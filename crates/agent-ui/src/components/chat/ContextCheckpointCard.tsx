@@ -22,7 +22,8 @@ export function ContextCheckpointCard(props: {
   return (
     <div
       className={cn(
-        "w-full overflow-hidden rounded-xl border border-black/[0.06] bg-white/[0.85] shadow-ui-contextcheckpointcard-3 dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-ui-contextcheckpointcard-4",
+        "w-full overflow-hidden rounded-xl border border-black/[0.06] bg-white/[0.85] shadow-ui-contextcheckpointcard-3",
+        "dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-ui-contextcheckpointcard-4",
         className,
       )}
     >
@@ -30,7 +31,10 @@ export function ContextCheckpointCard(props: {
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((previous) => !previous)}
-        className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors duration-150 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+        className={cn(
+          "flex w-full items-center gap-3 px-3.5 py-3 text-left",
+          "transition-colors duration-150 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]",
+        )}
       >
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-black/[0.04] dark:bg-white/[0.08]">
           <CheckCircle2 size={16} strokeWidth={1.8} className="text-muted-foreground" />
@@ -40,7 +44,12 @@ export function ContextCheckpointCard(props: {
             <span className="text-scaled-13px font-medium text-foreground/90">
               {t("chat.contextCheckpoint.title")}
             </span>
-            <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-1px text-scaled-11px font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
+            <span
+              className={cn(
+                "inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-1px text-scaled-11px font-normal",
+                "tabular-nums text-muted-foreground dark:bg-white/[0.08]",
+              )}
+            >
               {messageCountLabel}
             </span>
           </div>

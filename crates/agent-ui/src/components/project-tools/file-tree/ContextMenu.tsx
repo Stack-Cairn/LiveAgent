@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
@@ -178,7 +179,11 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
     <div
       ref={menuRef}
       role="menu"
-      className="origin-top-left layer-popover absolute min-w-52 select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+      className={cn(
+        "origin-top-left layer-popover absolute min-w-52 select-none overflow-hidden",
+        "rounded-xl border border-border/60 bg-popover/80 p-1",
+        "text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]",
+      )}
       style={{
         left: (position ?? anchor).x,
         top: (position ?? anchor).y,

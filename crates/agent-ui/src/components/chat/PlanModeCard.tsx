@@ -128,12 +128,23 @@ export function PlanModeCard({
       </div>
 
       {canApprove ? (
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-t border-border/35 bg-foreground/[0.015] px-3.5 py-2.5 dark:border-white/[0.05] dark:bg-white/[0.015]">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-x-2.5 gap-y-1.5",
+            "border-t border-border/35 bg-foreground/[0.015] px-3.5 py-2.5 dark:border-white/[0.05] dark:bg-white/[0.015]",
+          )}
+        >
           <button
             type="button"
             disabled={submitting}
             onClick={() => void approve()}
-            className="group/approve inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-scaled-12px font-medium text-primary-foreground shadow-ui-planmodecard-13 transition-[background-color,transform,box-shadow] duration-150 ease-out hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
+            className={cn(
+              "group/approve inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary",
+              "px-3.5 text-scaled-12px font-medium text-primary-foreground shadow-ui-planmodecard-13",
+              "transition-[background-color,transform,box-shadow] duration-150 ease-out",
+              "hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background active:scale-[0.98] disabled:pointer-events-none",
+              "disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100",
+            )}
           >
             {submitting ? (
               <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />

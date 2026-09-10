@@ -175,7 +175,10 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           type="button"
           aria-label={tab.label}
           aria-haspopup={tab.menuItems ? "menu" : undefined}
-          className="absolute inset-0 z-0 rounded-md bg-transparent p-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className={cn(
+            "absolute inset-0 z-0 rounded-md bg-transparent p-0",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          )}
           onClick={() => {
             if (consumeSuppressedTabClick(tab.id)) return;
             tab.onActivate();
@@ -210,8 +213,11 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
             aria-label={t("workbench.dragPane")}
             title={t("workbench.dragPane")}
             className={cn(
-              "relative z-10 flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/45 opacity-70 transition-[background-color,color,opacity] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              "cursor-grab touch-none hover:bg-background/80 hover:text-foreground hover:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100 active:cursor-grabbing",
+              "relative z-10 flex h-6 w-5 shrink-0 items-center justify-center",
+              "rounded text-muted-foreground/45 opacity-70 transition-[background-color,color,opacity]",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "cursor-grab touch-none",
+              "hover:bg-background/80 hover:text-foreground hover:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100 active:cursor-grabbing",
             )}
             onPointerDown={(event) => {
               // The reorder handle sits above the tab body and used to
@@ -228,7 +234,10 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
         )}
         <div
           aria-hidden="true"
-          className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-1.5 text-left text-inherit"
+          className={cn(
+            "pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center",
+            "gap-1.5 text-left text-inherit",
+          )}
         >
           {tab.icon}
           <span className="min-w-0 truncate">{tab.label}</span>

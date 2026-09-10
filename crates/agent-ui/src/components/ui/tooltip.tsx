@@ -55,7 +55,9 @@ export const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentPro
             ref={ref}
             data-slot="tooltip-content"
             className={cn(
-              "max-w-64 rounded-lg border border-border/60 bg-popover px-2.5 py-1.5 text-xs font-medium leading-4 text-popover-foreground shadow-lg outline-none transition-[transform,opacity] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+              "max-w-64 rounded-lg border border-border/60 bg-popover px-2.5 py-1.5",
+              "text-xs font-medium leading-4 text-popover-foreground shadow-lg outline-none transition-[transform,opacity] duration-150",
+              "data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
               className,
             )}
             {...props}

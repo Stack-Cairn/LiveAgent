@@ -1,3 +1,4 @@
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
 
 export function StatusLabel({ children }: { children: ReactNode }) {
@@ -18,7 +19,12 @@ export function StatusHeading({ children }: { children: ReactNode }) {
 
 export function StatusSectionHeader({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-10px flex flex-none items-center justify-between gap-10px text-11px text-(--ui-color-rgba-191-225-255-0p68) [&>svg]:text-11px [&>span]:text-11px">
+    <div
+      className={cn(
+        "mb-10px flex flex-none items-center justify-between gap-10px text-11px text-(--ui-color-rgba-191-225-255-0p68)",
+        "[&>svg]:text-11px [&>span]:text-11px",
+      )}
+    >
       {children}
     </div>
   );

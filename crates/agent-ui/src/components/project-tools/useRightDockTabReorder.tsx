@@ -466,9 +466,14 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
         disabled={!canReorderTabs}
         tabIndex={canReorderTabs ? 0 : -1}
         className={cn(
-          "relative z-10 flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/45 opacity-70 transition-[background-color,color,opacity] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "relative z-10 flex h-6 w-5 shrink-0 items-center justify-center",
+          "rounded text-muted-foreground/45 opacity-70 transition-[background-color,color,opacity]",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           canReorderTabs
-            ? "cursor-grab touch-none hover:bg-background/80 hover:text-foreground hover:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100 active:cursor-grabbing"
+            ? cn(
+                "cursor-grab touch-none",
+                "hover:bg-background/80 hover:text-foreground hover:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100 active:cursor-grabbing",
+              )
             : "cursor-default opacity-30",
         )}
         onClick={() => {

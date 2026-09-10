@@ -28,7 +28,13 @@ export function ProjectToolsPanelToggle(props: {
     >
       {isOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
       {sessionCount > 0 ? (
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-scaled-10px font-semibold leading-none text-white">
+        <span
+          className={cn(
+            "absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center",
+            "rounded-full bg-emerald-500 px-1",
+            "text-scaled-10px font-semibold leading-none text-white",
+          )}
+        >
           {sessionCount}
         </span>
       ) : null}

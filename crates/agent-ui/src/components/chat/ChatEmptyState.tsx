@@ -109,7 +109,11 @@ export function ChatEmptyState({
             <button
               type="button"
               onClick={() => onOpenSettings("providers")}
-              className="mt-5 inline-flex h-8 items-center gap-2 rounded-lg bg-foreground/[0.05] px-3 text-sm font-normal text-foreground/85 transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className={cn(
+                "mt-5 inline-flex h-8 items-center gap-2 rounded-lg bg-foreground/[0.05] px-3",
+                "text-sm font-normal text-foreground/85 transition-colors",
+                "hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              )}
             >
               <Settings className="size-4 text-foreground/65" />
               {t("chat.goToSettings")}
@@ -122,13 +126,22 @@ export function ChatEmptyState({
             {t(GREETING_KEYS[period])}，{t("chat.greetingSubtitle")}
           </div>
           {onSuggestionSelect ? (
-            <div className="mt-7 grid w-full max-w-520px grid-cols-1 gap-2 px-6 sm:grid-cols-3 sm:px-4">
+            <div
+              className={cn(
+                "mt-7 grid w-full max-w-520px grid-cols-1 gap-2 px-6",
+                "sm:grid-cols-3 sm:px-4",
+              )}
+            >
               {SUGGESTION_CARDS.map((card) => (
                 <button
                   key={card.key}
                   type="button"
                   onClick={() => onSuggestionSelect(t(card.promptKey))}
-                  className="flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+                  className={cn(
+                    "flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5",
+                    "text-left text-foreground/85 transition-colors",
+                    "hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+                  )}
                 >
                   <span
                     className={cn(

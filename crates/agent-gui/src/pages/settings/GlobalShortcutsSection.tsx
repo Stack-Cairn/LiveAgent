@@ -394,7 +394,10 @@ function ShortcutRow({
       <Label
         type={onEdit ? "button" : undefined}
         onClick={onEdit}
-        className="group flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-xl"
+        className={cn(
+          "group flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5",
+          "py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-xl",
+        )}
       >
         <div className="flex min-w-0 items-center gap-3">
           <div
@@ -500,7 +503,10 @@ function ShortcutChoiceSwitch({
         event.stopPropagation();
         onChange(event.key === "ArrowRight");
       }}
-      className="flex h-8 shrink-0 items-center gap-2 rounded-full px-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className={cn(
+        "flex h-8 shrink-0 items-center gap-2 rounded-full px-1 text-xs",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      )}
     >
       <span
         aria-hidden="true"
@@ -517,7 +523,9 @@ function ShortcutChoiceSwitch({
       >
         <span
           className={cn(
-            "absolute left-3px top-3px size-4 rounded-full bg-primary shadow-sm transition-transform duration-200 ease-out motion-reduce:transition-none",
+            "absolute left-3px top-3px size-4",
+            "rounded-full bg-primary shadow-sm",
+            "transition-transform duration-200 ease-out motion-reduce:transition-none",
             checked ? "translate-x-4" : "translate-x-0",
           )}
         />
@@ -1101,7 +1109,10 @@ export function GlobalShortcutsSection() {
                       type="button"
                       onClick={() => clearBinding(action.id)}
                       title={t("settings.shortcutClear")}
-                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className={cn(
+                        "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                        "hover:bg-muted hover:text-foreground",
+                      )}
                     >
                       <X className="size-3.5" />
                     </button>
@@ -1154,7 +1165,10 @@ export function GlobalShortcutsSection() {
             {boundEntries.map((entry) => (
               <span
                 key={entry.action}
-                className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/80 px-2 py-1 text-xs"
+                className={cn(
+                  "flex items-center gap-1.5",
+                  "rounded-lg border border-border/60 bg-background/80 px-2 py-1 text-xs",
+                )}
               >
                 <span
                   className="size-2 rounded-full"

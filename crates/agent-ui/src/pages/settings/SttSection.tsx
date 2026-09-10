@@ -402,7 +402,12 @@ export function SttSection({
           ) : null}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-background/60 px-4 py-3">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-4",
+          "rounded-xl border border-border/50 bg-background/60 px-4 py-3",
+        )}
+      >
         <div className="min-w-0">
           <div className="text-sm font-medium">开启语音输入</div>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
@@ -431,7 +436,8 @@ export function SttSection({
               onClick={() => selectProvider(item.id)}
               aria-pressed={active}
               className={cn(
-                "group relative flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-150",
+                "group relative flex min-w-0 items-center gap-3 rounded-xl border",
+                "p-3 text-left transition-all duration-150",
                 active
                   ? "border-primary/50 bg-primary/5 shadow-sm ring-1 ring-primary/25"
                   : "border-border/50 bg-background/40 hover:border-border hover:bg-muted/40",
@@ -491,7 +497,12 @@ export function SttSection({
             </div>
           </div>
           {provider.configured ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-11px text-emerald-600 dark:text-emerald-400">
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5",
+                "text-11px text-emerald-600 dark:text-emerald-400",
+              )}
+            >
               <Shield className="size-3" />
               密钥已脱敏保存
             </span>
@@ -576,7 +587,10 @@ export function SttSection({
                   {secretField ? (
                     <button
                       type="button"
-                      className="absolute right-1 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                      className={cn(
+                        "absolute right-1 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center",
+                        "rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+                      )}
                       disabled={
                         saving ||
                         testing ||
@@ -625,7 +639,10 @@ export function SttSection({
             type="button"
             onClick={() => void test()}
             disabled={saving || testing || clearing}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2",
+              "text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60",
+            )}
           >
             {saving || testing ? (
               <LoaderCircle className="size-3.5 animate-spin" />
@@ -638,7 +655,11 @@ export function SttSection({
             type="button"
             onClick={() => void clearProviderSecrets()}
             disabled={saving || testing || clearing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3.5 py-2 text-xs text-destructive transition-colors hover:bg-destructive/5 disabled:opacity-60"
+            className={cn(
+              "inline-flex items-center gap-1.5",
+              "rounded-lg border border-destructive/40 px-3.5 py-2 text-xs text-destructive transition-colors",
+              "hover:bg-destructive/5 disabled:opacity-60",
+            )}
           >
             {clearing ? (
               <LoaderCircle className="size-3.5 animate-spin" />
@@ -673,7 +694,12 @@ export function SttSection({
           </div>
         ) : null}
         {error ? (
-          <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+          <div
+            className={cn(
+              "flex items-start gap-2",
+              "rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive",
+            )}
+          >
             <XCircle className="mt-px size-3.5 shrink-0" />
             <p className="break-words">{error}</p>
           </div>

@@ -16,6 +16,7 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { Wrench } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useMemo, useState } from "react";
 import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";
 import {
@@ -79,7 +80,10 @@ function BrowserModeRow(props: {
           // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: 同 ToolPolicyToggle——互斥单选语义需要向读屏表达。
           role="radiogroup"
           aria-label={t("settings.browserMode.label")}
-          className="inline-flex min-w-0 shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
+          className={cn(
+            "inline-flex min-w-0 shrink-0 items-center",
+            "rounded-lg border border-border/60 bg-muted/40 p-0.5",
+          )}
         >
           {BROWSER_AUTOMATION_MODES.map((option) => {
             const active = mode === option;
@@ -93,8 +97,14 @@ function BrowserModeRow(props: {
                 onClick={() => onChange(option)}
                 className={
                   active
-                    ? "rounded-md bg-primary px-2.5 py-1 text-11px font-medium leading-none text-primary-foreground transition-colors"
-                    : "rounded-md px-2.5 py-1 text-11px font-medium leading-none text-muted-foreground transition-colors hover:text-foreground"
+                    ? cn(
+                        "rounded-md bg-primary px-2.5 py-1",
+                        "text-11px font-medium leading-none text-primary-foreground transition-colors",
+                      )
+                    : cn(
+                        "rounded-md px-2.5 py-1",
+                        "text-11px font-medium leading-none text-muted-foreground transition-colors hover:text-foreground",
+                      )
                 }
               >
                 {t(`settings.browserMode.${option}`)}
@@ -128,12 +138,20 @@ function BrowserModeRow(props: {
           </p>
           {info.extensionDir ? (
             <div className="flex flex-wrap items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded bg-muted/60 px-1.5 py-1 font-mono text-10px leading-none text-muted-foreground">
+              <code
+                className={cn(
+                  "min-w-0 flex-1 truncate rounded bg-muted/60 px-1.5 py-1",
+                  "font-mono text-10px leading-none text-muted-foreground",
+                )}
+              >
                 {info.extensionDir}
               </code>
               <button
                 type="button"
-                className="shrink-0 rounded-md border border-border/60 px-2 py-1 text-11px font-medium leading-none text-foreground transition-colors hover:bg-muted/60"
+                className={cn(
+                  "shrink-0 rounded-md border border-border/60 px-2 py-1",
+                  "text-11px font-medium leading-none text-foreground transition-colors hover:bg-muted/60",
+                )}
                 onClick={() => {
                   void invoke("browser_extension_reveal_dir", {}).catch(() => {});
                 }}
@@ -204,7 +222,12 @@ export function SystemToolsSection(props: SettingsSectionProps) {
           </p>
         </div>
         {overriddenCount > 0 ? (
-          <span className="ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-11px font-medium leading-none text-primary">
+          <span
+            className={cn(
+              "ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5",
+              "text-11px font-medium leading-none text-primary",
+            )}
+          >
             {t("settings.toolPermissionsOverridden").replace("{count}", String(overriddenCount))}
           </span>
         ) : null}

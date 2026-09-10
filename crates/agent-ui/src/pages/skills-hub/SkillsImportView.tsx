@@ -160,7 +160,10 @@ export function SkillsImportView(props: {
           {importToast ? (
             <div
               role="status"
-              className="pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+              className={cn(
+                "pointer-events-auto flex w-full max-w-md items-start gap-2.5",
+                "rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl",
+              )}
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <p className="min-w-0 flex-1 leading-relaxed text-foreground">{importToast}</p>
@@ -177,7 +180,10 @@ export function SkillsImportView(props: {
           ) : importErrors.length > 0 ? (
             <div
               role="alert"
-              className="pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+              className={cn(
+                "pointer-events-auto flex w-full max-w-md items-start gap-2.5",
+                "rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl",
+              )}
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
               <div className="min-w-0 flex-1">
@@ -203,7 +209,10 @@ export function SkillsImportView(props: {
           ) : (
             <div
               role="status"
-              className="pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
+              className={cn(
+                "pointer-events-auto flex w-full max-w-md items-start gap-2.5",
+                "rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl",
+              )}
             >
               <Check className="mt-0.5 size-4 shrink-0 text-[hsl(var(--chat-success))]" />
               <p className="min-w-0 flex-1 leading-relaxed text-foreground">
@@ -240,7 +249,12 @@ export function SkillsImportView(props: {
             </GlassPanel>
           ) : null}
 
-          <div className="sticky top-0 z-30 -mx-0.5 flex flex-wrap items-center justify-between gap-3 bg-background/95 px-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+          <div
+            className={cn(
+              "sticky top-0 z-30 -mx-0.5 flex flex-wrap items-center justify-between",
+              "gap-3 bg-background/95 px-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/90",
+            )}
+          >
             <SkillsImportSourceTabs
               scans={filteredScans}
               value={activeTool}
@@ -431,7 +445,9 @@ export function SkillsImportView(props: {
                             event.currentTarget.click();
                           }}
                           className={cn(
-                            "group flex min-h-48 w-full flex-col rounded-xl border border-foreground/15 bg-card p-3.5 text-left shadow-sm transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                            "group flex min-h-48 w-full flex-col",
+                            "rounded-xl border border-foreground/15 bg-card p-3.5 text-left shadow-sm transition-[border-color,background-color,box-shadow]",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                             alreadyInstalled
                               ? "border-emerald-600/25"
                               : checked
@@ -519,10 +535,17 @@ export function SkillsImportView(props: {
       </div>
 
       {bulkMode ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-1 z-40 flex justify-center px-2 max-sm:bottom-safe-bottom-offset-compact">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-1 z-40 flex justify-center px-2",
+            "max-sm:bottom-safe-bottom-offset-compact",
+          )}
+        >
           <div
             className={cn(
-              "pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/95 text-12p5px shadow-ui-skillshubpage-51 max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
+              "pointer-events-auto flex max-w-full flex-wrap items-center gap-2",
+              "rounded-full border border-border/50 bg-background/95 text-12p5px shadow-ui-skillshubpage-51",
+              "max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
               importableSelectedCount > 0 || importing ? "py-2 pl-4 pr-2" : "px-4 py-2.5",
             )}
           >

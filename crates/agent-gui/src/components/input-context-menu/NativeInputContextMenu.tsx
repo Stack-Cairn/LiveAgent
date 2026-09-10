@@ -398,7 +398,10 @@ export function useNativeInputContextMenu(): {
             open={snapshot !== null && items !== null}
             ref={menuRef}
             role="menu"
-            className="origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu"
+            className={cn(
+              "origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden",
+              "rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
+            )}
             style={snapshot ? { left: snapshot.x, top: snapshot.y } : undefined}
             onContextMenu={(event) => {
               event.preventDefault();

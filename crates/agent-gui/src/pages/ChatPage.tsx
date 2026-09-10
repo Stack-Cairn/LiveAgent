@@ -42,6 +42,7 @@ import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   ConversationOpenOptions,
   ConversationOpenRequest,
@@ -3822,7 +3823,10 @@ export function ChatPage(props: ChatPageProps) {
           const blockedBanner = blockedMessage ? (
             <div
               data-workbench-pane-blocked=""
-              className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400"
+              className={cn(
+                "flex shrink-0 items-center gap-2",
+                "border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400",
+              )}
             >
               {blockedMessage}
             </div>
@@ -3888,7 +3892,11 @@ export function ChatPage(props: ChatPageProps) {
       <div
         ref={workbenchDragGhostRef}
         data-workbench-drag-ghost=""
-        className="layer-popover pointer-events-none fixed max-w-220px truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
+        className={cn(
+          "layer-popover pointer-events-none fixed max-w-220px",
+          "truncate rounded-md border border-border bg-background/95 px-2.5 py-1",
+          "text-xs text-foreground shadow-md",
+        )}
         style={{
           left: 0,
           top: 0,

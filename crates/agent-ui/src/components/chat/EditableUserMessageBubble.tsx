@@ -134,7 +134,8 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
       <textarea
         ref={textareaRef}
         className={cn(
-          "w-full resize-none rounded-lg bg-transparent p-2 font-chat text-scaled-14p5px leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
+          "w-full resize-none rounded-lg bg-transparent p-2",
+          "font-chat text-scaled-14p5px leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
           textareaClassName,
         )}
         value={draftText}
@@ -150,14 +151,20 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
       <div className="mt-2 flex justify-end gap-2">
         <button
           type="button"
-          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
+          className={cn(
+            "rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground",
+            "transition-colors hover:bg-muted",
+          )}
           onClick={onCancel}
         >
           {t("chat.cancel")}
         </button>
         <button
           type="button"
-          className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn(
+            "rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors",
+            "hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
+          )}
           disabled={!canSubmit}
           onClick={() => {
             if (!canSubmit) {

@@ -81,7 +81,11 @@ export function ComposerAttachmentCard(props: {
     return (
       <div
         title={fileName}
-        className="group relative size-12 shrink-0 overflow-hidden rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color] hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]"
+        className={cn(
+          "group relative size-12 shrink-0 overflow-hidden",
+          "rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color]",
+          "hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]",
+        )}
       >
         {imageSrc && !imageLoadFailed ? (
           <button
@@ -123,7 +127,11 @@ export function ComposerAttachmentCard(props: {
           type="button"
           disabled={disabled}
           onClick={onRemove}
-          className="absolute right-0.5 top-0.5 z-10 inline-flex size-4 items-center justify-center rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale] hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35"
+          className={cn(
+            "absolute right-0.5 top-0.5 z-10 inline-flex size-4 items-center justify-center",
+            "rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale]",
+            "hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35",
+          )}
           aria-label={`${removeLabel} ${fileName}`}
           title={removeLabel}
         >
@@ -154,9 +162,18 @@ export function ComposerAttachmentCard(props: {
   return (
     <div
       title={pathTitle}
-      className="group flex h-9 w-36 max-w-viewport-inset-5rem shrink-0 items-center gap-1 rounded-lg border border-black/[0.075] bg-black/[0.035] p-1 pr-1.5 shadow-ui-composerattachmentcard-1 transition-[border-color,background-color] hover:border-black/[0.11] hover:bg-black/[0.05] dark:border-white/[0.11] dark:bg-white/[0.065] dark:shadow-ui-composerattachmentcard-2 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.09]"
+      className={cn(
+        "group flex h-9 w-36 max-w-viewport-inset-5rem shrink-0 items-center gap-1",
+        "rounded-lg border border-black/[0.075] bg-black/[0.035] p-1 pr-1.5 shadow-ui-composerattachmentcard-1 transition-[border-color,background-color]",
+        "hover:border-black/[0.11] hover:bg-black/[0.05] dark:border-white/[0.11] dark:bg-white/[0.065] dark:shadow-ui-composerattachmentcard-2 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.09]",
+      )}
     >
-      <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/[0.045] text-muted-foreground dark:bg-white/[0.08]">
+      <span
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center overflow-hidden",
+          "rounded-md bg-black/[0.045] text-muted-foreground dark:bg-white/[0.08]",
+        )}
+      >
         {fallbackIcon}
       </span>
 
@@ -168,7 +185,11 @@ export function ComposerAttachmentCard(props: {
         type="button"
         disabled={disabled}
         onClick={onRemove}
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/75 outline-hidden transition-[background-color,color,scale] hover:bg-foreground/[0.07] hover:text-foreground active:scale-90 focus-visible:bg-foreground/[0.07] focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-35"
+        className={cn(
+          "inline-flex size-5 shrink-0 items-center justify-center",
+          "rounded-full text-muted-foreground/75 outline-hidden transition-[background-color,color,scale]",
+          "hover:bg-foreground/[0.07] hover:text-foreground active:scale-90 focus-visible:bg-foreground/[0.07] focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-35",
+        )}
         aria-label={`${removeLabel} ${fileName}`}
         title={removeLabel}
       >

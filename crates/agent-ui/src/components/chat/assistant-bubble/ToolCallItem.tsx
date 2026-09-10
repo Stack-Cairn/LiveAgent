@@ -87,7 +87,10 @@ function FileOperationTarget({
     <button
       type="button"
       data-chat-file-link=""
-      className="min-w-0 flex-1 cursor-pointer truncate text-left underline decoration-foreground/20 underline-offset-3px transition-colors hover:text-foreground hover:decoration-foreground/45"
+      className={cn(
+        "min-w-0 flex-1 cursor-pointer",
+        "truncate text-left underline decoration-foreground/20 underline-offset-3px transition-colors hover:text-foreground hover:decoration-foreground/45",
+      )}
       title={operation.path}
       aria-label={`${actionLabel} ${operation.path}`}
       onClick={() => onOpenFileLink(fileLink)}
@@ -353,7 +356,12 @@ function ToolCallItem({
       </span>
 
       {compactChipText || fileChangeStats ? (
-        <span className="inline-flex h-22px min-w-0 flex-1 items-center gap-2 font-mono text-scaled-11p5px text-foreground/48">
+        <span
+          className={cn(
+            "inline-flex h-22px min-w-0 flex-1 items-center gap-2",
+            "font-mono text-scaled-11p5px text-foreground/48",
+          )}
+        >
           {compactChipText ? (
             <span
               className="min-w-0 flex-1 truncate"
@@ -469,7 +477,12 @@ function ToolCallItem({
 
           return (
             <details className="group/result">
-              <summary className="flex cursor-pointer select-none items-center gap-1 text-scaled-10p5px text-muted-foreground/50 transition-colors duration-150 hover:text-foreground/60">
+              <summary
+                className={cn(
+                  "flex cursor-pointer select-none items-center gap-1 text-scaled-10p5px text-muted-foreground/50",
+                  "transition-colors duration-150 hover:text-foreground/60",
+                )}
+              >
                 <ChevronRight className="size-2.5 transition-transform duration-200 group-open/result:rotate-90" />
                 {t("chat.tool.viewReturn")}
               </summary>

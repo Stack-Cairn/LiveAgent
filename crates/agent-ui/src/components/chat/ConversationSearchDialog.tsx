@@ -246,9 +246,17 @@ export function ConversationSearchDialog({
             }}
             placeholder={t("chat.searchConversationsPlaceholder")}
             aria-label={t("chat.searchConversations")}
-            className="h-auto flex-1 border-0 bg-transparent px-0 text-15px shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+            className={cn(
+              "h-auto flex-1 border-0 bg-transparent px-0 text-15px shadow-none",
+              "placeholder:text-muted-foreground/70 focus-visible:ring-0",
+            )}
           />
-          <kbd className="hidden rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 text-10px font-medium text-muted-foreground sm:inline-flex">
+          <kbd
+            className={cn(
+              "hidden rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5",
+              "text-10px font-medium text-muted-foreground sm:inline-flex",
+            )}
+          >
             Esc
           </kbd>
         </div>
@@ -259,12 +267,21 @@ export function ConversationSearchDialog({
           role="listbox"
         >
           {status === "error" ? (
-            <div className="flex min-h-200px flex-col items-center justify-center gap-3 px-8 text-center text-sm text-destructive">
+            <div
+              className={cn(
+                "flex min-h-200px flex-col items-center justify-center gap-3 px-8",
+                "text-center text-sm text-destructive",
+              )}
+            >
               <span>{t("chat.conversationSearchFailed")}</span>
               <button
                 type="button"
                 onClick={() => void performSearch(normalizedQuery)}
-                className="rounded-lg border border-border/70 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={cn(
+                  "rounded-lg border border-border/70 px-3 py-1.5",
+                  "text-xs font-medium text-foreground transition-colors",
+                  "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
               >
                 {t("chat.retryConversationSearch")}
               </button>

@@ -337,7 +337,10 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   <Textarea
                     value={scriptText}
                     placeholder={"pnpm install\npnpm build\npnpm test"}
-                    className="min-h-180px resize-y rounded-none border-0 bg-transparent font-mono text-xs leading-relaxed focus-visible:ring-0"
+                    className={cn(
+                      "min-h-180px resize-y rounded-none border-0 bg-transparent font-mono text-xs leading-relaxed",
+                      "focus-visible:ring-0",
+                    )}
                     onChange={(e) => {
                       setFormError(null);
                       setScriptText(e.currentTarget.value);

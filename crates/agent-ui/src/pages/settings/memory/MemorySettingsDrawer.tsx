@@ -334,7 +334,8 @@ export function MemorySettingsDrawer(props: {
             quotaLadder.tightestScope ? (
               <div
                 className={cn(
-                  "flex items-start gap-2 rounded-2xl border px-4 py-3 text-11p5px leading-relaxed",
+                  "flex items-start gap-2 rounded-2xl border px-4 py-3",
+                  "text-11p5px leading-relaxed",
                   quotaLadder.level === "critical" || quotaLadder.level === "exhausted"
                     ? "border-red-500/25 bg-red-500/[0.06] text-red-700 dark:text-red-300"
                     : "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300",
@@ -379,7 +380,12 @@ export function MemorySettingsDrawer(props: {
                   )}
                 </div>
                 {modelOptions.length === 0 ? (
-                  <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2 text-11p5px text-amber-700 dark:text-amber-300">
+                  <div
+                    className={cn(
+                      "mt-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2",
+                      "text-11p5px text-amber-700 dark:text-amber-300",
+                    )}
+                  >
                     {t("settings.memoryModelEmpty")}
                   </div>
                 ) : null}
@@ -488,7 +494,12 @@ export function MemorySettingsDrawer(props: {
                   </div>
                 </div>
                 {settings.memory.organizerEnabled && settings.memory.organizerNextRunAt ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2 text-11p5px text-muted-foreground">
+                  <div
+                    className={cn(
+                      "flex items-center gap-2",
+                      "rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2 text-11p5px text-muted-foreground",
+                    )}
+                  >
                     <span className="relative inline-flex size-1.5 shrink-0">
                       <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/40" />
                       <span className="relative inline-block size-1.5 rounded-full bg-emerald-500" />
@@ -502,7 +513,12 @@ export function MemorySettingsDrawer(props: {
                   </div>
                 ) : null}
                 {organizerFeedback ? (
-                  <div className="whitespace-pre-wrap rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2 text-11p5px text-muted-foreground">
+                  <div
+                    className={cn(
+                      "whitespace-pre-wrap rounded-xl border border-foreground/[0.05] bg-foreground/[0.025] px-3 py-2",
+                      "text-11p5px text-muted-foreground",
+                    )}
+                  >
                     {organizerFeedback}
                   </div>
                 ) : null}

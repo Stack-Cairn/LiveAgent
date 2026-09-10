@@ -134,7 +134,9 @@ export function ModelPicker({
           disabled={disabled}
           aria-label={ariaLabel}
           className={cn(
-            "flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+            "flex h-10 w-full cursor-pointer items-center justify-between gap-2",
+            "rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs",
+            "focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
             triggerClassName,
           )}
         >
@@ -171,7 +173,12 @@ export function ModelPicker({
           className="w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
         >
           <div className="px-2 py-1.5">
-            <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
+            <div
+              className={cn(
+                "flex items-center gap-1.5",
+                "rounded-md border border-border/50 bg-muted/40 px-2 py-1",
+              )}
+            >
               <Search className="size-3.5 shrink-0 text-muted-foreground/70" />
               <input
                 ref={searchInputRef}
@@ -188,7 +195,8 @@ export function ModelPicker({
               <DropdownMenuItem
                 onSelect={() => onChange("")}
                 className={cn(
-                  "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
+                  "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
+                  "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
                   value === "" &&
                     "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
                 )}
@@ -220,14 +228,23 @@ export function ModelPicker({
                         onSelect={() => toggleGroup(group.id)}
                         aria-expanded={expanded}
                         title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                        className="sticky top-0 z-10 flex h-30px shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40"
+                        className={cn(
+                          "sticky top-0 z-10 flex h-30px shrink-0 cursor-pointer items-center",
+                          "gap-1.5 rounded-md bg-popover/60 px-2 py-0",
+                          "text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40",
+                        )}
                       >
                         <ProviderBrandIcon
                           type={group.providerType}
                           className="size-3.5 opacity-90"
                         />
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                        <span className="inline-flex h-4 min-w-1p1rem shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-10px tabular-nums">
+                        <span
+                          className={cn(
+                            "inline-flex h-4 min-w-1p1rem shrink-0 items-center justify-center rounded-full bg-muted/70",
+                            "px-1 text-10px tabular-nums",
+                          )}
+                        >
                           {group.opts.length}
                         </span>
                         <ChevronDown
@@ -246,7 +263,8 @@ export function ModelPicker({
                               key={option.value}
                               onSelect={() => onChange(option.value)}
                               className={cn(
-                                "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
+                                "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
+                                "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
                                 isSelected &&
                                   "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
                               )}

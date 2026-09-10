@@ -40,7 +40,10 @@ function WorkPixelGrid({ active }: { active: boolean }) {
         {PIXEL_DELAYS.map((delay, index) => (
           <span
             key={PIXEL_KEYS[index]}
-            className="size-1 bg-foreground opacity-15 animate-chat-work-pixel [&[data-paused]]:opacity-45 data-paused:transform-none data-paused:animate-none motion-reduce:opacity-15 motion-reduce:transform-none motion-reduce:animate-none"
+            className={cn(
+              "size-1 bg-foreground opacity-15 animate-chat-work-pixel",
+              "[&[data-paused]]:opacity-45 data-paused:transform-none data-paused:animate-none motion-reduce:opacity-15 motion-reduce:transform-none motion-reduce:animate-none",
+            )}
             data-paused={active ? undefined : ""}
             style={{ "--chat-work-delay": `${delay}ms` } as LoadingPixelStyle}
           />
@@ -137,7 +140,8 @@ export function AssistantWorkTrace({
       {hasDetails ? (
         <ChevronDown
           className={cn(
-            "size-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 group-hover/work-trace:opacity-100 group-focus-visible/work-trace:opacity-100 motion-reduce:transition-none",
+            "size-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150",
+            "group-hover/work-trace:opacity-100 group-focus-visible/work-trace:opacity-100 motion-reduce:transition-none",
             !expanded && "-rotate-90",
           )}
         />
@@ -156,7 +160,11 @@ export function AssistantWorkTrace({
       {hasDetails ? (
         <button
           type="button"
-          className="group/work-trace flex w-full items-center gap-2 rounded-lg py-1 text-scaled-13px font-450 transition-colors hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            "group/work-trace flex w-full items-center gap-2 rounded-lg py-1",
+            "text-scaled-13px font-450 transition-colors",
+            "hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
         >

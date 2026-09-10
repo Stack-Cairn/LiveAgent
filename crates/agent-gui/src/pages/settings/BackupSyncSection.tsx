@@ -34,6 +34,7 @@ import { Label } from "@liveagent/ui/components/ui/label";
 import { LabelTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
@@ -124,11 +125,13 @@ function FeedbackStrip({ status }: { status: Status }) {
   const ok = status.kind === "ok";
   return (
     <div
-      className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 text-xs leading-relaxed ${
+      className={cn(
+        "flex items-start gap-2 rounded-xl border px-3 py-2.5",
+        "text-xs leading-relaxed",
         ok
           ? "border-emerald-600/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:text-emerald-300"
-          : "border-destructive/30 bg-destructive/10 text-destructive"
-      }`}
+          : "border-destructive/30 bg-destructive/10 text-destructive",
+      )}
     >
       {ok ? (
         <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
@@ -165,7 +168,12 @@ function SyncStatusBanner({
 }) {
   if (loading && !view) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-5 py-4">
+      <div
+        className={cn(
+          "flex items-center gap-3",
+          "rounded-2xl border border-border/60 bg-card px-5 py-4",
+        )}
+      >
         <Loader2 className="size-4 animate-spin text-muted-foreground" />
         <span className="text-sm text-muted-foreground">{t("settings.backupSyncLoading")}</span>
       </div>
@@ -206,11 +214,13 @@ function SyncStatusBanner({
         </div>
         {configured ? (
           <span
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-11px font-medium leading-none ${
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border",
+              "px-2.5 py-1 text-11px font-medium leading-none",
               view?.autoSync
                 ? "border-emerald-600/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:text-emerald-300"
-                : "border-border/70 bg-muted/45 text-muted-foreground"
-            }`}
+                : "border-border/70 bg-muted/45 text-muted-foreground",
+            )}
           >
             <Zap className="size-3" />
             {view?.autoSync ? t("settings.backupSyncAutoOn") : t("settings.backupSyncAutoOff")}
@@ -218,7 +228,12 @@ function SyncStatusBanner({
         ) : null}
       </div>
       {failed && view?.lastError ? (
-        <p className="mt-3 break-all rounded-xl bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive/90">
+        <p
+          className={cn(
+            "mt-3 break-all rounded-xl bg-destructive/10 px-3 py-2",
+            "text-xs leading-relaxed text-destructive/90",
+          )}
+        >
           {view.lastError}
         </p>
       ) : null}
@@ -247,7 +262,11 @@ function ActionTile({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-3 text-left transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-55"
+      className={cn(
+        "group flex w-full items-center gap-3",
+        "rounded-xl border border-border/60 bg-background/60 px-3.5 py-3 text-left transition-colors",
+        "hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-55",
+      )}
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
         {busy ? <Loader2 className="size-4 animate-spin" /> : icon}
@@ -277,9 +296,11 @@ function ScopeItem({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-11px font-medium leading-none ${
-        excluded ? "bg-muted/30 text-muted-foreground/70" : "bg-muted/45 text-foreground/85"
-      }`}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1",
+        "text-11px font-medium leading-none",
+        excluded ? "bg-muted/30 text-muted-foreground/70" : "bg-muted/45 text-foreground/85",
+      )}
     >
       <span
         className={`flex size-3.5 shrink-0 items-center justify-center ${excluded ? "opacity-60" : ""}`}
@@ -580,7 +601,12 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       <div className="grid gap-5 lg:grid-cols-gateway-settings-compact">
         {/* 左栏：WebDAV 同步配置。弹性布局把底部操作区钉在底边，撑高时中间留白。 */}
         <section className="flex flex-col rounded-2xl border border-border/60 bg-card">
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-5 py-4">
+          <header
+            className={cn(
+              "flex flex-wrap items-center justify-between gap-2 border-b border-border/60",
+              "px-5 py-4",
+            )}
+          >
             <div className="flex items-center gap-2.5">
               <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Cloud className="size-4" />
@@ -589,7 +615,13 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                 {t("settings.backupSyncTitle")}
               </h3>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-11px font-medium leading-none text-muted-foreground">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5",
+                "rounded-full border border-border/70 bg-muted/45 px-2.5 py-1",
+                "text-11px font-medium leading-none text-muted-foreground",
+              )}
+            >
               <Lock className="size-3" />
               {t("settings.backupSyncCredentialNote")}
             </span>
@@ -608,11 +640,13 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                       disabled={syncLocked}
                       aria-pressed={active}
                       onClick={() => handlePresetChange(item.id)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+                      className={cn(
+                        "rounded-full border px-3 py-1.5 text-xs font-medium",
+                        "transition-colors disabled:cursor-not-allowed disabled:opacity-55",
                         active
                           ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border/70 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground"
-                      }`}
+                          : "border-border/70 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground",
+                      )}
                     >
                       {t(`settings.backupSyncPreset_${item.id}`)}
                     </button>
@@ -698,7 +732,12 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-3">
+            <div
+              className={cn(
+                "flex items-center justify-between gap-3",
+                "rounded-xl border border-border/60 bg-background/60 px-3.5 py-3",
+              )}
+            >
               <div className="flex min-w-0 items-center gap-2.5">
                 <Zap className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">

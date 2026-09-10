@@ -59,7 +59,10 @@ export function PaneChrome(props: PaneChromeProps) {
     <div
       data-workbench-pane-chrome={paneId}
       data-workbench-pane-chrome-compact={isCompact ? "true" : undefined}
-      className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-5 items-center justify-center"
+      className={cn(
+        "pointer-events-none absolute inset-x-0 top-0 z-30 flex h-5 items-center",
+        "justify-center",
+      )}
     >
       <button
         type="button"
@@ -101,7 +104,8 @@ export function PaneChrome(props: PaneChromeProps) {
           onClick={trajectoryToggle.onToggle}
           className={cn(
             revealClass,
-            "absolute left-1.5 top-1/2 flex size-3.5 -translate-y-1/2 items-center justify-center rounded-full",
+            "absolute left-1.5 top-1/2 flex size-3.5 -translate-y-1/2 items-center justify-center",
+            "rounded-full",
             "bg-muted-foreground/25 text-background",
             "hover:bg-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           )}
@@ -123,7 +127,8 @@ export function PaneChrome(props: PaneChromeProps) {
           onClick={onClose}
           className={cn(
             revealClass,
-            "absolute right-1.5 top-1/2 flex size-3.5 -translate-y-1/2 items-center justify-center rounded-full",
+            "absolute right-1.5 top-1/2 flex size-3.5 -translate-y-1/2 items-center justify-center",
+            "rounded-full",
             "bg-muted-foreground/25 text-background",
             "hover:bg-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           )}

@@ -413,7 +413,8 @@ export function GitReviewStatusView(props: {
       <div
         key={`${section}:${entry.kind}:${entry.oldPath ?? ""}:${entry.path}`}
         className={cn(
-          "select-none border-b border-l-2 border-border/60 border-l-transparent px-3 py-2 transition-colors hover:bg-muted/40",
+          "select-none border-b border-l-2 border-border/60 border-l-transparent px-3 py-2 transition-colors",
+          "hover:bg-muted/40",
           selected && "border-l-emerald-500 bg-emerald-500/10",
           contextMenuOpen && "border-l-primary bg-primary/10 ring-1 ring-inset ring-primary/35",
         )}
@@ -421,7 +422,10 @@ export function GitReviewStatusView(props: {
       >
         <button
           type="button"
-          className="flex w-full select-none items-start gap-2 rounded-sm bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className={cn(
+            "flex w-full select-none items-start gap-2 rounded-sm bg-transparent p-0",
+            "text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          )}
           onClick={() => selectEntry(entry)}
           title={entry.path}
         >
@@ -464,10 +468,18 @@ export function GitReviewStatusView(props: {
     onToggle: () => void,
   ) => (
     <section className="relative border-b border-border/60 bg-background last:border-b-0">
-      <div className="sticky top-0 z-20 grid h-7 w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border/60 bg-muted px-3">
+      <div
+        className={cn(
+          "sticky top-0 z-20 grid h-7 w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center",
+          "gap-2 border-b border-border/60 bg-muted px-3",
+        )}
+      >
         <button
           type="button"
-          className="flex min-w-0 items-center gap-1.5 rounded-sm bg-transparent p-0 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className={cn(
+            "flex min-w-0 items-center gap-1.5 rounded-sm bg-transparent p-0 text-left",
+            "hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          )}
           aria-expanded={!collapsed}
           onClick={onToggle}
         >
@@ -482,7 +494,13 @@ export function GitReviewStatusView(props: {
             {title}
           </span>
         </button>
-        <span className="inline-flex h-4 min-w-6 shrink-0 items-center justify-center justify-self-end rounded bg-background/70 px-1.5 text-center text-scaled-10px font-medium tabular-nums text-muted-foreground">
+        <span
+          className={cn(
+            "inline-flex h-4 min-w-6 shrink-0 items-center justify-center justify-self-end",
+            "rounded bg-background/70 px-1.5",
+            "text-center text-scaled-10px font-medium tabular-nums text-muted-foreground",
+          )}
+        >
           {sectionEntries.length}
         </span>
         <Button
@@ -624,7 +642,12 @@ export function GitReviewStatusView(props: {
         >
           {selectedEntry ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-              <div className="flex shrink-0 items-center gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs">
+              <div
+                className={cn(
+                  "flex shrink-0 items-center gap-2",
+                  "rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs",
+                )}
+              >
                 <span className="text-muted-foreground">
                   {t("projectTools.gitReview.selected")}
                 </span>
@@ -643,7 +666,13 @@ export function GitReviewStatusView(props: {
               />
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-border/70 bg-muted/10 px-4 text-center text-xs text-muted-foreground">
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 items-center justify-center",
+                "rounded-lg border border-border/70 bg-muted/10 px-4",
+                "text-center text-xs text-muted-foreground",
+              )}
+            >
               {t("projectTools.gitReview.selectFileToViewDiff")}
             </div>
           )}

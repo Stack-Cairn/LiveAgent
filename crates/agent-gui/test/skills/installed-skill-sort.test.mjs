@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const implementations = [
   {
@@ -100,7 +101,9 @@ for (const { label, loader, sources } of implementations) {
   });
 
   test(`${label} wires visual order, selection order, persistence, and reduced-motion FLIP`, () => {
-    const source = resolveStyleValues(sources.map((file) => readFileSync(file, "utf8")).join("\n"));
+    const source = normalizeClassGroups(
+      resolveStyleValues(sources.map((file) => readFileSync(file, "utf8")).join("\n")),
+    );
 
     assert.match(source, /skillsHub\.installedSort/);
     assert.match(source, /sortInstalledSkillItems\(filtered, installedSort, selected/);

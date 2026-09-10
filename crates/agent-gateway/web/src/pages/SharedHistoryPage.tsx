@@ -1,5 +1,6 @@
 import { AlertCircle, Loader2, MessageSquareText } from "@liveagent/ui/components/IconSet";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { GatewayTranscript } from "../components/GatewayTranscript";
 import { buildRowsFromEntries, dedupeRowKeys } from "../lib/chat/transcript/rows";
@@ -24,7 +25,12 @@ type SharedHistoryState =
 
 function SharedHistoryStateLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-full min-h-320px flex-col items-center justify-center gap-12px p-24px text-center">
+    <div
+      className={cn(
+        "flex h-full min-h-320px flex-col items-center justify-center gap-12px p-24px",
+        "text-center",
+      )}
+    >
       {children}
     </div>
   );
@@ -74,7 +80,13 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
       <main className={GATEWAY_MAIN_SHELL_CLASS}>
         <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
         <div className="relative z-(--layer-content) flex size-full min-h-0 min-w-0 flex-1 flex-col">
-          <header className="flex min-h-76px items-center justify-between gap-16px border-b border-solid border-b-border/55 bg-background/78 px-22px py-14px backdrop-blur-18px max-820:min-h-auto max-820:items-start max-820:flex-col max-820:px-14px max-820:py-12px">
+          <header
+            className={cn(
+              "flex min-h-76px items-center justify-between gap-16px",
+              "border-b border-solid border-b-border/55 bg-background/78 px-22px py-14px backdrop-blur-18px",
+              "max-820:min-h-auto max-820:items-start max-820:flex-col max-820:px-14px max-820:py-12px",
+            )}
+          >
             <div className="flex min-w-0 items-center gap-3">
               <img
                 src="/icon-simple.png"
@@ -93,7 +105,12 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
               </div>
             </div>
             {state.status === "ready" ? (
-              <div className="history-share-meta flex shrink-0 flex-wrap justify-end gap-8px text-muted-foreground text-12px max-820:justify-start [&>span]:border [&>span]:border-border/65 [&>span]:bg-background/72">
+              <div
+                className={cn(
+                  "history-share-meta flex shrink-0 flex-wrap justify-end gap-8px text-muted-foreground text-12px",
+                  "max-820:justify-start [&>span]:border [&>span]:border-border/65 [&>span]:bg-background/72",
+                )}
+              >
                 <span className="rounded-full py-4px px-9px">
                   {summary?.message_count ?? state.entries.length} 条消息
                 </span>
@@ -110,7 +127,12 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
               </SharedHistoryStateLayout>
             ) : state.status === "error" ? (
               <SharedHistoryStateLayout>
-                <div className="flex size-10 items-center justify-center rounded-2xl border border-destructive/25 bg-destructive/10 text-destructive">
+                <div
+                  className={cn(
+                    "flex size-10 items-center justify-center",
+                    "rounded-2xl border border-destructive/25 bg-destructive/10 text-destructive",
+                  )}
+                >
                   <AlertCircle className="size-5" />
                 </div>
                 <div className="text-sm font-medium text-foreground/85">{state.error}</div>

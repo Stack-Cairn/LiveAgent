@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const loader = createTsModuleLoader();
 const scanState = loader.loadModule(
@@ -11,9 +12,11 @@ const hubSource = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
   "utf8",
 );
-const importViewSource = readFileSync(
-  new URL("../../../agent-ui/src/pages/skills-hub/SkillsImportView.tsx", import.meta.url),
-  "utf8",
+const importViewSource = normalizeClassGroups(
+  readFileSync(
+    new URL("../../../agent-ui/src/pages/skills-hub/SkillsImportView.tsx", import.meta.url),
+    "utf8",
+  ),
 );
 
 function scans(description = "A useful skill") {

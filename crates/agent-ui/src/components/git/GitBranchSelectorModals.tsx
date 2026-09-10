@@ -98,7 +98,12 @@ export function GitInitModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+                )}
+              >
                 <GitBranch className="size-5" />
               </div>
               <div className="min-w-0">
@@ -117,7 +122,10 @@ export function GitInitModal(props: {
                 {t("git.branchSelector.targetDirectory")}
               </Label>
               <div
-                className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
+                className={cn(
+                  "truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2",
+                  "text-xs text-foreground",
+                )}
                 title={workdir}
               >
                 {workdir}
@@ -265,7 +273,12 @@ export function WorktreeCreateModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+                )}
+              >
                 <FolderTree className="size-5" />
               </div>
               <div className="min-w-0">
@@ -284,7 +297,10 @@ export function WorktreeCreateModal(props: {
                 {t("git.branchSelector.repositoryLabel")}
               </Label>
               <div
-                className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
+                className={cn(
+                  "truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2",
+                  "text-xs text-foreground",
+                )}
                 title={repoRoot}
               >
                 {repoRoot}
@@ -502,7 +518,12 @@ export function BranchActionsModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+                )}
+              >
                 <GitBranch className="size-5" />
               </div>
               <div className="min-w-0">
@@ -601,7 +622,10 @@ export function BranchActionsModal(props: {
                     {t("git.branchSelector.startPointLabel")}
                   </Label>
                   <div
-                    className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
+                    className={cn(
+                      "truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2",
+                      "text-xs text-foreground",
+                    )}
                     title={branch.fullName}
                   >
                     {branch.fullName}

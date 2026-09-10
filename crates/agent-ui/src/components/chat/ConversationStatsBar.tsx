@@ -178,7 +178,10 @@ export function ConversationStatsBar(props: {
   const row = (
     <div
       aria-hidden="true"
-      className="flex min-w-0 items-center overflow-hidden text-scaled-11px leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums"
+      className={cn(
+        "flex min-w-0 items-center overflow-hidden",
+        "text-scaled-11px leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums",
+      )}
     >
       {prefix === "" ? null : <span className="mr-1">{t("chat.stats.approximate")}</span>}
       {groups.map((group, index) => (
@@ -231,7 +234,10 @@ export function ConversationStatsBar(props: {
                   type="button"
                   onClick={open}
                   aria-label={t("chat.manualCompactTitle")}
-                  className="flex min-w-0 cursor-pointer items-center rounded-full px-1.5 outline-hidden transition-[background-color] hover:bg-muted/50 focus-visible:bg-muted/50"
+                  className={cn(
+                    "flex min-w-0 cursor-pointer items-center rounded-full px-1.5 outline-hidden transition-[background-color]",
+                    "hover:bg-muted/50 focus-visible:bg-muted/50",
+                  )}
                 >
                   {row}
                 </button>

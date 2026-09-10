@@ -12,6 +12,7 @@ import {
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -186,7 +187,12 @@ export function AboutSection(props: AboutSectionProps) {
                 v{currentVersion}
               </div>
             </div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-xs font-medium">
+            <div
+              className={cn(
+                "inline-flex items-center gap-1.5",
+                "rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-xs font-medium",
+              )}
+            >
               <Sparkles className="size-3.5 text-primary" />
               {channelLabel}
             </div>

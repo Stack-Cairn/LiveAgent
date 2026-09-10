@@ -133,7 +133,8 @@ export function UsageInfoPopover(props: {
           <button
             type="button"
             className={cn(
-              "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+              "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+              "transition-colors hover:bg-muted/50 hover:text-foreground",
               className,
             )}
             title={label}

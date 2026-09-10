@@ -4,6 +4,7 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback } from "react";
 import type { WorkspaceProjectRemoveOptions } from "../components/chat/ChatHistorySidebar";
 import { Terminal } from "../components/IconSet";
@@ -60,7 +61,12 @@ function RunningTerminalWarning(props: { count: number; t: (key: string) => stri
   const { count, t } = props;
   return (
     <div className="flex items-start gap-3">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+      <div
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center",
+          "rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        )}
+      >
         <Terminal className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
@@ -68,7 +74,12 @@ function RunningTerminalWarning(props: { count: number; t: (key: string) => stri
           <span className="text-sm font-semibold text-foreground">
             {t("chat.exitConfirmRunningLabel")}
           </span>
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-scaled-11px font-semibold text-amber-700 dark:text-amber-300">
+          <span
+            className={cn(
+              "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5",
+              "text-scaled-11px font-semibold text-amber-700 dark:text-amber-300",
+            )}
+          >
             {count}
           </span>
         </div>

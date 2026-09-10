@@ -7,7 +7,8 @@ export function ChoiceCard({ className, ...props }: ComponentProps<"button">) {
     <button
       {...props}
       className={cn(
-        "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all",
+        "group relative flex items-start gap-3 rounded-xl border-2 p-4",
+        "text-left transition-all",
         className,
       )}
     />

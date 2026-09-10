@@ -251,7 +251,10 @@ export function GitCommitComposer(props: {
         {generating ? (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-2px overflow-hidden after:absolute after:inset-0 after:bg-git-review-generate-progress after:animate-git-review-generate-progress after:content-[''] motion-reduce:after:animate-none motion-reduce:after:bg-none motion-reduce:after:bg-hsl-primary-40"
+            className={cn(
+              "pointer-events-none absolute inset-x-0 top-0 h-2px overflow-hidden",
+              "after:absolute after:inset-0 after:bg-git-review-generate-progress after:animate-git-review-generate-progress after:content-[''] motion-reduce:after:animate-none motion-reduce:after:bg-none motion-reduce:after:bg-hsl-primary-40",
+            )}
           />
         ) : null}
         <Textarea
@@ -263,7 +266,11 @@ export function GitCommitComposer(props: {
           placeholder={t("projectTools.gitReview.commitMessagePlaceholder")}
           disabled={writeDisabled || operationBusy}
           aria-busy={generating}
-          className="max-h-composer-popover min-h-8 resize-none overflow-y-auto border-0 bg-transparent px-2.5 pb-1 pt-2 text-xs leading-5 shadow-none placeholder:text-xs placeholder:text-muted-foreground/70"
+          className={cn(
+            "max-h-composer-popover min-h-8 resize-none overflow-y-auto border-0 bg-transparent",
+            "px-2.5 pb-1 pt-2",
+            "text-xs leading-5 shadow-none placeholder:text-xs placeholder:text-muted-foreground/70",
+          )}
         />
         <div className="flex items-center gap-1.5 px-1.5 pb-1.5">
           {textGenerationClient ? (
@@ -272,7 +279,9 @@ export function GitCommitComposer(props: {
               variant="ghost"
               disabled={generateDisabled}
               className={cn(
-                "h-7 shrink-0 gap-1 rounded-full border border-border/60 bg-background/70 px-2 text-scaled-11px font-medium text-muted-foreground hover:border-primary/35 hover:text-foreground",
+                "h-7 shrink-0 gap-1",
+                "rounded-full border border-border/60 bg-background/70 px-2",
+                "text-scaled-11px font-medium text-muted-foreground hover:border-primary/35 hover:text-foreground",
                 generating && "border-primary/40 text-primary hover:text-primary",
                 COARSE_POINTER_BUTTON_CLASS,
               )}
@@ -304,7 +313,11 @@ export function GitCommitComposer(props: {
             ) : undoMessage !== null ? (
               <button
                 type="button"
-                className="inline-flex max-w-full items-center gap-1 rounded-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className={cn(
+                  "inline-flex max-w-full items-center gap-1",
+                  "rounded-sm text-muted-foreground underline-offset-2",
+                  "hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                )}
                 onClick={handleUndoGeneration}
               >
                 <Undo2 className="size-3 shrink-0" aria-hidden="true" />

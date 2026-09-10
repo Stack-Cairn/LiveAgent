@@ -106,7 +106,8 @@ export function RetryErrorSection(props: SettingsSectionProps) {
                   aria-label={t(`settings.retryError.preset.${code}`)}
                   onClick={() => togglePresetCode(code, !enabled)}
                   className={cn(
-                    "flex h-8 items-center gap-1.5 rounded-lg border px-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    "flex h-8 items-center gap-1.5 rounded-lg border px-2 text-left",
+                    "transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     enabled
                       ? "border-primary/25 bg-primary/[0.06] text-foreground"
                       : "border-foreground/[0.07] text-muted-foreground/75 hover:border-foreground/[0.15] hover:text-foreground/80",
@@ -114,7 +115,8 @@ export function RetryErrorSection(props: SettingsSectionProps) {
                 >
                   <code
                     className={cn(
-                      "flex shrink-0 items-center rounded px-1 py-0.5 font-mono text-10px leading-none tabular-nums transition-colors",
+                      "flex shrink-0 items-center rounded px-1 py-0.5",
+                      "font-mono text-10px leading-none tabular-nums transition-colors",
                       enabled
                         ? "bg-primary/15 text-primary"
                         : "bg-foreground/[0.06] text-muted-foreground",
@@ -174,7 +176,11 @@ export function RetryErrorSection(props: SettingsSectionProps) {
                   key={pattern}
                   type="button"
                   onClick={() => removePattern(pattern)}
-                  className="group flex items-center gap-1 rounded-full border border-border/60 bg-background/60 py-1 pl-2.5 pr-1.5 text-xs text-foreground/90 transition-colors hover:border-destructive/40 hover:bg-destructive/5"
+                  className={cn(
+                    "group flex items-center gap-1",
+                    "rounded-full border border-border/60 bg-background/60",
+                    "py-1 pl-2.5 pr-1.5 text-xs text-foreground/90 transition-colors hover:border-destructive/40 hover:bg-destructive/5",
+                  )}
                   title={t("settings.retryErrorRemovePattern")}
                   aria-label={`${t("settings.retryErrorRemovePattern")} ${pattern}`}
                 >

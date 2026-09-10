@@ -249,7 +249,8 @@ export function AskUserQuestionCard({
                           tabIndex={active ? 0 : -1}
                           onClick={() => selectOption(question.id, option.label)}
                           className={cn(
-                            "group/option relative flex w-full items-start gap-2 rounded-lg p-2 text-left transition-colors duration-150",
+                            "group/option relative flex w-full items-start gap-2 rounded-lg p-2",
+                            "text-left transition-colors duration-150",
                             selected
                               ? "bg-foreground/6"
                               : active && canInteract
@@ -263,7 +264,8 @@ export function AskUserQuestionCard({
                         >
                           <span
                             className={cn(
-                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color] duration-200",
+                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                              "transition-[background-color,border-color] duration-200",
                               selected
                                 ? "border-foreground bg-foreground text-background"
                                 : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
@@ -307,7 +309,8 @@ export function AskUserQuestionCard({
                     {interactive && !isSettled && !cancelled ? (
                       <div
                         className={cn(
-                          "group/option flex w-full items-center gap-2 rounded-lg p-2 transition-colors duration-150",
+                          "group/option flex w-full items-center gap-2 rounded-lg p-2",
+                          "transition-colors duration-150",
                           questionCustomSelected ? "bg-foreground/6" : "",
                         )}
                       >
@@ -320,7 +323,8 @@ export function AskUserQuestionCard({
                           disabled={!canInteract}
                           onClick={() => selectCustom(question.id)}
                           className={cn(
-                            "flex size-4 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color] duration-200",
+                            "flex size-4 shrink-0 items-center justify-center rounded-full border",
+                            "transition-[background-color,border-color] duration-200",
                             questionCustomSelected
                               ? "border-foreground bg-foreground text-background"
                               : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
@@ -364,7 +368,12 @@ export function AskUserQuestionCard({
                       </div>
                     ) : questionCustomSelected && questionCustomText ? (
                       <div className="flex w-full items-center gap-2 rounded-lg p-2">
-                        <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-foreground bg-foreground">
+                        <span
+                          className={cn(
+                            "flex size-4 shrink-0 items-center justify-center",
+                            "rounded-full border border-foreground bg-foreground",
+                          )}
+                        >
                           <span className="size-1.5 rounded-full bg-background" />
                         </span>
                         <span className="min-w-0 flex-1 wrap-break-word text-scaled-12p5px font-medium leading-1p45 text-foreground">
@@ -385,7 +394,12 @@ export function AskUserQuestionCard({
           ) : null}
         </div>
 
-        <div className="flex min-h-11 items-center justify-between gap-3 border-t border-border/60 px-3 py-2">
+        <div
+          className={cn(
+            "flex min-h-11 items-center justify-between gap-3 border-t border-border/60",
+            "px-3 py-2",
+          )}
+        >
           <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground/70">
             {questions.length > 1 ? (
               <>
@@ -394,7 +408,10 @@ export function AskUserQuestionCard({
                   aria-label={t("chat.askUser.previousQuestion")}
                   disabled={safeActiveIndex === 0}
                   onClick={() => goToQuestion(safeActiveIndex - 1)}
-                  className="flex size-18px items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
+                  className={cn(
+                    "flex size-18px items-center justify-center rounded-md transition-colors",
+                    "enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30",
+                  )}
                 >
                   <ChevronUp className="size-3.5" />
                 </button>
@@ -406,7 +423,10 @@ export function AskUserQuestionCard({
                   aria-label={t("chat.askUser.nextQuestion")}
                   disabled={safeActiveIndex === questions.length - 1}
                   onClick={() => goToQuestion(safeActiveIndex + 1)}
-                  className="flex size-18px items-center justify-center rounded-md transition-colors enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30"
+                  className={cn(
+                    "flex size-18px items-center justify-center rounded-md transition-colors",
+                    "enabled:hover:bg-foreground/[0.05] enabled:hover:text-foreground disabled:opacity-30",
+                  )}
                 >
                   <ChevronDown className="size-3.5" />
                 </button>

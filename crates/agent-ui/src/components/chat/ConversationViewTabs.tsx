@@ -25,7 +25,8 @@ export function ConversationViewTabs(props: {
       role="tablist"
       aria-orientation="horizontal"
       className={cn(
-        "flex shrink-0 items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5",
+        "flex shrink-0 items-center gap-0.5",
+        "rounded-lg border border-border/60 bg-muted/40 p-0.5",
         props.className,
       )}
     >

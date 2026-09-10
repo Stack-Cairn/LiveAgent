@@ -28,6 +28,7 @@ import {
   type PendingUploadedFile,
   parsePastedTextDisplayReferences,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   type FocusEvent,
   type MouseEvent,
@@ -684,7 +685,11 @@ function CommitReferenceTooltip({
     // biome-ignore lint/a11y/noStaticElementInteractions: Hover handlers keep this descriptive tooltip open; it has no activation behavior.
     <div
       ref={tooltipRef}
-      className="layer-popover fixed overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
+      className={cn(
+        "layer-popover fixed overflow-y-auto",
+        "rounded-xl border border-border bg-popover px-3 py-2.5",
+        "text-xs text-popover-foreground shadow-xl",
+      )}
       style={{
         left,
         top,
@@ -732,7 +737,12 @@ function CommitReferenceTooltip({
         </div>
       ) : null}
       {commit.githubUrl ? (
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-11px leading-tight text-muted-foreground">
+        <div
+          className={cn(
+            "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
+            "pt-1.5 text-11px leading-tight text-muted-foreground",
+          )}
+        >
           <span className="font-mono text-foreground">{shortSha}</span>
           {commit.remoteName ? <span>{commit.remoteName}</span> : null}
           <span className="text-border">|</span>
@@ -746,7 +756,12 @@ function CommitReferenceTooltip({
           </button>
         </div>
       ) : detailed ? (
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-11px leading-tight text-muted-foreground">
+        <div
+          className={cn(
+            "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
+            "pt-1.5 text-11px leading-tight text-muted-foreground",
+          )}
+        >
           <span className="font-mono text-foreground">{shortSha}</span>
           {commit.remoteName ? <span>{commit.remoteName}</span> : null}
         </div>

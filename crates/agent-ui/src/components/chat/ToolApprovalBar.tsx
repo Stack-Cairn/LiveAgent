@@ -14,6 +14,7 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 import { ASK_USER_QUESTION_TIMEOUT_MS } from "../../lib/chat/askUserQuestion";
 
@@ -178,7 +179,11 @@ export function ToolApprovalBar({
           onDecide(current.toolCallId, "approve"),
         );
       }}
-      className="@container relative flex h-32 w-full flex-col rounded-3xl border border-black/[0.055] bg-white/72 shadow-ui-toolapprovalbar-18 outline-none backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-toolapprovalbar-19"
+      className={cn(
+        "@container relative flex h-32 w-full flex-col",
+        "rounded-3xl border border-black/[0.055] bg-white/72 shadow-ui-toolapprovalbar-18 outline-none backdrop-blur-2xl backdrop-saturate-[165%]",
+        "dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-toolapprovalbar-19",
+      )}
     >
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3">
         <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
@@ -239,7 +244,10 @@ export function ToolApprovalBar({
           {t("chat.toolApproval.deny")}
           <span
             aria-hidden="true"
-            className="rounded bg-muted px-1 py-0.5 font-sans text-9px font-normal leading-none text-muted-foreground"
+            className={cn(
+              "rounded bg-muted px-1 py-0.5",
+              "font-sans text-9px font-normal leading-none text-muted-foreground",
+            )}
           >
             Esc
           </span>
@@ -265,7 +273,10 @@ export function ToolApprovalBar({
               {t("chat.toolApproval.approve")}
               <span
                 aria-hidden="true"
-                className="rounded bg-primary-foreground/10 px-1 py-0.5 font-sans text-10px font-normal leading-none text-primary-foreground/75"
+                className={cn(
+                  "rounded bg-primary-foreground/10 px-1 py-0.5",
+                  "font-sans text-10px font-normal leading-none text-primary-foreground/75",
+                )}
               >
                 ↵
               </span>

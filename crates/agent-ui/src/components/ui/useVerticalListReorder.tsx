@@ -399,7 +399,8 @@ export function useVerticalListReorder(options: UseVerticalListReorderOptions) {
         aria-disabled={!enabled}
         tabIndex={enabled ? 0 : -1}
         className={cn(
-          "flex h-8 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "flex h-8 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/50",
+          "transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           enabled
             ? "cursor-grab touch-none hover:bg-muted hover:text-foreground active:cursor-grabbing"
             : "cursor-not-allowed opacity-30",

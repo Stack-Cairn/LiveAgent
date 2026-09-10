@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const hubSource = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
   "utf8",
 );
-const storeSource = readFileSync(
-  new URL("../../../agent-ui/src/pages/skills-hub/SkillsStoreView.tsx", import.meta.url),
-  "utf8",
+const storeSource = normalizeClassGroups(
+  readFileSync(
+    new URL("../../../agent-ui/src/pages/skills-hub/SkillsStoreView.tsx", import.meta.url),
+    "utf8",
+  ),
 );
 const cacheSource = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/skillStoreCache.ts", import.meta.url),

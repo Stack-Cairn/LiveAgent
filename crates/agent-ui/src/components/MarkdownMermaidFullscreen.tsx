@@ -49,7 +49,10 @@ function MermaidControlButton(props: {
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground/75 transition-colors hover:bg-foreground/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-md text-foreground/75 transition-colors",
+        "hover:bg-foreground/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35",
+      )}
     >
       {children}
     </button>
@@ -166,7 +169,10 @@ function MermaidFullscreenDialog({ chart, onClose }: { chart: string; onClose: (
   return (
     <Dialog open disablePointerDismissal onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="fixed inset-0 m-0 flex h-full w-screen max-w-none overflow-hidden rounded-none border-0 bg-background p-0 shadow-none transition-none"
+        className={cn(
+          "fixed inset-0 m-0 flex h-full w-screen max-w-none overflow-hidden",
+          "rounded-none border-0 bg-background p-0 shadow-none transition-none",
+        )}
         closeLabel={t("chat.imageViewer.exitFullscreen")}
         data-liveagent-mermaid-fullscreen="true"
         showCloseButton
@@ -227,12 +233,21 @@ function MermaidFullscreenDialog({ chart, onClose }: { chart: string; onClose: (
           {error ? (
             <div
               role="alert"
-              className="absolute left-1/2 top-1/2 max-w-dialog-36rem -translate-x-1/2 -translate-y-1/2 rounded-md border border-destructive/30 bg-background px-4 py-3 text-sm text-destructive shadow-lg"
+              className={cn(
+                "absolute left-1/2 top-1/2 max-w-dialog-36rem -translate-x-1/2 -translate-y-1/2",
+                "rounded-md border border-destructive/30 bg-background px-4 py-3",
+                "text-sm text-destructive shadow-lg",
+              )}
             >
               {error}
             </div>
           ) : null}
-          <div className="absolute bottom-4 left-4 z-10 flex items-center rounded-md border border-border bg-background/95 p-1 shadow-md">
+          <div
+            className={cn(
+              "absolute bottom-4 left-4 z-10 flex items-center",
+              "rounded-md border border-border bg-background/95 p-1 shadow-md",
+            )}
+          >
             <MermaidControlButton
               label={t("chat.imageViewer.zoomOut")}
               disabled={!viewportState || viewportState.zoom <= MIN_ZOOM}
@@ -272,7 +287,8 @@ export function MermaidFullscreenButton({ chart, className }: MermaidFullscreenB
         title={t("chat.imageViewer.fullscreen")}
         onClick={() => setOpen(true)}
         className={cn(
-          "flex size-6 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          "flex size-6 items-center justify-center rounded p-1 text-muted-foreground transition-colors",
+          "hover:bg-muted hover:text-foreground",
           className,
         )}
       >

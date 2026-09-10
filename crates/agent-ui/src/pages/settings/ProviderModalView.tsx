@@ -249,13 +249,18 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
         <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
           <nav
-            className="flex w-172px shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5 max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2"
+            className={cn(
+              "flex w-172px shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5",
+              "max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2",
+            )}
             aria-label={t("settings.providerDialogNavigation")}
           >
             <button
               type="button"
               className={cn(
-                "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                "flex h-8 items-center gap-2 rounded-lg px-3",
+                "text-left text-sm font-medium transition-colors",
+                "max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
                 activePanel === "general"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -269,7 +274,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             <button
               type="button"
               className={cn(
-                "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                "flex h-8 items-center gap-2 rounded-lg px-3",
+                "text-left text-sm font-medium transition-colors",
+                "max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
                 activePanel === "request"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -286,7 +293,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
               {customHeaders.length > 0 ? (
                 <span
                   className={cn(
-                    "min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-10px tabular-nums text-muted-foreground",
+                    "min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-10px tabular-nums",
+                    "text-muted-foreground",
                     activePanel === "request" && "bg-primary text-primary-foreground",
                   )}
                 >
@@ -297,7 +305,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             <button
               type="button"
               className={cn(
-                "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                "flex h-8 items-center gap-2 rounded-lg px-3",
+                "text-left text-sm font-medium transition-colors",
+                "max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
                 activePanel === "usage"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -469,7 +479,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       {modelSearch ? (
                         <button
                           type="button"
-                          className="absolute right-0 top-0 flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          className={cn(
+                            "absolute right-0 top-0 flex size-8 items-center justify-center",
+                            "rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                          )}
                           onClick={() => setModelSearch("")}
                           title={t("settings.clearModelSearch")}
                           aria-label={t("settings.clearModelSearch")}
@@ -610,7 +623,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   {newModelPhase ? (
                                     <span
                                       className={cn(
-                                        "shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-10px font-semibold leading-none tracking-wide text-primary transition-all duration-500 max-[420px]:px-1.5",
+                                        "shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5",
+                                        "text-10px font-semibold leading-none tracking-wide text-primary transition-all duration-500 max-[420px]:px-1.5",
                                         newModelPhase === "fading" && "scale-95 opacity-0",
                                       )}
                                     >
@@ -619,7 +633,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   ) : null}
                                 </div>
                               </div>
-                              <div className="flex shrink-0 items-center whitespace-nowrap text-11px tabular-nums text-muted-foreground max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0">
+                              <div
+                                className={cn(
+                                  "flex shrink-0 items-center whitespace-nowrap text-11px tabular-nums text-muted-foreground",
+                                  "max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0",
+                                )}
+                              >
                                 {modalityIcons.length > 0 ? (
                                   <span className="mr-1.5 flex items-center gap-1">
                                     {modalityIcons.map(({ modality, Icon, labelKey }) => (
@@ -640,7 +659,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   {formatTokenCount(model.maxOutputToken)} out
                                 </span>
                                 {model.limitsSource === "fallback" ? (
-                                  <span className="ml-1.5 rounded-full border border-border/70 bg-muted/60 px-1.5 py-0.5 text-10px font-medium leading-none text-muted-foreground">
+                                  <span
+                                    className={cn(
+                                      "ml-1.5 rounded-full border border-border/70 bg-muted/60 px-1.5 py-0.5",
+                                      "text-10px font-medium leading-none text-muted-foreground",
+                                    )}
+                                  >
                                     {t("settings.estimatedLimitsBadge")}
                                   </span>
                                 ) : null}
@@ -827,7 +851,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                 </div>
 
                                 {!canSaveEditingModel ? (
-                                  <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                  <div
+                                    className={cn(
+                                      "mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2",
+                                      "text-xs text-destructive",
+                                    )}
+                                  >
                                     {t("settings.positiveIntegerRequired")}
                                   </div>
                                 ) : null}
@@ -865,13 +894,15 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                 <div
                   className={cn(
-                    "mt-3 flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors",
+                    "mt-3 flex items-center gap-3",
+                    "rounded-xl border bg-card px-4 py-3 transition-colors",
                     useSystemProxy && "border-primary/35 bg-primary/[0.04]",
                   )}
                 >
                   <span
                     className={cn(
-                      "flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
+                      "flex size-9 shrink-0 items-center justify-center",
+                      "rounded-lg bg-muted text-muted-foreground transition-colors",
                       useSystemProxy && "bg-primary/15 text-primary",
                     )}
                   >
@@ -896,7 +927,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   <div className="flex items-center gap-3">
                     <span
                       className={cn(
-                        "flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
+                        "flex size-9 shrink-0 items-center justify-center",
+                        "rounded-lg bg-muted text-muted-foreground transition-colors",
                         streamRetryMode !== "default" && "bg-primary/15 text-primary",
                       )}
                     >
@@ -920,7 +952,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                           key={value}
                           type="button"
                           className={cn(
-                            "rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+                            "rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors",
+                            "hover:border-primary hover:text-primary",
                             streamRetryMode === value &&
                               "border-primary bg-primary/10 text-primary",
                           )}
@@ -973,7 +1006,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     <div className="flex items-center gap-3">
                       <span
                         className={cn(
-                          "flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
+                          "flex size-9 shrink-0 items-center justify-center",
+                          "rounded-lg bg-muted text-muted-foreground transition-colors",
                           (providerType === "codex"
                             ? promptCacheHintMode !== "none"
                             : promptCachingEnabled) && "bg-primary/15 text-primary",
@@ -1039,7 +1073,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             key={value}
                             type="button"
                             className={cn(
-                              "rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+                              "rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors",
+                              "hover:border-primary hover:text-primary",
                               promptCacheRetention === value &&
                                 "border-primary bg-primary/10 text-primary",
                             )}
@@ -1092,7 +1127,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               {t(`settings.cliIdentity.${identity}`)}
                             </span>
                             {isCliIdentityProviderId(providerType) && identity === providerType ? (
-                              <span className="shrink-0 whitespace-nowrap rounded bg-primary/10 px-1 py-px text-10px font-medium text-primary">
+                              <span
+                                className={cn(
+                                  "shrink-0 whitespace-nowrap rounded bg-primary/10 px-1 py-px",
+                                  "text-10px font-medium text-primary",
+                                )}
+                              >
                                 {t("settings.cliIdentityRecommended")}
                               </span>
                             ) : null}
@@ -1207,7 +1247,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 {headerImportOpen ? null : customHeaders.length === 0 ? (
                   <button
                     type="button"
-                    className="mt-3 flex w-full flex-col items-center gap-1 rounded-xl border border-dashed px-4 py-8 text-center transition-colors hover:border-primary/50 hover:bg-accent/20"
+                    className={cn(
+                      "mt-3 flex w-full flex-col items-center gap-1",
+                      "rounded-xl border border-dashed px-4 py-8 text-center transition-colors",
+                      "hover:border-primary/50 hover:bg-accent/20",
+                    )}
                     onClick={() => addCustomHeader()}
                   >
                     <List className="size-5 text-muted-foreground/60" />
@@ -1237,7 +1281,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             // biome-ignore lint/suspicious/noArrayIndexKey: Header rows are an ordered, controlled editor whose mutation API is intentionally index-based; content-derived keys would remount inputs on every keystroke.
                             key={index}
                             className={cn(
-                              "group relative flex items-stretch overflow-hidden rounded-lg border bg-card transition-all focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-muted-foreground/30 max-[720px]:flex-wrap",
+                              "group relative flex items-stretch overflow-hidden",
+                              "rounded-lg border bg-card transition-all",
+                              "focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-muted-foreground/30 max-[720px]:flex-wrap",
                               issue &&
                                 "border-destructive/60 focus-within:border-destructive focus-within:ring-destructive/10",
                             )}
@@ -1248,7 +1294,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               }}
                               value={header.key}
                               className={cn(
-                                "h-8 w-210px shrink-0 rounded-none border-0 border-r bg-muted/30 px-3 font-mono text-xs shadow-none focus-visible:ring-0 max-[720px]:w-full max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:bg-muted/40",
+                                "h-8 w-210px shrink-0",
+                                "rounded-none border-0 border-r bg-muted/30 px-3",
+                                "font-mono text-xs shadow-none",
+                                "focus-visible:ring-0 max-[720px]:w-full max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:bg-muted/40",
                                 keyIssue && "text-destructive",
                               )}
                               placeholder={t("settings.customHeaderKeyPlaceholder")}
@@ -1311,7 +1360,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                 type="text"
                                 value={header.value}
                                 className={cn(
-                                  "h-8 w-full rounded-none border-0 bg-transparent pl-3 pr-11 font-mono text-xs shadow-none focus-visible:ring-0",
+                                  "h-8 w-full rounded-none border-0 bg-transparent pl-3 pr-11",
+                                  "font-mono text-xs shadow-none focus-visible:ring-0",
                                   valueIssue && "text-destructive",
                                 )}
                                 placeholder={t("settings.customHeaderValue")}
@@ -1330,7 +1380,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   else focusCustomHeader(index + 1, "key");
                                 }}
                               />
-                              <div className="settings-hover-actions absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-[720px]:opacity-100">
+                              <div
+                                className={cn(
+                                  "settings-hover-actions absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5",
+                                  "opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-[720px]:opacity-100",
+                                )}
+                              >
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1362,7 +1417,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       <div
                         id="provider-header-suggest"
                         role="listbox"
-                        className="layer-popover fixed overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
+                        className={cn(
+                          "layer-popover fixed overflow-hidden",
+                          "rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg",
+                        )}
                         style={{
                           left: headerSuggest.rect.left,
                           top: headerSuggest.rect.top,
@@ -1376,7 +1434,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             role="option"
                             aria-selected={itemIndex === headerSuggestActiveIndex}
                             className={cn(
-                              "flex w-full items-center rounded-md px-2.5 py-2 text-left font-mono text-xs text-muted-foreground transition-colors",
+                              "flex w-full items-center rounded-md px-2.5 py-2",
+                              "text-left font-mono text-xs text-muted-foreground transition-colors",
                               itemIndex === headerSuggestActiveIndex && "bg-accent text-foreground",
                             )}
                             onMouseDown={(event) => event.preventDefault()}
@@ -1470,7 +1529,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     </div>
 
                     {usageQuery.mode !== "custom" ? (
-                      <p className="mt-3 rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                      <p
+                        className={cn(
+                          "mt-3 rounded-lg border bg-muted/30 px-3 py-2",
+                          "text-xs leading-5 text-muted-foreground",
+                        )}
+                      >
                         {usageQuery.mode === "general"
                           ? t("settings.providerUsageTemplate.general")
                           : usageQuery.mode === "newapi"
@@ -1487,7 +1551,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         {matchedBalanceProviders.map((entry) => (
                           <span
                             key={entry.id}
-                            className="inline-flex items-center rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                            className={cn(
+                              "inline-flex items-center rounded-md bg-primary/10 px-2.5 py-1",
+                              "text-xs font-medium text-primary",
+                            )}
                           >
                             {entry.label}
                           </span>
@@ -1730,7 +1797,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                         {activeCodingPlanProvider === "zhipu_team" ? (
                           <>
-                            <p className="mt-3 rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                            <p
+                              className={cn(
+                                "mt-3 rounded-lg border bg-muted/30 px-3 py-2",
+                                "text-xs leading-5 text-muted-foreground",
+                              )}
+                            >
                               {t("settings.providerUsageZhipuTeamHint")}{" "}
                               {t("settings.providerUsageZhipuTeamConsoleLink")}{" "}
                               <a
@@ -1791,7 +1863,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                         {activeCodingPlanProvider === "volcengine" ? (
                           <>
-                            <p className="mt-3 rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                            <p
+                              className={cn(
+                                "mt-3 rounded-lg border bg-muted/30 px-3 py-2",
+                                "text-xs leading-5 text-muted-foreground",
+                              )}
+                            >
                               {t("settings.providerUsageVolcengineHint")}{" "}
                               {t("settings.providerUsageVolcengineConsoleLink")}{" "}
                               <a
@@ -1898,7 +1975,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     ) : null}
 
                     {/* 测试查询:独占一行的 card——按钮居左,结果内容就地靠左展示。 */}
-                    <div className="mt-4 flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
+                    <div
+                      className={cn(
+                        "mt-4 flex items-center gap-3",
+                        "rounded-xl border bg-card px-4 py-3",
+                      )}
+                    >
                       <Button
                         type="button"
                         variant="outline"
@@ -1961,14 +2043,24 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     {usageQuery.mode === "custom" ||
                     usageQuery.mode === "general" ||
                     usageQuery.mode === "newapi" ? (
-                      <div className="mt-4 rounded-lg border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+                      <div
+                        className={cn(
+                          "mt-4 rounded-lg border bg-muted/30 px-3 py-2.5",
+                          "text-xs leading-5 text-muted-foreground",
+                        )}
+                      >
                         <div className="font-medium text-foreground">
                           {t("settings.providerUsageScriptHelp")}
                         </div>
                         <div className="mt-2 font-medium">
                           {t("settings.providerUsageScriptHelpFormat")}
                         </div>
-                        <pre className="mt-1 overflow-x-auto rounded-md border bg-background/60 p-2 font-mono text-11px leading-4">
+                        <pre
+                          className={cn(
+                            "mt-1 overflow-x-auto rounded-md border bg-background/60 p-2",
+                            "font-mono text-11px leading-4",
+                          )}
+                        >
                           {USAGE_QUERY_SCRIPT_HELP_EXAMPLE}
                         </pre>
                         <div className="mt-2 font-medium">

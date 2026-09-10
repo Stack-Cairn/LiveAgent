@@ -195,14 +195,19 @@ function ToolTraceGroupInner(props: {
         type="button"
         aria-expanded={open}
         aria-label={open ? t("chat.tool.collapseActivity") : t("chat.tool.expandActivity")}
-        className="-mx-1.5 flex w-fit max-w-bleed-0p75rem cursor-pointer select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-scaled-13px font-450 text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75"
+        className={cn(
+          "-mx-1.5 flex w-fit max-w-bleed-0p75rem cursor-pointer select-none items-center gap-1.5",
+          "rounded-lg px-1.5 py-1",
+          "text-left text-scaled-13px font-450 text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75",
+        )}
         onClick={() => setOpen((prev) => !prev)}
       >
         <BatchIcon className="size-3 shrink-0 text-foreground/45" />
         <span className="min-w-0 truncate">{headerLabel}</span>
         <ChevronRight
           className={cn(
-            "size-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/tool-trace:opacity-100 group-focus-within/tool-trace:opacity-100",
+            "size-3 shrink-0 text-foreground/40 opacity-0",
+            "transition-[opacity,transform] duration-150 ease-out group-hover/tool-trace:opacity-100 group-focus-within/tool-trace:opacity-100",
             open ? "rotate-90" : "",
           )}
         />
@@ -227,7 +232,10 @@ function ToolTraceGroupInner(props: {
           <div className="-mx-3 overflow-hidden px-3 pt-0.5">
             <div
               data-tool-trace-scroll=""
-              className="-mx-3 flex max-h-400px flex-col gap-1 overflow-y-auto overscroll-contain px-3 [scrollbar-gutter:stable]"
+              className={cn(
+                "-mx-3 flex max-h-400px flex-col gap-1 overflow-y-auto overscroll-contain px-3",
+                "[scrollbar-gutter:stable]",
+              )}
             >
               {items.map((item, index) => (
                 <MemoToolCallItem

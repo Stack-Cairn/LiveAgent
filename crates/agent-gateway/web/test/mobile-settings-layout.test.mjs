@@ -2,23 +2,24 @@ import { readStyleSource } from "../../../agent-ui/test-support/style-values.mjs
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
-const hooksSource = readFileSync(
+const hooksSource = normalizeClassGroups(readFileSync(
   new URL("../../../agent-ui/src/pages/settings/HooksSection.tsx", import.meta.url),
   "utf8",
-);
-const devicesSource = readFileSync(
+));
+const devicesSource = normalizeClassGroups(readFileSync(
   new URL("../src/pages/settings/DevicesSection.tsx", import.meta.url),
   "utf8",
-);
+));
 const cronSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/CronTaskViewModal.tsx", import.meta.url),
   "utf8",
 );
-const providersSource = readFileSync(
+const providersSource = normalizeClassGroups(readFileSync(
   new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
   "utf8",
-);
+));
 const settingsShellSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/SettingsShell.tsx", import.meta.url),
   "utf8",

@@ -307,7 +307,8 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
           <div className="ml-auto grid min-w-0 items-center justify-items-end">
             <span
               className={cn(
-                "pointer-events-none col-start-1 row-start-1 inline-flex min-w-0 items-center gap-1 text-10px text-muted-foreground transition-opacity",
+                "pointer-events-none col-start-1 row-start-1 inline-flex min-w-0 items-center gap-1",
+                "text-10px text-muted-foreground transition-opacity",
                 !bulkMode &&
                   "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0",
               )}
@@ -320,7 +321,10 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
                 data-card-delete-zone=""
                 role="toolbar"
                 aria-label={`${t("settings.skillsHubDeleteSkill")}: ${skill.name}`}
-                className="pointer-events-none relative z-10 col-start-1 row-start-1 flex opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+                className={cn(
+                  "pointer-events-none relative z-10 col-start-1 row-start-1 flex opacity-0 transition-opacity",
+                  "group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
+                )}
                 onPointerDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}

@@ -23,7 +23,8 @@ export const Switch = React.forwardRef<HTMLElement, SwitchProps>(
       ref={ref}
       data-slot="switch"
       className={cn(
-        "peer inline-flex shrink-0 cursor-pointer items-center rounded-full bg-muted-foreground/20 transition-colors focus-visible:outline-none focus-visible:ring-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[unchecked]:hover:bg-muted-foreground/30",
+        "peer inline-flex shrink-0 cursor-pointer items-center rounded-full bg-muted-foreground/20 transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[unchecked]:hover:bg-muted-foreground/30",
         SWITCH_SIZES[size].track,
         tone === "success"
           ? "data-[checked]:bg-emerald-500 focus-visible:ring-emerald-500/30"

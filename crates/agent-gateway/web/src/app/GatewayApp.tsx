@@ -10,6 +10,7 @@ import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationS
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import {
   type ConversationOpenState,
@@ -1930,7 +1931,11 @@ function useGatewayAppController() {
           <main className={GATEWAY_MAIN_SHELL_CLASS}>
             <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
             <div
-              className={`${GATEWAY_CHAT_FRAME_CLASS} relative flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center max-820:h-full`}
+              className={cn(
+                GATEWAY_CHAT_FRAME_CLASS,
+                "relative flex h-full min-h-0 min-w-0 flex-1 flex-col",
+                "items-center justify-center max-820:h-full",
+              )}
             >
               <SettingsSyncLoading locale={settings.locale} />
             </div>

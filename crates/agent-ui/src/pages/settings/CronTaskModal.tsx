@@ -619,7 +619,12 @@ export function CronTaskModal({
 
             {/* Prompt-type run semantics belong to the type choice, not the config step */}
             {type === "prompt" ? (
-              <div className="mt-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.04] px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+              <div
+                className={cn(
+                  "mt-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.04] px-3.5 py-3",
+                  "text-xs leading-relaxed text-muted-foreground",
+                )}
+              >
                 {t("settings.cronPromptRunHint")}
               </div>
             ) : null}
@@ -802,7 +807,10 @@ export function CronTaskModal({
                 <Textarea
                   value={scriptText}
                   placeholder={"pnpm install\npnpm build\npnpm test"}
-                  className="min-h-180px resize-y rounded-none border-0 bg-transparent font-mono text-xs leading-relaxed focus-visible:ring-0"
+                  className={cn(
+                    "min-h-180px resize-y rounded-none border-0 bg-transparent font-mono text-xs leading-relaxed",
+                    "focus-visible:ring-0",
+                  )}
                   onChange={(e) => {
                     setFormError(null);
                     setScriptText(e.currentTarget.value);
@@ -827,7 +835,12 @@ export function CronTaskModal({
             {type === "prompt" ? (
               <div className="space-y-3">
                 {!autoPromptSupported ? (
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3.5 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+                  <div
+                    className={cn(
+                      "rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3.5 py-3",
+                      "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
+                    )}
+                  >
                     {t("settings.cronPromptAgentModeOnlyHint")}
                   </div>
                 ) : null}
@@ -879,13 +892,23 @@ export function CronTaskModal({
                   </div>
                 </div>
                 {promptModelOptions.length === 0 ? (
-                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  <div
+                    className={cn(
+                      "rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-xs text-amber-700",
+                      "dark:text-amber-300",
+                    )}
+                  >
                     {t("settings.cronPromptModelEmpty")}
                   </div>
                 ) : null}
 
                 <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
-                  <div className="flex items-center gap-1.5 border-b border-border/30 px-3 py-2 text-11px text-muted-foreground">
+                  <div
+                    className={cn(
+                      "flex items-center gap-1.5 border-b border-border/30 px-3 py-2",
+                      "text-11px text-muted-foreground",
+                    )}
+                  >
                     <MessageSquare className="size-3" />
                     <span className="font-medium">{t("settings.cronPromptLabel")}</span>
                   </div>

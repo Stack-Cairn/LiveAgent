@@ -149,7 +149,11 @@ export function HostedSearchGroupView({
         type="button"
         aria-expanded={expanded}
         aria-label={expanded ? t("chat.search.collapseActivity") : t("chat.search.expandActivity")}
-        className="-mx-1.5 flex h-auto max-w-bleed-0p75rem items-center gap-1.5 rounded-lg px-1.5 py-1 text-scaled-13px font-450 text-foreground/60 transition-colors hover:bg-foreground/[0.04] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "-mx-1.5 flex h-auto max-w-bleed-0p75rem items-center gap-1.5 rounded-lg",
+          "px-1.5 py-1 text-scaled-13px font-450 text-foreground/60 transition-colors",
+          "hover:bg-foreground/[0.04] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        )}
         onClick={() => setExpanded((current) => !current)}
       >
         <Globe className="size-3 shrink-0 text-foreground/45" />
@@ -165,7 +169,9 @@ export function HostedSearchGroupView({
         <ChevronRight
           aria-hidden="true"
           className={cn(
-            "size-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/search-trace:opacity-100 group-focus-within/search-trace:opacity-100 motion-reduce:transition-none",
+            "size-3 shrink-0 text-foreground/40 opacity-0",
+            "transition-[opacity,transform] duration-150 ease-out",
+            "group-hover/search-trace:opacity-100 group-focus-within/search-trace:opacity-100 motion-reduce:transition-none",
             expanded && "rotate-90",
           )}
         />
@@ -194,7 +200,10 @@ export function HostedSearchGroupView({
 
                   {visibleSources.map((source) => (
                     <a
-                      className="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className={cn(
+                        "flex min-h-7 items-center gap-2 rounded-md px-1.5 py-0.5 text-left",
+                        "transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
                       href={source.url}
                       key={source.url}
                       rel="noreferrer"
@@ -220,7 +229,10 @@ export function HostedSearchGroupView({
 
                   {hiddenSourceCount > 0 ? (
                     <button
-                      className="ml-1 w-fit rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                      className={cn(
+                        "ml-1 w-fit rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors",
+                        "hover:bg-muted/70 hover:text-foreground",
+                      )}
                       onClick={() => setShowAll(true)}
                       type="button"
                     >

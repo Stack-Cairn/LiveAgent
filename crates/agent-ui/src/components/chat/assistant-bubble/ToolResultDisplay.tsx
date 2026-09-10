@@ -842,7 +842,10 @@ export function ToolResultDisplay({
             {details.entries.map((entry) => (
               <div
                 key={`${entry.kind}-${entry.path}`}
-                className="flex items-start gap-2 rounded-md px-1.5 py-1 text-scaled-11px leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className={cn(
+                  "flex items-start gap-2 rounded-md px-1.5 py-1 text-scaled-11px leading-1p5",
+                  "even:bg-black/[0.02] dark:even:bg-white/[0.03]",
+                )}
               >
                 <span className="mt-1px shrink-0 text-scaled-10px font-semibold uppercase text-muted-foreground/35">
                   {entry.kind}
@@ -880,7 +883,10 @@ export function ToolResultDisplay({
               <PathDisplay
                 key={entry}
                 path={entry}
-                className="block rounded-md px-1.5 py-1 break-all font-mono text-scaled-11px leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className={cn(
+                  "block rounded-md px-1.5 py-1",
+                  "break-all font-mono text-scaled-11px leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]",
+                )}
               />
             ))}
           </div>
@@ -942,7 +948,12 @@ export function ToolResultDisplay({
                     path={match.path}
                     className="min-w-0 break-all font-mono text-scaled-11px leading-1p5"
                   />
-                  <span className="shrink-0 rounded bg-black/[0.04] px-1.5 py-1px text-scaled-10px font-semibold text-muted-foreground/60 dark:bg-white/[0.05]">
+                  <span
+                    className={cn(
+                      "shrink-0 rounded bg-black/[0.04] px-1.5 py-1px",
+                      "text-scaled-10px font-semibold text-muted-foreground/60 dark:bg-white/[0.05]",
+                    )}
+                  >
                     line {match.line}
                   </span>
                 </div>
@@ -1141,7 +1152,12 @@ export function ToolResultDisplay({
           </div>
         ) : null}
         {details.bodyPreview ? (
-          <div className="rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-scaled-11p5px leading-1p6 dark:border-white/[0.07] dark:bg-white/[0.03]">
+          <div
+            className={cn(
+              "rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-scaled-11p5px leading-1p6",
+              "dark:border-white/[0.07] dark:bg-white/[0.03]",
+            )}
+          >
             <Markdown content={details.bodyPreview} />
           </div>
         ) : null}

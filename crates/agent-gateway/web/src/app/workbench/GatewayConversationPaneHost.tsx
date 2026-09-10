@@ -39,6 +39,7 @@ import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import {
   ChatComposerBar,
@@ -805,13 +806,20 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       {blockedMessage ? (
         <div
           data-workbench-pane-blocked=""
-          className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400"
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400",
+          )}
         >
           {blockedMessage}
         </div>
       ) : null}
       <div
-        className={`${GATEWAY_CHAT_FRAME_CLASS} relative flex size-full h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden max-820:h-full`}
+        className={cn(
+          GATEWAY_CHAT_FRAME_CLASS,
+          "relative flex size-full h-full min-h-0 min-w-0 flex-1",
+          "flex-col overflow-hidden max-820:h-full",
+        )}
       >
         <section
           ref={usePrimary ? primary?.stageRef : undefined}

@@ -103,7 +103,8 @@ export function CommandSafetyModeSelector(props: {
             disabled={disabled}
             className={cn(
               COMPOSER_CONTROL_TRIGGER_CLASS,
-              "w-8 justify-center gap-0 px-0 data-popup-open:bg-muted/60 web:max-480:flex-none web:max-480:w-2rem web:max-480:min-w-2rem web:max-480:justify-center web:max-480:gap-0 web:max-480:px-0",
+              "w-8 justify-center gap-0 px-0",
+              "data-popup-open:bg-muted/60 web:max-480:flex-none web:max-480:w-2rem web:max-480:min-w-2rem web:max-480:justify-center web:max-480:gap-0 web:max-480:px-0",
             )}
           />
         }
@@ -113,7 +114,13 @@ export function CommandSafetyModeSelector(props: {
         {modeIcon(selected, triggerIconClass(selected))}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="composer-safety-dropdown flex w-72 origin-(--transform-origin) flex-col gap-1 overflow-hidden p-1 transition-[opacity,transform] duration-180 ease-ui-enter data-starting-style:translate-y-6px data-starting-style:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none! web:font-app"
+        className={cn(
+          "composer-safety-dropdown flex w-72 origin-(--transform-origin)",
+          "flex-col gap-1 overflow-hidden p-1",
+          "transition-[opacity,transform] duration-180 ease-ui-enter",
+          "data-starting-style:translate-y-6px data-starting-style:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in",
+          "motion-reduce:transition-none! web:font-app",
+        )}
         side="top"
         align="start"
       >

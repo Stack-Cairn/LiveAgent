@@ -262,7 +262,10 @@ export function SkillsStoreView(props: {
                   key={option.value}
                   value={option.value}
                   disabled={searching}
-                  className="h-8 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground data-[pressed]:bg-muted data-[pressed]:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    "h-8 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground",
+                    "hover:bg-muted/60 hover:text-foreground data-[pressed]:bg-muted data-[pressed]:text-foreground disabled:cursor-not-allowed disabled:opacity-50",
+                  )}
                 >
                   {t(option.labelKey)}
                 </ToggleGroupItem>
@@ -273,7 +276,8 @@ export function SkillsStoreView(props: {
         <div
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-x-0 -bottom-1 h-px overflow-hidden rounded-full bg-transparent transition-opacity duration-200 motion-reduce:transition-none",
+            "pointer-events-none absolute inset-x-0 -bottom-1 h-px overflow-hidden rounded-full bg-transparent",
+            "transition-opacity duration-200 motion-reduce:transition-none",
             refreshing ? "opacity-100" : "opacity-0",
           )}
         >
@@ -377,7 +381,9 @@ export function SkillsStoreView(props: {
                       }
                     }}
                     className={cn(
-                      "flex h-full cursor-pointer flex-col rounded-2xl border bg-card p-3.5 text-left shadow-xs focus:outline-none focus:ring-2 focus:ring-ring",
+                      "flex h-full cursor-pointer flex-col",
+                      "rounded-2xl border bg-card p-3.5 text-left shadow-xs",
+                      "focus:outline-none focus:ring-2 focus:ring-ring",
                       done
                         ? "border-emerald-500/40 dark:border-emerald-400/35"
                         : "border-border/70",
@@ -435,7 +441,12 @@ export function SkillsStoreView(props: {
                         </p>
                       ) : null}
 
-                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/60 pt-2 text-10p5px text-muted-foreground">
+                      <div
+                        className={cn(
+                          "flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/60 pt-2",
+                          "text-10p5px text-muted-foreground",
+                        )}
+                      >
                         <span
                           className="inline-flex items-center gap-1"
                           title={t("settings.skillsStorePreviewDownloads")}
@@ -660,7 +671,12 @@ function SkillsStorePreviewPopup(props: {
       className="w-full sm:max-w-34rem"
     >
       <SheetHeader className="flex-row items-start gap-3 border-b border-border px-5 py-4 pr-14">
-        <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted text-foreground">
+        <div
+          className={cn(
+            "flex size-11 shrink-0 items-center justify-center overflow-hidden",
+            "rounded-xl border border-border bg-muted text-foreground",
+          )}
+        >
           {detail?.ownerImage ? (
             <img src={detail.ownerImage} alt="" className="size-full object-cover" loading="lazy" />
           ) : (
@@ -672,7 +688,12 @@ function SkillsStorePreviewPopup(props: {
             {t("settings.skillsStorePreviewTitle")}
           </div>
           <SheetTitle className="mt-1 truncate">{data.displayName}</SheetTitle>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-11px text-muted-foreground">
+          <div
+            className={cn(
+              "mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1",
+              "text-11px text-muted-foreground",
+            )}
+          >
             {owner ? <span className="truncate">@{owner}</span> : null}
             <span>v{version}</span>
             {data.updatedAt ? <span>{formatStoreDate(data.updatedAt)}</span> : null}

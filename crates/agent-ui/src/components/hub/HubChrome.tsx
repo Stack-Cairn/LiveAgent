@@ -57,7 +57,12 @@ export function HubHeader(props: {
         )}
       >
         {icon ? (
-          <div className="hub-header-icon flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-foreground shadow-xs">
+          <div
+            className={cn(
+              "hub-header-icon flex size-11 shrink-0 items-center justify-center",
+              "rounded-xl border border-border bg-background text-foreground shadow-xs",
+            )}
+          >
             {icon}
           </div>
         ) : null}

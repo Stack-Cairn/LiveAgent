@@ -19,7 +19,12 @@ export const NotifyToast = memo(function NotifyToast(props: {
   const { items, onDismiss } = props;
 
   return (
-    <div className="absolute top-full right-4 z-50 flex flex-col gap-2 pt-2 pointer-events-none">
+    <div
+      className={cn(
+        "absolute top-full right-4 z-50 flex flex-col gap-2 pt-2",
+        "pointer-events-none",
+      )}
+    >
       <LazyMotion features={domAnimation} strict>
         <AnimatePresence>
           {items.map((item) => (
@@ -62,7 +67,8 @@ const ToastEntry = memo(function ToastEntry(props: {
       aria-live={item.type === "error" ? "assertive" : "polite"}
       aria-atomic="true"
       className={cn(
-        "pointer-events-auto flex w-notification items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
+        "pointer-events-auto flex w-notification items-start gap-2.5 rounded-lg border",
+        "px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
         isWarning
           ? "border-amber-500/30 bg-amber-50/95 dark:bg-amber-950/80 dark:border-amber-500/25"
           : isSuccess
@@ -102,7 +108,10 @@ const ToastEntry = memo(function ToastEntry(props: {
         type="button"
         onClick={() => onDismiss(item.id)}
         aria-label={t("common.dismissNotification")}
-        className="mt-0.5 shrink-0 rounded p-0.5 opacity-50 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+        className={cn(
+          "mt-0.5 shrink-0 rounded p-0.5 opacity-50 transition-opacity",
+          "hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
+        )}
       >
         <X aria-hidden="true" className="size-3.5" />
       </button>

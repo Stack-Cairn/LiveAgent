@@ -1,6 +1,7 @@
 import type { AgentPromptTemplate } from "@liveagent/app/lib/settings";
 import { BookOpen, Check, FileText, ScrollText } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
@@ -55,7 +56,12 @@ export function AgentPromptTemplateModal({
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3.5">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
+          <div
+            className={cn(
+              "flex size-11 shrink-0 items-center justify-center",
+              "rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs",
+            )}
+          >
             <ScrollText className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -70,9 +76,19 @@ export function AgentPromptTemplateModal({
 
         <DialogBody>
           <div className="grid items-stretch gap-4 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
-            <section className="flex min-h-0 flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs">
+            <section
+              className={cn(
+                "flex min-h-0 flex-col",
+                "rounded-2xl border border-border/60 bg-card p-5 shadow-xs",
+              )}
+            >
               <div className="mb-5 flex items-start gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
+                <div
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center",
+                    "rounded-xl border border-border/60 bg-muted/40 text-muted-foreground",
+                  )}
+                >
                   <BookOpen className="size-4" />
                 </div>
                 <div>
@@ -105,16 +121,29 @@ export function AgentPromptTemplateModal({
                   id="agent-template-description"
                   value={description}
                   placeholder={t("settings.agentsDescriptionPlaceholder")}
-                  className="h-32 min-h-32 flex-1 resize-none overflow-y-auto overscroll-contain px-3.5 py-3 leading-relaxed md:h-auto md:min-h-0"
+                  className={cn(
+                    "h-32 min-h-32 flex-1 resize-none overflow-y-auto overscroll-contain px-3.5 py-3",
+                    "leading-relaxed md:h-auto md:min-h-0",
+                  )}
                   onChange={(e) => setDescription(e.currentTarget.value)}
                 />
               </div>
             </section>
 
-            <section className="flex min-h-0 flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-xs md:min-h-438px">
+            <section
+              className={cn(
+                "flex min-h-0 flex-col",
+                "rounded-2xl border border-border/60 bg-card p-5 shadow-xs md:min-h-438px",
+              )}
+            >
               <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                 <div className="flex items-start gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
+                  <div
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center",
+                      "rounded-xl border border-border/60 bg-muted/40 text-muted-foreground",
+                    )}
+                  >
                     <FileText className="size-4" />
                   </div>
                   <div>
@@ -127,7 +156,12 @@ export function AgentPromptTemplateModal({
                     </p>
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs",
+                    "tabular-nums text-muted-foreground",
+                  )}
+                >
                   {prompt.length.toLocaleString()} {t("settings.agentsCharacters")}
                 </span>
               </div>
@@ -135,7 +169,10 @@ export function AgentPromptTemplateModal({
                 id="agent-template-prompt"
                 value={prompt}
                 placeholder={t("settings.agentsPromptPlaceholder")}
-                className="h-80 min-h-80 flex-1 resize-none overflow-y-auto overscroll-contain p-4 font-mono text-13px leading-6 md:h-auto md:min-h-0"
+                className={cn(
+                  "h-80 min-h-80 flex-1 resize-none overflow-y-auto overscroll-contain p-4",
+                  "font-mono text-13px leading-6 md:h-auto md:min-h-0",
+                )}
                 onChange={(e) => setPrompt(e.currentTarget.value)}
               />
             </section>

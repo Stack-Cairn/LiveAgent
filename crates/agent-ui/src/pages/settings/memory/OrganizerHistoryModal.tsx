@@ -315,7 +315,12 @@ export function OrganizerHistoryModal(props: {
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-2">
               {runs.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border/60 px-3 py-8 text-center text-xs text-muted-foreground">
+                <div
+                  className={cn(
+                    "rounded-lg border border-dashed border-border/60 px-3 py-8",
+                    "text-center text-xs text-muted-foreground",
+                  )}
+                >
                   {t("settings.memoryOrganizerHistoryEmpty")}
                 </div>
               ) : (
@@ -329,7 +334,8 @@ export function OrganizerHistoryModal(props: {
                         aria-pressed={active}
                         onClick={() => reload(run.runId)}
                         className={cn(
-                          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left font-normal",
+                          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg",
+                          "px-3 py-2.5 text-left font-normal",
                           active
                             ? "border-primary/50 bg-primary/5"
                             : "border-border/50 bg-background/70 hover:bg-muted/35",
@@ -366,12 +372,22 @@ export function OrganizerHistoryModal(props: {
 
           <section className="min-h-0 overflow-auto p-5">
             {error ? (
-              <div className="mb-4 whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2 text-xs text-destructive">
+              <div
+                className={cn(
+                  "mb-4 whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2",
+                  "text-xs text-destructive",
+                )}
+              >
                 {error}
               </div>
             ) : null}
             {historyFeedback ? (
-              <div className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <div
+                className={cn(
+                  "mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2",
+                  "text-xs text-emerald-700 dark:text-emerald-300",
+                )}
+              >
                 {historyFeedback}
               </div>
             ) : null}
@@ -399,7 +415,12 @@ export function OrganizerHistoryModal(props: {
                       {selectedRun.runId}
                     </div>
                   </div>
-                  <div className="grid shrink-0 grid-cols-skill-filter gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                  <div
+                    className={cn(
+                      "grid shrink-0 grid-cols-skill-filter gap-x-2 gap-y-1",
+                      "rounded-md border border-border/50 bg-background/70 px-3 py-2 text-xs text-muted-foreground",
+                    )}
+                  >
                     <span className="whitespace-nowrap">
                       {t("settings.memoryOrganizerStarted")}
                     </span>
@@ -528,7 +549,12 @@ export function OrganizerHistoryModal(props: {
                                   </span>
                                 ) : null}
                                 {decision.requiresUserAck ? (
-                                  <span className="rounded border border-amber-500/30 bg-amber-500/[0.06] px-1.5 py-0.5 text-10px text-amber-700 dark:text-amber-300">
+                                  <span
+                                    className={cn(
+                                      "rounded border border-amber-500/30 bg-amber-500/[0.06] px-1.5 py-0.5 text-10px text-amber-700",
+                                      "dark:text-amber-300",
+                                    )}
+                                  >
                                     {t("settings.memoryOrganizerRequiresAck")}
                                   </span>
                                 ) : null}
@@ -647,7 +673,12 @@ export function OrganizerHistoryModal(props: {
                     <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
                       {t("settings.memoryOrganizerTrimmedProtocol")}
                     </summary>
-                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-3 text-11px">
+                    <pre
+                      className={cn(
+                        "mt-3 max-h-80 overflow-auto",
+                        "whitespace-pre-wrap break-words rounded bg-muted/30 p-3 text-11px",
+                      )}
+                    >
                       {JSON.stringify(rawBlocks, null, 2)}
                     </pre>
                   </details>

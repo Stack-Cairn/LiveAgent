@@ -227,7 +227,8 @@ export function MemoryPanel(props: {
         aria-pressed={active}
         onClick={() => openEntry(entry)}
         className={cn(
-          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left font-normal",
+          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg",
+          "px-3 py-2.5 text-left font-normal",
           nested ? "ml-3 w-inset-0p75rem" : "",
           active
             ? "border-primary/50 bg-primary/5 shadow-xs"
@@ -252,7 +253,12 @@ export function MemoryPanel(props: {
   function renderFlatEntries(items: MemoryMeta[], emptyKey: string) {
     if (items.length === 0) {
       return (
-        <div className="rounded-lg border border-dashed border-border/60 px-4 py-8 text-center text-xs text-muted-foreground">
+        <div
+          className={cn(
+            "rounded-lg border border-dashed border-border/60 px-4 py-8",
+            "text-center text-xs text-muted-foreground",
+          )}
+        >
           {t(emptyKey)}
         </div>
       );
@@ -262,7 +268,12 @@ export function MemoryPanel(props: {
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 web:max-820:min-h-auto web:max-820:flex-none web:max-820:gap-12px web:max-820:pb-settings-memory-panel-pb">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-4",
+          "web:max-820:min-h-auto web:max-820:flex-none web:max-820:gap-12px web:max-820:pb-settings-memory-panel-pb",
+        )}
+      >
         <div className="shrink-0 rounded-xl border border-border/60 bg-card p-4 web:max-820:rounded-12px web:max-820:p-12px">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 space-y-1">
@@ -347,19 +358,36 @@ export function MemoryPanel(props: {
           </div>
 
           {unreviewedCount > 0 ? (
-            <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <div
+              className={cn(
+                "mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2",
+                "text-xs text-amber-700 dark:text-amber-300",
+              )}
+            >
               {unreviewedCount} {t("settings.memoryAwaitingReview")}
             </div>
           ) : null}
           {pathsInfo?.isInCloud ? (
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <div
+              className={cn(
+                "mt-3 flex items-start gap-2",
+                "rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700",
+                "dark:text-amber-300",
+              )}
+            >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               {t("settings.memoryCloudWarningPrefix")}{" "}
               {pathsInfo.cloudProvider ?? t("settings.memoryCloudSyncFolder")}
             </div>
           ) : null}
           {quotaStatus === "full" || quotaStatus === "danger" ? (
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-700 dark:text-red-300">
+            <div
+              className={cn(
+                "mt-3 flex items-start gap-2",
+                "rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-700",
+                "dark:text-red-300",
+              )}
+            >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               {t(
                 quotaStatus === "full"
@@ -368,20 +396,42 @@ export function MemoryPanel(props: {
               )}
             </div>
           ) : quotaStatus === "warning" ? (
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <div
+              className={cn(
+                "mt-3 flex items-start gap-2",
+                "rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700",
+                "dark:text-amber-300",
+              )}
+            >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               {t("settings.memoryQuotaWarningMessage")}
             </div>
           ) : null}
           {error ? (
-            <div className="mt-3 whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2 text-xs text-destructive">
+            <div
+              className={cn(
+                "mt-3 whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2",
+                "text-xs text-destructive",
+              )}
+            >
               {error}
             </div>
           ) : null}
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-stt-settings web:max-820:flex web:max-820:min-h-auto web:max-820:flex-none web:max-820:flex-col web:max-820:gap-12px">
-          <section className="flex min-h-0 flex-col rounded-xl border border-border/60 bg-card web:max-820:min-h-auto web:max-820:overflow-visible web:max-820:rounded-12px">
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 gap-4",
+            "lg:grid-cols-stt-settings web:max-820:flex web:max-820:min-h-auto web:max-820:flex-none web:max-820:flex-col web:max-820:gap-12px",
+          )}
+        >
+          <section
+            className={cn(
+              "flex min-h-0 flex-col",
+              "rounded-xl border border-border/60 bg-card",
+              "web:max-820:min-h-auto web:max-820:overflow-visible web:max-820:rounded-12px",
+            )}
+          >
             <div className="shrink-0 space-y-3 border-b border-border/40 p-3">
               <Tabs
                 value={tab}
@@ -448,13 +498,23 @@ export function MemoryPanel(props: {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto p-2 web:max-820:max-h-settings-memory-entry-list-max-h web:max-820:flex-initial web:max-820:overflow-y-auto web:max-820:overscroll-y-contain web:max-820:[-webkit-overflow-scrolling:touch]">
+            <div
+              className={cn(
+                "min-h-0 flex-1 overflow-auto p-2",
+                "web:max-820:max-h-settings-memory-entry-list-max-h web:max-820:flex-initial web:max-820:overflow-y-auto web:max-820:overscroll-y-contain web:max-820:[-webkit-overflow-scrolling:touch]",
+              )}
+            >
               {tab === "global" ? (
                 renderFlatEntries(globalEntries, "settings.memoryNoGlobalEntries")
               ) : tab === "journal" ? (
                 renderFlatEntries(dailyEntries, "settings.memoryNoJournalEntries")
               ) : projectGroups.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border/60 px-4 py-8 text-center text-xs text-muted-foreground">
+                <div
+                  className={cn(
+                    "rounded-lg border border-dashed border-border/60 px-4 py-8",
+                    "text-center text-xs text-muted-foreground",
+                  )}
+                >
                   {t("settings.memoryNoProjectEntries")}
                 </div>
               ) : (
@@ -465,7 +525,12 @@ export function MemoryPanel(props: {
                       className="group rounded-lg border border-border/50 bg-muted/15"
                       open
                     >
-                      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-left text-xs [&::-webkit-details-marker]:hidden">
+                      <summary
+                        className={cn(
+                          "flex cursor-pointer list-none",
+                          "items-center gap-2 px-3 py-2.5 text-left text-xs [&::-webkit-details-marker]:hidden",
+                        )}
+                      >
                         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-0 -rotate-90" />
                         <Folder className="size-3.5 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate font-medium" title={group.label}>
@@ -485,7 +550,13 @@ export function MemoryPanel(props: {
             </div>
           </section>
 
-          <section className="flex min-h-0 flex-col rounded-xl border border-border/60 bg-card web:max-820:min-h-auto web:max-820:overflow-visible web:max-820:rounded-12px">
+          <section
+            className={cn(
+              "flex min-h-0 flex-col",
+              "rounded-xl border border-border/60 bg-card",
+              "web:max-820:min-h-auto web:max-820:overflow-visible web:max-820:rounded-12px",
+            )}
+          >
             {showCreate ? (
               <div className="shrink-0 border-b border-border/40 p-4">
                 <div className="mb-3 text-sm font-semibold">{t("settings.memoryNew")}</div>
@@ -688,7 +759,12 @@ export function MemoryPanel(props: {
                 </div>
               </>
             ) : (
-              <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 items-center justify-center p-8",
+                  "text-center text-sm text-muted-foreground",
+                )}
+              >
                 {t("settings.memorySelectEntry")}
               </div>
             )}

@@ -27,7 +27,9 @@ export function LoadingTrack({ className, ...props }: ComponentProps<"div">) {
     <div
       {...props}
       className={cn(
-        "relative h-2px w-full overflow-hidden rounded-full bg-hsl-muted-foreground-10 after:absolute after:inset-y-0 after:left-0 after:w-2/5 after:rounded-[inherit] after:bg-primary/35 after:animate-hub-loading-progress after:content-[''] motion-reduce:after:animate-none!",
+        "relative h-2px w-full overflow-hidden rounded-full bg-hsl-muted-foreground-10",
+        "after:absolute after:inset-y-0 after:left-0 after:w-2/5 after:rounded-[inherit] after:bg-primary/35 after:animate-hub-loading-progress after:content-['']",
+        "motion-reduce:after:animate-none!",
         className,
       )}
     />

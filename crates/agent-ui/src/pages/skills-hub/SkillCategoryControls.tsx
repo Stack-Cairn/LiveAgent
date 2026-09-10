@@ -104,7 +104,9 @@ export function StoreCategoryChips(props: {
                 value={value}
                 aria-label={`${t(storeCategoryLabelKey(value))}: ${count}`}
                 className={cn(
-                  "group shrink-0 gap-1 rounded-md px-2 text-11p5px font-medium text-muted-foreground shadow-none hover:text-foreground data-[active]:text-foreground data-[active]:shadow-none",
+                  "group shrink-0 gap-1 rounded-md px-2",
+                  "text-11p5px font-medium text-muted-foreground shadow-none",
+                  "hover:text-foreground data-[active]:text-foreground data-[active]:shadow-none",
                   appearance === "outlined"
                     ? "border border-border/70 bg-background hover:border-foreground/20 hover:bg-muted/50 data-[active]:border-foreground/25 data-[active]:bg-muted data-[active]:shadow-xs"
                     : "border border-transparent hover:bg-muted/60 data-[active]:bg-muted",

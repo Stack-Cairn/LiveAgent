@@ -2,6 +2,7 @@ import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const roundContentSource = fs.readFileSync(
   new URL(
@@ -72,8 +73,8 @@ test("operation rows use compact icons and reveal disclosure chevrons on intent"
   assertJsxDimensions(toolTraceSource, "BatchIcon", { width: "3", height: "3" });
   assertJsxDimensions(toolCallSource, "ToolIcon", { width: "3", height: "3" });
 
-  assert.match(workTraceSource, /opacity-0[^"\n]*group-hover\/work-trace:opacity-100/);
-  assert.match(hostedSearchSource, /opacity-0[^"\n]*group-hover\/search-trace:opacity-100/);
-  assert.match(toolTraceSource, /opacity-0[^"\n]*group-hover\/tool-trace:opacity-100/);
-  assert.match(toolCallSource, /opacity-0[^"\n]*group-hover\/tool:opacity-100/);
+  assert.match(normalizeClassGroups(workTraceSource), /opacity-0[^"\n]*group-hover\/work-trace:opacity-100/);
+  assert.match(normalizeClassGroups(hostedSearchSource), /opacity-0[^"\n]*group-hover\/search-trace:opacity-100/);
+  assert.match(normalizeClassGroups(toolTraceSource), /opacity-0[^"\n]*group-hover\/tool-trace:opacity-100/);
+  assert.match(normalizeClassGroups(toolCallSource), /opacity-0[^"\n]*group-hover\/tool:opacity-100/);
 });

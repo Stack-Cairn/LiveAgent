@@ -156,8 +156,18 @@ export function HttpRequestListEditor({
             key={request.id}
             className="overflow-hidden rounded-xl border border-border/60 bg-background/80 transition-colors hover:border-border/80"
           >
-            <div className="flex items-center gap-3 px-4 py-3 web:max-820:flex-wrap web:max-820:items-stretch web:max-820:[&_>_input]:order-5 web:max-820:[&_>_input]:flex-[1_1_100%] web:max-820:[&_>_input]:min-w-0 web:max-820:[&_>_div:last-child]:ml-auto">
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            <div
+              className={cn(
+                "flex items-center gap-3 px-4 py-3",
+                "web:max-820:flex-wrap web:max-820:items-stretch web:max-820:[&_>_input]:order-5 web:max-820:[&_>_input]:flex-[1_1_100%] web:max-820:[&_>_input]:min-w-0 web:max-820:[&_>_div:last-child]:ml-auto",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center",
+                  "rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400",
+                )}
+              >
                 {index + 1}
               </div>
 
@@ -215,7 +225,10 @@ export function HttpRequestListEditor({
                       onExpand(null);
                     }
                   }}
-                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className={cn(
+                    "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                    "hover:bg-destructive/10 hover:text-destructive",
+                  )}
                   title={t("settings.delete")}
                 >
                   <Trash2 className="size-3.5" />
@@ -251,7 +264,12 @@ export function HttpRequestListEditor({
                         }}
                       />
                     ) : (
-                      <div className="flex min-h-100px items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/10 text-xs text-muted-foreground/60">
+                      <div
+                        className={cn(
+                          "flex min-h-100px items-center justify-center",
+                          "rounded-lg border border-dashed border-border/50 bg-muted/10 text-xs text-muted-foreground/60",
+                        )}
+                      >
                         {t("settings.cronHttpBodyDisabled")}
                       </div>
                     )}

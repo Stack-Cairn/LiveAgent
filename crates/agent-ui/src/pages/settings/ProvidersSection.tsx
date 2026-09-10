@@ -209,7 +209,12 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
         title={t("settings.failoverTitle")}
         hint={t("settings.failoverToggleHint").replaceAll("{vendor}", vendorLabel)}
         badge={
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground/[0.05] px-2 py-0.5 text-10p5px font-medium text-foreground/60">
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground/[0.05] px-2 py-0.5",
+              "text-10p5px font-medium text-foreground/60",
+            )}
+          >
             <ProviderBrandIcon type={providerType} />
             {vendorLabel}
           </span>
@@ -246,14 +251,21 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                       key={entry}
                       {...getQueueReorderProps(entry)}
                       className={cn(
-                        "flex items-center gap-1.5 rounded-lg border border-foreground/[0.06] bg-background/60 py-1.5 pl-1 pr-1.5 transition-colors",
+                        "flex items-center gap-1.5",
+                        "rounded-lg border border-foreground/[0.06] bg-background/60",
+                        "py-1.5 pl-1 pr-1.5 transition-colors",
                         draggingQueueId === entry
                           ? "border-foreground/[0.14] bg-accent shadow-lg"
                           : "hover:border-foreground/[0.12]",
                       )}
                     >
                       {renderQueueDragHandle(entry, queueEntryLabel(entry))}
-                      <span className="flex h-5 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] font-mono text-10px font-semibold text-foreground/55">
+                      <span
+                        className={cn(
+                          "flex h-5 w-6 shrink-0 items-center justify-center",
+                          "rounded-md bg-foreground/[0.05] font-mono text-10px font-semibold text-foreground/55",
+                        )}
+                      >
                         P{index + 1}
                       </span>
                       <span className="min-w-0 flex-1 leading-tight">
@@ -268,7 +280,10 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                       </span>
                       <button
                         type="button"
-                        className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        className={cn(
+                          "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-colors",
+                          "hover:bg-destructive/10 hover:text-destructive",
+                        )}
                         onClick={() => removeQueueEntry(index)}
                         title={t("settings.failoverQueueRemove")}
                         aria-label={`${t("settings.failoverQueueRemove")} ${queueEntryLabel(entry)}`}
@@ -279,7 +294,12 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                   ))}
                 </div>
               ) : (
-                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-11px leading-relaxed text-amber-700 dark:text-amber-300">
+                <div
+                  className={cn(
+                    "rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2",
+                    "text-11px leading-relaxed text-amber-700 dark:text-amber-300",
+                  )}
+                >
                   {t("settings.failoverQueueEmpty")}
                 </div>
               )}
@@ -422,7 +442,10 @@ function CustomSettingsDrawer(
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         variant="inset"
-        className="max-w-none border-border bg-background sm:max-w-440px web:max-820:inset-0 web:max-820:size-full web:max-820:max-w-none web:max-820:max-h-none web:max-820:rounded-none web:max-820:border-l-0"
+        className={cn(
+          "max-w-none border-border bg-background",
+          "sm:max-w-440px web:max-820:inset-0 web:max-820:size-full web:max-820:max-w-none web:max-820:max-h-none web:max-820:rounded-none web:max-820:border-l-0",
+        )}
         closeLabel={t("settings.closeCustomSettings")}
         showCloseButton={false}
       >
@@ -433,7 +456,10 @@ function CustomSettingsDrawer(
           <button
             type="button"
             onClick={onClose}
-            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.12] hover:text-foreground"
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center",
+              "rounded-full bg-foreground/[0.06] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.12] hover:text-foreground",
+            )}
             title={t("settings.closeCustomSettings")}
             aria-label={t("settings.closeCustomSettings")}
           >
@@ -471,7 +497,12 @@ function CustomSettingsDrawer(
                   onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
                 />
                 {modelOptions.length === 0 ? (
-                  <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-11px leading-relaxed text-amber-700 dark:text-amber-300">
+                  <div
+                    className={cn(
+                      "rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2",
+                      "text-11px leading-relaxed text-amber-700 dark:text-amber-300",
+                    )}
+                  >
                     {t("settings.customSettingsModelEmpty")}
                   </div>
                 ) : null}
@@ -581,7 +612,11 @@ function ProviderActionGroup(props: {
 
   return (
     <fieldset
-      className="inline-flex h-36px min-w-0 shrink-0 items-stretch gap-1px rounded-(--radius) border-0 bg-muted p-4px text-muted-foreground [&>:not(.settings-provider-action):not(.settings-provider-action-slot)]:contents max-640:w-full max-640:flex-none max-640:[&>.settings-provider-action]:flex-1 max-640:[&>.settings-provider-action-slot]:flex-1"
+      className={cn(
+        "inline-flex h-36px min-w-0 shrink-0 items-stretch gap-1px",
+        "rounded-(--radius) border-0 bg-muted p-4px text-muted-foreground",
+        "[&>:not(.settings-provider-action):not(.settings-provider-action-slot)]:contents max-640:w-full max-640:flex-none max-640:[&>.settings-provider-action]:flex-1 max-640:[&>.settings-provider-action-slot]:flex-1",
+      )}
       aria-label={t("settings.providerActionGroup")}
     >
       <Button
@@ -664,7 +699,9 @@ function ProviderCardRow(props: {
     <div
       {...reorderProps}
       className={cn(
-        "settings-card-row group flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/30 web:max-520:grid web:max-520:grid-cols-settings-provider-card-row web:max-520:items-center! web:max-520:flex-nowrap!",
+        "settings-card-row group flex items-center gap-3",
+        "rounded-xl border bg-card px-4 py-3 transition-colors",
+        "hover:bg-accent/30 web:max-520:grid web:max-520:grid-cols-settings-provider-card-row web:max-520:items-center! web:max-520:flex-nowrap!",
         dragging && "bg-accent shadow-lg",
       )}
     >
@@ -778,7 +815,12 @@ function ProviderCardRow(props: {
           </div>
         ) : null}
       </div>
-      <div className="settings-card-actions settings-hover-actions flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+      <div
+        className={cn(
+          "settings-card-actions settings-hover-actions flex items-center gap-1 opacity-0 transition-opacity",
+          "focus-within:opacity-100 group-hover:opacity-100",
+        )}
+      >
         <ProviderCopyConfigButton provider={provider} />
         {usageDisplay.show ? (
           <Button
@@ -882,7 +924,13 @@ function ProviderList(props: {
         className="min-h-0 flex-1 overflow-y-auto pr-1 web:max-820:pr-0 web:max-820:overscroll-y-contain web:max-820:[-webkit-overflow-scrolling:touch]"
       >
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center web:max-820:min-h-settings-provider-empty-min-h web:max-820:px-16px web:max-820:py-28px web:max-520:min-h-settings-provider-empty-min-h-2 web:max-520:px-12px web:max-520:py-22px">
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center",
+              "rounded-xl border border-dashed py-12 text-center",
+              "web:max-820:min-h-settings-provider-empty-min-h web:max-820:px-16px web:max-820:py-28px web:max-520:min-h-settings-provider-empty-min-h-2 web:max-520:px-12px web:max-520:py-22px",
+            )}
+          >
             <div className="mb-3 flex items-center justify-center text-3xl text-foreground">
               <ProviderBrandIcon type={type} />
             </div>
@@ -1035,15 +1083,28 @@ export function ProvidersSection(
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col web:max-820:min-w-0 web:max-820:min-h-0">
-        <div className="mb-4 flex shrink-0 items-center justify-between gap-3 min-w-0 max-640:flex-col max-640:items-stretch web:max-820:flex web:max-820:w-full web:max-820:flex-col web:max-820:items-stretch web:max-820:gap-10px web:max-820:mb-10px web:max-820:overflow-visible">
-          <div className="inline-flex h-9 min-w-0 items-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0 max-640:w-full">
+        <div
+          className={cn(
+            "mb-4 flex shrink-0 items-center justify-between gap-3 min-w-0",
+            "max-640:flex-col max-640:items-stretch web:max-820:flex web:max-820:w-full web:max-820:flex-col web:max-820:items-stretch web:max-820:gap-10px web:max-820:mb-10px",
+            "web:max-820:overflow-visible",
+          )}
+        >
+          <div
+            className={cn(
+              "inline-flex h-9 min-w-0 items-center overflow-x-auto rounded-lg bg-muted p-1",
+              "text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0 max-640:w-full",
+            )}
+          >
             {PROVIDER_TABS.map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
                 className={cn(
-                  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all web:max-820:min-h-34px web:max-820:pl-10px web:max-820:pr-10px web:max-820:text-13px web:max-520:pl-8px web:max-520:pr-8px",
+                  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md",
+                  "px-3 py-1 text-sm font-medium transition-all",
+                  "web:max-820:min-h-34px web:max-820:pl-10px web:max-820:pr-10px web:max-820:text-13px web:max-520:pl-8px web:max-520:pr-8px",
                   activeTab === tab
                     ? "bg-background text-foreground shadow"
                     : "hover:text-foreground/80",
@@ -1054,7 +1115,8 @@ export function ProvidersSection(
                 {providerCountByType[tab] > 0 ? (
                   <span
                     className={cn(
-                      "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-10px font-semibold leading-none tabular-nums transition-colors",
+                      "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1",
+                      "text-10px font-semibold leading-none tabular-nums transition-colors",
                       activeTab === tab
                         ? "bg-foreground/[0.08] text-foreground/70"
                         : "bg-foreground/[0.06] text-muted-foreground/80",

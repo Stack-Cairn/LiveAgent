@@ -492,7 +492,12 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
         subtitle: t("projectTools.fileTree.deleteConfirmDescription"),
         description: (
           <div className="flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
+            <div
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center",
+                "rounded-xl border border-destructive/25 bg-destructive/10 text-destructive",
+              )}
+            >
               <Trash2 className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -561,7 +566,12 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
 
   if (!initialized) {
     return (
-      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 px-6 text-center">
+      <div
+        className={cn(
+          "flex h-full min-h-0 flex-col items-center justify-center gap-4 px-6",
+          "text-center",
+        )}
+      >
         <div className="flex size-12 items-center justify-center rounded-xl bg-muted/80">
           <FolderOpen className="size-6 text-muted-foreground" />
         </div>
@@ -667,7 +677,12 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
       ) : null}
 
       {query.trim() ? (
-        <div className="project-file-tree-panel-scroll max-h-40 shrink-0 overflow-auto border-b border-border/60 p-2 web:pb-[max(var(--spacing-16px),env(safe-area-inset-bottom))] web:[scroll-padding-bottom:max(var(--spacing-16px),env(safe-area-inset-bottom))]">
+        <div
+          className={cn(
+            "project-file-tree-panel-scroll max-h-40 shrink-0 overflow-auto border-b border-border/60 p-2",
+            "web:pb-[max(var(--spacing-16px),env(safe-area-inset-bottom))] web:[scroll-padding-bottom:max(var(--spacing-16px),env(safe-area-inset-bottom))]",
+          )}
+        >
           {search.loading ? (
             <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
@@ -688,7 +703,8 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
                   type="button"
                   draggable
                   className={cn(
-                    "flex w-full select-none items-center gap-1.5 rounded-md px-2 text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground",
+                    "flex w-full select-none items-center gap-1.5 rounded-md px-2",
+                    "text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground",
                     entry.hidden && "opacity-60 hover:opacity-80",
                   )}
                   style={{ minHeight: FILE_TREE_ROW_HEIGHT }}

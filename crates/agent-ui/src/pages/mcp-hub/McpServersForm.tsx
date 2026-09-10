@@ -7,6 +7,7 @@ import { Plug, Plus, Server } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo } from "react";
 import {
   effectiveServerPolicyDefault,
@@ -65,8 +66,18 @@ export function McpServersForm(props: McpServersFormProps) {
     <div className="h-full min-h-0 overflow-y-auto px-0.5 pb-4 pr-1 pt-1.5">
       <div className="flex flex-col gap-4">
         {serverCount === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border/70 bg-card px-6 py-12 text-center shadow-xs">
-            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-border/70 bg-background text-foreground shadow-xs">
+          <div
+            className={cn(
+              "rounded-2xl border border-dashed border-border/70 bg-card px-6 py-12",
+              "text-center shadow-xs",
+            )}
+          >
+            <div
+              className={cn(
+                "mx-auto flex size-14 items-center justify-center",
+                "rounded-2xl border border-border/70 bg-background text-foreground shadow-xs",
+              )}
+            >
               <Server className="size-6" />
             </div>
             <p className="mt-4 text-sm font-medium text-foreground">{t("mcpHub.noServers")}</p>

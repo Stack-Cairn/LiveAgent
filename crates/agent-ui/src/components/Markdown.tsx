@@ -323,7 +323,13 @@ export function MarkdownFileLink(props: MarkdownFileLinkProps) {
   return (
     <button
       type="button"
-      className="inline max-w-full cursor-pointer appearance-none whitespace-normal rounded-sm border-0 bg-transparent p-0 text-left font-medium text-sky-600 no-underline decoration-sky-500/45 underline-offset-2 outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-2 focus-visible:ring-ring/35 dark:text-sky-400"
+      className={cn(
+        "inline max-w-full cursor-pointer appearance-none",
+        "whitespace-normal rounded-sm border-0 bg-transparent p-0",
+        "text-left font-medium text-sky-600 no-underline",
+        "decoration-sky-500/45 underline-offset-2 outline-none",
+        "[overflow-wrap:anywhere] hover:underline focus-visible:ring-2 focus-visible:ring-ring/35 dark:text-sky-400",
+      )}
       data-liveagent-file-link="true"
       title={label}
       onClick={() => onOpenFileLink(parsed)}
@@ -390,7 +396,10 @@ function MarkdownExternalLink(props: MarkdownAnchorFallbackProps) {
       <button
         type="button"
         className={cn(
-          "inline max-w-full cursor-pointer appearance-none whitespace-normal border-0 bg-transparent p-0 text-left font-medium text-sky-600 no-underline decoration-sky-500/45 underline-offset-2 [overflow-wrap:anywhere] hover:underline dark:text-sky-400",
+          "inline max-w-full cursor-pointer appearance-none",
+          "whitespace-normal border-0 bg-transparent p-0",
+          "text-left font-medium text-sky-600 no-underline decoration-sky-500/45 underline-offset-2",
+          "[overflow-wrap:anywhere] hover:underline dark:text-sky-400",
           className,
         )}
         data-incomplete={incomplete}
@@ -449,7 +458,12 @@ function CodeBlockActions({ code }: { code: string }) {
   const { t } = useLocale();
 
   return (
-    <div className="pointer-events-none absolute right-0 top-0 z-20 flex h-8 items-center justify-end">
+    <div
+      className={cn(
+        "pointer-events-none absolute right-0 top-0 z-20 flex h-8 items-center",
+        "justify-end",
+      )}
+    >
       <div className="pointer-events-auto flex shrink-0 items-center rounded-md bg-transparent px-1.5 py-1">
         <CopyButton
           value={code}
@@ -515,20 +529,33 @@ export function CollapsibleCodePre({
             {language || DEFAULT_CODE_BLOCK_LANGUAGE}
           </div>
           <pre className="!m-0 !overflow-x-auto !pb-2">
-            <code className="block w-max min-w-full whitespace-pre py-4 font-mono text-13px leading-5 text-foreground/92">
+            <code
+              className={cn(
+                "block w-max min-w-full whitespace-pre py-4",
+                "font-mono text-13px leading-5 text-foreground/92",
+              )}
+            >
               {previewContent}
             </code>
           </pre>
         </div>
       )}
       {expanded ? null : (
-        <div className="pointer-events-none absolute inset-x-0 bottom-7 h-20 bg-gradient-to-b from-transparent via-background/70 to-background" />
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-7 h-20 bg-gradient-to-b",
+            "from-transparent via-background/70 to-background",
+          )}
+        />
       )}
       <div className="flex justify-center">
         <button
           type="button"
           onClick={() => setExpanded((current) => !current)}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-11px font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-0.5",
+            "text-11px font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground",
+          )}
         >
           {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
           <span>
@@ -632,7 +659,12 @@ function ExternalLinkDialog({ onClose, onConfirm, url }: Omit<LinkSafetyModalPro
           </div>
         </DialogHeader>
         <DialogBody className="overflow-visible pb-5 pt-0">
-          <div className="flex min-h-10 items-center gap-2 rounded-xl bg-muted/55 px-3 py-2.5 text-muted-foreground">
+          <div
+            className={cn(
+              "flex min-h-10 items-center gap-2 rounded-xl bg-muted/55 px-3 py-2.5",
+              "text-muted-foreground",
+            )}
+          >
             <ExternalLink className="size-3.5 shrink-0" />
             <p
               className="min-w-0 truncate font-mono text-xs leading-5 text-foreground/85"
@@ -652,7 +684,10 @@ function ExternalLinkDialog({ onClose, onConfirm, url }: Omit<LinkSafetyModalPro
             <Button
               type="button"
               variant="ghost"
-              className="h-8 gap-1.5 rounded-lg px-3 text-xs font-normal text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+              className={cn(
+                "h-8 gap-1.5 rounded-lg px-3",
+                "text-xs font-normal text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+              )}
               onClick={handleCopyLink}
             >
               <Copy className="size-3.5" />
@@ -661,7 +696,10 @@ function ExternalLinkDialog({ onClose, onConfirm, url }: Omit<LinkSafetyModalPro
             <Button
               type="button"
               variant="secondary"
-              className="h-8 gap-1.5 rounded-lg bg-muted px-3 text-xs font-normal shadow-none hover:bg-muted/80"
+              className={cn(
+                "h-8 gap-1.5 rounded-lg bg-muted px-3",
+                "text-xs font-normal shadow-none hover:bg-muted/80",
+              )}
               onClick={handleOpenLink}
             >
               <ExternalLink className="size-3.5" />

@@ -279,7 +279,13 @@ const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isD
 
   return (
     <div ref={containerRef} className="border-b border-border/60 last:border-b-0">
-      <div className="flex select-none items-center gap-2 border-b border-border/60 bg-muted/20 px-3 py-1.5 text-scaled-11px font-medium text-muted-foreground">
+      <div
+        className={cn(
+          "flex select-none items-center gap-2",
+          "border-b border-border/60 bg-muted/20 px-3 py-1.5",
+          "text-scaled-11px font-medium text-muted-foreground",
+        )}
+      >
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {item.large ? (
           <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-scaled-10px text-amber-700 dark:text-amber-300">
@@ -327,7 +333,8 @@ function DiffStatView(props: { stat: string }) {
       <pre
         className={cn(
           GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-          "max-h-24 overflow-auto border-b border-border/70 bg-muted/25 px-3 py-2 text-scaled-11px leading-relaxed text-muted-foreground",
+          "max-h-24 overflow-auto border-b border-border/70 bg-muted/25 px-3 py-2",
+          "text-scaled-11px leading-relaxed text-muted-foreground",
         )}
         onScroll={handleOverlayScroll}
       >
@@ -410,7 +417,8 @@ function DiffStatView(props: { stat: string }) {
         <pre
           className={cn(
             GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-            "mt-2 max-h-20 overflow-auto rounded-md bg-muted/35 px-2 py-1.5 text-scaled-10px leading-relaxed text-muted-foreground",
+            "mt-2 max-h-20 overflow-auto rounded-md bg-muted/35 px-2 py-1.5",
+            "text-scaled-10px leading-relaxed text-muted-foreground",
           )}
           onScroll={handleOverlayScroll}
         >
@@ -895,14 +903,26 @@ export function DiffContent(props: {
         rootRef.current = node;
       }}
       aria-label={title}
-      className="git-review-diff-selectable m-0 flex min-h-0 min-w-0 flex-1 select-none flex-col overflow-hidden border-0 p-0 [&_.git-review-diff-selectable-content]:select-text [&_.git-review-diff-selectable-content_*]:select-text [&_.git-review-diff-selectable-content_.select-none]:select-none [&_.git-review-diff-selectable-content_.select-none_*]:select-none [[data-project-tools-resizing=true]_&]:relative [[data-project-tools-resizing=true]_&]:isolate [[data-project-tools-resizing=true]_&]:[contain:layout_paint_style] [[data-project-tools-resizing=true]_&]:before:block [[data-project-tools-resizing=true]_&]:before:min-h-0 [[data-project-tools-resizing=true]_&]:before:flex-1 [[data-project-tools-resizing=true]_&]:before:m-0p75rem [[data-project-tools-resizing=true]_&]:before:rounded-8px [[data-project-tools-resizing=true]_&]:before:border [[data-project-tools-resizing=true]_&]:before:border-border/72 [[data-project-tools-resizing=true]_&]:before:bg-[linear-gradient(90deg,hsl(var(--muted)/0.62)_0_var(--spacing-4p25rem),hsl(var(--border)/0.74)_var(--spacing-4p25rem)_calc(var(--spacing-4p25rem)+var(--spacing-1px)),transparent_calc(var(--spacing-4p25rem)+var(--spacing-1px))),linear-gradient(to_bottom,transparent_0_var(--spacing-3p5rem),var(--ui-color-hsl-142-72-42-0p09)_var(--spacing-3p5rem)_var(--spacing-5p25rem),transparent_var(--spacing-5p25rem)_var(--spacing-7rem),hsl(var(--destructive)/0.08)_var(--spacing-7rem)_var(--spacing-8p75rem),transparent_var(--spacing-8p75rem)_var(--spacing-10p5rem),var(--ui-color-hsl-38-92-50-0p08)_var(--spacing-10p5rem)_var(--spacing-12p25rem),transparent_var(--spacing-12p25rem)),repeating-linear-gradient(to_bottom,transparent_0_var(--spacing-27px),hsl(var(--border)/0.42)_var(--spacing-27px)_var(--spacing-28px)),hsl(var(--background))] [[data-project-tools-resizing=true]_&]:before:shadow-[inset_0_var(--spacing-1px)_0_hsl(var(--foreground)/0.04),0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.04)] [[data-project-tools-resizing=true]_&]:before:content-[''] [[data-project-tools-resizing=true]_&]:after:pointer-events-none [[data-project-tools-resizing=true]_&]:after:absolute [[data-project-tools-resizing=true]_&]:after:inset-[var(--spacing-1p25rem)_var(--spacing-1p5rem)_var(--spacing-1p25rem)_var(--spacing-5p8rem)] [[data-project-tools-resizing=true]_&]:after:z-1 [[data-project-tools-resizing=true]_&]:after:rounded-4px [[data-project-tools-resizing=true]_&]:after:bg-[repeating-linear-gradient(to_bottom,hsl(var(--muted-foreground)/0.16)_0_var(--spacing-7px),transparent_var(--spacing-7px)_var(--spacing-84px)),repeating-linear-gradient(to_bottom,transparent_0_var(--spacing-28px),hsl(var(--muted-foreground)/0.11)_var(--spacing-28px)_var(--spacing-35px),transparent_var(--spacing-35px)_var(--spacing-84px)),repeating-linear-gradient(to_bottom,transparent_0_var(--spacing-56px),hsl(var(--muted-foreground)/0.13)_var(--spacing-56px)_var(--spacing-63px),transparent_var(--spacing-63px)_var(--spacing-84px))] [[data-project-tools-resizing=true]_&]:after:bg-[length:56%_var(--spacing-84px),82%_var(--spacing-84px),42%_var(--spacing-84px)] [[data-project-tools-resizing=true]_&]:after:bg-repeat-y [[data-project-tools-resizing=true]_&]:after:content-[''] [[data-project-tools-resizing=true]_&]:[&>*]:hidden"
+      className={cn(
+        "git-review-diff-selectable m-0 flex min-h-0 min-w-0 flex-1 select-none flex-col",
+        "overflow-hidden border-0 p-0",
+        "[&_.git-review-diff-selectable-content]:select-text [&_.git-review-diff-selectable-content_*]:select-text [&_.git-review-diff-selectable-content_.select-none]:select-none [&_.git-review-diff-selectable-content_.select-none_*]:select-none [[data-project-tools-resizing=true]_&]:relative [[data-project-tools-resizing=true]_&]:isolate [[data-project-tools-resizing=true]_&]:[contain:layout_paint_style] [[data-project-tools-resizing=true]_&]:before:block",
+        "[[data-project-tools-resizing=true]_&]:before:min-h-0 [[data-project-tools-resizing=true]_&]:before:flex-1 [[data-project-tools-resizing=true]_&]:before:m-0p75rem [[data-project-tools-resizing=true]_&]:before:rounded-8px [[data-project-tools-resizing=true]_&]:before:border [[data-project-tools-resizing=true]_&]:before:border-border/72 [[data-project-tools-resizing=true]_&]:before:bg-[linear-gradient(90deg,hsl(var(--muted)/0.62)_0_var(--spacing-4p25rem),hsl(var(--border)/0.74)_var(--spacing-4p25rem)_calc(var(--spacing-4p25rem)+var(--spacing-1px)),transparent_calc(var(--spacing-4p25rem)+var(--spacing-1px))),linear-gradient(to_bottom,transparent_0_var(--spacing-3p5rem),var(--ui-color-hsl-142-72-42-0p09)_var(--spacing-3p5rem)_var(--spacing-5p25rem),transparent_var(--spacing-5p25rem)_var(--spacing-7rem),hsl(var(--destructive)/0.08)_var(--spacing-7rem)_var(--spacing-8p75rem),transparent_var(--spacing-8p75rem)_var(--spacing-10p5rem),var(--ui-color-hsl-38-92-50-0p08)_var(--spacing-10p5rem)_var(--spacing-12p25rem),transparent_var(--spacing-12p25rem)),repeating-linear-gradient(to_bottom,transparent_0_var(--spacing-27px),hsl(var(--border)/0.42)_var(--spacing-27px)_var(--spacing-28px)),hsl(var(--background))] [[data-project-tools-resizing=true]_&]:before:shadow-[inset_0_var(--spacing-1px)_0_hsl(var(--foreground)/0.04),0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.04)]",
+        "[[data-project-tools-resizing=true]_&]:before:content-[''] [[data-project-tools-resizing=true]_&]:after:pointer-events-none [[data-project-tools-resizing=true]_&]:after:absolute [[data-project-tools-resizing=true]_&]:after:inset-[var(--spacing-1p25rem)_var(--spacing-1p5rem)_var(--spacing-1p25rem)_var(--spacing-5p8rem)] [[data-project-tools-resizing=true]_&]:after:z-1 [[data-project-tools-resizing=true]_&]:after:rounded-4px [[data-project-tools-resizing=true]_&]:after:bg-[repeating-linear-gradient(to_bottom,hsl(var(--muted-foreground)/0.16)_0_var(--spacing-7px),transparent_var(--spacing-7px)_var(--spacing-84px)),repeating-linear-gradient(to_bottom,transparent_0_var(--spacing-28px),hsl(var(--muted-foreground)/0.11)_var(--spacing-28px)_var(--spacing-35px),transparent_var(--spacing-35px)_var(--spacing-84px)),repeating-linear-gradient(to_bottom,transparent_0_var(--spacing-56px),hsl(var(--muted-foreground)/0.13)_var(--spacing-56px)_var(--spacing-63px),transparent_var(--spacing-63px)_var(--spacing-84px))] [[data-project-tools-resizing=true]_&]:after:bg-[length:56%_var(--spacing-84px),82%_var(--spacing-84px),42%_var(--spacing-84px)]",
+        "[[data-project-tools-resizing=true]_&]:after:bg-repeat-y [[data-project-tools-resizing=true]_&]:after:content-[''] [[data-project-tools-resizing=true]_&]:[&>*]:hidden",
+      )}
       onContextMenu={handleContextMenu}
       onPointerDownCapture={handleSelectionPointerDownCapture}
     >
       {error ? <div className="shrink-0 p-3 text-xs text-destructive">{error}</div> : null}
       {!error && showDiffStat ? <DiffStatView stat={diff?.stat ?? ""} /> : null}
       {showLoadingState ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center gap-2 px-3 py-8 text-center text-xs text-muted-foreground">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 items-center justify-center gap-2 px-3 py-8",
+            "text-center text-xs text-muted-foreground",
+          )}
+        >
           <Loader2 className="size-4 animate-spin" />
           <span>{t("projectTools.loading")}</span>
         </div>
@@ -932,7 +952,8 @@ export function DiffContent(props: {
           }}
           className={cn(
             GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-            "git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto p-3 text-scaled-11px leading-relaxed text-muted-foreground",
+            "git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto p-3",
+            "text-scaled-11px leading-relaxed text-muted-foreground",
           )}
           onScroll={handleOverlayScroll}
         >
@@ -940,7 +961,12 @@ export function DiffContent(props: {
         </pre>
       ) : null}
       {!error && !showLoadingState && diff && !diff.patch.trim() && patchChunks.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center px-3 py-8 text-center text-xs text-muted-foreground">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 items-center justify-center px-3 py-8",
+            "text-center text-xs text-muted-foreground",
+          )}
+        >
           {t("projectTools.gitReview.noDiff")}
         </div>
       ) : null}
@@ -965,7 +991,10 @@ export function DiffContent(props: {
             onPointerDown={handleDiffHorizontalScrollbarPointerDown}
           >
             <div
-              className="git-review-diff-horizontal-scrollbar-thumb absolute left-0 top-0 h-full rounded-full bg-muted-foreground/35 shadow-sm transition-colors hover:bg-muted-foreground/55"
+              className={cn(
+                "git-review-diff-horizontal-scrollbar-thumb absolute left-0 top-0 h-full",
+                "rounded-full bg-muted-foreground/35 shadow-sm transition-colors hover:bg-muted-foreground/55",
+              )}
               style={{
                 width: `${diffHorizontalScrollbar.thumbWidth}px`,
                 transform: `translateX(${diffHorizontalScrollbar.thumbLeft}px)`,
@@ -979,7 +1008,11 @@ export function DiffContent(props: {
             <div
               ref={contextMenuRef}
               role="menu"
-              className="origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+              className={cn(
+                "origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden",
+                "rounded-xl border border-border/60 bg-popover/80 p-1",
+                "text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]",
+              )}
               style={{
                 left: selectionContextMenu.x,
                 top: selectionContextMenu.y,
@@ -992,7 +1025,10 @@ export function DiffContent(props: {
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5",
+                  "text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                )}
                 onClick={() => {
                   writeTextToClipboard(selectionContextMenu.selectedText);
                   closeSelectionContextMenu();
@@ -1035,8 +1071,18 @@ export function DiffReviewCard(props: {
   const activeError = activeView === "branch" ? branchError : "";
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/70 bg-background">
-      <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-background px-3 py-2">
+    <section
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden",
+        "rounded-lg border border-border/70 bg-background",
+      )}
+    >
+      <div
+        className={cn(
+          "sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2",
+          "border-b border-border/70 bg-background px-3 py-2",
+        )}
+      >
         <div className="min-w-0">
           <div className="truncate text-xs font-semibold">{activeTitle}</div>
           {activeDiff ? (

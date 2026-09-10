@@ -337,7 +337,10 @@ export function WorkspaceProjectSettingsModal(props: {
 
         <DialogBody className="flex overflow-hidden p-0 max-[720px]:flex-col">
           <nav
-            className="flex w-188px shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5 max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2"
+            className={cn(
+              "flex w-188px shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5",
+              "max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2",
+            )}
             aria-label={t("chat.workspaceSettingsNavigation")}
           >
             {navigation.map(({ id, icon: Icon, label }) => (
@@ -345,7 +348,9 @@ export function WorkspaceProjectSettingsModal(props: {
                 key={id}
                 type="button"
                 className={cn(
-                  "flex h-8 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition-colors max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
+                  "flex h-8 items-center gap-2 rounded-lg px-3",
+                  "text-left text-sm font-medium transition-colors",
+                  "max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
                   activePanel === id
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",

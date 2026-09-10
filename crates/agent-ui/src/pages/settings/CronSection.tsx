@@ -150,7 +150,12 @@ export function CronSection(props: SettingsSectionProps) {
         </div>
 
         <div className="settings-section-actions flex items-center gap-2">
-          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-2",
+              "whitespace-nowrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground",
+            )}
+          >
             <span className="tabular-nums font-medium text-foreground">{tasks.length}</span>
             {t("settings.cronCount")}
             <span className="text-border">|</span>
@@ -175,13 +180,23 @@ export function CronSection(props: SettingsSectionProps) {
       </div>
 
       {!autoPromptSupported ? (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+        <div
+          className={cn(
+            "rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3",
+            "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
+          )}
+        >
           {t("settings.cronPromptAgentModeOnlyHint")}
         </div>
       ) : null}
 
       {actionError ? (
-        <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            "rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive",
+          )}
+        >
           <AlertTriangle className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{actionError}</span>
         </div>
@@ -248,7 +263,10 @@ export function CronSection(props: SettingsSectionProps) {
                       {task.lastError ? (
                         <span
                           title={task.lastError}
-                          className="flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5 text-10px font-medium leading-none text-red-600 dark:text-red-400"
+                          className={cn(
+                            "flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5",
+                            "text-10px font-medium leading-none text-red-600 dark:text-red-400",
+                          )}
                         >
                           <AlertTriangle className="size-2.5" />
                           {t("settings.cronScheduleError")}
@@ -261,13 +279,19 @@ export function CronSection(props: SettingsSectionProps) {
                   </div>
 
                   {/* Cron Expression - fixed width for alignment */}
-                  <div className="hidden w-140px shrink-0 items-center justify-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-11px font-medium text-amber-600 dark:text-amber-400 md:flex">
+                  <div
+                    className={cn(
+                      "hidden w-140px shrink-0 items-center justify-center gap-1.5 rounded-full bg-amber-500/10",
+                      "px-2.5 py-1 text-11px font-medium text-amber-600 dark:text-amber-400 md:flex",
+                    )}
+                  >
                     <Clock3 className="size-3 shrink-0" />
                     <span className="font-mono">{task.cron}</span>
                   </div>
                   <div
                     className={cn(
-                      "hidden w-74px shrink-0 items-center justify-center gap-1 rounded-full px-2 py-1 text-11px font-medium md:flex",
+                      "hidden w-74px shrink-0 items-center justify-center gap-1 rounded-full",
+                      "px-2 py-1 text-11px font-medium md:flex",
                       exhausted
                         ? "bg-red-500/10 text-red-600 dark:text-red-400"
                         : task.remainingExecutions == null
@@ -289,7 +313,10 @@ export function CronSection(props: SettingsSectionProps) {
                     <button
                       type="button"
                       onClick={() => setModal({ open: true, mode: "view", taskId: task.id })}
-                      className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      className={cn(
+                        "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                        "hover:bg-muted/60 hover:text-foreground",
+                      )}
                       title={t("settings.cronView")}
                     >
                       <Eye className="size-3.5" />
@@ -297,7 +324,10 @@ export function CronSection(props: SettingsSectionProps) {
                     <button
                       type="button"
                       onClick={() => setModal({ open: true, mode: "edit", task })}
-                      className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      className={cn(
+                        "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                        "hover:bg-muted/60 hover:text-foreground",
+                      )}
                       title={t("settings.cronEdit")}
                     >
                       <Pencil className="size-3.5" />
@@ -307,7 +337,10 @@ export function CronSection(props: SettingsSectionProps) {
                         <button
                           type="button"
                           onClick={open}
-                          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          className={cn(
+                            "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                            "hover:bg-destructive/10 hover:text-destructive",
+                          )}
                           title={t("settings.cronDelete")}
                         >
                           <Trash2 className="size-3.5" />

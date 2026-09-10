@@ -29,7 +29,8 @@ export const SheetBackdrop = React.forwardRef<
     ref={ref}
     data-slot="sheet-backdrop"
     className={cn(
-      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200",
+      "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
     {...props}
@@ -69,7 +70,10 @@ export const SheetPopup = React.forwardRef<HTMLDivElement, SheetPopupProps>(
         data-slot="sheet-popup"
         data-side={side}
         className={cn(
-          "layer-modal fixed flex max-h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+          "layer-modal fixed flex max-h-full min-h-0 min-w-0 flex-col overflow-hidden",
+          "bg-background text-foreground shadow-2xl outline-none",
+          "transition-[transform,opacity] duration-200 ease-out",
+          "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
           side === "top" &&
             "inset-x-0 top-0 max-h-85dvh border-b data-[ending-style]:-translate-y-8 data-[starting-style]:-translate-y-8",
           side === "right" &&

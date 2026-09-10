@@ -49,8 +49,16 @@ export function AppUpdateButton({
       size="sm"
       className={cn(
         iconOnly
-          ? "group/update relative size-6 shrink-0 gap-0 overflow-hidden rounded-full bg-ui-4096ff px-0 text-11px font-medium leading-none text-white shadow-none transition-[width,background-color] duration-150 hover:w-10 hover:bg-ui-1677ff hover:text-white active:bg-ui-0958d9"
-          : "h-22px shrink-0 gap-3px rounded-full bg-ui-4096ff px-2 text-11px font-medium leading-none text-white shadow-none hover:bg-ui-1677ff hover:text-white active:bg-ui-0958d9",
+          ? cn(
+              "group/update relative size-6 shrink-0 gap-0 overflow-hidden rounded-full bg-ui-4096ff",
+              "px-0 text-11px font-medium leading-none text-white shadow-none transition-[width,background-color] duration-150",
+              "hover:w-10 hover:bg-ui-1677ff hover:text-white active:bg-ui-0958d9",
+            )
+          : cn(
+              "h-22px shrink-0 gap-3px rounded-full bg-ui-4096ff px-2",
+              "text-11px font-medium leading-none text-white shadow-none",
+              "hover:bg-ui-1677ff hover:text-white active:bg-ui-0958d9",
+            ),
         className,
       )}
       disabled={busy}

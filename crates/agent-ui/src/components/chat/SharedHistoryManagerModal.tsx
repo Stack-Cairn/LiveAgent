@@ -85,9 +85,17 @@ function ShareSwitch(props: { disabled: boolean; onDisable: () => void }) {
       title={t("sharedHistory.disableShare")}
       disabled={disabled}
       onClick={onDisable}
-      className="relative h-6 w-11 shrink-0 rounded-full bg-sky-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed disabled:opacity-60"
+      className={cn(
+        "relative h-6 w-11 shrink-0 rounded-full bg-sky-500 transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed disabled:opacity-60",
+      )}
     >
-      <span className="absolute left-0.5 top-0.5 size-5 translate-x-5 rounded-full bg-white shadow-sm transition-transform" />
+      <span
+        className={cn(
+          "absolute left-0.5 top-0.5 size-5 translate-x-5",
+          "rounded-full bg-white shadow-sm transition-transform",
+        )}
+      />
     </button>
   );
 }
@@ -105,7 +113,8 @@ function RedactionPicker(props: {
       role="radiogroup"
       aria-label={t("sharedHistory.redactionTitle")}
       className={cn(
-        "inline-flex min-w-0 shrink-0 items-center rounded-full border border-border/60 bg-muted/40 p-0.5",
+        "inline-flex min-w-0 shrink-0 items-center",
+        "rounded-full border border-border/60 bg-muted/40 p-0.5",
         disabled && "pointer-events-none opacity-60",
       )}
     >
@@ -117,7 +126,8 @@ function RedactionPicker(props: {
         disabled={disabled}
         onClick={() => onChange(true)}
         className={cn(
-          "relative rounded-full px-2.5 py-0.5 text-scaled-11px font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-2.5 py-0.5 text-scaled-11px font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/35 disabled:cursor-not-allowed",
           value
             ? "bg-emerald-500 text-white shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -133,7 +143,8 @@ function RedactionPicker(props: {
         disabled={disabled}
         onClick={() => onChange(false)}
         className={cn(
-          "relative rounded-full px-2.5 py-0.5 text-scaled-11px font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-2.5 py-0.5 text-scaled-11px font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -153,8 +164,18 @@ function EmptyState(props: { isFiltered: boolean }) {
   const { isFiltered } = props;
   const { t } = useLocale();
   return (
-    <div className="flex min-h-220px flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 px-6 py-8 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl border border-sky-500/15 bg-sky-500/10 text-sky-500">
+    <div
+      className={cn(
+        "flex min-h-220px flex-col items-center justify-center",
+        "rounded-2xl border border-dashed border-border/70 bg-muted/20 px-6 py-8 text-center",
+      )}
+    >
+      <div
+        className={cn(
+          "flex size-12 items-center justify-center",
+          "rounded-2xl border border-sky-500/15 bg-sky-500/10 text-sky-500",
+        )}
+      >
         <Share2 className="size-5" />
       </div>
       <div className="mt-4 text-sm font-semibold text-foreground">
@@ -236,7 +257,12 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
         <DialogHeader>
           <div className="flex items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
+              <div
+                className={cn(
+                  "flex size-11 shrink-0 items-center justify-center",
+                  "rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500",
+                )}
+              >
                 <Share2 className="size-5" />
               </div>
               <div className="min-w-0">
@@ -269,7 +295,12 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
               <div className="truncate text-scaled-10px font-medium uppercase leading-4 text-muted-foreground sm:text-scaled-11px">
                 {t("sharedHistory.summaryStatus")}
               </div>
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground sm:gap-2">
+              <div
+                className={cn(
+                  "mt-1 flex min-w-0 items-center gap-1.5",
+                  "text-sm font-medium text-foreground sm:gap-2",
+                )}
+              >
                 {hasLoading ? <Loader2 className="size-3.5 animate-spin text-sky-500" /> : null}
                 <span className="truncate">
                   {hasLoading ? t("sharedHistory.syncing") : t("sharedHistory.synced")}
@@ -279,11 +310,21 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
           </div>
 
           {!shareOriginLoading && !publicOrigin ? (
-            <div className="mt-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
+            <div
+              className={cn(
+                "mt-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3 py-2",
+                "text-xs leading-5 text-amber-700 dark:text-amber-300",
+              )}
+            >
               {t("sharedHistory.originUnavailable")}
             </div>
           ) : shareOriginLoading && !publicOrigin ? (
-            <div className="mt-3 rounded-2xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs leading-5 text-sky-700 dark:text-sky-300">
+            <div
+              className={cn(
+                "mt-3 rounded-2xl border border-sky-500/20 bg-sky-500/10 px-3 py-2",
+                "text-xs leading-5 text-sky-700 dark:text-sky-300",
+              )}
+            >
               {t("sharedHistory.originLoading")}
             </div>
           ) : null}
@@ -291,7 +332,11 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
           {listError ? (
             <div
               role="alert"
-              className="mt-3 flex items-start gap-2 rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
+              className={cn(
+                "mt-3 flex items-start gap-2",
+                "rounded-2xl border border-destructive/25 bg-destructive/10 px-3 py-2",
+                "text-xs leading-5 text-destructive",
+              )}
             >
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               <span className="min-w-0 break-words">{listError}</span>
@@ -305,7 +350,11 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 placeholder={t("sharedHistory.searchPlaceholder")}
-                className="h-9 w-full rounded-xl border border-border/70 bg-background px-9 text-xs outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-sky-500/45 focus:ring-2 focus:ring-sky-500/15"
+                className={cn(
+                  "h-9 w-full rounded-xl border border-border/70 bg-background px-9",
+                  "text-xs outline-none transition-colors",
+                  "placeholder:text-muted-foreground/70 focus:border-sky-500/45 focus:ring-2 focus:ring-sky-500/15",
+                )}
               />
             </div>
             <Button
@@ -354,11 +403,21 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                           <span className="min-w-0 truncate text-sm font-semibold text-foreground">
                             {conversation.title}
                           </span>
-                          <span className="shrink-0 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-scaled-11px font-medium text-sky-600 dark:text-sky-400">
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5",
+                              "text-scaled-11px font-medium text-sky-600 dark:text-sky-400",
+                            )}
+                          >
                             {t("sharedHistory.publicBadge")}
                           </span>
                           {redactToolContent ? (
-                            <span className="shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-scaled-11px font-medium text-emerald-600 dark:text-emerald-400">
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5",
+                                "text-scaled-11px font-medium text-emerald-600 dark:text-emerald-400",
+                              )}
+                            >
                               {t("sharedHistory.redactedBadge")}
                             </span>
                           ) : null}
@@ -389,14 +448,22 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                       </div>
                     </div>
 
-                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
+                    <div
+                      className={cn(
+                        "mt-3 flex items-center gap-2",
+                        "rounded-xl border border-border/60 bg-muted/20 px-3 py-2",
+                      )}
+                    >
                       <Link2 className="size-4 shrink-0 text-muted-foreground" />
                       {shareUrl ? (
                         <a
                           href={shareUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4 hover:underline dark:text-sky-400"
+                          className={cn(
+                            "min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4",
+                            "hover:underline dark:text-sky-400",
+                          )}
                           title={shareUrl}
                         >
                           {shareUrl}
@@ -451,7 +518,8 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
 
                     <div
                       className={cn(
-                        "mt-2 flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors",
+                        "mt-2 flex items-center justify-between gap-3 rounded-xl border",
+                        "px-3 py-2 transition-colors",
                         redactToolContent
                           ? "border-emerald-500/25 bg-emerald-500/5"
                           : "border-border/60 bg-muted/20",
@@ -495,7 +563,12 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                     </div>
 
                     {error ? (
-                      <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      <div
+                        className={cn(
+                          "mt-2 flex items-center justify-between gap-3",
+                          "rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive",
+                        )}
+                      >
                         <span className="min-w-0">{error}</span>
                         <button
                           type="button"

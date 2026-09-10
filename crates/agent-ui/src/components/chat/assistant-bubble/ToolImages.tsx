@@ -279,7 +279,8 @@ function ToolImageStatusCard(props: {
   return (
     <div
       className={cn(
-        "relative flex min-h-28 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-md border border-dashed px-4 py-5 text-center",
+        "relative flex min-h-28 w-full flex-col items-center justify-center gap-2",
+        "overflow-hidden rounded-md border border-dashed px-4 py-5 text-center",
         isError
           ? "border-red-500/25 bg-red-500/[0.04] text-red-700 dark:border-red-400/25 dark:bg-red-400/[0.06] dark:text-red-300"
           : "border-black/[0.08] bg-black/[0.025] text-muted-foreground dark:border-white/[0.1] dark:bg-white/[0.035]",
@@ -288,7 +289,8 @@ function ToolImageStatusCard(props: {
     >
       <div
         className={cn(
-          "flex size-9 items-center justify-center rounded-md border bg-white/80 shadow-sm dark:bg-black/20",
+          "flex size-9 items-center justify-center",
+          "rounded-md border bg-white/80 shadow-sm dark:bg-black/20",
           isError ? "border-red-500/20" : "border-black/[0.06] dark:border-white/[0.08]",
         )}
       >
@@ -372,12 +374,23 @@ export function ToolResultImagePreview(props: {
     return (
       <button
         type="button"
-        className="group flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5 text-center text-muted-foreground transition-colors hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]"
+        className={cn(
+          "group flex min-h-28 w-full flex-col items-center justify-center gap-2",
+          "rounded-md border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5",
+          "text-center text-muted-foreground transition-colors",
+          "hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]",
+        )}
         onClick={() => setShouldLoad(true)}
         title={alt}
         aria-label={`${t("chat.image.load")} ${alt}`}
       >
-        <div className="flex size-9 items-center justify-center rounded-md border border-black/[0.06] bg-white/80 shadow-sm transition-colors group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]">
+        <div
+          className={cn(
+            "flex size-9 items-center justify-center",
+            "rounded-md border border-black/[0.06] bg-white/80 shadow-sm transition-colors",
+            "group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]",
+          )}
+        >
           <Eye className="size-4" />
         </div>
         <div className="max-w-full space-y-1">
@@ -427,7 +440,8 @@ export function ToolResultImagePreview(props: {
       <button
         type="button"
         className={cn(
-          "relative block w-full overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
+          "relative block w-full overflow-hidden rounded-md text-left",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
           canPreview ? "cursor-zoom-in" : "cursor-default",
         )}
         disabled={!canPreview}

@@ -981,7 +981,10 @@ export function GitBranchSelector(props: {
         tabIndex={-1}
         aria-label={t("git.branchSelector.branchActions")}
         title={t("git.branchSelector.branchActions")}
-        className="pointer-events-none ml-auto inline-flex shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover/branch:pointer-events-auto group-hover/branch:opacity-100 group-data-[highlighted]/branch:pointer-events-auto group-data-[highlighted]/branch:opacity-100"
+        className={cn(
+          "pointer-events-none ml-auto inline-flex shrink-0 rounded p-0.5 text-muted-foreground opacity-0",
+          "hover:bg-muted hover:text-foreground group-hover/branch:pointer-events-auto group-hover/branch:opacity-100 group-data-[highlighted]/branch:pointer-events-auto group-data-[highlighted]/branch:opacity-100",
+        )}
         onPointerDown={(event) => {
           // Swallow every selection trigger the menu items listen to (Base UI
           // selects on click plus mouseup for drag-release gestures, Radix on
@@ -1028,7 +1031,13 @@ export function GitBranchSelector(props: {
           <ChevronDown className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, menuOpen && "rotate-180")} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          className="composer-branch-dropdown flex w-72 origin-[var(--transform-origin)] flex-col overflow-hidden p-0 transition-[opacity,transform] duration-180 ease-ui-enter data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none!"
+          className={cn(
+            "composer-branch-dropdown flex w-72 origin-[var(--transform-origin)]",
+            "flex-col overflow-hidden p-0",
+            "transition-[opacity,transform] duration-180 ease-ui-enter",
+            "data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in",
+            "motion-reduce:transition-none!",
+          )}
           side="top"
           align="start"
         >
@@ -1073,7 +1082,12 @@ export function GitBranchSelector(props: {
                     )}
                   </button>
                   {showSyncBadges && state.behind > 0 ? (
-                    <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-9px font-medium leading-3 text-primary-foreground">
+                    <span
+                      className={cn(
+                        "pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1",
+                        "text-9px font-medium leading-3 text-primary-foreground",
+                      )}
+                    >
                       {state.behind > 9 ? "9+" : state.behind}
                     </span>
                   ) : null}
@@ -1096,7 +1110,12 @@ export function GitBranchSelector(props: {
                     )}
                   </button>
                   {showSyncBadges && state.ahead > 0 ? (
-                    <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-9px font-medium leading-3 text-primary-foreground">
+                    <span
+                      className={cn(
+                        "pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1",
+                        "text-9px font-medium leading-3 text-primary-foreground",
+                      )}
+                    >
                       {state.ahead > 9 ? "9+" : state.ahead}
                     </span>
                   ) : null}
@@ -1135,7 +1154,12 @@ export function GitBranchSelector(props: {
                     {selectedGitRepositoryLabel(repositories, selectedRepoRoot) ||
                       t("git.branchSelector.switchRepository")}
                   </span>
-                  <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-10px leading-4 text-muted-foreground">
+                  <span
+                    className={cn(
+                      "ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px",
+                      "text-10px leading-4 text-muted-foreground",
+                    )}
+                  >
                     {repositories.length}
                   </span>
                   <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1154,7 +1178,9 @@ export function GitBranchSelector(props: {
                         type="button"
                         disabled={mutating}
                         className={cn(
-                          "flex w-full cursor-default select-none items-center gap-2 rounded-xs px-2 py-1.5 text-left text-xs outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+                          "flex w-full cursor-default select-none items-center gap-2 rounded-xs",
+                          "px-2 py-1.5 text-left text-xs outline-hidden transition-colors",
+                          "hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
                           isCurrent && "text-muted-foreground",
                         )}
                         title={repo.root}
@@ -1298,7 +1324,10 @@ export function GitBranchSelector(props: {
                   />
                   <button
                     type="button"
-                    className="inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded bg-foreground px-2 text-xs text-background"
+                    className={cn(
+                      "inline-flex h-8 shrink-0 items-center justify-center",
+                      "whitespace-nowrap rounded bg-foreground px-2 text-xs text-background",
+                    )}
                     onClick={createBranch}
                   >
                     {t("git.branchSelector.create")}
@@ -1311,7 +1340,12 @@ export function GitBranchSelector(props: {
                       type="button"
                       disabled={!canWrite || mutating}
                       title={!canWrite ? disabledMessage : undefined}
-                      className="relative flex min-w-0 flex-1 cursor-default select-none items-center gap-2 rounded-xs px-2 py-1.5 text-left text-xs outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+                      className={cn(
+                        "relative flex min-w-0 flex-1 cursor-default select-none items-center gap-2",
+                        "rounded-xs px-2 py-1.5",
+                        "text-left text-xs outline-hidden transition-colors",
+                        "hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+                      )}
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -1366,7 +1400,12 @@ export function GitBranchSelector(props: {
                       type="button"
                       disabled={!canWrite || mutating}
                       title={!canWrite ? disabledMessage : undefined}
-                      className="relative flex min-w-0 w-full cursor-default select-none items-center gap-2 rounded-xs px-2 py-1.5 text-left text-xs outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+                      className={cn(
+                        "relative flex min-w-0 w-full cursor-default select-none items-center gap-2",
+                        "rounded-xs px-2 py-1.5",
+                        "text-left text-xs outline-hidden transition-colors",
+                        "hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+                      )}
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();

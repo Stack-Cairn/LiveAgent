@@ -34,7 +34,11 @@ export function McpRegistryToolbar(props: {
             <TabsTrigger
               key={option.value}
               value={option.value}
-              className="shrink-0 rounded-md border border-transparent px-2.5 text-11p5px font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none"
+              className={cn(
+                "shrink-0 rounded-md border border-transparent px-2.5",
+                "text-11p5px font-medium text-muted-foreground shadow-none",
+                "hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none",
+              )}
             >
               {option.label}
             </TabsTrigger>

@@ -227,7 +227,10 @@ function CommitRefTags({
       className={
         variant === "detail"
           ? "mt-1.5 flex min-w-0 flex-wrap items-center gap-1 overflow-visible"
-          : "mt-0.5 flex max-w-[52%] shrink-0 items-center justify-end gap-1 overflow-x-hidden overflow-y-visible"
+          : cn(
+              "mt-0.5 flex max-w-[52%] shrink-0 items-center justify-end gap-1 overflow-x-hidden",
+              "overflow-y-visible",
+            )
       }
       title={orderedRefs.map((ref) => ref.title).join(", ")}
     >
@@ -954,7 +957,12 @@ export function GitReviewHistoryView(props: {
             !useSplitReviewLayout && "flex-1",
           )}
         >
-          <div className="relative z-10 flex shrink-0 items-center gap-2 border-b border-border bg-background px-3 py-1.5">
+          <div
+            className={cn(
+              "relative z-10 flex shrink-0 items-center gap-2",
+              "border-b border-border bg-background px-3 py-1.5",
+            )}
+          >
             <div className="flex min-w-0 items-center gap-2 truncate text-xs font-semibold">
               <History className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{t("projectTools.gitReview.commitHistoryTitle")}</span>
@@ -963,7 +971,10 @@ export function GitReviewHistoryView(props: {
               type="button"
               aria-label={t("projectTools.gitReview.revealCurrentHistoryItem")}
               title={t("projectTools.gitReview.revealCurrentHistoryItem")}
-              className="ml-auto inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+              className={cn(
+                "ml-auto inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground",
+                "transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40",
+              )}
               disabled={currentHistoryItemIndex < 0}
               onClick={revealCurrentHistoryItem}
             >
@@ -1003,7 +1014,11 @@ export function GitReviewHistoryView(props: {
                       >
                         <button
                           type="button"
-                          className="flex min-h-28px w-full items-center justify-center gap-2 px-3 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-70"
+                          className={cn(
+                            "flex min-h-28px w-full items-center justify-center gap-2 px-3",
+                            "text-xs text-muted-foreground transition-colors",
+                            "hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-70",
+                          )}
                           disabled={historyLoadingMore}
                           title={historyLoadMoreError || undefined}
                           onClick={() => void loadHistory({ append: true, silent: true })}
@@ -1175,7 +1190,12 @@ export function GitReviewHistoryView(props: {
         >
           {selectedCommit ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-              <div className="flex shrink-0 items-start gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs">
+              <div
+                className={cn(
+                  "flex shrink-0 items-start gap-2",
+                  "rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs",
+                )}
+              >
                 <GitCommitHorizontal className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <div
@@ -1199,8 +1219,18 @@ export function GitReviewHistoryView(props: {
                 </div>
               </div>
               {selectedCommitFile || commitDiff || commitDiffLoading || historyError ? (
-                <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/70 bg-background">
-                  <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-background px-3 py-2">
+                <section
+                  className={cn(
+                    "flex min-h-0 flex-1 flex-col overflow-hidden",
+                    "rounded-lg border border-border/70 bg-background",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2",
+                      "border-b border-border/70 bg-background px-3 py-2",
+                    )}
+                  >
                     <div className="min-w-0">
                       <div className="truncate text-xs font-semibold">
                         {historyDiffTitle || t("projectTools.gitReview.commitDiff")}
@@ -1228,13 +1258,25 @@ export function GitReviewHistoryView(props: {
                   />
                 </section>
               ) : (
-                <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-border/70 bg-muted/10 px-4 text-center text-xs text-muted-foreground">
+                <div
+                  className={cn(
+                    "flex min-h-0 flex-1 items-center justify-center",
+                    "rounded-lg border border-border/70 bg-muted/10 px-4",
+                    "text-center text-xs text-muted-foreground",
+                  )}
+                >
                   {t("projectTools.gitReview.selectCommitFileToViewDiff")}
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-border/70 bg-muted/10 px-4 text-center text-xs text-muted-foreground">
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 items-center justify-center",
+                "rounded-lg border border-border/70 bg-muted/10 px-4",
+                "text-center text-xs text-muted-foreground",
+              )}
+            >
               {historyError || t("projectTools.gitReview.selectCommitToViewFiles")}
             </div>
           )}

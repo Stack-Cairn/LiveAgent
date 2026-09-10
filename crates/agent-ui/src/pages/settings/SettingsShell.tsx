@@ -119,18 +119,36 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
       className={
         web
           ? `flex h-full bg-background web:min-w-0 web:max-820:h-full web:max-820:min-h-0 web:max-820:flex-col web:max-820:overflow-hidden [&_.settings-section-actions]:min-w-0 [&_.settings-card-actions]:min-w-0 ${WEB_SETTINGS_RESPONSIVE_CLASS}`
-          : "flex h-full flex-col bg-background desktop:max-640:[&_.settings-section-heading-row]:flex-col desktop:max-640:[&_.settings-section-heading-row]:items-stretch desktop:max-640:[&_.settings-section-heading-row]:gap-3 desktop:max-640:[&_.settings-section-title-group]:min-w-0 desktop:max-640:[&_.settings-section-actions]:w-full desktop:max-640:[&_.settings-section-actions]:flex-wrap desktop:max-640:[&_.settings-section-actions]:justify-start desktop:max-640:[&_.settings-hover-actions]:opacity-100 desktop:max-640:[&_.settings-card-row]:p-3 desktop:no-hover:[&_.settings-hover-actions]:opacity-100"
+          : cn(
+              "flex h-full flex-col bg-background",
+              "desktop:max-640:[&_.settings-section-heading-row]:flex-col desktop:max-640:[&_.settings-section-heading-row]:items-stretch desktop:max-640:[&_.settings-section-heading-row]:gap-3 desktop:max-640:[&_.settings-section-title-group]:min-w-0 desktop:max-640:[&_.settings-section-actions]:w-full desktop:max-640:[&_.settings-section-actions]:flex-wrap desktop:max-640:[&_.settings-section-actions]:justify-start desktop:max-640:[&_.settings-hover-actions]:opacity-100",
+              "desktop:max-640:[&_.settings-card-row]:p-3 desktop:no-hover:[&_.settings-hover-actions]:opacity-100",
+            )
       }
     >
       <div className={web ? "contents" : "flex min-h-0 flex-1"}>
-        <aside className="flex w-64 shrink-0 flex-col border-r border-border/60 bg-muted/30 web:max-820:w-full web:max-820:flex-none web:max-820:border-r-0 web:max-820:border-r-current web:max-820:border-b web:max-820:border-solid web:max-820:border-b-border web:max-820:bg-background/96">
+        <aside
+          className={cn(
+            "flex w-64 shrink-0 flex-col",
+            "border-r border-border/60 bg-muted/30",
+            "web:max-820:w-full web:max-820:flex-none web:max-820:border-r-0 web:max-820:border-r-current web:max-820:border-b web:max-820:border-solid web:max-820:border-b-border web:max-820:bg-background/96",
+          )}
+        >
           {registry.slots.sidebarLeading}
           {web ? (
-            <div className="web:hidden web:max-820:flex web:max-820:items-center web:max-820:order-1 web:max-820:border-t-0 web:max-820:border-t-current web:max-820:border-b web:max-820:border-solid web:max-820:border-b-border/72 web:max-820:px-10px web:max-820:pt-settings-back-bar-pt web:max-820:pb-8px">
+            <div
+              className={cn(
+                "web:hidden web:max-820:flex web:max-820:items-center web:max-820:order-1 web:max-820:border-t-0 web:max-820:border-t-current web:max-820:border-b web:max-820:border-solid",
+                "web:max-820:border-b-border/72 web:max-820:px-10px web:max-820:pt-settings-back-bar-pt web:max-820:pb-8px",
+              )}
+            >
               <button
                 type="button"
                 onClick={onBack}
-                className="settings-back-button flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                className={cn(
+                  "settings-back-button flex items-center gap-2 rounded-lg px-3 py-2",
+                  "text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground",
+                )}
               >
                 <ArrowLeft className="size-3.5 shrink-0" />
                 <span>{t("settings.backToChat")}</span>
@@ -141,7 +159,10 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
             <button
               type="button"
               onClick={onBack}
-              className="settings-back-button flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              className={cn(
+                "settings-back-button flex w-full items-center gap-2 rounded-lg px-3 py-2",
+                "text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground",
+              )}
             >
               <ArrowLeft className="size-4 shrink-0" />
               <span>{t("settings.backToChat")}</span>
@@ -154,7 +175,11 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                 onChange={(event) => setNavQuery(event.currentTarget.value)}
                 placeholder={t("settings.searchPlaceholder")}
                 aria-label={t("settings.searchPlaceholder")}
-                className="h-9 w-full rounded-xl border border-border/70 bg-background/85 pl-9 pr-3 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus:border-border focus:ring-2 focus:ring-foreground/5"
+                className={cn(
+                  "h-9 w-full rounded-xl border border-border/70 bg-background/85 pl-9 pr-3",
+                  "text-sm shadow-xs outline-none",
+                  "placeholder:text-muted-foreground/70 focus:border-border focus:ring-2 focus:ring-foreground/5",
+                )}
               />
             </div>
           </div>
@@ -182,13 +207,21 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                         data-settings-nav-id={definition.id}
                         data-active={active ? "true" : "false"}
                         className={cn(
-                          "group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-all duration-150 web:max-820:w-auto web:max-820:flex-none web:max-820:whitespace-nowrap web:max-820:border web:max-820:border-solid web:max-820:border-border/50 web:max-820:px-10px web:max-820:py-8px web:max-820:rounded-10px web:max-820:[&_>_div]:gap-8px web:max-520:px-9px web:max-520:py-7px",
+                          "group relative flex w-full items-center gap-2.5 rounded-lg",
+                          "px-3 py-2 text-left text-sm transition-all duration-150",
+                          "web:max-820:w-auto web:max-820:flex-none web:max-820:whitespace-nowrap web:max-820:border web:max-820:border-solid web:max-820:border-border/50 web:max-820:px-10px web:max-820:py-8px",
+                          "web:max-820:rounded-10px web:max-820:[&_>_div]:gap-8px web:max-520:px-9px web:max-520:py-7px",
                           active
                             ? "bg-accent font-medium text-foreground web:max-820:border-primary/35!"
                             : "text-foreground/75 hover:bg-accent/60 hover:text-foreground",
                         )}
                       >
-                        <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground web:max-820:size-24px web:max-820:rounded-8px">
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center text-muted-foreground transition-colors",
+                            "group-hover:text-foreground web:max-820:size-24px web:max-820:rounded-8px",
+                          )}
+                        >
                           {definition.icon}
                         </span>
                         <span className="min-w-0 truncate leading-tight web:max-820:text-12px">
@@ -238,7 +271,10 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
             </div>
             {web && showSaveIndicator ? (
               <div
-                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground web:max-820:flex-none web:max-820:whitespace-nowrap"
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5",
+                  "whitespace-nowrap text-xs text-muted-foreground web:max-820:flex-none web:max-820:whitespace-nowrap",
+                )}
                 title={saveIndicator.title}
               >
                 <div className={cn("size-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />

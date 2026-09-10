@@ -23,7 +23,12 @@ function RootAccessToggle(props: {
 }) {
   const { value, disabled, ariaLabel, readLabel, writeLabel, onChange } = props;
   return (
-    <fieldset className="flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
+    <fieldset
+      className={cn(
+        "flex h-7 shrink-0 items-center gap-0.5",
+        "rounded-lg border border-border/60 bg-muted/40 p-0.5",
+      )}
+    >
       <legend className="sr-only">{ariaLabel}</legend>
       {ROOT_ACCESS_OPTIONS.map((option) => (
         <button
@@ -32,7 +37,9 @@ function RootAccessToggle(props: {
           aria-pressed={value === option}
           disabled={disabled}
           className={cn(
-            "rounded-md px-2 py-0.5 text-11px font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+            "rounded-md px-2 py-0.5",
+            "text-11px font-medium text-muted-foreground transition-colors",
+            "hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
             value === option && "bg-background text-foreground shadow-sm",
           )}
           onClick={() => onChange(option)}
@@ -116,7 +123,10 @@ export function WorkspaceDirectorySettingsPanel(props: {
           roots.map((root) => (
             <div
               key={root.id}
-              className="flex items-center gap-3 border-t border-border/50 px-4 py-2.5 transition-colors hover:bg-muted/25 max-[560px]:flex-wrap"
+              className={cn(
+                "flex items-center gap-3 border-t border-border/50 px-4 py-2.5 transition-colors",
+                "hover:bg-muted/25 max-[560px]:flex-wrap",
+              )}
             >
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
                 <Folder className="size-3.5" />
@@ -130,7 +140,11 @@ export function WorkspaceDirectorySettingsPanel(props: {
                     maxLength={32}
                     pattern="[a-z][a-z0-9_-]{0,31}"
                     disabled={!loaded}
-                    className="h-6 min-w-0 max-w-180px border-transparent bg-transparent px-1 text-sm font-medium shadow-none hover:border-border/60 focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-foreground/10"
+                    className={cn(
+                      "h-6 min-w-0 max-w-180px border-transparent bg-transparent px-1",
+                      "text-sm font-medium shadow-none",
+                      "hover:border-border/60 focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-foreground/10",
+                    )}
                   />
                   {/* 正常状态不显示徽标，只有异常/待批准时提醒。 */}
                   {root.state !== "active" ? (
@@ -186,7 +200,12 @@ export function WorkspaceDirectorySettingsPanel(props: {
             type="button"
             onClick={onAdd}
             disabled={!loaded || loading}
-            className="flex w-full items-center justify-center gap-1.5 border-t border-dashed border-border/60 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            className={cn(
+              "flex w-full items-center justify-center gap-1.5",
+              "border-t border-dashed border-border/60 px-4 py-2.5",
+              "text-xs font-medium text-muted-foreground transition-colors",
+              "hover:bg-muted/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+            )}
           >
             <Plus className="size-3.5" />
             {t("chat.workspaceSettingsAddDirectory")}
@@ -209,7 +228,12 @@ export function WorkspaceDirectorySettingsPanel(props: {
       ) : null}
 
       {error ? (
-        <div className="flex gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+        <div
+          className={cn(
+            "flex gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5",
+            "text-xs text-destructive",
+          )}
+        >
           <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
           <span>{error}</span>
         </div>

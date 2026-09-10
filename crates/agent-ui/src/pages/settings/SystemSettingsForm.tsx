@@ -66,7 +66,10 @@ function SettingsSelectTrigger({ className = "", ...props }: SettingsSelectTrigg
   return (
     <SelectTrigger
       className={cn(
-        "h-8 w-fit max-w-260px gap-1.5 whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0 text-13px font-normal leading-none shadow-ui-systemsettingsform-48 transition-colors hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:size-3.5 [&_svg]:opacity-40",
+        "h-8 w-fit max-w-260px gap-1.5",
+        "whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0",
+        "text-13px font-normal leading-none shadow-ui-systemsettingsform-48 transition-colors",
+        "hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:size-3.5 [&_svg]:opacity-40",
         className,
       )}
       {...props}
@@ -106,13 +109,22 @@ function ProxySettingsRow({
   onToggleDetails,
 }: ProxySettingsRowProps) {
   return (
-    <div className="relative flex min-h-76px flex-col gap-3 px-5 py-4 after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden sm:flex-row sm:items-center">
+    <div
+      className={cn(
+        "relative flex min-h-76px flex-col gap-3 px-5 py-4",
+        "after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
+        "sm:flex-row sm:items-center",
+      )}
+    >
       <button
         type="button"
         aria-expanded={expanded}
         aria-controls="system-proxy-details"
         onClick={onToggleDetails}
-        className="group flex min-w-0 flex-1 items-center justify-between gap-4 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-foreground/10"
+        className={cn(
+          "group flex min-w-0 flex-1 items-center justify-between gap-4",
+          "rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-foreground/10",
+        )}
       >
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium text-foreground">{title}</span>
@@ -120,7 +132,13 @@ function ProxySettingsRow({
             {description}
           </span>
         </span>
-        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-background px-3 py-2 text-xs font-medium text-foreground/80 shadow-xs transition-colors group-hover:bg-muted/45">
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5",
+            "rounded-xl border border-border/70 bg-background px-3 py-2",
+            "text-xs font-medium text-foreground/80 shadow-xs transition-colors group-hover:bg-muted/45",
+          )}
+        >
           <Settings2 className="size-3.5 text-muted-foreground" />
           <span>{actionLabel}</span>
           <ChevronRight

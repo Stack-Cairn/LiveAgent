@@ -443,7 +443,8 @@ export function McpImportView(props: {
                           disabled={alreadyImported}
                           onClick={() => toggleServer(activeScan.tool, server)}
                           className={cn(
-                            "group flex min-h-36 items-start gap-2.5 rounded-xl border p-3.5 text-left transition-[border-color,background-color,box-shadow]",
+                            "group flex min-h-36 items-start gap-2.5 rounded-xl border p-3.5",
+                            "text-left transition-[border-color,background-color,box-shadow]",
                             alreadyImported
                               ? "cursor-not-allowed border-border/70 bg-muted/50"
                               : checked
@@ -453,7 +454,8 @@ export function McpImportView(props: {
                         >
                           <span
                             className={cn(
-                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
+                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
+                              "transition-colors",
                               checked && !alreadyImported
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-border/70 bg-background",
@@ -466,7 +468,12 @@ export function McpImportView(props: {
                               <span className="truncate text-13px font-medium text-foreground">
                                 <SearchHighlight text={server.id} query={query} />
                               </span>
-                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted/70 px-1.5 py-0.5 text-10px uppercase text-muted-foreground">
+                              <span
+                                className={cn(
+                                  "inline-flex shrink-0 items-center gap-1 rounded-full bg-muted/70 px-1.5 py-0.5",
+                                  "text-10px uppercase text-muted-foreground",
+                                )}
+                              >
                                 {isStdio ? (
                                   <Terminal className="size-2.5" />
                                 ) : (
@@ -476,14 +483,22 @@ export function McpImportView(props: {
                               </span>
                               {server.origin !== "user" ? (
                                 <span
-                                  className="inline-flex max-w-10rem shrink-0 items-center truncate rounded-full bg-muted/70 px-1.5 py-0.5 text-10px text-muted-foreground"
+                                  className={cn(
+                                    "inline-flex max-w-10rem shrink-0 items-center",
+                                    "truncate rounded-full bg-muted/70 px-1.5 py-0.5 text-10px text-muted-foreground",
+                                  )}
                                   title={server.origin}
                                 >
                                   {t("mcpHub.importOriginProject")}
                                 </span>
                               ) : null}
                               {alreadyImported ? (
-                                <span className="inline-flex shrink-0 items-center rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-10px font-medium text-foreground/70 ring-1 ring-border/45">
+                                <span
+                                  className={cn(
+                                    "inline-flex shrink-0 items-center rounded-full bg-foreground/[0.06] px-1.5 py-0.5",
+                                    "text-10px font-medium text-foreground/70 ring-1 ring-border/45",
+                                  )}
+                                >
                                   {t("mcpHub.importAlreadyImported")}
                                 </span>
                               ) : null}

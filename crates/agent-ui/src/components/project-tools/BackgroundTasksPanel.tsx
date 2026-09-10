@@ -264,7 +264,10 @@ function BackgroundTaskLogDialog(props: {
             <div
               role="menu"
               aria-label={t("projectTools.bgTaskViewLog")}
-              className="absolute z-10 min-w-36 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              className={cn(
+                "absolute z-10 min-w-36",
+                "rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg",
+              )}
               style={{ left: contextMenu.x, top: contextMenu.y }}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -372,7 +375,12 @@ function BackgroundTaskRow(props: {
   }, [process.id, runAction]);
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+    <div
+      className={cn(
+        "flex flex-col gap-1.5",
+        "rounded-lg border border-border/60 bg-background/60 px-2.5 py-2",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-2">
         <span
           aria-hidden="true"
@@ -529,7 +537,12 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
   return (
     <div className="flex h-full min-h-0 flex-col">
       {actionsDisabled ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-scaled-11px text-muted-foreground">
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-border bg-muted/40 px-3 py-2 text-scaled-11px text-muted-foreground",
+          )}
+        >
           <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
           <span className="min-w-0 flex-1">{t("projectTools.bgTaskAgentOffline")}</span>
         </div>
@@ -557,7 +570,7 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
           {t("projectTools.bgTaskClearFinished")}
         </Button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-1">
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3", "pt-1")}>
         {state.processes.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
             {t("projectTools.bgTaskEmpty")}

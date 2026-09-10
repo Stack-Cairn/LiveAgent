@@ -1270,7 +1270,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             type="button"
             disabled={sectionsDisabled || state?.loading}
             onClick={() => void onLoadWorkspaceHistory?.(project.path, !state?.error, archivedIds)}
-            className="flex h-30px w-full items-center rounded-md px-2 text-left text-scaled-14px font-normal leading-5 text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className={cn(
+              "flex h-30px w-full items-center rounded-md px-2",
+              "text-left text-scaled-14px font-normal leading-5 text-foreground/60",
+              "hover:bg-foreground/[0.06] hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+            )}
           >
             {state?.loading
               ? t("sidebar.loadingMoreHistory")
@@ -1351,7 +1355,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           type="button"
           onClick={() => setArchivedConversationsOpen((open) => !open)}
           aria-expanded={archivedConversationsOpen}
-          className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            "flex w-full items-center gap-1 rounded-md px-2 py-1",
+            "text-xs font-medium text-muted-foreground",
+            "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+          )}
         >
           <ChevronRight
             className={cn("size-3 transition-transform", archivedConversationsOpen && "rotate-90")}
@@ -1370,7 +1378,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       data-app-frame-column="sidebar"
       data-state={isOpen ? "open" : "closed"}
       className={cn(
-        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out [contain:layout_paint_style] web:max-820:fixed web:max-820:inset-y-0 web:max-820:left-0 web:max-820:z-(--layer-panel) web:max-820:h-100dvh web:max-820:w-[min(var(--spacing-86vw),var(--spacing-272px))]! web:max-820:max-w-[min(var(--spacing-86vw),var(--spacing-272px))] web:max-820:-translate-x-full web:max-820:opacity-100! web:max-820:invisible web:max-820:[contain:layout_style] web:max-820:[backface-visibility:hidden] web:max-820:[will-change:transform] web:max-820:shadow-[var(--spacing-18px)_0_var(--spacing-48px)_var(--ui-color-hsl-220-22-10-0p16)] web:max-820:transition-[transform,visibility] web:max-820:duration-180 web:max-820:ease-ui-curve-6 web:max-820:data-[state=open]:visible web:max-820:data-[state=open]:translate-x-0 web:max-820:data-[state=closed]:pointer-events-none",
+        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden",
+        "border-r border-border/50 bg-[hsl(var(--sidebar-bg))]",
+        "transition-[width,opacity] duration-200 ease-out",
+        "[contain:layout_paint_style] web:max-820:fixed web:max-820:inset-y-0 web:max-820:left-0 web:max-820:z-(--layer-panel) web:max-820:h-100dvh web:max-820:w-[min(var(--spacing-86vw),var(--spacing-272px))]! web:max-820:max-w-[min(var(--spacing-86vw),var(--spacing-272px))]",
+        "web:max-820:-translate-x-full web:max-820:opacity-100! web:max-820:invisible web:max-820:[contain:layout_style] web:max-820:[backface-visibility:hidden] web:max-820:[will-change:transform] web:max-820:shadow-[var(--spacing-18px)_0_var(--spacing-48px)_var(--ui-color-hsl-220-22-10-0p16)] web:max-820:transition-[transform,visibility]",
+        "web:max-820:duration-180 web:max-820:ease-ui-curve-6 web:max-820:data-[state=open]:visible web:max-820:data-[state=open]:translate-x-0 web:max-820:data-[state=closed]:pointer-events-none",
         isOpen ? "w-272px opacity-100" : "w-0 opacity-0",
       )}
       style={{ "--zone-font-scale": fontScale } as CSSProperties}
@@ -1380,7 +1393,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           ref={reorder.ghostRef}
           aria-hidden="true"
           data-sidebar-drag-ghost
-          className="pointer-events-none fixed left-0 top-0 layer-popover flex h-8 max-w-240px items-center gap-2 rounded-lg border border-border/30 bg-popover/95 px-3 text-scaled-14px text-popover-foreground shadow-lg backdrop-blur-sm"
+          className={cn(
+            "pointer-events-none fixed left-0 top-0 layer-popover flex h-8 max-w-240px",
+            "items-center gap-2 rounded-lg border border-border/30 bg-popover/95 px-3",
+            "text-scaled-14px text-popover-foreground shadow-lg backdrop-blur-sm",
+          )}
           style={{
             transform:
               "translate3d(var(--sidebar-drag-x, var(--spacing-minus-9999px)), var(--sidebar-drag-y, var(--spacing-minus-9999px)), 0)",
@@ -1394,7 +1411,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           <span className="truncate">{draggedTitle}</span>
         </div>
       ) : null}
-      <div className="chat-history-sidebar-inner flex w-272px min-w-272px min-h-0 flex-1 flex-col web:max-820:w-full web:max-820:min-w-0 web:max-820:translate-z-0 web:max-820:[backface-visibility:hidden]">
+      <div
+        className={cn(
+          "chat-history-sidebar-inner flex w-272px min-w-272px min-h-0 flex-1 flex-col",
+          "web:max-820:w-full web:max-820:min-w-0 web:max-820:translate-z-0 web:max-820:[backface-visibility:hidden]",
+        )}
+      >
         {headerTop}
         <div className="shrink-0 border-b border-border/50 px-2 pb-3 pt-3">
           <div className="flex items-center justify-between gap-2">
@@ -1433,7 +1455,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               onClick={onNewConversation}
               className={cn(
-                "h-30px w-full justify-start gap-3 rounded-lg px-3 text-scaled-14px font-normal leading-5 shadow-none transition-colors web:text-14px! web:leading-20px! web:font-normal",
+                "h-30px w-full justify-start gap-3 rounded-lg px-3",
+                "text-scaled-14px font-normal leading-5 shadow-none transition-colors",
+                "web:text-14px! web:leading-20px! web:font-normal",
                 activeView === "chat"
                   ? "text-foreground/90 hover:bg-foreground/[0.08] hover:text-foreground active:bg-foreground/[0.1] active:text-foreground focus-visible:bg-foreground/[0.08]"
                   : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
@@ -1449,7 +1473,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               disabled={sectionsDisabled}
               onClick={() => setConversationSearchOpen(true)}
-              className="chat-history-search-button h-30px w-full justify-start gap-3 rounded-lg px-3 text-scaled-14px font-normal leading-5 text-foreground/80 shadow-none transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
+              className={cn(
+                "chat-history-search-button h-30px w-full justify-start gap-3 rounded-lg px-3",
+                "text-scaled-14px font-normal leading-5 text-foreground/80 shadow-none transition-colors",
+                "hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
+              )}
               title={t("chat.searchConversations")}
             >
               <Search className="size-4 shrink-0 text-foreground/85" />
@@ -1469,7 +1497,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   aria-current={active ? "page" : undefined}
                   onClick={() => onOpenResourceHub(id)}
                   className={cn(
-                    "sidebar-hub-menu-item h-30px w-full justify-start gap-3 rounded-lg px-3 text-scaled-14px font-normal leading-5 shadow-none transition-colors",
+                    "sidebar-hub-menu-item h-30px w-full justify-start gap-3 rounded-lg px-3",
+                    "text-scaled-14px font-normal leading-5 shadow-none transition-colors",
                     active
                       ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
                       : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
@@ -1506,7 +1535,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       type="button"
                       aria-expanded={!pinnedCollapsed}
                       onClick={() => setPinnedCollapsed((collapsed) => !collapsed)}
-                      className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
+                      className={cn(
+                        "group flex min-w-0 items-center gap-1 rounded-md px-3 py-1",
+                        "text-xs font-semibold text-muted-foreground outline-hidden",
+                      )}
                     >
                       {t("chat.pinnedSection")}
                       <ChevronRight
@@ -1539,7 +1571,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               >
                 <div
                   className={cn(
-                    "flex shrink-0 items-center justify-between rounded-t-xl px-2 pb-1 pt-2 transition-colors",
+                    "flex shrink-0 items-center justify-between rounded-t-xl",
+                    "px-2 pb-1 pt-2 transition-colors",
                     showWorkspaceFolderDrop &&
                       "bg-primary/[0.08] ring-1 ring-primary/40 ring-inset",
                   )}
@@ -1547,7 +1580,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   <button
                     type="button"
                     aria-expanded={!projectsCollapsed}
-                    className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
+                    className={cn(
+                      "group flex min-w-0 items-center gap-1 rounded-md px-3 py-1",
+                      "text-xs font-semibold text-muted-foreground outline-hidden",
+                    )}
                     onClick={handleProjectsCollapsedChange}
                     disabled={sectionsDisabled}
                   >
@@ -1686,7 +1722,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     {hiddenProjectCount > 0 || showAllProjects ? (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-scaled-11p5px font-medium text-muted-foreground outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn(
+                          "flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5",
+                          "text-scaled-11p5px font-medium text-muted-foreground outline-hidden transition-colors",
+                          "hover:!bg-foreground/[0.06] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring",
+                        )}
                         onClick={handleShowAllProjects}
                         disabled={sectionsDisabled}
                       >
@@ -1704,7 +1744,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           type="button"
                           onClick={() => setArchivedGroupOpen((current) => !current)}
                           disabled={sectionsDisabled}
-                          className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-scaled-11p5px font-medium text-muted-foreground/80 outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                          className={cn(
+                            "flex w-full items-center gap-1 rounded-md px-2 py-1.5",
+                            "text-scaled-11p5px font-medium text-muted-foreground/80 outline-hidden transition-colors",
+                            "hover:!bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                          )}
                         >
                           <ChevronRight
                             className={cn(
@@ -1742,7 +1786,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 <div
                   role="status"
                   aria-live="polite"
-                  className="flex min-w-0 items-center gap-1.5 px-3 py-1 text-xs font-semibold text-foreground/85"
+                  className={cn(
+                    "flex min-w-0 items-center gap-1.5 px-3 py-1",
+                    "text-xs font-semibold text-foreground/85",
+                  )}
                 >
                   <ListChecks className="size-3.5 shrink-0" />
                   <span className="min-w-0 truncate">
@@ -1756,7 +1803,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 <button
                   type="button"
                   aria-expanded={!recentCollapsed}
-                  className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
+                  className={cn(
+                    "group flex min-w-0 items-center gap-1 rounded-md px-3 py-1",
+                    "text-xs font-semibold text-muted-foreground outline-hidden",
+                  )}
                   onClick={handleRecentCollapsedChange}
                   disabled={sectionsDisabled}
                 >
@@ -1862,7 +1912,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       <span
                         role="status"
                         aria-live="polite"
-                        className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-scaled-10p5px font-medium text-primary/80"
+                        className={cn(
+                          "flex items-center gap-1",
+                          "rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5",
+                          "text-scaled-10p5px font-medium text-primary/80",
+                        )}
                       >
                         <span className="relative flex size-1.5 shrink-0" aria-hidden="true">
                           <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/35 opacity-75" />
@@ -1943,7 +1997,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 <div
                   role="alert"
                   title={actionErrorMessage}
-                  className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-scaled-11px leading-4 text-destructive"
+                  className={cn(
+                    "flex items-start gap-2",
+                    "rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2",
+                    "text-scaled-11px leading-4 text-destructive",
+                  )}
                 >
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                   <span className="min-w-0 break-words">{actionErrorMessage}</span>
@@ -2009,7 +2067,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   type="button"
                   onClick={handleLoadMore}
                   disabled={sectionsDisabled || isLoadingMore}
-                  className="w-full rounded-md px-2 pb-2 pt-1 text-center text-xs leading-5 text-muted-foreground hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring"
+                  className={cn(
+                    "w-full rounded-md px-2 pb-2 pt-1",
+                    "text-center text-xs leading-5 text-muted-foreground",
+                    "hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring",
+                  )}
                 >
                   {isLoadingMore
                     ? t("sidebar.loadingMoreHistory")
@@ -2019,7 +2081,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             </div>
           </div>
         </div>
-        <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-border/50 bg-[hsl(var(--sidebar-bg))] px-2 py-1.5">
+        <div
+          className={cn(
+            "grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
+            "border-t border-border/50 bg-[hsl(var(--sidebar-bg))] px-2 py-1.5",
+          )}
+        >
           <Button
             type="button"
             variant="ghost"
@@ -2028,7 +2095,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             // 东西不该为了脚本方便固定成英文。
             data-testid="open-settings"
             onClick={() => onOpenSettings()}
-            className="h-8 w-full justify-start gap-2.5 rounded-lg px-2.5 text-scaled-13px font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"
+            className={cn(
+              "h-8 w-full justify-start gap-2.5 rounded-lg px-2.5",
+              "text-scaled-13px font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground",
+            )}
             title={t("tooltip.settings")}
           >
             <Settings className="size-4 shrink-0 text-foreground/75" />

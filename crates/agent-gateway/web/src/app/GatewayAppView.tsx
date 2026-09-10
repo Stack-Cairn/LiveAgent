@@ -1229,7 +1229,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       <div
         ref={workbenchController.dragGhostRef}
         data-workbench-drag-ghost=""
-        className="layer-popover pointer-events-none fixed max-w-220px truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
+        className={cn(
+          "layer-popover pointer-events-none fixed max-w-220px",
+          "truncate rounded-md border border-border bg-background/95 px-2.5 py-1",
+          "text-xs text-foreground shadow-md",
+        )}
         style={{
           left: 0,
           top: 0,
@@ -1488,22 +1492,46 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   content: (
                     <>
                       {statusError ? (
-                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
                           {statusError}
                         </div>
                       ) : null}
                       {chatProtocolIncompatibleMessage && !statusError ? (
-                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
                           {chatProtocolIncompatibleMessage}
                         </div>
                       ) : null}
                       {settingsSyncError ? (
-                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
                           {settingsSyncError}
                         </div>
                       ) : null}
                       {chatError && displayedTranscriptRowCount === 0 ? (
-                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
                           {chatError}
                         </div>
                       ) : null}

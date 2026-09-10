@@ -16,12 +16,18 @@ export function ResourceSelectionCard(props: {
   return (
     <article
       className={cn(
-        "flex items-center gap-2.5 rounded-lg border bg-card p-2.5 text-left transition-[border-color,background-color]",
+        "flex items-center gap-2.5",
+        "rounded-lg border bg-card p-2.5 text-left transition-[border-color,background-color]",
         props.checked ? "border-emerald-600/25" : "border-border",
         props.disabled && "bg-muted/10",
       )}
     >
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground">
+      <span
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center",
+          "rounded-lg border border-border bg-muted text-foreground",
+        )}
+      >
         <Icon className="size-3.5" />
       </span>
       <div className="min-w-0 flex-1">

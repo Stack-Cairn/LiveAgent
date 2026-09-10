@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const sharedTrajectoryRoot = new URL("../../../agent-ui/src/components/trajectory/", import.meta.url);
 const trajectoryViewSource = readFileSync(new URL("TrajectoryView.tsx", sharedTrajectoryRoot), "utf8");
@@ -12,9 +13,8 @@ const detailsSource = readFileSync(
   new URL("details/DetailsPanel.tsx", sharedTrajectoryRoot),
   "utf8",
 );
-const resizeHandleSource = readFileSync(
-  new URL("details/DetailsResizeHandle.tsx", sharedTrajectoryRoot),
-  "utf8",
+const resizeHandleSource = normalizeClassGroups(
+  readFileSync(new URL("details/DetailsResizeHandle.tsx", sharedTrajectoryRoot), "utf8"),
 );
 
 test("narrow trajectory container keeps empty details beside the list", () => {

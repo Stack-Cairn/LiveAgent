@@ -255,7 +255,12 @@ export function DevicesSection({
       </div>
 
       {error ? (
-        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
+        <div
+          className={cn(
+            "flex items-start gap-2",
+            "rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive",
+          )}
+        >
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -318,7 +323,8 @@ export function DevicesSection({
                   disabled={loading}
                   onClick={() => handleStatusFilter(value)}
                   className={cn(
-                    "inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50",
+                    "inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md px-3",
+                    "text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50",
                     statusFilter === value
                       ? "bg-background text-foreground shadow"
                       : "hover:text-foreground/80",
@@ -420,7 +426,12 @@ function AddClientDialog({
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400">
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                )}
+              >
                 <Plus className="size-5" />
               </div>
               <div className="min-w-0">
@@ -434,7 +445,12 @@ function AddClientDialog({
 
           <DialogBody className="space-y-4 py-5">
             {error ? (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+              <div
+                className={cn(
+                  "flex items-start gap-2",
+                  "rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive",
+                )}
+              >
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -510,7 +526,12 @@ function IssuedTokenDialog({
       <DialogContent className="max-w-lg p-0" closeLabel={t("settings.close")} showCloseButton>
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center",
+                "rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+              )}
+            >
               <Key className="size-5" />
             </div>
             <div className="min-w-0">
@@ -536,7 +557,11 @@ function IssuedTokenDialog({
             <button
               type="button"
               onClick={() => void handleCopy()}
-              className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+              className={cn(
+                "absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center",
+                "rounded-lg text-muted-foreground transition-colors",
+                "hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+              )}
               title={copied ? t("chat.markdown.copied") : t("chat.copy")}
               aria-label={copied ? t("chat.markdown.copied") : t("chat.copy")}
             >
@@ -583,7 +608,12 @@ function DeviceDirectory(props: {
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-sm text-muted-foreground">
+      <div
+        className={cn(
+          "flex items-center justify-center",
+          "rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-sm text-muted-foreground",
+        )}
+      >
         {loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
         {loading ? t("settings.devicesLoading") : t("settings.devicesEmpty")}
       </div>
@@ -593,7 +623,12 @@ function DeviceDirectory(props: {
   if (data.agents.length === 0) {
     const filtered = statusFilter !== "all";
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center">
+      <div
+        className={cn(
+          "flex flex-col items-center gap-3",
+          "rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center",
+        )}
+      >
         <MonitorSmartphone className="size-8 text-muted-foreground/30" />
         <div>
           <p className="text-sm font-medium text-muted-foreground">
@@ -656,7 +691,12 @@ function DeviceRow(props: {
 
   return (
     <div className="group rounded-xl border border-border/60 bg-card transition-colors hover:border-border hover:bg-accent/20">
-      <div className="settings-card-row flex items-center gap-3 px-4 py-3 max-820:grid max-820:grid-cols-settings-devices-card-row max-820:[align-items:start] max-820:gap-y-10px max-820:gap-x-12px">
+      <div
+        className={cn(
+          "settings-card-row flex items-center gap-3 px-4 py-3",
+          "max-820:grid max-820:grid-cols-settings-devices-card-row max-820:[align-items:start] max-820:gap-y-10px max-820:gap-x-12px",
+        )}
+      >
         <div
           className={
             agent.online
@@ -694,7 +734,12 @@ function DeviceRow(props: {
                 : t("settings.devicesOfflineStatus")}
             </span>
           </div>
-          <div className="mt-1 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground max-820:min-w-0">
+          <div
+            className={cn(
+              "mt-1 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground",
+              "max-820:min-w-0",
+            )}
+          >
             {displayName ? (
               <span className="settings-devices-card-agent-id min-w-0 max-w-full truncate font-mono">
                 {agent.agent_id}
@@ -712,7 +757,13 @@ function DeviceRow(props: {
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 max-820:col-span-full max-820:w-full max-820:justify-stretch max-820:gap-6px max-820:border-t max-820:border-solid max-820:border-t-border/50 max-820:pt-8px max-820:[&_>_button]:min-w-0 max-820:[&_>_button]:flex-[1_1_0] max-820:[&_>_button]:justify-center max-820:[&_>_button]:px-8px">
+        <div
+          className={cn(
+            "flex shrink-0 flex-wrap items-center justify-end gap-1",
+            "max-820:col-span-full max-820:w-full max-820:justify-stretch max-820:gap-6px max-820:border-t max-820:border-solid max-820:border-t-border/50 max-820:pt-8px",
+            "max-820:[&_>_button]:min-w-0 max-820:[&_>_button]:flex-[1_1_0] max-820:[&_>_button]:justify-center max-820:[&_>_button]:px-8px",
+          )}
+        >
           {agent.has_token ? (
             <ConfirmActionPopover
               title={t("settings.devicesRotateTitle")}
@@ -795,7 +846,12 @@ function DeviceRow(props: {
         </div>
       </div>
       {editing ? (
-        <div className="flex flex-col gap-2 border-t border-border/50 px-4 py-3 sm:flex-row sm:items-end">
+        <div
+          className={cn(
+            "flex flex-col gap-2 border-t border-border/50 px-4 py-3",
+            "sm:flex-row sm:items-end",
+          )}
+        >
           <div className="min-w-0 flex-1 space-y-1.5">
             <Label
               htmlFor={`agent-name-${agent.agent_id}`}

@@ -31,7 +31,12 @@ export function WorkspaceGeneralSettingsPanel(props: {
       <h3 className="text-sm font-semibold">{t("chat.workspaceSettingsGeneral")}</h3>
 
       <div className="overflow-hidden rounded-xl border border-border/60">
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-2">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 px-3 py-2.5",
+            "max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-2",
+          )}
+        >
           <label htmlFor="workspace-project-name" className="shrink-0 text-sm font-medium">
             {t("chat.workspaceSettingsProjectName")}
           </label>
@@ -68,7 +73,12 @@ export function WorkspaceGeneralSettingsPanel(props: {
           <Badge variant="muted">{projectKindLabel}</Badge>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border/40 px-3 py-2.5 max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-1.5">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 border-t border-border/40 px-3 py-2.5",
+            "max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-1.5",
+          )}
+        >
           <span className="shrink-0 text-sm font-medium">
             {t("chat.workspaceSettingsPrimaryDirectory")}
           </span>

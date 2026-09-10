@@ -1,5 +1,6 @@
 import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { t as translate } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { AppSettings } from "@/lib/settings";
 
 export function HistorySwitchLoadingOverlay(props: { locale: AppSettings["locale"] }) {
@@ -12,7 +13,13 @@ export function HistorySwitchLoadingOverlay(props: { locale: AppSettings["locale
       aria-live="polite"
       aria-label={label}
     >
-      <div className="inline-flex items-center gap-0p5rem border border-solid border-border/60 rounded-full bg-background/95 text-muted-foreground shadow-gateway-history-switch-overlay-card px-0p875rem py-0p5rem text-0p75rem font-medium leading-1rem">
+      <div
+        className={cn(
+          "inline-flex items-center gap-0p5rem",
+          "border border-solid border-border/60 rounded-full bg-background/95 text-muted-foreground shadow-gateway-history-switch-overlay-card",
+          "px-0p875rem py-0p5rem text-0p75rem font-medium leading-1rem",
+        )}
+      >
         <Loader2 className="size-4 animate-spin text-primary" />
         <span>{label}</span>
       </div>

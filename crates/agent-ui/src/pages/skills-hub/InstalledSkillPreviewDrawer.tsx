@@ -11,9 +11,9 @@ import {
 } from "@liveagent/ui/components/ui/sheet";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useMemo } from "react";
-
 import { useDrawerPresence } from "./useDrawerPresence";
 
 export const INSTALLED_SKILL_PREVIEW_LINES = 10_000;
@@ -261,7 +261,12 @@ function InstalledSkillPreviewPopup(props: {
       className="w-full sm:max-w-xl"
     >
       <SheetHeader className="flex-row items-center gap-3 px-5 py-4 pr-14">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+        <div
+          className={cn(
+            "flex size-11 shrink-0 items-center justify-center",
+            "rounded-xl border border-border bg-muted text-foreground",
+          )}
+        >
           {alwaysEnabled ? <Lock className="size-5" /> : <SkillIcon className="size-7" />}
         </div>
         <div className="min-w-0 flex-1">
@@ -380,7 +385,12 @@ function InstalledSkillPreviewPopup(props: {
                   previewIsMarkdown ? (
                     <DocumentMarkdown content={previewContent} />
                   ) : (
-                    <pre className="max-h-24rem overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3 font-mono text-11px leading-5 text-foreground">
+                    <pre
+                      className={cn(
+                        "max-h-24rem overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3",
+                        "font-mono text-11px leading-5 text-foreground",
+                      )}
+                    >
                       {previewContent}
                     </pre>
                   )
@@ -391,7 +401,12 @@ function InstalledSkillPreviewPopup(props: {
                 )}
 
                 {preview.truncated ? (
-                  <div className="mt-2 rounded-lg border border-border bg-muted px-3 py-2 text-11px text-muted-foreground">
+                  <div
+                    className={cn(
+                      "mt-2 rounded-lg border border-border bg-muted px-3 py-2",
+                      "text-11px text-muted-foreground",
+                    )}
+                  >
                     {t("settings.skillsInstalledPreviewTruncated").replace(
                       "{count}",
                       String(INSTALLED_SKILL_PREVIEW_LINES),

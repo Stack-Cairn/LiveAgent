@@ -27,6 +27,7 @@ import {
   UserMessageContent,
 } from "@liveagent/ui/lib/chat/userMessageContent";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
 import {
   buildTranscriptLayoutKey,
@@ -169,10 +170,20 @@ function HistoryLoadingState(props: { title?: string }) {
   return (
     <div className={GATEWAY_TRANSCRIPT_SHELL_CLASS}>
       <div
-        className={`${GATEWAY_CHAT_COLUMN_CLASS} ${GATEWAY_EMPTY_STATE_CLASS} relative col-[2] flex items-center justify-center overflow-hidden px-0 pt-24px pb-0 max-640:pt-8px`}
+        className={cn(
+          GATEWAY_CHAT_COLUMN_CLASS,
+          GATEWAY_EMPTY_STATE_CLASS,
+          "relative col-[2] flex items-center justify-center overflow-hidden",
+          "px-0 pt-24px pb-0 max-640:pt-8px",
+        )}
       >
         <div className="flex min-h-280px w-full flex-col items-center justify-center px-4 text-center">
-          <div className="mb-4 flex size-10 items-center justify-center rounded-xl border border-border/70 bg-background/80 shadow-sm">
+          <div
+            className={cn(
+              "mb-4 flex size-10 items-center justify-center",
+              "rounded-xl border border-border/70 bg-background/80 shadow-sm",
+            )}
+          >
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
           <div className="max-w-28rem text-scaled-14px font-medium text-foreground/90">
@@ -221,7 +232,13 @@ function GatewayUserMessageBubbleBody(props: {
   const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(attachments, text);
 
   return (
-    <div className="ml-auto w-fit max-w-full whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]">
+    <div
+      className={cn(
+        "ml-auto w-fit max-w-full",
+        "whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5",
+        "font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
+      )}
+    >
       <UserAttachmentCards
         files={visibleFiles}
         workspaceRoot={workspaceRoot}
@@ -870,7 +887,10 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 type="button"
                 onClick={onLoadEarlierHistory}
                 disabled={isLoadingMoreHistory || !onLoadEarlierHistory}
-                className="rounded-full border border-border/60 bg-background/80 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                className={cn(
+                  "rounded-full border border-border/60 bg-background/80 px-4 py-1.5 text-xs text-muted-foreground",
+                  "transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60",
+                )}
               >
                 {isLoadingMoreHistory
                   ? locale === "en-US"
@@ -1022,7 +1042,12 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
             className={`${GATEWAY_TRANSCRIPT_ROW_CLASS} absolute inset-x-0 top-0`}
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
-            <div className="w-gateway-bubble-w rounded-22px border border-solid shadow-gateway-bubble backdrop-blur-18px px-18px py-16px border-destructive/30 bg-destructive/5">
+            <div
+              className={cn(
+                "w-gateway-bubble-w rounded-22px border border-solid shadow-gateway-bubble backdrop-blur-18px px-18px py-16px",
+                "border-destructive/30 bg-destructive/5",
+              )}
+            >
               <div className="text-11px font-bold tracking-0p12em uppercase text-muted-foreground">
                 Error
               </div>
@@ -1099,7 +1124,12 @@ export function GatewayTranscript({
     return (
       <div className={GATEWAY_TRANSCRIPT_SHELL_CLASS}>
         <div
-          className={`${GATEWAY_CHAT_COLUMN_CLASS} ${GATEWAY_EMPTY_STATE_CLASS} relative col-[2] flex items-center justify-center overflow-hidden px-0 pt-24px pb-0 max-640:pt-8px`}
+          className={cn(
+            GATEWAY_CHAT_COLUMN_CLASS,
+            GATEWAY_EMPTY_STATE_CLASS,
+            "relative col-[2] flex items-center justify-center overflow-hidden",
+            "px-0 pt-24px pb-0 max-640:pt-8px",
+          )}
         >
           {/* Keyed per conversation so the hero entrance replays when
               switching between empty conversations, not just on mount. */}
@@ -1155,7 +1185,12 @@ export function GatewayTranscript({
           redactToolContent={redactToolContent}
         />
         {shouldShowInlineError ? (
-          <div className="rounded-14px border border-solid border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive">
+          <div
+            className={cn(
+              "rounded-14px border border-solid border-destructive/16 bg-destructive/8 px-12px py-10px",
+              "text-13px text-destructive",
+            )}
+          >
             {inlineErrorText}
           </div>
         ) : null}

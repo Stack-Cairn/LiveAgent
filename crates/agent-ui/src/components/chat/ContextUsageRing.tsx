@@ -136,7 +136,10 @@ export function ContextUsageRing(props: {
     <Meter
       value={clampedPercentage}
       aria-valuetext={usageLabel}
-      className="relative flex size-8 items-center justify-center text-8px font-semibold leading-none tabular-nums text-foreground/75"
+      className={cn(
+        "relative flex size-8 items-center justify-center",
+        "text-8px font-semibold leading-none tabular-nums text-foreground/75",
+      )}
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" className="absolute inset-0 size-8 -rotate-90">
         <circle
@@ -221,7 +224,8 @@ export function ContextUsageRing(props: {
             className={cn(
               // 悬停底色画在 inset-0.5 的伪元素上（28px），与环外径及 composer 右列
               // 其余按钮的可见圆等大；不能改用 padding 收缩——内部 32px 的环会被挤偏。
-              "relative inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full outline-hidden before:absolute before:inset-0.5 before:rounded-full before:transition-colors hover:before:bg-muted/60 focus-visible:before:bg-muted/60",
+              "relative inline-flex size-8 shrink-0 cursor-pointer items-center justify-center",
+              "rounded-full outline-hidden before:absolute before:inset-0.5 before:rounded-full before:transition-colors hover:before:bg-muted/60 focus-visible:before:bg-muted/60",
               className,
             )}
           >

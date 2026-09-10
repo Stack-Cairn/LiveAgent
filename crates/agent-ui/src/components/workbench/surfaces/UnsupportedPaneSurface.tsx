@@ -1,4 +1,5 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 
 export type UnsupportedPaneSurfaceProps = {
   paneId: string;
@@ -14,7 +15,10 @@ export function UnsupportedPaneSurface(props: UnsupportedPaneSurfaceProps) {
     <div
       data-workbench-pane-id={paneId}
       data-workbench-surface="unsupported"
-      className="flex size-full min-h-0 flex-col items-center justify-center gap-1.5 p-6 text-center"
+      className={cn(
+        "flex size-full min-h-0 flex-col items-center justify-center gap-1.5 p-6",
+        "text-center",
+      )}
     >
       <p className="text-sm text-muted-foreground">{t("workbench.unsupportedPane")}</p>
       <p className="font-mono text-xs text-muted-foreground/70">{originalKind}</p>

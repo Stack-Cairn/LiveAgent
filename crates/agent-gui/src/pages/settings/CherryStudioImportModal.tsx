@@ -230,12 +230,22 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
 
         <DialogBody className="flex overflow-hidden p-0">
           {groups.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center px-6 py-10 text-center text-sm text-muted-foreground">
+            <div
+              className={cn(
+                "flex flex-1 items-center justify-center px-6 py-10",
+                "text-center text-sm text-muted-foreground",
+              )}
+            >
               没有可同步的 Cherry Studio 聊天供应商
             </div>
           ) : (
             <>
-              <div className="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r bg-muted/30 p-2">
+              <div
+                className={cn(
+                  "flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r bg-muted/30",
+                  "p-2",
+                )}
+              >
                 {groups.map((group) => {
                   const groupSelected = group.items.filter(
                     (item) => item.importable && selected.has(itemKey(item)),
@@ -247,7 +257,8 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                       type="button"
                       onClick={() => setActiveType(group.type)}
                       className={cn(
-                        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors",
+                        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left",
+                        "transition-colors",
                         active
                           ? "bg-background text-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -284,7 +295,8 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                         key={itemKey(item)}
                         type="button"
                         className={cn(
-                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3",
+                          "text-left transition-colors",
                           item.importable
                             ? checked
                               ? "border-primary/45 bg-primary/[0.06]"

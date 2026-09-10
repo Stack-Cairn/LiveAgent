@@ -67,7 +67,8 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-scaled-11px font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-scaled-11px font-medium transition-colors",
+          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
           value
             ? "bg-emerald-500 text-white shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -87,7 +88,8 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-scaled-11px font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-scaled-11px font-medium transition-colors",
+          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -119,7 +121,8 @@ function ShareSwitch(props: { checked: boolean; disabled: boolean; onToggle: () 
       disabled={disabled}
       onClick={onToggle}
       className={cn(
-        "relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed disabled:opacity-60",
+        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed disabled:opacity-60",
         checked ? "bg-sky-500" : "bg-muted-foreground/20 hover:bg-muted-foreground/30",
       )}
     >
@@ -193,7 +196,12 @@ export function HistoryShareModal({
       <DialogContent className="max-w-lg p-0" closeLabel="关闭" showCloseButton>
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
+            <div
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center",
+                "rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500",
+              )}
+            >
               <Share2 className="size-5" />
             </div>
             <div className="min-w-0">
@@ -264,7 +272,12 @@ export function HistoryShareModal({
           </div>
 
           {isLoading ? (
-            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground">
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                "rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground",
+              )}
+            >
               <Loader2 className="size-4 animate-spin" />
               正在读取分享状态...
             </div>
@@ -279,14 +292,22 @@ export function HistoryShareModal({
           {isEnabled && token ? (
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">分享链接</div>
-              <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background px-3 py-2 shadow-sm">
+              <div
+                className={cn(
+                  "flex items-center gap-2",
+                  "rounded-2xl border border-border/70 bg-background px-3 py-2 shadow-sm",
+                )}
+              >
                 <Link2 className="size-4 shrink-0 text-muted-foreground" />
                 {shareUrl ? (
                   <a
                     href={shareUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4 hover:underline dark:text-sky-400"
+                    className={cn(
+                      "min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4",
+                      "hover:underline dark:text-sky-400",
+                    )}
                     title={shareUrl}
                   >
                     {shareUrl}
@@ -336,7 +357,12 @@ export function HistoryShareModal({
                 </a>
               </div>
               {!shareOriginLoading && !publicOrigin ? (
-                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                <div
+                  className={cn(
+                    "rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2",
+                    "text-xs leading-5 text-amber-700 dark:text-amber-300",
+                  )}
+                >
                   当前 Gateway 地址无法用于生成公开链接，请确认 Remote 连接状态后再复制。
                 </div>
               ) : null}

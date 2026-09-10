@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
-const dockSource = readFileSync(new URL("../../../agent-ui/src/components/project-tools/RightDockPanel.tsx", import.meta.url), "utf8");
+const dockSource = normalizeClassGroups(readFileSync(new URL("../../../agent-ui/src/components/project-tools/RightDockPanel.tsx", import.meta.url), "utf8"));
 
 test("WebUI right dock hides the native tabs scrollbar behind its custom scrollbar", () => {
   assert.match(dockSource, /project-tools-panel-tabs[^"\n]*\[scrollbar-width:none\]/);

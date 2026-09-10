@@ -170,7 +170,10 @@ function ConfigChips({ card }: { card: McpRegistryCard }) {
       {inputs.slice(0, 5).map((input) => (
         <span
           key={`${input.target}:${input.name}`}
-          className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-10px text-muted-foreground ring-1 ring-border/60"
+          className={cn(
+            "inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5",
+            "text-10px text-muted-foreground ring-1 ring-border/60",
+          )}
           title={input.description ?? input.name}
         >
           {input.secret ? <Key className="size-3 shrink-0" /> : null}
@@ -234,7 +237,9 @@ function RegistryCard(props: {
         }
       }}
       className={cn(
-        "group relative flex h-full min-h-228px cursor-pointer flex-col rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color] focus:outline-none focus:ring-2 focus:ring-ring",
+        "group relative flex h-full min-h-228px cursor-pointer flex-col",
+        "rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color]",
+        "focus:outline-none focus:ring-2 focus:ring-ring",
         done ? "border-emerald-600/25" : "border-border hover:border-foreground/20 hover:shadow-md",
       )}
     >
@@ -267,7 +272,11 @@ function RegistryCard(props: {
           {hasVersionSelector ? (
             <Select value={card.id} onValueChange={setSelectedCardId}>
               <SelectTrigger
-                className="h-7 w-5p75rem overflow-hidden rounded-lg border-border/70 bg-background px-2 py-0 text-10p5px shadow-xs [&>svg]:size-3 [&>svg]:shrink-0"
+                className={cn(
+                  "h-7 w-5p75rem overflow-hidden",
+                  "rounded-lg border-border/70 bg-background px-2 py-0 text-10p5px shadow-xs",
+                  "[&>svg]:size-3 [&>svg]:shrink-0",
+                )}
                 title={versionLabelForCard(card) ?? t("mcpHub.storeVersionLatest")}
                 aria-label={t("mcpHub.storeVersion")}
               >
@@ -353,7 +362,8 @@ function RegistryCard(props: {
 
       <div
         className={cn(
-          "mt-3 flex min-h-40px items-center rounded-lg border border-border/60 px-2.5 py-2 transition-colors",
+          "mt-3 flex min-h-40px items-center",
+          "rounded-lg border border-border/60 px-2.5 py-2 transition-colors",
           done ? "bg-emerald-500/5" : "bg-muted/50",
         )}
       >
@@ -453,7 +463,12 @@ function McpRegistryPreviewDrawer(props: {
       >
         <div className="flex flex-col gap-2.5 border-b border-border/70 px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
+            <div
+              className={cn(
+                "flex size-11 shrink-0 items-center justify-center",
+                "rounded-2xl border border-border/70 bg-muted/50 text-foreground shadow-xs",
+              )}
+            >
               {data.remote ? <Globe2 className="size-5" /> : <Server className="size-5" />}
             </div>
             <div className="min-w-0 flex-1">
@@ -548,11 +563,22 @@ function McpRegistryPreviewDrawer(props: {
                 {t("mcpHub.storePreviewInstallPreview")}
               </div>
               {draft?.commandPreview ? (
-                <code className="mb-2 block max-h-28 overflow-y-auto whitespace-pre-wrap break-all rounded-xl border border-border/70 bg-muted/50 px-3 py-2 text-11px leading-5 text-muted-foreground">
+                <code
+                  className={cn(
+                    "mb-2 block max-h-28 overflow-y-auto",
+                    "whitespace-pre-wrap break-all rounded-xl border border-border/70 bg-muted/50 px-3 py-2",
+                    "text-11px leading-5 text-muted-foreground",
+                  )}
+                >
                   {draft.commandPreview}
                 </code>
               ) : (
-                <div className="mb-2 rounded-xl border border-border/70 bg-muted/50 px-3 py-2 text-12px text-muted-foreground">
+                <div
+                  className={cn(
+                    "mb-2 rounded-xl border border-border/70 bg-muted/50 px-3 py-2",
+                    "text-12px text-muted-foreground",
+                  )}
+                >
                   {data.installUnavailableReason === "needs-manual-command"
                     ? t("mcpHub.storeNeedsCommand")
                     : t("mcpHub.storeManualOnly")}
@@ -654,7 +680,10 @@ function McpRegistryPreviewDrawer(props: {
                       type="button"
                       key={`${link.key}:${link.url}`}
                       onClick={() => void openUrl(link.url)}
-                      className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-12px text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      className={cn(
+                        "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5",
+                        "text-left text-12px text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+                      )}
                     >
                       <ExternalLink className="size-3.5 shrink-0" />
                       <span className="shrink-0">{t(link.labelKey)}</span>
@@ -971,7 +1000,12 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
       />
 
       {error ? (
-        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+        <div
+          className={cn(
+            "flex items-start gap-2",
+            "rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive",
+          )}
+        >
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span className="break-words">{error}</span>
         </div>
@@ -1030,8 +1064,18 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-card px-6 py-12 text-center shadow-xs">
-              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-border/70 bg-background text-foreground shadow-xs">
+            <div
+              className={cn(
+                "rounded-2xl border border-dashed border-border/70 bg-card px-6 py-12",
+                "text-center shadow-xs",
+              )}
+            >
+              <div
+                className={cn(
+                  "mx-auto flex size-14 items-center justify-center",
+                  "rounded-2xl border border-border/70 bg-background text-foreground shadow-xs",
+                )}
+              >
                 <Terminal className="size-6" />
               </div>
               <p className="mt-4 text-sm font-medium text-foreground">

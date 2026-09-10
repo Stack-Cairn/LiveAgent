@@ -23,7 +23,13 @@ export function SettingsRow(props: { title: string; description?: string; contro
   const { title, description, control } = props;
 
   return (
-    <div className="relative flex min-h-72px flex-col gap-3 px-5 py-4 after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={cn(
+        "relative flex min-h-72px flex-col gap-3 px-5 py-4",
+        "after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
+        "sm:flex-row sm:items-center sm:justify-between",
+      )}
+    >
       <div className="min-w-0 flex-1 pr-2">
         <div className="text-sm font-medium text-foreground">{title}</div>
         {description ? (
@@ -51,7 +57,12 @@ export function SettingsChoiceRow(props: {
       type="button"
       aria-pressed={selected}
       onClick={onClick}
-      className="group relative flex w-full items-center gap-3 px-5 py-4 text-left transition-colors after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden hover:bg-muted/20"
+      className={cn(
+        "group relative flex w-full items-center gap-3 px-5 py-4",
+        "text-left transition-colors",
+        "after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
+        "hover:bg-muted/20",
+      )}
     >
       <span
         className={cn(
@@ -80,7 +91,8 @@ export function PromptTag({ label, muted = false }: { label: string; muted?: boo
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-11px leading-none",
+        "inline-flex shrink-0 items-center",
+        "whitespace-nowrap rounded-full border px-2 py-0.5 text-11px leading-none",
         muted
           ? "border-border/60 bg-muted/40 text-muted-foreground"
           : "border-border/70 bg-muted/60 text-foreground/80",

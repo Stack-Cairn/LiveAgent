@@ -343,7 +343,10 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
   return (
     <span
       className={cn(
-        "flex h-33px items-center gap-7px rounded-full border border-status-cyan/20 bg-rgba-255-255-255-0p055 px-12px py-0 text-11px text-rgba-233-245-255-0p84 uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default",
+        "flex h-33px items-center gap-7px",
+        "rounded-full border border-status-cyan/20 bg-rgba-255-255-255-0p055 px-12px py-0 text-11px text-rgba-233-245-255-0p84",
+        "uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px",
+        "transition-[transform,border-color,background-color] duration-160ms ease-default",
         online &&
           "[&>span]:animate-[status-board-pulse_var(--ui-duration-1500ms)_ease-in-out_infinite] [&>span]:bg-[rgb(var(--status-emerald))] [&>span]:shadow-[0_0_var(--spacing-20px)_rgba(var(--status-emerald),0.86)]",
       )}
@@ -360,11 +363,17 @@ function MetricTile({ metric }: { metric: MetricCard }) {
     <section
       className={cn(
         statusPanelSurfaceClass,
-        "relative grid min-h-82px min-w-0 grid-cols-[var(--spacing-34px)_minmax(0,1fr)] items-center gap-9px overflow-hidden rounded-14px border border-[rgba(var(--status-cyan),0.12)] bg-rgba-255-255-255-0p045 p-10px",
+        "relative grid min-h-82px min-w-0 grid-cols-[var(--spacing-34px)_minmax(0,1fr)] items-center gap-9px overflow-hidden",
+        "rounded-14px border border-[rgba(var(--status-cyan),0.12)] bg-rgba-255-255-255-0p045 p-10px",
         dashboardToneClass[metric.tone],
       )}
     >
-      <div className="grid size-34px place-items-center rounded-12px border border-[rgba(var(--status-cyan),0.3)] bg-[rgba(var(--status-board-tone),0.11)] text-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px">
+      <div
+        className={cn(
+          "grid size-34px place-items-center",
+          "rounded-12px border border-[rgba(var(--status-cyan),0.3)] bg-[rgba(var(--status-board-tone),0.11)] text-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px",
+        )}
+      >
         <Icon size={18} strokeWidth={2.2} />
       </div>
       <div>
@@ -375,7 +384,12 @@ function MetricTile({ metric }: { metric: MetricCard }) {
         <em className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic uppercase">
           {metric.unit}
         </em>
-        <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic block overflow-hidden mt-4px leading-1p25 text-ellipsis whitespace-nowrap">
+        <span
+          className={cn(
+            "text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic block overflow-hidden mt-4px",
+            "leading-1p25 text-ellipsis whitespace-nowrap",
+          )}
+        >
           {metric.detail}
         </span>
       </div>
@@ -411,7 +425,10 @@ function FactList({ items, className }: { items: FactItem[]; className?: string 
             {item.label}
           </span>
           <strong
-            className="inline-block overflow-hidden max-w-full mt-3px text-(--ui-color-rgba-255-255-255-0p94) text-13px leading-1p12 text-ellipsis whitespace-nowrap"
+            className={cn(
+              "inline-block overflow-hidden max-w-full mt-3px",
+              "text-(--ui-color-rgba-255-255-255-0p94) text-13px leading-1p12 text-ellipsis whitespace-nowrap",
+            )}
             title={item.value}
           >
             {item.value}
@@ -423,7 +440,10 @@ function FactList({ items, className }: { items: FactItem[]; className?: string 
           )}
           {item.note && (
             <em
-              className="block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-10px not-italic leading-1p22 text-ellipsis whitespace-nowrap"
+              className={cn(
+                "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-10px not-italic",
+                "leading-1p22 text-ellipsis whitespace-nowrap",
+              )}
               title={item.note}
             >
               {item.note}
@@ -1037,7 +1057,15 @@ export function StatusDashboardPage() {
   }
 
   return (
-    <main className="relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden bg-[radial-gradient(circle_at_16%_15%,rgba(var(--status-cyan),0.18),transparent_25%),radial-gradient(circle_at_76%_18%,rgba(var(--status-violet),0.18),transparent_27%),radial-gradient(circle_at_56%_85%,rgba(var(--status-emerald),0.1),transparent_30%),linear-gradient(135deg,var(--ui-color-02040c)_0%,var(--ui-color-06101f)_48%,var(--ui-color-030712)_100%)] font-app text-(--status-text) [--status-amber:255,196,87] [--status-bg:var(--ui-color-030712)] [--status-cyan:72,235,255] [--status-emerald:68,255,196] [--status-line:var(--ui-color-rgba-125-249-255-0p2)] [--status-muted:var(--ui-color-rgba-178-202-230-0p62)] [--status-panel-strong:var(--ui-color-rgba-8-20-42-0p88)] [--status-panel:var(--ui-color-rgba-6-14-31-0p72)] [--status-rose:255,78,142] [--status-text:var(--ui-color-rgba-241-248-255-0p94)] [--status-violet:169,119,255] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(var(--status-cyan),0.08)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.06)_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_50%_50%,transparent_0_44%,rgba(var(--status-cyan),0.08)_45%,transparent_46%)] before:bg-[length:var(--spacing-48px)_var(--spacing-48px),var(--spacing-48px)_var(--spacing-48px),var(--spacing-620px)_var(--spacing-620px)] before:opacity-(--ui-opacity-0p9) before:[mask-image:radial-gradient(circle_at_50%_50%,var(--ui-color-rgba-0-0-0-0p94),transparent_78%)] before:content-['']">
+    <main
+      className={cn(
+        "relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden",
+        "bg-[radial-gradient(circle_at_16%_15%,rgba(var(--status-cyan),0.18),transparent_25%),radial-gradient(circle_at_76%_18%,rgba(var(--status-violet),0.18),transparent_27%),radial-gradient(circle_at_56%_85%,rgba(var(--status-emerald),0.1),transparent_30%),linear-gradient(135deg,var(--ui-color-02040c)_0%,var(--ui-color-06101f)_48%,var(--ui-color-030712)_100%)] font-app text-(--status-text)",
+        "[--status-amber:255,196,87] [--status-bg:var(--ui-color-030712)] [--status-cyan:72,235,255] [--status-emerald:68,255,196] [--status-line:var(--ui-color-rgba-125-249-255-0p2)] [--status-muted:var(--ui-color-rgba-178-202-230-0p62)] [--status-panel-strong:var(--ui-color-rgba-8-20-42-0p88)] [--status-panel:var(--ui-color-rgba-6-14-31-0p72)]",
+        "[--status-rose:255,78,142] [--status-text:var(--ui-color-rgba-241-248-255-0p94)] [--status-violet:169,119,255] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(var(--status-cyan),0.08)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.06)_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_50%_50%,transparent_0_44%,rgba(var(--status-cyan),0.08)_45%,transparent_46%)] before:bg-[length:var(--spacing-48px)_var(--spacing-48px),var(--spacing-48px)_var(--spacing-48px),var(--spacing-620px)_var(--spacing-620px)]",
+        "before:opacity-(--ui-opacity-0p9) before:[mask-image:radial-gradient(circle_at_50%_50%,var(--ui-color-rgba-0-0-0-0p94),transparent_78%)] before:content-['']",
+      )}
+    >
       <div
         className="pointer-events-none absolute inset-[-30%_-18%] bg-[conic-gradient(from_90deg_at_50%_50%,transparent,rgba(var(--status-cyan),0.16),transparent,rgba(var(--status-violet),0.16),transparent,rgba(var(--status-emerald),0.12),transparent),radial-gradient(circle_at_48%_46%,var(--ui-color-hsl-0-0-100-0p08),transparent_28%)] opacity-(--ui-opacity-0p95) blur-28px"
         aria-hidden="true"
@@ -1047,22 +1075,48 @@ export function StatusDashboardPage() {
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none absolute top-[9%] left-[4%] size-220px rounded-full bg-[radial-gradient(circle,rgba(var(--status-cyan),0.3),transparent_64%)] opacity-(--ui-opacity-0p8) blur-2px"
+        className={cn(
+          "pointer-events-none absolute top-[9%] left-[4%] size-220px",
+          "rounded-full bg-[radial-gradient(circle,rgba(var(--status-cyan),0.3),transparent_64%)] opacity-(--ui-opacity-0p8) blur-2px",
+        )}
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none absolute top-[11%] right-[8%] size-280px rounded-full bg-[radial-gradient(circle,rgba(var(--status-violet),0.26),transparent_66%)] opacity-(--ui-opacity-0p8) blur-2px"
+        className={cn(
+          "pointer-events-none absolute top-[11%] right-[8%] size-280px",
+          "rounded-full bg-[radial-gradient(circle,rgba(var(--status-violet),0.26),transparent_66%)] opacity-(--ui-opacity-0p8) blur-2px",
+        )}
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none absolute right-[18%] bottom-[-4%] size-340px rounded-full bg-[radial-gradient(circle,rgba(var(--status-emerald),0.16),transparent_68%)] opacity-(--ui-opacity-0p8) blur-2px"
+        className={cn(
+          "pointer-events-none absolute right-[18%] bottom-[-4%] size-340px",
+          "rounded-full bg-[radial-gradient(circle,rgba(var(--status-emerald),0.16),transparent_68%)] opacity-(--ui-opacity-0p8) blur-2px",
+        )}
         aria-hidden="true"
       />
 
-      <section className="relative z-1 box-border grid grid-rows-status-board-stage gap-12px w-status-board-stage-w h-status-board-stage-h min-h-0 px-18px pt-14px pb-12px status-compact:w-100vw status-compact:h-100dvh status-compact:p-10px">
-        <header className="relative flex items-center justify-between gap-16px rounded-20px border border-[rgba(var(--status-cyan),0.2)] bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-[0_var(--spacing-18px)_var(--spacing-60px)_var(--ui-color-rgba-0-0-0-0p26),inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),inset_0_0_var(--spacing-48px)_rgba(var(--status-cyan),0.05)] backdrop-blur-22px before:absolute before:inset-x-[22%] before:bottom-minus-1px before:h-1px before:bg-[linear-gradient(90deg,transparent,rgba(var(--status-cyan),0.82),transparent)] before:shadow-[0_0_var(--spacing-18px)_rgba(var(--status-cyan),0.72)] before:content-['']">
+      <section
+        className={cn(
+          "relative z-1 box-border grid grid-rows-status-board-stage gap-12px w-status-board-stage-w h-status-board-stage-h",
+          "min-h-0 px-18px pt-14px pb-12px",
+          "status-compact:w-100vw status-compact:h-100dvh status-compact:p-10px",
+        )}
+      >
+        <header
+          className={cn(
+            "relative flex items-center justify-between gap-16px",
+            "rounded-20px border border-[rgba(var(--status-cyan),0.2)] bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-[0_var(--spacing-18px)_var(--spacing-60px)_var(--ui-color-rgba-0-0-0-0p26),inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),inset_0_0_var(--spacing-48px)_rgba(var(--status-cyan),0.05)] backdrop-blur-22px",
+            "before:absolute before:inset-x-[22%] before:bottom-minus-1px before:h-1px before:bg-[linear-gradient(90deg,transparent,rgba(var(--status-cyan),0.82),transparent)] before:shadow-[0_0_var(--spacing-18px)_rgba(var(--status-cyan),0.72)] before:content-['']",
+          )}
+        >
           <div className="flex min-w-0 items-center gap-12px">
-            <div className="flex size-38px flex-col place-items-center items-start gap-2px rounded-14px border border-[rgba(var(--status-cyan),0.3)] bg-[linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),var(--ui-color-hsl-0-0-100-0p06)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px">
+            <div
+              className={cn(
+                "flex size-38px flex-col place-items-center items-start gap-2px",
+                "rounded-14px border border-[rgba(var(--status-cyan),0.3)] bg-[linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),var(--ui-color-hsl-0-0-100-0p06)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px",
+              )}
+            >
               <Sparkles size={19} strokeWidth={2.4} />
             </div>
             <div className="items-start flex-col gap-2px flex">
@@ -1118,7 +1172,13 @@ export function StatusDashboardPage() {
         </header>
 
         {snapshot.error && (
-          <div className="absolute top-82px right-24px z-6 flex max-w-540px items-center gap-9px border border-solid border-status-amber/30 rounded-16px px-12px py-9px bg-rgba-56-35-4-0p5 text-rgba-255-232-190-0p92 text-12px shadow-status-board-warning backdrop-blur-18px">
+          <div
+            className={cn(
+              "absolute top-82px right-24px z-6 flex max-w-540px items-center gap-9px",
+              "border border-solid border-status-amber/30 rounded-16px px-12px py-9px",
+              "bg-rgba-56-35-4-0p5 text-rgba-255-232-190-0p92 text-12px shadow-status-board-warning backdrop-blur-18px",
+            )}
+          >
             <AlertCircle size={16} />
             <span>{snapshot.error}</span>
           </div>
@@ -1137,7 +1197,8 @@ export function StatusDashboardPage() {
               <div className="grid grid-cols-status-board-reactor-core items-center gap-14px mb-12px">
                 <div
                   className={cn(
-                    "relative grid size-154px place-items-center rounded-full shadow-[0_0_var(--spacing-46px)_rgba(var(--status-cyan),0.22),inset_0_0_var(--spacing-34px)_var(--ui-color-rgba-0-0-0-0p58)] before:absolute before:inset-12px before:rounded-[inherit] before:bg-[radial-gradient(circle,var(--ui-color-hsl-0-0-100-0p12),transparent_42%),var(--ui-color-071226)] before:shadow-[inset_0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.12)] before:content-['']",
+                    "relative grid size-154px place-items-center rounded-full shadow-[0_0_var(--spacing-46px)_rgba(var(--status-cyan),0.22),inset_0_0_var(--spacing-34px)_var(--ui-color-rgba-0-0-0-0p58)]",
+                    "before:absolute before:inset-12px before:rounded-[inherit] before:bg-[radial-gradient(circle,var(--ui-color-hsl-0-0-100-0p12),transparent_42%),var(--ui-color-071226)] before:shadow-[inset_0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.12)] before:content-['']",
                   )}
                   style={{
                     background: `conic-gradient(from -90deg, var(--color-status-integrity-start) 0deg, var(--color-status-integrity-end) ${integrityScore * 3.6}deg, var(--color-status-integrity-track) ${integrityScore * 3.6}deg 360deg)`,
@@ -1181,7 +1242,12 @@ export function StatusDashboardPage() {
                 <Server size={18} />
               </StatusSectionHeader>
               <FactList items={fabricFacts} />
-              <div className="mt-10px grid grid-cols-2 gap-8px [&>div]:min-w-0 [&>div]:rounded-14px [&>div]:border [&>div]:border-[rgba(var(--status-cyan),0.12)] [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-[rgba(var(--status-cyan),0.84)]">
+              <div
+                className={cn(
+                  "mt-10px grid grid-cols-2 gap-8px",
+                  "[&>div]:min-w-0 [&>div]:rounded-14px [&>div]:border [&>div]:border-[rgba(var(--status-cyan),0.12)] [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-[rgba(var(--status-cyan),0.84)]",
+                )}
+              >
                 <div>
                   <Globe2 size={17} />
                   <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
@@ -1240,13 +1306,21 @@ export function StatusDashboardPage() {
 
               <div className="grid grid-cols-status-board-radar-deck items-center gap-14px min-h-0 flex-auto mt-12px">
                 <div
-                  className="relative grid size-[min(var(--spacing-42vh),var(--spacing-410px))] place-items-center justify-self-center overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.22)] bg-[radial-gradient(circle,rgba(var(--status-cyan),0.13),transparent_7%),repeating-radial-gradient(circle,transparent_0_var(--spacing-54px),rgba(var(--status-cyan),0.13)_var(--spacing-55px)_var(--spacing-56px)),radial-gradient(circle_at_center,var(--ui-color-rgba-7-17-33-0p4),var(--ui-color-rgba-2-7-15-0p92))] shadow-[0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.16),inset_0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.08)] status-compact:size-[min(var(--spacing-38vh),var(--spacing-320px))]"
+                  className={cn(
+                    "relative grid size-[min(var(--spacing-42vh),var(--spacing-410px))] place-items-center justify-self-center overflow-hidden",
+                    "rounded-full border border-[rgba(var(--status-cyan),0.22)] bg-[radial-gradient(circle,rgba(var(--status-cyan),0.13),transparent_7%),repeating-radial-gradient(circle,transparent_0_var(--spacing-54px),rgba(var(--status-cyan),0.13)_var(--spacing-55px)_var(--spacing-56px)),radial-gradient(circle_at_center,var(--ui-color-rgba-7-17-33-0p4),var(--ui-color-rgba-2-7-15-0p92))] shadow-[0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.16),inset_0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.08)] status-compact:size-[min(var(--spacing-38vh),var(--spacing-320px))]",
+                  )}
                   role="img"
                   aria-label="live signal radar"
                 >
                   <div className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-46px)_var(--spacing-46px)] opacity-(--ui-opacity-0p42) [mask-image:radial-gradient(circle,black_0_68%,transparent_69%)]" />
                   <div className="absolute inset-0 animate-[status-board-radar-sweep_var(--ui-duration-3400ms)_linear_infinite] rounded-[inherit] bg-[conic-gradient(from_0deg,rgba(var(--status-cyan),0.45),rgba(var(--status-cyan),0.06)_42deg,transparent_72deg_360deg)] opacity-(--ui-opacity-0p82) mix-blend-screen" />
-                  <div className="relative z-2 grid size-126px place-items-center rounded-full border border-[rgba(var(--status-cyan),0.26)] bg-rgba-4-13-28-0p84 shadow-[0_0_var(--spacing-40px)_rgba(var(--status-cyan),0.23),inset_0_0_var(--spacing-26px)_rgba(var(--status-cyan),0.08)] [&>svg]:text-[rgba(var(--status-cyan),0.9)]">
+                  <div
+                    className={cn(
+                      "relative z-2 grid size-126px place-items-center",
+                      "rounded-full border border-[rgba(var(--status-cyan),0.26)] bg-rgba-4-13-28-0p84 shadow-[0_0_var(--spacing-40px)_rgba(var(--status-cyan),0.23),inset_0_0_var(--spacing-26px)_rgba(var(--status-cyan),0.08)] [&>svg]:text-[rgba(var(--status-cyan),0.9)]",
+                    )}
+                  >
                     <Bot size={44} strokeWidth={1.65} />
                     <strong className="text-(--ui-color-ffffff) text-36px leading-0p8">
                       {runtimeActiveRunCount}
@@ -1338,11 +1412,21 @@ export function StatusDashboardPage() {
                             {formatClock(event.at)}
                           </time>
                         </div>
-                        <p className="mx-0 mt-3px mb-0 line-clamp-1 overflow-hidden text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic">
+                        <p
+                          className={cn(
+                            "mx-0 mt-3px mb-0 line-clamp-1 overflow-hidden",
+                            "text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
+                          )}
+                        >
                           {event.detail}
                         </p>
                         {(event.conversationId || event.workdir) && (
-                          <span className="text-rgba-190-219-248-0p58 text-10px not-italic leading-1p25 inline-flex mt-4px rounded-full px-6px py-2px bg-rgba-255-255-255-0p06">
+                          <span
+                            className={cn(
+                              "text-rgba-190-219-248-0p58 text-10px not-italic leading-1p25 inline-flex mt-4px rounded-full",
+                              "px-6px py-2px bg-rgba-255-255-255-0p06",
+                            )}
+                          >
                             {event.workdir
                               ? basename(event.workdir)
                               : truncateMiddle(event.conversationId ?? "", 18)}
@@ -1412,12 +1496,20 @@ export function StatusDashboardPage() {
                   Active Workspace
                 </span>
                 <strong
-                  className="inline-block overflow-hidden max-w-full mt-3px text-(--ui-color-rgba-255-255-255-0p94) text-13px leading-1p12 text-ellipsis whitespace-nowrap"
+                  className={cn(
+                    "inline-block overflow-hidden max-w-full mt-3px",
+                    "text-(--ui-color-rgba-255-255-255-0p94) text-13px leading-1p12 text-ellipsis whitespace-nowrap",
+                  )}
                   title={activeWorkspaceHint}
                 >
                   {activeWorkspaceName}
                 </strong>
-                <em className="block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-10px not-italic leading-1p22 text-ellipsis whitespace-nowrap">
+                <em
+                  className={cn(
+                    "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-10px not-italic",
+                    "leading-1p22 text-ellipsis whitespace-nowrap",
+                  )}
+                >
                   {activeWorkspaceHint}
                 </em>
               </div>
@@ -1443,7 +1535,10 @@ export function StatusDashboardPage() {
                       </div>
                       <div className="h-8px overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.12)] bg-hsl-0-0-100-0p05">
                         <span
-                          className="block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)] not-italic"
+                          className={cn(
+                            "block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)]",
+                            "not-italic",
+                          )}
                           style={{
                             width: percentage(
                               ((item.conversationCount || 0) / maxWorkdirCount) * 100,
@@ -1462,7 +1557,13 @@ export function StatusDashboardPage() {
           </aside>
         </section>
 
-        <footer className="flex flex-nowrap items-center justify-between gap-10px overflow-hidden rounded-14px border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px text-10px text-(--ui-color-rgba-198-225-250-0p62) backdrop-blur-16px">
+        <footer
+          className={cn(
+            "flex flex-nowrap items-center justify-between gap-10px overflow-hidden",
+            "rounded-14px border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px",
+            "text-10px text-(--ui-color-rgba-198-225-250-0p62) backdrop-blur-16px",
+          )}
+        >
           <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <CheckCircle2 size={14} />
             Sources: status.get / settings.get / history.list / terminal.list / tunnel.state /

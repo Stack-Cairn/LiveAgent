@@ -89,7 +89,12 @@ function SidebarDropIndicator({ position }: { position?: "before" | "after" }) {
         position === "before" ? "-top-px" : "-bottom-px",
       )}
     >
-      <span className="absolute left-0 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-500 bg-[hsl(var(--sidebar-bg))]" />
+      <span
+        className={cn(
+          "absolute left-0 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2",
+          "rounded-full border-2 border-blue-500 bg-[hsl(var(--sidebar-bg))]",
+        )}
+      />
     </span>
   );
 }
@@ -632,7 +637,12 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
   if (isPendingDelete) {
     return (
-      <div className="chat-history-row rounded-2xl border border-border/70 bg-background px-3 py-2.5 shadow-xs shadow-black/5 [contain:layout_paint_style]">
+      <div
+        className={cn(
+          "chat-history-row rounded-2xl border border-border/70 bg-background px-3 py-2.5",
+          "shadow-xs shadow-black/5 [contain:layout_paint_style]",
+        )}
+      >
         <p className="truncate text-sm leading-5 text-foreground/80">
           {t("chat.conversationDeleteConfirm").replace("{title}", item.title)}
         </p>
@@ -673,7 +683,8 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
       style={props.dropPosition ? { contain: "layout style", zIndex: 1 } : undefined}
       className={cn(
         props.isDragging && "opacity-35",
-        "chat-history-row group/item relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors [contain:layout_paint_style]",
+        "chat-history-row group/item relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg",
+        "pl-1 transition-colors [contain:layout_paint_style]",
         isSelectionMode && isSelected
           ? "bg-primary/10 text-foreground hover:bg-primary/[0.14]"
           : isActive
@@ -710,7 +721,11 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-scaled-14px font-normal shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
+            className={cn(
+              "h-7 min-w-0 flex-1",
+              "rounded-none border-0 bg-transparent p-0",
+              "text-scaled-14px font-normal shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent",
+            )}
             disabled={isInteractionDisabled || isBusy}
           />
         </div>
@@ -761,7 +776,11 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 aria-current={isActive ? "page" : undefined}
                 aria-pressed={isSelectionMode ? isSelected : undefined}
                 disabled={isInteractionDisabled || (isSelectionMode && isSelectionDisabled)}
-                className="flex h-30px w-full min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring web:max-820:[-webkit-touch-callout:none] web:max-820:select-none web:max-820:touch-pan-y"
+                className={cn(
+                  "flex h-30px w-full min-w-0 items-center gap-2 rounded-md px-2",
+                  "text-left outline-hidden transition-colors",
+                  "focus-visible:ring-2 focus-visible:ring-ring web:max-820:[-webkit-touch-callout:none] web:max-820:select-none web:max-820:touch-pan-y",
+                )}
                 title={item.title}
               >
                 {isSelectionMode ? (
@@ -789,7 +808,12 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   {item.title}
                 </span>
                 {!isSelectionMode && blockedBadgeLabel ? (
-                  <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2 text-scaled-10p5px font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300">
+                  <span
+                    className={cn(
+                      "inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2",
+                      "text-scaled-10p5px font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300",
+                    )}
+                  >
                     {blockedBadgeLabel}
                   </span>
                 ) : null}
@@ -819,7 +843,8 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   aria-label={t("chat.statusRunningReply")}
                   title={t("chat.statusRunningReply")}
                   className={cn(
-                    "pointer-events-none absolute right-1.5 flex size-4 items-center justify-center text-muted-foreground transition-opacity duration-200",
+                    "pointer-events-none absolute right-1.5 flex size-4 items-center justify-center text-muted-foreground",
+                    "transition-opacity duration-200",
                     isMobileMenuLayout
                       ? "opacity-100"
                       : [
@@ -1112,7 +1137,11 @@ export function ProjectGroupHeader(props: {
     <div className="group/project-group flex h-30px items-center rounded-lg pl-1 transition-colors hover:bg-foreground/[0.04]">
       <button
         type="button"
-        className="flex h-30px min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "flex h-30px min-w-0 flex-1 items-center gap-2 rounded-md px-2",
+          "text-left outline-hidden transition-colors",
+          "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        )}
         onClick={onToggleCollapsed}
         title={t("chat.workspaceGroupToggle")}
       >
@@ -1139,7 +1168,10 @@ export function ProjectGroupHeader(props: {
           render={
             <button
               type="button"
-              className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors",
+                "hover:bg-foreground/[0.06] hover:text-foreground",
+              )}
             />
           }
           aria-label={t("chat.workspaceGroupActions")}
@@ -1360,7 +1392,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
   if (pendingAction) {
     const deletingWorktree = pendingAction === "deleteWorktree" && Boolean(project.worktree);
     return (
-      <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-sm text-destructive shadow-xs shadow-black/5">
+      <div
+        className={cn(
+          "rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5",
+          "text-sm text-destructive shadow-xs shadow-black/5",
+        )}
+      >
         <p className="truncate font-medium leading-5 text-destructive">
           {t(
             deletingWorktree
@@ -1435,7 +1472,8 @@ export const ProjectRow = memo(function ProjectRow(props: {
       data-sidebar-reorder-key={props.reorderKey}
       className={cn(
         props.isDragging && "opacity-35",
-        "group/project relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        "group/project relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1",
+        "transition-colors",
         indented && "pl-5",
         isMissing
           ? "text-destructive hover:bg-destructive/10"
@@ -1459,7 +1497,8 @@ export const ProjectRow = memo(function ProjectRow(props: {
               aria-expanded={props.onToggleExpanded ? props.expanded : undefined}
               draggable={false}
               className={cn(
-                "flex h-30px min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-30px min-w-0 items-center gap-2 rounded-md px-2",
+                "text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 isMissing
                   ? "hover:text-destructive focus-visible:bg-destructive/10"
                   : isArchived
@@ -1564,7 +1603,8 @@ export const ProjectRow = memo(function ProjectRow(props: {
             aria-label={t("chat.statusRunningReply")}
             title={t("chat.statusRunningReply")}
             className={cn(
-              "pointer-events-none absolute right-1.5 flex size-4 items-center justify-center text-muted-foreground transition-opacity duration-200",
+              "pointer-events-none absolute right-1.5 flex size-4 items-center justify-center text-muted-foreground",
+              "transition-opacity duration-200",
               "opacity-100 group-hover/project:opacity-0 group-focus-within/project:opacity-0",
               menuOpen && "opacity-0",
             )}

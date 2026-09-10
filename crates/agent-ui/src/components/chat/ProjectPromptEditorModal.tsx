@@ -75,7 +75,10 @@ export function ProjectPromptSettingsPanel(props: {
         value={projectPrompt}
         placeholder={t("chat.projectPromptPlaceholder")}
         aria-label={t("chat.projectPromptTitle")}
-        className="mt-3 min-h-52 flex-1 resize-none overflow-y-auto rounded-xl p-4 font-mono text-13px leading-6"
+        className={cn(
+          "mt-3 min-h-52 flex-1 resize-none overflow-y-auto rounded-xl p-4",
+          "font-mono text-13px leading-6",
+        )}
         onChange={(event) => onProjectPromptChange(event.currentTarget.value)}
       />
 
@@ -134,7 +137,12 @@ export function ProjectPromptEditorModal(props: {
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3.5">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300">
+          <div
+            className={cn(
+              "flex size-11 shrink-0 items-center justify-center",
+              "rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300",
+            )}
+          >
             <BookOpen className="size-5" />
           </div>
           <div className="min-w-0 flex-1">

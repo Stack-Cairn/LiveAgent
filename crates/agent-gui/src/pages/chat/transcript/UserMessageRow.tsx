@@ -81,7 +81,13 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
       )}
       data-user-bubble-wrap
     >
-      <div className="ml-auto w-fit max-w-full whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]">
+      <div
+        className={cn(
+          "ml-auto w-fit max-w-full",
+          "whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5",
+          "font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
+        )}
+      >
         <UserAttachmentCards files={visibleFiles} workspaceRoot={workspaceRoot} />
         {item.text ? (
           <UserMessageContent

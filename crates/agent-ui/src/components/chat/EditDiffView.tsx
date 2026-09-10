@@ -249,7 +249,10 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
   const displayPath = filePath?.trim() || "changed file";
   return (
     <figure
-      className="edit-tool-diff-view w-full max-w-420px overflow-hidden rounded-xl border border-border/65 bg-card/85 shadow-ui-editdiffview-5"
+      className={cn(
+        "edit-tool-diff-view w-full max-w-420px overflow-hidden",
+        "rounded-xl border border-border/65 bg-card/85 shadow-ui-editdiffview-5",
+      )}
       aria-label={`Diff for ${displayPath}`}
       data-chat-code-diff=""
     >

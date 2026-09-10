@@ -15,7 +15,9 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
     return (
       <div
         className={cn(
-          "animate-file-drop-overlay motion-reduce:animate-none! pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-3xl border border-dashed px-5 py-3 backdrop-blur-xl",
+          "animate-file-drop-overlay motion-reduce:animate-none!",
+          "pointer-events-none absolute inset-0 z-30 flex items-center justify-center",
+          "rounded-3xl border border-dashed px-5 py-3 backdrop-blur-xl",
           canDropUpload
             ? "border-foreground/25 bg-background/92 dark:border-white/20 dark:bg-zinc-950/90"
             : "border-destructive/40 bg-background/94 dark:bg-zinc-950/92",
@@ -47,7 +49,8 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
           </div>
           <div
             className={cn(
-              "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-scaled-11px font-medium md:inline-flex",
+              "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1",
+              "text-scaled-11px font-medium md:inline-flex",
               canDropUpload
                 ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
                 : "border-destructive/20 bg-destructive/[0.05] text-destructive/80",
@@ -69,7 +72,11 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
 
   return (
     <div
-      className="animate-file-drop-overlay motion-reduce:animate-none! pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 bg-white/30 backdrop-blur-md dark:bg-black/30"
+      className={cn(
+        "animate-file-drop-overlay motion-reduce:animate-none!",
+        "pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4",
+        "sm:p-6 bg-white/30 backdrop-blur-md dark:bg-black/30",
+      )}
       aria-hidden="true"
     >
       <div
@@ -82,7 +89,10 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
       />
       <div
         className={cn(
-          "animate-file-drop-overlay-card motion-reduce:animate-none! relative flex w-full max-w-380px flex-col items-center gap-5 rounded-2xl border bg-white/70 px-8 py-7 text-center shadow-ui-filedropoverlay-6 backdrop-blur-2xl dark:bg-zinc-900/70 dark:shadow-ui-filedropoverlay-7",
+          "animate-file-drop-overlay-card motion-reduce:animate-none!",
+          "relative flex w-full max-w-380px flex-col items-center gap-5",
+          "rounded-2xl border bg-white/70 px-8 py-7",
+          "text-center shadow-ui-filedropoverlay-6 backdrop-blur-2xl dark:bg-zinc-900/70 dark:shadow-ui-filedropoverlay-7",
           canDropUpload
             ? "border-black/[0.06] ring-1 ring-inset ring-white/40 dark:border-white/10 dark:ring-white/[0.04]"
             : "border-destructive/20 ring-1 ring-inset ring-destructive/10 dark:border-destructive/30",
@@ -114,7 +124,8 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
 
         <div
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-scaled-11px font-medium",
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1",
+            "text-scaled-11px font-medium",
             canDropUpload
               ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
               : "border-destructive/20 bg-destructive/[0.05] text-destructive/80",

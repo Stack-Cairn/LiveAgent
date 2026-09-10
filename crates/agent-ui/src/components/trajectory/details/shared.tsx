@@ -1,3 +1,4 @@
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import type { TrajectorySourceBlock } from "../../../lib/trajectory/types";
 import { Markdown } from "../../Markdown";
@@ -21,7 +22,10 @@ export function TextBlock(props: { value: string | undefined; t: Translate; lang
   return (
     <pre
       data-language={props.language}
-      className="max-h-full whitespace-pre-wrap break-words rounded bg-muted/40 p-2 font-mono text-11px leading-relaxed"
+      className={cn(
+        "max-h-full whitespace-pre-wrap break-words rounded bg-muted/40 p-2",
+        "font-mono text-11px leading-relaxed",
+      )}
     >
       {props.value}
     </pre>
@@ -75,7 +79,10 @@ export function SourceBlocks(props: {
           {block.filePath && block.fileSource && props.onOpenFileLink ? (
             <button
               type="button"
-              className="max-w-full truncate rounded border border-border/60 px-2 py-1 text-left text-11px font-medium text-primary hover:bg-muted/60"
+              className={cn(
+                "max-w-full truncate rounded border border-border/60 px-2 py-1",
+                "text-left text-11px font-medium text-primary hover:bg-muted/60",
+              )}
               title={block.filePath}
               onClick={() => {
                 const { filePath, fileSource } = block;

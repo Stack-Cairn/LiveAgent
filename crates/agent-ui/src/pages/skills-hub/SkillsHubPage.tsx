@@ -1374,12 +1374,23 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         : t("settings.skillsScanNoChanges")
       : scanFeedback?.message;
   return (
-    <div className="hub-page relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className={cn(
+        "hub-page relative flex h-full min-h-0 flex-1 flex-col overflow-hidden",
+        "bg-background",
+      )}
+    >
       {scanFeedback ? (
-        <div className="pointer-events-none absolute bottom-5 inset-x-4 z-50 flex justify-end sm:left-auto sm:right-6">
+        <div
+          className={cn(
+            "pointer-events-none absolute bottom-5 inset-x-4 z-50 flex justify-end",
+            "sm:left-auto sm:right-6",
+          )}
+        >
           <div
             className={cn(
-              "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-background px-3 py-2.5 text-sm shadow-xl",
+              "pointer-events-auto flex w-full max-w-sm items-start gap-2.5",
+              "rounded-lg border bg-background px-3 py-2.5 text-sm shadow-xl",
               scanFeedback.status === "success" ? "border-emerald-600/30" : "border-destructive/30",
             )}
             role={scanFeedback.status === "error" ? "alert" : "status"}
@@ -1501,7 +1512,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
           className={
             props.embedded
               ? "hub-scroll min-h-0 flex-1 overflow-hidden"
-              : "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10"
+              : cn(
+                  "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6",
+                  "sm:px-6 lg:px-8 xl:px-10",
+                )
           }
         >
           <div className="hub-content-stage mx-auto flex size-full min-h-0 max-w-1320px flex-col">
@@ -1533,7 +1547,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           ? t("settings.skillsStoreSearch")
                           : t("settings.skillsImportSearchPlaceholder")
                     }
-                    className="h-11 rounded-full border-border bg-background pl-11 pr-4 text-sm shadow-none placeholder:text-muted-foreground"
+                    className={cn(
+                      "h-11 rounded-full border-border bg-background pl-11 pr-4 text-sm shadow-none",
+                      "placeholder:text-muted-foreground",
+                    )}
                   />
                 </div>
               ) : null}
@@ -1605,7 +1622,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         <SelectTrigger
                           aria-label={t("settings.skillsInstalledSortLabel")}
                           title={t("settings.skillsInstalledSortLabel")}
-                          className="h-8 w-auto max-w-11rem shrink-0 gap-2 border-0 bg-transparent px-2.5 text-xs font-medium text-foreground shadow-none hover:bg-muted max-sm:max-w-8rem"
+                          className={cn(
+                            "h-8 w-auto max-w-11rem shrink-0 gap-2 border-0 bg-transparent px-2.5",
+                            "text-xs font-medium text-foreground shadow-none hover:bg-muted max-sm:max-w-8rem",
+                          )}
                         >
                           <SelectValue>
                             {t(
@@ -1841,11 +1861,21 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       view === "installed" &&
       !lockedByChatMode &&
       (!bulkUndo || bulkSelection.size > 0) ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3 max-sm:bottom-safe-bottom-offset">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3",
+            "max-sm:bottom-safe-bottom-offset",
+          )}
+        >
           <div
             role="toolbar"
             aria-label={t("settings.skillsBulkSelect")}
-            className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/95 py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95"
+            className={cn(
+              "pointer-events-auto flex max-w-full flex-wrap items-center gap-2",
+              "rounded-full border border-border/50 bg-background/95",
+              "py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51",
+              "max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
+            )}
           >
             {bulkSelection.size > 0 ? (
               <>
@@ -1944,8 +1974,19 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       ) : null}
 
       {bulkUndo && bulkSelection.size === 0 ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3 max-sm:bottom-safe-bottom-offset">
-          <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-full border border-border/50 bg-background/95 py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 dark:border-white/[0.1] dark:bg-popover/95">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3",
+            "max-sm:bottom-safe-bottom-offset",
+          )}
+        >
+          <div
+            className={cn(
+              "pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3",
+              "rounded-full border border-border/50 bg-background/95",
+              "py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 dark:border-white/[0.1] dark:bg-popover/95",
+            )}
+          >
             <span className="text-foreground">
               {t("settings.skillsBulkUpdated").replace("{count}", String(bulkUndo.count))}
             </span>

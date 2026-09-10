@@ -128,7 +128,12 @@ export function CopyPathDialog(props: {
             value={text}
             readOnly
             autoFocus
-            className="min-h-28 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+            className={cn(
+              "min-h-28 w-full resize-none",
+              "rounded-lg border border-input bg-background px-3 py-2",
+              "font-mono text-xs text-foreground outline-none transition-colors",
+              "focus:border-ring focus:ring-2 focus:ring-ring/20",
+            )}
             onFocus={(event) => event.currentTarget.select()}
           />
         </DialogBody>
@@ -147,7 +152,13 @@ export function CopyPathDialog(props: {
 export function CopyPathToast(props: { message: string }) {
   return (
     <div className="layer-raised pointer-events-none absolute bottom-14 right-4">
-      <div className="flex min-w-56 items-center gap-2 rounded-lg border border-emerald-500/25 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-2xl backdrop-blur-xl">
+      <div
+        className={cn(
+          "flex min-w-56 items-center gap-2",
+          "rounded-lg border border-emerald-500/25 bg-background/95 px-3 py-2",
+          "text-sm font-medium text-foreground shadow-2xl backdrop-blur-xl",
+        )}
+      >
         <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
         <span>{props.message}</span>
       </div>
@@ -264,7 +275,13 @@ export function TransferToast(props: {
       : "text-sky-600 dark:text-sky-300";
 
   return (
-    <div className="pointer-events-auto relative ml-auto flex h-full w-340px max-w-[50%] shrink-0 items-center gap-2 pl-3 text-foreground before:absolute before:inset-y-2 before:left-0 before:w-px before:bg-border/60">
+    <div
+      className={cn(
+        "pointer-events-auto relative ml-auto flex h-full w-340px max-w-[50%] shrink-0",
+        "items-center gap-2 pl-3 text-foreground",
+        "before:absolute before:inset-y-2 before:left-0 before:w-px before:bg-border/60",
+      )}
+    >
       <div className="flex size-4 shrink-0 items-center justify-center">
         <StatusIcon className={cn("size-3.5", iconClass, isRunning && "animate-spin")} />
       </div>
@@ -336,7 +353,11 @@ export function DragPreview(props: {
 
   return (
     <div
-      className="layer-toast pointer-events-none fixed flex w-260px max-w-viewport-inset-32px items-center gap-2 rounded-md bg-sky-500/90 px-2.5 py-2 text-xs text-white shadow-xl ring-1 ring-sky-200/50 backdrop-blur-sm"
+      className={cn(
+        "layer-toast pointer-events-none fixed flex w-260px max-w-viewport-inset-32px items-center gap-2",
+        "rounded-md bg-sky-500/90 px-2.5 py-2",
+        "text-xs text-white shadow-xl ring-1 ring-sky-200/50 backdrop-blur-sm",
+      )}
       style={{
         left: x + 18,
         top: y + 14,
@@ -383,7 +404,8 @@ export function MenuItem(props: {
       role="menuitem"
       disabled={disabled}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
+        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left",
+        "transition-colors",
         destructive
           ? "text-destructive hover:bg-destructive/10"
           : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",

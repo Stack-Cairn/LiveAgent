@@ -370,7 +370,8 @@ export function GitOperationNoticeToast({
         role={isSuccess ? "status" : "alert"}
         aria-live={isSuccess ? "polite" : "assertive"}
         className={cn(
-          "pointer-events-auto flex w-80 max-w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
+          "pointer-events-auto flex w-80 max-w-full items-start gap-2.5 rounded-lg border",
+          "px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
           isSuccess
             ? "border-emerald-500/25 bg-emerald-50/95 text-emerald-900 dark:bg-emerald-950/85 dark:text-emerald-100"
             : "border-red-500/30 bg-red-50/95 text-red-900 dark:bg-red-950/85 dark:text-red-100",
@@ -543,7 +544,11 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
     >
       <DropdownMenuTrigger
         disabled={operationBusy}
-        className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-scaled-12px font-medium outline-hidden transition-colors hover:bg-muted/70 focus-visible:bg-muted/70 disabled:pointer-events-none disabled:opacity-60"
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1.5 px-2",
+          "text-scaled-12px font-medium outline-hidden transition-colors",
+          "hover:bg-muted/70 focus-visible:bg-muted/70 disabled:pointer-events-none disabled:opacity-60",
+        )}
         title={t("projectTools.gitReview.switchBranch")}
         aria-label={t("projectTools.gitReview.switchBranch")}
       >
@@ -632,7 +637,8 @@ function GitReviewScopeDial(props: {
               if (!isActive) onChange(item.key);
             }}
             className={cn(
-              "group absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-hidden transition-[left] duration-200 ease-out motion-reduce:transition-none",
+              "group absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center",
+              "justify-center outline-hidden transition-[left] duration-200 ease-out motion-reduce:transition-none",
               isActive ? "left-3 z-10" : "left-10",
             )}
           >
@@ -727,12 +733,21 @@ export function GitReviewToolbar(props: {
             <GitBranch className="size-18px text-emerald-600 dark:text-emerald-300" />
           </div>
         )}
-        <div className="flex h-7 min-w-0 flex-1 items-stretch overflow-hidden rounded-md border border-border bg-muted/25">
+        <div
+          className={cn(
+            "flex h-7 min-w-0 flex-1 items-stretch overflow-hidden",
+            "rounded-md border border-border bg-muted/25",
+          )}
+        >
           {effectiveScope === "repository" ? (
             <DropdownMenu>
               <DropdownMenuTrigger
                 disabled={operationBusy}
-                className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-scaled-12px font-medium outline-hidden transition-colors hover:bg-muted/70 focus-visible:bg-muted/70 disabled:pointer-events-none disabled:opacity-60"
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-1.5 px-2",
+                  "text-scaled-12px font-medium outline-hidden transition-colors",
+                  "hover:bg-muted/70 focus-visible:bg-muted/70 disabled:pointer-events-none disabled:opacity-60",
+                )}
                 title={t("projectTools.gitReview.repositoryPicker")}
                 aria-label={t("projectTools.gitReview.repositoryPicker")}
               >
@@ -868,9 +883,19 @@ export function GitReviewToolbar(props: {
         </Button>
       </div>
       {state.status === "ready" ? (
-        <div className="mt-1.5 overflow-hidden rounded-xl border border-white/20 bg-white/50 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.03]">
+        <div
+          className={cn(
+            "mt-1.5 overflow-hidden rounded-xl border border-white/20 bg-white/50 shadow-sm backdrop-blur-xl",
+            "dark:border-white/[0.08] dark:bg-white/[0.03]",
+          )}
+        >
           <div className="flex items-center gap-1.5 border-b border-black/[0.04] px-3 py-2 dark:border-white/[0.06]">
-            <span className="shrink-0 rounded bg-muted/70 px-1.5 py-0.5 text-scaled-10px font-medium leading-none text-muted-foreground">
+            <span
+              className={cn(
+                "shrink-0 rounded bg-muted/70 px-1.5 py-0.5",
+                "text-scaled-10px font-medium leading-none text-muted-foreground",
+              )}
+            >
               {t("projectTools.gitReview.labelBase")}
             </span>
             <Cloud className="size-3 shrink-0 text-muted-foreground/60" />
@@ -939,7 +964,8 @@ export function GitReviewToolbar(props: {
           <button
             type="button"
             className={cn(
-              "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 font-medium text-muted-foreground transition-colors hover:text-foreground",
+              "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 font-medium text-muted-foreground",
+              "transition-colors hover:text-foreground",
               reviewMode === "changes" && "bg-background text-foreground shadow-sm",
             )}
             onClick={() => setReviewMode("changes")}
@@ -950,7 +976,8 @@ export function GitReviewToolbar(props: {
           <button
             type="button"
             className={cn(
-              "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 font-medium text-muted-foreground transition-colors hover:text-foreground",
+              "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 font-medium text-muted-foreground",
+              "transition-colors hover:text-foreground",
               reviewMode === "history" && "bg-background text-foreground shadow-sm",
             )}
             onClick={() => setReviewMode("history")}

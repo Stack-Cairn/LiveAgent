@@ -129,7 +129,8 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
               setSettings((prev) => updateSkills(prev, { enabled: !prev.skills.enabled }))
             }
             className={cn(
-              "relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              "relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors",
+              "disabled:cursor-not-allowed disabled:opacity-50",
               settings.skills.enabled ? "bg-primary" : "bg-muted-foreground/30",
             )}
           >
@@ -167,7 +168,12 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
       </div>
 
       {skillsLockedByChatMode ? (
-        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2.5">
+        <div
+          className={cn(
+            "flex items-start gap-2",
+            "rounded-lg border border-border/60 bg-muted/40 px-3 py-2.5",
+          )}
+        >
           <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">
             {t("settings.skillsDisabledInChatMode")}
@@ -176,14 +182,24 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
       ) : (
         <>
           {loadError ? (
-            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                "rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5",
+              )}
+            >
               <AlertTriangle className="size-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">{loadError}</span>
             </div>
           ) : null}
 
           {!settings.skills.enabled ? (
-            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2.5">
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                "rounded-lg border border-border/60 bg-muted/40 px-3 py-2.5",
+              )}
+            >
               <BookOpen className="size-4 shrink-0 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">
                 {t("settings.skillsDisabledHint")}
@@ -192,7 +208,12 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
           ) : null}
 
           {!loading && skills.length === 0 && !loadError ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 py-12 text-center">
+            <div
+              className={cn(
+                "flex flex-col items-center gap-3",
+                "rounded-xl border border-dashed border-border/60 py-12 text-center",
+              )}
+            >
               <div className="flex size-12 items-center justify-center rounded-full bg-muted">
                 <BookOpen className="size-5 text-muted-foreground" />
               </div>
@@ -241,7 +262,11 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                 value={filter}
                 onChange={(e) => setFilter(e.currentTarget.value)}
                 placeholder={t("settings.skillsSearch")}
-                className="h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-sm outline-hidden transition-colors placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 web:text-0p75rem"
+                className={cn(
+                  "h-9 w-full rounded-lg border bg-background pl-9 pr-3",
+                  "text-sm outline-hidden transition-colors",
+                  "placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 web:text-0p75rem",
+                )}
               />
             </div>
           ) : null}
@@ -281,7 +306,10 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
 
                     {alwaysEnabled ? (
                       <div
-                        className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2 py-1 text-11px font-medium text-primary"
+                        className={cn(
+                          "flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2 py-1",
+                          "text-11px font-medium text-primary",
+                        )}
                         title={t("settings.skillsAlwaysOn")}
                       >
                         <Lock className="size-3" />
@@ -306,7 +334,10 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                   return (
                     <div
                       key={`${skill.name}-${scanGeneration}`}
-                      className="settings-card-row flex w-full items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3 text-left shadow-xs"
+                      className={cn(
+                        "settings-card-row flex w-full items-center gap-3",
+                        "rounded-xl border border-primary/40 bg-primary/5 p-3 text-left shadow-xs",
+                      )}
                     >
                       {content}
                     </div>
@@ -319,7 +350,8 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                     type="button"
                     onClick={() => toggleSkill(skill.name, !checked)}
                     className={cn(
-                      "settings-card-row group flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
+                      "settings-card-row group flex w-full items-center gap-3 rounded-xl border",
+                      "p-3 text-left transition-all",
                       checked
                         ? "border-primary/40 bg-primary/5 shadow-xs"
                         : "border-border/60 bg-background hover:border-border hover:bg-accent/30",

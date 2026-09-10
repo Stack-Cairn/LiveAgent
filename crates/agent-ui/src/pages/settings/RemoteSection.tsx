@@ -50,7 +50,10 @@ function CopyButton({ value }: { value: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors",
+        "hover:bg-muted/60 hover:text-foreground",
+      )}
     >
       {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
     </button>
@@ -84,7 +87,10 @@ function PasswordInput({
         <button
           type="button"
           onClick={() => setVisible((prev) => !prev)}
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          className={cn(
+            "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
+            "hover:bg-muted/60 hover:text-foreground",
+          )}
         >
           {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         </button>
@@ -328,7 +334,8 @@ export function RemoteSection(props: SettingsSectionProps) {
         <div className="flex items-center gap-3">
           <div
             className={cn(
-              "flex max-w-260px items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium",
+              "flex max-w-260px items-center gap-2 rounded-lg px-2.5 py-1.5",
+              "text-xs font-medium",
               isConnected
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : "bg-muted/50 text-muted-foreground",
@@ -398,7 +405,12 @@ export function RemoteSection(props: SettingsSectionProps) {
         </div>
 
         {gatewayEndpointPreview ? (
-          <div className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-11px text-muted-foreground">
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2",
+              "text-11px text-muted-foreground",
+            )}
+          >
             <Globe className="size-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate font-mono">{gatewayEndpointPreview}</span>
             <CopyButton value={gatewayEndpointPreview} />

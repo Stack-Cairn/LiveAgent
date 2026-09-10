@@ -2,6 +2,7 @@ import { useChangedFilesActions } from "@liveagent/ui/components/chat/ChangedFil
 import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { FileToolFieldPreview, FileToolPreview } from "@liveagent/ui/lib/chat/toolPreview";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   MetaTags,
   PathDisplay,
@@ -71,7 +72,10 @@ function PathSurface({ path }: { path: string }) {
         >
           <PathDisplay
             path={path}
-            className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6 transition-colors hover:text-foreground hover:underline"
+            className={cn(
+              "block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6 transition-colors",
+              "hover:text-foreground hover:underline",
+            )}
           />
         </button>
       ) : (

@@ -51,12 +51,20 @@ export function UserMenu(props: UserMenuProps) {
         render={
           <Button
             variant="ghost"
-            className="h-8 gap-1 rounded-full border border-border/60 bg-background/70 px-1.5 text-foreground shadow-sm hover:bg-muted/70"
+            className={cn(
+              "h-8 gap-1 rounded-full border border-border/60 bg-background/70 px-1.5",
+              "text-foreground shadow-sm hover:bg-muted/70",
+            )}
             title={`${userMenuLabel} · ${statusLabel}`}
           />
         }
       >
-        <span className="relative flex size-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500/90 to-sky-500/90 text-scaled-11px font-semibold text-white">
+        <span
+          className={cn(
+            "relative flex size-6 items-center justify-center rounded-full bg-gradient-to-br",
+            "from-emerald-500/90 to-sky-500/90 text-scaled-11px font-semibold text-white",
+          )}
+        >
           {userAvatarLabel || <User className="size-3.5" />}
           <span
             className={cn(

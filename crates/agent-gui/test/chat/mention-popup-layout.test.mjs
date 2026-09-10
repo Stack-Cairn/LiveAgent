@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const loader = createTsModuleLoader();
 const overlay = loader.loadModule(
@@ -25,7 +26,7 @@ test("mention popup list stays compact and adapts to the room above the composer
 });
 
 test("mention popup rows keep file names aligned with their icons", () => {
-  assert.match(source, /group flex h-38px[^"\n]*text-left/);
+  assert.match(normalizeClassGroups(source), /group flex h-38px[^"\n]*text-left/);
   assert.doesNotMatch(source, /mention-popup-item/);
   assert.doesNotMatch(source, /max-h-320px/);
 });

@@ -4,6 +4,7 @@ import {
 } from "@liveagent/ui/components/resources/ExternalToolSourceIcon";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@liveagent/ui/components/ui/tabs";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ExternalToolScan } from "@liveagent/ui/lib/skills/index";
 
 const EXTERNAL_TOOL_OPTIONS = [
@@ -48,7 +49,12 @@ export function SkillsImportSourceTabs(props: {
             value={tool}
             disabled={props.disabled || !scan}
             aria-label={`${label}: ${scan?.exists ? scan.skills.length : 0}`}
-            className="group shrink-0 gap-1 rounded-md border border-transparent px-2 text-11p5px font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none disabled:opacity-60"
+            className={cn(
+              "group shrink-0 gap-1",
+              "rounded-md border border-transparent px-2",
+              "text-11p5px font-medium text-muted-foreground shadow-none",
+              "hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none disabled:opacity-60",
+            )}
           >
             <ExternalToolSourceIcon tool={tool} className="size-3.5" />
             <span>{label}</span>

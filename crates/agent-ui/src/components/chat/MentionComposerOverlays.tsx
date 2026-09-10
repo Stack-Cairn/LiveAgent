@@ -167,7 +167,12 @@ export function Popup({
           event.preventDefault();
         }}
       >
-        <div className="flex min-h-10 items-center px-3.5 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+        <div
+          className={cn(
+            "flex min-h-10 items-center px-3.5 pb-1 pt-2",
+            "text-xs font-medium text-muted-foreground",
+          )}
+        >
           {trigger === "skill" ? (
             "Skills"
           ) : mode === "root" ? (
@@ -175,7 +180,10 @@ export function Popup({
           ) : (
             <button
               type="button"
-              className="-ml-1 flex min-h-8 items-center gap-1 rounded-md px-1.5 transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+              className={cn(
+                "-ml-1 flex min-h-8 items-center gap-1 rounded-md px-1.5 transition-colors",
+                "hover:bg-foreground/[0.05] hover:text-foreground",
+              )}
               onMouseDown={(event) => {
                 event.preventDefault();
                 onBack();
@@ -282,7 +290,9 @@ export function Popup({
                   // visual 34px row keeps the 4px gap while clicks in the gap
                   // still land on a row instead of a dead strip. shrink-0 stops
                   // the max-h flex column from compressing rows before it scrolls.
-                  "group flex h-38px shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
+                  "group flex h-38px shrink-0 cursor-pointer items-center gap-3",
+                  "rounded-lg border-y-2 border-transparent bg-clip-padding px-3",
+                  "text-left text-xs leading-5 transition-colors",
                   i === highlightIndex
                     ? "bg-foreground/[0.07] text-foreground"
                     : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",
@@ -455,7 +465,11 @@ export function CommitMentionTooltip({
     // biome-ignore lint/a11y/noStaticElementInteractions: Hover and pointer handlers keep this non-interactive tooltip open while the pointer crosses into it.
     <div
       ref={tooltipRef}
-      className="layer-popover fixed overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
+      className={cn(
+        "layer-popover fixed overflow-y-auto",
+        "rounded-xl border border-border bg-popover px-3 py-2.5",
+        "text-xs text-popover-foreground shadow-xl",
+      )}
       style={{
         left,
         top,
@@ -493,7 +507,12 @@ export function CommitMentionTooltip({
         </span>
         <span className="font-medium text-rose-600 dark:text-rose-400">{deletionsLabel}</span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-scaled-11px leading-tight text-muted-foreground">
+      <div
+        className={cn(
+          "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
+          "pt-1.5 text-scaled-11px leading-tight text-muted-foreground",
+        )}
+      >
         <span className="font-mono text-foreground">{shortSha}</span>
         {commit.remoteName ? <span>{commit.remoteName}</span> : null}
         {commit.githubUrl ? (

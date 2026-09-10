@@ -109,7 +109,8 @@ function TtlSegmented({
             onClick={() => onChange(option)}
             disabled={disabled}
             className={cn(
-              "h-7 min-w-0 truncate rounded-md px-1 text-xs text-muted-foreground transition-all duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+              "h-7 min-w-0 truncate rounded-md px-1 text-xs text-muted-foreground",
+              "transition-all duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
               active && "bg-background font-medium text-foreground shadow-sm",
             )}
           >
@@ -140,7 +141,8 @@ function HealthBadge({
     <span
       title={title}
       className={cn(
-        "inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-scaled-11px font-medium",
+        "inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5",
+        "text-scaled-11px font-medium",
         status === "ok"
           ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
           : status === "failed"
@@ -337,14 +339,20 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
     }
   };
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 shadow-ui-localtunnelpanel-26 backdrop-blur-xl transition-shadow duration-200 hover:shadow-ui-localtunnelpanel-27">
+    <div
+      className={cn(
+        "min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70 shadow-ui-localtunnelpanel-26 backdrop-blur-xl",
+        "transition-shadow duration-200 hover:shadow-ui-localtunnelpanel-27",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-2 px-3 pt-2.5">
         <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {displayTunnelName(tunnel)}
         </div>
         <span
           className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-scaled-11px font-medium",
+            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5",
+            "text-scaled-11px font-medium",
             offline
               ? "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400"
               : expired
@@ -426,7 +434,9 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
                 onClick={() => onEditTtlSecondsChange("keep")}
                 disabled={!mutationsEnabled || updating}
                 className={cn(
-                  "flex h-7 min-w-0 items-center justify-center truncate rounded-lg bg-muted/70 px-2 text-xs text-muted-foreground transition-all duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+                  "flex h-7 min-w-0 items-center justify-center",
+                  "truncate rounded-lg bg-muted/70 px-2 text-xs text-muted-foreground transition-all duration-200",
+                  "hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
                   editTtlSeconds === "keep" &&
                     "bg-background font-medium text-foreground shadow-sm ring-1 ring-border/60",
                 )}
@@ -440,7 +450,12 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
               />
             </div>
           </div>
-          <div className="mt-1.5 flex items-center justify-end gap-1.5 border-t border-border/40 px-3 py-1.5">
+          <div
+            className={cn(
+              "mt-1.5 flex items-center justify-end gap-1.5 border-t border-border/40",
+              "px-3 py-1.5",
+            )}
+          >
             <Button
               type="button"
               variant="ghost"
@@ -478,7 +493,12 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
             disabled={!publicUrl}
             title={copied ? t("projectTools.tunnelCopied") : t("projectTools.tunnelCopyLink")}
             aria-label={copied ? t("projectTools.tunnelCopied") : t("projectTools.tunnelCopyLink")}
-            className="mx-3 mt-2 flex w-inset-1p5rem min-w-0 items-center gap-1.5 rounded-lg border border-border/50 bg-muted/40 px-2 py-1.5 text-left transition-colors duration-150 hover:border-border hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            className={cn(
+              "mx-3 mt-2 flex w-inset-1p5rem min-w-0 items-center gap-1.5",
+              "rounded-lg border border-border/50 bg-muted/40 px-2 py-1.5 text-left",
+              "transition-colors duration-150",
+              "hover:border-border hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+            )}
           >
             <Globe className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate font-mono text-scaled-11px text-foreground/85">
@@ -502,7 +522,8 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
             <div
               title={`${t("projectTools.tunnelServiceLabel")} · ${healthTitle(localHealth)}`}
               className={cn(
-                "flex h-6 min-w-0 items-center gap-1 rounded-md border px-1.5 text-scaled-10px font-medium",
+                "flex h-6 min-w-0 items-center gap-1 rounded-md border px-1.5",
+                "text-scaled-10px font-medium",
                 localStatus === "ok"
                   ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : localStatus === "failed"
@@ -529,11 +550,21 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
             </div>
           </div>
           {rowError ? (
-            <div className="mx-3 mt-2 rounded-lg border border-destructive/25 bg-destructive/10 px-2 py-1.5 text-scaled-11px leading-relaxed text-destructive">
+            <div
+              className={cn(
+                "mx-3 mt-2 rounded-lg border border-destructive/25 bg-destructive/10 px-2 py-1.5",
+                "text-scaled-11px leading-relaxed text-destructive",
+              )}
+            >
               {rowError}
             </div>
           ) : null}
-          <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/40 py-1 pl-3 pr-1.5">
+          <div
+            className={cn(
+              "mt-2 flex items-center justify-between gap-2 border-t border-border/40",
+              "py-1 pl-3 pr-1.5",
+            )}
+          >
             <div className="flex min-w-0 items-center gap-2 text-scaled-11px text-muted-foreground">
               <span
                 className="inline-flex min-w-0 items-center gap-1"
@@ -948,7 +979,12 @@ export function LocalTunnelPanel({
     <div className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-muted/40 via-muted/15 to-background">
       <div className="shrink-0 border-b border-border/60 bg-background/70 px-4 pb-3 pt-3.5 backdrop-blur-xl">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-foreground/70 shadow-ui-localtunnelpanel-28 dark:shadow-none">
+          <div
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center",
+              "rounded-xl border border-border/60 bg-background/80 text-foreground/70 shadow-ui-localtunnelpanel-28 dark:shadow-none",
+            )}
+          >
             <Globe className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
@@ -991,12 +1027,17 @@ export function LocalTunnelPanel({
         </div>
         <fieldset
           aria-label={t("projectTools.tunnelScopeGroup")}
-          className="relative mt-3 grid min-w-0 grid-cols-2 gap-0.5 rounded-lg border-0 bg-muted/70 p-0.5"
+          className={cn(
+            "relative mt-3 grid min-w-0 grid-cols-2 gap-0.5",
+            "rounded-lg border-0 bg-muted/70 p-0.5",
+          )}
         >
           <div
             aria-hidden
             className={cn(
-              "pointer-events-none absolute inset-y-0 left-0 z-0 w-1/2 transform-gpu rounded-md bg-background shadow-sm transition-transform duration-200 ease-out motion-reduce:transition-none",
+              "pointer-events-none absolute inset-y-0 left-0 z-0 w-1/2 transform-gpu",
+              "rounded-md bg-background shadow-sm",
+              "transition-transform duration-200 ease-out motion-reduce:transition-none",
               scope === "global" ? "translate-x-full" : "translate-x-0",
             )}
           />
@@ -1016,7 +1057,11 @@ export function LocalTunnelPanel({
                   setCreateError(null);
                 }}
                 className={cn(
-                  "relative z-10 flex h-7 min-w-0 transform-gpu items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-[color,transform] duration-200 ease-out hover:text-foreground active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100",
+                  "relative z-10 flex h-7 min-w-0 transform-gpu",
+                  "items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground",
+                  "transition-[color,transform] duration-200 ease-out",
+                  "hover:text-foreground active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none",
+                  "motion-reduce:active:scale-100",
                   active && "font-medium text-foreground",
                 )}
               >
@@ -1030,14 +1075,28 @@ export function LocalTunnelPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {disabledMessage ? (
-          <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300">
+          <div
+            className={cn(
+              "mb-3 flex items-start gap-2",
+              "rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5",
+              "text-xs leading-relaxed text-amber-700",
+              "dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300",
+            )}
+          >
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             <span className="min-w-0">{disabledMessage}</span>
           </div>
         ) : null}
 
         {gatewayUnsupported ? (
-          <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300">
+          <div
+            className={cn(
+              "mb-3 flex items-start gap-2",
+              "rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5",
+              "text-xs leading-relaxed text-amber-700",
+              "dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300",
+            )}
+          >
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             <span className="min-w-0">{t("projectTools.tunnelGatewayUnsupported")}</span>
           </div>
@@ -1056,7 +1115,8 @@ export function LocalTunnelPanel({
               <section
                 aria-hidden={!showCreateForm}
                 className={cn(
-                  "overflow-hidden rounded-xl border border-border/60 bg-background/70 shadow-ui-localtunnelpanel-26 backdrop-blur-xl transition-[border-color,background-color,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+                  "overflow-hidden rounded-xl border border-border/60 bg-background/70 shadow-ui-localtunnelpanel-26 backdrop-blur-xl",
+                  "transition-[border-color,background-color,box-shadow] duration-200 ease-out motion-reduce:transition-none",
                   !showCreateForm && "pointer-events-none",
                 )}
               >
@@ -1066,7 +1126,11 @@ export function LocalTunnelPanel({
                   aria-controls="local-tunnel-create-form"
                   aria-expanded={showCreateForm && createOpen}
                   disabled={!showCreateForm}
-                  className="flex h-10 w-full items-center gap-2 px-3 text-left transition-colors duration-150 ease-out hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none motion-reduce:transition-none"
+                  className={cn(
+                    "flex h-10 w-full items-center gap-2 px-3 text-left",
+                    "transition-colors duration-150 ease-out",
+                    "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none motion-reduce:transition-none",
+                  )}
                 >
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-muted/80 text-muted-foreground">
                     <Plus className="size-3" />
@@ -1093,7 +1157,9 @@ export function LocalTunnelPanel({
                     <form
                       id="local-tunnel-create-form"
                       className={cn(
-                        "grid min-w-0 gap-3 border-t border-border/50 px-3 pb-3 pt-3 transition-transform duration-200 ease-out motion-reduce:transition-none",
+                        "grid min-w-0 gap-3 border-t border-border/50",
+                        "px-3 pb-3 pt-3",
+                        "transition-transform duration-200 ease-out motion-reduce:transition-none",
                         showCreateForm && createOpen ? "translate-y-0" : "-translate-y-1",
                       )}
                       onSubmit={(event) => {
@@ -1179,7 +1245,12 @@ export function LocalTunnelPanel({
         ) : null}
 
         {createError ? (
-          <div className="mb-3 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
+          <div
+            className={cn(
+              "mb-3 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2",
+              "text-xs leading-relaxed text-destructive",
+            )}
+          >
             {createError}
           </div>
         ) : null}
@@ -1196,7 +1267,12 @@ export function LocalTunnelPanel({
             ) : null}
           </div>
           {listError ? (
-            <div className="mb-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
+            <div
+              className={cn(
+                "mb-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2",
+                "text-xs leading-relaxed text-destructive",
+              )}
+            >
               {listError}
             </div>
           ) : null}
@@ -1207,8 +1283,18 @@ export function LocalTunnelPanel({
               <LoadingSurface variant="skeleton" className="h-24 opacity-70" aria-hidden />
             </div>
           ) : sortedTunnels.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/70 bg-background/40 px-4 py-10 text-center">
-              <div className="mb-1.5 flex size-12 items-center justify-center rounded-2xl border border-border/50 bg-background/80 text-muted-foreground/70 shadow-ui-localtunnelpanel-29 dark:shadow-none">
+            <div
+              className={cn(
+                "flex flex-col items-center justify-center gap-1.5",
+                "rounded-xl border border-dashed border-border/70 bg-background/40 px-4 py-10 text-center",
+              )}
+            >
+              <div
+                className={cn(
+                  "mb-1.5 flex size-12 items-center justify-center",
+                  "rounded-2xl border border-border/50 bg-background/80 text-muted-foreground/70 shadow-ui-localtunnelpanel-29 dark:shadow-none",
+                )}
+              >
                 <Globe className="size-5" />
               </div>
               <div className="text-xs font-medium text-foreground/80">

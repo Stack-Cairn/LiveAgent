@@ -22,7 +22,10 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
         type="button"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((prev) => !prev)}
-        className="retry-details-toggle flex w-full cursor-pointer select-none items-center gap-2 py-1.5 text-left text-scaled-13px font-normal text-muted-foreground/80 hover:text-foreground"
+        className={cn(
+          "retry-details-toggle flex w-full cursor-pointer select-none items-center gap-2 py-1.5",
+          "text-left text-scaled-13px font-normal text-muted-foreground/80 hover:text-foreground",
+        )}
       >
         <RefreshCw className="size-3.5 shrink-0 text-muted-foreground/60" />
         <span>{t("chat.retryDetailsToggle").replace("{count}", String(attempts.length))}</span>

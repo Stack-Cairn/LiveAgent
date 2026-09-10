@@ -192,7 +192,8 @@ function ImagePreviewToolButton(props: {
     <button
       type="button"
       className={cn(
-        "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+        "hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
         pressed && "bg-muted text-foreground",
       )}
       title={label}
@@ -215,7 +216,10 @@ export function ImagePreviewMenuItem(props: {
     <button
       type="button"
       role="menuitem"
-      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left",
+        "hover:bg-accent disabled:pointer-events-none disabled:opacity-40",
+      )}
       disabled={props.disabled}
       onClick={props.onClick}
     >
@@ -329,7 +333,11 @@ export function ImagePreviewContextMenu(props: {
     <div
       ref={menuRef}
       role="menu"
-      className="layer-popover fixed min-w-52 rounded-lg border border-border bg-popover p-1 text-xs text-popover-foreground shadow-2xl"
+      className={cn(
+        "layer-popover fixed min-w-52",
+        "rounded-lg border border-border bg-popover p-1",
+        "text-xs text-popover-foreground shadow-2xl",
+      )}
       style={{
         left: (menuPosition ?? position).x,
         top: (menuPosition ?? position).y,
@@ -693,7 +701,11 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
       <DialogContent
         ref={dialogRef}
         initialFocus={dialogRef}
-        className="flex h-image-preview-height w-image-preview-width max-w-none min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border-border bg-background p-0 text-foreground [&:fullscreen]:w-100vw [&:fullscreen]:h-100vh [&:fullscreen]:max-w-none [&:fullscreen]:max-h-none [&:fullscreen]:border-0 [&:fullscreen]:border-current [&:fullscreen]:rounded-none"
+        className={cn(
+          "flex h-image-preview-height w-image-preview-width max-w-none min-h-0 min-w-0 flex-col overflow-hidden",
+          "rounded-xl border-border bg-background p-0 text-foreground",
+          "[&:fullscreen]:w-100vw [&:fullscreen]:h-100vh [&:fullscreen]:max-w-none [&:fullscreen]:max-h-none [&:fullscreen]:border-0 [&:fullscreen]:border-current [&:fullscreen]:rounded-none",
+        )}
         onKeyDown={(event) => {
           if (
             (event.ctrlKey || event.metaKey) &&
@@ -712,7 +724,12 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
         }}
       >
         <DialogTitle className="sr-only">{t("chat.imageViewer.viewer")}</DialogTitle>
-        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-background/90 px-2">
+        <div
+          className={cn(
+            "flex h-11 shrink-0 items-center justify-between gap-2",
+            "border-b border-border bg-background/90 px-2",
+          )}
+        >
           <div className="flex min-w-0 items-center gap-1">
             {imageCount > 1 ? (
               <>
@@ -818,7 +835,10 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </ImagePreviewToolButton>
             <DialogClose
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className={cn(
+                "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                "hover:bg-muted hover:text-foreground",
+              )}
               title={closeLabel}
               aria-label={closeLabel}
             >
@@ -934,7 +954,11 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           {actionError ? (
             <div
               role="alert"
-              className="absolute left-3 top-3 z-10 max-w-panel-28rem rounded-md border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-lg backdrop-blur"
+              className={cn(
+                "absolute left-3 top-3 z-10 max-w-panel-28rem",
+                "rounded-md border border-destructive/30 bg-background/95 px-3 py-2",
+                "text-xs text-destructive shadow-lg backdrop-blur",
+              )}
             >
               {actionError}
             </div>
@@ -942,13 +966,20 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           {showInfo ? (
             <aside
               aria-label={t("chat.imageViewer.infoPanel")}
-              className="absolute right-3 top-3 z-10 w-72 rounded-lg border border-border bg-background/90 p-3 text-xs text-foreground shadow-xl backdrop-blur"
+              className={cn(
+                "absolute right-3 top-3 z-10 w-72",
+                "rounded-lg border border-border bg-background/90 p-3",
+                "text-xs text-foreground shadow-xl backdrop-blur",
+              )}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="text-sm font-semibold">{t("chat.imageViewer.infoPanel")}</div>
                 <button
                   type="button"
-                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className={cn(
+                    "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                    "hover:bg-muted hover:text-foreground",
+                  )}
                   title={closeLabel}
                   aria-label={closeLabel}
                   onClick={() => setShowInfo(false)}

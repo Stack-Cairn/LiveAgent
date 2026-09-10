@@ -135,7 +135,12 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
       >
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">
+            <div
+              className={cn(
+                "flex size-11 shrink-0 items-center justify-center",
+                "rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300",
+              )}
+            >
               <Cable className="size-5" />
             </div>
             <div className="min-w-0">
@@ -227,7 +232,12 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
               />
             </div>
 
-            <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
+            <div
+              className={cn(
+                "rounded-lg border border-border/60 bg-muted/25 px-3 py-2",
+                "font-mono text-xs text-muted-foreground",
+              )}
+            >
               127.0.0.1:{previewLocal}
               <span className="mx-1.5 text-muted-foreground/60">→</span>
               {previewHost}:{previewPort}

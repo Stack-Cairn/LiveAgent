@@ -131,7 +131,12 @@ export function AgentsSection(props: SettingsSectionProps) {
 
           <div className="settings-section-actions flex items-center gap-2">
             {templates.length > 0 ? (
-              <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
+              <div
+                className={cn(
+                  "flex items-center gap-2 rounded-lg bg-muted/50 px-2.5 py-1.5",
+                  "text-xs text-muted-foreground",
+                )}
+              >
                 <span className="tabular-nums font-medium text-foreground">{templates.length}</span>
                 {t("settings.agentsCount")}
                 {enabledCount > 0 ? (
@@ -163,7 +168,12 @@ export function AgentsSection(props: SettingsSectionProps) {
                 {t("settings.agentsGlobalConfigHint")}
               </p>
             </div>
-            <span className="shrink-0 rounded-full border border-sky-500/20 bg-sky-500/[0.06] px-2.5 py-1 text-xs text-sky-600 dark:text-sky-300">
+            <span
+              className={cn(
+                "shrink-0 rounded-full border border-sky-500/20 bg-sky-500/[0.06] px-2.5 py-1",
+                "text-xs text-sky-600 dark:text-sky-300",
+              )}
+            >
               {enabledCount} {t("settings.agentsActive")}
             </span>
           </div>
@@ -200,7 +210,12 @@ export function AgentsSection(props: SettingsSectionProps) {
                     )}
                   >
                     <div className="settings-card-row flex items-center gap-3 px-4 py-3">
-                      <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500">
+                      <div
+                        className={cn(
+                          "relative flex size-9 shrink-0 items-center justify-center",
+                          "rounded-lg bg-sky-500/10 text-sky-500",
+                        )}
+                      >
                         <BookOpen className="size-4" />
                         {template.enabled ? (
                           <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-card bg-emerald-500" />
@@ -213,7 +228,12 @@ export function AgentsSection(props: SettingsSectionProps) {
                             {template.name}
                           </span>
                           {template.enabled ? (
-                            <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-10px font-medium leading-none text-emerald-600 dark:text-emerald-400">
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5",
+                                "text-10px font-medium leading-none text-emerald-600 dark:text-emerald-400",
+                              )}
+                            >
                               {t("settings.agentsGlobalDefault")}
                             </span>
                           ) : null}
@@ -234,7 +254,12 @@ export function AgentsSection(props: SettingsSectionProps) {
                           title={template.enabled ? t("settings.disable") : t("settings.enable")}
                           onToggle={() => handleToggleEnabled(template.id)}
                         />
-                        <div className="settings-hover-actions ml-1 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                        <div
+                          className={cn(
+                            "settings-hover-actions ml-1 flex items-center gap-0.5 opacity-0 transition-opacity",
+                            "focus-within:opacity-100 group-hover:opacity-100",
+                          )}
+                        >
                           <Button
                             variant="ghost"
                             size="icon-xs"
@@ -288,7 +313,12 @@ export function AgentsSection(props: SettingsSectionProps) {
                 {t("chat.projectPromptStrategyHint")}
               </p>
             </div>
-            <span className="shrink-0 rounded-full border border-violet-500/20 bg-violet-500/[0.06] px-2.5 py-1 text-xs text-violet-600 dark:text-violet-300">
+            <span
+              className={cn(
+                "shrink-0 rounded-full border border-violet-500/20 bg-violet-500/[0.06] px-2.5 py-1",
+                "text-xs text-violet-600 dark:text-violet-300",
+              )}
+            >
               {configuredProjectCount}/{projects.length}
             </span>
           </div>
@@ -322,7 +352,12 @@ export function AgentsSection(props: SettingsSectionProps) {
                     )}
                   >
                     <div className="settings-card-row flex items-center gap-3 px-4 py-3">
-                      <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-300">
+                      <div
+                        className={cn(
+                          "relative flex size-9 shrink-0 items-center justify-center",
+                          "rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-300",
+                        )}
+                      >
                         <FolderTree className="size-4" />
                         {configured ? (
                           <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-card bg-violet-500" />
@@ -359,7 +394,12 @@ export function AgentsSection(props: SettingsSectionProps) {
 
                       <div className="settings-card-actions flex items-center gap-1.5">
                         {configured ? (
-                          <span className="shrink-0 rounded-full border border-border/60 bg-muted/40 px-2 py-1 text-10px font-medium text-muted-foreground">
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full border border-border/60 bg-muted/40 px-2 py-1",
+                              "text-10px font-medium text-muted-foreground",
+                            )}
+                          >
                             {t(
                               entry?.projectPromptStrategy === "replace"
                                 ? "settings.agentsProjectReplace"
@@ -367,7 +407,12 @@ export function AgentsSection(props: SettingsSectionProps) {
                             )}
                           </span>
                         ) : null}
-                        <div className="settings-hover-actions ml-1 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                        <div
+                          className={cn(
+                            "settings-hover-actions ml-1 flex items-center gap-0.5 opacity-0 transition-opacity",
+                            "focus-within:opacity-100 group-hover:opacity-100",
+                          )}
+                        >
                           <Button
                             variant="ghost"
                             size="icon-xs"
@@ -527,7 +572,12 @@ function AgentPromptViewModal({
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3.5">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
+          <div
+            className={cn(
+              "flex size-11 shrink-0 items-center justify-center",
+              "rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs",
+            )}
+          >
             <Eye className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -538,7 +588,8 @@ function AgentPromptViewModal({
           </div>
           <span
             className={cn(
-              "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-11px font-medium sm:inline-flex",
+              "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1",
+              "text-11px font-medium sm:inline-flex",
               statusBadgeClass,
             )}
           >
@@ -551,7 +602,12 @@ function AgentPromptViewModal({
           <div className="grid min-h-0 gap-4 md:grid-cols-model-picker">
             <aside className="min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-xs">
               <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
+                <div
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center",
+                    "rounded-xl border border-border/60 bg-muted/40 text-muted-foreground",
+                  )}
+                >
                   <BookOpen className="size-4" />
                 </div>
                 <h3 className="text-sm font-semibold">
@@ -587,16 +643,36 @@ function AgentPromptViewModal({
               </div>
             </aside>
 
-            <section className="flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-xs md:min-h-420px">
+            <section
+              className={cn(
+                "flex flex-col overflow-hidden",
+                "rounded-2xl border border-border/60 bg-card shadow-xs md:min-h-420px",
+              )}
+            >
               {!hidePromptHeader ? (
-                <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/30 px-4 py-3">
+                <div
+                  className={cn(
+                    "flex items-center justify-between gap-3",
+                    "border-b border-border/60 bg-muted/30 px-4 py-3",
+                  )}
+                >
                   <div className="flex items-center gap-2.5">
-                    <div className="flex size-8 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-muted-foreground">
+                    <div
+                      className={cn(
+                        "flex size-8 items-center justify-center",
+                        "rounded-xl border border-border/60 bg-muted/40 text-muted-foreground",
+                      )}
+                    >
                       <FileText className="size-4" />
                     </div>
                     <span className="text-xs font-semibold">{t("settings.agentsPrompt")}</span>
                   </div>
-                  <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
+                  <span
+                    className={cn(
+                      "rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs tabular-nums",
+                      "text-muted-foreground",
+                    )}
+                  >
                     {template.prompt.length.toLocaleString()} {t("settings.agentsCharacters")}
                   </span>
                 </div>
@@ -631,7 +707,8 @@ function PromptScopeLabel(props: { label: string; tone: "global" | "project" }) 
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-11px font-medium",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1",
+        "text-11px font-medium",
         tone === "global"
           ? "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300"
           : "border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300",

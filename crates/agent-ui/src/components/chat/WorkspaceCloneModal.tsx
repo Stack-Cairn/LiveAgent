@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type RemoteBranches = {
@@ -161,7 +162,12 @@ export function WorkspaceCloneModal({
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3 px-6 py-5">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
+          <div
+            className={cn(
+              "flex size-11 shrink-0 items-center justify-center",
+              "rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs",
+            )}
+          >
             <GitBranch className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -193,7 +199,12 @@ export function WorkspaceCloneModal({
             </span>
           </Button>
 
-          <div className="relative py-1 text-center text-xs text-muted-foreground before:absolute before:inset-x-0 before:top-1/2 before:border-t before:border-border/60">
+          <div
+            className={cn(
+              "relative py-1 text-center text-xs text-muted-foreground",
+              "before:absolute before:inset-x-0 before:top-1/2 before:border-t before:border-border/60",
+            )}
+          >
             <span className="relative bg-background px-3">{t("chat.workspaceOr")}</span>
           </div>
 

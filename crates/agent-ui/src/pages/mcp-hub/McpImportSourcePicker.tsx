@@ -5,6 +5,7 @@ import {
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@liveagent/ui/components/ui/tabs";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ExternalMcpToolScan } from "@liveagent/ui/lib/skills/index";
 
 export const LOCAL_FILE_TOOL = "local-file";
@@ -40,7 +41,12 @@ export function McpImportSourcePicker(props: {
               key={scan.tool}
               value={scan.tool}
               title={isLocalFile ? scan.configPath : undefined}
-              className="group shrink-0 gap-1.5 rounded-md border border-transparent px-2.5 text-11p5px font-medium text-muted-foreground shadow-none hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none"
+              className={cn(
+                "group shrink-0 gap-1.5",
+                "rounded-md border border-transparent px-2.5",
+                "text-11p5px font-medium text-muted-foreground shadow-none",
+                "hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none",
+              )}
             >
               <ExternalToolSourceIcon tool={scan.tool} className="size-3.5" />
               <span className="max-w-10rem truncate">{toolLabel}</span>

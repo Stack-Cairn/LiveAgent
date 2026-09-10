@@ -24,13 +24,19 @@ import {
 } from "@liveagent/ui/lib/mcp/oauthApi";
 import { resolveMcpDocsHref } from "@liveagent/ui/lib/mcpServerMetadata";
 import { isGatewayWebuiRuntime } from "@liveagent/ui/lib/runtimeEnv";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useEffect, useState } from "react";
 
 type SetMcpSettingsFn = (updater: (prev: AppSettings) => AppSettings) => void;
 
 function ConfigurationCount(props: { count: number; label: string }) {
   return (
-    <span className="inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2 text-10px text-muted-foreground ring-1 ring-border/60">
+    <span
+      className={cn(
+        "inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2",
+        "text-10px text-muted-foreground ring-1 ring-border/60",
+      )}
+    >
       <span className="font-semibold tabular-nums text-foreground">{props.count}</span>
       <span>{props.label}</span>
     </span>
@@ -207,7 +213,12 @@ export const McpServerCard = memo(function McpServerCard(props: {
     // 容器查询挂在 article 上:行宽 < 520px(手机、或桌面侧栏占位后的窄内容区)
     // 时把 计数/策略/编辑/删除 整组换到第二行。此前四组里只有名称列可收缩,
     // 其余全是 shrink-0,窄屏下名称列被挤成 0 宽,文字溢出到徽章底下(重叠)。
-    <article className="group @container flex min-h-16 w-full flex-wrap items-center gap-3 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/30">
+    <article
+      className={cn(
+        "group @container flex min-h-16 w-full flex-wrap items-center gap-3",
+        "bg-card px-4 py-3 text-left transition-colors hover:bg-muted/30",
+      )}
+    >
       <ResourceActivationSwitch
         checked={enabled}
         compact
@@ -254,7 +265,10 @@ export const McpServerCard = memo(function McpServerCard(props: {
             type="button"
             onClick={onEdit}
             title={detailLine}
-            className="mt-1 min-w-0 truncate rounded-sm text-left text-11px text-muted-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "mt-1 min-w-0 truncate rounded-sm text-left text-11px text-muted-foreground outline-hidden",
+              "focus-visible:ring-2 focus-visible:ring-ring",
+            )}
           >
             <SearchHighlight text={detailLine} query={searchQuery} />
           </button>

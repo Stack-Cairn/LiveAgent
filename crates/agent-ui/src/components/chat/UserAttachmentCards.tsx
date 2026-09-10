@@ -91,7 +91,8 @@ function UserImageAttachmentCard(props: {
     <div
       title={file.relativePath}
       className={cn(
-        "group relative overflow-hidden rounded-xl border border-white/60 bg-white/75 dark:border-white/[0.12] dark:bg-white/[0.06]",
+        "group relative overflow-hidden",
+        "rounded-xl border border-white/60 bg-white/75 dark:border-white/[0.12] dark:bg-white/[0.06]",
         compact ? "min-w-0 basis-third-minus-gap grow" : "w-full max-w-280px",
       )}
     >
@@ -99,7 +100,10 @@ function UserImageAttachmentCard(props: {
         <button
           type="button"
           onClick={() => onRemove(file.relativePath)}
-          className="absolute top-1.5 right-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-black/30 text-white/90 opacity-0 backdrop-blur-sm transition-all hover:bg-black/45 group-hover:opacity-100"
+          className={cn(
+            "absolute top-1.5 right-1.5 z-10 flex size-5 items-center justify-center",
+            "rounded-full bg-black/30 text-white/90 opacity-0 backdrop-blur-sm transition-all hover:bg-black/45 group-hover:opacity-100",
+          )}
           aria-label={removeLabel ?? file.fileName}
           title={removeLabel}
         >
@@ -216,11 +220,18 @@ function UserFileAttachmentCard(props: {
     <div
       title={file.relativePath}
       className={cn(
-        "group relative flex items-center gap-2 rounded-xl border border-white/60 bg-white/75 px-2.5 py-2 text-left shadow-ui-userattachmentcards-20 transition-shadow hover:shadow-ui-userattachmentcards-21 dark:border-white/[0.12] dark:bg-white/[0.06]",
+        "group relative flex items-center gap-2",
+        "rounded-xl border border-white/60 bg-white/75 px-2.5 py-2 text-left shadow-ui-userattachmentcards-20",
+        "transition-shadow hover:shadow-ui-userattachmentcards-21 dark:border-white/[0.12] dark:bg-white/[0.06]",
         compact ? "min-w-0 basis-third-minus-gap grow" : "w-full",
       )}
     >
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-black/[0.03] to-black/[0.06] dark:from-white/[0.06] dark:to-white/[0.1]">
+      <div
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b",
+          "from-black/[0.03] to-black/[0.06] dark:from-white/[0.06] dark:to-white/[0.1]",
+        )}
+      >
         <TypeIcon className="size-4.5" />
       </div>
       <div className="min-w-0 flex-1">
@@ -235,7 +246,11 @@ function UserFileAttachmentCard(props: {
         <button
           type="button"
           onClick={() => onRemove(file.relativePath)}
-          className="absolute top-1/2 right-1.5 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-[hsl(var(--chat-user-fg)/0.3)] opacity-0 transition-all hover:bg-black/5 hover:text-[hsl(var(--chat-user-fg)/0.6)] group-hover:opacity-100 dark:hover:bg-white/10"
+          className={cn(
+            "absolute top-1/2 right-1.5 z-10 flex size-5 -translate-y-1/2 items-center",
+            "justify-center rounded-full text-[hsl(var(--chat-user-fg)/0.3)] opacity-0 transition-all",
+            "hover:bg-black/5 hover:text-[hsl(var(--chat-user-fg)/0.6)] group-hover:opacity-100 dark:hover:bg-white/10",
+          )}
           aria-label={removeLabel ?? file.fileName}
           title={removeLabel}
         >

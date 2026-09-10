@@ -9,6 +9,7 @@
  * 没有事件时回落到从消息推导的降级账本——结构完整、时间为空，甘特图锁在 sequence。
  */
 
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TrajectoryHost } from "../../contracts/trajectory";
 import { useLocale } from "../../i18n/index";
@@ -470,7 +471,10 @@ export function TrajectoryView(props: {
         <div className="shrink-0 border-b border-border/60 px-3 py-1.5 text-center">
           <button
             type="button"
-            className="rounded px-2 py-1 text-11px text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+            className={cn(
+              "rounded px-2 py-1 text-11px text-muted-foreground",
+              "hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60",
+            )}
             disabled={loadingMore}
             onClick={() => void loadEarlier()}
           >

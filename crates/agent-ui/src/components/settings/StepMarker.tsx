@@ -6,7 +6,8 @@ export function StepMarker({ className, ...props }: ComponentProps<"div">) {
     <div
       {...props}
       className={cn(
-        "flex size-6 items-center justify-center rounded-md bg-primary/10 text-11px font-bold text-primary",
+        "flex size-6 items-center justify-center",
+        "rounded-md bg-primary/10 text-11px font-bold text-primary",
         className,
       )}
     />

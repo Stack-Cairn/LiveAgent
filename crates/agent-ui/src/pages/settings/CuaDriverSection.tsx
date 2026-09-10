@@ -92,7 +92,8 @@ function TimelineItem(props: {
         ) : null}
         <span
           className={cn(
-            "z-10 mt-0.5 flex size-9 items-center justify-center rounded-full border transition-colors duration-300",
+            "z-10 mt-0.5 flex size-9 items-center justify-center rounded-full border",
+            "transition-colors duration-300",
             NODE_TONE_CLASS[tone],
           )}
         >
@@ -117,7 +118,8 @@ function CardBlock(props: { className?: string; children: ReactNode }) {
   return (
     <div
       className={cn(
-        "relative px-5 after:pointer-events-none after:absolute after:inset-x-5 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
+        "relative px-5",
+        "after:pointer-events-none after:absolute after:inset-x-5 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
         props.className,
       )}
     >
@@ -142,7 +144,8 @@ function CopyButton({ value, className }: { value: string; className?: string })
       onClick={handleCopy}
       title={value}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+        "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+        "hover:bg-muted/60 hover:text-foreground",
         className,
       )}
     >
@@ -195,7 +198,8 @@ function HeroCard(props: {
       {/* 动态光晕 */}
       <div
         className={cn(
-          "pointer-events-none absolute -top-24 -right-16 size-64 rounded-full blur-3xl transition-colors duration-700",
+          "pointer-events-none absolute -top-24 -right-16 size-64 rounded-full blur-3xl",
+          "transition-colors duration-700",
           running ? "bg-emerald-500/15" : "bg-sky-500/10",
         )}
       />
@@ -206,11 +210,17 @@ function HeroCard(props: {
         )}
       />
 
-      <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div
+        className={cn(
+          "relative flex flex-col gap-4 p-5",
+          "sm:flex-row sm:items-center sm:justify-between sm:p-6",
+        )}
+      >
         <div className="flex min-w-0 items-center gap-3.5">
           <div
             className={cn(
-              "flex size-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg transition-all duration-500",
+              "flex size-12 shrink-0 items-center justify-center",
+              "rounded-2xl text-white shadow-lg transition-all duration-500",
               running
                 ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/25"
                 : "bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-500/25",
@@ -223,7 +233,8 @@ function HeroCard(props: {
               <h3 className="text-16px font-semibold text-foreground">Computer Use</h3>
               <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-11px font-medium transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-11px font-medium",
+                  "transition-colors",
                   running
                     ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                     : "bg-muted/70 text-muted-foreground",
@@ -599,7 +610,10 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
               type="button"
               disabled={checking || installing}
               onClick={() => void refresh({ force: true })}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs text-muted-foreground",
+                "transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50",
+              )}
             >
               <RefreshCw className={checking ? "size-3.5 animate-spin" : "size-3.5"} />
               {t("settings.cuaDriver.recheck")}
@@ -727,7 +741,13 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
                     {t("settings.cuaDriver.confirmDesc").replace("{url}", preview.sourceUrl)}
                   </p>
                   <div className="relative mt-2.5">
-                    <pre className="overflow-x-auto rounded-lg bg-foreground/[0.05] px-3 py-2 pr-9 font-mono text-11px leading-relaxed text-foreground">
+                    <pre
+                      className={cn(
+                        "overflow-x-auto rounded-lg bg-foreground/[0.05]",
+                        "px-3 py-2 pr-9",
+                        "font-mono text-11px leading-relaxed text-foreground",
+                      )}
+                    >
                       {preview.display}
                     </pre>
                     <CopyButton
@@ -773,7 +793,12 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
               ) : null}
 
               {error ? (
-                <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/[0.05] px-3.5 py-2.5">
+                <div
+                  className={cn(
+                    "flex items-start gap-2",
+                    "rounded-xl border border-destructive/30 bg-destructive/[0.05] px-3.5 py-2.5",
+                  )}
+                >
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
                   <p className="min-w-0 break-words text-xs text-destructive">{error}</p>
                 </div>
@@ -945,7 +970,10 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
               {capabilities.map((cap) => (
                 <div
                   key={cap.key}
-                  className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2 text-xs text-foreground/80"
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2",
+                    "text-xs text-foreground/80",
+                  )}
                 >
                   <div className="size-1.5 shrink-0 rounded-full bg-sky-500/70" />
                   <span className="truncate">{cap.label}</span>

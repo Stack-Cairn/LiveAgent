@@ -57,7 +57,10 @@ function CloneTaskCard({
 
   return (
     <section
-      className="pointer-events-auto w-80 overflow-hidden rounded-xl border border-border/70 bg-background/95 shadow-2xl backdrop-blur-xl"
+      className={cn(
+        "pointer-events-auto w-80 overflow-hidden",
+        "rounded-xl border border-border/70 bg-background/95 shadow-2xl backdrop-blur-xl",
+      )}
       aria-live="polite"
     >
       <div className="flex items-start gap-2.5 px-3.5 pb-2 pt-3">
@@ -144,7 +147,12 @@ function CloneTaskCard({
 export function WorkspaceCloneTaskOverlay(props: WorkspaceCloneTaskOverlayProps) {
   if (props.tasks.length === 0) return null;
   return (
-    <div className="layer-toast pointer-events-none fixed bottom-4 right-4 flex max-h-viewport-inset-2rem-vh flex-col-reverse gap-2 overflow-y-auto">
+    <div
+      className={cn(
+        "layer-toast pointer-events-none fixed bottom-4 right-4 flex max-h-viewport-inset-2rem-vh flex-col-reverse",
+        "gap-2 overflow-y-auto",
+      )}
+    >
       {props.tasks.map((task) => (
         <CloneTaskCard key={task.id} task={task} {...props} />
       ))}

@@ -121,7 +121,10 @@ export function MacOsTitleBarToggle({
     : trafficLightLeft + trafficLightWidth + MAC_OS_TITLEBAR_TOGGLE_GAP;
   return (
     <div
-      className="fixed z-49 flex items-center gap-0.5 transition-[left] duration-200 ease-out [-webkit-app-region:no-drag]"
+      className={cn(
+        "fixed z-49 flex items-center gap-0.5",
+        "transition-[left] duration-200 ease-out [-webkit-app-region:no-drag]",
+      )}
       style={{
         top: toggleTop,
         left: toggleLeft,
@@ -131,7 +134,10 @@ export function MacOsTitleBarToggle({
       <button
         type="button"
         onClick={onToggle}
-        className="flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]"
+        className={cn(
+          "flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors",
+          "hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]",
+        )}
         style={{
           height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
           width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
@@ -148,7 +154,10 @@ export function MacOsTitleBarToggle({
           data-testid="open-settings"
           aria-label={t("tooltip.settings")}
           title={t("tooltip.settings")}
-          className="flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]"
+          className={cn(
+            "flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors",
+            "hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]",
+          )}
           style={{
             height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
             width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,

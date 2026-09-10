@@ -257,7 +257,9 @@ export function RightDockChooser(props: RightDockChooserProps) {
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-5 py-6">
+    <div
+      className={cn("flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-5", "py-6")}
+    >
       <div className="flex flex-col items-center gap-1">
         <h3 className="text-sm font-medium text-foreground">{t("projectTools.getStarted")}</h3>
         <p className="text-xs text-muted-foreground">{t("projectTools.getStartedHint")}</p>
@@ -271,9 +273,19 @@ export function RightDockChooser(props: RightDockChooserProps) {
             onPointerDown={tool.onPointerDown}
             disabled={tool.disabled}
             title={tool.titleAttr}
-            className="group flex items-center gap-3 rounded-lg border border-border/60 bg-background px-3.5 py-3 text-left text-sm text-foreground transition-all hover:border-border hover:bg-muted/60 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"
+            className={cn(
+              "group flex items-center gap-3",
+              "rounded-lg border border-border/60 bg-background px-3.5 py-3",
+              "text-left text-sm text-foreground transition-all",
+              "hover:border-border hover:bg-muted/60 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50",
+            )}
           >
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted/80 text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground">
+            <div
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center",
+                "rounded-md bg-muted/80 text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground",
+              )}
+            >
               {tool.icon}
             </div>
             <div className="min-w-0 flex-1">

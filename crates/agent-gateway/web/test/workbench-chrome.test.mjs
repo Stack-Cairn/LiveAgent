@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const gatewayAppViewSource = readFileSync(
   new URL("../src/app/GatewayAppView.tsx", import.meta.url),
@@ -10,10 +11,10 @@ const webStyleClassesSource = readFileSync(
   new URL("../src/lib/webStyleClasses.ts", import.meta.url),
   "utf8",
 );
-const composerSource = readFileSync(
+const composerSource = normalizeClassGroups(readFileSync(
   new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
   "utf8",
-);
+));
 const sidebarSource = readFileSync(
   new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
   "utf8",

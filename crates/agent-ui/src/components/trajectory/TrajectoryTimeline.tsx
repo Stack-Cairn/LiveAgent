@@ -136,7 +136,10 @@ export function TrajectoryTimeline(props: {
   return (
     <section
       aria-label={t("trajectory.timeline.aria")}
-      className="flex shrink-0 gap-2 border-b border-border/60 px-3 pt-1.5 pb-2 @max-[520px]:gap-1 @max-[520px]:px-2"
+      className={cn(
+        "flex shrink-0 gap-2 border-b border-border/60",
+        "px-3 pt-1.5 pb-2 @max-[520px]:gap-1 @max-[520px]:px-2",
+      )}
     >
       <div
         className="flex w-11 shrink-0 flex-col @max-[520px]:w-8"
@@ -200,7 +203,8 @@ export function TrajectoryTimeline(props: {
                     statusLabel: t(`trajectory.status.${status}`),
                   })}
                   className={cn(
-                    "absolute top-0 flex h-12px items-center gap-1 overflow-hidden rounded-xs px-1 text-9px leading-none",
+                    "absolute top-0 flex h-12px items-center gap-1 overflow-hidden rounded-xs",
+                    "px-1 text-9px leading-none",
                     status === "running"
                       ? "bg-primary/15 text-primary"
                       : status === "error"
@@ -331,7 +335,11 @@ export function TrajectoryTimeline(props: {
         {hoveredRecord !== null && gestures.draft === null && hovered !== null && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute top-0 z-10 max-w-320px -translate-x-1/2 -translate-y-full whitespace-pre-wrap break-all rounded-md border bg-popover px-2 py-1 text-11px leading-snug text-popover-foreground shadow-md"
+            className={cn(
+              "pointer-events-none absolute top-0 z-10 max-w-320px -translate-x-1/2 -translate-y-full",
+              "whitespace-pre-wrap break-all rounded-md border bg-popover px-2 py-1",
+              "text-11px leading-snug text-popover-foreground shadow-md",
+            )}
             style={{ left: `${hovered.leftPct}%`, top: trackHeight + 4 }}
           >
             {spanTooltip({

@@ -1,3 +1,4 @@
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { WorkbenchRect } from "../../lib/workbench/geometry";
 
 export type DockIntentOverlayProps = {
@@ -17,7 +18,10 @@ export function DockIntentOverlay(props: DockIntentOverlayProps) {
     <div
       data-workbench-drop-preview=""
       aria-hidden="true"
-      className="pointer-events-none absolute z-20 flex items-center justify-center rounded-lg border border-primary/50 bg-primary/[0.08] shadow-ui-dockintentoverlay-33"
+      className={cn(
+        "pointer-events-none absolute z-20 flex items-center justify-center",
+        "rounded-lg border border-primary/50 bg-primary/[0.08] shadow-ui-dockintentoverlay-33",
+      )}
       style={{
         left: rect.left + 3,
         top: rect.top + 3,
@@ -26,7 +30,12 @@ export function DockIntentOverlay(props: DockIntentOverlayProps) {
       }}
     >
       {label ? (
-        <span className="max-w-[80%] truncate rounded-full border border-border/60 bg-background/95 px-3 py-1 text-xs font-medium text-foreground shadow-md">
+        <span
+          className={cn(
+            "max-w-[80%] truncate rounded-full border border-border/60 bg-background/95 px-3 py-1",
+            "text-xs font-medium text-foreground shadow-md",
+          )}
+        >
           {label}
         </span>
       ) : null}

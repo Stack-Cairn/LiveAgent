@@ -3,6 +3,7 @@ import { Cloud, Download, Plus, Search, Server } from "@liveagent/ui/components/
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { McpRegistryBrowser } from "@liveagent/ui/pages/mcp-hub/McpRegistryBrowser";
 import { McpServerEditModal, McpServersForm } from "@liveagent/ui/pages/mcp-hub/McpServersForm";
 import { useMemo, useState } from "react";
@@ -79,7 +80,12 @@ export function McpHubPage(props: McpHubPageProps) {
   }
 
   return (
-    <div className="hub-page relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className={cn(
+        "hub-page relative flex h-full min-h-0 flex-1 flex-col overflow-hidden",
+        "bg-background",
+      )}
+    >
       <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden">
         <HubHeader
           embedded={props.embedded}
@@ -114,7 +120,10 @@ export function McpHubPage(props: McpHubPageProps) {
           className={
             props.embedded
               ? "hub-scroll min-h-0 flex-1 overflow-hidden"
-              : "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10"
+              : cn(
+                  "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6",
+                  "sm:px-6 lg:px-8 xl:px-10",
+                )
           }
         >
           <div className="hub-content-stage mx-auto flex size-full min-h-0 max-w-1320px flex-col">
@@ -136,7 +145,10 @@ export function McpHubPage(props: McpHubPageProps) {
                   }}
                   placeholder={searchPlaceholder}
                   aria-label={searchPlaceholder}
-                  className="h-11 rounded-full border-border bg-background pl-11 pr-4 text-sm shadow-none placeholder:text-muted-foreground"
+                  className={cn(
+                    "h-11 rounded-full border-border bg-background pl-11 pr-4 text-sm shadow-none",
+                    "placeholder:text-muted-foreground",
+                  )}
                 />
               </div>
 

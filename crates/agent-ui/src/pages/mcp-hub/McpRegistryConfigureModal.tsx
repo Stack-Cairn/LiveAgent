@@ -30,6 +30,7 @@ import {
   type McpRegistryInstallDraft,
   mcpRegistryConfigInputKey,
 } from "@liveagent/ui/lib/mcpRegistry/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type FormEvent, useEffect, useState } from "react";
 
 function configureDraftForCard(card: McpRegistryCard) {
@@ -307,7 +308,12 @@ export function McpRegistryConfigureModal(props: {
       >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="flex-row items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
+            <div
+              className={cn(
+                "flex size-10 items-center justify-center",
+                "rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs",
+              )}
+            >
               <Sparkles className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -539,7 +545,12 @@ export function McpRegistryConfigureModal(props: {
               ) : null}
 
               {formError ? (
-                <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive">
+                <div
+                  className={cn(
+                    "flex items-start gap-2",
+                    "rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive",
+                  )}
+                >
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <span>{formError}</span>
                 </div>

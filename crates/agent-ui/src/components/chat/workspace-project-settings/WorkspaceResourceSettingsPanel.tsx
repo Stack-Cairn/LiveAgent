@@ -148,7 +148,10 @@ export function WorkspaceResourceSettingsPanel(props: {
               value={query}
               onChange={(event) => onQueryChange(event.currentTarget.value)}
               placeholder={t("chat.workspaceResourcesSearch")}
-              className="h-8 rounded-lg border-border bg-background pl-9 pr-3 text-sm shadow-none placeholder:text-muted-foreground"
+              className={cn(
+                "h-8 rounded-lg border-border bg-background pl-9 pr-3 text-sm shadow-none",
+                "placeholder:text-muted-foreground",
+              )}
             />
           </div>
           <Tabs
