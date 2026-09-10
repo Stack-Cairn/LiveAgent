@@ -47,7 +47,7 @@ import type {
   HistoryWorkdirSummary,
 } from "@/lib/gatewayTypes";
 import { clearToken, loadToken, saveToken } from "@/lib/storage";
-import { StatusPanel } from "../components/StatusPanel";
+import { StatusPanel, statusPanelSurfaceClass } from "../components/StatusPanel";
 import { StatusHeading, StatusLabel, StatusSectionHeader } from "../components/StatusTypography";
 import { LoginPage } from "./LoginPage";
 
@@ -113,6 +113,21 @@ const HISTORY_PAGE_SIZE = 80;
 const SNAPSHOT_REFRESH_MS = 10_000;
 const LIVE_FLUSH_MS = 500;
 const MAX_RECENT_EVENTS = 12;
+
+const dashboardToneClass: Record<DashboardTone, string> = {
+  cyan: "[--status-board-tone:var(--status-cyan)]",
+  violet: "[--status-board-tone:var(--status-violet)]",
+  rose: "[--status-board-tone:var(--status-rose)]",
+  amber: "[--status-board-tone:var(--status-amber)]",
+  emerald: "[--status-board-tone:var(--status-emerald)]",
+  slate: "[--status-board-tone:191,210,232]",
+};
+
+const statusActionClass =
+  "flex h-33px items-center gap-7px rounded-full border border-[rgba(var(--status-cyan),0.2)] bg-rgba-255-255-255-0p055 px-12px py-0 text-11px text-rgba-233-245-255-0p84 uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-[rgba(var(--status-cyan),0.48)] hover:bg-[rgba(var(--status-cyan),0.1)] hover:text-(--ui-color-ffffff)";
+
+const statusEntrySurfaceClass =
+  "border border-[rgba(var(--status-board-tone,191,210,232),0.14)] bg-[rgba(var(--status-board-tone,191,210,232),0.055)]";
 
 const initialCounters = (): LiveCounters => ({
   events: 0,
@@ -313,12 +328,14 @@ function updateHistoryListWithEvent(
   };
 }
 
-function useNow(tickMs = 1000) {
+function useNow(enabled: boolean, tickMs = 1000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!enabled) return undefined;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), tickMs);
     return () => window.clearInterval(timer);
-  }, [tickMs]);
+  }, [enabled, tickMs]);
   return now;
 }
 
@@ -326,11 +343,12 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
   return (
     <span
       className={cn(
-        "flex items-center h-33px gap-7px border border-solid border-status-cyan/20 rounded-999px px-12px py-0 bg-rgba-255-255-255-0p055 text-rgba-233-245-255-0p84 text-11px no-underline uppercase whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default",
-        online ? "status-board-pill--online" : "status-board-pill--offline",
+        "flex h-33px items-center gap-7px rounded-full border border-status-cyan/20 bg-rgba-255-255-255-0p055 px-12px py-0 text-11px text-rgba-233-245-255-0p84 uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default",
+        online &&
+          "[&>span]:animate-[status-board-pulse_var(--ui-duration-1500ms)_ease-in-out_infinite] [&>span]:bg-[rgb(var(--status-emerald))] [&>span]:shadow-[0_0_var(--spacing-20px)_rgba(var(--status-emerald),0.86)]",
       )}
     >
-      <span className="status-board-pill-dot size-8px rounded-999px" />
+      <span className="size-8px rounded-full bg-[rgb(var(--status-rose))] shadow-[0_0_var(--spacing-18px)_rgba(var(--status-rose),0.82)]" />
       {label}
     </span>
   );
@@ -341,11 +359,12 @@ function MetricTile({ metric }: { metric: MetricCard }) {
   return (
     <section
       className={cn(
-        "status-board-card status-board-metric relative overflow-hidden rounded-14px min-w-0 grid items-center gap-9px min-h-82px p-10px",
-        `status-board-tone-${metric.tone}`,
+        statusPanelSurfaceClass,
+        "relative grid min-h-82px min-w-0 grid-cols-[var(--spacing-34px)_minmax(0,1fr)] items-center gap-9px overflow-hidden rounded-14px border border-[rgba(var(--status-cyan),0.12)] bg-rgba-255-255-255-0p045 p-10px",
+        dashboardToneClass[metric.tone],
       )}
     >
-      <div className="status-board-metric-icon grid place-items-center size-34px rounded-12px">
+      <div className="grid size-34px place-items-center rounded-12px border border-[rgba(var(--status-cyan),0.3)] bg-[rgba(var(--status-board-tone),0.11)] text-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px">
         <Icon size={18} strokeWidth={2.2} />
       </div>
       <div>
@@ -366,21 +385,26 @@ function MetricTile({ metric }: { metric: MetricCard }) {
 
 function EmptyState({ children }: { children: string }) {
   return (
-    <div className="status-board-empty rounded-14px py-8px px-9px text-(--ui-color-rgba-190-219-248-0p58) text-10px not-italic leading-1p25">
+    <div
+      className={cn(
+        statusEntrySurfaceClass,
+        "rounded-14px px-9px py-8px text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
+      )}
+    >
       {children}
     </div>
   );
 }
 
-function FactList({ items }: { items: FactItem[] }) {
+function FactList({ items, className }: { items: FactItem[]; className?: string }) {
   return (
-    <div className="status-board-fact-list grid grid-cols-2 gap-7px">
+    <div className={cn("grid grid-cols-2 gap-7px", className)}>
       {items.map((item) => (
         <div
           key={item.label}
           className={cn(
-            "status-board-fact min-w-0 rounded-13px p-8px",
-            item.tone && `status-board-fact--${item.tone}`,
+            "min-w-0 rounded-13px border border-[rgba(var(--status-board-tone),0.15)] bg-[linear-gradient(135deg,rgba(var(--status-board-tone),0.08),transparent),var(--ui-color-rgba-255-255-255-0p045)] p-8px [--status-board-tone:191,210,232]",
+            item.tone && dashboardToneClass[item.tone],
           )}
         >
           <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-9px tracking-0p12em uppercase">
@@ -393,7 +417,9 @@ function FactList({ items }: { items: FactItem[] }) {
             {item.value}
           </strong>
           {item.unit && (
-            <b className="inline-block ml-5px text-9px font-medium uppercase">{item.unit}</b>
+            <b className="ml-5px inline-block text-9px font-medium text-[rgba(var(--status-board-tone),0.9)] uppercase">
+              {item.unit}
+            </b>
           )}
           {item.note && (
             <em
@@ -497,7 +523,6 @@ function useDashboardAuth() {
 }
 
 export function StatusDashboardPage() {
-  const now = useNow();
   const {
     token,
     loginToken,
@@ -508,6 +533,7 @@ export function StatusDashboardPage() {
     submit,
     logout,
   } = useDashboardAuth();
+  const now = useNow(token !== "");
   const api = useMemo(() => (token ? getGatewayWebSocketClient(token) : null), [token]);
   const pendingEventsRef = useRef<DashboardEvent[]>([]);
   const pendingCountersRef = useRef<PendingCounters>(initialPendingCounters());
@@ -1011,26 +1037,32 @@ export function StatusDashboardPage() {
   }
 
   return (
-    <main className="status-board-shell relative grid w-100vw h-100dvh min-h-0 place-items-center overflow-hidden text-(--status-text)">
-      <div className="status-board-aurora absolute pointer-events-none" aria-hidden="true" />
-      <div className="status-board-noise absolute pointer-events-none inset-0" aria-hidden="true" />
+    <main className="relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden bg-[radial-gradient(circle_at_16%_15%,rgba(var(--status-cyan),0.18),transparent_25%),radial-gradient(circle_at_76%_18%,rgba(var(--status-violet),0.18),transparent_27%),radial-gradient(circle_at_56%_85%,rgba(var(--status-emerald),0.1),transparent_30%),linear-gradient(135deg,var(--ui-color-02040c)_0%,var(--ui-color-06101f)_48%,var(--ui-color-030712)_100%)] font-app text-(--status-text) [--status-amber:255,196,87] [--status-bg:var(--ui-color-030712)] [--status-cyan:72,235,255] [--status-emerald:68,255,196] [--status-line:var(--ui-color-rgba-125-249-255-0p2)] [--status-muted:var(--ui-color-rgba-178-202-230-0p62)] [--status-panel-strong:var(--ui-color-rgba-8-20-42-0p88)] [--status-panel:var(--ui-color-rgba-6-14-31-0p72)] [--status-rose:255,78,142] [--status-text:var(--ui-color-rgba-241-248-255-0p94)] [--status-violet:169,119,255] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(var(--status-cyan),0.08)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.06)_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_50%_50%,transparent_0_44%,rgba(var(--status-cyan),0.08)_45%,transparent_46%)] before:bg-[length:var(--spacing-48px)_var(--spacing-48px),var(--spacing-48px)_var(--spacing-48px),var(--spacing-620px)_var(--spacing-620px)] before:opacity-(--ui-opacity-0p9) before:[mask-image:radial-gradient(circle_at_50%_50%,var(--ui-color-rgba-0-0-0-0p94),transparent_78%)] before:content-[''] after:pointer-events-none after:absolute after:inset-0 after:animate-[status-board-scanline_var(--ui-duration-6000ms)_linear_infinite] after:bg-[linear-gradient(180deg,transparent_0,var(--ui-color-rgba-255-255-255-0p055)_50%,transparent_100%)] after:bg-[length:100%_var(--spacing-7px)] after:opacity-(--ui-opacity-0p22) after:mix-blend-screen after:content-['']">
       <div
-        className="status-board-orb status-board-orb--a absolute pointer-events-none rounded-999px size-220px"
+        className="pointer-events-none absolute inset-[-30%_-18%] animate-[status-board-aurora-drift_var(--ui-duration-22000ms)_ease-in-out_infinite_alternate] bg-[conic-gradient(from_90deg_at_50%_50%,transparent,rgba(var(--status-cyan),0.16),transparent,rgba(var(--status-violet),0.16),transparent,rgba(var(--status-emerald),0.12),transparent),radial-gradient(circle_at_48%_46%,var(--ui-color-hsl-0-0-100-0p08),transparent_28%)] opacity-(--ui-opacity-0p95) blur-28px"
         aria-hidden="true"
       />
       <div
-        className="status-board-orb status-board-orb--b absolute pointer-events-none rounded-999px size-280px"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_26%,var(--ui-color-rgba-255-255-255-0p2)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_72%_62%,rgba(var(--status-cyan),0.18)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_46%_82%,rgba(var(--status-violet),0.16)_0_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-37px)_var(--spacing-37px),var(--spacing-61px)_var(--spacing-61px),var(--spacing-89px)_var(--spacing-89px)] opacity-(--ui-opacity-0p26) mix-blend-screen"
         aria-hidden="true"
       />
       <div
-        className="status-board-orb status-board-orb--c absolute pointer-events-none rounded-999px size-340px"
+        className="pointer-events-none absolute top-[9%] left-[4%] size-220px animate-[status-board-float_var(--ui-duration-12000ms)_ease-in-out_infinite_alternate] rounded-full bg-[radial-gradient(circle,rgba(var(--status-cyan),0.3),transparent_64%)] opacity-(--ui-opacity-0p8) blur-2px"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute top-[11%] right-[8%] size-280px animate-[status-board-float_var(--ui-duration-12000ms)_ease-in-out_infinite_alternate] rounded-full bg-[radial-gradient(circle,rgba(var(--status-violet),0.26),transparent_66%)] opacity-(--ui-opacity-0p8) blur-2px [animation-delay:var(--ui-duration-minus-4000ms)]"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute right-[18%] bottom-[-4%] size-340px animate-[status-board-float_var(--ui-duration-12000ms)_ease-in-out_infinite_alternate] rounded-full bg-[radial-gradient(circle,rgba(var(--status-emerald),0.16),transparent_68%)] opacity-(--ui-opacity-0p8) blur-2px [animation-delay:var(--ui-duration-minus-7000ms)]"
         aria-hidden="true"
       />
 
       <section className="relative z-1 box-border grid grid-rows-status-board-stage gap-12px w-status-board-stage-w h-status-board-stage-h min-h-0 px-18px pt-14px pb-12px status-compact:w-100vw status-compact:h-100dvh status-compact:p-10px">
-        <header className="status-board-command flex items-center relative justify-between gap-16px rounded-20px py-9px px-12px">
-          <div className="status-board-brand min-w-0 gap-12px">
-            <div className="status-board-logo animate-status-board-logo-hot items-start flex-col gap-2px flex place-items-center size-38px rounded-14px">
+        <header className="relative flex items-center justify-between gap-16px rounded-20px border border-[rgba(var(--status-cyan),0.2)] bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-[0_var(--spacing-18px)_var(--spacing-60px)_var(--ui-color-rgba-0-0-0-0p26),inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),inset_0_0_var(--spacing-48px)_rgba(var(--status-cyan),0.05)] backdrop-blur-22px before:absolute before:inset-x-[22%] before:bottom-minus-1px before:h-1px before:bg-[linear-gradient(90deg,transparent,rgba(var(--status-cyan),0.82),transparent)] before:shadow-[0_0_var(--spacing-18px)_rgba(var(--status-cyan),0.72)] before:content-['']">
+          <div className="flex min-w-0 items-center gap-12px">
+            <div className="flex size-38px flex-col place-items-center items-start gap-2px rounded-14px border border-[rgba(var(--status-cyan),0.3)] bg-[linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),var(--ui-color-hsl-0-0-100-0p06)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px animate-status-board-logo-hot">
               <Sparkles size={19} strokeWidth={2.4} />
             </div>
             <div className="items-start flex-col gap-2px flex">
@@ -1042,7 +1074,7 @@ export function StatusDashboardPage() {
               </h1>
             </div>
           </div>
-          <div className="status-board-command-center absolute grid min-w-360px justify-items-center text-center">
+          <div className="absolute left-1/2 grid min-w-360px -translate-x-1/2 justify-items-center text-center [&>strong]:[text-shadow:0_0_var(--spacing-24px)_rgba(var(--status-cyan),0.42)]">
             <span className="text-(--ui-color-rgba-181-213-244-0p58) text-10px not-italic tracking-0p2em uppercase">
               1912×948 Telemetry Surface
             </span>
@@ -1063,7 +1095,7 @@ export function StatusDashboardPage() {
             <Button
               type="button"
               variant="ghost"
-              className="status-board-action-button"
+              className={statusActionClass}
               onClick={() => setRefreshVersion((value) => value + 1)}
               disabled={snapshot.loading}
             >
@@ -1074,16 +1106,11 @@ export function StatusDashboardPage() {
               )}
               Sync
             </Button>
-            <a className="status-board-link-button" href="./" title="回到 Gateway 控制台">
+            <a className={statusActionClass} href="./" title="回到 Gateway 控制台">
               Console
               <ExternalLink size={14} />
             </a>
-            <Button
-              type="button"
-              variant="ghost"
-              className="status-board-action-button"
-              onClick={logout}
-            >
+            <Button type="button" variant="ghost" className={statusActionClass} onClick={logout}>
               <LogOut size={15} />
               Exit
             </Button>
@@ -1110,17 +1137,16 @@ export function StatusDashboardPage() {
               <div className="grid grid-cols-status-board-reactor-core items-center gap-14px mb-12px">
                 <div
                   className={cn(
-                    "status-board-reactor relative grid size-154px place-items-center rounded-999px",
-                    status?.online && "status-board-reactor--online",
+                    "relative grid size-154px place-items-center rounded-full shadow-[0_0_var(--spacing-46px)_rgba(var(--status-cyan),0.22),inset_0_0_var(--spacing-34px)_var(--ui-color-rgba-0-0-0-0p58)] before:absolute before:inset-12px before:rounded-[inherit] before:bg-[radial-gradient(circle,var(--ui-color-hsl-0-0-100-0p12),transparent_42%),var(--ui-color-071226)] before:shadow-[inset_0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.12)] before:content-['']",
                   )}
                   style={{
                     background: `conic-gradient(from -90deg, var(--color-status-integrity-start) 0deg, var(--color-status-integrity-end) ${integrityScore * 3.6}deg, var(--color-status-integrity-track) ${integrityScore * 3.6}deg 360deg)`,
                   }}
                 >
-                  <div className="status-board-reactor-ring inset-minus-8px animate-status-board-reactor-ring-a absolute rounded-[inherit]" />
-                  <div className="status-board-reactor-ring inset-28px border-status-violet/28! animate-status-board-reactor-ring-b absolute rounded-[inherit]" />
-                  <div className="status-board-reactor-number relative z-1 grid justify-items-center">
-                    <strong className="text-(--ui-color-ffffff) text-46px leading-0p92 tracking-minus-0p06em">
+                  <div className="absolute inset-minus-8px animate-status-board-reactor-ring-a rounded-[inherit] border border-[rgba(var(--status-cyan),0.24)]" />
+                  <div className="absolute inset-28px animate-status-board-reactor-ring-b rounded-[inherit] border border-status-violet/28!" />
+                  <div className="relative z-1 grid justify-items-center">
+                    <strong className="text-46px leading-0p92 tracking-minus-0p06em text-(--ui-color-ffffff) [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
                       {integrityScore}
                     </strong>
                     <span className="text-(--status-muted) text-10px not-italic tracking-0p12em uppercase">
@@ -1128,7 +1154,7 @@ export function StatusDashboardPage() {
                     </span>
                   </div>
                 </div>
-                <div className="status-board-reactor-copy min-w-0">
+                <div className="min-w-0">
                   <span className="text-(--status-muted) text-10px not-italic tracking-0p12em uppercase">
                     Runtime: {runtimeState}
                   </span>
@@ -1155,8 +1181,8 @@ export function StatusDashboardPage() {
                 <Server size={18} />
               </StatusSectionHeader>
               <FactList items={fabricFacts} />
-              <div className="status-board-mini-grid--matrix grid gap-8px grid-cols-2 mt-10px">
-                <div className="status-board-mini-card min-w-0 rounded-14px p-10px text-(--ui-color-rgba-226-242-255-0p7)">
+              <div className="mt-10px grid grid-cols-2 gap-8px [&>div]:min-w-0 [&>div]:rounded-14px [&>div]:border [&>div]:border-[rgba(var(--status-cyan),0.12)] [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-[rgba(var(--status-cyan),0.84)]">
+                <div>
                   <Globe2 size={17} />
                   <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
                     Tunnels
@@ -1165,7 +1191,7 @@ export function StatusDashboardPage() {
                     {activeTunnels.length}
                   </strong>
                 </div>
-                <div className="status-board-mini-card min-w-0 rounded-14px p-10px text-(--ui-color-rgba-226-242-255-0p7)">
+                <div>
                   <Terminal size={17} />
                   <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
                     Terminals
@@ -1174,7 +1200,7 @@ export function StatusDashboardPage() {
                     {runningTerminals.length}
                   </strong>
                 </div>
-                <div className="status-board-mini-card min-w-0 rounded-14px p-10px text-(--ui-color-rgba-226-242-255-0p7)">
+                <div>
                   <Brain size={17} />
                   <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
                     Providers
@@ -1183,7 +1209,7 @@ export function StatusDashboardPage() {
                     {activeProviders.length}
                   </strong>
                 </div>
-                <div className="status-board-mini-card min-w-0 rounded-14px p-10px text-(--ui-color-rgba-226-242-255-0p7)">
+                <div>
                   <Plug size={17} />
                   <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
                     Remote
@@ -1197,7 +1223,7 @@ export function StatusDashboardPage() {
           </aside>
 
           <section className="grid min-h-0 gap-12px grid-rows-status-board-center-stack status-compact:gap-8px">
-            <StatusPanel className="status-board-radar-panel">
+            <StatusPanel>
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Live Telemetry</StatusLabel>
@@ -1214,13 +1240,13 @@ export function StatusDashboardPage() {
 
               <div className="grid grid-cols-status-board-radar-deck items-center gap-14px min-h-0 flex-auto mt-12px">
                 <div
-                  className="status-board-radar-screen relative grid place-items-center justify-self-center overflow-hidden rounded-999px"
+                  className="relative grid size-[min(var(--spacing-42vh),var(--spacing-410px))] place-items-center justify-self-center overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.22)] bg-[radial-gradient(circle,rgba(var(--status-cyan),0.13),transparent_7%),repeating-radial-gradient(circle,transparent_0_var(--spacing-54px),rgba(var(--status-cyan),0.13)_var(--spacing-55px)_var(--spacing-56px)),radial-gradient(circle_at_center,var(--ui-color-rgba-7-17-33-0p4),var(--ui-color-rgba-2-7-15-0p92))] shadow-[0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.16),inset_0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.08)] status-compact:size-[min(var(--spacing-38vh),var(--spacing-320px))]"
                   role="img"
                   aria-label="live signal radar"
                 >
-                  <div className="status-board-radar-grid absolute inset-0 rounded-[inherit]" />
-                  <div className="status-board-radar-sweep absolute inset-0 rounded-[inherit]" />
-                  <div className="status-board-radar-core relative grid size-126px place-items-center rounded-999px">
+                  <div className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-46px)_var(--spacing-46px)] opacity-(--ui-opacity-0p42) [mask-image:radial-gradient(circle,black_0_68%,transparent_69%)]" />
+                  <div className="absolute inset-0 animate-[status-board-radar-sweep_var(--ui-duration-3400ms)_linear_infinite] rounded-[inherit] bg-[conic-gradient(from_0deg,rgba(var(--status-cyan),0.45),rgba(var(--status-cyan),0.06)_42deg,transparent_72deg_360deg)] opacity-(--ui-opacity-0p82) mix-blend-screen" />
+                  <div className="relative z-2 grid size-126px place-items-center rounded-full border border-[rgba(var(--status-cyan),0.26)] bg-rgba-4-13-28-0p84 shadow-[0_0_var(--spacing-40px)_rgba(var(--status-cyan),0.23),inset_0_0_var(--spacing-26px)_rgba(var(--status-cyan),0.08)] [&>svg]:text-[rgba(var(--status-cyan),0.9)]">
                     <Bot size={44} strokeWidth={1.65} />
                     <strong className="text-(--ui-color-ffffff) text-36px leading-0p8">
                       {runtimeActiveRunCount}
@@ -1233,8 +1259,8 @@ export function StatusDashboardPage() {
                     <span
                       key={segment.label}
                       className={cn(
-                        "status-board-radar-node absolute size-10px rounded-999px",
-                        `status-board-tone-${segment.tone}`,
+                        "absolute z-3 size-10px animate-[status-board-node-pulse_var(--ui-duration-1800ms)_ease-in-out_infinite] rounded-full bg-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-20px)_rgba(var(--status-board-tone),0.82),0_0_var(--spacing-46px)_rgba(var(--status-board-tone),0.38)] [--status-board-tone:var(--status-cyan)]",
+                        dashboardToneClass[segment.tone],
                       )}
                       style={{
                         transform: `rotate(${index * 72 - 18}deg) translateX(${118 + segment.width * 0.62}px)`,
@@ -1244,7 +1270,7 @@ export function StatusDashboardPage() {
                 </div>
 
                 <div className="min-w-0">
-                  <div className="status-board-throughput-head flex items-baseline justify-between mb-10px">
+                  <div className="mb-10px flex items-baseline justify-between">
                     <span className="text-(--status-muted) text-11px tracking-0p18em uppercase">
                       Stream Load
                     </span>
@@ -1256,16 +1282,16 @@ export function StatusDashboardPage() {
                     <div
                       key={segment.label}
                       className={cn(
-                        "status-board-load-row grid items-center gap-9px mb-8px",
-                        `status-board-tone-${segment.tone}`,
+                        "mb-8px grid grid-cols-[var(--spacing-112px)_minmax(0,1fr)_var(--spacing-92px)] items-center gap-9px [--status-board-tone:var(--status-cyan)]",
+                        dashboardToneClass[segment.tone],
                       )}
                     >
                       <span className="text-(--ui-color-rgba-211-232-255-0p66) text-11px not-italic">
                         {segment.label}
                       </span>
-                      <div className="h-10px overflow-hidden rounded-999px">
+                      <div className="h-10px overflow-hidden rounded-full border border-[rgba(var(--status-board-tone),0.14)] bg-hsl-0-0-100-0p05">
                         <i
-                          className="block h-full rounded-[inherit]"
+                          className="block h-full animate-[status-board-load-breathe_var(--ui-duration-1800ms)_ease-in-out_infinite_alternate] rounded-[inherit] bg-[linear-gradient(90deg,rgba(var(--status-board-tone),0.25),rgba(var(--status-board-tone),0.95))] shadow-[0_0_var(--spacing-16px)_rgba(var(--status-board-tone),0.44)]"
                           style={{ width: `${segment.width}%` }}
                         />
                       </div>
@@ -1274,12 +1300,12 @@ export function StatusDashboardPage() {
                       </em>
                     </div>
                   ))}
-                  <FactList items={telemetryFacts} />
+                  <FactList items={telemetryFacts} className="mt-10px grid-cols-4" />
                 </div>
               </div>
             </StatusPanel>
 
-            <StatusPanel className="status-board-stream-panel pb-12px">
+            <StatusPanel className="pb-12px">
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Event Stream</StatusLabel>
@@ -1297,13 +1323,14 @@ export function StatusDashboardPage() {
                     <article
                       key={event.id}
                       className={cn(
-                        "status-board-event rounded-14px py-8px px-9px grid gap-9px",
-                        `status-board-tone-${event.tone}`,
+                        statusEntrySurfaceClass,
+                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px px-9px py-8px [--status-board-tone:191,210,232]",
+                        dashboardToneClass[event.tone],
                       )}
                     >
-                      <span className="size-8px mt-5px rounded-999px bg-status-board-tone shadow-status-board-event-dot animate-status-board-event-dot" />
+                      <span className="size-8px mt-5px rounded-full bg-status-board-tone shadow-status-board-event-dot animate-status-board-event-dot" />
                       <div>
-                        <div className="status-board-event-title-row flex items-center justify-between gap-12px">
+                        <div className="flex items-center justify-between gap-12px">
                           <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-12px text-ellipsis whitespace-nowrap">
                             {event.title}
                           </strong>
@@ -1311,11 +1338,11 @@ export function StatusDashboardPage() {
                             {formatClock(event.at)}
                           </time>
                         </div>
-                        <p className="text-(--ui-color-rgba-190-219-248-0p58) text-10px not-italic leading-1p25 overflow-hidden mt-3px mx-0 mb-0">
+                        <p className="mx-0 mt-3px mb-0 line-clamp-1 overflow-hidden text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic">
                           {event.detail}
                         </p>
                         {(event.conversationId || event.workdir) && (
-                          <span className="text-rgba-190-219-248-0p58 text-10px not-italic leading-1p25 inline-flex mt-4px rounded-999px px-6px py-2px bg-rgba-255-255-255-0p06">
+                          <span className="text-rgba-190-219-248-0p58 text-10px not-italic leading-1p25 inline-flex mt-4px rounded-full px-6px py-2px bg-rgba-255-255-255-0p06">
                             {event.workdir
                               ? basename(event.workdir)
                               : truncateMiddle(event.conversationId ?? "", 18)}
@@ -1346,9 +1373,12 @@ export function StatusDashboardPage() {
                   runningConversations.slice(0, 4).map((item) => (
                     <article
                       key={item.id}
-                      className="status-board-running-item grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px py-8px px-9px"
+                      className={cn(
+                        statusEntrySurfaceClass,
+                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px px-9px py-8px [--status-board-tone:var(--status-violet)]",
+                      )}
                     >
-                      <div className="status-board-running-dot size-8px mt-5px rounded-999px flex-none" />
+                      <div className="mt-5px size-8px flex-none animate-status-board-event-dot rounded-full bg-status-board-tone shadow-status-board-event-dot" />
                       <div>
                         <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-12px text-ellipsis whitespace-nowrap">
                           {truncateMiddle(item.title, 34)}
@@ -1372,7 +1402,12 @@ export function StatusDashboardPage() {
                 </div>
                 <HardDrive size={18} />
               </StatusSectionHeader>
-              <div className="status-board-active-workspace rounded-14px py-8px px-9px flex-none mb-8px">
+              <div
+                className={cn(
+                  statusEntrySurfaceClass,
+                  "mb-8px flex-none rounded-14px px-9px py-8px [--status-board-tone:var(--status-cyan)]",
+                )}
+              >
                 <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-9px tracking-0p12em uppercase">
                   Active Workspace
                 </span>
@@ -1393,7 +1428,10 @@ export function StatusDashboardPage() {
                   workdirs.slice(0, 6).map((item) => (
                     <article
                       key={item.path}
-                      className="status-board-workdir rounded-14px py-8px px-9px grid items-center gap-9px"
+                      className={cn(
+                        statusEntrySurfaceClass,
+                        "grid grid-cols-[minmax(0,1fr)_var(--spacing-86px)_var(--spacing-82px)] items-center gap-9px rounded-14px px-9px py-8px",
+                      )}
                     >
                       <div>
                         <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-12px text-ellipsis whitespace-nowrap">
@@ -1403,9 +1441,9 @@ export function StatusDashboardPage() {
                           {truncateMiddle(item.path, 46)}
                         </span>
                       </div>
-                      <div className="status-board-workdir-meter h-8px overflow-hidden rounded-999px">
+                      <div className="h-8px overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.12)] bg-hsl-0-0-100-0p05">
                         <span
-                          className="text-(--ui-color-rgba-190-219-248-0p58) text-10px not-italic leading-1p25 block h-full rounded-[inherit]"
+                          className="block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)] not-italic"
                           style={{
                             width: percentage(
                               ((item.conversationCount || 0) / maxWorkdirCount) * 100,
@@ -1424,7 +1462,7 @@ export function StatusDashboardPage() {
           </aside>
         </section>
 
-        <footer className="status-board-footer flex-nowrap justify-between gap-10px overflow-hidden rounded-14px py-6px px-10px text-(--ui-color-rgba-198-225-250-0p62) text-10px">
+        <footer className="flex flex-nowrap items-center justify-between gap-10px overflow-hidden rounded-14px border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px text-10px text-(--ui-color-rgba-198-225-250-0p62) backdrop-blur-16px">
           <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <CheckCircle2 size={14} />
             Sources: status.get / settings.get / history.list / terminal.list / tunnel.state /

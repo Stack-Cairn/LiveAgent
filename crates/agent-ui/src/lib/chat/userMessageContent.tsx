@@ -1053,7 +1053,7 @@ export const UserMessageContent = memo(function UserMessageContent({
       part.type === "pastedText",
   );
   const trailingNewlineAnchor = normalizedText.endsWith("\n") ? (
-    <span aria-hidden="true" className="chat-user-trailing-newline-anchor" />
+    <span aria-hidden="true" className="before:content-['\\200b']" />
   ) : null;
   if (!hasChip) {
     return (

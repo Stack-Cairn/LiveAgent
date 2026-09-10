@@ -56,6 +56,12 @@ import {
   workspaceProjectPathKey,
 } from "@/lib/settings";
 import { createIdleSidebarBackend, createWebSidebarBackend } from "@/lib/sidebar/webSidebarBackend";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_MAIN_BACKDROP_CLASS,
+  GATEWAY_MAIN_SHELL_CLASS,
+  GATEWAY_SHELL_CLASS,
+} from "@/lib/webStyleClasses";
 import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
@@ -1921,10 +1927,12 @@ function useGatewayAppController() {
   if (!settingsSyncReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
-        <div className="gateway-shell">
-          <main className="gateway-main-shell">
-            <div className="gateway-main-backdrop absolute inset-0 pointer-events-none" />
-            <div className="gateway-chat-frame flex items-center justify-center relative flex h-full min-h-0 min-w-0 flex-1 flex-col max-820:h-full">
+        <div className={GATEWAY_SHELL_CLASS}>
+          <main className={GATEWAY_MAIN_SHELL_CLASS}>
+            <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
+            <div
+              className={`${GATEWAY_CHAT_FRAME_CLASS} relative flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center max-820:h-full`}
+            >
               <SettingsSyncLoading locale={settings.locale} />
             </div>
           </main>

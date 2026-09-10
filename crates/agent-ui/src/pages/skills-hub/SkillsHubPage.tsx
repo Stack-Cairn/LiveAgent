@@ -4,6 +4,7 @@ import {
   updateSkills,
 } from "@liveagent/app/lib/settings";
 import { GlassPanel, HubHeader } from "@liveagent/ui/components/hub/HubChrome";
+import { HUB_PAGE_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   AlertTriangle,
   BookOpen,
@@ -1374,7 +1375,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         : t("settings.skillsScanNoChanges")
       : scanFeedback?.message;
   return (
-    <div className="hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className={`hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background ${HUB_PAGE_ENTER_CLASS}`}
+    >
       {scanFeedback ? (
         <div className="pointer-events-none absolute bottom-5 inset-x-4 z-50 flex justify-end sm:left-auto sm:right-6">
           <div

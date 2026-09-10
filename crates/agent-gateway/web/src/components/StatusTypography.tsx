@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export function StatusLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="status-board-label m-0 text-(--ui-color-rgba-186-216-246-0p6) text-10px tracking-0p18em uppercase">
+    <p className="m-0 text-(--ui-color-rgba-186-216-246-0p6) text-10px tracking-0p18em uppercase">
       {children}
     </p>
   );
@@ -18,7 +18,7 @@ export function StatusHeading({ children }: { children: ReactNode }) {
 
 export function StatusSectionHeader({ children }: { children: ReactNode }) {
   return (
-    <div className="status-board-section-head flex-none justify-between gap-10px mb-10px">
+    <div className="mb-10px flex flex-none items-center justify-between gap-10px text-11px text-(--ui-color-rgba-191-225-255-0p68) [&>svg]:text-11px [&>span]:text-11px">
       {children}
     </div>
   );

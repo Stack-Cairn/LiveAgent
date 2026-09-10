@@ -1741,7 +1741,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
       {contextMenu ? (
         <div
-          className="animate-editor-context-menu origin-top-left layer-popover absolute w-220px select-none overflow-hidden rounded-xl border border-border/60 bg-popover/90 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+          className="animate-editor-context-menu origin-top-left layer-popover absolute w-220px select-none overflow-hidden rounded-xl border border-border/60 bg-popover/90 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl motion-reduce:animate-none dark:ring-white/[0.06]"
           role="menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onContextMenu={(event) => event.preventDefault()}

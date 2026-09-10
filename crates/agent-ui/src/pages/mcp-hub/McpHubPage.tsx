@@ -7,6 +7,7 @@ import { McpRegistryBrowser } from "@liveagent/ui/pages/mcp-hub/McpRegistryBrows
 import { McpServerEditModal, McpServersForm } from "@liveagent/ui/pages/mcp-hub/McpServersForm";
 import { useMemo, useState } from "react";
 import { HubHeader } from "../../components/hub/HubChrome";
+import { HUB_PAGE_ENTER_CLASS } from "../../components/hub/hubMotionStyles";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Tabs, TabsContent } from "../../components/ui/tabs";
@@ -79,7 +80,9 @@ export function McpHubPage(props: McpHubPageProps) {
   }
 
   return (
-    <div className="hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className={`hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background ${HUB_PAGE_ENTER_CLASS}`}
+    >
       <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden">
         <HubHeader
           embedded={props.embedded}

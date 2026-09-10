@@ -300,7 +300,7 @@ box-shadow:0 var(--spacing-4px) 0 var(--ghk-hl-side),0 var(--spacing-6px) var(--
 .ghk-tag{position:absolute;left:var(--spacing-2px);right:var(--spacing-2px);bottom:var(--spacing-2px);font-size:var(--text-8px);font-weight:var(--font-weight-600);line-height:var(--leading-1p2);
 color:var(--ghk-hl-text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;}
 .ghk-dots{position:absolute;top:var(--spacing-3px);right:var(--spacing-4px);display:flex;gap:var(--spacing-2px);pointer-events:none;}
-.ghk-dot{width:var(--spacing-5px);height:var(--spacing-5px);border-radius:var(--radius-9999px);box-shadow:0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-100-0p55);}
+.ghk-dot{width:var(--spacing-5px);height:var(--spacing-5px);border-radius:50%;box-shadow:0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-100-0p55);}
 .dark .ghk-dot{box-shadow:0 0 0 var(--spacing-1px) var(--ui-color-rgb-0-0-0-p4);}
 .ghk-key.ghk-held{background:var(--ghk-cap-held);color:var(--ghk-cap-active-text);
 box-shadow:0 var(--spacing-4px) 0 var(--ghk-cap-held-side),0 var(--spacing-6px) var(--spacing-5px) var(--ui-color-rgb-37-99-235-p22);}

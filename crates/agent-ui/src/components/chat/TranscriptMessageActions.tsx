@@ -78,8 +78,8 @@ export function TranscriptUserMessageActions(
     <div className="mt-1 flex items-center justify-end gap-1.5 web:min-h-24px web:no-hover:opacity-100 web:max-640:opacity-100">
       <div
         className={cn(
-          "chat-row-hover-chrome chat-row-hover-chrome--actions flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-          alwaysShowActions && "[@media(any-hover:none)]:opacity-100",
+          "flex items-center gap-1.5 opacity-100 transition-opacity duration-150 motion-reduce:transition-none has-hover:opacity-0 has-hover:[[data-user-bubble-wrap]:hover_&]:pointer-events-auto has-hover:[[data-user-bubble-wrap]:hover_&]:opacity-100 has-hover:[[data-user-bubble-wrap]:focus-within_&]:pointer-events-auto has-hover:[[data-user-bubble-wrap]:focus-within_&]:opacity-100 data-[force-visible=true]:pointer-events-auto data-[force-visible=true]:opacity-100",
+          alwaysShowActions && "no-hover:opacity-100",
         )}
       >
         {!readOnly ? (
@@ -165,9 +165,8 @@ export function TranscriptAssistantMessageActions(
     <div className="flex min-w-0 flex-1 items-center justify-start gap-0.5">
       <div
         className={cn(
-          "chat-row-hover-chrome chat-row-hover-chrome--actions pointer-events-none flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-data-[actions-visible=true]/assistant:pointer-events-auto group-data-[actions-visible=true]/assistant:opacity-100 group-focus-within/assistant:pointer-events-auto group-focus-within/assistant:opacity-100 group-hover/assistant:pointer-events-auto group-hover/assistant:opacity-100 motion-reduce:transition-none",
-          alwaysShowActions &&
-            "[@media(any-hover:none)]:pointer-events-auto [@media(any-hover:none)]:opacity-100",
+          "pointer-events-none flex items-center gap-0.5 opacity-100 transition-opacity duration-150 motion-reduce:transition-none has-hover:opacity-0 has-hover:[[data-assistant-row]:hover_&]:pointer-events-auto has-hover:[[data-assistant-row]:hover_&]:opacity-100 has-hover:[[data-assistant-row]:focus-within_&]:pointer-events-auto has-hover:[[data-assistant-row]:focus-within_&]:opacity-100 has-hover:[[data-assistant-row][data-actions-visible=true]_&]:pointer-events-auto has-hover:[[data-assistant-row][data-actions-visible=true]_&]:opacity-100 data-[force-visible=true]:pointer-events-auto data-[force-visible=true]:opacity-100",
+          alwaysShowActions && "no-hover:pointer-events-auto no-hover:opacity-100",
           branchPending && "pointer-events-auto opacity-100",
         )}
         data-force-visible={branchPending ? "true" : undefined}

@@ -3,11 +3,15 @@ import {
   LoadingSurface,
   LoadingTrack,
 } from "@liveagent/ui/components/hub/HubLoading";
+import {
+  SKILL_CARD_ENTER_CLASS,
+  SKILLS_SCAN_DOTS_CLASS,
+} from "@liveagent/ui/components/hub/hubMotionStyles";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 
 export function ScanActivityDots() {
   return (
-    <span className="ml-0.5 inline-flex gap-2px" aria-hidden="true">
+    <span className={`ml-0.5 inline-flex gap-2px ${SKILLS_SCAN_DOTS_CLASS}`} aria-hidden="true">
       <span className="skills-scan-dot size-1 rounded-full bg-foreground/55" />
       <span className="skills-scan-dot size-1 rounded-full bg-foreground/55" />
       <span className="skills-scan-dot size-1 rounded-full bg-foreground/55" />
@@ -35,7 +39,11 @@ export function SkillsContentLoadingState(props: { title: string; description: s
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {[1, 2, 3, 4, 5, 6].map((item) => (
-          <LoadingSurface variant="skeleton" key={item} className="skill-card-enter p-3.5">
+          <LoadingSurface
+            variant="skeleton"
+            key={item}
+            className={`skill-card-enter p-3.5 ${SKILL_CARD_ENTER_CLASS}`}
+          >
             <div className="flex items-center gap-3">
               <Skeleton className="size-9 shrink-0 rounded-lg" />
               <div className="flex-1 space-y-2">

@@ -1,7 +1,5 @@
 @import "tailwindcss";
 @import "../../../agent-ui/src/styles/base.css";
-@import "../../../agent-ui/src/styles/transcript.css";
-@import "../../../agent-ui/src/styles/common.css";
 @reference "../../../agent-ui/src/styles/semantic-colors.css";
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:is(.dark *));
@@ -21,76 +19,100 @@
   font-display: swap;
 }
 
-@layer components {
-  .sidebar-context-menu[data-state="open"] {
-    animation: sidebarMenuIn var(--ui-duration-180ms) var(--ease-ui-enter);
-    --tw-enter-opacity: initial;
-    --tw-enter-scale: initial;
-    --tw-enter-translate-x: initial;
-  }
+/* Gateway-wide theme variables and browser scrollbar primitives have no
+   component host; all product layout and state styling lives in TSX classes. */
+html[data-liveagent-webui="gateway"] {
+  --ring: 220 13% 62%;
+  --gateway-scrollbar-size: var(--spacing-10px);
+  --gateway-scrollbar-track: transparent;
+  --gateway-scrollbar-track-hover: hsl(var(--muted) / 0.34);
+  --gateway-scrollbar-thumb: hsl(var(--muted-foreground) / 0.22);
+  --gateway-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.36);
+  --gateway-scrollbar-thumb-active: hsl(var(--muted-foreground) / 0.5);
+  --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.82);
+  --project-tools-tabs-scrollbar-track: hsl(var(--muted) / 0.42);
+  --project-tools-tabs-scrollbar-track-hover: var(--gateway-scrollbar-track-hover);
+  --project-tools-tabs-scrollbar-thumb: var(--gateway-scrollbar-thumb);
+  --project-tools-tabs-scrollbar-thumb-hover: var(--gateway-scrollbar-thumb-hover);
+  --project-tools-tabs-scrollbar-thumb-border: var(--gateway-scrollbar-thumb-border);
+}
 
-  .sidebar-context-menu[data-state="closed"] {
-    animation: sidebarMenuOut var(--ui-duration-120ms) var(--ease-in);
-    --tw-exit-opacity: initial;
-    --tw-exit-scale: initial;
-    --tw-exit-translate-x: initial;
-  }
+html[data-liveagent-webui="gateway"].dark {
+  --ring: 220 18% 68%;
+  --gateway-scrollbar-track-hover: hsl(var(--muted) / 0.46);
+  --gateway-scrollbar-thumb: hsl(var(--muted-foreground) / 0.28);
+  --gateway-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.46);
+  --gateway-scrollbar-thumb-active: hsl(var(--muted-foreground) / 0.62);
+  --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.76);
+}
 
-  .mention-composer.is-empty::before {
-    left: 0;
-    right: 0;
-    padding-right: inherit;
-  }
+html[data-liveagent-webui="gateway"],
+html[data-liveagent-webui="gateway"] * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gateway-scrollbar-thumb) transparent;
+}
 
-  .composer-add-dropdown,
-  .composer-branch-dropdown,
-  .composer-safety-dropdown {
-    transform-origin: var(--transform-origin, bottom left);
-    transition:
-      opacity var(--ui-duration-180ms) var(--ease-ui-enter),
-      transform var(--ui-duration-180ms) var(--ease-ui-enter);
-  }
+html[data-liveagent-webui="gateway"]:hover,
+html[data-liveagent-webui="gateway"]:focus-within,
+html[data-liveagent-webui="gateway"] *:hover,
+html[data-liveagent-webui="gateway"] *:focus-within {
+  scrollbar-color: var(--gateway-scrollbar-thumb-hover) transparent;
+}
 
-  .composer-add-dropdown[data-starting-style],
-  .composer-add-dropdown[data-ending-style],
-  .composer-branch-dropdown[data-starting-style],
-  .composer-branch-dropdown[data-ending-style],
-  .composer-safety-dropdown[data-starting-style],
-  .composer-safety-dropdown[data-ending-style] {
-    opacity: 0;
-    transform: translateY(var(--spacing-6px)) scale(0.97);
-  }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar {
+  width: var(--gateway-scrollbar-size);
+  height: var(--gateway-scrollbar-size);
+}
 
-  .composer-add-dropdown[data-ending-style],
-  .composer-branch-dropdown[data-ending-style],
-  .composer-safety-dropdown[data-ending-style] {
-    transition-duration: var(--ui-duration-120ms);
-    transition-timing-function: var(--ease-in);
-    transform: translateY(var(--spacing-5px)) scale(0.975);
-  }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-track,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-track {
+  border-radius: 9999px;
+  background: var(--gateway-scrollbar-track);
+}
 
-  .composer-add-dropdown[data-state="open"],
-  .composer-branch-dropdown[data-state="open"],
-  .composer-safety-dropdown[data-state="open"] {
-    animation: composerReasoningDropdownIn var(--ui-duration-180ms) var(--ease-ui-enter);
-    transform-origin: var(--transform-origin, bottom left);
-  }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-track:hover,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-track:hover {
+  background: var(--gateway-scrollbar-track-hover);
+}
 
-  .composer-add-dropdown[data-state="closed"],
-  .composer-branch-dropdown[data-state="closed"],
-  .composer-safety-dropdown[data-state="closed"] {
-    animation: composerReasoningDropdownOut var(--ui-duration-120ms) var(--ease-in) forwards;
-    transform-origin: var(--transform-origin, bottom left);
-  }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb {
+  min-width: var(--spacing-36px);
+  min-height: var(--spacing-36px);
+  border: var(--spacing-3px) solid transparent;
+  border-radius: 9999px;
+  background-color: var(--gateway-scrollbar-thumb);
+  background-clip: content-box;
+}
 
-  @media (prefers-reduced-motion: reduce) {
-    .composer-add-dropdown,
-    .composer-branch-dropdown,
-    .composer-safety-dropdown {
-      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides dropdown open/close animations. */
-      animation: none !important;
-      /* biome-ignore lint/complexity/noImportantStyles: Preserve reduced-motion overrides. */
-      transition: none !important;
-    }
-  }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb:hover,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb:hover {
+  border-width: var(--spacing-2px);
+  background-color: var(--gateway-scrollbar-thumb-hover);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb:active,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb:active {
+  border-width: var(--spacing-2px);
+  background-color: var(--gateway-scrollbar-thumb-active);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-corner,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.08), transparent 24%),
+    radial-gradient(circle at bottom right, hsl(var(--ring) / 0.08), transparent 28%),
+    hsl(var(--background));
+}
+
+html.dark body {
+  background:
+    radial-gradient(circle at top left, var(--ui-color-hsl-220-60-60-0p08), transparent 24%),
+    radial-gradient(circle at bottom right, var(--ui-color-hsl-260-50-55-0p08), transparent 28%),
+    hsl(var(--background));
 }

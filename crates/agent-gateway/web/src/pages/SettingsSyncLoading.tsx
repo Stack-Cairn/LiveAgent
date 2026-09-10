@@ -12,11 +12,11 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
       aria-live="polite"
     >
       <div
-        className="sync-loading-orb size-200px top-minus-80px left-minus-64px bg-hsl-210-100-86-0p55 animate-sync-loading-orb-1 dark:bg-hsl-210-80-32-0p25 absolute pointer-events-none"
+        className="pointer-events-none absolute top-minus-80px left-minus-64px -z-1 size-200px animate-sync-loading-orb-1 rounded-half bg-hsl-210-100-86-0p55 opacity-(--ui-opacity-0p55) blur-60px will-change-transform motion-reduce:animate-none dark:bg-hsl-210-80-32-0p25"
         aria-hidden="true"
       />
       <div
-        className="sync-loading-orb size-170px bottom-minus-72px right-minus-54px bg-hsl-250-70-86-0p45 animate-sync-loading-orb-2 dark:bg-hsl-250-60-32-0p2 absolute pointer-events-none"
+        className="pointer-events-none absolute right-minus-54px bottom-minus-72px -z-1 size-170px animate-sync-loading-orb-2 rounded-half bg-hsl-250-70-86-0p45 opacity-(--ui-opacity-0p55) blur-60px will-change-transform motion-reduce:animate-none dark:bg-hsl-250-60-32-0p2"
         aria-hidden="true"
       />
 
@@ -37,10 +37,13 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
         {translate("chat.runtime.settingsSyncTitle", locale)}
       </strong>
 
-      <span className="sync-loading-dots inline-flex items-center gap-6px h-8px" aria-hidden="true">
-        <i className="size-7px" />
-        <i className="size-7px" />
-        <i className="size-7px" />
+      <span
+        className="inline-flex h-8px items-center gap-6px [&>i]:size-7px [&>i]:animate-[syncDotBounce_var(--ui-duration-1200ms)_ease-in-out_infinite] [&>i]:rounded-half [&>i]:bg-primary [&>i]:will-change-[transform,opacity] motion-reduce:[&>i]:animate-none [&>i:nth-child(2)]:[animation-delay:var(--ui-duration-160ms)] [&>i:nth-child(3)]:[animation-delay:var(--ui-duration-320ms)]"
+        aria-hidden="true"
+      >
+        <i />
+        <i />
+        <i />
       </span>
     </div>
   );

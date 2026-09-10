@@ -81,6 +81,11 @@ import {
   liveTrajectoryEvents,
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_SCROLL_TO_BOTTOM_CLASS,
+  GATEWAY_TRANSCRIPT_SCROLL_CLASS,
+} from "@/lib/webStyleClasses";
 import type { SectionId } from "@/pages/settings/types";
 import { ConversationStatsBarHost } from "../ConversationStatsBarHost";
 import {
@@ -807,10 +812,12 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           {blockedMessage}
         </div>
       ) : null}
-      <div className="gateway-chat-frame relative flex size-full min-h-0 flex-col overflow-hidden relative flex h-full min-h-0 min-w-0 flex-1 flex-col max-820:h-full">
+      <div
+        className={`${GATEWAY_CHAT_FRAME_CLASS} relative flex size-full h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden max-820:h-full`}
+      >
         <section
           ref={usePrimary ? primary?.stageRef : undefined}
-          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden"
+          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden @container"
           style={
             {
               [CHAT_TRANSCRIPT_WIDTH_CSS_VAR]: `${context.transcriptContentWidth}px`,
@@ -843,7 +850,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                     ? primary.setTranscriptViewport
                     : setViewport
                 }
-                className="gateway-transcript-scroll"
+                className={GATEWAY_TRANSCRIPT_SCROLL_CLASS}
               >
                 {usePrimary && primary ? (
                   <ChangedFilesActionsProvider value={primary.changedFilesActions}>
@@ -867,7 +874,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               {!transcriptFollowing && rowCount > 0 ? (
                 <button
                   type="button"
-                  className="gateway-scroll-to-bottom"
+                  className={GATEWAY_SCROLL_TO_BOTTOM_CLASS}
                   onClick={handleJumpToBottom}
                   aria-label="滚动到底部"
                   title="滚动到底部"

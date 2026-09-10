@@ -7,6 +7,11 @@ import type { ChatEntry } from "../lib/chatUi";
 import type { SharedHistoryDetail } from "../lib/gatewayTypes";
 import { parseHistoryMessagesJsonAsync } from "../lib/historyParser";
 import { fetchSharedHistory, formatSharedHistoryTimestamp } from "../lib/historyShare";
+import {
+  GATEWAY_MAIN_BACKDROP_CLASS,
+  GATEWAY_MAIN_SHELL_CLASS,
+  GATEWAY_SHELL_CLASS,
+} from "../lib/webStyleClasses";
 
 type SharedHistoryPageProps = {
   token: string;
@@ -65,9 +70,9 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
   );
 
   return (
-    <div className="gateway-shell history-share-page">
-      <main className="gateway-main-shell">
-        <div className="gateway-main-backdrop absolute inset-0 pointer-events-none" />
+    <div className={`${GATEWAY_SHELL_CLASS} history-share-page`}>
+      <main className={GATEWAY_MAIN_SHELL_CLASS}>
+        <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
         <div className="relative z-(--layer-content) flex size-full min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex min-h-76px items-center justify-between gap-16px border-b border-solid border-b-border/55 bg-background/78 px-22px py-14px backdrop-blur-18px max-820:min-h-auto max-820:items-start max-820:flex-col max-820:px-14px max-820:py-12px">
             <div className="flex min-w-0 items-center gap-3">
@@ -88,13 +93,11 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
               </div>
             </div>
             {state.status === "ready" ? (
-              <div className="history-share-meta flex shrink-0 flex-wrap justify-end gap-8px text-muted-foreground text-12px max-820:justify-start">
-                <span className="rounded-999px py-4px px-9px">
+              <div className="history-share-meta flex shrink-0 flex-wrap justify-end gap-8px text-muted-foreground text-12px max-820:justify-start [&>span]:border [&>span]:border-border/65 [&>span]:bg-background/72">
+                <span className="rounded-full py-4px px-9px">
                   {summary?.message_count ?? state.entries.length} 条消息
                 </span>
-                {updatedAt ? (
-                  <span className="rounded-999px py-4px px-9px">{updatedAt}</span>
-                ) : null}
+                {updatedAt ? <span className="rounded-full py-4px px-9px">{updatedAt}</span> : null}
               </div>
             ) : null}
           </header>

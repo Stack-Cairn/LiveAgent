@@ -47,7 +47,7 @@ export function CompactionBand(props: {
       {active ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-0 h-2px w-[34%] rounded-9999px bg-compaction-band-progress animate-compaction-band-progress motion-reduce:animate-none motion-reduce:w-full motion-reduce:opacity-50"
+          className="pointer-events-none absolute bottom-0 left-0 h-2px w-[34%] rounded-full bg-compaction-band-progress animate-compaction-band-progress motion-reduce:animate-none motion-reduce:w-full motion-reduce:opacity-50"
         />
       ) : null}
     </>

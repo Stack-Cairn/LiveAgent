@@ -667,7 +667,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
       ) : null}
 
       {query.trim() ? (
-        <div className="project-file-tree-panel-scroll max-h-40 shrink-0 overflow-auto border-b border-border/60 p-2">
+        <div className="project-file-tree-panel-scroll max-h-40 shrink-0 overflow-auto border-b border-border/60 p-2 web:pb-[max(var(--spacing-16px),env(safe-area-inset-bottom))] web:[scroll-padding-bottom:max(var(--spacing-16px),env(safe-area-inset-bottom))]">
           {search.loading ? (
             <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
@@ -716,7 +716,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
       <div
         role="tree"
         ref={scrollRef}
-        className="project-file-tree-panel-scroll min-h-0 flex-1 select-none overflow-auto p-2"
+        className="project-file-tree-panel-scroll min-h-0 flex-1 select-none overflow-auto p-2 web:pb-[max(var(--spacing-16px),env(safe-area-inset-bottom))] web:[scroll-padding-bottom:max(var(--spacing-16px),env(safe-area-inset-bottom))]"
         onContextMenu={(event) => openContextMenu(event, selectedPath || ROOT_PATH)}
       >
         <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>

@@ -117,6 +117,13 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
     () => settings.customProviders.filter((provider) => provider.type === providerType),
     [settings.customProviders, providerType],
   );
+  const providerById = useMemo(() => {
+    const index = new Map<string, CustomProvider>();
+    for (const provider of settings.customProviders) {
+      if (!index.has(provider.id)) index.set(provider.id, provider);
+    }
+    return index;
+  }, [settings.customProviders]);
 
   const queueValues = useMemo(() => new Set(failover.queue), [failover.queue]);
   const addableProviders = useMemo(
@@ -136,10 +143,10 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   const unavailableQueuedProviderCount = useMemo(
     () =>
       failover.queue.filter((providerId) => {
-        const provider = settings.customProviders.find((item) => item.id === providerId);
+        const provider = providerById.get(providerId);
         return provider ? !hasProviderFailoverConfiguration(provider) : false;
       }).length,
-    [failover.queue, settings.customProviders],
+    [failover.queue, providerById],
   );
   const addableProviderOptions = useMemo<ModelPickerOption[]>(
     () =>
@@ -161,12 +168,12 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   }
 
   function queueEntryLabel(providerId: string) {
-    const provider = settings.customProviders.find((item) => item.id === providerId);
+    const provider = providerById.get(providerId);
     return provider?.name ?? providerId;
   }
 
   function queueEntryDetail(providerId: string) {
-    const provider = settings.customProviders.find((item) => item.id === providerId);
+    const provider = providerById.get(providerId);
     return provider?.baseUrl ?? "";
   }
 
@@ -558,7 +565,7 @@ function CustomSettingsDrawer(
 }
 
 const PROVIDER_ACTION_CLASS =
-  "settings-provider-action h-full min-w-0 gap-1.5 rounded-md px-2.5 text-12p5px font-medium shadow-none";
+  "settings-provider-action inline-flex h-full min-w-0 items-center justify-center gap-6px rounded-[calc(var(--radius)-var(--radius-4px))] border-0 bg-transparent px-10px py-0 text-12p5px font-medium text-muted-foreground shadow-none transition-[background-color,color,box-shadow] duration-150 ease-default has-hover:hover:bg-background/72 has-hover:hover:text-foreground data-[open]:bg-background data-[open]:text-foreground data-[open]:shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)] data-[popup-open]:bg-background data-[popup-open]:text-foreground data-[popup-open]:shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)] focus-visible:z-1 focus-visible:outline-none focus-visible:shadow-[0_0_0_var(--spacing-2px)_hsl(var(--background)),0_0_0_var(--spacing-4px)_hsl(var(--ring))] motion-reduce:transition-none max-[860px]:min-w-32px max-[860px]:px-8px";
 
 function ProviderActionGroup(props: {
   activeTab: ProviderId;
@@ -574,20 +581,23 @@ function ProviderActionGroup(props: {
 
   return (
     <fieldset
-      className="settings-provider-action-group min-w-0 border-0 p-0"
+      className="inline-flex h-36px min-w-0 shrink-0 items-stretch gap-1px rounded-(--radius) border-0 bg-muted p-4px text-muted-foreground [&>:not(.settings-provider-action):not(.settings-provider-action-slot)]:contents max-640:w-full max-640:flex-none max-640:[&>.settings-provider-action]:flex-1 max-640:[&>.settings-provider-action-slot]:flex-1"
       aria-label={t("settings.providerActionGroup")}
     >
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        className={cn(PROVIDER_ACTION_CLASS, "settings-provider-action--primary")}
+        className={cn(
+          PROVIDER_ACTION_CLASS,
+          "bg-primary text-primary-foreground shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--primary)/0.28)] has-hover:hover:bg-primary/90 has-hover:hover:text-primary-foreground",
+        )}
         onClick={onAdd}
         title={t("settings.addProvider")}
         aria-label={t("settings.addProvider")}
       >
         <Plus className="size-3.5" />
-        <span className="settings-provider-action-label">{t("settings.addProviderShort")}</span>
+        <span className="max-[860px]:hidden max-640:inline">{t("settings.addProviderShort")}</span>
       </Button>
       <ProviderSettingsExtension
         activeTab={activeTab}
@@ -601,14 +611,15 @@ function ProviderActionGroup(props: {
         size="sm"
         className={cn(
           PROVIDER_ACTION_CLASS,
-          customSettingsOpen && "settings-provider-action-active",
+          customSettingsOpen &&
+            "bg-background text-foreground shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)]",
         )}
         onClick={onOpenCustomSettings}
         title={t("settings.openCustomSettings")}
         aria-label={t("settings.openCustomSettings")}
       >
         <Settings className="size-3.5" />
-        <span className="settings-provider-action-label">
+        <span className="max-[860px]:hidden max-640:inline">
           {t("settings.providerActionSettings")}
         </span>
       </Button>
@@ -1030,7 +1041,7 @@ export function ProvidersSection(
     <>
       <div className="flex min-h-0 flex-1 flex-col web:max-820:min-w-0 web:max-820:min-h-0">
         <div className="mb-4 flex shrink-0 items-center justify-between gap-3 min-w-0 max-640:flex-col max-640:items-stretch web:max-820:flex web:max-820:w-full web:max-820:flex-col web:max-820:items-stretch web:max-820:gap-10px web:max-820:mb-10px web:max-820:overflow-visible">
-          <div className="settings-provider-tabs inline-flex h-9 min-w-0 items-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground">
+          <div className="inline-flex h-9 min-w-0 items-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0 max-640:w-full">
             {PROVIDER_TABS.map((tab) => (
               <button
                 key={tab}

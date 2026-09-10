@@ -4,6 +4,7 @@ import {
   LoadingSurface,
   LoadingTrack,
 } from "@liveagent/ui/components/hub/HubLoading";
+import { SKILL_CARD_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   AlertTriangle,
   Check,
@@ -323,7 +324,11 @@ export function SkillsStoreView(props: {
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {[1, 2, 3, 4, 5, 6].map((item) => (
-                  <LoadingSurface variant="skeleton" key={item} className="skill-card-enter p-3.5">
+                  <LoadingSurface
+                    variant="skeleton"
+                    key={item}
+                    className={`skill-card-enter p-3.5 ${SKILL_CARD_ENTER_CLASS}`}
+                  >
                     <div className="space-y-3">
                       <div className="flex items-center gap-3">
                         <Skeleton className="size-9 shrink-0 rounded-lg" />
@@ -381,6 +386,7 @@ export function SkillsStoreView(props: {
                     }}
                     className={cn(
                       "skill-card-enter flex h-full cursor-pointer flex-col rounded-2xl border bg-card p-3.5 text-left shadow-xs focus:outline-none focus:ring-2 focus:ring-ring",
+                      SKILL_CARD_ENTER_CLASS,
                       done
                         ? "border-emerald-500/40 dark:border-emerald-400/35"
                         : "border-border/70",

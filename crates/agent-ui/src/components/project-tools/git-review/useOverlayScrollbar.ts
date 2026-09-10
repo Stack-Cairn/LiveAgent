@@ -13,7 +13,9 @@
 
 import { type UIEvent as ReactUIEvent, useCallback, useEffect, useRef } from "react";
 
-export const GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS = "git-review-transient-scrollbar";
+const GIT_REVIEW_TRANSIENT_SCROLLBAR_MARKER = "git-review-transient-scrollbar";
+export const GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS =
+  "git-review-transient-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0";
 const GIT_REVIEW_SCROLLBAR_HIDE_DELAY_MS = 1000;
 const GIT_REVIEW_SCROLLBAR_HOVER_CHECK_MS = 140;
 const GIT_REVIEW_SCROLLBAR_THUMB_SIZE_PX = 4;
@@ -243,8 +245,10 @@ function ensureGitReviewScrollbarOverlay(element: HTMLElement) {
     delete element.dataset.scrollbarHover;
     scheduleGitReviewScrollbarHide(element, GIT_REVIEW_SCROLLBAR_HOVER_CHECK_MS);
   };
-  vertical.className = "git-review-floating-scrollbar git-review-floating-scrollbar-vertical";
-  horizontal.className = "git-review-floating-scrollbar git-review-floating-scrollbar-horizontal";
+  const floatingClassName =
+    "fixed z-raised touch-none select-none rounded-full bg-muted-foreground/34 opacity-0 pointer-events-none [contain:layout_paint] [transition:opacity_var(--ui-duration-240ms)_ease,background-color_var(--ui-duration-180ms)_ease] hover:bg-muted-foreground/52 data-[dragging=true]:bg-muted-foreground/52 data-[visible=true]:pointer-events-auto data-[visible=true]:opacity-100";
+  vertical.className = `${floatingClassName} w-3px min-h-24px`;
+  horizontal.className = `${floatingClassName} h-3px min-w-24px`;
   vertical.dataset.visible = "false";
   horizontal.dataset.visible = "false";
   vertical.addEventListener("pointerenter", handleEnter);
@@ -291,7 +295,7 @@ function scheduleGitReviewScrollbarHide(
 // the same overlay so the thumb follows programmatic scrolling too. Only
 // elements that already opted in via the transient-scrollbar class react.
 export function syncGitReviewAutoscrollScrollbar(viewport: HTMLElement) {
-  if (!viewport.classList.contains(GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS)) return;
+  if (!viewport.classList.contains(GIT_REVIEW_TRANSIENT_SCROLLBAR_MARKER)) return;
   viewport.dataset.scrollActive = "true";
   updateGitReviewScrollbarOverlay(viewport);
   scheduleGitReviewScrollbarHide(viewport);

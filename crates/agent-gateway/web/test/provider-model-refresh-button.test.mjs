@@ -1,4 +1,4 @@
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
+import { readStyleSource } from "../../../agent-ui/test-support/style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -15,7 +15,6 @@ const providerListSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
   "utf8",
 );
-const responsiveStylesSource = readStyleSource(new URL("../src/styles/responsive.css", import.meta.url));
 
 test("WebUI provider model refresh only disables while a request is running", () => {
   const clickHandlerIndex = providersSectionSource.indexOf("onClick={handleRefresh}");

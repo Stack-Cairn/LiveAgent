@@ -99,6 +99,15 @@ import {
   liveTrajectoryEvents,
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_MAIN_BACKDROP_CLASS,
+  GATEWAY_MAIN_SHELL_CLASS,
+  GATEWAY_SCROLL_TO_BOTTOM_CLASS,
+  GATEWAY_SETTINGS_OVERLAY_CLASS,
+  GATEWAY_SHELL_CLASS,
+  GATEWAY_TRANSCRIPT_SCROLL_CLASS,
+} from "@/lib/webStyleClasses";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { openUrl } from "@/shims/tauriOpener";
 import { AgentSelector } from "./AgentSelector";
@@ -1238,7 +1247,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
-        <div className="gateway-shell">
+        <div className={GATEWAY_SHELL_CLASS}>
           <input
             ref={fileInputRef}
             type="file"
@@ -1408,8 +1417,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
             {confirmDialog}
 
-            <main className="gateway-main-shell">
-              <div className="gateway-main-backdrop absolute inset-0 pointer-events-none" />
+            <main className={GATEWAY_MAIN_SHELL_CLASS}>
+              <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
               <AppWorkbenchChrome
                 settings={settings}
                 sidebarOpen={sidebarOpen}
@@ -1469,7 +1478,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 className="contents"
                 chat={{
                   containerProps: {
-                    className: "gateway-chat-frame zone-font-scale",
+                    className: `${GATEWAY_CHAT_FRAME_CLASS} zone-font-scale`,
                     style: {
                       "--zone-font-scale": settings.customSettings.fontScale.chat,
                     } as CSSProperties,
@@ -1481,22 +1490,22 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   content: (
                     <>
                       {statusError ? (
-                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
+                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
                           {statusError}
                         </div>
                       ) : null}
                       {chatProtocolIncompatibleMessage && !statusError ? (
-                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
+                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
                           {chatProtocolIncompatibleMessage}
                         </div>
                       ) : null}
                       {settingsSyncError ? (
-                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
+                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
                           {settingsSyncError}
                         </div>
                       ) : null}
                       {chatError && displayedTranscriptRowCount === 0 ? (
-                        <div className="gateway-banner-error mt-12px mx-20px mb-0 text-destructive rounded-14px py-10px px-12px text-13px max-640:mt-8px max-640:mx-10px max-640:mb-0">
+                        <div className="gateway-banner-error mx-20px mt-12px mb-0 rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-13px text-destructive max-640:mx-10px max-640:mt-8px max-640:mb-0">
                           {chatError}
                         </div>
                       ) : null}
@@ -1506,7 +1515,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                       ) : (
                         <section
                           ref={transcriptStageRef}
-                          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden"
+                          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden @container"
                           // Preferred (persisted) width, so a fresh mount paints at
                           // the user's width instead of the default.
                           // TranscriptWidthControls narrows this same variable to
@@ -1535,7 +1544,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                               <ScrollArea
                                 ref={setTranscriptScrollAreaRoot}
                                 viewportRef={setTranscriptViewport}
-                                className="gateway-transcript-scroll"
+                                className={GATEWAY_TRANSCRIPT_SCROLL_CLASS}
                               >
                                 <ChangedFilesActionsProvider value={changedFilesActions}>
                                   <CheckpointRewindProvider
@@ -1621,7 +1630,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           {renderedConversationView === "conversation" && !transcriptFollowing ? (
                             <button
                               type="button"
-                              className="gateway-scroll-to-bottom"
+                              className={GATEWAY_SCROLL_TO_BOTTOM_CLASS}
                               onClick={transcriptFollow.jumpToBottom}
                               aria-label="滚动到底部"
                               title="滚动到底部"
@@ -2022,7 +2031,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           {settingsOpen ? (
             <div
               className={cn(
-                "gateway-settings-overlay",
+                GATEWAY_SETTINGS_OVERLAY_CLASS,
                 // Keep the settled transform at none: a transformed settings scroller
                 // can leave blank rasterized regions on Android Chrome.
                 overlay === "open" ? "opacity-100! transform-none!" : "",

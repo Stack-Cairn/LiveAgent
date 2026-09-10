@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { splitUtility } from "../../../../scripts/lib/style-classes.mjs";
 const require = createRequire(new URL("../../package.json", import.meta.url));
 const parser = require("@babel/parser");
+
+function splitUtility(token) {
+  let depth = 0;
+  let lastColon = -1;
+  for (let i = 0; i < token.length; i++) {
+    if ("[(".includes(token[i])) depth++;
+    if (")]".includes(token[i])) depth--;
+    if (token[i] === ":" && depth === 0) lastColon = i;
+  }
+  const prefix = token.slice(0, lastColon + 1);
+  let utility = token.slice(lastColon + 1);
+  if (utility.startsWith("!")) utility = utility.slice(1);
+  if (utility.endsWith("!")) utility = utility.slice(0, -1);
+  return { prefix, utility };
+}
 /** Structural size assertion: independent of class order and size-* versus separate height/width notation. */
 export function staticDimensionCandidates(source, tag, requiredClasses = []) {
   const candidates = [];

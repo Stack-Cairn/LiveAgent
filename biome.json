@@ -7,10 +7,13 @@
   },
   "files": {
     "includes": [
-      "src/**",
+      "crates/agent-ui/src/**",
+      "crates/agent-gui/src/**",
+      "crates/agent-gateway/web/src/**",
       "!!**/dist",
       "!!**/node_modules",
-      "!src/lib/models/catalog.generated.ts"
+      "!**/src/lib/models/catalog.generated.ts",
+      "!crates/agent-gateway/web/src/lib/proto/gen/**"
     ]
   },
   "formatter": {
@@ -39,7 +42,9 @@
         "noUnusedImports": "error"
       },
       "suspicious": {
-        "noArrayIndexKey": "warn"
+        "noArrayIndexKey": "warn",
+        "noDuplicateCustomProperties": "error",
+        "noDuplicateProperties": "error"
       }
     }
   },
@@ -62,19 +67,5 @@
         "organizeImports": "on"
       }
     }
-  },
-  "overrides": [
-    {
-      "includes": [
-        "**/*.css"
-      ],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noDuplicateProperties": "off"
-          }
-        }
-      }
-    }
-  ]
+  }
 }

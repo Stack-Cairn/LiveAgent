@@ -109,33 +109,6 @@ Web Animations 的 `easing` 和 xterm 的颜色解析器不接受 CSS 变量表�
   `ChoiceCard` 只复用原 div/button 的样式。文案、请求状态、选择逻辑和事件仍归页面。
 - 确认弹层和标签 Tooltip 共用 `animations.css` 的状态规则，通过各自的距离、进入和
   退出时长参数保留差异。检查变量引用时也要覆盖关键帧、脚本和跨端消费。
-- 阴影、背景图、drop-shadow 的 Tailwind 合并名称从 `tokens.css` 自动生成到
-  `style-token-names.generated.json`。修改这些 token 后运行 `pnpm style:sync`；
-  不手改生成文件。`cn()` 直接消费登记表，不再维护组件名称前缀白名单。
-- `pnpm check:style-drift` 已纳入统一检查：比较工作区与 HEAD，只报告新增的等价简写
-  候选、部分固定任意值、分散的动画定义、重复原语表达式和旧配置文件。
-  CI 已按 PR／push 的实际基线执行；本地也可用
-  `pnpm check:style-drift --base <已确认的基线引用>`。
-  动态几何、不同条件或有重叠覆盖的宽高/边距不机械合并；此检查不声称识别所有语义等值颜色。
-
-## 可重复使用的样式基线
-
-修改前保存当前真实组件和双端 CSS：
-
-```sh
-pnpm style:preview --out /tmp/liveagent-style-before --no-serve
-```
-
-修改后运行：
-
-```sh
-pnpm style:preview --baseline /tmp/liveagent-style-before
-```
-
-终端会给出仅监听本机的页面地址。可以并排操作真实组件，也可以运行矩阵比较两端、
-亮暗主题、1280/380px、禁用与焦点，以及 CSS 减少动态效果分支；比较动画 0ms/500ms 的
-元素和伪元素标准计算属性。基线与输出目录不能相同。按 Ctrl+C 结束预览服务。
-
-默认构建输出在临时目录，不进入产品页面或生产构建；只查看当前组件时运行
-`pnpm style:preview`。对比页模拟 CSS 媒体条件，不修改系统偏好，不替代完整业务流程、
-真实拖拽、原生窗口或所有动画时间点的验收。样例集中在 `scripts/style-preview/client.tsx`。
+- 阴影、背景图、drop-shadow 的 Tailwind 合并名称登记在
+  `style-token-names.generated.json`，由共享 UI 的契约测试核对其与 `tokens.css` 一致。
+  `cn()` 直接消费登记表，避免用组件名称前缀猜测工具类类型。

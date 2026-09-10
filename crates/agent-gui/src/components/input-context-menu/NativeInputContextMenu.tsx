@@ -402,7 +402,8 @@ export function useNativeInputContextMenu(): {
             role="menu"
             className={cn(
               "animate-editor-context-menu origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
-              isExiting && "editor-context-menu-exit",
+              isExiting &&
+                "editor-context-menu-exit pointer-events-none animate-[editorContextMenuOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] motion-reduce:animate-none motion-reduce:opacity-0",
             )}
             style={{ left: renderedSnapshot.x, top: renderedSnapshot.y }}
             onContextMenu={(event) => {

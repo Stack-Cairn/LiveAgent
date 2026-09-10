@@ -1,5 +1,4 @@
 import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -37,7 +36,10 @@ const markdownSource = fs.readFileSync(
   new URL("../../../agent-ui/src/components/Markdown.tsx", import.meta.url),
   "utf8",
 );
-const chatStylesSource = readStyleSource(new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url));
+const markdownStylesSource = fs.readFileSync(
+  new URL("../../../agent-ui/src/components/markdown/markdownStyles.ts", import.meta.url),
+  "utf8",
+);
 
 test("tool and operation blocks share the same compact rhythm as prose", () => {
   assert.match(roundContentSource, /const isOperationBlock = block\.kind !== "text";/);
@@ -54,19 +56,15 @@ test("operation components defer outer spacing to the shared block wrapper", () 
 });
 
 test("chat typography keeps body copy substantial and emphasis at weight 500", () => {
-  assert.match(chatStylesSource, /\.chat-markdown \{[\s\S]*?font-weight: 450;/);
-  assert.match(chatStylesSource, /\.chat-markdown p \{[\s\S]*?font-weight: 450;/);
-  assert.match(
-    chatStylesSource,
-    /\.chat-markdown strong,[\s\S]*?\[data-streamdown="strong"\][\s\S]*?@apply font-medium/,
-  );
-  assert.match(markdownSource, /\[&_strong\]:font-medium/);
+  assert.match(markdownStylesSource, /font-\[450\]/);
+  assert.match(markdownStylesSource, /\[&_p\]:font-\[450\]/);
+  assert.match(markdownStylesSource, /\[&_strong\]:font-medium/);
+  assert.match(markdownSource, /CHAT_MARKDOWN_CLASS/);
 });
 
 test("inline code uses the higher-contrast transcript treatment", () => {
-  assert.match(chatStylesSource, /bg-foreground\/\[0\.085\]/);
-  assert.match(chatStylesSource, /rounded-xs/);
-  assert.match(markdownSource, /bg-foreground\/\[0\.085\]/);
+  assert.match(markdownStylesSource, /bg-foreground\/\[0\.085\]/);
+  assert.match(markdownStylesSource, /rounded-xs/);
 });
 
 test("operation rows use compact icons and reveal disclosure chevrons on intent", () => {

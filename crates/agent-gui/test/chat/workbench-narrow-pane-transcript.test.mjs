@@ -77,8 +77,16 @@ test("FloorNavRail clamps its panel to the container, not the viewport", () => {
 });
 
 test("gateway transcript stage declares containment for the shared rail", () => {
-  const source = read("../../../agent-gateway/web/src/styles/base-chat.css");
-  const stageRule = source.match(/\.gateway-transcript-stage \{[\s\S]*?\}/);
-  assert.ok(stageRule, ".gateway-transcript-stage rule not found");
-  assert.match(stageRule[0], /container-type: inline-size/);
+  const sources = [
+    read("../../../agent-gateway/web/src/app/GatewayAppView.tsx"),
+    read("../../../agent-gateway/web/src/app/workbench/GatewayConversationPaneHost.tsx"),
+  ];
+
+  for (const source of sources) {
+    const stageClass = source.match(
+      /className="([^"]*\bgateway-transcript-stage\b[^"]*)"/,
+    );
+    assert.ok(stageClass, "gateway-transcript-stage class not found");
+    assert.match(stageClass[1], /(?:^|\s)@container(?:\s|$)/);
+  }
 });

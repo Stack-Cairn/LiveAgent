@@ -120,7 +120,7 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter @liveagent/gateway-webui...
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter @liveagent/gateway-webui...
 
       - name: Build WebUI
         working-directory: crates/agent-gateway/web
@@ -150,7 +150,7 @@ jobs:
       - name: Install dependencies
         # GUI frontend tests load shared Gateway WebUI modules (including STT adapters).
         # Install that workspace and its transitive dependencies in this isolated job.
-        run: pnpm install --frozen-lockfile --filter liveagent... --filter @liveagent/gateway-webui...
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter liveagent... --filter @liveagent/gateway-webui...
 
       - name: Typecheck and build GUI frontend
         working-directory: crates/agent-gui
@@ -240,8 +240,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -251,7 +249,13 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter @liveagent/ui...
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter @liveagent/ui...
+
+      - name: Typecheck shared UI
+        run: pnpm typecheck:ui
+
+      - name: Lint shared UI
+        run: pnpm lint:ui
 
       - name: Run check script tests
         run: pnpm check:script-tests
@@ -259,15 +263,11 @@ jobs:
       - name: Check shared UI dependency boundaries
         run: pnpm check:ui-boundaries
 
-      - name: Check incremental style drift
-        env:
-          STYLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Reject new Biome warnings
         run: |
-          if git cat-file -e "${STYLE_BASE_SHA}^{commit}" 2>/dev/null; then
-            pnpm check:style-drift --base "$STYLE_BASE_SHA"
-          else
-            pnpm check:style-drift --base "$(git hash-object -t tree /dev/null)"
-          fi
+          node scripts/check-biome-changed.mjs ui
+          node scripts/check-biome-changed.mjs gui
+          node scripts/check-biome-changed.mjs webui
 
   whitespace:
     name: Diff Hygiene

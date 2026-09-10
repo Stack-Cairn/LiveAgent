@@ -1,9 +1,7 @@
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const stylesSource = readStyleSource(new URL("../src/styles/base-chat.css", import.meta.url));
 const controlStylesSource = readFileSync(
   new URL("../../../agent-ui/src/lib/chat/composerControlStyles.ts", import.meta.url),
   "utf8",
@@ -23,8 +21,8 @@ const composerSource = readFileSync(
 
 test("mobile composer model and branch controls keep truncated labels visible", () => {
   assert.match(
-    stylesSource,
-    /@media \(max-width: 480px\) \{[\s\S]*?\.composer-model-trigger \{[\s\S]*?flex: 1 1 0;[\s\S]*?width: auto;[\s\S]*?min-width: 0;/,
+    controlStylesSource,
+    /web:max-480:w-auto[^"\n]*web:max-480:min-w-0[^"\n]*web:max-480:flex-1/,
   );
   assert.match(
     controlStylesSource,
@@ -32,8 +30,8 @@ test("mobile composer model and branch controls keep truncated labels visible", 
   );
   assert.match(controlStylesSource, /min-w-0 truncate/);
   assert.match(
-    stylesSource,
-    /@media \(max-width: 480px\) \{[\s\S]*?\.composer-model-trigger > svg:last-child \{\s*display: block;/,
+    controlStylesSource,
+    /web:max-480:\[&_>svg:last-child\]:block/,
   );
 });
 

@@ -2,7 +2,7 @@
 // an `@container`), not viewport media queries: a conversation pane in a
 // split window must collapse its toolbar labels even on a wide screen.
 export const COMPOSER_CONTROL_TRIGGER_CLASS =
-  "composer-model-trigger inline-flex h-8 min-w-8 max-w-10p5rem shrink-0 items-center justify-start gap-1.5 overflow-hidden rounded-full px-2 text-xs font-medium text-foreground shadow-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 disabled:opacity-40 @max-[480px]:w-8 @max-[480px]:justify-center @max-[480px]:gap-0 @max-[480px]:px-0";
+  "composer-model-trigger inline-flex h-8 min-w-8 max-w-10p5rem shrink-0 items-center justify-start gap-1.5 overflow-hidden rounded-full px-2 text-xs font-medium text-foreground shadow-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 disabled:opacity-40 @max-[480px]:w-8 @max-[480px]:justify-center @max-[480px]:gap-0 @max-[480px]:px-0 web:font-app web:max-480:w-auto web:max-480:min-w-0 web:max-480:flex-1 web:max-480:px-0p5rem web:max-480:[&_>svg:last-child]:block";
 
 export const COMPOSER_CONTROL_LABEL_CLASS =
   "min-w-0 truncate @max-[480px]:hidden web:font-app web:max-480:block";

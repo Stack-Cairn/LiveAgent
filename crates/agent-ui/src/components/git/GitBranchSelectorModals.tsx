@@ -131,7 +131,7 @@ export function GitInitModal(props: {
                 id={branchId}
                 value={branch}
                 onChange={(event) => onBranchChange(event.target.value)}
-                className="git-branch-selector-input h-9 text-sm"
+                className="git-branch-selector-input h-9 text-sm web:text-xs"
                 placeholder="main"
                 autoFocus
                 disabled={loading}
@@ -146,7 +146,7 @@ export function GitInitModal(props: {
                   id={userNameId}
                   value={userName}
                   onChange={(event) => onUserNameChange(event.target.value)}
-                  className="git-branch-selector-input h-9 text-sm"
+                  className="git-branch-selector-input h-9 text-sm web:text-xs"
                   disabled={loading}
                 />
               </div>
@@ -158,7 +158,7 @@ export function GitInitModal(props: {
                   id={userEmailId}
                   value={userEmail}
                   onChange={(event) => onUserEmailChange(event.target.value)}
-                  className="git-branch-selector-input h-9 text-sm"
+                  className="git-branch-selector-input h-9 text-sm web:text-xs"
                   disabled={loading}
                 />
               </div>

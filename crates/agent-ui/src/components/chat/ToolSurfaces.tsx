@@ -117,7 +117,7 @@ export function ToolScrollablePre(props: { children: ReactNode; className?: stri
   return (
     <pre
       className={cn(
-        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-md px-2.5 py-2 text-scaled-11p5px leading-1p6",
+        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-md px-2.5 py-2 text-scaled-11p5px leading-1p6 [scrollbar-color:transparent_transparent] [scrollbar-width:thin] transition-[scrollbar-color] duration-200 ease-default hover:[scrollbar-color:hsl(var(--muted-foreground)/0.3)_transparent] [&::-webkit-scrollbar]:size-10px [&::-webkit-scrollbar-track]:m-6px [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/14 [&::-webkit-scrollbar-thumb]:transition-colors [&::-webkit-scrollbar-thumb]:duration-200 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/22 hover:[&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/38 web:[&::-webkit-scrollbar]:size-8px",
         className,
       )}
     >

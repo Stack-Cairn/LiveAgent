@@ -59,7 +59,11 @@ import {
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { SidebarReorderPointer } from "../../lib/sidebar/useSidebarReorderDrag";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
-import { HISTORY_RENAME_INPUT_CLASS, PROJECT_ICON_BUTTON_CLASS } from "./ChatHistorySidebarStyles";
+import {
+  HISTORY_RENAME_INPUT_CLASS,
+  PROJECT_ICON_BUTTON_CLASS,
+  SIDEBAR_CONTEXT_MENU_CLASS,
+} from "./ChatHistorySidebarStyles";
 
 export type WorkspaceProjectRemoveOptions = {
   deleteWorktree?: boolean;
@@ -628,7 +632,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
   if (isPendingDelete) {
     return (
-      <div className="chat-history-row rounded-2xl border border-border/70 bg-background px-3 py-2.5 shadow-xs shadow-black/5">
+      <div className="chat-history-row rounded-2xl border border-border/70 bg-background px-3 py-2.5 shadow-xs shadow-black/5 [contain:layout_paint_style]">
         <p className="truncate text-sm leading-5 text-foreground/80">
           {t("chat.conversationDeleteConfirm").replace("{title}", item.title)}
         </p>
@@ -669,7 +673,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
       style={props.dropPosition ? { contain: "layout style", zIndex: 1 } : undefined}
       className={cn(
         props.isDragging && "opacity-35",
-        "chat-history-row group/item relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        "chat-history-row group/item relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors [contain:layout_paint_style]",
         isSelectionMode && isSelected
           ? "bg-primary/10 text-foreground hover:bg-primary/[0.14]"
           : isActive
@@ -902,7 +906,10 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   }
                   return true;
                 }}
-                className="sidebar-context-menu min-w-10rem rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
+                className={cn(
+                  SIDEBAR_CONTEXT_MENU_CLASS,
+                  "min-w-10rem rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
+                )}
               >
                 {!item.isPending ? (
                   <DropdownMenuItem
@@ -964,7 +971,12 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     <Folder className="size-3.5" />
                     {t("chat.conversationMoveToWorkspace")}
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="sidebar-context-menu max-h-18rem min-w-12rem overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl">
+                  <DropdownMenuSubContent
+                    className={cn(
+                      SIDEBAR_CONTEXT_MENU_CLASS,
+                      "max-h-18rem min-w-12rem overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
+                    )}
+                  >
                     {moveWorkspaces.map((workspace) => (
                       <DropdownMenuItem
                         key={workspace.id}
@@ -1627,7 +1639,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   side="right"
                   align="start"
                   sideOffset={6}
-                  className="sidebar-context-menu"
+                  className={SIDEBAR_CONTEXT_MENU_CLASS}
                 >
                   {!isArchived && (
                     <DropdownMenuItem

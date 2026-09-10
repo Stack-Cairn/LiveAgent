@@ -32,6 +32,21 @@
   initial-value: 0px;
 }
 
+/* Zones redefine the core text variables so rem-based utilities inherit the
+   local font scale. Portaled popups receive the same variable from React. */
+@layer components {
+  .zone-font-scale,
+  .layer-popover {
+    font-size: calc(var(--text-1rem) * var(--zone-font-scale, 1));
+    --text-xs: calc(var(--text-0p75rem) * var(--zone-font-scale, 1));
+    --text-sm: calc(var(--text-0p875rem) * var(--zone-font-scale, 1));
+    --text-base: calc(var(--text-1rem) * var(--zone-font-scale, 1));
+    --text-lg: calc(var(--text-1p125rem) * var(--zone-font-scale, 1));
+    --text-xl: calc(var(--text-1p25rem) * var(--zone-font-scale, 1));
+    --text-2xl: calc(var(--text-1p5rem) * var(--zone-font-scale, 1));
+  }
+}
+
 @utility layer-raised {
   z-index: var(--layer-raised);
 }
@@ -260,6 +275,21 @@
   }
 }
 
+/* Streamdown owns these document-level portals, so no React component can carry the utilities. */
+body > div:has([data-streamdown="mermaid"]):not(#root),
+body > div:has([data-streamdown="table-fullscreen"]):not(#root),
+body > div:not(#root) [data-streamdown="mermaid"] svg {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+body > div:not(#root) [data-streamdown="mermaid"]:has([role="application"]:active) svg,
+body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor: grabbing"]) svg,
+body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]) svg {
+  -webkit-transform: none;
+  transform: none;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -337,218 +367,5 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.35);
-  }
-
-  .upload-file-list {
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .upload-file-list::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-  }
-
-  .project-tools-panel-tabs {
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .project-tools-panel-tabs::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-  }
-
-  .project-tools-panel-tabs-scrollbar {
-    position: relative;
-    height: var(--spacing-4px);
-    flex: 0 0 var(--spacing-4px);
-    overflow: hidden;
-    border-radius: var(--radius-999px);
-    background: var(--project-tools-tabs-scrollbar-track, hsl(var(--muted) / 0.42));
-    opacity: 0;
-    pointer-events: none;
-    touch-action: none;
-    transition:
-      background-color var(--ui-duration-160ms) ease,
-      opacity var(--ui-duration-160ms) ease;
-  }
-
-  .project-tools-panel-tabs-scrollbar-thumb {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    min-width: var(--spacing-28px);
-    border-radius: inherit;
-    background: var(--project-tools-tabs-scrollbar-thumb, hsl(var(--muted-foreground) / 0.22));
-    box-shadow: inset 0 0 0 var(--spacing-1px)
-      var(--project-tools-tabs-scrollbar-thumb-border, hsl(var(--background) / 0.82));
-    transition:
-      background-color var(--ui-duration-160ms) ease,
-      box-shadow var(--ui-duration-160ms) ease;
-  }
-
-  .project-tools-panel-tabs-scrollbar:hover,
-  .project-tools-panel-tabs-scrollbar-dragging {
-    background: var(--project-tools-tabs-scrollbar-track-hover, hsl(var(--muted) / 0.5));
-  }
-
-  .project-tools-panel-tabs-scrollbar:hover .project-tools-panel-tabs-scrollbar-thumb,
-  .project-tools-panel-tabs-scrollbar-dragging .project-tools-panel-tabs-scrollbar-thumb {
-    background: var(
-      --project-tools-tabs-scrollbar-thumb-hover,
-      hsl(var(--muted-foreground) / 0.36)
-    );
-  }
-
-  .chat-queue-scroll {
-    overscroll-behavior: contain;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .chat-queue-scroll::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-  }
-
-  .chat-queue-scrollbar {
-    position: absolute;
-    top: var(--spacing-2px);
-    right: var(--spacing-1px);
-    bottom: var(--spacing-2px);
-    z-index: var(--ui-z-index-2);
-    width: var(--spacing-8px);
-    border-radius: var(--radius-999px);
-    background: hsl(var(--muted) / 0.36);
-    box-shadow: inset 0 0 0 var(--spacing-1px) hsl(var(--background) / 0.42);
-    cursor: default;
-    touch-action: none;
-  }
-
-  .chat-queue-scrollbar-thumb {
-    position: absolute;
-    left: var(--spacing-1px);
-    right: var(--spacing-1px);
-    top: 0;
-    min-height: var(--spacing-24px);
-    border-radius: var(--radius-999px);
-    background: hsl(var(--muted-foreground) / 0.42);
-    box-shadow:
-      inset 0 0 0 var(--spacing-1px) hsl(var(--background) / 0.55),
-      0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-hsl-220-22-10-0p08);
-    transition: background-color var(--ui-duration-160ms) ease;
-  }
-
-  .chat-queue-scrollbar:hover .chat-queue-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.56);
-  }
-
-  .chat-queue-scrollbar-thumb:active {
-    background: hsl(var(--muted-foreground) / 0.7);
-  }
-
-  .tool-text-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    transition: scrollbar-color var(--ui-duration-200ms) ease;
-  }
-
-  .tool-text-scroll:hover {
-    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
-  }
-
-  .tool-text-scroll::-webkit-scrollbar {
-    width: var(--spacing-10px);
-    height: var(--spacing-10px);
-  }
-
-  .tool-text-scroll::-webkit-scrollbar-track {
-    background: transparent;
-    margin: var(--spacing-6px);
-  }
-
-  .tool-text-scroll::-webkit-scrollbar-thumb {
-    border-radius: var(--radius-999px);
-    background: hsl(var(--muted-foreground) / 0.14);
-    transition: background var(--ui-duration-200ms) ease;
-  }
-
-  .tool-text-scroll:hover::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.22);
-  }
-
-  .tool-text-scroll:hover::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.38);
-  }
-}
-
-@layer base {
-  .project-terminal-viewport {
-    --project-terminal-padding-x: var(--spacing-0p75rem);
-    --project-terminal-padding-y: var(--spacing-0p625rem);
-    --project-terminal-scrollbar-size: var(--spacing-8px);
-    --project-terminal-background: hsl(var(--background));
-    background: var(--project-terminal-background);
-  }
-
-  .project-terminal-viewport .xterm {
-    background: var(--project-terminal-background);
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    padding: var(--project-terminal-padding-y) var(--project-terminal-padding-x)
-      var(--project-terminal-padding-y) var(--project-terminal-padding-x);
-  }
-
-  .project-terminal-viewport .xterm-viewport,
-  .project-terminal-viewport .xterm-screen,
-  .project-terminal-viewport .xterm-scrollable-element {
-    /* biome-ignore lint/complexity/noImportantStyles: xterm applies its terminal background inline; the forced-colors palette must override it. */
-    background: var(--project-terminal-background) !important;
-  }
-
-  .project-terminal-viewport .xterm-scrollable-element > .scrollbar.vertical > .slider {
-    border-radius: var(--radius-999px);
-  }
-
-  .project-terminal-viewport .xterm-viewport {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    transition: scrollbar-color var(--ui-duration-200ms) ease;
-  }
-
-  .project-terminal-viewport:hover .xterm-viewport {
-    scrollbar-color: hsl(var(--muted-foreground) / 0.32) transparent;
-  }
-
-  .project-terminal-viewport .xterm-viewport::-webkit-scrollbar {
-    width: var(--project-terminal-scrollbar-size);
-    height: var(--project-terminal-scrollbar-size);
-  }
-
-  .project-terminal-viewport .xterm-viewport::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .project-terminal-viewport .xterm-viewport::-webkit-scrollbar-thumb {
-    border-radius: var(--radius-999px);
-    background: transparent;
-    transition: background var(--ui-duration-200ms) ease;
-  }
-
-  .project-terminal-viewport:hover .xterm-viewport::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.28);
-  }
-
-  .project-terminal-viewport .xterm-viewport::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.45);
   }
 }

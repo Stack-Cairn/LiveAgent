@@ -6,6 +6,7 @@ import {
   updateMcp,
 } from "@liveagent/app/lib/settings/index";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { SKILL_CARD_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import { ToolPolicyToggle } from "@liveagent/ui/components/hub/ToolPolicyToggle";
 import { ExternalLink, Settings, Trash2 } from "@liveagent/ui/components/IconSet";
 import { getMcpTransportMeta } from "@liveagent/ui/components/resources/McpTransportMeta";
@@ -207,7 +208,9 @@ export const McpServerCard = memo(function McpServerCard(props: {
     // 容器查询挂在 article 上:行宽 < 520px(手机、或桌面侧栏占位后的窄内容区)
     // 时把 计数/策略/编辑/删除 整组换到第二行。此前四组里只有名称列可收缩,
     // 其余全是 shrink-0,窄屏下名称列被挤成 0 宽,文字溢出到徽章底下(重叠)。
-    <article className="skill-card-enter group @container flex min-h-16 w-full flex-wrap items-center gap-3 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/30">
+    <article
+      className={`skill-card-enter group @container flex min-h-16 w-full flex-wrap items-center gap-3 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/30 ${SKILL_CARD_ENTER_CLASS}`}
+    >
       <ResourceActivationSwitch
         checked={enabled}
         compact

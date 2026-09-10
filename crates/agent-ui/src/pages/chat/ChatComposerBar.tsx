@@ -1238,7 +1238,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       className={cn(
         surface === "desktop"
           ? "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-5 pb-4"
-          : "gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center",
+          : "gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20 grid max-h-full grid-cols-[minmax(var(--gateway-chat-column-gutter,var(--spacing-16px)),1fr)_minmax(0,min(calc(var(--chat-transcript-content-width,var(--spacing-768px))-var(--spacing-40px)),100%))_minmax(var(--gateway-chat-column-gutter,var(--spacing-16px)),1fr)] pb-[var(--gateway-chat-composer-bottom,var(--spacing-16px))] max-640:pb-[var(--gateway-chat-composer-bottom,var(--spacing-12px))]",
         isComposerExpanded && (surface === "desktop" ? "top-14" : "top-0 pt-3"),
         hidden && "hidden",
       )}
@@ -1261,7 +1261,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         className={cn(
           surface === "desktop"
             ? "pointer-events-auto relative w-inset-2p25rem max-w-transcript-gui"
-            : "gateway-chat-column pointer-events-auto relative",
+            : "gateway-chat-column pointer-events-auto relative col-[2] flex w-full min-w-0 max-h-full flex-col justify-end [&_[data-clarify-panel]]:min-h-0 [&_[data-clarify-panel]]:shrink",
           // justify-end：展开动画途中卡片被钳在中间高度时保持贴底，向上生长。
           isComposerExpanded && "flex min-h-0 flex-col justify-end",
         )}
@@ -1290,7 +1290,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       ref={queueListRef}
                       data-scrollable={queuedTurns.length > 2 ? "true" : "false"}
                       className={cn(
-                        "chat-queue-scroll flex min-w-0 flex-col gap-1 overflow-x-hidden",
+                        "chat-queue-scroll flex min-w-0 flex-col gap-1 overflow-x-hidden overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0",
                         queuedTurns.length > 2
                           ? "h-76px overflow-y-scroll pr-3"
                           : "max-h-76px overflow-y-hidden pr-1",
@@ -1372,14 +1372,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       <div
                         ref={queueScrollbarTrackRef}
                         aria-hidden
-                        className="chat-queue-scrollbar"
+                        className="chat-queue-scrollbar absolute inset-y-2px right-1px z-2 w-8px touch-none rounded-full bg-muted/36 shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--background)/0.42)] [&:hover_.chat-queue-scrollbar-thumb]:bg-muted-foreground/56"
                         onPointerCancel={handleQueueScrollbarPointerUp}
                         onPointerDown={handleQueueScrollbarPointerDown}
                         onPointerMove={handleQueueScrollbarPointerMove}
                         onPointerUp={handleQueueScrollbarPointerUp}
                       >
                         <div
-                          className="chat-queue-scrollbar-thumb"
+                          className="chat-queue-scrollbar-thumb absolute inset-x-1px top-0 min-h-24px rounded-full bg-muted-foreground/42 shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--background)/0.55),0_var(--spacing-1px)_var(--spacing-2px)_var(--ui-color-hsl-220-22-10-0p08)] transition-colors duration-160 ease-default active:bg-muted-foreground/70"
                           style={{
                             height: `${queueScrollbar.thumbHeight}px`,
                             transform: `translateY(${queueScrollbar.thumbTop}px)`,
@@ -1501,7 +1501,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             {pendingUploadedFiles.length > 0 ? (
               <div
                 ref={attachmentListRef}
-                className="upload-file-list relative z-10 flex shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden pb-1 pl-4 pr-12 pt-2"
+                className="upload-file-list relative z-10 flex shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-1 pl-4 pr-12 pt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0"
               >
                 {pendingUploadedFiles.map((file) => (
                   <PendingComposerAttachment
@@ -1621,7 +1621,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     ) : null}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
-                    className="composer-add-dropdown flex w-60 flex-col overflow-hidden p-1"
+                    className="composer-add-dropdown flex w-60 origin-[var(--transform-origin)] flex-col overflow-hidden p-1 transition-[opacity,transform] duration-180 ease-ui-enter data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none! web:data-[state=open]:animate-[composerReasoningDropdownIn_var(--ui-duration-180ms)_var(--ease-ui-enter)] web:data-[state=closed]:animate-[composerReasoningDropdownOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] web:motion-reduce:animate-none!"
                     side="top"
                     align="start"
                   >

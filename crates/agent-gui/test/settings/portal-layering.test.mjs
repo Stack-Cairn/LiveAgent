@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
+import { readStyleSource } from "../../../agent-ui/test-support/style-values.mjs";
 
 function readShared(path) {
   return readFileSync(new URL(`../../../agent-ui/src/${path}`, import.meta.url), "utf8");

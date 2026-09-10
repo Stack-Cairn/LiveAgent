@@ -9,6 +9,7 @@ import {
   LoadingSurface,
   LoadingTrack,
 } from "@liveagent/ui/components/hub/HubLoading";
+import { SKILL_CARD_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
   AlertTriangle,
   Check,
@@ -235,6 +236,7 @@ function RegistryCard(props: {
       }}
       className={cn(
         "skill-card-enter group relative flex h-full min-h-228px cursor-pointer flex-col rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color] focus:outline-none focus:ring-2 focus:ring-ring",
+        SKILL_CARD_ENTER_CLASS,
         done ? "border-emerald-600/25" : "border-border hover:border-foreground/20 hover:shadow-md",
       )}
     >
@@ -1005,7 +1007,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
                   <LoadingSurface
                     variant="skeleton"
                     key={skeletonId}
-                    className="skill-card-enter h-228px p-3.5"
+                    className={`skill-card-enter h-228px p-3.5 ${SKILL_CARD_ENTER_CLASS}`}
                   >
                     <div className="flex items-center gap-3">
                       <Skeleton className="size-10 shrink-0 rounded-xl" />

@@ -337,9 +337,9 @@ export function AskUserQuestionCard({
                           className={cn(
                             "group/option relative flex w-full items-start gap-2 rounded-lg p-2 text-left transition-colors duration-150",
                             selected
-                              ? "bg-foreground/[0.06]"
+                              ? "bg-foreground/6"
                               : active && canInteract
-                                ? "hover:bg-foreground/[0.04]"
+                                ? "hover:bg-foreground/4"
                                 : "",
                             !selected && (isSettled || cancelled || countdownExpired)
                               ? "opacity-50"
@@ -394,7 +394,7 @@ export function AskUserQuestionCard({
                       <div
                         className={cn(
                           "group/option flex w-full items-center gap-2 rounded-lg p-2 transition-colors duration-150",
-                          questionCustomSelected ? "bg-foreground/[0.06]" : "",
+                          questionCustomSelected ? "bg-foreground/6" : "",
                         )}
                       >
                         {/* biome-ignore lint/a11y/useSemanticElements: The radio sits beside its own text field; a native input would nest a control inside the label row. */}
@@ -453,7 +453,7 @@ export function AskUserQuestionCard({
                         <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-foreground bg-foreground">
                           <span className="size-1.5 rounded-full bg-background" />
                         </span>
-                        <span className="min-w-0 flex-1 break-words text-scaled-12p5px font-medium leading-1p45 text-foreground">
+                        <span className="min-w-0 flex-1 wrap-break-word text-scaled-12p5px font-medium leading-1p45 text-foreground">
                           {questionCustomText}
                         </span>
                       </div>

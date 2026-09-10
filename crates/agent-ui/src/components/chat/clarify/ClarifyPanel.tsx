@@ -442,7 +442,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
       <div
         ref={listRef}
         data-clarify-messages=""
-        className="chat-queue-scroll min-h-0 overflow-y-auto px-3 pb-2 [overflow-anchor:none]"
+        className="chat-queue-scroll min-h-0 overflow-y-auto overscroll-contain px-3 pb-2 [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0"
         onScroll={() => {
           const el = listRef.current;
           if (!el) return;

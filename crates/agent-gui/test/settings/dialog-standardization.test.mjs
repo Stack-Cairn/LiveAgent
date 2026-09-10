@@ -6,10 +6,6 @@ const dialogSource = await readFile(
   new URL("../../../agent-ui/src/components/ui/dialog.tsx", import.meta.url),
   "utf8",
 );
-const commonSettingsCss = await readFile(
-  new URL("../../../agent-ui/src/styles/common-settings.css", import.meta.url),
-  "utf8",
-);
 const alertDialogSource = await readFile(
   new URL(
     "../../../agent-ui/src/components/ui/alert-dialog.tsx",
@@ -17,13 +13,13 @@ const alertDialogSource = await readFile(
   ),
   "utf8",
 );
-const gatewayDialogCss = ["base-chat.css", "responsive.css"].map((file) =>
-  readFile(
-    new URL(`../../../agent-gateway/web/src/styles/${file}`, import.meta.url),
-    "utf8",
-  ),
-);
-const gatewayDialogCssSource = (await Promise.all(gatewayDialogCss)).join("\n");
+const retainedCssSource = await Promise.all(
+  [
+    "../../../agent-ui/src/styles/base.css",
+    "../../../agent-gui/src/index.css",
+    "../../../agent-gateway/web/src/index.css",
+  ].map((file) => readFile(new URL(file, import.meta.url), "utf8")),
+).then((sources) => sources.join("\n"));
 
 const retiredDialogCss =
   /settings-modal-(?:overlay|panel|header|subheader|body|footer|actions|step-row)|(?:external-link|history-share)-modal-(?:overlay|panel)|modal-dialog-(?:backdrop|popup|viewport)|ssh-forward-dialog/;
@@ -52,8 +48,7 @@ test("shared Dialog owns modal visibility and motion", () => {
     dialogSource,
     /export (?:function|const) Dialog(?:Portal|Overlay)/,
   );
-  assert.doesNotMatch(commonSettingsCss, retiredDialogCss);
-  assert.doesNotMatch(gatewayDialogCssSource, retiredDialogCss);
+  assert.doesNotMatch(retainedCssSource, retiredDialogCss);
 });
 
 test("shared AlertDialog owns its viewport and composition", () => {

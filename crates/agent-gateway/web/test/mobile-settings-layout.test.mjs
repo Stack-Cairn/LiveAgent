@@ -1,4 +1,4 @@
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
+import { readStyleSource } from "../../../agent-ui/test-support/style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -19,7 +19,10 @@ const providersSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
   "utf8",
 );
-const responsiveStylesSource = readStyleSource(new URL("../src/styles/responsive.css", import.meta.url));
+const settingsShellSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/SettingsShell.tsx", import.meta.url),
+  "utf8",
+);
 const themeSource = readStyleSource(new URL("../../../agent-ui/src/styles/tokens.css", import.meta.url));
 
 test("empty hook events render only the content-area add action", () => {
@@ -49,30 +52,32 @@ test("mobile cron details give configuration more room and compact log summaries
   assert.match(cronSource, /max-\[820px\]:max-h-\[55%\]/);
   assert.doesNotMatch(cronSource, /max-\[820px\]:max-h-\[42%\]/);
   assert.match(
-    responsiveStylesSource,
-    /\.settings-log-row\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto auto auto;/,
+    settingsShellSource,
+    /settings-log-row\]:grid[^"\n]*settings-log-row\]:grid-cols-\[auto_minmax\(0,1fr\)_auto_auto_auto\]/,
   );
   assert.match(
-    responsiveStylesSource,
-    /\.settings-log-row\s*> span:first-of-type\s*\{[\s\S]*text-overflow:\s*ellipsis;/,
+    settingsShellSource,
+    /settings-log-row>span:first-of-type\]:truncate/,
   );
 });
 
 test("mobile provider toolbar stacks tabs above a full-width action group", () => {
   assert.match(providersSource, /flex min-h-0 flex-1 flex-col web:max-820:min-w-0/);
-  assert.match(providersSource, /settings-provider-action-group/);
-  assert.match(providersSource, /settings-provider-empty-add/);
   assert.match(
     providersSource,
-    /web:max-820:flex web:max-820:w-full web:max-820:flex-col/,
+    /web:max-820:flex web:max-820:w-full web:max-820:flex-col web:max-820:items-stretch/,
   );
   assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-action-group\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*42px;/,
+    providersSource,
+    /inline-flex h-36px[^"\n]*max-640:w-full max-640:flex-none/,
   );
   assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-action-label\s*\{[\s\S]*display:\s*inline;/,
+    providersSource,
+    /max-\[860px\]:hidden max-640:inline/,
+  );
+  assert.match(
+    providersSource,
+    /web:max-820:w-settings-provider-empty-add-w[^"\n]*web:max-520:w-full/,
   );
   assert.match(
     providersSource,

@@ -1,5 +1,6 @@
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { HubHeader } from "@liveagent/ui/components/hub/HubChrome";
+import { HUB_PAGE_ENTER_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import { useLocale } from "@liveagent/ui/i18n";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { CronSection } from "../settings/CronSection";
@@ -13,7 +14,9 @@ export function ResourceManagementPage({
   const { t } = useLocale();
   const memory = resource === "memory";
   return (
-    <div className="hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className={`hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background ${HUB_PAGE_ENTER_CLASS}`}
+    >
       <HubHeader title={t(memory ? "settings.navMemory" : "settings.navCron")} prominent />
       <div
         className={cn(

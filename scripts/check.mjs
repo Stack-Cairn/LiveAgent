@@ -71,7 +71,6 @@ function buildSteps() {
     commandStep("Diff hygiene", "git", ["diff", "--check", "HEAD"]),
     miseStep("Check script tests", "pnpm", ["check:script-tests"]),
     miseStep("Shared UI boundaries", "pnpm", ["check:ui-boundaries"]),
-    miseStep("Incremental style drift", "pnpm", ["check:style-drift"]),
     miseStep("Shared UI TypeScript check", "pnpm", ["typecheck:ui"]),
     miseStep("Virtual core TypeScript check", "pnpm", ["typecheck:virtual-core"]),
     miseStep("Virtual core tests", "pnpm", ["test:virtual-core"]),

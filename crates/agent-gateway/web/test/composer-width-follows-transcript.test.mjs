@@ -1,6 +1,4 @@
-import { styleDeclarations } from "./helpers/style-rules.mjs";
 import { parse } from "@babel/parser";
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -12,7 +10,10 @@ import test from "node:test";
 // .gateway-transcript-stage 内部，TranscriptWidthControls 写在 stage 上的内联值
 // （含拖拽逐帧更新）由 CSS 继承直接到达。本文件锁住这组耦合。
 
-const chatStyles = readStyleSource(new URL("../src/styles/base-chat.css", import.meta.url));
+const webStyleClassesSource = readFileSync(
+  new URL("../src/lib/webStyleClasses.ts", import.meta.url),
+  "utf8",
+);
 const appViewSource = readFileSync(
   new URL("../src/app/GatewayAppView.tsx", import.meta.url),
   "utf8",
@@ -27,17 +28,10 @@ const composerSource = readFileSync(
 );
 
 test("composer 列与转录列读同一个宽度变量", () => {
-  const layer = styleDeclarations(chatStyles, ".gateway-composer-layer")["grid-template-columns"];
-  assert.ok(layer, ".gateway-composer-layer 规则存在");
-  // Same variable as the transcript shell — that is what this guard is for.
-  // The calc() wraps it because both columns give back the retired 40px avatar
-  // rail; see measurements-lru.test.mjs for that half of the invariant.
-  assert.match(
-    layer,
-    /min\(\s*calc\(var\(--chat-transcript-content-width, 768px\) - 40px\),\s*100%\s*\)/,
-  );
+  assert.match(composerSource, /grid-cols-\[[^"\n]*--chat-transcript-content-width/);
+  assert.match(webStyleClassesSource, /GATEWAY_TRANSCRIPT_SHELL_CLASS[\s\S]*?--chat-transcript-content-width/);
   assert.doesNotMatch(
-    chatStyles,
+    `${composerSource}\n${webStyleClassesSource}`,
     /--gateway-chat-column-width/,
     "固定列宽变量已退役，不允许再引入第二个宽度来源",
   );

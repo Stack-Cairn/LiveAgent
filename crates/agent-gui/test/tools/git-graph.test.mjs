@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
-import { resolveStyleValues } from "../../../../scripts/test-style-values.mjs";
+import { resolveStyleValues } from "../../../agent-ui/test-support/style-values.mjs";
 
 const guiRoot = fileURLToPath(new URL("../..", import.meta.url));
 const graphModules = {

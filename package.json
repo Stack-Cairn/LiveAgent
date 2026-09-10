@@ -3,6 +3,9 @@
   "private": true,
   "packageManager": "pnpm@10.32.1",
   "scripts": {
+    "format": "biome format --write crates/agent-ui/src crates/agent-gui/src crates/agent-gateway/web/src",
+    "lint": "biome check crates/agent-ui/src crates/agent-gui/src crates/agent-gateway/web/src --max-diagnostics=none",
+    "lint:fix": "biome check --write crates/agent-ui/src crates/agent-gui/src crates/agent-gateway/web/src --max-diagnostics=none",
     "build:gui": "pnpm --filter liveagent build",
     "build:webui": "pnpm --filter @liveagent/gateway-webui build",
     "dev:stack": "node scripts/dev-stack.mjs start",
@@ -13,7 +16,7 @@
     "check:fast": "node scripts/check.mjs fast",
     "check:all": "node scripts/check.mjs all",
     "check:strict": "node scripts/check.mjs strict",
-    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs scripts/check-biome-changed.test.mjs scripts/style-drift.test.mjs",
+    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs scripts/check-biome-changed.test.mjs",
     "check:ui-boundaries": "node scripts/check-ui-boundaries.mjs",
     "typecheck:ui": "pnpm --filter @liveagent/ui typecheck",
     "typecheck:virtual-core": "pnpm --filter @tanstack/virtual-core typecheck",
@@ -21,11 +24,10 @@
     "lint:ui": "pnpm --filter @liveagent/ui lint",
     "lint:gui": "pnpm --filter liveagent lint",
     "lint:webui": "pnpm --filter @liveagent/gateway-webui lint",
+    "typecheck:gui": "pnpm --filter liveagent typecheck",
+    "typecheck:webui": "pnpm --filter @liveagent/gateway-webui typecheck",
     "test:gui": "pnpm --filter liveagent test:frontend",
-    "test:webui": "pnpm --filter @liveagent/gateway-webui test",
-    "style:sync": "node scripts/sync-style-tokens.mjs",
-    "check:style-drift": "node scripts/check-style-drift.mjs",
-    "style:preview": "node scripts/style-preview.mjs"
+    "test:webui": "pnpm --filter @liveagent/gateway-webui test"
   },
   "pnpm": {
     "overrides": {
@@ -52,8 +54,8 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.15",
     "@babel/parser": "7.29.8",
-    "esbuild": "0.28.2",
-    "postcss": "8.5.8"
+    "esbuild": "0.28.2"
   }
 }

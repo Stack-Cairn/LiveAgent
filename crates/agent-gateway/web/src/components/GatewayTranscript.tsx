@@ -60,6 +60,12 @@ import { getRoundText } from "@/lib/chat/uiMessages";
 import { DEFAULT_CHAT_TRANSCRIPT_WIDTH } from "@/lib/settings";
 import { extractLiveRange } from "@/lib/transcript-virtual/liveRangeExtractor";
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
+import {
+  GATEWAY_CHAT_COLUMN_CLASS,
+  GATEWAY_EMPTY_STATE_CLASS,
+  GATEWAY_TRANSCRIPT_ROW_CLASS,
+  GATEWAY_TRANSCRIPT_SHELL_CLASS,
+} from "../lib/webStyleClasses";
 import type { SectionId } from "../pages/settings/types";
 
 type GatewayTranscriptProps = {
@@ -162,8 +168,10 @@ function resolveNearestScrollViewport(element: HTMLElement | null) {
 function HistoryLoadingState(props: { title?: string }) {
   const title = props.title?.trim();
   return (
-    <div className="gateway-transcript-shell grid w-full min-w-0 pt-18px max-820:pt-12px">
-      <div className="gateway-chat-column gateway-empty-state col-[2] relative flex items-center justify-center overflow-hidden pt-24px px-0 pb-0 max-640:pt-8px">
+    <div className={GATEWAY_TRANSCRIPT_SHELL_CLASS}>
+      <div
+        className={`${GATEWAY_CHAT_COLUMN_CLASS} ${GATEWAY_EMPTY_STATE_CLASS} relative col-[2] flex items-center justify-center overflow-hidden px-0 pt-24px pb-0 max-640:pt-8px`}
+      >
         <div className="flex min-h-280px w-full flex-col items-center justify-center px-4 text-center">
           <div className="mb-4 flex size-10 items-center justify-center rounded-xl border border-border/70 bg-background/80 shadow-sm">
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -214,7 +222,7 @@ function GatewayUserMessageBubbleBody(props: {
   const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(attachments, text);
 
   return (
-    <div className="chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed text-[hsl(var(--chat-user-fg))]">
+    <div className="ml-auto w-fit max-w-full whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]">
       <UserAttachmentCards
         files={visibleFiles}
         workspaceRoot={workspaceRoot}
@@ -303,7 +311,10 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
   }
 
   return (
-    <div className="chat-user-bubble-wrap group relative ml-auto max-w-user-bubble-web">
+    <div
+      className="chat-user-bubble-wrap group relative ml-auto max-w-user-bubble-web"
+      data-user-bubble-wrap
+    >
       <GatewayUserMessageBubbleBody
         text={row.text}
         attachments={row.attachments}
@@ -880,7 +891,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row absolute inset-x-0 top-0"
+              className={`${GATEWAY_TRANSCRIPT_ROW_CLASS} absolute inset-x-0 top-0`}
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <div className="w-full max-w-full">
@@ -908,7 +919,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row absolute inset-x-0 top-0 justify-end!"
+              className={`${GATEWAY_TRANSCRIPT_ROW_CLASS} absolute inset-x-0 top-0 justify-end!`}
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <GatewayUserMessageRowBody
@@ -943,10 +954,13 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               data-index={virtualRow.index}
               data-row-key={row.key}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row absolute inset-x-0 top-0"
+              className={`${GATEWAY_TRANSCRIPT_ROW_CLASS} absolute inset-x-0 top-0`}
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-              <div className="group/assistant min-w-0 w-full max-w-full space-y-1">
+              <div
+                className="group/assistant min-w-0 w-full max-w-full space-y-1"
+                data-assistant-row
+              >
                 <AssistantBubble
                   rounds={row.rounds}
                   isLive={isLatestLiveAssistant}
@@ -993,7 +1007,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={transcriptVirtualizer.measureElement}
-              className="gateway-transcript-row absolute inset-x-0 top-0 w-full"
+              className={`${GATEWAY_TRANSCRIPT_ROW_CLASS} absolute inset-x-0 top-0 w-full`}
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               <CheckpointCard item={row} readOnly={readOnly} />
@@ -1006,7 +1020,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
             key={virtualRow.key}
             data-index={virtualRow.index}
             ref={transcriptVirtualizer.measureElement}
-            className="gateway-transcript-row absolute inset-x-0 top-0"
+            className={`${GATEWAY_TRANSCRIPT_ROW_CLASS} absolute inset-x-0 top-0`}
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
             <div className="w-gateway-bubble-w rounded-22px border border-solid shadow-gateway-bubble backdrop-blur-18px px-18px py-16px border-destructive/30 bg-destructive/5">
@@ -1085,8 +1099,10 @@ export function GatewayTranscript({
   if (rowCount === 0 && !isStreaming) {
     const showNoModelsState = !hasModels;
     return (
-      <div className="gateway-transcript-shell grid w-full min-w-0 pt-18px max-820:pt-12px">
-        <div className="gateway-chat-column gateway-empty-state col-[2] relative flex items-center justify-center overflow-hidden pt-24px px-0 pb-0 max-640:pt-8px">
+      <div className={GATEWAY_TRANSCRIPT_SHELL_CLASS}>
+        <div
+          className={`${GATEWAY_CHAT_COLUMN_CLASS} ${GATEWAY_EMPTY_STATE_CLASS} relative col-[2] flex items-center justify-center overflow-hidden px-0 pt-24px pb-0 max-640:pt-8px`}
+        >
           {/* Keyed per conversation so the hero entrance replays when
               switching between empty conversations, not just on mount. */}
           <ChatEmptyState
@@ -1102,10 +1118,10 @@ export function GatewayTranscript({
   }
 
   return (
-    <div className="gateway-transcript-shell grid w-full min-w-0 pt-18px max-820:pt-12px">
+    <div className={GATEWAY_TRANSCRIPT_SHELL_CLASS}>
       <div
         ref={transcriptListRef}
-        className="gateway-chat-column gateway-transcript-list select-text col-[2] flex min-w-0 flex-col gap-18px max-640:gap-14px"
+        className={`${GATEWAY_CHAT_COLUMN_CLASS} gateway-transcript-list col-[2] flex min-w-0 select-text flex-col gap-18px max-640:gap-14px`}
       >
         {/* Keyed remount per conversation: per-conversation state (measured
             heights, scroll-to-end latch) initializes fresh, and row keys can

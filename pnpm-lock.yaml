@@ -35,12 +35,12 @@ importers:
       '@babel/parser':
         specifier: 7.29.8
         version: 7.29.8
+      '@biomejs/biome':
+        specifier: 2.4.15
+        version: 2.4.15
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
-      postcss:
-        specifier: 8.5.8
-        version: 8.5.8
 
   crates/agent-gateway/web:
     dependencies:
@@ -120,9 +120,6 @@ importers:
         specifier: ^3.5.0
         version: 3.6.0
     devDependencies:
-      '@biomejs/biome':
-        specifier: 2.4.15
-        version: 2.4.15
       '@bufbuild/protoc-gen-es':
         specifier: 2.12.1
         version: 2.12.1(@bufbuild/protobuf@2.12.1)
@@ -262,9 +259,6 @@ importers:
         specifier: 1.3.7
         version: 1.3.7
     devDependencies:
-      '@biomejs/biome':
-        specifier: 2.4.15
-        version: 2.4.15
       '@iconify-json/logos':
         specifier: 1.2.11
         version: 1.2.11
@@ -299,7 +293,7 @@ importers:
         specifier: 6.0.1
         version: 6.0.1(vite@8.0.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
       jsdom:
-        specifier: ^30.0.1
+        specifier: 30.0.1
         version: 30.0.1
       postcss:
         specifier: 8.5.8
@@ -377,9 +371,6 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
     devDependencies:
-      '@biomejs/biome':
-        specifier: 2.4.15
-        version: 2.4.15
       '@types/react':
         specifier: 19.2.14
         version: 19.2.14

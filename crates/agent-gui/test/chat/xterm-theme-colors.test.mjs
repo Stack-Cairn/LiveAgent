@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
+import { readStyleSource } from "../../../agent-ui/test-support/style-values.mjs";
 import { readTerminalAppearance, readTerminalTheme } from "../../../agent-ui/src/lib/terminal/theme.ts";
 
 const source = readStyleSource(new URL("../../../agent-ui/src/styles/tokens.css", import.meta.url));

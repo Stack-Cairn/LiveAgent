@@ -1,4 +1,4 @@
-import { resolveStyleValues } from "../../../../scripts/test-style-values.mjs";
+import { resolveStyleValues } from "../../../agent-ui/test-support/style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

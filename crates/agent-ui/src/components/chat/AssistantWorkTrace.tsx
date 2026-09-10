@@ -40,7 +40,7 @@ function WorkPixelGrid({ active }: { active: boolean }) {
         {PIXEL_DELAYS.map((delay, index) => (
           <span
             key={PIXEL_KEYS[index]}
-            className="size-1 bg-foreground opacity-15 animate-chat-work-pixel [&[data-paused]]:opacity-45 [&[data-paused]]:transform-none [&[data-paused]]:animate-none motion-reduce:opacity-15 motion-reduce:transform-none motion-reduce:animate-none"
+            className="size-1 bg-foreground opacity-15 animate-chat-work-pixel [&[data-paused]]:opacity-45 data-paused:transform-none data-paused:animate-none motion-reduce:opacity-15 motion-reduce:transform-none motion-reduce:animate-none"
             data-paused={active ? undefined : ""}
             style={{ "--chat-work-delay": `${delay}ms` } as LoadingPixelStyle}
           />

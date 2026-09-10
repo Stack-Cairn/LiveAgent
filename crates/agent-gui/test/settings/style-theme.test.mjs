@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { cn } from "../../../agent-ui/src/lib/shared/utils.ts";
-import { resolveStyleValues } from "../../../../scripts/test-style-values.mjs";
+import { resolveStyleValues } from "../../../agent-ui/test-support/style-values.mjs";
 
 const require = createRequire(new URL("../../package.json", import.meta.url));
 const postcss = require("postcss");

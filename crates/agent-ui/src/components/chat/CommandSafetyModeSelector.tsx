@@ -103,7 +103,7 @@ export function CommandSafetyModeSelector(props: {
             disabled={disabled}
             className={cn(
               COMPOSER_CONTROL_TRIGGER_CLASS,
-              "w-8 justify-center gap-0 px-0 data-[popup-open]:bg-muted/60 web:max-480:flex-none web:max-480:w-2rem web:max-480:min-w-2rem web:max-480:justify-center web:max-480:gap-0 web:max-480:px-0",
+              "w-8 justify-center gap-0 px-0 data-popup-open:bg-muted/60 web:max-480:flex-none web:max-480:w-2rem web:max-480:min-w-2rem web:max-480:justify-center web:max-480:gap-0 web:max-480:px-0",
             )}
           />
         }
@@ -113,7 +113,7 @@ export function CommandSafetyModeSelector(props: {
         {modeIcon(selected, triggerIconClass(selected))}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="composer-safety-dropdown flex w-72 flex-col gap-1 overflow-hidden p-1"
+        className="composer-safety-dropdown flex w-72 origin-(--transform-origin) flex-col gap-1 overflow-hidden p-1 transition-[opacity,transform] duration-180 ease-ui-enter data-starting-style:translate-y-6px data-starting-style:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in motion-reduce:transition-none! web:font-app web:data-[state=open]:animate-[composerReasoningDropdownIn_var(--ui-duration-180ms)_var(--ease-ui-enter)] web:data-[state=closed]:animate-[composerReasoningDropdownOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] web:motion-reduce:animate-none!"
         side="top"
         align="start"
       >
@@ -131,9 +131,8 @@ export function CommandSafetyModeSelector(props: {
               disabled={entryDisabled}
               onSelect={() => onChange(mode)}
               className={cn(
-                "composer-safety-item items-start gap-2 whitespace-normal rounded-md py-1.5 text-xs",
-                isSelected &&
-                  "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
+                "composer-safety-item items-start gap-2 whitespace-normal rounded-md py-1.5 text-xs web:font-app",
+                isSelected && "bg-foreground/[0.07] font-medium data-highlighted:bg-foreground/9",
               )}
             >
               {modeIcon(mode, "mt-0.5 size-3.5 shrink-0 text-muted-foreground")}

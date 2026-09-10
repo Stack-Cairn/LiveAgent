@@ -515,8 +515,6 @@
   --radius-22px: 22px;
   --radius-24px: 24px;
   --radius-28px: 28px;
-  --radius-999px: 999px;
-  --radius-9999px: 9999px;
   --tracking-0p01em: 0.01em;
   --tracking-0p2em: 0.2em;
   --tracking-0p04em: 0.04em;
@@ -1329,6 +1327,8 @@
 @custom-variant desktop (&:not(html[data-liveagent-webui="gateway"] *));
 
 @custom-variant no-hover (@media (any-hover: none));
+
+@custom-variant has-hover (@media (any-hover: hover));
 
 @custom-variant status-compact {
   @media (max-width: 1400px), (max-height: 760px) {

@@ -66,6 +66,7 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
   return (
     <div
       data-actions-visible={actionsVisible ? "true" : undefined}
+      data-assistant-row
       className={cn("group/assistant w-full max-w-full", compacted && "opacity-70")}
     >
       {changedFiles ? (
@@ -122,7 +123,7 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
   }
 
   return (
-    <div className={cn("group/assistant w-full max-w-full", compactedClass)}>
+    <div className={cn("group/assistant w-full max-w-full", compactedClass)} data-assistant-row>
       <AssistantBubbleUnit
         row={row}
         isCompactionRunning={isCompactionRunning}

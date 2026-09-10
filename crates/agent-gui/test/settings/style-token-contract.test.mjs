@@ -1,14 +1,39 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { cn } from "../../../agent-ui/src/lib/shared/utils.ts";
 import styleTokenNames from "../../../agent-ui/src/lib/shared/style-token-names.generated.json" with {
   type: "json",
 };
-import { syncStyleTokens } from "../../../../scripts/sync-style-tokens.mjs";
 const require = createRequire(new URL("../../package.json", import.meta.url));
+const postcss = require("postcss");
+const tokenSource = readFileSync(
+  new URL("../../../agent-ui/src/styles/tokens.css", import.meta.url),
+  "utf8",
+);
+
+function tokenGroups(source) {
+  const result = { shadow: [], backgroundImage: [], dropShadow: [] };
+  const namespaces = {
+    "--shadow-": "shadow",
+    "--background-image-": "backgroundImage",
+    "--drop-shadow-": "dropShadow",
+  };
+  postcss.parse(source).walkAtRules("theme", (theme) => {
+    theme.walkDecls((declaration) => {
+      for (const [prefix, group] of Object.entries(namespaces)) {
+        if (declaration.prop.startsWith(prefix)) result[group].push(declaration.prop.slice(prefix.length));
+      }
+    });
+  });
+  return Object.fromEntries(
+    Object.entries(result).map(([key, values]) => [key, [...new Set(values)].sort()]),
+  );
+}
+
 test("every registered composite utility compiles and preserves caller colors", async () => {
-  syncStyleTokens(true);
+  assert.deepEqual(styleTokenNames, tokenGroups(tokenSource));
   const groups = [
     {
       names: styleTokenNames.shadow,
@@ -30,7 +55,7 @@ test("every registered composite utility compiles and preserves caller colors", 
     },
   ];
   const candidates = groups.flatMap((g) => g.names.map((n) => g.prefix + "-" + n));
-  const result = await require("postcss")([
+  const result = await postcss([
     require("@tailwindcss/postcss")({ optimize: false }),
   ]).process(
     '@import "tailwindcss" source(none);\n@import "../../agent-ui/src/styles/tokens.css";\n@source inline(' +

@@ -2295,7 +2295,7 @@ export const MentionComposer = memo(
           onCompositionEnd={handleCompositionEnd}
           onBlur={handleBlur}
           className={cn(
-            "mention-composer min-h-10 max-h-160px w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
+            "mention-composer min-h-10 max-h-160px w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden [&.is-empty::before]:pointer-events-none [&.is-empty::before]:absolute [&.is-empty::before]:text-muted-foreground [&.is-empty::before]:content-[attr(data-placeholder)] web:[&.is-empty::before]:inset-x-0 web:[&.is-empty::before]:pe-[inherit] [&_.mention-chip]:me-0p375rem [&_.mention-chip]:cursor-default [&_.mention-chip]:select-none [&_.mention-chip]:align-baseline [&_.mention-chip]:text-scaled-13px [&_.mention-chip]:leading-1p5",
             "text-sm",
             isDomEmpty && "is-empty",
             disabled && "cursor-not-allowed opacity-60",

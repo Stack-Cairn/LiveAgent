@@ -82,11 +82,12 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
         "chat-user-bubble-wrap group relative ml-auto max-w-user-bubble-web",
         compactedClass,
       )}
+      data-user-bubble-wrap
     >
       <div
         className={cn(
           animateEntrance && "desktop:animate-chat-bubble-enter",
-          "chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed text-[hsl(var(--chat-user-fg))]",
+          "ml-auto w-fit max-w-full whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
         )}
       >
         <UserAttachmentCards files={visibleFiles} workspaceRoot={workspaceRoot} />

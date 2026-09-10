@@ -356,7 +356,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           aria-label={jumpToBottomLabel}
           title={jumpToBottomLabel}
           onClick={() => scrollFollowHandle.jumpToBottom()}
-          className="chat-jump-to-bottom absolute z-10 flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+          className="chat-jump-to-bottom absolute z-10 flex size-8 -translate-x-1/2 animate-[chatJumpToBottomIn_var(--ui-duration-180ms)_var(--ease-ui-enter)] items-center justify-center rounded-full border border-border/55 bg-background/45 text-muted-foreground shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p45),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p35)] backdrop-blur-18px backdrop-saturate-[180%] transition-colors hover:bg-background/65 hover:text-foreground dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p6)] dark:hover:bg-white/[0.11]"
           // Centered on the composer card (not the pane) and stacked above
           // the task-progress pill / queue panel: the composer layer paints
           // over the transcript, so any overlap would hide the button.
@@ -375,7 +375,8 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
               role="menu"
               className={cn(
                 "animate-editor-context-menu origin-top-left layer-popover fixed w-max min-w-38 max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
-                isContextMenuExiting && "editor-context-menu-exit",
+                isContextMenuExiting &&
+                  "editor-context-menu-exit pointer-events-none animate-[editorContextMenuOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] motion-reduce:animate-none motion-reduce:opacity-0",
               )}
               style={{
                 left: transcriptContextMenuPosition.left,

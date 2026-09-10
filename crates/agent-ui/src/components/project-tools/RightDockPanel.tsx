@@ -372,7 +372,7 @@ function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | n
       ref={trackRef}
       aria-hidden={!scrollbar.visible}
       className={cn(
-        "project-tools-panel-tabs-scrollbar",
+        "project-tools-panel-tabs-scrollbar relative h-4px basis-4px touch-none overflow-hidden rounded-full bg-[var(--project-tools-tabs-scrollbar-track,hsl(var(--muted)/0.42))] opacity-0 transition-[background-color,opacity] duration-160 ease-default hover:bg-[var(--project-tools-tabs-scrollbar-track-hover,hsl(var(--muted)/0.5))] [&.project-tools-panel-tabs-scrollbar-dragging]:bg-[var(--project-tools-tabs-scrollbar-track-hover,hsl(var(--muted)/0.5))] [&:hover_.project-tools-panel-tabs-scrollbar-thumb]:bg-[var(--project-tools-tabs-scrollbar-thumb-hover,hsl(var(--muted-foreground)/0.36))] [&.project-tools-panel-tabs-scrollbar-dragging_.project-tools-panel-tabs-scrollbar-thumb]:bg-[var(--project-tools-tabs-scrollbar-thumb-hover,hsl(var(--muted-foreground)/0.36))] web:max-820:h-5px web:max-820:basis-5px",
         scrollbar.visible && "opacity-100 pointer-events-auto",
         dragging && "project-tools-panel-tabs-scrollbar-dragging",
       )}
@@ -382,7 +382,7 @@ function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | n
       onPointerUp={finishDrag}
     >
       <div
-        className="project-tools-panel-tabs-scrollbar-thumb"
+        className="project-tools-panel-tabs-scrollbar-thumb absolute inset-y-0 left-0 min-w-28px rounded-inherit bg-[var(--project-tools-tabs-scrollbar-thumb,hsl(var(--muted-foreground)/0.22))] shadow-[inset_0_0_0_var(--spacing-1px)_var(--project-tools-tabs-scrollbar-thumb-border,hsl(var(--background)/0.82))] transition-[background-color,box-shadow] duration-160 ease-default"
         style={{
           transform: `translateX(${scrollbar.thumbLeft}px)`,
           width: `${scrollbar.thumbWidth}px`,
@@ -852,7 +852,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         data-state={isOpen ? "open" : "closed"}
         data-project-tools-resizing={isResizing ? "true" : undefined}
         className={cn(
-          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-dialog-34rem-vh min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[width,opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
+          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-dialog-34rem-vh min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[width,opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none web:max-820:inset-0! web:max-820:z-(--layer-panel)! web:max-820:h-100dvh! web:max-820:max-h-none! web:max-820:w-full! web:max-820:rounded-none! web:max-820:border-0! web:max-820:bg-background! web:max-820:shadow-none! web:max-820:translate-none! web:max-820:[transform:none]! web:max-820:[contain:layout_style] web:max-820:[backface-visibility:hidden] web:max-820:[will-change:opacity] web:max-820:invisible web:max-820:opacity-0! web:max-820:transition-[opacity,visibility] web:max-820:duration-220 web:max-820:ease-default web:max-820:data-[state=open]:visible web:max-820:data-[state=open]:opacity-100!",
           isOpen
             ? "pointer-events-auto translate-y-0 border-t border-border opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-l md:border-t-0"
             : "pointer-events-none translate-y-full border-t border-transparent opacity-0 md:translate-x-3 md:translate-y-0 md:border-l-0 md:border-t-0",
@@ -863,7 +863,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       >
         <div
           className={cn(
-            "project-tools-panel-inner flex size-full min-h-0 flex-col transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:w-[var(--project-tools-panel-width)] md:min-w-[var(--project-tools-panel-width)]",
+            "project-tools-panel-inner flex size-full min-h-0 flex-col transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:w-[var(--project-tools-panel-width)] md:min-w-[var(--project-tools-panel-width)] web:max-820:min-w-0! web:max-820:translate-none! web:max-820:transform-[translate3d(0,0,0)]! web:max-820:opacity-100! web:max-820:transition-none! web:max-820:[backface-visibility:hidden]",
             isOpen
               ? "translate-y-0 opacity-100 md:translate-x-0"
               : "translate-y-3 opacity-0 md:translate-x-2 md:translate-y-0",
@@ -872,7 +872,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
           {effectiveShouldRenderContent ? (
             <>
               <div
-                className="desktop:hidden web:hidden web:max-820:block web:max-820:w-36px web:max-820:h-4px web:max-820:flex-none web:max-820:self-center web:max-820:mt-8px web:max-820:rounded-999px web:max-820:bg-muted-foreground/24"
+                className="desktop:hidden web:hidden web:max-820:block web:max-820:w-36px web:max-820:h-4px web:max-820:flex-none web:max-820:self-center web:max-820:mt-8px web:max-820:rounded-full web:max-820:bg-muted-foreground/24"
                 aria-hidden="true"
               />
               <button
@@ -901,7 +901,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                 >
                   <div
                     ref={tabsScrollRef}
-                    className="project-tools-panel-tabs flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
+                    className="project-tools-panel-tabs flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0 desktop:h-2p5rem! desktop:py-0p25rem!"
                   >
                     <RightDockTabStrip
                       tabs={orderedProjectTabs}

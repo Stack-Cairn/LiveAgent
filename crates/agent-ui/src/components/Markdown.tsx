@@ -43,6 +43,13 @@ import {
 import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { cn } from "../lib/shared/utils";
 import { MermaidFullscreenButton } from "./MarkdownMermaidFullscreen";
+import {
+  CHAT_MARKDOWN_CLASS,
+  DOCUMENT_MARKDOWN_CLASS,
+  PLAN_MARKDOWN_CLASS,
+  RELEASE_NOTES_MARKDOWN_CLASS,
+  THINKING_MARKDOWN_CLASS,
+} from "./markdown/markdownStyles";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { CopyButton } from "./ui/copy-button";
@@ -731,12 +738,18 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
     : preserveRelativeUrls
       ? relativeUrlRehypePlugins
       : undefined;
+  const profileClasses = new Set(className?.split(/\s+/));
 
   return (
     <div>
       <Streamdown
         className={cn(
           "chat-markdown max-w-none break-words",
+          CHAT_MARKDOWN_CLASS,
+          profileClasses.has("thinking-markdown") && THINKING_MARKDOWN_CLASS,
+          profileClasses.has("document-markdown") && DOCUMENT_MARKDOWN_CLASS,
+          profileClasses.has("plan-markdown") && PLAN_MARKDOWN_CLASS,
+          profileClasses.has("release-notes-markdown") && RELEASE_NOTES_MARKDOWN_CLASS,
           MARKDOWN_EMBED_CLASSNAME,
           streaming ? "chat-markdown--streaming" : "chat-markdown--static",
           showCaret ? "chat-markdown--caret-on" : "chat-markdown--caret-off",

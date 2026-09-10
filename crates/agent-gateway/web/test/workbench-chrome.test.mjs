@@ -1,4 +1,3 @@
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -7,17 +6,44 @@ const gatewayAppViewSource = readFileSync(
   new URL("../src/app/GatewayAppView.tsx", import.meta.url),
   "utf8",
 );
-const baseChatStyles = readStyleSource(new URL("../src/styles/base-chat.css", import.meta.url));
-const responsiveStyles = readStyleSource(new URL("../src/styles/responsive.css", import.meta.url));
+const webStyleClassesSource = readFileSync(
+  new URL("../src/lib/webStyleClasses.ts", import.meta.url),
+  "utf8",
+);
+const composerSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+  "utf8",
+);
+const sidebarSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
+  "utf8",
+);
 
 test("gateway mounts workbench chrome outside the shared application view", () => {
-  assert.match(gatewayAppViewSource, /<main className="gateway-main-shell">/);
+  assert.match(gatewayAppViewSource, /<main className=\{GATEWAY_MAIN_SHELL_CLASS\}>/);
+  const mainClass = webStyleClassesSource.match(/GATEWAY_MAIN_SHELL_CLASS\s*=\s*\n?\s*"([^"]+)"/);
+  assert.ok(mainClass, "gateway-main-shell class constant not found");
+  const mainClassNames = new Set(mainClass[1].split(/\s+/));
+  for (const className of [
+    "relative",
+    "flex",
+    "h-full",
+    "min-w-0",
+    "flex-1",
+    "flex-col",
+    "items-stretch",
+    "overflow-hidden",
+  ]) {
+    assert.ok(
+      mainClassNames.has(className),
+      `gateway-main-shell is missing ${className}`,
+    );
+  }
   assert.match(
     gatewayAppViewSource,
     /<AppWorkbenchChrome[\s\S]*?<ApplicationView/,
   );
   assert.doesNotMatch(gatewayAppViewSource, /chat=\{\{[\s\S]*?headerOverlay:/);
-  assert.match(baseChatStyles, /\.gateway-main-shell \{[\s\S]*?display: flex;[\s\S]*?flex-direction: column;/);
 });
 
 test("gateway shows the conversation view switcher in chrome only after an assistant reply", () => {
@@ -44,8 +70,8 @@ test("gateway shows the conversation view switcher in chrome only after an assis
     /hidden=\{renderedConversationView === "trajectory"\}/,
   );
   assert.match(
-    baseChatStyles,
-    /\.gateway-composer-layer\.hidden\s*\{\s*display: none;\s*\}/,
+    composerSource,
+    /hidden && "hidden"/,
   );
 });
 
@@ -54,26 +80,26 @@ test("web composer column clamps the clarify panel so new turns scroll inside it
   // 里可能还没触顶就被外层裁掉，内部 overflow-y-auto 永不生效。列必须是
   // 有上限的 flex 列，并允许 [data-clarify-panel] 收缩。
   assert.match(
-    baseChatStyles,
-    /\.gateway-composer-layer \{[\s\S]*?max-height: 100%;/,
+    composerSource,
+    /gateway-composer-layer[^"\n]*max-h-full/,
   );
   assert.match(
-    baseChatStyles,
-    /\.gateway-composer-layer > \.gateway-chat-column \{[\s\S]*?display: flex;[\s\S]*?min-height: 0;[\s\S]*?max-height: 100%;[\s\S]*?flex-direction: column;[\s\S]*?justify-content: flex-end;/,
+    composerSource,
+    /gateway-chat-column[^"\n]*flex[^"\n]*min-w-0[^"\n]*max-h-full[^"\n]*flex-col[^"\n]*justify-end/,
   );
   assert.match(
-    baseChatStyles,
-    /\.gateway-composer-layer \[data-clarify-panel\] \{[\s\S]*?flex-shrink: 1;[\s\S]*?min-height: 0;/,
+    composerSource,
+    /\[&_\[data-clarify-panel\]\]:min-h-0[^"\n]*\[&_\[data-clarify-panel\]\]:shrink/,
   );
 });
 
 test("mobile sidebar stays above the interactive workbench header", () => {
   assert.match(
-    responsiveStyles,
-    /@media \(max-width: 820px\) \{[\s\S]*?\.gateway-main-shell \[data-app-workbench-chrome\] \{\s*z-index: var\(--layer-raised\);/,
+    webStyleClassesSource,
+    /max-820:\[&_\[data-app-workbench-chrome\]\]:z-\(--layer-raised\)/,
   );
   assert.match(
-    responsiveStyles,
-    /@media \(max-width: 820px\) \{[\s\S]*?\.gateway-editor-host > \.chat-history-sidebar \{[\s\S]*?z-index: var\(--layer-panel\);/,
+    sidebarSource,
+    /web:max-820:z-\(--layer-panel\)/,
   );
 });

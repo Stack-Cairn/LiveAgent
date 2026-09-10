@@ -69,7 +69,7 @@ import {
 } from "../../lib/workspaceProjects";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 import { HistoryRow, ProjectGroupHeader, ProjectRow } from "./ChatHistorySidebarRows";
-import { PROJECT_ICON_BUTTON_CLASS } from "./ChatHistorySidebarStyles";
+import { PROJECT_ICON_BUTTON_CLASS, SIDEBAR_CONTEXT_MENU_CLASS } from "./ChatHistorySidebarStyles";
 import type {
   ChatHistorySidebarProps,
   WorkspaceProjectRemoveOptions,
@@ -327,6 +327,15 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     () => items.filter((item) => !archivedIds.has(item.id)),
     [archivedIds, items],
   );
+  const itemById = useMemo(() => {
+    const index = new Map<string, SidebarConversation>();
+    for (const item of items) {
+      // Preserve Array.find's first-match behavior if malformed input contains
+      // duplicate ids while making repeated lookups constant-time.
+      if (!index.has(item.id)) index.set(item.id, item);
+    }
+    return index;
+  }, [items]);
   const pinnedConversations = useMemo(
     () => unarchivedItems.filter((item) => item.isPinned),
     [unarchivedItems],
@@ -335,7 +344,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     () =>
       archivedConversations.map(
         (entry): SidebarConversation =>
-          items.find((item) => item.id === entry.id) ?? {
+          itemById.get(entry.id) ?? {
             ...entry,
             providerId: "",
             model: "",
@@ -343,7 +352,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             updatedAt: 0,
           },
       ),
-    [archivedConversations, items],
+    [archivedConversations, itemById],
   );
   const handleSetConversationArchived = useStableEvent(
     (item: SidebarConversation, archived: boolean) => {
@@ -360,8 +369,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   );
 
   const currentConversationWorkdir = useMemo(
-    () => items.find((item) => item.id === currentConversationId)?.cwd,
-    [currentConversationId, items],
+    () => itemById.get(currentConversationId)?.cwd,
+    [currentConversationId, itemById],
   );
 
   useEffect(() => {
@@ -1361,7 +1370,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       data-app-frame-column="sidebar"
       data-state={isOpen ? "open" : "closed"}
       className={cn(
-        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
+        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out [contain:layout_paint_style] web:max-820:fixed web:max-820:inset-y-0 web:max-820:left-0 web:max-820:z-(--layer-panel) web:max-820:h-100dvh web:max-820:w-[min(var(--spacing-86vw),var(--spacing-272px))]! web:max-820:max-w-[min(var(--spacing-86vw),var(--spacing-272px))] web:max-820:-translate-x-full web:max-820:opacity-100! web:max-820:invisible web:max-820:[contain:layout_style] web:max-820:[backface-visibility:hidden] web:max-820:[will-change:transform] web:max-820:shadow-[var(--spacing-18px)_0_var(--spacing-48px)_var(--ui-color-hsl-220-22-10-0p16)] web:max-820:transition-[transform,visibility] web:max-820:duration-180 web:max-820:ease-ui-curve-6 web:max-820:data-[state=open]:visible web:max-820:data-[state=open]:translate-x-0 web:max-820:data-[state=closed]:pointer-events-none",
         isOpen ? "w-272px opacity-100" : "w-0 opacity-0",
       )}
       style={{ "--zone-font-scale": fontScale } as CSSProperties}
@@ -1385,7 +1394,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           <span className="truncate">{draggedTitle}</span>
         </div>
       ) : null}
-      <div className="chat-history-sidebar-inner flex w-272px min-w-272px min-h-0 flex-1 flex-col">
+      <div className="chat-history-sidebar-inner flex w-272px min-w-272px min-h-0 flex-1 flex-col web:max-820:w-full web:max-820:min-w-0 web:max-820:translate-z-0 web:max-820:[backface-visibility:hidden]">
         {headerTop}
         <div className="shrink-0 border-b border-border/50 px-2 pb-3 pt-3">
           <div className="flex items-center justify-between gap-2">
@@ -1797,7 +1806,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         side="top"
                         align="start"
                         collisionPadding={12}
-                        className="sidebar-context-menu max-h-18rem min-w-12rem overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
+                        className={cn(
+                          SIDEBAR_CONTEXT_MENU_CLASS,
+                          "max-h-18rem min-w-12rem overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
+                        )}
                       >
                         {activeProjects.map((workspace) => (
                           <DropdownMenuItem

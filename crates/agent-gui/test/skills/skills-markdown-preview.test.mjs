@@ -1,4 +1,3 @@
-import { readStyleSource } from "../../../../scripts/test-style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -21,9 +20,10 @@ const documentMarkdownSource = readFileSync(
   new URL("../../../agent-ui/src/components/markdown/DocumentMarkdown.tsx", import.meta.url),
   "utf8",
 );
-const desktopStyles = readStyleSource(new URL("../../src/index.css", import.meta.url));
-const webStyles = readStyleSource(new URL("../../../agent-gateway/web/src/index.css", import.meta.url));
-const sharedStyles = readStyleSource(new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url));
+const markdownStyles = readFileSync(
+  new URL("../../../agent-ui/src/components/markdown/markdownStyles.ts", import.meta.url),
+  "utf8",
+);
 
 test("Skill and workspace files share the document Markdown presentation", () => {
   assert.match(skillDrawerSource, /<DocumentMarkdown content=\{previewContent\}/);
@@ -31,18 +31,13 @@ test("Skill and workspace files share the document Markdown presentation", () =>
   assert.match(documentMarkdownSource, /"document-markdown"/);
 });
 
-test("document Markdown keeps its typography separate from chat Markdown in both hosts", () => {
-  for (const source of [desktopStyles, webStyles]) {
-    assert.match(source, /agent-ui\/src\/styles\/common\.css/);
-  }
-  assert.match(sharedStyles, /\.document-markdown p/);
-  assert.match(sharedStyles, /\.document-markdown \[data-streamdown="heading-2"\]/);
-  assert.match(sharedStyles, /\.document-markdown \[data-streamdown="list-item"\] > p/);
-  assert.match(sharedStyles, /\.document-markdown \[data-streamdown="code-block-body"\]/);
-  assert.match(
-    sharedStyles,
-    /\.document-markdown \[data-streamdown="heading-1"\] \{\s*@apply[^;]*text-lg/,
-  );
+test("document Markdown keeps its typography separate from chat Markdown", () => {
+  assert.match(markdownStyles, /DOCUMENT_MARKDOWN_CLASS/);
+  assert.match(markdownStyles, /\[&_p\]:text-scaled-13px/);
+  assert.match(markdownStyles, /\[&_\[data-streamdown=heading-2\]\]/);
+  assert.match(markdownStyles, /\[&_\[data-streamdown=list-item\]>p\]:my-0/);
+  assert.match(markdownStyles, /\[&_\[data-streamdown=code-block-body\]\]:rounded-lg/);
+  assert.match(markdownStyles, /\[&_\[data-streamdown=heading-1\]\]:text-lg/);
 });
 
 test("Skill detail sections use whitespace instead of large divider lines", () => {

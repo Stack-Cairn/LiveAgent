@@ -331,7 +331,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
 
   return (
     <div
-      className="transcript-width-controls pointer-events-none absolute inset-y-0 left-1/2 z-10 -translate-x-1/2"
+      className="transcript-width-controls pointer-events-none absolute inset-y-0 left-1/2 z-10 -translate-x-1/2 max-820:hidden touch-primary:hidden"
       // The root stays mounted in every state and names the gate that hides
       // the handles, so a runtime look at a pane that lost them tells the
       // gates apart instead of finding nothing to inspect (#749). `hidden`

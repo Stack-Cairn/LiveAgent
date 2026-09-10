@@ -455,11 +455,15 @@ export function ProviderSettingsExtension(props: {
         }
       }),
     );
+    const resultById = new Map<string, (typeof results)[number]>();
+    for (const result of results) {
+      if (!resultById.has(result.id)) resultById.set(result.id, result);
+    }
     setSettings((current) =>
       updateCustomProviders(
         current,
         current.customProviders.map((provider) => {
-          const result = results.find((item) => item.id === provider.id);
+          const result = resultById.get(provider.id);
           if (!result?.ok) return provider;
           const models = mergeFetchedModels(result.models, provider.models);
           return {
@@ -537,12 +541,17 @@ export function ProviderSettingsExtension(props: {
         }
       }),
     );
+    const importedIdSet = new Set(importedIds);
+    const resultById = new Map<string, (typeof results)[number]>();
+    for (const result of results) {
+      if (!resultById.has(result.id)) resultById.set(result.id, result);
+    }
     setSettings((current) =>
       updateCustomProviders(
         current,
         current.customProviders.map((provider) => {
-          if (!importedIds.includes(provider.id)) return provider;
-          const result = results.find((item) => item.id === provider.id);
+          if (!importedIdSet.has(provider.id)) return provider;
+          const result = resultById.get(provider.id);
           if (!result?.ok) return provider;
           const models = mergeFetchedModels(result.models, provider.models);
           return {
@@ -600,7 +609,7 @@ export function ProviderSettingsExtension(props: {
 
   return (
     <>
-      <span className="settings-provider-action-slot">
+      <span className="settings-provider-action-slot flex min-w-0 self-stretch [&_.settings-provider-action]:flex-1">
         <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
           <DropdownMenuTrigger
             render={
@@ -619,7 +628,9 @@ export function ProviderSettingsExtension(props: {
             ) : (
               <Download className="size-3.5" />
             )}
-            <span className="settings-provider-action-label">{t("settings.importProviders")}</span>
+            <span className="max-[860px]:hidden max-640:inline">
+              {t("settings.importProviders")}
+            </span>
             <ChevronDown
               className={cn("size-3.5 shrink-0 transition-transform", menuOpen && "rotate-180")}
             />
