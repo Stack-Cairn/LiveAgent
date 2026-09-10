@@ -15,6 +15,7 @@ import {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type KeyboardEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { MotionDirectionalPanel } from "../../MotionDirectionalPanel";
 import { isClarifyListFollowing, pinClarifyListIfFollowing } from "./clarifyPanelScroll";
 import type { ClarifyAnswer, ClarifyQuestion, ClarifyRound } from "./clarifyTypes";
 import type { ClarifySessionState } from "./useClarifySession";
@@ -506,18 +507,10 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                       </div>
                     ) : null}
 
-                    {/* key 触发重挂载，切题时按方向播放轻量滑入动画。 */}
-                    <div
-                      key={activeQuestion.id}
-                      className={cn(
-                        "flex flex-col gap-1.5",
-                        switchDirection === "forward"
-                          ? "animate-ask-question-enter-forward motion-reduce:animate-none!"
-                          : "",
-                        switchDirection === "backward"
-                          ? "animate-ask-question-enter-backward motion-reduce:animate-none!"
-                          : "",
-                      )}
+                    <MotionDirectionalPanel
+                      panelKey={activeQuestion.id}
+                      direction={switchDirection}
+                      className="flex flex-col gap-1.5"
                     >
                       <div className="text-scaled-12p5px font-medium leading-1p55 text-foreground/90">
                         {activeQuestion.prompt}
@@ -602,7 +595,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                                   onChange={(event) =>
                                     setCustomText(activeQuestion, event.currentTarget.value)
                                   }
-                                  className="animate-ask-custom-input-enter motion-reduce:animate-none! h-7 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2 text-scaled-12px text-foreground outline-none transition-[border-color,background-color] placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]"
+                                  className="h-7 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2 text-scaled-12px text-foreground outline-none transition-[border-color,background-color] placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]"
                                 />
                               ) : null}
                             </span>
@@ -625,7 +618,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                           />
                         )}
                       </ChoiceGroup>
-                    </div>
+                    </MotionDirectionalPanel>
                   </div>
                 );
               })()

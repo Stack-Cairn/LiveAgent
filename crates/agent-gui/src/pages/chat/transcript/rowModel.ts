@@ -569,16 +569,12 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
   return reconciled;
 }
 
-export type TranscriptRowModelOptions = {
-  onRowsBorn?: (keys: readonly string[], isInitialBuild: boolean) => void;
-};
-
 export type TranscriptRowModel = {
   build: (historyItems: RenderTimelineItem[], live: LiveTailInput) => TranscriptRowsSnapshot;
   reset: () => void;
 };
 
-export function createTranscriptRowModel(options?: TranscriptRowModelOptions): TranscriptRowModel {
+export function createTranscriptRowModel(): TranscriptRowModel {
   // Keyed by the FIRST item of a render group: a plain user/summary item, or
   // the leading assistant part of a (possibly stitched) reply. `members`
   // records every item the cached rows were built from so a group that grows
@@ -594,8 +590,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
   >();
   let historyRowsCache: { items: RenderTimelineItem[]; rows: TranscriptRow[] } | null = null;
   let streamOrigins = new Map<string, string>();
-  let knownKeys = new Set<string>();
-  let hasBuilt = false;
   let turnSeq = 0;
   let activeTurn: {
     replyKey: string;
@@ -612,8 +606,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     rowCache = new WeakMap();
     historyRowsCache = null;
     streamOrigins = new Map();
-    knownKeys = new Set();
-    hasBuilt = false;
     turnSeq = 0;
     activeTurn = null;
     pendingSettle = null;
@@ -768,8 +760,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
   ): TranscriptRowsSnapshot => {
     const liveTailVisible =
       (live.isSending || live.isCompactionRunning === true) && !live.isSettled;
-    const isInitialBuild = !hasBuilt;
-    hasBuilt = true;
 
     if (liveTailVisible && pendingSettle && activeTurn) {
       if (!adoptSettledTwin(historyItems, pendingSettle)) {
@@ -830,14 +820,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
       deferredSettles = deferredSettles.filter((turn) => !adoptSettledTwin(historyItems, turn));
     }
 
-    const bornKeys: string[] = [];
-    const trackBirth = (key: string) => {
-      if (!knownKeys.has(key)) {
-        knownKeys.add(key);
-        bornKeys.push(key);
-      }
-    };
-
     let historyRows: TranscriptRow[];
     if (historyRowsCache?.items === historyItems) {
       historyRows = historyRowsCache.rows;
@@ -848,7 +830,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         const members = group.kind === "reply" ? group.items : [group.item];
         const itemRows = buildHistoryRows(members, retryTarget);
         historyRows.push(...itemRows);
-        for (const row of itemRows) trackBirth(row.key);
         if (group.kind === "single" && group.item.kind === "user") retryTarget = group.item;
       }
       historyRowsCache = { items: historyItems, rows: historyRows };
@@ -908,11 +889,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
       const liveActivity = buildAssistantActivityRow(activeTurn.replyKey, liveUnits);
       rows = [...visibleHistoryRows, liveActivity];
       liveStartIndex = rows.length - 1;
-      trackBirth(liveActivity.key);
-    }
-
-    if (bornKeys.length > 0 || isInitialBuild) {
-      options?.onRowsBorn?.(bornKeys, isInitialBuild);
     }
 
     return { rows, liveStartIndex };

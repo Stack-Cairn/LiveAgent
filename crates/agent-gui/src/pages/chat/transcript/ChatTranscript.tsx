@@ -1,5 +1,6 @@
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ChevronDown, Copy } from "@liveagent/ui/components/IconSet";
+import { MotionPopover } from "@liveagent/ui/components/MotionPopover";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildFloorEntries } from "@liveagent/ui/lib/chat-floor-nav/floorModel";
 import { BOTTOM_REATTACH_ZONE_PX } from "@liveagent/ui/lib/chat-scroll/scrollFollowCore";
@@ -18,7 +19,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useMenuExitPresence } from "../../../lib/shared/menuMotion";
 import { RowInteractionProvider, useRowInteractionStore } from "./rowInteraction";
 import { TranscriptList, type TranscriptNavHandle } from "./TranscriptList";
 import { HistorySwitchLoadingOverlay } from "./TranscriptLoadingStates";
@@ -231,12 +231,8 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     [closeTranscriptContextMenu],
   );
 
-  // Closing keeps the last snapshot mounted (inert) while the exit animation
-  // plays; only the live snapshot drives the dismiss listeners above.
-  const { rendered: renderedContextMenu, isExiting: isContextMenuExiting } =
-    useMenuExitPresence(transcriptContextMenu);
-  const transcriptContextMenuPosition = renderedContextMenu
-    ? clampTranscriptContextMenuPosition(renderedContextMenu.x, renderedContextMenu.y)
+  const transcriptContextMenuPosition = transcriptContextMenu
+    ? clampTranscriptContextMenuPosition(transcriptContextMenu.x, transcriptContextMenu.y)
     : null;
   const copySelectedTextLabel = locale === "en-US" ? "Copy selected text" : "复制选中文本";
   const jumpToBottomLabel = locale === "en-US" ? "Scroll to bottom" : "回到底部";
@@ -354,7 +350,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           aria-label={jumpToBottomLabel}
           title={jumpToBottomLabel}
           onClick={() => scrollFollowHandle.jumpToBottom()}
-          className="chat-jump-to-bottom absolute z-10 flex size-8 -translate-x-1/2 animate-[chatJumpToBottomIn_var(--ui-duration-180ms)_var(--ease-ui-enter)] items-center justify-center rounded-full border border-border/55 bg-background/45 text-muted-foreground shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p45),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p35)] backdrop-blur-18px backdrop-saturate-[180%] transition-colors hover:bg-background/65 hover:text-foreground dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p6)] dark:hover:bg-white/[0.11]"
+          className="chat-jump-to-bottom absolute z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/55 bg-background/45 text-muted-foreground shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p45),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p35)] backdrop-blur-18px backdrop-saturate-[180%] transition-colors hover:bg-background/65 hover:text-foreground dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p6)] dark:hover:bg-white/[0.11]"
           // Centered on the composer card (not the pane) and stacked above
           // the task-progress pill / queue panel: the composer layer paints
           // over the transcript, so any overlap would hide the button.
@@ -366,37 +362,40 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           <ChevronDown className="size-4" />
         </button>
       ) : null}
-      {renderedContextMenu && transcriptContextMenuPosition
+      {typeof document !== "undefined"
         ? createPortal(
-            <div
+            <MotionPopover
+              open={transcriptContextMenu !== null && transcriptContextMenuPosition !== null}
               ref={transcriptContextMenuRef}
               role="menu"
-              className={cn(
-                "animate-editor-context-menu origin-top-left layer-popover fixed w-max min-w-38 max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
-                isContextMenuExiting &&
-                  "editor-context-menu-exit pointer-events-none animate-[editorContextMenuOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] motion-reduce:animate-none motion-reduce:opacity-0",
-              )}
-              style={{
-                left: transcriptContextMenuPosition.left,
-                top: transcriptContextMenuPosition.top,
-              }}
+              className="origin-top-left layer-popover fixed w-max min-w-38 max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu"
+              style={
+                transcriptContextMenuPosition
+                  ? {
+                      left: transcriptContextMenuPosition.left,
+                      top: transcriptContextMenuPosition.top,
+                    }
+                  : undefined
+              }
               onContextMenu={(event) => {
                 event.preventDefault();
               }}
             >
-              <button
-                type="button"
-                role="menuitem"
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
-                onClick={() => {
-                  writeTextToClipboard(renderedContextMenu.selectedText);
-                  closeTranscriptContextMenu();
-                }}
-              >
-                <Copy className="size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">{copySelectedTextLabel}</span>
-              </button>
-            </div>,
+              {transcriptContextMenu ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => {
+                    writeTextToClipboard(transcriptContextMenu.selectedText);
+                    closeTranscriptContextMenu();
+                  }}
+                >
+                  <Copy className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{copySelectedTextLabel}</span>
+                </button>
+              ) : null}
+            </MotionPopover>,
             document.body,
           )
         : null}

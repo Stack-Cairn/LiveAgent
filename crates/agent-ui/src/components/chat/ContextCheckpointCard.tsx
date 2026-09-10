@@ -22,7 +22,7 @@ export function ContextCheckpointCard(props: {
   return (
     <div
       className={cn(
-        "animate-checkpoint-card w-full overflow-hidden rounded-xl border border-black/[0.06] bg-white/[0.85] shadow-ui-contextcheckpointcard-3 dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-ui-contextcheckpointcard-4",
+        "w-full overflow-hidden rounded-xl border border-black/[0.06] bg-white/[0.85] shadow-ui-contextcheckpointcard-3 dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-ui-contextcheckpointcard-4",
         className,
       )}
     >
@@ -56,7 +56,7 @@ export function ContextCheckpointCard(props: {
         />
       </button>
       {expanded ? (
-        <div className="animate-checkpoint-expand overflow-hidden border-t border-black/[0.05] px-3.5 py-3 dark:border-white/[0.06]">
+        <div className="overflow-hidden border-t border-black/[0.05] px-3.5 py-3 dark:border-white/[0.06]">
           <Markdown content={content} className="font-chat text-sm" readOnly={readOnly} />
         </div>
       ) : null}

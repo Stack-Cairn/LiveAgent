@@ -91,7 +91,7 @@ export function FileToolArgsDisplay({ preview }: { preview: FileToolPreview }) {
     }
     const fieldLabel = preview.field === "new_source" ? "new source" : "content";
     return (
-      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {preview.path ? <PathSurface path={preview.path} /> : null}
         {preview.content.has ? (
           <MetaTags
@@ -116,7 +116,7 @@ export function FileToolArgsDisplay({ preview }: { preview: FileToolPreview }) {
     return <StreamingArgPlaceholder label="Waiting for replacement strings..." />;
   }
   return (
-    <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {preview.path ? <PathSurface path={preview.path} /> : null}
       <MetaTags
         tags={[

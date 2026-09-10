@@ -296,9 +296,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                             : "border-border bg-background group-hover:border-muted-foreground/40",
                         )}
                       >
-                        {checked ? (
-                          <Check className="animate-skill-check-enter motion-reduce:animate-none! size-3" />
-                        ) : null}
+                        {checked ? <Check className="size-3" /> : null}
                       </div>
                     )}
                   </>

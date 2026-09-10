@@ -278,7 +278,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
     const task = displayString(args.prompt);
 
     return (
-      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {name ? (
           <ToolSurface>
             <ToolSurfaceLabel label="agent" />
@@ -315,7 +315,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         : "";
     if (!cmd) return null;
     return (
-      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <ToolScrollablePre className="max-h-44 bg-zinc-950/90 text-emerald-300/90 dark:bg-zinc-950/90">
           <span className="mr-1 select-none text-emerald-500/30">$</span>
           {cmd}
@@ -328,7 +328,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
   // File tools: target path + compact request facts
   if (display.type === "file" && (display.path || display.tags.length > 0)) {
     return (
-      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {display.path ? (
           <ToolSurface>
             <ToolSurfaceLabel label="path" />
@@ -346,7 +346,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
   // Search tools: query, scope, and request facts
   if (display.type === "search" && (display.pattern || display.path || display.tags.length > 0)) {
     return (
-      <div className="animate-tool-expand motion-reduce:animate-none! flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {display.pattern ? (
           <ToolSurface>
             <ToolSurfaceLabel label="query" />

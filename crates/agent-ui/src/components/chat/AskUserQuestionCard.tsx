@@ -8,7 +8,7 @@ import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ASK_USER_QUESTION_CUSTOM_MAX_LENGTH,
   ASK_USER_QUESTION_TIMEOUT_MS,
@@ -16,95 +16,15 @@ import {
   type AskUserQuestionItem,
 } from "../../lib/chat/askUserQuestion";
 import { cn } from "../../lib/shared/utils";
+import { MotionDirectionalPanel } from "../MotionDirectionalPanel";
 
 export type AskUserQuestionSubmitOutcome = { ok: boolean; message?: string };
-
-const COUNTER_ROLL_MS = 400;
 
 function formatCountdown(remainingMs: number) {
   const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function RollingDigits({ value }: { value: string }) {
-  const previousValueRef = useRef(value);
-  const [previousValue, setPreviousValue] = useState(value);
-  const [nextValue, setNextValue] = useState(value);
-  const [rolling, setRolling] = useState(false);
-  const [shifted, setShifted] = useState(false);
-  const [direction, setDirection] = useState<"up" | "down">("up");
-
-  useEffect(() => {
-    if (previousValueRef.current === value) return;
-    const from = previousValueRef.current;
-    previousValueRef.current = value;
-    const fromNumber = Number.parseInt(from, 10);
-    const toNumber = Number.parseInt(value, 10);
-    setDirection(
-      Number.isFinite(fromNumber) && Number.isFinite(toNumber) && toNumber < fromNumber
-        ? "down"
-        : "up",
-    );
-    setPreviousValue(from);
-    setNextValue(value);
-    setRolling(true);
-    setShifted(false);
-
-    let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => setShifted(true));
-    });
-    const done = window.setTimeout(() => {
-      setRolling(false);
-      setPreviousValue(value);
-      setShifted(false);
-    }, COUNTER_ROLL_MS);
-
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      cancelAnimationFrame(secondFrame);
-      window.clearTimeout(done);
-    };
-  }, [value]);
-
-  const visibleValue = rolling ? nextValue : previousValue;
-
-  return (
-    <>
-      {Array.from({ length: visibleValue.length }, (_, index) => {
-        const previousCharacter = previousValue[index] ?? "";
-        const nextCharacter = visibleValue[index] ?? "";
-        if (!rolling || previousCharacter === nextCharacter) {
-          // biome-ignore lint/suspicious/noArrayIndexKey: Counter glyphs are positional animation cells.
-          return <span key={`${index}-${nextCharacter}`}>{nextCharacter}</span>;
-        }
-        const top = direction === "down" ? nextCharacter : previousCharacter;
-        const bottom = direction === "down" ? previousCharacter : nextCharacter;
-        const restingOffset = direction === "down" ? "0" : "-1em";
-        const startingOffset = direction === "down" ? "-1em" : "0";
-        return (
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: Counter glyphs are positional animation cells.
-            key={`${index}-${previousCharacter}-${nextCharacter}-${direction}`}
-            className="relative inline-block h-1em overflow-hidden align-minus-0p05em leading-1em"
-          >
-            <span
-              className="flex flex-col"
-              style={{
-                transition: "transform var(--ui-duration-350ms) var(--ease-in-out)",
-                transform: `translateY(${shifted ? restingOffset : startingOffset})`,
-              }}
-            >
-              <span className="h-1em leading-1em">{top}</span>
-              <span className="h-1em leading-1em">{bottom}</span>
-            </span>
-          </span>
-        );
-      })}
-    </>
-  );
 }
 
 /**
@@ -281,7 +201,7 @@ export function AskUserQuestionCard({
   };
 
   return (
-    <div className="animate-tool-expand motion-reduce:animate-none! w-full max-w-panel-36rem">
+    <div className="w-full max-w-panel-36rem">
       <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
         <div className="px-4 pb-3 pt-4">
           {/* 只渲染当前题、高度自然撑开。此前用「固定高度视口 + transform
@@ -299,16 +219,10 @@ export function AskUserQuestionCard({
                 ? (settledSelections[question.id] ?? "")
                 : (customTexts[question.id] ?? "");
               return (
-                <div
+                <MotionDirectionalPanel
                   key={question.id}
-                  className={cn(
-                    switchDirection === "forward"
-                      ? "animate-ask-question-enter-forward motion-reduce:animate-none!"
-                      : "",
-                    switchDirection === "backward"
-                      ? "animate-ask-question-enter-backward motion-reduce:animate-none!"
-                      : "",
-                  )}
+                  panelKey={question.id}
+                  direction={switchDirection}
                 >
                   <div className="text-scaled-13px font-medium leading-1p5 text-foreground">
                     {question.prompt}
@@ -459,7 +373,7 @@ export function AskUserQuestionCard({
                       </div>
                     ) : null}
                   </fieldset>
-                </div>
+                </MotionDirectionalPanel>
               );
             })}
           </div>
@@ -485,7 +399,7 @@ export function AskUserQuestionCard({
                   <ChevronUp className="size-3.5" />
                 </button>
                 <span className="inline-flex items-center text-scaled-11px font-medium tabular-nums leading-none">
-                  <RollingDigits value={`${safeActiveIndex + 1} / ${questions.length}`} />
+                  {safeActiveIndex + 1} / {questions.length}
                 </span>
                 <button
                   type="button"

@@ -5,7 +5,6 @@ import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentio
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { useCommitDetailsLoader } from "@liveagent/ui/lib/chat/useCommitDetailsLoader";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
-import { createEntranceRegistry } from "@liveagent/ui/lib/transcript-virtual/entranceOnce";
 import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
 import {
   buildTranscriptLayoutKey,
@@ -176,12 +175,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
 
   // The component remounts per conversation (keyed by ChatTranscript), so
   // per-conversation state initializes once per mount — no reset effects.
-  const [entranceRegistry] = useState(() => createEntranceRegistry());
-  const [rowModel] = useState(() =>
-    createTranscriptRowModel({
-      onRowsBorn: (keys, isInitialBuild) => entranceRegistry.observeBirths(keys, isInitialBuild),
-    }),
-  );
+  const [rowModel] = useState(() => createTranscriptRowModel());
 
   // 手动压缩空闲态只置 isCompactionRunning、不置 isSending，仍要显示「正在
   // 压缩」live tail：把它并入可见性 gate（只影响 live tail 是否显示，不改动
@@ -452,7 +446,6 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
               <UserMessageRow
                 row={row}
                 isEditing={editingMessageKey === row.key}
-                animateEntrance={entranceRegistry.shouldAnimate(row.key)}
                 workspaceRoot={workspaceRoot}
                 loadCommitDetails={loadCommitDetails}
                 onStartEdit={handleStartEdit}

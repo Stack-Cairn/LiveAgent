@@ -697,7 +697,7 @@ function ProviderCardRow(props: {
                 骨架等高占位,结果到达后原位替换,卡片高度全程稳定。 */}
             <div className="flex min-h-4 min-w-0 items-center">
               {firstUsagePlan ? (
-                <span className="animate-settings-usage-reveal motion-reduce:animate-none flex min-w-0">
+                <span className="flex min-w-0">
                   <UsagePlanLine plan={firstUsagePlan} />
                 </span>
               ) : usageDisplay.loading ? (
@@ -706,12 +706,7 @@ function ProviderCardRow(props: {
                   className="h-2 w-32 max-w-full animate-pulse rounded-full bg-foreground/[0.08] motion-reduce:animate-none"
                 />
               ) : (
-                <span
-                  className={cn(
-                    "animate-settings-usage-reveal motion-reduce:animate-none truncate",
-                    usageDisplay.error && "text-destructive",
-                  )}
-                >
+                <span className={cn("truncate", usageDisplay.error && "text-destructive")}>
                   {usageDisplay.error ?? t("settings.providerUsageNoData")}
                 </span>
               )}
@@ -744,7 +739,7 @@ function ProviderCardRow(props: {
                   className="h-2 w-16 animate-pulse rounded-full bg-foreground/[0.06] motion-reduce:animate-none"
                 />
               ) : (
-                <span className="animate-settings-usage-reveal motion-reduce:animate-none flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                   {extraUsagePlans.length > 0 ? (
                     <button
                       type="button"

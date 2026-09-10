@@ -52,6 +52,6 @@ test("extremely narrow viewports still return a renderable layout", () => {
 
 test("popup utilities leave its width to the measured composer layout", () => {
   const popup = source.match(/className=\{cn\([\s\S]*?\)\}/)?.[0] ?? "";
-  assert.match(popup, /animate-mention-popup-enter[^"\n]*min-w-0/);
+  assert.match(popup, /origin-bottom min-w-0/);
   assert.doesNotMatch(popup, /(?:min-w-|w-)380px/);
 });

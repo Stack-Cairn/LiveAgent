@@ -1,4 +1,5 @@
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
+import { MotionPopover } from "@liveagent/ui/components/MotionPopover";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -11,7 +12,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useMenuExitPresence } from "../../lib/shared/menuMotion";
 import { readClipboardText } from "../../lib/system/clipboardText";
 import {
   clampMenuPosition,
@@ -389,75 +389,73 @@ export function useNativeInputContextMenu(): {
     closeMenu();
   }, [closeMenu]);
 
-  // Clearing the snapshot starts the exit animation; the retained snapshot
-  // keeps the menu rendered (inert) until the fade-out completes.
-  const { rendered: renderedSnapshot, isExiting } = useMenuExitPresence(snapshot);
-  const items = renderedSnapshot ? computeMenuItems(renderedSnapshot) : null;
+  const items = snapshot ? computeMenuItems(snapshot) : null;
 
   const menu =
-    renderedSnapshot && items
+    typeof document !== "undefined"
       ? createPortal(
-          <div
+          <MotionPopover
+            open={snapshot !== null && items !== null}
             ref={menuRef}
             role="menu"
-            className={cn(
-              "animate-editor-context-menu origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
-              isExiting &&
-                "editor-context-menu-exit pointer-events-none animate-[editorContextMenuOut_var(--ui-duration-120ms)_var(--ease-in)_forwards] motion-reduce:animate-none motion-reduce:opacity-0",
-            )}
-            style={{ left: renderedSnapshot.x, top: renderedSnapshot.y }}
+            className="origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu"
+            style={snapshot ? { left: snapshot.x, top: snapshot.y } : undefined}
             onContextMenu={(event) => {
               event.preventDefault();
             }}
           >
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canCut}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleCut}
-            >
-              <Scissors className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.cut")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canCopy}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleCopy}
-            >
-              <Copy className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.copy")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canPaste}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                void handlePaste();
-              }}
-            >
-              <ClipboardPaste className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.paste")}</span>
-            </button>
-            <div className="my-1 h-px bg-border/70" />
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canSelectAll}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleSelectAll}
-            >
-              <ScanText className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.selectAll")}</span>
-            </button>
-          </div>,
+            {snapshot && items ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canCut}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleCut}
+                >
+                  <Scissors className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.cut")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canCopy}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleCopy}
+                >
+                  <Copy className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.copy")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canPaste}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    void handlePaste();
+                  }}
+                >
+                  <ClipboardPaste className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.paste")}</span>
+                </button>
+                <div className="my-1 h-px bg-border/70" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canSelectAll}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleSelectAll}
+                >
+                  <ScanText className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.selectAll")}</span>
+                </button>
+              </>
+            ) : null}
+          </MotionPopover>,
           document.body,
         )
       : null;

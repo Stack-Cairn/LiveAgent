@@ -25,10 +25,10 @@ test("folder import notifications expose accessible status and motion behavior",
   assert.match(toastSource, /role=\{item\.type === "error" \? "alert" : "status"\}/);
   assert.match(toastSource, /aria-live=\{item\.type === "error" \? "assertive" : "polite"\}/);
   assert.match(toastSource, /aria-label=\{t\("common\.dismissNotification"\)\}/);
-  assert.match(toastSource, /animate-notify-toast-enter/);
-  assert.match(animationStyles, /@keyframes notifySlideIn/);
-  assert.match(toastSource, /motion-reduce:animate-none!/);
-  assert.match(toastSource, /classList\.add\("animate-notify-toast-exit"\)/);
+  assert.match(toastSource, /<AnimatePresence>/);
+  assert.match(toastSource, /useReducedMotion\(\)/);
+  assert.match(toastSource, /exit=\{\{ opacity: 0,/);
+  assert.doesNotMatch(animationStyles, /@keyframes notifyFadeOut/);
 });
 
 test("workspace drop label truncates safely in narrow translated layouts", () => {

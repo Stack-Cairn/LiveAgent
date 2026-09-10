@@ -19,8 +19,6 @@ import { UserAttachmentCards } from "./UserAttachmentCards";
 export type UserMessageRowProps = {
   row: UserRow;
   isEditing: boolean;
-  // True only in the row's birth window — never on virtualizer re-entry.
-  animateEntrance: boolean;
   workspaceRoot?: string;
   loadCommitDetails: CommitDetailsLoader;
   onStartEdit: (key: string) => void;
@@ -37,7 +35,6 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
   const {
     row,
     isEditing,
-    animateEntrance,
     workspaceRoot,
     loadCommitDetails,
     onStartEdit,
@@ -84,12 +81,7 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
       )}
       data-user-bubble-wrap
     >
-      <div
-        className={cn(
-          animateEntrance && "desktop:animate-chat-bubble-enter",
-          "ml-auto w-fit max-w-full whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
-        )}
-      >
+      <div className="ml-auto w-fit max-w-full whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]">
         <UserAttachmentCards files={visibleFiles} workspaceRoot={workspaceRoot} />
         {item.text ? (
           <UserMessageContent

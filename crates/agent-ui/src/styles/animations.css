@@ -1,8 +1,8 @@
-/* Animation definitions shared by both hosts. Keep original timing, keyframe layers and state-specific consumers. Duration and easing primitives live in tokens.css. */
+/* Keep CSS keyframes for repeated status feedback and host-specific legacy transitions.
+   Component presence and navigation transitions belong in the shared Motion primitives. */
 @theme inline {
   --animate-hub-loading-progress: hubLoadingProgress var(--ui-duration-1450ms) var(--ease-in-out)
     infinite;
-  --animate-chat-bubble-enter: chatBubbleIn var(--ui-duration-300ms) var(--ease-ui-enter);
   --animate-status-board-reactor-ring-a: status-board-ring-spin var(--ui-duration-9000ms) linear
     infinite;
   --animate-status-board-reactor-ring-b: status-board-ring-spin var(--ui-duration-7000ms) linear
@@ -12,26 +12,13 @@
   --animate-login-btn-loading: loginSpin var(--ui-duration-600ms) linear infinite;
   --animate-chat-work-pixel: chat-work-pixel var(--ui-duration-650ms) ease-in-out
     var(--chat-work-delay) infinite;
-  --animate-checkpoint-expand: checkpointExpandIn var(--ui-duration-300ms) var(--ease-ui-enter);
   --animate-compaction-band-icon-active: compactionBandBreathe var(--ui-duration-1800ms) ease-in-out
     infinite;
-  --animate-ask-custom-input-enter: askCustomInputReveal var(--ui-duration-180ms)
-    var(--ease-ui-enter);
-  --animate-skill-check-enter: skillCardCheckIn var(--ui-duration-300ms) var(--ease-ui-spring) both;
   --animate-file-drop-overlay-zone: fileDropBorderPulse var(--ui-duration-2400ms) ease-in-out
     infinite;
   --animate-sftp-path-popover-enter: sftpPathPopoverIn var(--ui-duration-160ms) var(--ease-ui-enter);
-  --animate-mention-popup-enter: mentionPopupIn var(--ui-duration-150ms) var(--ease-ui-enter);
-  --animate-notify-toast-exit: notifyFadeOut var(--ui-duration-300ms) ease-out both;
-  --animate-settings-usage-reveal: settings-usage-reveal var(--ui-duration-240ms) ease-out;
-  --animate-checkpoint-card: checkpointSlideIn var(--ui-duration-350ms) var(--ease-ui-enter);
   --animate-compaction-band-progress: compactionBandSweep var(--ui-duration-1600ms)
     var(--ease-in-out) infinite;
-  --animate-tool-expand: toolExpandIn var(--ui-duration-220ms) var(--ease-ui-enter);
-  --animate-ask-question-enter-forward: askQuestionSlideForward var(--ui-duration-220ms)
-    var(--ease-ui-enter);
-  --animate-ask-question-enter-backward: askQuestionSlideBackward var(--ui-duration-220ms)
-    var(--ease-ui-enter);
   --animate-notify-toast-enter: notifySlideIn var(--ui-duration-300ms) var(--ease-ui-enter) both;
   --animate-file-drop-overlay: fileDropOverlayIn var(--ui-duration-160ms) var(--ease-ui-enter);
   --animate-file-drop-overlay-card: fileDropCardIn var(--ui-duration-220ms) var(--ease-ui-enter);
@@ -64,41 +51,6 @@
   }
 }
 @layer components {
-  @keyframes mentionPopupIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-6px)) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  /* Smooth entrance for chat bubbles */
-
-  @keyframes chatBubbleIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-6px)) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes chatJumpToBottomIn {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) translateY(var(--spacing-6px));
-    }
-    to {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-  }
-
   @keyframes sidebarMenuIn {
     from {
       opacity: 0;
@@ -147,29 +99,6 @@
     }
   }
 
-  /* Context checkpoint animations */
-  @keyframes checkpointSlideIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-8px)) scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes checkpointExpandIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-minus-4px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
   /* Compaction band — shared chrome for the live "compressing context"
      status and the settled in-reply seam. The active band carries a sweeping
      progress line along its bottom edge and a breathing icon tile; the
@@ -195,53 +124,6 @@
     }
   }
 
-  /* Tool card animations & micro-interactions */
-  @keyframes toolExpandIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-minus-4px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  /* AskUserQuestion 切题：按方向轻微滑入（forward 从右、backward 从左） */
-  @keyframes askQuestionSlideForward {
-    from {
-      opacity: 0;
-      transform: translateX(var(--spacing-10px));
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  @keyframes askQuestionSlideBackward {
-    from {
-      opacity: 0;
-      transform: translateX(var(--spacing-minus-10px));
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  /* “其他（自行输入）”展开输入框：轻微下滑+淡入，呼应磨砂玻璃质感。 */
-  @keyframes askCustomInputReveal {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-minus-3px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
   /* Notify toast animations */
 
   @keyframes notifySlideIn {
@@ -252,17 +134,6 @@
     to {
       opacity: 1;
       transform: translateX(0);
-    }
-  }
-
-  @keyframes notifyFadeOut {
-    from {
-      opacity: 1;
-      transform: translateX(0);
-    }
-    to {
-      opacity: 0;
-      transform: translateX(var(--spacing-20px));
     }
   }
 
@@ -335,20 +206,6 @@
     }
   }
 
-  @keyframes skillCardCheckIn {
-    0% {
-      transform: scale(0);
-      opacity: 0;
-    }
-    60% {
-      transform: scale(1.15);
-    }
-    100% {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
-
   @keyframes skillsSkeletonPulse {
     0%,
     100% {
@@ -387,16 +244,6 @@
     50% {
       box-shadow: 0 0 0 var(--spacing-3px) hsl(var(--foreground) / 0.04);
     }
-  }
-}
-/* 供应商卡片用量区:结果替换等高骨架占位时柔和浮现,只动透明度不动高度。 */
-@keyframes settings-usage-reveal {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
   }
 }
 @keyframes sftpPathPopoverIn {
@@ -500,20 +347,6 @@
  * keep the moved row in a skipped paint state and render only the white row
  * background, making the conversation title look blank.
  */
-/* Exit leg for menus driven by useMenuExitPresence (lib/shared/menuMotion.ts):
- * the hook keeps the menu mounted for MENU_EXIT_MS while this plays, so the
- * duration below must stay in sync with that constant. `forwards` holds the
- * faded-out frame in case the unmount timer lands a tick late. */
-@keyframes editorContextMenuOut {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97);
-  }
-}
 @keyframes loginSpin {
   to {
     transform: rotate(360deg);

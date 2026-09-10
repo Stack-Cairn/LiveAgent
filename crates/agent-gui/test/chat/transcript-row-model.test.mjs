@@ -14,9 +14,6 @@ const {
 const { createLiveTranscriptStore } = loader.loadModule(
   "src/lib/chat/conversation/liveTranscriptStore.ts",
 );
-const { createEntranceRegistry, ENTRANCE_ANIMATION_WINDOW_MS } = loader.loadModule(
-  "@liveagent/ui/lib/transcript-virtual/entranceOnce.ts",
-);
 const { extractRenderUnitRange } = loader.loadModule(
   "src/pages/chat/transcript/renderUnitRangeExtractor.ts",
 );
@@ -278,42 +275,13 @@ test("settled units reuse identities across live-store emits", () => {
   assert.equal(first.rows[2], second.rows[2]);
 });
 
-test("entrance registry: initial rows never animate, new rows animate once", () => {
-  let clock = 1_000;
-  const registry = createEntranceRegistry(() => clock);
-  registry.observeBirths(["a", "b"], true);
-  assert.equal(registry.shouldAnimate("a"), false);
-
-  clock += 50;
-  registry.observeBirths(["c"], false);
-  assert.equal(registry.shouldAnimate("c"), true);
-  assert.equal(registry.shouldAnimate("a"), false);
-
-  clock += ENTRANCE_ANIMATION_WINDOW_MS + 1;
-  assert.equal(registry.shouldAnimate("c"), false);
-  registry.observeBirths(["c"], false);
-  assert.equal(registry.shouldAnimate("c"), false);
-
-  registry.reset();
-  registry.observeBirths(["c"], true);
-  assert.equal(registry.shouldAnimate("c"), false);
-});
-
-test("row model reports unit births once and reuses the history array", () => {
-  const births = [];
-  const model = createTranscriptRowModel({
-    onRowsBorn: (keys, isInitialBuild) => births.push([keys.slice(), isInitialBuild]),
-  });
+test("row model reuses history rows across builds", () => {
+  const model = createTranscriptRowModel();
   const history = [userItem("u1"), assistantItem("a1", [round("r1", "done")])];
 
   const first = model.build(history, idleLive);
-  assert.deepEqual(births, [
-    [["u1", "a1:round:r1:block:text-1", "a1:footer"], true],
-  ]);
-
   const second = model.build(history, idleLive);
   assert.equal(second.rows, first.rows);
-  assert.equal(births.length, 1);
 
   const sendingLive = {
     ...idleLive,
@@ -321,13 +289,7 @@ test("row model reports unit births once and reuses the history array", () => {
     liveRounds: [{ ...round("r1", "x"), runningToolCallIds: [], thinkingOpen: false }],
   };
   const streaming = model.build(history, sendingLive);
-  assert.equal(births.length, 2);
-  assert.equal(births[1][1], false);
-  assert.match(births[1][0][0], /^live-turn-/);
   assert.equal(streaming.rows[0], first.rows[0]);
-
-  model.build(history, { ...sendingLive });
-  assert.equal(births.length, 2);
 });
 
 test("a committed twin that races persistence is re-keyed at settle", () => {

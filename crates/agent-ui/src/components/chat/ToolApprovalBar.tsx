@@ -178,7 +178,7 @@ export function ToolApprovalBar({
           onDecide(current.toolCallId, "approve"),
         );
       }}
-      className="animate-tool-expand motion-reduce:animate-none! @container relative flex h-32 w-full flex-col rounded-3xl border border-black/[0.055] bg-white/72 shadow-ui-toolapprovalbar-18 outline-none backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-toolapprovalbar-19"
+      className="@container relative flex h-32 w-full flex-col rounded-3xl border border-black/[0.055] bg-white/72 shadow-ui-toolapprovalbar-18 outline-none backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-toolapprovalbar-19"
     >
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3">
         <div className="flex min-w-0 items-center gap-2 text-muted-foreground">

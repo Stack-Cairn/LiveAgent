@@ -66,7 +66,7 @@ export function PlanModeCard({
     <div
       className={cn(
         // 边框与兄弟工具卡保持一致,状态色只由左侧脊承担一处,避免多点强调互相稀释。
-        "animate-tool-expand motion-reduce:animate-none! relative overflow-hidden rounded-xl border border-border/45 bg-background/70 dark:border-white/[0.08] dark:bg-white/[0.03]",
+        "relative overflow-hidden rounded-xl border border-border/45 bg-background/70 dark:border-white/[0.08] dark:bg-white/[0.03]",
         // 只有仍可拍板的计划值得从转录里浮起来;已落定的一律回落成安静的历史文档。
         tone === "pending"
           ? "shadow-ui-planmodecard-9 dark:shadow-ui-planmodecard-10"

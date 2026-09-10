@@ -31,6 +31,7 @@ import {
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
+import { AnimatePresence } from "motion/react";
 import {
   type ClipboardEvent,
   type FocusEvent,
@@ -2017,21 +2018,24 @@ export const MentionComposer = memo(
 
     return (
       <div ref={wrapperRef} className="relative w-full min-w-0 max-w-full flex-1">
-        {popupVisible && (
-          <Popup
-            anchorRef={wrapperRef}
-            trigger={mentionCtx.trigger}
-            mode={mentionMenuMode}
-            suggestions={suggestions}
-            highlightIndex={highlightIdx}
-            isLoading={popupLoading}
-            error={popupError}
-            showEmpty={showEmpty}
-            emptyLabel={popupEmptyLabel}
-            onBack={returnToMentionRoot}
-            onSelect={selectSuggestion}
-          />
-        )}
+        <AnimatePresence initial={false}>
+          {popupVisible ? (
+            <Popup
+              key="mention-popup"
+              anchorRef={wrapperRef}
+              trigger={mentionCtx.trigger}
+              mode={mentionMenuMode}
+              suggestions={suggestions}
+              highlightIndex={highlightIdx}
+              isLoading={popupLoading}
+              error={popupError}
+              showEmpty={showEmpty}
+              emptyLabel={popupEmptyLabel}
+              onBack={returnToMentionRoot}
+              onSelect={selectSuggestion}
+            />
+          ) : null}
+        </AnimatePresence>
         {commitTooltip ? (
           <CommitMentionTooltip
             commit={commitTooltip.commit}

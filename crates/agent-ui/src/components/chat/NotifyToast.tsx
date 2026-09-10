@@ -1,7 +1,10 @@
 import { AlertTriangle, CheckCircle2, X, XCircle } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { UI_MOTION_TRANSITION } from "@liveagent/ui/lib/shared/motion";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { memo, useEffect, useRef } from "react";
+import { AnimatePresence, domAnimation, LazyMotion, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { memo, useEffect } from "react";
 
 export type NotifyItem = {
   id: string;
@@ -14,13 +17,16 @@ export const NotifyToast = memo(function NotifyToast(props: {
   onDismiss: (id: string) => void;
 }) {
   const { items, onDismiss } = props;
-  if (items.length === 0) return null;
 
   return (
     <div className="absolute top-full right-4 z-50 flex flex-col gap-2 pt-2 pointer-events-none">
-      {items.map((item) => (
-        <ToastEntry key={item.id} item={item} onDismiss={onDismiss} />
-      ))}
+      <LazyMotion features={domAnimation} strict>
+        <AnimatePresence>
+          {items.map((item) => (
+            <ToastEntry key={item.id} item={item} onDismiss={onDismiss} />
+          ))}
+        </AnimatePresence>
+      </LazyMotion>
     </div>
   );
 });
@@ -31,35 +37,32 @@ const ToastEntry = memo(function ToastEntry(props: {
 }) {
   const { item, onDismiss } = props;
   const { t } = useLocale();
-  const elRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const el = elRef.current;
-      if (el) {
-        el.classList.add("animate-notify-toast-exit");
-        const onEnd = () => onDismiss(item.id);
-        el.addEventListener("animationend", onEnd, { once: true });
-        // fallback in case animationend doesn't fire
-        setTimeout(onEnd, 400);
-      } else {
-        onDismiss(item.id);
-      }
-    }, 5000);
+    const timer = setTimeout(() => onDismiss(item.id), 5000);
     return () => clearTimeout(timer);
   }, [item.id, onDismiss]);
 
   const isWarning = item.type === "warning";
   const isSuccess = item.type === "success";
+  const enterTransition = prefersReducedMotion
+    ? UI_MOTION_TRANSITION.instant
+    : UI_MOTION_TRANSITION.feedback;
+  const exitTransition = prefersReducedMotion
+    ? UI_MOTION_TRANSITION.instant
+    : UI_MOTION_TRANSITION.feedbackExit;
 
   return (
-    <div
-      ref={elRef}
+    <m.div
+      initial={{ opacity: 0, x: prefersReducedMotion ? 0 : 20 }}
+      animate={{ opacity: 1, x: 0, transition: enterTransition }}
+      exit={{ opacity: 0, x: prefersReducedMotion ? 0 : 20, transition: exitTransition }}
       role={item.type === "error" ? "alert" : "status"}
       aria-live={item.type === "error" ? "assertive" : "polite"}
       aria-atomic="true"
       className={cn(
-        "animate-notify-toast-enter motion-reduce:animate-none! motion-reduce:animate-none! pointer-events-auto flex w-notification items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
+        "pointer-events-auto flex w-notification items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
         isWarning
           ? "border-amber-500/30 bg-amber-50/95 dark:bg-amber-950/80 dark:border-amber-500/25"
           : isSuccess
@@ -103,6 +106,6 @@ const ToastEntry = memo(function ToastEntry(props: {
       >
         <X aria-hidden="true" className="size-3.5" />
       </button>
-    </div>
+    </m.div>
   );
 });
