@@ -1968,7 +1968,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               {items.length > 0 ? (
                 <div
                   key={scopeKey || "scope"}
-                  className="animate-chat-history-scope-enter will-change-[transform,opacity] motion-reduce:animate-none relative"
+                  className="relative"
                   style={{ height: historyVirtualizer.getTotalSize() }}
                 >
                   {virtualHistoryRows.map((virtualRow) => {
@@ -1997,7 +1997,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               ) : listStatus === "loading" || listStatus === "initial" ? (
                 <HistoryListLoadingSkeleton />
               ) : listStatus === "ready" && !errorMessage ? (
-                <div className="animate-chat-history-scope-enter will-change-[transform,opacity] motion-reduce:animate-none flex items-center justify-center px-4 py-8 text-center">
+                <div className="flex items-center justify-center px-4 py-8 text-center">
                   <p className="text-xs font-medium text-muted-foreground/60">
                     {t("chat.emptyChatHistory")}
                   </p>

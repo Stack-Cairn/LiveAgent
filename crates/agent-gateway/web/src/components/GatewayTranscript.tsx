@@ -119,7 +119,6 @@ type GatewayTranscriptProps = {
   // a spinner and every branch button disables until it settles.
   branchPendingMessageId?: string | null;
   onSuggestionSelect?: (text: string) => void;
-  suggestionsDisabled?: boolean;
   readOnly?: boolean;
   redactToolContent?: boolean;
 };
@@ -1070,7 +1069,6 @@ export function GatewayTranscript({
   onBranchConversation,
   branchPendingMessageId,
   onSuggestionSelect,
-  suggestionsDisabled = false,
   readOnly = false,
   redactToolContent = false,
 }: GatewayTranscriptProps) {
@@ -1110,7 +1108,6 @@ export function GatewayTranscript({
             variant={showNoModelsState ? "no-models" : "start-chat"}
             onOpenSettings={onOpenSettings}
             onSuggestionSelect={readOnly ? undefined : onSuggestionSelect}
-            suggestionsDisabled={suggestionsDisabled}
           />
         </div>
       </div>

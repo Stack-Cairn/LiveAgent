@@ -214,7 +214,6 @@ export type GatewayConversationPrimarySurface = {
   onBranchConversation: Parameters<typeof GatewayTranscript>[0]["onBranchConversation"];
   branchPendingMessageId: string | null;
   onSuggestionSelect: Parameters<typeof GatewayTranscript>[0]["onSuggestionSelect"];
-  suggestionsDisabled: boolean;
   hasMoreHistory: boolean;
   isLoadingMoreHistory: boolean;
   onLoadEarlierHistory?: () => void;
@@ -790,7 +789,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         usePrimary ? (primary?.branchPendingMessageId ?? undefined) : undefined
       }
       onSuggestionSelect={usePrimary ? primary?.onSuggestionSelect : () => onFocusPane()}
-      suggestionsDisabled={usePrimary ? primary?.suggestionsDisabled : undefined}
     />
   );
 

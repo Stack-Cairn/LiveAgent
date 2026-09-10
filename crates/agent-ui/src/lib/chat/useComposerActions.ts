@@ -7,7 +7,7 @@ import type {
   GitFileContextPayload,
 } from "@liveagent/ui/components/project-tools/git-review/index";
 import type { CodeMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
-import { type MutableRefObject, useCallback, useMemo, useRef, useState } from "react";
+import { type MutableRefObject, useCallback, useMemo } from "react";
 import type { AppSettings } from "../settings";
 import { updateSkills } from "../settings";
 import { mergeAlwaysEnabledSkillNames } from "../skills";
@@ -90,8 +90,6 @@ export function useInsertCodeReviewSkill<TSkill extends MentionComposerSkill>(pa
 }
 
 export function useComposerActions(composerRef: MutableRefObject<MentionComposerHandle | null>) {
-  const [isSuggestionTyping, setIsSuggestionTyping] = useState(false);
-  const suggestionTypingRef = useRef(false);
   const handleRightDockInsertFileMention = useCallback(
     (path: string, kind: "file" | "dir") => {
       composerRef.current?.insertFileMention(path, kind);
@@ -123,19 +121,14 @@ export function useComposerActions(composerRef: MutableRefObject<MentionComposer
   const handleEmptyStateSuggestion = useCallback(
     (text: string) => {
       const composer = composerRef.current;
-      if (!composer || suggestionTypingRef.current) return;
-      suggestionTypingRef.current = true;
-      setIsSuggestionTyping(true);
-      void composer.typeText(text).finally(() => {
-        suggestionTypingRef.current = false;
-        setIsSuggestionTyping(false);
-      });
+      if (!composer) return;
+      composer.setText(text);
+      composer.focus();
     },
     [composerRef],
   );
 
   return {
-    isSuggestionTyping,
     handleRightDockInsertFileMention,
     handleRightDockInsertCommitMention,
     handleRightDockInsertGitFileMention,

@@ -796,7 +796,6 @@ export function ChatPage(props: ChatPageProps) {
     ? t("projectTools.tunnelWebDisabled")
     : undefined;
   const {
-    isSuggestionTyping,
     handleRightDockInsertFileMention,
     handleRightDockInsertCommitMention,
     handleRightDockInsertGitFileMention,
@@ -2309,7 +2308,6 @@ export function ChatPage(props: ChatPageProps) {
       branchPendingMessageId,
       onOpenSettings,
       onSuggestionSelect: handleEmptyStateSuggestion,
-      suggestionsDisabled: isSuggestionTyping,
     },
     composer: {
       surface: "desktop",
@@ -3417,7 +3415,6 @@ export function ChatPage(props: ChatPageProps) {
         branchPendingMessageId: undefined,
         onOpenSettings,
         onSuggestionSelect: focusGuard(handleEmptyStateSuggestion),
-        suggestionsDisabled: isSuggestionTyping,
       },
       composer: {
         surface: "desktop",

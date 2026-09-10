@@ -277,7 +277,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     isConversationBusy,
     isFileDropActive,
     isImportingPastedTextRef,
-    isSuggestionTyping,
     isUploadingFiles,
     uploadingConversationId,
     loadComposerHistoryPrompts,
@@ -896,7 +895,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     onBranchConversation: handleBranchConversation,
     branchPendingMessageId,
     onSuggestionSelect: handleEmptyStateSuggestion,
-    suggestionsDisabled: isSuggestionTyping,
     hasMoreHistory: selectedHistoryHasMore,
     isLoadingMoreHistory: loadingOlderHistory,
     onLoadEarlierHistory: selectedHistoryHasMore ? handleLoadEarlierHistory : undefined,
@@ -1590,7 +1588,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                       onBranchConversation={handleBranchConversation}
                                       branchPendingMessageId={branchPendingMessageId}
                                       onSuggestionSelect={handleEmptyStateSuggestion}
-                                      suggestionsDisabled={isSuggestionTyping}
                                     />
                                   </CheckpointRewindProvider>
                                 </ChangedFilesActionsProvider>

@@ -66,14 +66,12 @@ export type ChatEmptyStateProps = {
   onOpenSettings?: (section?: "providers") => void;
   onSuggestionSelect?: (text: string) => void;
   /** Locks the suggestion cards while a picked prompt is still typing in. */
-  suggestionsDisabled?: boolean;
 };
 
 export function ChatEmptyState({
   variant,
   onOpenSettings,
   onSuggestionSelect,
-  suggestionsDisabled = false,
 }: ChatEmptyStateProps) {
   const { t } = useLocale();
   const period = useGreetingPeriod();
@@ -129,7 +127,6 @@ export function ChatEmptyState({
                 <button
                   key={card.key}
                   type="button"
-                  disabled={suggestionsDisabled}
                   onClick={() => onSuggestionSelect(t(card.promptKey))}
                   className="flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
                 >

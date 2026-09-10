@@ -63,7 +63,6 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     branchPendingMessageId,
     onOpenSettings,
     onSuggestionSelect,
-    suggestionsDisabled = false,
   } = props;
   const { locale } = useLocale();
   const showNoModelsState = !hasModels;
@@ -283,7 +282,6 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
                 variant={showNoModelsState ? "no-models" : "start-chat"}
                 onOpenSettings={onOpenSettings}
                 onSuggestionSelect={onSuggestionSelect}
-                suggestionsDisabled={suggestionsDisabled}
               />
             </div>
           ) : null}

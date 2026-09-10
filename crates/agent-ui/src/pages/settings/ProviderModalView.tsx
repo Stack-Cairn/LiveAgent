@@ -318,10 +318,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
             onScroll={() => setHeaderSuggest(null)}
           >
             {activePanel === "general" ? (
-              <section
-                key="general"
-                className="animate-provider-panel-enter motion-reduce:animate-none"
-              >
+              <section key="general">
                 <div className="text-sm font-semibold">{t("settings.basicInformation")}</div>
 
                 <div className="mt-3 space-y-2">
@@ -863,10 +860,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 </div>
               </section>
             ) : activePanel === "request" ? (
-              <section
-                key="request"
-                className="animate-provider-panel-enter motion-reduce:animate-none"
-              >
+              <section key="request">
                 <div className="text-sm font-semibold">{t("settings.providerDialogRequest")}</div>
 
                 <div
@@ -1144,7 +1138,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 </div>
 
                 {headerImportOpen ? (
-                  <div className="animate-provider-panel-enter motion-reduce:animate-none mt-3 min-w-0 rounded-xl border bg-card p-3">
+                  <div className="mt-3 min-w-0 rounded-xl border bg-card p-3">
                     <Label
                       htmlFor="provider-custom-header-import"
                       className="mb-2 block text-xs font-medium"
@@ -1243,7 +1237,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             // biome-ignore lint/suspicious/noArrayIndexKey: Header rows are an ordered, controlled editor whose mutation API is intentionally index-based; content-derived keys would remount inputs on every keystroke.
                             key={index}
                             className={cn(
-                              "animate-provider-panel-enter motion-reduce:animate-none group relative flex items-stretch overflow-hidden rounded-lg border bg-card transition-all focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-muted-foreground/30 max-[720px]:flex-wrap",
+                              "group relative flex items-stretch overflow-hidden rounded-lg border bg-card transition-all focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-muted-foreground/30 max-[720px]:flex-wrap",
                               issue &&
                                 "border-destructive/60 focus-within:border-destructive focus-within:ring-destructive/10",
                             )}
@@ -1398,10 +1392,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   : null}
               </section>
             ) : (
-              <section
-                key="usage"
-                className="animate-provider-panel-enter motion-reduce:animate-none"
-              >
+              <section key="usage">
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold">{t("settings.providerUsageQuery")}</div>

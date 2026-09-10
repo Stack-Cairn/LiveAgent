@@ -137,7 +137,6 @@ import {
   serializeChildren,
   serializeChildrenToSegments,
   stepCaretOverChip,
-  TYPEWRITER_CHAR_FADE_MS,
   writeComposerClipboardSnapshot,
   writeTextToClipboard,
 } from "./MentionComposerInternals";
@@ -735,17 +734,6 @@ export const MentionComposer = memo(
       };
     }, [clearTransientText, setBusy]);
 
-    // ---- Typewriter (typeText) ----
-    // While a run is active the editor drops contentEditable so keyboard and
-    // IME input cannot interleave user text with the scripted text.
-    const typewriterRef = useRef<{
-      timer: number;
-      finish: () => void;
-      settle: (restoreFocus: boolean) => void;
-    } | null>(null);
-    const [isTypewriting, setIsTypewriting] = useState(false);
-    const typewriterFocusPendingRef = useRef(false);
-
     const placeCaretAtEditorEnd = useCallback(() => {
       const el = editorRef.current;
       if (!el) return;
@@ -756,38 +744,6 @@ export const MentionComposer = memo(
       sel?.removeAllRanges();
       sel?.addRange(range);
     }, []);
-
-    const cancelTypewriter = useCallback(() => {
-      const active = typewriterRef.current;
-      if (!active) return;
-      typewriterRef.current = null;
-      window.clearTimeout(active.timer);
-      active.settle(false);
-    }, []);
-
-    // Programmatic draft reads and mention inserts complete the animation
-    // instantly so they always observe the full suggestion text.
-    const finishTypewriter = useCallback(() => {
-      const active = typewriterRef.current;
-      if (!active) return;
-      typewriterRef.current = null;
-      window.clearTimeout(active.timer);
-      active.finish();
-      active.settle(true);
-    }, []);
-
-    useEffect(() => cancelTypewriter, [cancelTypewriter]);
-
-    // Restore focus only after React has re-enabled contentEditable; focusing
-    // inside settle() would race the attribute flip and get dropped.
-    useEffect(() => {
-      if (isTypewriting || !typewriterFocusPendingRef.current) return;
-      typewriterFocusPendingRef.current = false;
-      const el = editorRef.current;
-      if (!el) return;
-      el.focus({ preventScroll: true });
-      placeCaretAtEditorEnd();
-    }, [isTypewriting, placeCaretAtEditorEnd]);
 
     const buildDraft = useCallback((): MentionComposerDraft => {
       const el = editorRef.current;
@@ -960,13 +916,9 @@ export const MentionComposer = memo(
         getText: () => {
           const el = editorRef.current;
           if (!el) return "";
-          finishTypewriter();
           return normalizeSerializedText(serializeChildren(el, largePastesRef.current));
         },
-        getDraft: () => {
-          finishTypewriter();
-          return buildDraft();
-        },
+        getDraft: buildDraft,
         hasContent: () => {
           const el = editorRef.current;
           return el != null && !editorTextIsEmpty(el);
@@ -974,7 +926,6 @@ export const MentionComposer = memo(
         setText: (text: string) => {
           const el = editorRef.current;
           if (!el) return;
-          cancelTypewriter();
           resetPromptHistoryRecall();
           el.innerHTML = "";
           largePastesRef.current.clear();
@@ -988,11 +939,12 @@ export const MentionComposer = memo(
             closeMentionSession();
             refreshEmptyState();
           }
+          placeCaretAtEditorEnd();
+          scheduleComposerSelectionScroll(el);
         },
         setDraft: (draft: MentionComposerDraft) => {
           const el = editorRef.current;
           if (!el) return;
-          cancelTypewriter();
           resetPromptHistoryRecall();
           el.innerHTML = "";
           largePastesRef.current.clear();
@@ -1047,7 +999,6 @@ export const MentionComposer = memo(
         insertFileMention: (path: string, kind: "file" | "dir") => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           const chip = createFileMentionChip(path, kind);
@@ -1059,7 +1010,6 @@ export const MentionComposer = memo(
         insertSkillMention: (skill: MentionComposerSkillMention) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createSkillMentionChip(skill));
@@ -1069,7 +1019,6 @@ export const MentionComposer = memo(
         insertCommitMention: (commit: MentionComposerCommitMention) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createCommitMentionChip(commit));
@@ -1079,7 +1028,6 @@ export const MentionComposer = memo(
         insertGitFileMention: (file: MentionComposerGitFileMention) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createGitFileMentionChip(file));
@@ -1101,7 +1049,6 @@ export const MentionComposer = memo(
           if (selectedIds.has(conversation.id.trim())) return "duplicate";
           if (selectedIds.size >= MAX_CONVERSATION_MENTIONS) return "limit";
 
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, normalized);
@@ -1112,7 +1059,6 @@ export const MentionComposer = memo(
         insertCodeMention: (reference: CodeMentionReference) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           const chip = createCodeMentionChip(reference);
@@ -1123,9 +1069,8 @@ export const MentionComposer = memo(
         },
         beginTransientText: () => {
           const el = editorRef.current;
-          if (!el || disabled || isTypewriting) return false;
+          if (!el || disabled) return false;
           clearTransientText(false);
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           const selection = window.getSelection();
@@ -1189,7 +1134,6 @@ export const MentionComposer = memo(
           const el = editorRef.current;
           if (!el) return;
           clearTransientText(false);
-          cancelTypewriter();
           resetPromptHistoryRecall();
           el.innerHTML = "";
           largePastesRef.current.clear();
@@ -1199,99 +1143,13 @@ export const MentionComposer = memo(
           refreshEmptyState();
         },
         focus: () => editorRef.current?.focus(),
-        typeText: (text: string) => {
-          const el = editorRef.current;
-          if (!el) return Promise.resolve();
-          cancelTypewriter();
-          resetPromptHistoryRecall();
-          el.innerHTML = "";
-          largePastesRef.current.clear();
-          closeCommitTooltip();
-          closeComposerContextMenu();
-          closeMentionSession();
-          el.focus({ preventScroll: true });
-
-          const chars = Array.from(text);
-          const textNode = document.createTextNode("");
-          el.appendChild(textNode);
-          if (chars.length === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            textNode.data = chars.join("");
-            placeCaretAtEditorEnd();
-            refreshEmptyState();
-            return Promise.resolve();
-          }
-
-          return new Promise<void>((resolve) => {
-            let settled = false;
-            const settle = (restoreFocus: boolean) => {
-              if (settled) return;
-              settled = true;
-              typewriterFocusPendingRef.current = restoreFocus;
-              setIsTypewriting(false);
-              resolve();
-            };
-            setIsTypewriting(true);
-
-            // Freshly typed characters live in short-lived fade-in spans, then
-            // fold into the committed text node once their fade completes, so
-            // the editor always ends up holding one plain text node.
-            const ghosts: HTMLSpanElement[] = [];
-            const foldOldestGhost = () => {
-              const ghost = ghosts.shift();
-              if (!ghost) return;
-              textNode.data += ghost.textContent ?? "";
-              ghost.remove();
-            };
-            const finish = () => {
-              for (const ghost of ghosts) ghost.remove();
-              ghosts.length = 0;
-              textNode.data = chars.join("");
-              placeCaretAtEditorEnd();
-              refreshEmptyState();
-            };
-
-            // Adaptive pace: long prompts speed up so the whole line lands in ~1s.
-            const tickMs = Math.max(12, Math.min(28, Math.round(900 / chars.length)));
-            const maxGhosts = Math.max(1, Math.ceil(TYPEWRITER_CHAR_FADE_MS / tickMs));
-            let index = 0;
-            const tick = () => {
-              if (index < chars.length) {
-                const ghost = document.createElement("span");
-                ghost.className =
-                  "opacity-0 animate-composer-typewriter-char motion-reduce:animate-none!";
-                ghost.textContent = chars[index] ?? "";
-                el.appendChild(ghost);
-                ghosts.push(ghost);
-                index += 1;
-                while (ghosts.length > maxGhosts) foldOldestGhost();
-                placeCaretAtEditorEnd();
-                refreshEmptyState();
-                typewriterRef.current = { timer: window.setTimeout(tick, tickMs), finish, settle };
-                return;
-              }
-              if (ghosts.length > 0) {
-                foldOldestGhost();
-                placeCaretAtEditorEnd();
-                typewriterRef.current = { timer: window.setTimeout(tick, tickMs), finish, settle };
-                return;
-              }
-              typewriterRef.current = null;
-              settle(true);
-            };
-            // Commit the first animated character in the same frame as the
-            // replacement so the empty-state placeholder never flashes.
-            tick();
-          });
-        },
       }),
       [
         buildDraft,
-        cancelTypewriter,
         clearTransientText,
         closeCommitTooltip,
         closeComposerContextMenu,
         closeMentionSession,
-        finishTypewriter,
         focusEditorAtSavedSelection,
         insertLargePaste,
         placeCaretAtEditorEnd,
@@ -1300,7 +1158,6 @@ export const MentionComposer = memo(
         conversationMentionsEnabled,
         currentConversationId,
         disabled,
-        isTypewriting,
       ],
     );
 
@@ -1778,12 +1635,6 @@ export const MentionComposer = memo(
           e.preventDefault();
           return;
         }
-        // The typewriter owns the editor while it runs; swallow keys so Enter
-        // cannot send a half-typed suggestion.
-        if (typewriterRef.current) {
-          e.preventDefault();
-          return;
-        }
         const isEnter = isEnterKeyboardEvent(e);
         const isActiveCompositionKey = isComposingRef.current || isActiveImeKeyboardEvent(e);
         const hasLegacyImeSignal = hasLegacyImeKeyboardSignal(e);
@@ -1997,7 +1848,7 @@ export const MentionComposer = memo(
 
     const handleCut = useCallback(
       (event: ClipboardEvent<HTMLDivElement>) => {
-        if (disabled || typewriterRef.current) {
+        if (disabled) {
           event.preventDefault();
           return;
         }
@@ -2027,10 +1878,6 @@ export const MentionComposer = memo(
     const handlePaste = useCallback(
       (e: ClipboardEvent<HTMLDivElement>) => {
         if (disabled) {
-          e.preventDefault();
-          return;
-        }
-        if (typewriterRef.current) {
           e.preventDefault();
           return;
         }
@@ -2273,7 +2120,7 @@ export const MentionComposer = memo(
         {/* biome-ignore lint/a11y/useSemanticElements: The composer is contenteditable so it can host inline mention chips. */}
         <div
           ref={editorRef}
-          contentEditable={!disabled && !isTypewriting}
+          contentEditable={!disabled}
           suppressContentEditableWarning
           role="textbox"
           tabIndex={disabled ? undefined : 0}

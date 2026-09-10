@@ -23,10 +23,6 @@
   --animate-sftp-path-popover-enter: sftpPathPopoverIn var(--ui-duration-160ms) var(--ease-ui-enter);
   --animate-mention-popup-enter: mentionPopupIn var(--ui-duration-150ms) var(--ease-ui-enter);
   --animate-notify-toast-exit: notifyFadeOut var(--ui-duration-300ms) ease-out both;
-  --animate-provider-panel-enter: providerPanelIn var(--ui-duration-180ms) var(--ease-ui-enter);
-  --animate-chat-history-scope-enter: chatHistoryScopeIn var(--ui-duration-200ms)
-    var(--ease-ui-enter);
-  --animate-composer-typewriter-char: composerTypeCharIn var(--ui-duration-220ms) ease-out forwards;
   --animate-settings-usage-reveal: settings-usage-reveal var(--ui-duration-240ms) ease-out;
   --animate-checkpoint-card: checkpointSlideIn var(--ui-duration-350ms) var(--ease-ui-enter);
   --animate-compaction-band-progress: compactionBandSweep var(--ui-duration-1600ms)
@@ -68,39 +64,6 @@
   }
 }
 @layer components {
-  @keyframes providerPanelIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-4px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes chatHistoryScopeIn {
-    from {
-      opacity: 0;
-      transform: translateY(var(--spacing-6px));
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes composerTypeCharIn {
-    from {
-      opacity: 0;
-      filter: blur(var(--spacing-2px));
-    }
-    to {
-      opacity: 1;
-      filter: blur(0);
-    }
-  }
-
   @keyframes mentionPopupIn {
     from {
       opacity: 0;
