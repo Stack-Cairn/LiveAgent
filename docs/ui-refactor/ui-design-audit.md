@@ -758,3 +758,14 @@ spacing 倍数随 rem 缩放，普通尺寸保持原样。源码 Biome 和 5 项
 用户随后澄清模型选择器只需去掉阴影：恢复 CustomSettingsModelField 原有细边框及
 明暗底色，仅将 shadow-sm 改为 shadow-none；保留键盘焦点提示。此前去框理解有误。
 本次单处样式 Biome 检查通过。
+
+### ModelPicker 样式职责整理（2026-09-11）
+
+“使用当前模型”和普通模型共用 ModelOptionItem，集中行尺寸、选中背景、图标透明度
+和勾选标记。trigger 的 default/compact/quiet/dashed 变体由 ModelPicker 维护，迁移
+供应商新增入口、高级设置和记忆设置的覆盖类名；高级设置保留细边框及无阴影。移除
+分组标题对 DropdownMenuItem 默认 flex、对齐、横向间距和 transition 的重复声明。
+搜索过滤、分组折叠、弹层宽度、滚动区与 FocusGuard 隔离 wrapper 保留。
+
+共享 UI 类型检查、源码 Biome、7 项相关测试通过；新增真实 DOM 测试验证搜索展开、
+选择关闭、清除选择和 quiet 变体边框/阴影契约。未执行本轮浏览器视觉对比。

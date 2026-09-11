@@ -10,7 +10,7 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 // Shared provider-grouped model picker used by the cron prompt-task form and
 // the memory settings drawer. The grouped-collapse behavior mirrors the main
@@ -48,6 +48,49 @@ function groupOptionsByProvider(options: ModelPickerOption[]): ModelGroup[] {
   return groups;
 }
 
+const TRIGGER_VARIANTS = {
+  default: "h-10 rounded-md border-input bg-background text-sm shadow-xs",
+  compact: "h-9 rounded-md border-input bg-background text-sm shadow-xs hover:bg-accent/40",
+  quiet:
+    "h-9 rounded-lg border-foreground/10 bg-white/70 text-sm shadow-none dark:bg-background/40",
+  dashed:
+    "h-8 rounded-lg border-dashed border-foreground/[0.13] bg-transparent py-0 text-xs text-muted-foreground shadow-none hover:border-foreground/[0.24] hover:bg-foreground/[0.02]",
+} as const;
+
+function ModelOptionItem({
+  selected,
+  icon,
+  label,
+  description,
+  onSelect,
+}: {
+  selected: boolean;
+  icon: ReactNode;
+  label: string;
+  description?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenuItem
+      onSelect={onSelect}
+      className={cn(
+        "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
+        "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
+        selected && "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <span className={cn("flex shrink-0 opacity-70", selected && "opacity-100")}>{icon}</span>
+        <span className="min-w-0 truncate">{label}</span>
+        {description ? (
+          <span className="min-w-0 truncate text-xs text-muted-foreground/70">{description}</span>
+        ) : null}
+      </span>
+      {selected ? <Check className="size-4 shrink-0 text-primary" /> : null}
+    </DropdownMenuItem>
+  );
+}
+
 export function ModelPicker({
   options,
   value,
@@ -56,7 +99,7 @@ export function ModelPicker({
   placeholder,
   noneLabel,
   ariaLabel,
-  triggerClassName,
+  variant = "default",
   collapsibleGroups = true,
   searchPlaceholder,
   emptyLabel,
@@ -70,7 +113,7 @@ export function ModelPicker({
   /** When set, a top entry with this label clears the selection (value ""). */
   noneLabel?: string;
   ariaLabel?: string;
-  triggerClassName?: string;
+  variant?: keyof typeof TRIGGER_VARIANTS;
   /** When false, render grouped options directly without a collapsible group header. */
   collapsibleGroups?: boolean;
   /** Search input placeholder; defaults to the shared model-search translation. */
@@ -111,16 +154,16 @@ export function ModelPicker({
 
   const filteredGroups = normalizedSearch
     ? groups
-      .map((group) => ({
-        ...group,
-        opts: group.opts.filter(
-          (option) =>
-            option.label.toLowerCase().includes(normalizedSearch) ||
-            option.providerName.toLowerCase().includes(normalizedSearch) ||
-            option.description?.toLowerCase().includes(normalizedSearch),
-        ),
-      }))
-      .filter((group) => group.opts.length > 0)
+        .map((group) => ({
+          ...group,
+          opts: group.opts.filter(
+            (option) =>
+              option.label.toLowerCase().includes(normalizedSearch) ||
+              option.providerName.toLowerCase().includes(normalizedSearch) ||
+              option.description?.toLowerCase().includes(normalizedSearch),
+          ),
+        }))
+        .filter((group) => group.opts.length > 0)
     : groups;
 
   // Menu.Root is a fragment. When open, Base UI injects FocusGuard siblings
@@ -134,10 +177,9 @@ export function ModelPicker({
           disabled={disabled}
           aria-label={ariaLabel}
           className={cn(
-            "flex h-10 w-full cursor-pointer items-center justify-between gap-2",
-            "rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs",
-            "focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
-            triggerClassName,
+            "flex w-full cursor-pointer items-center justify-between gap-2 border px-3 py-2 transition-colors",
+            TRIGGER_VARIANTS[variant],
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >
           <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
@@ -192,23 +234,12 @@ export function ModelPicker({
           </div>
           <div className="max-h-popover-14rem overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
             {noneLabel && !normalizedSearch ? (
-              <DropdownMenuItem
+              <ModelOptionItem
+                selected={value === ""}
                 onSelect={() => onChange("")}
-                className={cn(
-                  "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
-                  "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
-                  value === "" &&
-                  "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <Sparkles
-                    className={cn("size-4 shrink-0 opacity-70", value === "" && "opacity-100")}
-                  />
-                  <span className="min-w-0 truncate">{noneLabel}</span>
-                </span>
-                {value === "" ? <Check className="size-4 shrink-0 text-primary" /> : null}
-              </DropdownMenuItem>
+                icon={<Sparkles className="size-4" />}
+                label={noneLabel}
+              />
             ) : null}
             {filteredGroups.length === 0 ? (
               <div className="px-2 py-6 text-center text-xs text-muted-foreground">
@@ -229,9 +260,9 @@ export function ModelPicker({
                         aria-expanded={expanded}
                         title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
                         className={cn(
-                          "sticky top-0 z-10 flex h-30px shrink-0 cursor-pointer items-center",
-                          "gap-1.5 rounded-md bg-popover/60 px-2 py-0",
-                          "text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40",
+                          "sticky top-0 z-10 h-30px shrink-0 cursor-pointer",
+                          "gap-1.5 rounded-md bg-popover/60 py-0",
+                          "text-xs font-medium text-muted-foreground/80 backdrop-blur-xl data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40",
                         )}
                       >
                         <ProviderBrandIcon
@@ -256,37 +287,16 @@ export function ModelPicker({
                       </DropdownMenuItem>
                     ) : null}
                     {!collapsibleGroups || expanded
-                      ? group.opts.map((option) => {
-                        const isSelected = option.value === value;
-                        return (
-                          <DropdownMenuItem
+                      ? group.opts.map((option) => (
+                          <ModelOptionItem
                             key={option.value}
+                            selected={option.value === value}
                             onSelect={() => onChange(option.value)}
-                            className={cn(
-                              "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
-                              "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
-                              isSelected &&
-                              "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
-                            )}
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <ProviderBrandIcon
-                                type={option.providerType}
-                                className={cn("opacity-70", isSelected && "opacity-100")}
-                              />
-                              <span className="min-w-0 truncate">{option.label}</span>
-                              {option.description ? (
-                                <span className="min-w-0 truncate text-xs text-muted-foreground/70">
-                                  {option.description}
-                                </span>
-                              ) : null}
-                            </span>
-                            {isSelected ? (
-                              <Check className="size-4 shrink-0 text-primary" />
-                            ) : null}
-                          </DropdownMenuItem>
-                        );
-                      })
+                            icon={<ProviderBrandIcon type={option.providerType} />}
+                            label={option.label}
+                            description={option.description}
+                          />
+                        ))
                       : null}
                   </div>
                 );

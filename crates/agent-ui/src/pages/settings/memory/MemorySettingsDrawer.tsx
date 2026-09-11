@@ -180,7 +180,7 @@ export function MemorySettingsDrawer(props: {
         placeholder={noneLabel}
         noneLabel={noneLabel}
         ariaLabel={ariaLabel}
-        triggerClassName="h-9 rounded-md border-input bg-background text-sm hover:bg-accent/40"
+        variant="compact"
       />
     );
   }

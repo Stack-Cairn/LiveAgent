@@ -309,7 +309,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                   collapsibleGroups={false}
                   searchPlaceholder={t("settings.failoverQueueSearch")}
                   emptyLabel={t("settings.failoverQueueNoMatch")}
-                  triggerClassName="h-8 rounded-lg border-dashed border-foreground/[0.13] bg-transparent py-0 text-xs text-muted-foreground shadow-none transition-colors hover:border-foreground/[0.24] hover:bg-foreground/[0.02]"
+                  variant="dashed"
                 />
               ) : null}
               {unavailableProviderCount > 0 ? (
@@ -403,7 +403,7 @@ function CustomSettingsModelField(props: {
         placeholder={followCurrentLabel}
         noneLabel={followCurrentLabel}
         ariaLabel={label}
-        triggerClassName="h-9 rounded-lg border border-foreground/10 bg-white/70 text-sm shadow-none dark:bg-background/40 focus-visible:ring-2 focus-visible:ring-ring"
+        variant="quiet"
       />
     </div>
   );
