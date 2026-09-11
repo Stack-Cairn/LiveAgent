@@ -9,6 +9,8 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { ChoiceCard } from "@liveagent/ui/components/settings/ChoiceCard";
 import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
+import { SettingsPanel } from "@liveagent/ui/components/settings/SettingsPanel";
 import { StepMarker } from "@liveagent/ui/components/settings/StepMarker";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -194,11 +196,8 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   setFormError(null);
                   setType("command");
                 }}
-                className={
-                  type === "command"
-                    ? "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }
+                kind="command"
+                selected={type === "command"}
               >
                 <div
                   className={cn(
@@ -236,11 +235,8 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   setFormError(null);
                   setType("http");
                 }}
-                className={
-                  type === "http"
-                    ? "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }
+                kind="http"
+                selected={type === "http"}
               >
                 <div
                   className={cn(
@@ -321,7 +317,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
 
             {type === "command" ? (
               <div className="space-y-3">
-                <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
+                <SettingsPanel variant="collapsible">
                   <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Terminal className="size-3" />
@@ -343,7 +339,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                       setScriptText(e.currentTarget.value);
                     }}
                   />
-                </div>
+                </SettingsPanel>
                 <div className="settings-form-grid grid gap-4 sm:grid-cols-2">
                   <FormField density="compact">
                     <FormFieldLabel htmlFor="hook-timeout" size="compact">
@@ -380,10 +376,10 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
         <DialogFooter className="min-[821px]:justify-between">
           <div className="min-w-0 flex-1">
             {formError ? (
-              <div className="flex items-center gap-1.5 text-xs text-destructive">
+              <SettingsNotice variant="inline-error">
                 <AlertTriangle className="size-3.5 shrink-0" />
                 <span className="truncate">{formError}</span>
-              </div>
+              </SettingsNotice>
             ) : name.trim() && (type !== "command" || scriptText.trim()) ? (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
                 <Check className="size-3.5" />

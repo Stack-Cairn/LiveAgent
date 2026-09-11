@@ -5,6 +5,7 @@ import {
   FormFieldDescription,
   FormFieldLabel,
 } from "@liveagent/ui/components/settings/FormField";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -25,7 +26,6 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 type ServerDraft = {
@@ -566,15 +566,10 @@ export function McpServerEditModal(props: {
               </section>
 
               {formError ? (
-                <div
-                  className={cn(
-                    "flex items-start gap-2",
-                    "rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive",
-                  )}
-                >
+                <SettingsNotice variant="validation">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <span>{formError}</span>
-                </div>
+                </SettingsNotice>
               ) : null}
             </div>
           </DialogBody>

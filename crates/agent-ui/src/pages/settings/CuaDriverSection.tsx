@@ -24,6 +24,7 @@ import {
   Terminal,
   Video,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { SettingsSurface } from "@liveagent/ui/components/settings/SettingsSurface";
 import type { UiSurface } from "@liveagent/ui/contracts/registry";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -696,7 +697,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
           {commandDrift || (confirmingInstall && preview) || log.length > 0 || error ? (
             <div className="space-y-3 border-t border-border/60 px-5 py-4">
               {commandDrift ? (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.05] p-3.5">
+                <SettingsNotice variant="installation-warning">
                   <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="size-3.5" />
                     {t("settings.cuaDriver.commandDriftTitle")}
@@ -727,11 +728,11 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
                     <Replace className="size-3" />
                     {t("settings.cuaDriver.commandDriftRealign")}
                   </Button>
-                </div>
+                </SettingsNotice>
               ) : null}
 
               {confirmingInstall && preview ? (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.05] p-3.5">
+                <SettingsNotice variant="installation-warning">
                   <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="size-3.5" />
                     {t("settings.cuaDriver.confirmTitle")}
@@ -771,7 +772,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
                       {t("settings.cuaDriver.confirmCancel")}
                     </Button>
                   </div>
-                </div>
+                </SettingsNotice>
               ) : null}
 
               {log.length > 0 ? (

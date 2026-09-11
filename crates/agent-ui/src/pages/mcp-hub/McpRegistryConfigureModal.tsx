@@ -1,6 +1,8 @@
 import type { McpServerConfig } from "@liveagent/app/lib/settings/index";
 import { AlertTriangle, Plus, Sparkles } from "@liveagent/ui/components/IconSet";
 import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
+import { SettingsPanel } from "@liveagent/ui/components/settings/SettingsPanel";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -381,7 +383,7 @@ export function McpRegistryConfigureModal(props: {
               </div>
 
               {isStdio ? (
-                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
+                <SettingsPanel variant="configuration">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <FormField density="compact">
                       <FormFieldLabel htmlFor="mcp-store-config-command" size="compact">
@@ -432,9 +434,9 @@ export function McpRegistryConfigureModal(props: {
                       onChange={(event) => updateDraft({ envText: event.currentTarget.value })}
                     />
                   </FormField>
-                </div>
+                </SettingsPanel>
               ) : (
-                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
+                <SettingsPanel variant="configuration">
                   <FormField density="compact">
                     <FormFieldLabel htmlFor="mcp-store-config-url" size="compact">
                       {draft.transport === "http" ? t("mcpHub.urlHttp") : t("mcpHub.urlSse")}
@@ -477,7 +479,7 @@ export function McpRegistryConfigureModal(props: {
                       onChange={(event) => updateDraft({ headersText: event.currentTarget.value })}
                     />
                   </FormField>
-                </div>
+                </SettingsPanel>
               )}
 
               {requiredConfig.length > 0 ? (
@@ -521,15 +523,10 @@ export function McpRegistryConfigureModal(props: {
               ) : null}
 
               {formError ? (
-                <div
-                  className={cn(
-                    "flex items-start gap-2",
-                    "rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive",
-                  )}
-                >
+                <SettingsNotice variant="validation">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <span>{formError}</span>
-                </div>
+                </SettingsNotice>
               ) : null}
             </div>
           </DialogBody>

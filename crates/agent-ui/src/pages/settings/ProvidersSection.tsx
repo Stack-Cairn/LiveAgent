@@ -33,6 +33,7 @@ import {
   Waypoints,
   X,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import { SegmentedSlider } from "@liveagent/ui/components/ui/segmented-slider";
@@ -294,14 +295,9 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                   ))}
                 </div>
               ) : (
-                <div
-                  className={cn(
-                    "rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2",
-                    "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
-                  )}
-                >
+                <SettingsNotice variant="warning">
                   {t("settings.failoverQueueEmpty")}
-                </div>
+                </SettingsNotice>
               )}
               {failover.queue.length < MODEL_FAILOVER_QUEUE_LIMIT && addableProviders.length > 0 ? (
                 <ModelPicker
@@ -497,14 +493,9 @@ function CustomSettingsDrawer(
                   onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
                 />
                 {modelOptions.length === 0 ? (
-                  <div
-                    className={cn(
-                      "rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2",
-                      "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
-                    )}
-                  >
+                  <SettingsNotice variant="warning">
                     {t("settings.customSettingsModelEmpty")}
-                  </div>
+                  </SettingsNotice>
                 ) : null}
               </div>
             </section>

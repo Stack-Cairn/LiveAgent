@@ -68,7 +68,7 @@ function SettingsSelectTrigger({ className = "", ...props }: SettingsSelectTrigg
       className={cn(
         "h-8 w-fit max-w-260px gap-1.5",
         "whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0",
-        "text-sm font-normal leading-none shadow-ui-systemsettingsform-48 transition-colors",
+        "text-sm font-normal leading-none shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.035)] transition-colors",
         "hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:size-3.5 [&_svg]:opacity-40",
         className,
       )}
@@ -83,7 +83,7 @@ function SettingsSelectContent({ className = "", ...props }: SettingsSelectConte
   return (
     <SelectContent
       className={cn(
-        "rounded-xl border-border/70 shadow-ui-systemsettingsform-49 [&_[role=option]]:min-h-8 [&_[role=option]]:rounded-lg [&_[role=option]]:text-sm",
+        "rounded-xl border-border/70 shadow-[0_var(--spacing-10px)_var(--spacing-30px)_hsl(var(--foreground)/0.1)] [&_[role=option]]:min-h-8 [&_[role=option]]:rounded-lg [&_[role=option]]:text-sm",
         className,
       )}
       {...props}

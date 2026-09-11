@@ -398,6 +398,16 @@ UI 边界、改动源码 Biome 检查通过；删除的 rem 变量无残留引�
 浏览器抽样对比 37 对实际使用的尺寸/字重类，在 16px、20px 根字号下共 74 组
 计算样式无差异；这是工具类级验证，不代表完整业务页面的视觉验收。
 
+### 模型与分支弹层退出跳变修复（2026-09-11）
+
+录屏涉及模型 Popover 和 Git 分支 Dropdown。退出类使用 Tailwind v4 独立的
+`scale` / `translate` 属性，原 transition-property 仅包含 transform 和 opacity，
+导致缩放/位移直接跳到退出值。Popover 补入 scale，分支菜单补入 translate 和 scale。
+保留原时长、曲线、退出幅度及 reduced-motion 分支，不改菜单开关和数据清理逻辑。
+
+验证：共享 UI 类型检查、改动源码 Biome 和新增 Tailwind 编译回归测试通过。
+此结论确认退出属性遗漏，不代表已经完成桌面 WebView 的性能采样或排除其他卡顿原因。
+
 ## 状态颜色第一批试点（2026-09-11）
 
 评估和映射见 `ui-color-migration.md`。新增六个成功/错误颜色角色，成功 Badge 保持
@@ -419,3 +429,24 @@ UI 边界、改动源码 Biome 检查通过；删除的 rem 变量无残留引�
 浏览器 14 个亮暗局部样例的文字对比度均超过 4.5:1，包含危险按钮默认和 hover
 配色。深色危险按钮的浅红底深红字是明确的视觉变化。详细映射与边界见
 ui-color-migration.md；本批没有执行暂存或提交操作。
+
+### 设置卡片表面与状态表达（2026-09-11）
+
+本批以当时工作区为基线，保留同时进行的颜色与字号改动。
+5 张 Cron/Hook 类型选择卡片统一通过 ChoiceCard 的 kind/selected 表达选中状态；
+未选中、command/http/prompt 三种选中色、原生按钮事件和 disabled 行为保持不变。
+3 处折叠面板、2 处 MCP 配置分组、3 处 Provider 说明分别接入 SettingsPanel/SettingsHint；
+2 处 MCP 校验提示、2 处 Provider 警告、2 处 CUA 安装提示、2 处表单内联错误接入
+SettingsNotice 的四种变体。保留原 div/p 标签、子节点、图标、条件及 aria 属性。
+
+两个仅在 SettingsSelectTrigger/Content 消费的编号阴影移回控件的 Tailwind 类，
+继续引用现有变量，移除全局定义及注册项。全仓检查没有旧名称残留。
+不同提示的透明度、边框、圆角和排版不近似合并；ResourceSelectionCard、状态 Badge、
+特殊可拖动 Provider 卡片和 CUA 错误块保留原有专门实现。
+
+验证：8 个页面消费者在展开展示组件、恢复状态类及等价阴影写法后 AST 一致；
+真实 React DOM 测试覆盖七种面板/提示及六种选择卡片状态，验证原生标签、class 集合、
+ref、属性透传、点击与禁用行为。两个阴影工具类与旧定义的 Tailwind 编译声明一致
+（只归一化 HSL alpha 分隔符周围的无意义空白）。共享 UI 类型检查、UI 边界、改动
+TSX Biome、双端生产构建、设置 396 项测试、Gateway 718 项测试通过。
+此次未执行桌面端完整流程或全页面截图对比，未提交。

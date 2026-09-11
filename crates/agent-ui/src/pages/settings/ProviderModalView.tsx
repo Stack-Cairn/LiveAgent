@@ -35,6 +35,7 @@ import {
   FormFieldDescription,
   FormFieldLabel,
 } from "@liveagent/ui/components/settings/FormField";
+import { SettingsHint } from "@liveagent/ui/components/settings/SettingsPanel";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -1521,12 +1522,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     </FormField>
 
                     {usageQuery.mode !== "custom" ? (
-                      <p
-                        className={cn(
-                          "mt-3 rounded-lg border bg-muted/30 px-3 py-2",
-                          "text-xs leading-5 text-muted-foreground",
-                        )}
-                      >
+                      <SettingsHint className="mt-3">
                         {usageQuery.mode === "general"
                           ? t("settings.providerUsageTemplate.general")
                           : usageQuery.mode === "newapi"
@@ -1534,7 +1530,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             : usageQuery.mode === "balance"
                               ? t("settings.providerUsageTemplate.balance")
                               : t("settings.providerUsageTemplate.codingPlan")}
-                      </p>
+                      </SettingsHint>
                     ) : null}
 
                     {/* 官方余额:按 Base URL 匹配到的供应商徽章。 */}
@@ -1780,12 +1776,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                         {activeCodingPlanProvider === "zhipu_team" ? (
                           <>
-                            <p
-                              className={cn(
-                                "mt-3 rounded-lg border bg-muted/30 px-3 py-2",
-                                "text-xs leading-5 text-muted-foreground",
-                              )}
-                            >
+                            <SettingsHint className="mt-3">
                               {t("settings.providerUsageZhipuTeamHint")}{" "}
                               {t("settings.providerUsageZhipuTeamConsoleLink")}{" "}
                               <a
@@ -1796,7 +1787,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               >
                                 bigmodel.cn/coding-plan/team/usage-stats
                               </a>
-                            </p>
+                            </SettingsHint>
                             <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                               <FormField>
                                 <FormFieldLabel htmlFor="usage-query-team-organization-id">
@@ -1840,12 +1831,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                         {activeCodingPlanProvider === "volcengine" ? (
                           <>
-                            <p
-                              className={cn(
-                                "mt-3 rounded-lg border bg-muted/30 px-3 py-2",
-                                "text-xs leading-5 text-muted-foreground",
-                              )}
-                            >
+                            <SettingsHint className="mt-3">
                               {t("settings.providerUsageVolcengineHint")}{" "}
                               {t("settings.providerUsageVolcengineConsoleLink")}{" "}
                               <a
@@ -1856,7 +1842,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               >
                                 console.volcengine.com/iam/keymanage
                               </a>
-                            </p>
+                            </SettingsHint>
                             <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                               <FormField>
                                 <FormFieldLabel htmlFor="usage-query-access-key-id">

@@ -163,10 +163,6 @@
   --shadow-ui-mcpregistrybrowser-46: var(--spacing-minus-18px) 0 var(--spacing-45px)
     var(--spacing-minus-28px) var(--ui-color-rgba-0-0-0-0p7);
   --shadow-settings-surface: 0 var(--spacing-1px) var(--spacing-2px) hsl(var(--foreground) / 0.02);
-  --shadow-ui-systemsettingsform-48: 0 var(--spacing-1px) var(--spacing-2px)
-    hsl(var(--foreground) / 0.035);
-  --shadow-ui-systemsettingsform-49: 0 var(--spacing-10px) var(--spacing-30px)
-    hsl(var(--foreground) / 0.1);
   --shadow-ui-memorysettingsdrawer-50:
     0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-rgba-15-23-42-0p08),
     0 var(--spacing-4px) var(--spacing-10px) var(--spacing-minus-6px)

@@ -176,3 +176,15 @@ rem 尺寸优先使用 Tailwind 标准尺度，例如 `h-10`、`w-8`、`max-w-48
 
 当前这两组变量是完整颜色值，直接 `var(...)`；其他旧 HSL 角色暂时仍需要
 `hsl(var(...))`。不要混用。映射、视觉变化与后续计划见 [UI 颜色迁移](ui-color-migration.md)。
+
+## 设置卡片与提示
+
+- `ChoiceCard` 的 `kind="command" | "http" | "prompt"` 和 `selected` 组合复用现有
+  类型卡片的选中/未选中表面。未指定 kind 的调用保留原有基础样式；按钮事件、disabled、
+  aria 属性仍由调用方传入，不自动推断产品语义。
+- `SettingsPanel` 承担折叠内容框（collapsible）和 MCP 配置分组（configuration）；
+  `SettingsHint` 保留 Provider 说明的 p 标签。其他面板不会因颜色接近而并入这些变体。
+- `SettingsNotice` 的 validation、warning、installation-warning、inline-error 分别
+  保留四种既有外观。组件只输出 div，不自动添加 alert/live region、图标或文本。
+- 系统设置下拉框的两个专用阴影写在 SettingsSelectTrigger/Content 的 Tailwind 类中，
+  继续引用原尺寸与主题变量；已移除对应全局编号 token 及类名合并注册项。

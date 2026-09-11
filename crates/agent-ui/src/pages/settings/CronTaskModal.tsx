@@ -19,6 +19,8 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { ChoiceCard } from "@liveagent/ui/components/settings/ChoiceCard";
 import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
+import { SettingsPanel } from "@liveagent/ui/components/settings/SettingsPanel";
 import { StepMarker } from "@liveagent/ui/components/settings/StepMarker";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -482,11 +484,8 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("bash");
                 }}
-                className={
-                  type === "bash"
-                    ? "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }
+                kind="command"
+                selected={type === "bash"}
               >
                 <div
                   className={cn(
@@ -525,11 +524,8 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("http");
                 }}
-                className={
-                  type === "http"
-                    ? "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }
+                kind="http"
+                selected={type === "http"}
               >
                 <div
                   className={cn(
@@ -570,11 +566,8 @@ export function CronTaskModal({
                   setFormError(null);
                   setType("prompt");
                 }}
-                className={
-                  type === "prompt"
-                    ? "border-violet-500/50 bg-violet-500/5 shadow-sm shadow-violet-500/10"
-                    : "border-border/60 bg-background hover:border-border hover:bg-muted/20"
-                }
+                kind="prompt"
+                selected={type === "prompt"}
               >
                 <div
                   className={cn(
@@ -784,7 +777,7 @@ export function CronTaskModal({
 
             {/* Shell script config */}
             {type === "bash" ? (
-              <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
+              <SettingsPanel variant="collapsible">
                 <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Terminal className="size-3" />
@@ -806,7 +799,7 @@ export function CronTaskModal({
                     setScriptText(e.currentTarget.value);
                   }}
                 />
-              </div>
+              </SettingsPanel>
             ) : null}
 
             {/* HTTP request config */}
@@ -892,7 +885,7 @@ export function CronTaskModal({
                   </div>
                 ) : null}
 
-                <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
+                <SettingsPanel variant="collapsible">
                   <div
                     className={cn(
                       "flex items-center gap-1.5 border-b border-border/30 px-3 py-2",
@@ -911,7 +904,7 @@ export function CronTaskModal({
                       setPrompt(e.currentTarget.value);
                     }}
                   />
-                </div>
+                </SettingsPanel>
               </div>
             ) : null}
           </div>
@@ -921,10 +914,10 @@ export function CronTaskModal({
         <DialogFooter className="min-[821px]:justify-between">
           <div className="min-w-0 flex-1">
             {formError ? (
-              <div className="flex items-center gap-1.5 text-xs text-destructive">
+              <SettingsNotice variant="inline-error">
                 <AlertTriangle className="size-3.5 shrink-0" />
                 <span className="truncate">{formError}</span>
-              </div>
+              </SettingsNotice>
             ) : formReady ? (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
                 <Check className="size-3.5" />
