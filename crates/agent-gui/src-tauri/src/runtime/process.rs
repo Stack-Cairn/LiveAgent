@@ -217,9 +217,13 @@ pub(crate) fn probe_process_start_time(_pid: u32) -> ProcessProbe {
     ProcessProbe::Unknown
 }
 
-/// `ps -o etime=` 只有秒级精度，启动时间换算允许 ±2s 误差。超出即认为这个 pid 已
-/// 被别的进程复用，不能再对它发信号。
-#[cfg(unix)]
+/// 启动时间比对的容差：超出即认为这个 pid 已被别的进程复用，不能再对它发信号。
+///
+/// unix 侧 `ps -o etime=` 只有秒级精度，换算出来的启动时间必然有抖动，所以这里必须
+/// 留出宽容度；windows 侧 `GetProcessTimes` 直接给出创建时间，精确到 100ns，同样的
+/// 宽容度只是稍宽一点，不会漏判 pid 复用。**这个常量必须在所有平台都可见**——它被
+/// 非 `cfg` 门控的 `terminate_process_tree_by_pid_if_same` 使用，只在 unix 下定义会让
+/// windows 构建直接报 E0425（CI 的 Rust 检查只跑 Linux，发现不了）。
 const PID_START_TIME_TOLERANCE_MS: i64 = 2_000;
 
 /// 按 pid 终止进程树，但先确认这个 pid 仍是当初启动的那个进程。
