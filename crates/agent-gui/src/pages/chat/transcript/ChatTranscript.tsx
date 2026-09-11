@@ -352,8 +352,8 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           onClick={() => scrollFollowHandle.jumpToBottom()}
           className={cn(
             "chat-jump-to-bottom absolute z-10 flex size-8 -translate-x-1/2 items-center justify-center",
-            "rounded-full border border-border/55 bg-background/45 text-muted-foreground shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p45),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p35)] backdrop-blur-18px backdrop-saturate-[180%]",
-            "transition-colors hover:bg-background/65 hover:text-foreground dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_var(--ui-color-hsl-0-0-0-0p6)] dark:hover:bg-white/[0.11]",
+            "rounded-full border border-border/55 bg-background/45 text-muted-foreground shadow-[inset_0_var(--spacing-1px)_0_color-mix(in_oklab,_var(--color-white)_45%,_transparent),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_color-mix(in_oklab,_var(--color-black)_35%,_transparent)] backdrop-blur-18px backdrop-saturate-[180%]",
+            "transition-colors hover:bg-background/65 hover:text-foreground dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[inset_0_var(--spacing-1px)_0_color-mix(in_oklab,_var(--color-white)_8%,_transparent),0_var(--spacing-8px)_var(--spacing-24px)_var(--spacing-minus-14px)_color-mix(in_oklab,_var(--color-black)_60%,_transparent)] dark:hover:bg-white/[0.11]",
           )}
           // Centered on the composer card (not the pane) and stacked above
           // the task-progress pill / queue panel: the composer layer paints

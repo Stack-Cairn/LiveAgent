@@ -236,14 +236,14 @@ export function HooksSection(_props: SettingsSectionProps) {
           <div
             className={cn(
               "settings-hooks-stat flex items-center gap-1.5",
-              "rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5",
+              "rounded-lg border border-success/20 bg-success/5 px-3 py-1.5",
             )}
           >
-            <CheckCircle2 className="size-3.5 text-emerald-500" />
-            <span className="settings-hooks-stat-label text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="size-3.5 text-success" />
+            <span className="settings-hooks-stat-label text-xs font-medium text-success">
               {t("settings.hooksActiveHooks")}
             </span>
-            <span className="settings-hooks-stat-value ml-0.5 text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+            <span className="settings-hooks-stat-value ml-0.5 text-sm font-bold tabular-nums text-success">
               {enabledCount}
             </span>
           </div>

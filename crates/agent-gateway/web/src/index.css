@@ -79,18 +79,18 @@ html[data-liveagent-webui="gateway"].dark {
   --rct-color-search-highlight-bg: hsl(var(--primary) / 0.24);
 }
 
-/* Static component variables live with the theme instead of occupying JSX. */
+/* The telemetry dashboard keeps its dark canvas. Surface/text roles follow the shared theme. */
 .status-dashboard-root {
+  --background: 222 47% 5%;
+  --foreground: 210 40% 98%;
+  --card: 222 47% 11%;
+  --card-foreground: var(--foreground);
+  --muted-foreground: 215 20% 72%;
+  --border: 215 28% 24%;
   --status-amber: 255, 196, 87;
-  --status-bg: var(--ui-color-030712);
   --status-cyan: 72, 235, 255;
   --status-emerald: 68, 255, 196;
-  --status-line: var(--ui-color-rgba-125-249-255-0p2);
-  --status-muted: var(--ui-color-rgba-178-202-230-0p62);
-  --status-panel-strong: var(--ui-color-rgba-8-20-42-0p88);
-  --status-panel: var(--ui-color-rgba-6-14-31-0p72);
   --status-rose: 255, 78, 142;
-  --status-text: var(--ui-color-rgba-241-248-255-0p94);
   --status-violet: 169, 119, 255;
 }
 

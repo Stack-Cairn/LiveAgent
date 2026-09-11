@@ -188,3 +188,31 @@ rem 尺寸优先使用 Tailwind 标准尺度，例如 `h-10`、`w-8`、`max-w-48
   保留四种既有外观。组件只输出 div，不自动添加 alert/live region、图标或文本。
 - 系统设置下拉框的两个专用阴影写在 SettingsSelectTrigger/Content 的 Tailwind 类中，
   继续引用原尺寸与主题变量；已移除对应全局编号 token 及类名合并注册项。
+
+## 颜色新增规则
+
+- 页面、文字、边框、成功和错误使用既有语义角色；亮暗取值在主题中定义。
+- 分类与装饰优先使用 Tailwind 标准色阶，不新增按 HEX/RGB/HSL 数值命名的变量。
+- 黑白透明色使用 `white/8`、`black/20` 等工具类；精确的非整数透明度可以
+  使用 `white/[0.055]`。不为每个 alpha 再注册全局颜色。
+- 阴影、渐变、遮罩内使用 `color-mix(in oklab, var(--color-black) 20%, transparent)`
+  等表达式，维护完整效果 token。黑色阴影不随意改成 foreground。
+- 终端等依赖库所需的精确颜色保留专用主题契约，例如透明色 `#00000000`。
+
+`pnpm check:ui-boundaries` 检查三处 UI 源码中的原始颜色声明。
+`scripts/legacy-ui-colors.json` 记录 tokens.css 剩余的历史名称，仅允许随迁移删减；
+不能通过扩大该清单添加新色。旧名称也不能在组件或宿主重新定义。
+新增语义变量应有明确消费者和用途；检查不限制正常的 Tailwind 色板及语义命名。
+
+## 快捷键立体键盘
+
+桌面设置页的键盘分为三个维护入口：
+
+- `ShortcutKeyboardLayout.ts`：平台键位、61/87/104 布局与几何尺寸。
+- `ShortcutKeyboard.tsx`：键帽、布局渲染及容器缩放；普通排版使用 Tailwind。
+- `ShortcutKeyboard.css`：局部主题、立体效果和状态变量，保持 ghk 前缀作用域。
+
+设置页继续负责快捷键录制、绑定、系统注册和分类映射，不再注入 CSS 字符串。
+四个分类的色值仅定义在 CSS 中，键帽、提示点和图例使用同一组 tone 类。
+键帽统一声明背景与阴影；状态按 bound、held、down、Enter 的顺序覆盖局部变量。
+当前配色仍引用历史原语，本批结构整理没有同时近似迁移彩色值。

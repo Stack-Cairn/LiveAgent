@@ -192,14 +192,17 @@
   --_scroll-fade-mask: linear-gradient(
     to bottom,
     var(--ui-color-00000000) 0,
-    var(--ui-color-rgb-0-0-0-0p1) calc(var(--scroll-fade-t-size) * 0.28),
-    var(--ui-color-rgb-0-0-0-0p45) calc(var(--scroll-fade-t-size) * 0.55),
-    var(--ui-color-rgb-0-0-0-0p82) calc(var(--scroll-fade-t-size) * 0.8),
+    color-mix(in oklab, var(--color-black) 10%, transparent) calc(var(--scroll-fade-t-size) * 0.28),
+    color-mix(in oklab, var(--color-black) 45%, transparent) calc(var(--scroll-fade-t-size) * 0.55),
+    color-mix(in oklab, var(--color-black) 82%, transparent) calc(var(--scroll-fade-t-size) * 0.8),
     var(--ui-color-000) var(--scroll-fade-t-size),
     var(--ui-color-000) calc(100% - var(--scroll-fade-b-size)),
-    var(--ui-color-rgb-0-0-0-0p82) calc(100% - var(--scroll-fade-b-size) * 0.8),
-    var(--ui-color-rgb-0-0-0-0p45) calc(100% - var(--scroll-fade-b-size) * 0.55),
-    var(--ui-color-rgb-0-0-0-0p1) calc(100% - var(--scroll-fade-b-size) * 0.28),
+    color-mix(in oklab, var(--color-black) 82%, transparent)
+      calc(100% - var(--scroll-fade-b-size) * 0.8),
+    color-mix(in oklab, var(--color-black) 45%, transparent)
+      calc(100% - var(--scroll-fade-b-size) * 0.55),
+    color-mix(in oklab, var(--color-black) 10%, transparent)
+      calc(100% - var(--scroll-fade-b-size) * 0.28),
     var(--ui-color-00000000) 100%
   );
   @supports (animation-timeline: scroll(self y)) {

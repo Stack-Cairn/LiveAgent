@@ -1,3 +1,8 @@
+import { type KeyDecor, SHORTCUT_KEYBOARD_TONES, ShortcutKeyboard } from "./ShortcutKeyboard";
+import { type KeyboardLayoutId, LAYOUT_OPTIONS } from "./ShortcutKeyboardLayout";
+
+export type { KeyboardLayoutId } from "./ShortcutKeyboardLayout";
+
 import {
   Keyboard,
   MonitorSmartphone,
@@ -16,15 +21,7 @@ import {
 } from "@liveagent/ui/lib/chat/sendShortcut";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inferRuntimePlatform } from "../../lib/runtimePlatform";
 import {
   applyGlobalShortcuts,
@@ -44,192 +41,7 @@ import {
   writeGlobalShortcutBindings,
 } from "../../lib/shortcuts/globalShortcuts";
 
-/* ============================== 键盘布局数据 ============================== */
-
-// 布局行是模块级常量，平台分叉须在模块加载时判定（同步推断即可，无需等后端）。
 const IS_MAC = inferRuntimePlatform() === "macos";
-
-const KEY_UNIT = 40;
-const KEY_GAP = 6;
-const BOARD_PAD = 14;
-const BLOCK_GAP = 20;
-const ROW_GAP_LARGE = 14;
-
-function keyWidth(units: number): number {
-  return units * KEY_UNIT + (units - 1) * KEY_GAP;
-}
-
-interface KeyDef {
-  /** 渲染 key（布局静态，模块加载时生成稳定 id） */
-  id: string;
-  /** KeyboardEvent.code；null 表示占位或不可录制键（Fn） */
-  code: string | null;
-  units: number;
-  label: string;
-}
-
-let keyDefSeq = 0;
-function k(label: string, code: string | null, units = 1): KeyDef {
-  keyDefSeq += 1;
-  return { id: `k${keyDefSeq}`, code, units, label };
-}
-function gap(units: number): KeyDef {
-  keyDefSeq += 1;
-  return { id: `k${keyDefSeq}`, code: null, units, label: "" };
-}
-
-const ROW_FN: KeyDef[] = [
-  k("Esc", "Escape"),
-  gap(1),
-  k("F1", "F1"),
-  k("F2", "F2"),
-  k("F3", "F3"),
-  k("F4", "F4"),
-  gap(0.5),
-  k("F5", "F5"),
-  k("F6", "F6"),
-  k("F7", "F7"),
-  k("F8", "F8"),
-  gap(0.5),
-  k("F9", "F9"),
-  k("F10", "F10"),
-  k("F11", "F11"),
-  k("F12", "F12"),
-];
-const ROW_NUM: KeyDef[] = [
-  k("`", "Backquote"),
-  k("1", "Digit1"),
-  k("2", "Digit2"),
-  k("3", "Digit3"),
-  k("4", "Digit4"),
-  k("5", "Digit5"),
-  k("6", "Digit6"),
-  k("7", "Digit7"),
-  k("8", "Digit8"),
-  k("9", "Digit9"),
-  k("0", "Digit0"),
-  k("-", "Minus"),
-  k("=", "Equal"),
-  k("⌫", "Backspace", 2),
-];
-const ROW_Q: KeyDef[] = [
-  k("Tab", "Tab", 1.5),
-  k("Q", "KeyQ"),
-  k("W", "KeyW"),
-  k("E", "KeyE"),
-  k("R", "KeyR"),
-  k("T", "KeyT"),
-  k("Y", "KeyY"),
-  k("U", "KeyU"),
-  k("I", "KeyI"),
-  k("O", "KeyO"),
-  k("P", "KeyP"),
-  k("[", "BracketLeft"),
-  k("]", "BracketRight"),
-  k("\\", "Backslash", 1.5),
-];
-const ROW_A: KeyDef[] = [
-  k("Caps", "CapsLock", 1.75),
-  k("A", "KeyA"),
-  k("S", "KeyS"),
-  k("D", "KeyD"),
-  k("F", "KeyF"),
-  k("G", "KeyG"),
-  k("H", "KeyH"),
-  k("J", "KeyJ"),
-  k("K", "KeyK"),
-  k("L", "KeyL"),
-  k(";", "Semicolon"),
-  k("'", "Quote"),
-  k("Enter ⏎", "Enter", 2.25),
-];
-const ROW_Z: KeyDef[] = [
-  k("Shift", "ShiftLeft", 2.25),
-  k("Z", "KeyZ"),
-  k("X", "KeyX"),
-  k("C", "KeyC"),
-  k("V", "KeyV"),
-  k("B", "KeyB"),
-  k("N", "KeyN"),
-  k("M", "KeyM"),
-  k(",", "Comma"),
-  k(".", "Period"),
-  k("/", "Slash"),
-  k("Shift", "ShiftRight", 2.75),
-];
-// 底排按平台分叉：macOS 用 fn ⌃ ⌥ ⌘ 排布与符号，其余平台用 Ctrl Win Alt。
-const ROW_CTL: KeyDef[] = IS_MAC
-  ? [
-      k("Fn", null, 1.25),
-      k("⌃", "ControlLeft", 1.25),
-      k("⌥", "AltLeft", 1.25),
-      k("⌘", "MetaLeft", 1.25),
-      k("", "Space", 6.25),
-      k("⌘", "MetaRight", 1.25),
-      k("⌥", "AltRight", 1.25),
-      k("⌃", "ControlRight", 1.25),
-    ]
-  : [
-      k("Ctrl", "ControlLeft", 1.25),
-      k("Win", "MetaLeft", 1.25),
-      k("Alt", "AltLeft", 1.25),
-      k("", "Space", 6.25),
-      k("Alt", "AltRight", 1.25),
-      k("Fn", null, 1.25),
-      k("☰", "ContextMenu", 1.25),
-      k("Ctrl", "ControlRight", 1.25),
-    ];
-
-const NAV_TOP: KeyDef[] = [
-  k("PrtSc", "PrintScreen"),
-  k("ScrLk", "ScrollLock"),
-  k("Pause", "Pause"),
-];
-const NAV_MID: KeyDef[][] = [
-  [k("Ins", "Insert"), k("Home", "Home"), k("PgUp", "PageUp")],
-  [k("Del", "Delete"), k("End", "End"), k("PgDn", "PageDown")],
-];
-const NAV_ARROW_TOP: KeyDef[] = [gap(1), k("▲", "ArrowUp"), gap(1)];
-const NAV_ARROW_BOTTOM: KeyDef[] = [k("◀", "ArrowLeft"), k("▼", "ArrowDown"), k("▶", "ArrowRight")];
-
-const NUM_TOP: KeyDef[] = [
-  k("Num", "NumLock"),
-  k("/", "NumpadDivide"),
-  k("*", "NumpadMultiply"),
-  k("-", "NumpadSubtract"),
-];
-interface NumpadCell {
-  def: KeyDef;
-  tall?: boolean;
-  wide?: boolean;
-}
-const NUM_GRID: NumpadCell[] = [
-  { def: k("7", "Numpad7") },
-  { def: k("8", "Numpad8") },
-  { def: k("9", "Numpad9") },
-  { def: k("+", "NumpadAdd"), tall: true },
-  { def: k("4", "Numpad4") },
-  { def: k("5", "Numpad5") },
-  { def: k("6", "Numpad6") },
-  { def: k("1", "Numpad1") },
-  { def: k("2", "Numpad2") },
-  { def: k("3", "Numpad3") },
-  { def: k("⏎", "NumpadEnter"), tall: true },
-  { def: k("0", "Numpad0"), wide: true },
-  { def: k(".", "NumpadDecimal") },
-];
-
-export type KeyboardLayoutId = "61" | "87" | "104";
-const LAYOUT_OPTIONS: KeyboardLayoutId[] = ["61", "87", "104"];
-
-const MAIN_WIDTH = keyWidth(15);
-const NAV_WIDTH = keyWidth(3);
-const NUM_WIDTH = keyWidth(4);
-const NATURAL_WIDTH: Record<KeyboardLayoutId, number> = {
-  "61": MAIN_WIDTH + BOARD_PAD * 2,
-  "87": MAIN_WIDTH + BLOCK_GAP + NAV_WIDTH + BOARD_PAD * 2,
-  "104": MAIN_WIDTH + BLOCK_GAP + NAV_WIDTH + BLOCK_GAP + NUM_WIDTH + BOARD_PAD * 2,
-};
 
 function displayToken(token: string): string {
   return globalShortcutDisplayToken(token, IS_MAC);
@@ -241,14 +53,6 @@ const MODIFIER_KEY_CODES: Record<ShortcutModifier, string[]> = {
   Alt: ["AltLeft", "AltRight"],
   Super: ["MetaLeft", "MetaRight"],
 };
-
-/** 每个动作的高亮色（与 .ghk-cN 类一一对应，索引按 GLOBAL_SHORTCUT_ACTIONS 顺序取模） */
-const ACTION_COLORS = [
-  "var(--ui-color-3b82f6)",
-  "var(--ui-color-8b5cf6)",
-  "var(--ui-color-10b981)",
-  "var(--ui-color-f59e0b)",
-];
 
 interface ShortcutDraft {
   mods: ShortcutModifier[];
@@ -265,99 +69,6 @@ interface BoundShortcutEntry {
 }
 
 /* ============================== 组件 ============================== */
-
-const GHK_STYLE = `
-.ghk-root{--ghk-cap-top:var(--ui-color-fdfdfe);--ghk-cap-side:var(--ui-color-c9d3e0);--ghk-cap-text:var(--ui-color-475569);
---ghk-cap-active:var(--ui-color-bfdbfe);--ghk-cap-active-text:var(--ui-color-1d4ed8);--ghk-cap-held:var(--ui-color-dbeafe);--ghk-cap-held-side:var(--ui-color-93b8f0);
---ghk-cap-enter:var(--ui-color-bbf7d0);--ghk-cap-enter-text:var(--ui-color-15803d);
---ghk-board1:var(--ui-color-e9edf4);--ghk-board2:var(--ui-color-d6dde8);--ghk-board-edge:var(--ui-color-b7c2d1);--ghk-shadow:var(--ui-color-rgb-15-23-42-p26);}
-.dark .ghk-root{--ghk-cap-top:var(--ui-color-313d4f);--ghk-cap-side:var(--ui-color-10161f);--ghk-cap-text:var(--ui-color-b6c2d4);
---ghk-cap-active:var(--ui-color-1e40af);--ghk-cap-active-text:var(--ui-color-bfdbfe);--ghk-cap-held:var(--ui-color-1e3a8a);--ghk-cap-held-side:var(--ui-color-172554);
---ghk-cap-enter:var(--ui-color-14532d);--ghk-cap-enter-text:var(--ui-color-86efac);
---ghk-board1:var(--ui-color-222b38);--ghk-board2:var(--ui-color-161d28);--ghk-board-edge:var(--ui-color-0b1017);--ghk-shadow:var(--ui-color-rgb-0-0-0-p5);}
-.ghk-stage{perspective:var(--spacing-1400px);}
-.ghk-board{display:inline-flex;gap:${BLOCK_GAP}px;padding:${BOARD_PAD}px;border-radius:var(--radius-16px);
-background:linear-gradient(180deg,var(--ghk-board1),var(--ghk-board2));
-box-shadow:0 var(--spacing-16px) 0 var(--spacing-minus-6px) var(--ghk-board-edge),0 var(--spacing-28px) var(--spacing-32px) var(--ghk-shadow);
-transform:rotateX(22deg);transform-style:preserve-3d;transition:transform var(--ui-duration-350ms),box-shadow var(--ui-duration-350ms);}
-.ghk-board.ghk-rec{
-box-shadow:0 var(--spacing-16px) 0 var(--spacing-minus-6px) var(--ghk-board-edge),0 var(--spacing-28px) var(--spacing-34px) var(--ghk-shadow),0 0 0 var(--spacing-2px) var(--ui-color-rgb-59-130-246-p45),0 0 var(--spacing-26px) var(--ui-color-rgb-59-130-246-p28);}
-.ghk-key{position:relative;height:${KEY_UNIT}px;border-radius:var(--radius-7px);background:var(--ghk-cap-top);
-box-shadow:0 var(--spacing-4px) 0 var(--ghk-cap-side),0 var(--spacing-6px) var(--spacing-5px) var(--ui-color-rgb-15-23-42-p16);color:var(--ghk-cap-text);
-display:flex;align-items:center;justify-content:center;font-size:var(--text-xs);font-weight:var(--font-weight-semibold);line-height:var(--leading-1p1);
-text-align:center;padding:0 var(--spacing-2px);transition:transform var(--ui-duration-50ms),box-shadow var(--ui-duration-50ms),background var(--ui-duration-120ms),color var(--ui-duration-120ms);}
-.ghk-c0{--ghk-hl:var(--ui-color-3b82f6);--ghk-hl-bg:var(--ui-color-dbeafe);--ghk-hl-side:var(--ui-color-94b6ee);--ghk-hl-text:var(--ui-color-1d4ed8);}
-.ghk-c1{--ghk-hl:var(--ui-color-8b5cf6);--ghk-hl-bg:var(--ui-color-ede9fe);--ghk-hl-side:var(--ui-color-b7a6ee);--ghk-hl-text:var(--ui-color-6d28d9);}
-.ghk-c2{--ghk-hl:var(--ui-color-10b981);--ghk-hl-bg:var(--ui-color-d1fae5);--ghk-hl-side:var(--ui-color-86d5b8);--ghk-hl-text:var(--ui-color-047857);}
-.ghk-c3{--ghk-hl:var(--ui-color-f59e0b);--ghk-hl-bg:var(--ui-color-fef3c7);--ghk-hl-side:var(--ui-color-e2c078);--ghk-hl-text:var(--ui-color-b45309);}
-.dark .ghk-c0{--ghk-hl-bg:var(--ui-color-1e3a8a);--ghk-hl-side:var(--ui-color-152a63);--ghk-hl-text:var(--ui-color-bfdbfe);}
-.dark .ghk-c1{--ghk-hl-bg:var(--ui-color-4c1d95);--ghk-hl-side:var(--ui-color-37156b);--ghk-hl-text:var(--ui-color-ddd6fe);}
-.dark .ghk-c2{--ghk-hl-bg:var(--ui-color-065f46);--ghk-hl-side:var(--ui-color-04422f);--ghk-hl-text:var(--ui-color-a7f3d0);}
-.dark .ghk-c3{--ghk-hl-bg:var(--ui-color-78350f);--ghk-hl-side:var(--ui-color-571f05);--ghk-hl-text:var(--ui-color-fde68a);}
-.ghk-key.ghk-bound{background:var(--ghk-hl-bg);color:var(--ghk-hl-text);
-box-shadow:0 var(--spacing-4px) 0 var(--ghk-hl-side),0 var(--spacing-6px) var(--spacing-5px) var(--ui-color-rgb-15-23-42-p16);}
-.ghk-key.ghk-bound .ghk-klegend{transform:translateY(var(--spacing-minus-5px));}
-.ghk-tag{position:absolute;left:var(--spacing-2px);right:var(--spacing-2px);bottom:var(--spacing-2px);font-size:var(--text-tiny);font-weight:var(--font-weight-semibold);line-height:var(--leading-1p2);
-color:var(--ghk-hl-text);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;}
-.ghk-dots{position:absolute;top:var(--spacing-3px);right:var(--spacing-4px);display:flex;gap:var(--spacing-2px);pointer-events:none;}
-.ghk-dot{width:var(--spacing-5px);height:var(--spacing-5px);border-radius:50%;box-shadow:0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-100-0p55);}
-.dark .ghk-dot{box-shadow:0 0 0 var(--spacing-1px) var(--ui-color-rgb-0-0-0-p4);}
-.ghk-key.ghk-held{background:var(--ghk-cap-held);color:var(--ghk-cap-active-text);
-box-shadow:0 var(--spacing-4px) 0 var(--ghk-cap-held-side),0 var(--spacing-6px) var(--spacing-5px) var(--ui-color-rgb-37-99-235-p22);}
-.ghk-key.ghk-down{transform:translateY(var(--spacing-4px));background:var(--ghk-cap-active);color:var(--ghk-cap-active-text);
-box-shadow:0 0 0 var(--ghk-cap-side),0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-rgb-15-23-42-p2);}
-.ghk-key.ghk-enter.ghk-down{background:var(--ghk-cap-enter);color:var(--ghk-cap-enter-text);}
-.ghk-kbd{display:inline-block;padding:var(--spacing-3px) var(--spacing-9px);font-size:var(--text-xs);font-weight:var(--font-weight-semibold);border-radius:var(--radius-6px);
-border:var(--spacing-1px) solid var(--ghk-cap-side);border-bottom-width:var(--spacing-2p5px);background:var(--ghk-cap-top);color:var(--ghk-cap-text);}
-`;
-
-/** 键帽上的占用标注：bound=该键是某快捷键主键；hintDots=按下更多修饰键后此修饰键下有组合 */
-interface KeyDecor {
-  bound?: { colorClass: string; tag: string; title: string };
-  hintDots?: string[];
-  hintTitle?: string;
-}
-
-function KeyCap(props: {
-  def: KeyDef;
-  pressed: boolean;
-  held: boolean;
-  decor?: KeyDecor;
-  fill?: boolean;
-}) {
-  const { def, pressed, held, decor, fill } = props;
-  if (!def.code && !def.label) {
-    return <div style={{ width: keyWidth(def.units), height: KEY_UNIT }} />;
-  }
-  const bound = decor?.bound;
-  const hintDots = decor?.hintDots ?? [];
-  const isEnter = def.code === "Enter" || def.code === "NumpadEnter";
-  const className = `ghk-key${isEnter ? " ghk-enter" : ""}${
-    bound ? ` ghk-bound ${bound.colorClass}` : ""
-  }${pressed ? " ghk-down" : ""}${held && !pressed ? " ghk-held" : ""}`;
-  return (
-    <div
-      className={className}
-      style={fill ? { width: "100%", height: "100%" } : { width: keyWidth(def.units) }}
-      title={bound?.title ?? decor?.hintTitle}
-    >
-      <span
-        className="ghk-klegend"
-        style={def.label.length > 3 ? { fontSize: "var(--text-tiny)" } : undefined}
-      >
-        {def.label}
-      </span>
-      {bound ? <span className="ghk-tag">{bound.tag}</span> : null}
-      {!bound && hintDots.length > 0 ? (
-        <span className="ghk-dots">
-          {hintDots.map((hex) => (
-            <span key={hex} className="ghk-dot" style={{ background: hex }} />
-          ))}
-        </span>
-      ) : null}
-    </div>
-  );
-}
 
 const SHORTCUT_KEY_BUTTON_CLASS =
   "flex shrink-0 items-center gap-1.5 rounded-md px-2 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -834,7 +545,7 @@ export function GlobalShortcutsSection() {
       label: actionLabelById[action],
       mods: SHORTCUT_MODIFIER_ORDER.filter((mod) => tokens.includes(mod)),
       main,
-      colorIndex: index % ACTION_COLORS.length,
+      colorIndex: index % SHORTCUT_KEYBOARD_TONES.length,
       combo: tokens.map((token) => displayToken(token)).join(" + "),
     });
   });
@@ -853,7 +564,7 @@ export function GlobalShortcutsSection() {
       } else if (heldMods.every((mod) => entry.mods.includes(mod))) {
         for (const mod of entry.mods) {
           if (heldMods.includes(mod)) continue;
-          const color = ACTION_COLORS[entry.colorIndex];
+          const color = SHORTCUT_KEYBOARD_TONES[entry.colorIndex];
           for (const code of MODIFIER_KEY_CODES[mod]) {
             const dots = modHintDots.get(code) ?? [];
             if (!dots.includes(color)) dots.push(color);
@@ -873,7 +584,7 @@ export function GlobalShortcutsSection() {
     if (bound) {
       return {
         bound: {
-          colorClass: `ghk-c${bound.colorIndex}`,
+          colorClass: SHORTCUT_KEYBOARD_TONES[bound.colorIndex],
           tag: bound.label,
           title: `${bound.combo} · ${bound.label} (${t("settings.shortcutOccupied")})`,
         },
@@ -886,119 +597,8 @@ export function GlobalShortcutsSection() {
     return undefined;
   }
 
-  // 键盘随容器宽度等比缩放；缩放与容器高度直接写 DOM，
-  // 以便在同一次布局中量取变换后的实际视高（transform 不影响布局盒）。
-  const outerRef = useRef<HTMLDivElement | null>(null);
-  const scalerRef = useRef<HTMLDivElement | null>(null);
-  const naturalWidth = NATURAL_WIDTH[layout];
-
-  useLayoutEffect(() => {
-    const outer = outerRef.current;
-    const scaler = scalerRef.current;
-    if (!outer || !scaler) return;
-    const update = () => {
-      const width = outer.clientWidth;
-      if (width <= 0) return;
-      const nextScale = Math.min(1, width / naturalWidth);
-      scaler.style.width = `${naturalWidth}px`;
-      scaler.style.transform = `scale(${nextScale})`;
-      scaler.style.transformOrigin = "top center";
-      scaler.style.marginLeft = `calc(50% - ${naturalWidth / 2}px)`;
-      // 底部预留投影空间，避免 overflow-hidden 裁掉键盘厚度阴影。
-      outer.style.height = `${scaler.getBoundingClientRect().height + 44}px`;
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(outer);
-    return () => observer.disconnect();
-  }, [naturalWidth]);
-
-  function renderRow(defs: KeyDef[], key: string) {
-    return (
-      <div key={key} className="flex" style={{ gap: KEY_GAP }}>
-        {defs.map((def) => (
-          <KeyCap
-            key={def.id}
-            def={def}
-            pressed={def.code !== null && pressedCodes.has(def.code)}
-            held={def.code !== null && heldCodes.has(def.code)}
-            decor={decorForCode(def.code)}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  function renderMainBlock(withFnRow: boolean) {
-    return (
-      <div className="flex flex-col" style={{ gap: KEY_GAP }}>
-        {withFnRow ? (
-          <>
-            {renderRow(ROW_FN, "fn")}
-            <div style={{ height: ROW_GAP_LARGE - KEY_GAP }} />
-          </>
-        ) : null}
-        {renderRow(ROW_NUM, "num")}
-        {renderRow(ROW_Q, "q")}
-        {renderRow(ROW_A, "a")}
-        {renderRow(ROW_Z, "z")}
-        {renderRow(ROW_CTL, "ctl")}
-      </div>
-    );
-  }
-
-  function renderNavBlock() {
-    return (
-      <div className="flex flex-col" style={{ gap: KEY_GAP }}>
-        {renderRow(NAV_TOP, "navtop")}
-        <div style={{ height: ROW_GAP_LARGE - KEY_GAP }} />
-        {renderRow(NAV_MID[0], "navmid0")}
-        {renderRow(NAV_MID[1], "navmid1")}
-        <div style={{ height: KEY_UNIT }} />
-        {renderRow(NAV_ARROW_TOP, "arrowtop")}
-        {renderRow(NAV_ARROW_BOTTOM, "arrowbottom")}
-      </div>
-    );
-  }
-
-  function renderNumBlock() {
-    return (
-      <div className="flex flex-col" style={{ gap: KEY_GAP }}>
-        {renderRow(NUM_TOP, "numtop")}
-        <div style={{ height: ROW_GAP_LARGE - KEY_GAP }} />
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: `repeat(4, ${KEY_UNIT}px)`,
-            gridAutoRows: KEY_UNIT,
-            gap: KEY_GAP,
-          }}
-        >
-          {NUM_GRID.map((cell) => (
-            <div
-              key={cell.def.id}
-              style={{
-                gridRow: cell.tall ? "span 2" : undefined,
-                gridColumn: cell.wide ? "span 2" : undefined,
-              }}
-            >
-              <KeyCap
-                def={cell.def}
-                pressed={cell.def.code !== null && pressedCodes.has(cell.def.code)}
-                held={cell.def.code !== null && heldCodes.has(cell.def.code)}
-                decor={decorForCode(cell.def.code)}
-                fill
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="ghk-root space-y-6">
-      <style>{GHK_STYLE}</style>
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Keyboard className="size-4 text-muted-foreground" />
@@ -1171,8 +771,10 @@ export function GlobalShortcutsSection() {
                 )}
               >
                 <span
-                  className="size-2 rounded-full"
-                  style={{ background: ACTION_COLORS[entry.colorIndex] }}
+                  className={cn(
+                    "size-2 rounded-full bg-(--ghk-hl)",
+                    SHORTCUT_KEYBOARD_TONES[entry.colorIndex],
+                  )}
                 />
                 <span className="font-medium text-foreground">{entry.label}</span>
                 <span className="text-muted-foreground">{entry.combo}</span>
@@ -1181,17 +783,13 @@ export function GlobalShortcutsSection() {
           </div>
         ) : null}
 
-        <div ref={outerRef} className="overflow-hidden pt-2">
-          <div ref={scalerRef}>
-            <div className="ghk-stage">
-              <div className={cn("ghk-board", recording && "ghk-rec")}>
-                {renderMainBlock(layout !== "61")}
-                {layout !== "61" ? renderNavBlock() : null}
-                {layout === "104" ? renderNumBlock() : null}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ShortcutKeyboard
+          layout={layout}
+          recording={Boolean(recording)}
+          pressedCodes={pressedCodes}
+          heldCodes={heldCodes}
+          decorForCode={decorForCode}
+        />
       </section>
     </div>
   );

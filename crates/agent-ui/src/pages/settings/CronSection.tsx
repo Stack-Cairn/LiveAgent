@@ -160,10 +160,8 @@ export function CronSection(props: SettingsSectionProps) {
             {t("settings.cronCount")}
             <span className="text-border">|</span>
             <span className="flex items-center gap-1">
-              <span className="size-1.5 rounded-full bg-emerald-500" />
-              <span className="tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
-                {enabledCount}
-              </span>
+              <span className="size-1.5 rounded-full bg-success" />
+              <span className="tabular-nums font-medium text-success">{enabledCount}</span>
             </span>
           </div>
 
@@ -264,8 +262,8 @@ export function CronSection(props: SettingsSectionProps) {
                         <span
                           title={task.lastError}
                           className={cn(
-                            "flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5",
-                            "text-tiny font-medium leading-none text-red-600 dark:text-red-400",
+                            "flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5",
+                            "text-tiny font-medium leading-none text-destructive",
                           )}
                         >
                           <AlertTriangle className="size-2.5" />
@@ -293,7 +291,7 @@ export function CronSection(props: SettingsSectionProps) {
                       "hidden w-74px shrink-0 items-center justify-center gap-1 rounded-full",
                       "px-2 py-1 text-xs font-medium md:flex",
                       exhausted
-                        ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                        ? "bg-destructive/10 text-destructive"
                         : task.remainingExecutions == null
                           ? "bg-muted text-muted-foreground"
                           : "bg-sky-500/10 text-sky-600 dark:text-sky-400",

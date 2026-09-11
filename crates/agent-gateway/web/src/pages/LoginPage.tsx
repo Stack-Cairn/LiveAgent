@@ -77,8 +77,8 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
       <div
         className={cn(
           "relative z-1 grid w-login-container-w grid-cols-login-container gap-0 overflow-hidden",
-          "rounded-28px border border-solid border-hsl-0-0-100-0p7 bg-hsl-0-0-100-0p55 shadow-login-container backdrop-blur-40px backdrop-saturate-160",
-          "dark:border-hsl-0-0-100-0p08 dark:bg-hsl-224-20-12-0p6 dark:shadow-login-container-2 max-1080:w-login-container-w-2 max-1080:grid-cols-login-container-2 max-820:rounded-22px max-640:w-full max-640:rounded-20px",
+          "rounded-28px border border-solid border-white/70 bg-white/55 shadow-login-container backdrop-blur-40px backdrop-saturate-160",
+          "dark:border-white/8 dark:bg-hsl-224-20-12-0p6 dark:shadow-login-container-2 max-1080:w-login-container-w-2 max-1080:grid-cols-login-container-2 max-820:rounded-22px max-640:w-full max-640:rounded-20px",
           "max-380:rounded-18px",
         )}
       >
@@ -86,9 +86,9 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
         <div
           className={cn(
             "flex flex-col justify-center",
-            "border-r border-solid border-r-hsl-0-0-0-0p04 bg-hsl-0-0-100-0p3 px-40px py-48px",
-            "dark:border-r-hsl-0-0-100-0p05 dark:bg-hsl-0-0-100-0p02 max-1080:border-r-0 max-1080:border-r-current max-1080:border-b max-1080:border-solid max-1080:border-b-hsl-0-0-0-0p04 max-1080:px-32px",
-            "max-1080:pt-36px max-1080:pb-28px dark:max-1080:border-b-hsl-0-0-100-0p05 max-820:px-24px max-820:pt-28px max-820:pb-20px max-640:px-20px max-640:pt-24px",
+            "border-r border-solid border-r-black/4 bg-white/30 px-40px py-48px",
+            "dark:border-r-white/5 dark:bg-white/2 max-1080:border-r-0 max-1080:border-r-current max-1080:border-b max-1080:border-solid max-1080:border-b-black/4 max-1080:px-32px",
+            "max-1080:pt-36px max-1080:pb-28px dark:max-1080:border-b-white/5 max-820:px-24px max-820:pt-28px max-820:pb-20px max-640:px-20px max-640:pt-24px",
             "max-640:pb-18px max-380:px-16px max-380:pt-20px max-380:pb-14px",
           )}
         >
@@ -127,11 +127,11 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 key={f.title}
                 className={cn(
                   "flex items-start gap-12px",
-                  "rounded-14px border border-hsl-0-0-0-0p04 bg-hsl-0-0-100-0p5 px-14px py-12px",
+                  "rounded-14px border border-black/4 bg-hsl-0-0-100-0p5 px-14px py-12px",
                   "transition-[background,border-color,transform] duration-200ms ease-default",
-                  "hover:translate-x-2px hover:border-hsl-0-0-0-0p06 hover:bg-hsl-0-0-100-0p75 motion-reduce:animate-none dark:border-hsl-0-0-100-0p06 dark:bg-hsl-0-0-100-0p04 dark:hover:border-hsl-0-0-100-0p1 dark:hover:bg-hsl-0-0-100-0p07",
-                  "[&>div:first-child]:transition-transform [&>div:first-child]:duration-200ms [&>div:first-child]:ease-default hover:[&>div:first-child]:scale-[1.08] touch-primary:hover:translate-x-0 touch-primary:hover:border-hsl-0-0-0-0p04 touch-primary:hover:bg-hsl-0-0-100-0p5 touch-primary:active:bg-hsl-0-0-100-0p75",
-                  "touch-primary:dark:hover:border-hsl-0-0-100-0p06 touch-primary:dark:hover:bg-hsl-0-0-100-0p04 touch-primary:dark:active:bg-hsl-0-0-100-0p07 touch-primary:hover:[&>div:first-child]:scale-100 max-820:rounded-12px max-820:px-12px max-820:py-10px max-640:items-center",
+                  "hover:translate-x-2px hover:border-black/6 hover:bg-hsl-0-0-100-0p75 motion-reduce:animate-none dark:border-white/6 dark:bg-white/4 dark:hover:border-hsl-0-0-100-0p1 dark:hover:bg-hsl-0-0-100-0p07",
+                  "[&>div:first-child]:transition-transform [&>div:first-child]:duration-200ms [&>div:first-child]:ease-default hover:[&>div:first-child]:scale-[1.08] touch-primary:hover:translate-x-0 touch-primary:hover:border-black/4 touch-primary:hover:bg-hsl-0-0-100-0p5 touch-primary:active:bg-hsl-0-0-100-0p75",
+                  "touch-primary:dark:hover:border-white/6 touch-primary:dark:hover:bg-white/4 touch-primary:dark:active:bg-hsl-0-0-100-0p07 touch-primary:hover:[&>div:first-child]:scale-100 max-820:rounded-12px max-820:px-12px max-820:py-10px max-640:items-center",
                   "max-640:py-9px max-380:gap-10px max-380:rounded-10px max-380:px-10px max-380:py-8px",
                   f.accent,
                 )}
@@ -171,8 +171,8 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 <div
                   className={cn(
                     "shrink-0 flex items-center justify-center size-34px",
-                    "rounded-10px text-muted-foreground bg-muted/60 border border-solid border-hsl-0-0-0-0p04",
-                    "dark:bg-hsl-0-0-100-0p06 dark:border-hsl-0-0-100-0p06 max-820:size-30px max-820:rounded-9px max-380:size-28px max-380:rounded-8px",
+                    "rounded-10px text-muted-foreground bg-muted/60 border border-solid border-black/4",
+                    "dark:bg-white/6 dark:border-white/6 max-820:size-30px max-820:rounded-9px max-380:size-28px max-380:rounded-8px",
                   )}
                 >
                   <Lock size={16} strokeWidth={2} />
@@ -189,9 +189,9 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
             <div
               className={cn(
                 "mb-16px px-16px py-14px",
-                "rounded-16px border border-solid border-hsl-0-0-0-0p06 bg-hsl-0-0-100-0p55",
+                "rounded-16px border border-solid border-black/6 bg-white/55",
                 "transition-[border-color,box-shadow] duration-250ms ease-default",
-                "dark:border-hsl-0-0-100-0p08 dark:bg-hsl-0-0-100-0p04 max-820:px-14px max-820:py-12px max-820:rounded-14px max-380:px-12px max-380:py-10px max-380:rounded-12px",
+                "dark:border-white/8 dark:bg-white/4 max-820:px-14px max-820:py-12px max-820:rounded-14px max-380:px-12px max-380:py-10px max-380:rounded-12px",
                 "max-380:mb-12px",
                 isFocused &&
                   "border-hsl-215-70-60-0p4 shadow-login-input-wrap-focus dark:border-hsl-215-60-55-0p5 dark:shadow-login-input-wrap--focus-2",

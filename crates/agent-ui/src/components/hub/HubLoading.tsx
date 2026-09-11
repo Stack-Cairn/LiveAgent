@@ -6,7 +6,7 @@ import { Loader2 } from "../IconSet";
 const loadingSurfaceVariants = cva("relative overflow-hidden rounded-14px border", {
   variants: {
     variant: {
-      hero: "border-hsl-border-55 bg-hub-frost-hero backdrop-blur-24px backdrop-saturate-180 shadow-hub-frost-hero dark:border-hsl-0-0-100-0p08 dark:bg-hub-frost-hero-dark dark:shadow-hub-frost-hero-dark",
+      hero: "border-hsl-border-55 bg-hub-frost-hero backdrop-blur-24px backdrop-saturate-180 shadow-hub-frost-hero dark:border-white/8 dark:bg-hub-frost-hero-dark dark:shadow-hub-frost-hero-dark",
       skeleton:
         "border-hsl-border-35 bg-hsl-background-50 backdrop-blur-18px backdrop-saturate-170",
     },

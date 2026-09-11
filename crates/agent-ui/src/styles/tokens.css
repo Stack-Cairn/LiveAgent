@@ -30,26 +30,28 @@
 
 @theme inline {
   --shadow-ui-composerattachmentcard-1: inset 0 var(--spacing-1px) 0
-    var(--ui-color-rgba-255-255-255-0p64);
+    color-mix(in oklab, var(--color-white) 64%, transparent);
   --shadow-ui-composerattachmentcard-2: inset 0 var(--spacing-1px) 0
-    var(--ui-color-rgba-255-255-255-0p055);
+    color-mix(in oklab, var(--color-white) 5.5%, transparent);
   --shadow-ui-contextcheckpointcard-3:
-    0 var(--spacing-1px) var(--spacing-3px) var(--ui-color-hsl-0-0-0-0p04),
-    0 var(--spacing-4px) var(--spacing-12px) var(--ui-color-hsl-0-0-0-0p03);
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 4%, transparent),
+    0 var(--spacing-4px) var(--spacing-12px) color-mix(in oklab, var(--color-black) 3%, transparent);
   --shadow-ui-contextcheckpointcard-4:
-    0 var(--spacing-1px) var(--spacing-3px) var(--ui-color-rgba-0-0-0-0p2),
-    0 var(--spacing-4px) var(--spacing-12px) var(--ui-color-hsl-0-0-0-0p15);
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 20%, transparent),
+    0 var(--spacing-4px) var(--spacing-12px)
+    color-mix(in oklab, var(--color-black) 15%, transparent);
   --shadow-ui-editdiffview-5: 0 var(--spacing-5px) var(--spacing-18px) var(--spacing-minus-14px)
     hsl(var(--foreground) / 0.28);
   --shadow-ui-filedropoverlay-6:
     0 var(--spacing-24px) var(--spacing-60px) var(--spacing-minus-20px)
-    var(--ui-color-hsl-0-0-0-0p25),
+    color-mix(in oklab, var(--color-black) 25%, transparent),
     0 var(--spacing-8px) var(--spacing-20px) var(--spacing-minus-12px)
-    var(--ui-color-hsl-0-0-0-0p15);
+    color-mix(in oklab, var(--color-black) 15%, transparent);
   --shadow-ui-filedropoverlay-7:
     0 var(--spacing-24px) var(--spacing-60px) var(--spacing-minus-20px)
-    var(--ui-color-rgba-0-0-0-0p7),
-    0 var(--spacing-8px) var(--spacing-20px) var(--spacing-minus-12px) var(--ui-color-rgb-0-0-0-p5);
+    color-mix(in oklab, var(--color-black) 70%, transparent),
+    0 var(--spacing-8px) var(--spacing-20px) var(--spacing-minus-12px)
+    color-mix(in oklab, var(--color-black) 50%, transparent);
   --shadow-editor-context-menu: 0 var(--spacing-20px) var(--spacing-60px) var(--spacing-minus-20px)
     var(--ui-color-rgba-15-23-42-0p35);
   --shadow-ui-planmodecard-9:
@@ -58,101 +60,109 @@
     0 var(--spacing-14px) var(--spacing-32px) var(--spacing-minus-26px)
     var(--ui-color-rgba-2-132-199-0p55);
   --shadow-ui-planmodecard-10:
-    inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p06),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 6%, transparent),
     0 var(--spacing-14px) var(--spacing-32px) var(--spacing-minus-24px)
-    var(--ui-color-rgba-0-0-0-0p7);
-  --shadow-ui-planmodecard-11: inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p04);
+    color-mix(in oklab, var(--color-black) 70%, transparent);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-planmodecard-11: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 4%, transparent);
   --shadow-ui-planmodecard-12: var(--spacing-2px) 0 var(--spacing-12px) var(--spacing-minus-2px)
     var(--ui-color-rgba-2-132-199-0p5);
   --shadow-ui-planmodecard-13: 0 var(--spacing-1px) var(--spacing-2px) var(--spacing-minus-1px)
     var(--ui-color-rgba-15-23-42-0p25);
   --shadow-ui-taskprogressindicator-14:
-    0 0 0 var(--spacing-1px) var(--ui-color-rgba-0-0-0-0p07),
-    0 var(--spacing-1px) var(--spacing-2px) var(--spacing-minus-1px) var(--ui-color-rgba-0-0-0-0p08),
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-black) 7%, transparent),
+    0 var(--spacing-1px) var(--spacing-2px) var(--spacing-minus-1px)
+    color-mix(in oklab, var(--color-black) 8%, transparent),
     0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-16px)
     var(--ui-color-rgba-15-23-42-0p38);
   --shadow-ui-taskprogressindicator-15:
-    0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-100-0p12),
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-white) 12%, transparent),
     0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-16px)
-    var(--ui-color-rgba-0-0-0-0p72);
+    color-mix(in oklab, var(--color-black) 72%, transparent);
   --shadow-ui-taskprogressindicator-16:
-    0 0 0 var(--spacing-1px) var(--ui-color-rgba-0-0-0-0p07),
-    0 var(--spacing-2px) var(--spacing-4px) var(--spacing-minus-2px) var(--ui-color-rgba-0-0-0-0p08),
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-black) 7%, transparent),
+    0 var(--spacing-2px) var(--spacing-4px) var(--spacing-minus-2px)
+    color-mix(in oklab, var(--color-black) 8%, transparent),
     0 var(--spacing-16px) var(--spacing-40px) var(--spacing-minus-20px)
     var(--ui-color-rgba-15-23-42-0p45);
   --shadow-ui-taskprogressindicator-17:
-    0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-100-0p12),
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-white) 12%, transparent),
     0 var(--spacing-16px) var(--spacing-40px) var(--spacing-minus-20px)
-    var(--ui-color-rgba-0-0-0-0p8);
+    color-mix(in oklab, var(--color-black) 80%, transparent);
   --shadow-ui-toolapprovalbar-18:
     0 var(--spacing-12px) var(--spacing-40px) var(--spacing-minus-14px)
     var(--ui-color-rgba-15-23-42-0p22),
     0 var(--spacing-2px) var(--spacing-6px) var(--spacing-minus-2px)
     var(--ui-color-rgba-15-23-42-0p08),
-    inset 0 var(--spacing-1px) 0 var(--ui-color-rgba-255-255-255-0p74);
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 74%, transparent);
   --shadow-ui-toolapprovalbar-19:
     0 var(--spacing-12px) var(--spacing-40px) var(--spacing-minus-14px)
-    var(--ui-color-rgba-0-0-0-0p72),
-    0 var(--spacing-2px) var(--spacing-6px) var(--spacing-minus-2px) var(--ui-color-rgba-0-0-0-0p42),
-    inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p08);
+    color-mix(in oklab, var(--color-black) 72%, transparent),
+    0 var(--spacing-2px) var(--spacing-6px) var(--spacing-minus-2px)
+    color-mix(in oklab, var(--color-black) 42%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
   --shadow-ui-userattachmentcards-20:
-    0 var(--spacing-1px) var(--spacing-3px) var(--ui-color-hsl-0-0-0-0p06),
-    0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-hsl-0-0-0-0p04);
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 6%, transparent),
+    0 var(--spacing-1px) var(--spacing-2px) color-mix(in oklab, var(--color-black) 4%, transparent);
   --shadow-ui-userattachmentcards-21: 0 var(--spacing-2px) var(--spacing-8px)
-    var(--ui-color-rgb-0-0-0-0p1);
+    color-mix(in oklab, var(--color-black) 10%, transparent);
   --shadow-ui-clarifypanel-22:
     0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-18px)
     var(--ui-color-rgba-15-23-42-0p24),
-    inset 0 var(--spacing-1px) 0 var(--ui-color-rgba-255-255-255-0p72);
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 72%, transparent);
   --shadow-ui-clarifypanel-23:
     0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-18px)
-    var(--ui-color-rgba-0-0-0-0p72),
-    inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p08);
+    color-mix(in oklab, var(--color-black) 72%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
   --shadow-ui-hubchrome-24:
-    0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p6) inset,
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent) inset,
     0 var(--spacing-6px) var(--spacing-22px) var(--spacing-minus-14px)
     var(--ui-color-rgba-15-23-42-0p18);
   --shadow-ui-hubchrome-25:
-    0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p06) inset,
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 6%, transparent) inset,
     0 var(--spacing-6px) var(--spacing-22px) var(--spacing-minus-14px)
-    var(--ui-color-rgba-0-0-0-0p55);
+    color-mix(in oklab, var(--color-black) 55%, transparent);
   --shadow-ui-localtunnelpanel-26: 0 var(--spacing-1px) var(--spacing-2px)
-    var(--ui-color-hsl-0-0-0-0p04);
+    color-mix(in oklab, var(--color-black) 4%, transparent);
   --shadow-ui-localtunnelpanel-27: 0 var(--spacing-3px) var(--spacing-10px)
-    var(--ui-color-rgba-0-0-0-0p07);
+    color-mix(in oklab, var(--color-black) 7%, transparent);
   --shadow-ui-localtunnelpanel-28:
-    inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p6),
-    0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-hsl-0-0-0-0p05);
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent),
+    0 var(--spacing-1px) var(--spacing-2px) color-mix(in oklab, var(--color-black) 5%, transparent);
   --shadow-ui-localtunnelpanel-29:
-    inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p6),
-    0 var(--spacing-1px) var(--spacing-3px) var(--ui-color-hsl-0-0-0-0p05);
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent),
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 5%, transparent);
   --shadow-ui-sshtunnelpanel-30:
     0 var(--spacing-18px) var(--spacing-46px) var(--spacing-minus-24px)
     var(--ui-color-hsl-160-84-25-0p42),
     0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-18px)
-    var(--ui-color-rgba-0-0-0-0p32);
+    color-mix(in oklab, var(--color-black) 32%, transparent);
   --shadow-ui-commitcomposer-31: 0 0 0 var(--spacing-3px) hsl(var(--primary) / 0.08);
   --shadow-ui-resourceactivationswitch-32: 0 var(--spacing-2px) var(--spacing-10px)
     var(--spacing-minus-3px) var(--ui-color-rgba-16-185-129-0p65);
   --shadow-ui-dockintentoverlay-33: inset 0 0 0 var(--spacing-1px) var(--color-background);
   --shadow-ui-workspacesftppanel-34:
     0 var(--spacing-18px) var(--spacing-44px) var(--spacing-minus-14px)
-    var(--ui-color-rgba-0-0-0-0-28),
-    0 var(--spacing-2px) var(--spacing-10px) var(--ui-color-hsl-0-0-0-0p06);
-  --shadow-ui-chatcomposerbar-35: inset 0 var(--spacing-1px) 0 var(--ui-color-rgba-255-255-255-0p56);
-  --shadow-ui-chatcomposerbar-36: inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p05);
+    color-mix(in oklab, var(--color-black) 28%, transparent),
+    0 var(--spacing-2px) var(--spacing-10px) color-mix(in oklab, var(--color-black) 6%, transparent);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-chatcomposerbar-35: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 56%, transparent);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-chatcomposerbar-36: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 5%, transparent);
   --shadow-ui-chatcomposerbar-37:
     0 var(--spacing-2px) var(--spacing-10px) var(--spacing-minus-4px)
     var(--ui-color-rgba-15-23-42-0p45),
-    inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p85);
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 85%, transparent);
   --shadow-ui-chatcomposerbar-38:
-    0 var(--spacing-2px) var(--spacing-10px) var(--spacing-minus-4px) var(--ui-color-rgba-0-0-0-0p8),
-    inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p1);
+    0 var(--spacing-2px) var(--spacing-10px) var(--spacing-minus-4px)
+    color-mix(in oklab, var(--color-black) 80%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 10%, transparent);
   /* biome-ignore format: Tailwind shadow parsing requires whitespace on one line. */
   --shadow-ui-chatcomposerbar-39: 0 var(--spacing-18px) var(--spacing-44px) var(--spacing-minus-34px) color-mix(in oklch, var(--foreground) 42%, transparent);
   /* biome-ignore format: Tailwind shadow parsing requires whitespace on one line. */
   --shadow-ui-chatcomposerbar-40: 0 var(--spacing-20px) var(--spacing-48px) var(--spacing-minus-34px) color-mix(in oklch, var(--foreground) 48%, transparent);
-  --shadow-ui-chatcomposerbar-41: 0 0 0 var(--spacing-1p5px) var(--ui-color-rgba-255-255-255-0p95);
+  --shadow-ui-chatcomposerbar-41: 0 0 0 var(--spacing-1p5px)
+    color-mix(in oklab, var(--color-white) 95%, transparent);
   --shadow-ui-chatcomposerbar-42: 0 0 0 var(--spacing-1p5px) var(--ui-color-rgba-20-22-28-0p9);
   --shadow-ui-floornavrail-43: 0 var(--spacing-12px) var(--spacing-32px) var(--spacing-minus-16px)
     var(--ui-color-rgba-15-23-42-0p28);
@@ -161,7 +171,7 @@
   --shadow-ui-mcpregistrybrowser-45: var(--spacing-minus-18px) 0 var(--spacing-45px)
     var(--spacing-minus-28px) var(--ui-color-rgba-15-23-42-0p45);
   --shadow-ui-mcpregistrybrowser-46: var(--spacing-minus-18px) 0 var(--spacing-45px)
-    var(--spacing-minus-28px) var(--ui-color-rgba-0-0-0-0p7);
+    var(--spacing-minus-28px) color-mix(in oklab, var(--color-black) 70%, transparent);
   --shadow-settings-surface: 0 var(--spacing-1px) var(--spacing-2px) hsl(var(--foreground) / 0.02);
   --shadow-ui-memorysettingsdrawer-50:
     0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-rgba-15-23-42-0p08),
@@ -169,7 +179,8 @@
     var(--ui-color-rgba-15-23-42-0p18);
   --shadow-ui-skillshubpage-51: 0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-12px)
     var(--ui-color-rgba-15-23-42-0p35);
-  --shadow-ui-windowstitlebar-52: inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p7);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-windowstitlebar-52: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 70%, transparent);
   --shadow-ui-agentselector-53: 0 0 0 var(--spacing-3px) var(--ui-color-rgb-16-185-129-0p12);
   --shadow-ui-agentselector-54: 0 0 0 var(--spacing-3px) var(--ui-color-rgb-244-63-94-0p1);
 }
@@ -630,13 +641,10 @@
     --ui-color-222b38: #222b38;
     --ui-color-313d4f: #313d4f;
     --ui-color-571f05: #571f05;
-    --ui-color-02040c: #02040c;
     --ui-color-04422f: #04422f;
-    --ui-color-06101f: #06101f;
     --ui-color-10161f: #10161f;
     --ui-color-14532d: #14532d;
     --ui-color-15803d: #15803d;
-    --ui-color-030712: #030712;
     --ui-color-37156b: #37156b;
     --ui-color-047857: #047857;
     --ui-color-071226: #071226;
@@ -667,36 +675,6 @@
     --ui-color-ffffff: #ffffff;
 
     /* color */
-    --ui-color-hsl-0-0-0-0p03: hsl(0 0% 0% / 0.03);
-    --ui-color-hsl-0-0-0-0p3: hsl(0 0% 0% / 0.3);
-    --ui-color-hsl-0-0-0-0p04: hsl(0 0% 0% / 0.04);
-    --ui-color-hsl-0-0-0-0p05: hsl(0 0% 0% / 0.05);
-    --ui-color-hsl-0-0-0-0p6: hsl(0 0% 0% / 0.6);
-    --ui-color-hsl-0-0-0-0p06: hsl(0 0% 0% / 0.06);
-    --ui-color-hsl-0-0-0-0p15: hsl(0 0% 0% / 0.15);
-    --ui-color-hsl-0-0-0-0p18: hsl(0 0% 0% / 0.18);
-    --ui-color-hsl-0-0-0-0p25: hsl(0 0% 0% / 0.25);
-    --ui-color-hsl-0-0-0-0p35: hsl(0 0% 0% / 0.35);
-    --ui-color-hsl-0-0-100-0p1: hsl(0 0% 100% / 0.1);
-    --ui-color-hsl-0-0-100-0p02: hsl(0 0% 100% / 0.02);
-    --ui-color-hsl-0-0-100-0p03: hsl(0 0% 100% / 0.03);
-    --ui-color-hsl-0-0-100-0p3: hsl(0 0% 100% / 0.3);
-    --ui-color-hsl-0-0-100-0p04: hsl(0 0% 100% / 0.04);
-    --ui-color-hsl-0-0-100-0p05: hsl(0 0% 100% / 0.05);
-    --ui-color-hsl-0-0-100-0p5: hsl(0 0% 100% / 0.5);
-    --ui-color-hsl-0-0-100-0p6: hsl(0 0% 100% / 0.6);
-    --ui-color-hsl-0-0-100-0p06: hsl(0 0% 100% / 0.06);
-    --ui-color-hsl-0-0-100-0p7: hsl(0 0% 100% / 0.7);
-    --ui-color-hsl-0-0-100-0p07: hsl(0 0% 100% / 0.07);
-    --ui-color-hsl-0-0-100-0p8: hsl(0 0% 100% / 0.8);
-    --ui-color-hsl-0-0-100-0p08: hsl(0 0% 100% / 0.08);
-    --ui-color-hsl-0-0-100-0p11: hsl(0 0% 100% / 0.11);
-    --ui-color-hsl-0-0-100-0p12: hsl(0 0% 100% / 0.12);
-    --ui-color-hsl-0-0-100-0p22: hsl(0 0% 100% / 0.22);
-    --ui-color-hsl-0-0-100-0p45: hsl(0 0% 100% / 0.45);
-    --ui-color-hsl-0-0-100-0p55: hsl(0 0% 100% / 0.55);
-    --ui-color-hsl-0-0-100-0p75: hsl(0 0% 100% / 0.75);
-    --ui-color-hsl-0-0-100-0p85: hsl(0 0% 100% / 0.85);
     --ui-color-hsl-0-72-50: hsl(0 72% 50%);
     --ui-color-hsl-0-80-50-0p1: hsl(0 80% 50% / 0.1);
     --ui-color-hsl-0-80-50-0p06: hsl(0 80% 50% / 0.06);
@@ -754,55 +732,21 @@
     --ui-color-hsl-255-60-72: hsl(255 60% 72%);
     --ui-color-hsl-260-50-55-0p08: hsl(260 50% 55% / 0.08);
     --ui-color-hsl-270-80-62-0p75: hsl(270 80% 62% / 0.75);
-    --ui-color-rgb-0-0-0-0p1: rgb(0 0 0 / 0.1);
-    --ui-color-rgb-0-0-0-0p45: rgb(0 0 0 / 0.45);
-    --ui-color-rgb-0-0-0-0p82: rgb(0 0 0 / 0.82);
-    --ui-color-rgb-0-0-0-p4: rgb(0 0 0 / 0.4);
-    --ui-color-rgb-0-0-0-p5: rgb(0 0 0 / 0.5);
     --ui-color-rgb-15-23-42-p2: rgb(15 23 42 / 0.2);
     --ui-color-rgb-15-23-42-p16: rgb(15 23 42 / 0.16);
     --ui-color-rgb-15-23-42-p26: rgb(15 23 42 / 0.26);
     --ui-color-rgb-37-99-235-p22: rgb(37 99 235 / 0.22);
     --ui-color-rgb-59-130-246-p28: rgb(59 130 246 / 0.28);
     --ui-color-rgb-59-130-246-p45: rgb(59 130 246 / 0.45);
-    --ui-color-rgba-0-0-0-0p26: rgba(0, 0, 0, 0.26);
-    --ui-color-rgba-0-0-0-0p32: rgba(0, 0, 0, 0.32);
-    --ui-color-rgba-0-0-0-0p58: rgba(0, 0, 0, 0.58);
-    --ui-color-rgba-0-0-0-0p94: rgba(0, 0, 0, 0.94);
     --ui-color-rgba-2-7-15-0p92: rgba(2, 7, 15, 0.92);
     --ui-color-rgba-4-11-24-0p64: rgba(4, 11, 24, 0.64);
     --ui-color-rgba-4-11-24-0p72: rgba(4, 11, 24, 0.72);
     --ui-color-rgba-4-13-28-0p84: rgba(4, 13, 28, 0.84);
-    --ui-color-rgba-6-14-31-0p72: rgba(6, 14, 31, 0.72);
     --ui-color-rgba-7-17-33-0p4: rgba(7, 17, 33, 0.4);
-    --ui-color-rgba-8-20-42-0p88: rgba(8, 20, 42, 0.88);
     --ui-color-rgba-56-35-4-0p5: rgba(56, 35, 4, 0.5);
-    --ui-color-rgba-125-249-255-0p2: rgba(125, 249, 255, 0.2);
-    --ui-color-rgba-178-202-230-0p62: rgba(178, 202, 230, 0.62);
-    --ui-color-rgba-181-213-244-0p58: rgba(181, 213, 244, 0.58);
-    --ui-color-rgba-186-213-242-0p58: rgba(186, 213, 242, 0.58);
-    --ui-color-rgba-186-216-246-0p6: rgba(186, 216, 246, 0.6);
-    --ui-color-rgba-190-218-246-0p58: rgba(190, 218, 246, 0.58);
     --ui-color-rgba-190-219-248-0p58: rgba(190, 219, 248, 0.58);
-    --ui-color-rgba-191-225-255-0p68: rgba(191, 225, 255, 0.68);
-    --ui-color-rgba-192-220-248-0p56: rgba(192, 220, 248, 0.56);
-    --ui-color-rgba-198-225-250-0p62: rgba(198, 225, 250, 0.62);
-    --ui-color-rgba-211-232-255-0p66: rgba(211, 232, 255, 0.66);
     --ui-color-rgba-226-242-255-0p7: rgba(226, 242, 255, 0.7);
-    --ui-color-rgba-233-245-255-0p84: rgba(233, 245, 255, 0.84);
-    --ui-color-rgba-241-248-255-0p94: rgba(241, 248, 255, 0.94);
     --ui-color-rgba-255-232-190-0p92: rgba(255, 232, 190, 0.92);
-    --ui-color-rgba-255-255-255-0p2: rgba(255, 255, 255, 0.2);
-    --ui-color-rgba-255-255-255-0p09: rgba(255, 255, 255, 0.09);
-    --ui-color-rgba-255-255-255-0p13: rgba(255, 255, 255, 0.13);
-    --ui-color-rgba-255-255-255-0p026: rgba(255, 255, 255, 0.026);
-    --ui-color-rgba-255-255-255-0p045: rgba(255, 255, 255, 0.045);
-    --ui-color-rgba-255-255-255-0p055: rgba(255, 255, 255, 0.055);
-    --ui-color-rgba-255-255-255-0p92: rgba(255, 255, 255, 0.92);
-    --ui-color-rgba-255-255-255-0p94: rgba(255, 255, 255, 0.94);
-    --ui-color-rgba-255-255-255-0p95: rgba(255, 255, 255, 0.95);
-    --ui-color-rgba-255-255-255-0p96: rgba(255, 255, 255, 0.96);
-    --ui-color-rgba-255-255-255-0p98: rgba(255, 255, 255, 0.98);
 
     /* duration */
     --ui-duration-100ms: 100ms;
@@ -940,7 +884,7 @@
   --spacing-inset-1p5rem: calc(100% - 1.5rem);
   --background-image-surface-glow-1: radial-gradient(
     circle at top left,
-    var(--ui-color-hsl-0-0-100-0p85),
+    color-mix(in oklab, var(--color-white) 85%, transparent),
     transparent 60%
   );
   --background-image-surface-glow-2: radial-gradient(
@@ -960,7 +904,7 @@
   );
   --background-image-surface-glow-5: radial-gradient(
     circle at top left,
-    var(--ui-color-hsl-0-0-100-0p8),
+    color-mix(in oklab, var(--color-white) 80%, transparent),
     transparent 60%
   );
   --background-image-surface-glow-6: radial-gradient(
@@ -1050,9 +994,8 @@
   --spacing-status-board-stage-w: min(var(--spacing-100vw), var(--spacing-1912px));
   --spacing-status-board-stage-h: min(var(--spacing-100dvh), var(--spacing-948px));
   --color-status-cyan: rgb(var(--status-cyan));
-  --color-rgba-255-255-255-0p055: var(--ui-color-rgba-255-255-255-0p055);
-  --color-rgba-233-245-255-0p84: var(--ui-color-rgba-233-245-255-0p84);
-  --shadow-status-board-pill: inset 0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p08);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-status-board-pill: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
   --blur-16px: var(--spacing-16px);
   --transition-duration-160ms: var(--ui-duration-160ms);
   --ease-default: ease;
@@ -1070,34 +1013,29 @@
   --color-status-board-tone: rgb(var(--status-board-tone));
   --shadow-status-board-event-dot: 0 0 var(--spacing-16px) rgba(var(--status-board-tone), 0.76);
   --color-rgba-190-219-248-0p58: var(--ui-color-rgba-190-219-248-0p58);
-  --color-rgba-255-255-255-0p06: var(--ui-color-hsl-0-0-100-0p06);
   --color-status-amber: rgb(var(--status-amber));
   --color-rgba-56-35-4-0p5: var(--ui-color-rgba-56-35-4-0p5);
   --color-rgba-255-232-190-0p92: var(--ui-color-rgba-255-232-190-0p92);
   --shadow-status-board-warning: 0 0 var(--spacing-32px) rgba(var(--status-amber), 0.16);
   --grid-template-columns-login-container: 1fr 1fr;
   --spacing-login-container-w: min(100%, var(--spacing-920px));
-  --color-hsl-0-0-100-0p7: var(--ui-color-hsl-0-0-100-0p7);
-  --color-hsl-0-0-100-0p55: var(--ui-color-hsl-0-0-100-0p55);
   --blur-40px: var(--spacing-40px);
   --shadow-login-container:
-    0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-0-0p03),
-    0 var(--spacing-1px) var(--spacing-3px) var(--ui-color-hsl-0-0-0-0p03),
-    0 var(--spacing-8px) var(--spacing-30px) var(--ui-color-hsl-0-0-0-0p05),
-    0 var(--spacing-30px) var(--spacing-80px) var(--ui-color-hsl-0-0-0-0p04);
-  --color-hsl-0-0-100-0p08: var(--ui-color-hsl-0-0-100-0p08);
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-black) 3%, transparent),
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 3%, transparent),
+    0 var(--spacing-8px) var(--spacing-30px) color-mix(in oklab, var(--color-black) 5%, transparent),
+    0 var(--spacing-30px) var(--spacing-80px)
+    color-mix(in oklab, var(--color-black) 4%, transparent);
   --color-hsl-224-20-12-0p6: var(--ui-color-hsl-224-20-12-0p6);
   --shadow-login-container-2:
-    0 0 0 var(--spacing-1px) var(--ui-color-hsl-0-0-100-0p04),
-    0 var(--spacing-1px) var(--spacing-3px) var(--ui-color-hsl-0-0-0-0p15),
-    0 var(--spacing-8px) var(--spacing-30px) var(--ui-color-hsl-0-0-0-0p3),
-    0 var(--spacing-30px) var(--spacing-80px) var(--ui-color-hsl-0-0-0-0p25);
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-white) 4%, transparent),
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 15%, transparent),
+    0 var(--spacing-8px) var(--spacing-30px)
+    color-mix(in oklab, var(--color-black) 30%, transparent),
+    0 var(--spacing-30px) var(--spacing-80px)
+    color-mix(in oklab, var(--color-black) 25%, transparent);
   --grid-template-columns-login-container-2: 1fr;
   --spacing-login-container-w-2: min(100%, var(--spacing-540px));
-  --color-hsl-0-0-0-0p04: var(--ui-color-hsl-0-0-0-0p04);
-  --color-hsl-0-0-100-0p3: var(--ui-color-hsl-0-0-100-0p3);
-  --color-hsl-0-0-100-0p05: var(--ui-color-hsl-0-0-100-0p05);
-  --color-hsl-0-0-100-0p02: var(--ui-color-hsl-0-0-100-0p02);
   --spacing-project-tools-panel-tab-max-w: min(12rem, calc(var(--spacing-100vw) - 10rem));
   --spacing-project-tools-panel-tab-max-w-2: min(10rem, calc(var(--spacing-100vw) - 8.5rem));
   --spacing-settings-memory-panel-pb: max(var(--spacing-14px), env(safe-area-inset-bottom));
@@ -1117,10 +1055,7 @@
   --grid-template-columns-settings-hooks-card-row: var(--spacing-36px) minmax(0, 1fr) auto;
   --grid-template-columns-settings-hooks-card-row-2: var(--spacing-32px) minmax(0, 1fr) auto;
   --grid-template-columns-settings-devices-card-row: var(--spacing-36px) minmax(0, 1fr);
-  --color-hsl-0-0-100-0p06: var(--ui-color-hsl-0-0-100-0p06);
-  --color-hsl-0-0-0-0p06: var(--ui-color-hsl-0-0-0-0p06);
   --transition-duration-250ms: var(--ui-duration-250ms);
-  --color-hsl-0-0-100-0p04: var(--ui-color-hsl-0-0-100-0p04);
   --color-hsl-210-100-88-0p5: var(--ui-color-hsl-210-100-88-0p5);
   --color-hsl-210-80-30-0p2: var(--ui-color-hsl-210-80-30-0p2);
   --color-hsl-250-70-88-0p4: var(--ui-color-hsl-250-70-88-0p4);
@@ -1197,7 +1132,6 @@
   --ui-color-994f00: #994f00;
   --ui-color-40b0a6: #40b0a6;
   --ui-color-b66dff: #b66dff;
-  --ui-color-rgba-0-0-0-0-28: rgba(0, 0, 0, 0.28);
   --ui-color-rgba-100-116-139-0-35: rgba(100, 116, 139, 0.35);
   --ui-color-0b0f14: #0b0f14;
   --terminal-dark-background: var(--ui-color-0b0f14);
@@ -1294,7 +1228,7 @@
   --background-image-trajectory-aborted: repeating-linear-gradient(
     45deg,
     transparent 0 var(--spacing-2px),
-    var(--ui-color-rgba-0-0-0-0-28) var(--spacing-2px) var(--spacing-3px)
+    color-mix(in oklab, var(--color-black) 28%, transparent) var(--spacing-2px) var(--spacing-3px)
   );
   --background-image-trajectory-idle: repeating-linear-gradient(
     45deg,
@@ -1331,10 +1265,7 @@
   --ui-color-1677ff: #1677ff;
   --ui-color-0958d9: #0958d9;
   --ui-color-e81123: #e81123;
-  --ui-color-rgba-255-255-255-0p64: rgba(255, 255, 255, 0.64);
-  --ui-color-rgba-0-0-0-0p2: rgba(0, 0, 0, 0.2);
   --spacing-minus-12px: -12px;
-  --ui-color-rgba-0-0-0-0p7: rgba(0, 0, 0, 0.7);
   --ui-color-rgba-15-23-42-0p35: rgba(15, 23, 42, 0.35);
   --ui-color-rgba-15-23-42-0p07: rgba(15, 23, 42, 0.07);
   --ui-color-rgba-2-132-199-0p55: rgba(2, 132, 199, 0.55);
@@ -1342,24 +1273,15 @@
   --ui-color-rgba-2-132-199-0p5: rgba(2, 132, 199, 0.5);
   --spacing-minus-2px: -2px;
   --ui-color-rgba-15-23-42-0p25: rgba(15, 23, 42, 0.25);
-  --ui-color-rgba-0-0-0-0p07: rgba(0, 0, 0, 0.07);
-  --ui-color-rgba-0-0-0-0p08: rgba(0, 0, 0, 0.08);
   --ui-color-rgba-15-23-42-0p38: rgba(15, 23, 42, 0.38);
   --spacing-minus-16px: -16px;
-  --ui-color-rgba-0-0-0-0p72: rgba(0, 0, 0, 0.72);
   --ui-color-rgba-15-23-42-0p45: rgba(15, 23, 42, 0.45);
-  --ui-color-rgba-0-0-0-0p8: rgba(0, 0, 0, 0.8);
   --ui-color-rgba-15-23-42-0p22: rgba(15, 23, 42, 0.22);
   --ui-color-rgba-15-23-42-0p08: rgba(15, 23, 42, 0.08);
-  --ui-color-rgba-255-255-255-0p74: rgba(255, 255, 255, 0.74);
-  --ui-color-rgba-0-0-0-0p42: rgba(0, 0, 0, 0.42);
   --ui-color-rgba-15-23-42-0p24: rgba(15, 23, 42, 0.24);
-  --ui-color-rgba-255-255-255-0p72: rgba(255, 255, 255, 0.72);
   --ui-color-rgba-15-23-42-0p18: rgba(15, 23, 42, 0.18);
-  --ui-color-rgba-0-0-0-0p55: rgba(0, 0, 0, 0.55);
   --ui-color-hsl-160-84-25-0p42: hsl(160 84% 25% / 0.42);
   --ui-color-rgba-16-185-129-0p65: rgba(16, 185, 129, 0.65);
-  --ui-color-rgba-255-255-255-0p56: rgba(255, 255, 255, 0.56);
   --spacing-minus-34px: -34px;
   --ui-color-rgba-20-22-28-0p9: rgba(20, 22, 28, 0.9);
   --ui-color-rgba-15-23-42-0p28: rgba(15, 23, 42, 0.28);
@@ -1380,17 +1302,18 @@
     hsl(var(--background) / 0.55)
   );
   --shadow-hub-frost-hero:
-    0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p6) inset,
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent) inset,
     0 var(--spacing-8px) var(--spacing-28px) var(--spacing-minus-18px)
-    var(--ui-color-hsl-0-0-0-0p18);
+    color-mix(in oklab, var(--color-black) 18%, transparent);
   --background-image-hub-frost-hero-dark: linear-gradient(
     180deg,
-    var(--ui-color-hsl-0-0-100-0p06),
-    var(--ui-color-hsl-0-0-100-0p03)
+    color-mix(in oklab, var(--color-white) 6%, transparent),
+    color-mix(in oklab, var(--color-white) 3%, transparent)
   );
   --shadow-hub-frost-hero-dark:
-    0 var(--spacing-1px) 0 var(--ui-color-hsl-0-0-100-0p05) inset,
-    0 var(--spacing-8px) var(--spacing-28px) var(--spacing-minus-18px) var(--ui-color-hsl-0-0-0-0p6);
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 5%, transparent) inset,
+    0 var(--spacing-8px) var(--spacing-28px) var(--spacing-minus-18px)
+    color-mix(in oklab, var(--color-black) 60%, transparent);
   --background-image-compaction-band-progress: linear-gradient(
     90deg,
     transparent 0%,

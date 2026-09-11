@@ -10,10 +10,10 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
     <div
       className={cn(
         "relative z-1 flex flex-col items-center gap-18px overflow-hidden",
-        "rounded-24px border border-solid border-hsl-0-0-100-0p7 bg-hsl-0-0-100-0p55",
+        "rounded-24px border border-solid border-white/70 bg-white/55",
         "px-46px pt-38px pb-32px",
         "shadow-login-container backdrop-blur-40px backdrop-saturate-160",
-        "dark:border-hsl-0-0-100-0p08 dark:bg-hsl-224-20-12-0p6 dark:shadow-login-container-2",
+        "dark:border-white/8 dark:bg-hsl-224-20-12-0p6 dark:shadow-login-container-2",
       )}
       role="status"
       aria-live="polite"

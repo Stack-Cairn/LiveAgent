@@ -124,7 +124,7 @@ const dashboardToneClass: Record<DashboardTone, string> = {
 };
 
 const statusActionClass =
-  "flex h-33px items-center gap-7px rounded-full border border-[rgba(var(--status-cyan),0.2)] bg-rgba-255-255-255-0p055 px-12px py-0 text-xs text-rgba-233-245-255-0p84 uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-[rgba(var(--status-cyan),0.48)] hover:bg-[rgba(var(--status-cyan),0.1)] hover:text-(--ui-color-ffffff)";
+  "flex h-33px items-center gap-7px rounded-full border border-[rgba(var(--status-cyan),0.2)] bg-white/[0.055] px-12px py-0 text-xs text-foreground uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-[rgba(var(--status-cyan),0.48)] hover:bg-[rgba(var(--status-cyan),0.1)] hover:text-foreground";
 
 const statusEntrySurfaceClass =
   "border border-[rgba(var(--status-board-tone,191,210,232),0.14)] bg-[rgba(var(--status-board-tone,191,210,232),0.055)]";
@@ -344,14 +344,15 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
     <span
       className={cn(
         "flex h-33px items-center gap-7px",
-        "rounded-full border border-status-cyan/20 bg-rgba-255-255-255-0p055 px-12px py-0 text-xs text-rgba-233-245-255-0p84",
+        "rounded-full border border-border bg-card/60 px-12px py-0 text-xs text-foreground",
         "uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px",
         "transition-[transform,border-color,background-color] duration-160ms ease-default",
-        online &&
-          "[&>span]:animate-[status-board-pulse_var(--ui-duration-1500ms)_ease-in-out_infinite] [&>span]:bg-[rgb(var(--status-emerald))] [&>span]:shadow-[0_0_var(--spacing-20px)_rgba(var(--status-emerald),0.86)]",
+        online
+          ? "border-success/25 bg-success/10 text-success [&>span]:animate-[status-board-pulse_var(--ui-duration-1500ms)_ease-in-out_infinite]"
+          : "border-destructive/25 bg-destructive/10 text-destructive",
       )}
     >
-      <span className="size-8px rounded-full bg-[rgb(var(--status-rose))] shadow-[0_0_var(--spacing-18px)_rgba(var(--status-rose),0.82)]" />
+      <span className="size-8px rounded-full bg-current shadow-[0_0_var(--spacing-18px)_currentColor]" />
       {label}
     </span>
   );
@@ -371,22 +372,20 @@ function MetricTile({ metric }: { metric: MetricCard }) {
       <div
         className={cn(
           "grid size-34px place-items-center",
-          "rounded-12px border border-[rgba(var(--status-cyan),0.3)] bg-[rgba(var(--status-board-tone),0.11)] text-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px",
+          "rounded-12px border border-[rgba(var(--status-cyan),0.3)] bg-[rgba(var(--status-board-tone),0.11)] text-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
         )}
       >
         <Icon size={18} strokeWidth={2.2} />
       </div>
       <div>
         <StatusLabel>{metric.label}</StatusLabel>
-        <strong className="inline-block mr-5px text-(--ui-color-ffffff) text-2xl leading-none tracking-minus-0p04em">
+        <strong className="inline-block mr-5px text-foreground text-2xl leading-none tracking-minus-0p04em">
           {metric.value}
         </strong>
-        <em className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic uppercase">
-          {metric.unit}
-        </em>
+        <em className="text-muted-foreground text-tiny not-italic uppercase">{metric.unit}</em>
         <span
           className={cn(
-            "text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic block overflow-hidden mt-4px",
+            "text-muted-foreground text-tiny not-italic block overflow-hidden mt-4px",
             "leading-1p25 text-ellipsis whitespace-nowrap",
           )}
         >
@@ -402,7 +401,7 @@ function EmptyState({ children }: { children: string }) {
     <div
       className={cn(
         statusEntrySurfaceClass,
-        "rounded-14px px-9px py-8px text-tiny leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
+        "rounded-14px px-9px py-8px text-tiny leading-1p25 text-muted-foreground not-italic",
       )}
     >
       {children}
@@ -417,17 +416,17 @@ function FactList({ items, className }: { items: FactItem[]; className?: string 
         <div
           key={item.label}
           className={cn(
-            "min-w-0 rounded-13px border border-[rgba(var(--status-board-tone),0.15)] bg-[linear-gradient(135deg,rgba(var(--status-board-tone),0.08),transparent),var(--ui-color-rgba-255-255-255-0p045)] p-8px [--status-board-tone:191,210,232]",
+            "min-w-0 rounded-13px border border-[rgba(var(--status-board-tone),0.15)] bg-[image:linear-gradient(135deg,rgba(var(--status-board-tone),0.08),transparent),color-mix(in_oklab,_var(--color-white)_4.5%,_transparent)] p-8px [--status-board-tone:191,210,232]",
             item.tone && dashboardToneClass[item.tone],
           )}
         >
-          <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-tiny tracking-0p12em uppercase">
+          <span className="block text-muted-foreground text-tiny tracking-0p12em uppercase">
             {item.label}
           </span>
           <strong
             className={cn(
               "inline-block overflow-hidden max-w-full mt-3px",
-              "text-(--ui-color-rgba-255-255-255-0p94) text-sm leading-1p12 text-ellipsis whitespace-nowrap",
+              "text-foreground text-sm leading-1p12 text-ellipsis whitespace-nowrap",
             )}
             title={item.value}
           >
@@ -441,7 +440,7 @@ function FactList({ items, className }: { items: FactItem[]; className?: string 
           {item.note && (
             <em
               className={cn(
-                "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-tiny not-italic",
+                "block overflow-hidden mt-3px text-muted-foreground text-tiny not-italic",
                 "leading-1p22 text-ellipsis whitespace-nowrap",
               )}
               title={item.note}
@@ -1059,18 +1058,18 @@ export function StatusDashboardPage() {
   return (
     <main
       className={cn(
-        "status-dashboard-root relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden",
-        "bg-[radial-gradient(circle_at_16%_15%,rgba(var(--status-cyan),0.18),transparent_25%),radial-gradient(circle_at_76%_18%,rgba(var(--status-violet),0.18),transparent_27%),radial-gradient(circle_at_56%_85%,rgba(var(--status-emerald),0.1),transparent_30%),linear-gradient(135deg,var(--ui-color-02040c)_0%,var(--ui-color-06101f)_48%,var(--ui-color-030712)_100%)] font-app text-(--status-text)",
+        "status-dashboard-root dark relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden",
+        "bg-[radial-gradient(circle_at_16%_15%,rgba(var(--status-cyan),0.18),transparent_25%),radial-gradient(circle_at_76%_18%,rgba(var(--status-violet),0.18),transparent_27%),radial-gradient(circle_at_56%_85%,rgba(var(--status-emerald),0.1),transparent_30%),linear-gradient(hsl(var(--background)),hsl(var(--background)))] font-app text-foreground",
         "before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(var(--status-cyan),0.08)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.06)_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_50%_50%,transparent_0_44%,rgba(var(--status-cyan),0.08)_45%,transparent_46%)] before:bg-[length:var(--spacing-48px)_var(--spacing-48px),var(--spacing-48px)_var(--spacing-48px),var(--spacing-620px)_var(--spacing-620px)]",
-        "before:opacity-(--ui-opacity-0p9) before:[mask-image:radial-gradient(circle_at_50%_50%,var(--ui-color-rgba-0-0-0-0p94),transparent_78%)] before:content-['']",
+        "before:opacity-(--ui-opacity-0p9) before:[mask-image:radial-gradient(circle_at_50%_50%,color-mix(in_oklab,_var(--color-black)_94%,_transparent),transparent_78%)] before:content-['']",
       )}
     >
       <div
-        className="pointer-events-none absolute inset-[-30%_-18%] bg-[conic-gradient(from_90deg_at_50%_50%,transparent,rgba(var(--status-cyan),0.16),transparent,rgba(var(--status-violet),0.16),transparent,rgba(var(--status-emerald),0.12),transparent),radial-gradient(circle_at_48%_46%,var(--ui-color-hsl-0-0-100-0p08),transparent_28%)] opacity-(--ui-opacity-0p95) blur-28px"
+        className="pointer-events-none absolute inset-[-30%_-18%] bg-[conic-gradient(from_90deg_at_50%_50%,transparent,rgba(var(--status-cyan),0.16),transparent,rgba(var(--status-violet),0.16),transparent,rgba(var(--status-emerald),0.12),transparent),radial-gradient(circle_at_48%_46%,color-mix(in_oklab,_var(--color-white)_8%,_transparent),transparent_28%)] opacity-(--ui-opacity-0p95) blur-28px"
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_26%,var(--ui-color-rgba-255-255-255-0p2)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_72%_62%,rgba(var(--status-cyan),0.18)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_46%_82%,rgba(var(--status-violet),0.16)_0_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-37px)_var(--spacing-37px),var(--spacing-61px)_var(--spacing-61px),var(--spacing-89px)_var(--spacing-89px)] opacity-(--ui-opacity-0p26) mix-blend-screen"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_26%,color-mix(in_oklab,_var(--color-white)_20%,_transparent)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_72%_62%,rgba(var(--status-cyan),0.18)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_46%_82%,rgba(var(--status-violet),0.16)_0_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-37px)_var(--spacing-37px),var(--spacing-61px)_var(--spacing-61px),var(--spacing-89px)_var(--spacing-89px)] opacity-(--ui-opacity-0p26) mix-blend-screen"
         aria-hidden="true"
       />
       <div
@@ -1105,7 +1104,7 @@ export function StatusDashboardPage() {
         <header
           className={cn(
             "relative flex items-center justify-between gap-16px",
-            "rounded-20px border border-[rgba(var(--status-cyan),0.2)] bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-[0_var(--spacing-18px)_var(--spacing-60px)_var(--ui-color-rgba-0-0-0-0p26),inset_0_var(--spacing-1px)_0_var(--ui-color-hsl-0-0-100-0p08),inset_0_0_var(--spacing-48px)_rgba(var(--status-cyan),0.05)] backdrop-blur-22px",
+            "rounded-20px border border-[rgba(var(--status-cyan),0.2)] bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-[0_var(--spacing-18px)_var(--spacing-60px)_color-mix(in_oklab,_var(--color-black)_26%,_transparent),inset_0_var(--spacing-1px)_0_color-mix(in_oklab,_var(--color-white)_8%,_transparent),inset_0_0_var(--spacing-48px)_rgba(var(--status-cyan),0.05)] backdrop-blur-22px",
             "before:absolute before:inset-x-[22%] before:bottom-minus-1px before:h-1px before:bg-[linear-gradient(90deg,transparent,rgba(var(--status-cyan),0.82),transparent)] before:shadow-[0_0_var(--spacing-18px)_rgba(var(--status-cyan),0.72)] before:content-['']",
           )}
         >
@@ -1113,28 +1112,28 @@ export function StatusDashboardPage() {
             <div
               className={cn(
                 "flex size-38px flex-col place-items-center items-start gap-2px",
-                "rounded-14px border border-[rgba(var(--status-cyan),0.3)] bg-[linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),var(--ui-color-hsl-0-0-100-0p06)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_var(--ui-color-hsl-0-0-100-0p08)] backdrop-blur-18px",
+                "rounded-14px border border-[rgba(var(--status-cyan),0.3)] bg-[image:linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),color-mix(in_oklab,_var(--color-white)_6%,_transparent)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
               )}
             >
               <Sparkles size={19} strokeWidth={2.4} />
             </div>
             <div className="items-start flex-col gap-2px flex">
-              <p className="m-0 text-(--ui-color-rgba-186-216-246-0p6) text-tiny tracking-0p18em uppercase">
+              <p className="m-0 text-muted-foreground text-tiny tracking-0p18em uppercase">
                 LiveAgent Nexus
               </p>
-              <h1 className="m-0 text-(--ui-color-rgba-255-255-255-0p96) tracking-minus-0p035em overflow-hidden max-w-360px text-2xl text-ellipsis whitespace-nowrap">
+              <h1 className="m-0 text-foreground tracking-minus-0p035em overflow-hidden max-w-360px text-2xl text-ellipsis whitespace-nowrap">
                 实时遥测指挥舱
               </h1>
             </div>
           </div>
           <div className="absolute left-1/2 grid min-w-360px -translate-x-1/2 justify-items-center text-center [&>strong]:[text-shadow:0_0_var(--spacing-24px)_rgba(var(--status-cyan),0.42)]">
-            <span className="text-(--ui-color-rgba-181-213-244-0p58) text-tiny not-italic tracking-0p2em uppercase">
+            <span className="text-muted-foreground text-tiny not-italic tracking-0p2em uppercase">
               1912×948 Telemetry Surface
             </span>
-            <strong className="text-(--ui-color-rgba-255-255-255-0p98) text-2xl tracking-0p05em leading-none">
+            <strong className="text-foreground text-2xl tracking-0p05em leading-none">
               {formatClock(now)}
             </strong>
-            <em className="text-(--ui-color-rgba-181-213-244-0p58) text-tiny not-italic tracking-0p2em uppercase">
+            <em className="text-muted-foreground text-tiny not-italic tracking-0p2em uppercase">
               {snapshot.lastRefreshAt
                 ? `sync age ${formatDuration(now - snapshot.lastRefreshAt)}`
                 : "syncing snapshot"}
@@ -1196,8 +1195,8 @@ export function StatusDashboardPage() {
               <div className="grid grid-cols-status-board-reactor-core items-center gap-14px mb-12px">
                 <div
                   className={cn(
-                    "relative grid size-154px place-items-center rounded-full shadow-[0_0_var(--spacing-46px)_rgba(var(--status-cyan),0.22),inset_0_0_var(--spacing-34px)_var(--ui-color-rgba-0-0-0-0p58)]",
-                    "before:absolute before:inset-12px before:rounded-[inherit] before:bg-[radial-gradient(circle,var(--ui-color-hsl-0-0-100-0p12),transparent_42%),var(--ui-color-071226)] before:shadow-[inset_0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.12)] before:content-['']",
+                    "relative grid size-154px place-items-center rounded-full shadow-[0_0_var(--spacing-46px)_rgba(var(--status-cyan),0.22),inset_0_0_var(--spacing-34px)_color-mix(in_oklab,_var(--color-black)_58%,_transparent)]",
+                    "before:absolute before:inset-12px before:rounded-[inherit] before:bg-[radial-gradient(circle,color-mix(in_oklab,_var(--color-white)_12%,_transparent),transparent_42%),var(--ui-color-071226)] before:shadow-[inset_0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.12)] before:content-['']",
                   )}
                   style={{
                     background: `conic-gradient(from -90deg, var(--color-status-integrity-start) 0deg, var(--color-status-integrity-end) ${integrityScore * 3.6}deg, var(--color-status-integrity-track) ${integrityScore * 3.6}deg 360deg)`,
@@ -1206,22 +1205,22 @@ export function StatusDashboardPage() {
                   <div className="absolute inset-minus-8px animate-status-board-reactor-ring-a rounded-[inherit] border border-[rgba(var(--status-cyan),0.24)]" />
                   <div className="absolute inset-28px animate-status-board-reactor-ring-b rounded-[inherit] border border-status-violet/28!" />
                   <div className="relative z-1 grid justify-items-center">
-                    <strong className="text-5xl leading-0p92 tracking-minus-0p06em text-(--ui-color-ffffff) [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
+                    <strong className="text-5xl leading-0p92 tracking-minus-0p06em text-foreground [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
                       {integrityScore}
                     </strong>
-                    <span className="text-(--status-muted) text-tiny not-italic tracking-0p12em uppercase">
+                    <span className="text-muted-foreground text-tiny not-italic tracking-0p12em uppercase">
                       derived %
                     </span>
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <span className="text-(--status-muted) text-tiny not-italic tracking-0p12em uppercase">
+                  <span className="text-muted-foreground text-tiny not-italic tracking-0p12em uppercase">
                     Runtime: {runtimeState}
                   </span>
-                  <strong className="block overflow-hidden my-7px mx-0 text-(--ui-color-rgba-255-255-255-0p94) text-lg text-ellipsis whitespace-nowrap">
+                  <strong className="block overflow-hidden my-7px mx-0 text-foreground text-lg text-ellipsis whitespace-nowrap">
                     {status?.agent_id ? truncateMiddle(status.agent_id, 24) : "等待 Agent 接入"}
                   </strong>
-                  <em className="text-(--status-muted) text-tiny not-italic tracking-0p12em uppercase">
+                  <em className="text-muted-foreground text-tiny not-italic tracking-0p12em uppercase">
                     我在监听 Gateway 心跳：
                     {status?.last_heartbeat
                       ? `${formatDuration(heartbeatAgeMs)} ago`
@@ -1249,37 +1248,29 @@ export function StatusDashboardPage() {
               >
                 <div>
                   <Globe2 size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
-                    Tunnels
-                  </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
+                  <span className="text-muted-foreground text-tiny not-italic">Tunnels</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
                     {activeTunnels.length}
                   </strong>
                 </div>
                 <div>
                   <Terminal size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
-                    Terminals
-                  </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
+                  <span className="text-muted-foreground text-tiny not-italic">Terminals</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
                     {runningTerminals.length}
                   </strong>
                 </div>
                 <div>
                   <Brain size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
-                    Providers
-                  </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
+                  <span className="text-muted-foreground text-tiny not-italic">Providers</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
                     {activeProviders.length}
                   </strong>
                 </div>
                 <div>
                   <Plug size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
-                    Remote
-                  </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
+                  <span className="text-muted-foreground text-tiny not-italic">Remote</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
                     {settingsSnapshot ? `${remoteFeatureCount}/3` : "--"}
                   </strong>
                 </div>
@@ -1321,10 +1312,10 @@ export function StatusDashboardPage() {
                     )}
                   >
                     <Bot size={44} strokeWidth={1.65} />
-                    <strong className="text-(--ui-color-ffffff) text-4xl leading-0p8">
+                    <strong className="text-foreground text-4xl leading-0p8">
                       {runtimeActiveRunCount}
                     </strong>
-                    <span className="text-(--status-muted) text-tiny tracking-0p12em uppercase">
+                    <span className="text-muted-foreground text-tiny tracking-0p12em uppercase">
                       active runs
                     </span>
                   </div>
@@ -1344,10 +1335,10 @@ export function StatusDashboardPage() {
 
                 <div className="min-w-0">
                   <div className="mb-10px flex items-baseline justify-between">
-                    <span className="text-(--status-muted) text-xs tracking-0p18em uppercase">
+                    <span className="text-muted-foreground text-xs tracking-0p18em uppercase">
                       Stream Load
                     </span>
-                    <strong className="text-(--ui-color-rgba-255-255-255-0p95) text-lg">
+                    <strong className="text-foreground text-lg">
                       {compactNumber(liveCounters.events)} events
                     </strong>
                   </div>
@@ -1359,16 +1350,16 @@ export function StatusDashboardPage() {
                         dashboardToneClass[segment.tone],
                       )}
                     >
-                      <span className="text-(--ui-color-rgba-211-232-255-0p66) text-xs not-italic">
+                      <span className="text-muted-foreground text-xs not-italic">
                         {segment.label}
                       </span>
-                      <div className="h-10px overflow-hidden rounded-full border border-[rgba(var(--status-board-tone),0.14)] bg-hsl-0-0-100-0p05">
+                      <div className="h-10px overflow-hidden rounded-full border border-[rgba(var(--status-board-tone),0.14)] bg-white/5">
                         <i
                           className="block h-full animate-[status-board-load-breathe_var(--ui-duration-1800ms)_ease-in-out_infinite_alternate] rounded-[inherit] bg-[linear-gradient(90deg,rgba(var(--status-board-tone),0.25),rgba(var(--status-board-tone),0.95))] shadow-[0_0_var(--spacing-16px)_rgba(var(--status-board-tone),0.44)]"
                           style={{ width: `${segment.width}%` }}
                         />
                       </div>
-                      <em className="text-(--ui-color-rgba-211-232-255-0p66) text-xs not-italic text-right">
+                      <em className="text-muted-foreground text-xs not-italic text-right">
                         {compactNumber(segment.value)} {segment.unit}
                       </em>
                     </div>
@@ -1404,17 +1395,17 @@ export function StatusDashboardPage() {
                       <span className="size-8px mt-5px rounded-full bg-status-board-tone shadow-status-board-event-dot animate-status-board-event-dot" />
                       <div>
                         <div className="flex items-center justify-between gap-12px">
-                          <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-xs text-ellipsis whitespace-nowrap">
+                          <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
                             {event.title}
                           </strong>
-                          <time className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25">
+                          <time className="text-muted-foreground text-tiny not-italic leading-1p25">
                             {formatClock(event.at)}
                           </time>
                         </div>
                         <p
                           className={cn(
                             "mx-0 mt-3px mb-0 line-clamp-1 overflow-hidden",
-                            "text-tiny leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
+                            "text-tiny leading-1p25 text-muted-foreground not-italic",
                           )}
                         >
                           {event.detail}
@@ -1423,7 +1414,7 @@ export function StatusDashboardPage() {
                           <span
                             className={cn(
                               "text-rgba-190-219-248-0p58 text-tiny not-italic leading-1p25 inline-flex mt-4px rounded-full",
-                              "px-6px py-2px bg-rgba-255-255-255-0p06",
+                              "px-6px py-2px bg-white/6",
                             )}
                           >
                             {event.workdir
@@ -1463,10 +1454,10 @@ export function StatusDashboardPage() {
                     >
                       <div className="mt-5px size-8px flex-none animate-status-board-event-dot rounded-full bg-status-board-tone shadow-status-board-event-dot" />
                       <div>
-                        <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-xs text-ellipsis whitespace-nowrap">
+                        <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
                           {truncateMiddle(item.title, 34)}
                         </strong>
-                        <span className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25">
+                        <span className="text-muted-foreground text-tiny not-italic leading-1p25">
                           {item.cwd ? basename(item.cwd) : "默认空间"} · {item.messageCount}{" "}
                           messages · {formatDuration(now - item.updatedAt)} ago
                         </span>
@@ -1491,13 +1482,13 @@ export function StatusDashboardPage() {
                   "mb-8px flex-none rounded-14px px-9px py-8px [--status-board-tone:var(--status-cyan)]",
                 )}
               >
-                <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-tiny tracking-0p12em uppercase">
+                <span className="block text-muted-foreground text-tiny tracking-0p12em uppercase">
                   Active Workspace
                 </span>
                 <strong
                   className={cn(
                     "inline-block overflow-hidden max-w-full mt-3px",
-                    "text-(--ui-color-rgba-255-255-255-0p94) text-sm leading-1p12 text-ellipsis whitespace-nowrap",
+                    "text-foreground text-sm leading-1p12 text-ellipsis whitespace-nowrap",
                   )}
                   title={activeWorkspaceHint}
                 >
@@ -1505,7 +1496,7 @@ export function StatusDashboardPage() {
                 </strong>
                 <em
                   className={cn(
-                    "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-tiny not-italic",
+                    "block overflow-hidden mt-3px text-muted-foreground text-tiny not-italic",
                     "leading-1p22 text-ellipsis whitespace-nowrap",
                   )}
                 >
@@ -1525,17 +1516,17 @@ export function StatusDashboardPage() {
                       )}
                     >
                       <div>
-                        <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-xs text-ellipsis whitespace-nowrap">
+                        <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
                           {basename(item.path)}
                         </strong>
-                        <span className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25">
+                        <span className="text-muted-foreground text-tiny not-italic leading-1p25">
                           {truncateMiddle(item.path, 46)}
                         </span>
                       </div>
-                      <div className="h-8px overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.12)] bg-hsl-0-0-100-0p05">
+                      <div className="h-8px overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.12)] bg-white/5">
                         <span
                           className={cn(
-                            "block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-tiny leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)]",
+                            "block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-tiny leading-1p25 text-muted-foreground shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)]",
                             "not-italic",
                           )}
                           style={{
@@ -1545,7 +1536,7 @@ export function StatusDashboardPage() {
                           }}
                         />
                       </div>
-                      <em className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25 text-right">
+                      <em className="text-muted-foreground text-tiny not-italic leading-1p25 text-right">
                         {item.conversationCount} conversations
                       </em>
                     </article>
@@ -1560,7 +1551,7 @@ export function StatusDashboardPage() {
           className={cn(
             "flex flex-nowrap items-center justify-between gap-10px overflow-hidden",
             "rounded-14px border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px",
-            "text-tiny text-(--ui-color-rgba-198-225-250-0p62) backdrop-blur-16px",
+            "text-tiny text-muted-foreground backdrop-blur-16px",
           )}
         >
           <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
