@@ -3,8 +3,8 @@ import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
-import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { type ToastTone, toast } from "@liveagent/ui/components/ui/toast-manager";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
@@ -175,17 +175,7 @@ function useGatewayAppController() {
     },
     [],
   );
-  // Top-right toast stack for upload/attachment feedback — mirrors the GUI's
-  // NotifyToast usage so upload failures never render as conversation output.
-  const [notifyItems, setNotifyItems] = useState<NotifyItem[]>([]);
-  const notifyIdCounter = useRef(0);
-  const addNotify = useCallback((type: NotifyItem["type"], message: string) => {
-    const id = `notify-${++notifyIdCounter.current}`;
-    setNotifyItems((prev) => [...prev, { id, type, message }]);
-  }, []);
-  const dismissNotify = useCallback((id: string) => {
-    setNotifyItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const addNotify = useCallback((type: ToastTone, message: string) => toast[type](message), []);
   // Sidebar errors raised outside the sidebar store (project removal flow).
   const [sidebarActionError, setSidebarActionError] = useState<string | null>(null);
   const [queuedChatTurns, setQueuedChatTurns] = useState<ChatQueueItemSummary[]>([]);
@@ -1398,7 +1388,7 @@ function useGatewayAppController() {
       resetSettingsOverlay();
       setActiveView("chat");
       setRightDockOpen(false);
-      setNotifyItems([]);
+      toast.dismiss();
       resetProjectToolsRuntimeRef.current();
       workbenchClearRef.current();
       resetToFreshHomeConversation();
@@ -1995,7 +1985,6 @@ function useGatewayAppController() {
     currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
-    dismissNotify,
     displayedConversationBusyRef,
     displayedConversationId,
     displayedConversationWorkdir,
@@ -2119,7 +2108,6 @@ function useGatewayAppController() {
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
-    notifyItems,
     openSettings,
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,

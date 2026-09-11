@@ -32,6 +32,7 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Tabs, TabsContent } from "@liveagent/ui/components/ui/tabs";
+import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -47,6 +48,7 @@ import {
   discoverSkills,
   type ExternalSkillEntry,
   type ExternalToolScan,
+  getCachedSkillsDiscovery,
   getSkillInstallJobStatus,
   isAlwaysEnabledSkillName,
   isUserSelectableSkill,
@@ -64,7 +66,7 @@ import {
   isInstalledSkillSort,
   sortInstalledSkillItems,
 } from "@liveagent/ui/lib/skills/installedSort";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { reconcileExternalToolScans } from "./externalSkillScanState";
 import { InstalledSkillCard } from "./InstalledSkillCard";
 import {
@@ -108,7 +110,6 @@ function isSkillsHubView(value: unknown): value is SkillsHubView {
 }
 
 const STORE_PAGE_LIMIT = 24;
-const EMPTY_SKILLS: SkillSummary[] = [];
 const SCAN_FEEDBACK_DURATION_MS = 6500;
 const SCAN_BUTTON_COMPLETE_DURATION_MS = 2400;
 const MIN_SCAN_LOADING_DURATION_MS = 600;
@@ -143,18 +144,30 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const { t } = useLocale();
   const lockedByChatMode = !isAgentMode;
 
-  const [skills, setSkills] = useState<SkillSummary[]>(initialSkills ?? []);
-  const [rootDir, setRootDir] = useState(initialRootDir ?? "");
+  const [initialDiscovery] = useState(() => (lockedByChatMode ? null : getCachedSkillsDiscovery()));
+  const [skills, setSkills] = useState<SkillSummary[]>(
+    initialSkills ?? initialDiscovery?.skills ?? [],
+  );
+  const [rootDir, setRootDir] = useState(initialRootDir ?? initialDiscovery?.rootDir ?? "");
   const [hasPresentedInstalledSkills, setHasPresentedInstalledSkills] = useState(false);
   const {
     captureVisibleKey: captureInstalledFlipKey,
     gridRef: installedGridRef,
     requestFlip: requestInstalledFlip,
   } = useFlipGrid();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(
+    !lockedByChatMode && initialSkills === undefined && initialDiscovery === null,
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [scanFeedback, setScanFeedback] = useState<SkillScanFeedback | null>(null);
-  const scanFeedbackTimerRef = useRef<number | null>(null);
+  const toastScope = useId();
+  const selectedSkillsRef = useRef(settings.skills.selected);
+  selectedSkillsRef.current = settings.skills.selected;
+  useEffect(
+    () => () => {
+      for (const kind of ["scan", "import", "undo"]) toast.dismiss(`${toastScope}-${kind}`);
+    },
+    [toastScope],
+  );
   const [scanButtonComplete, setScanButtonComplete] = useState(false);
   const scanButtonCompleteTimerRef = useRef<number | null>(null);
   const [filter, setFilter] = useState("");
@@ -170,8 +183,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const bulkSelectionRef = useRef<ReadonlySet<string>>(bulkSelection);
   bulkSelectionRef.current = bulkSelection;
   const bulkAnchorRef = useRef<string | null>(null);
-  const [bulkUndo, setBulkUndo] = useState<{ selected: string[]; count: number } | null>(null);
-  const bulkUndoTimerRef = useRef<number | null>(null);
   const [view, setView] = useState<SkillsHubView>("installed");
   const [storeQuery, setStoreQuery] = useState("");
   const [storeSort, setStoreSort] = useState<ClawHubSort>("downloads");
@@ -196,36 +207,44 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     null,
   );
   const [importingExternalBaseDir, setImportingExternalBaseDir] = useState<string | null>(null);
-  const [importErrors, setImportErrors] = useState<
-    Array<{ baseDir: string; name: string; message: string }>
-  >([]);
-  const [importedCount, setImportedCount] = useState<number | null>(null);
-  const [importToast, setImportToast] = useState<string | null>(null);
   const [previewInstalledSkill, setPreviewInstalledSkill] = useState<SkillSummary | null>(null);
   const [installedPreviewState, setInstalledPreviewState] = useState<InstalledSkillPreviewState>(
     () => emptyInstalledSkillPreviewState(),
   );
   const discoverySignatureRef = useRef<string | null>(null);
-  const skillsSnapshotRef = useRef<SkillSummary[]>(initialSkills ?? []);
+  const skillsSnapshotRef = useRef<SkillSummary[]>(skills);
 
-  const dismissScanFeedback = useCallback(() => {
-    if (scanFeedbackTimerRef.current !== null) {
-      window.clearTimeout(scanFeedbackTimerRef.current);
-      scanFeedbackTimerRef.current = null;
-    }
-    setScanFeedback(null);
-  }, []);
-
-  const showScanFeedback = useCallback((feedback: SkillScanFeedback) => {
-    if (scanFeedbackTimerRef.current !== null) {
-      window.clearTimeout(scanFeedbackTimerRef.current);
-    }
-    setScanFeedback(feedback);
-    scanFeedbackTimerRef.current = window.setTimeout(() => {
-      setScanFeedback(null);
-      scanFeedbackTimerRef.current = null;
-    }, SCAN_FEEDBACK_DURATION_MS);
-  }, []);
+  const showScanFeedback = useCallback(
+    (feedback: SkillScanFeedback) => {
+      const details =
+        feedback.status === "success"
+          ? feedback.added + feedback.updated + feedback.removed > 0
+            ? t("settings.skillsScanChanged")
+                .replace("{added}", String(feedback.added))
+                .replace("{updated}", String(feedback.updated))
+                .replace("{removed}", String(feedback.removed))
+            : t("settings.skillsScanNoChanges")
+          : feedback.message;
+      toast[feedback.status](
+        t(
+          feedback.status === "success"
+            ? "settings.skillsScanComplete"
+            : "settings.skillsScanFailed",
+        ),
+        {
+          id: `${toastScope}-scan`,
+          position: "bottom-right",
+          appearance: "notice",
+          duration: SCAN_FEEDBACK_DURATION_MS,
+          description:
+            feedback.status === "success"
+              ? `${t("settings.skillsScanFound").replace("{count}", String(feedback.total))} · ${details}`
+              : details,
+        },
+      );
+    },
+    [t, toastScope],
+  );
 
   const resetScanButtonComplete = useCallback(() => {
     if (scanButtonCompleteTimerRef.current !== null) {
@@ -248,9 +267,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   useEffect(
     () => () => {
-      if (scanFeedbackTimerRef.current !== null) {
-        window.clearTimeout(scanFeedbackTimerRef.current);
-      }
       if (scanButtonCompleteTimerRef.current !== null) {
         window.clearTimeout(scanButtonCompleteTimerRef.current);
       }
@@ -273,7 +289,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   }, []);
 
   const refresh = useCallback(
-    async (options?: { silent?: boolean; announce?: boolean }) => {
+    async (options?: { silent?: boolean; announce?: boolean; force?: boolean }) => {
       if (lockedByChatMode) {
         skillsSnapshotRef.current = [];
         setSkills([]);
@@ -294,7 +310,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       }
       setLoadError(null);
       try {
-        const discovery = await discoverSkills({ force: true });
+        const discovery = await discoverSkills({ force: options?.force ?? true });
         const summary = summarizeSkillScan(skillsSnapshotRef.current, discovery.skills);
         const changed = applyDiscovery(discovery.rootDir, discovery.skills);
         if (changed) {
@@ -347,17 +363,16 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   useEffect(() => {
     if ((initialSkills?.length ?? 0) === 0) {
-      void refresh();
+      void refresh({ silent: initialDiscovery !== null, force: false });
     }
-  }, [initialSkills?.length, refresh]);
+  }, [initialSkills?.length, initialDiscovery, refresh]);
 
   const selected = useMemo(
     () => new Set(mergeAlwaysEnabledSkillNames(settings.skills.selected)),
     [settings.skills.selected],
   );
-  // React 19 的 initialValue 让 Hub 外壳先独立提交；大量卡片在可中断的后台
-  // render 中准备，全部完成后再原子替换加载态，避免页面切换被首屏列表挂载阻塞。
-  const deferredSkills = useDeferredValue(skills, EMPTY_SKILLS);
+  // 首次渲染保留缓存列表；后续数据更新仍可延迟渲染，避免阻塞输入。
+  const deferredSkills = useDeferredValue(skills);
   const installedContentPending = deferredSkills !== skills;
   useEffect(() => {
     if (!installedContentPending && deferredSkills.length > 0) {
@@ -494,11 +509,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     [externalSkillByBaseDir, installedSkillNames],
   );
 
-  const showImportToast = useCallback((message: string) => {
-    setImportErrors([]);
-    setImportedCount(null);
-    setImportToast(message);
-  }, []);
+  const showImportToast = useCallback(
+    (message: string) => {
+      toast.warning(message, { id: `${toastScope}-import`, appearance: "notice", duration: 0 });
+    },
+    [toastScope],
+  );
 
   const toggleExternalSkill = useCallback(
     (baseDir: string) => {
@@ -547,9 +563,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         }
         return;
       }
-      setImportToast(null);
-      setImportErrors([]);
-      setImportedCount(null);
+      toast.dismiss(`${toastScope}-import`);
       const failures: Array<{ baseDir: string; name: string; message: string }> = [];
       for (let index = 0; index < targets.length; index += 1) {
         setImportingExternalBaseDir(targets[index].baseDir);
@@ -570,8 +584,20 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       }
       setImportingExternalBaseDir(null);
       setImportProgress(null);
-      setImportErrors(failures);
-      setImportedCount(targets.length - failures.length);
+      if (failures.length) {
+        toast.error(t("settings.skillsImportFailed"), {
+          id: `${toastScope}-import`,
+          appearance: "notice",
+          duration: 0,
+          description: failures.map((failure) => `${failure.name}: ${failure.message}`).join("\n"),
+        });
+      } else if (targets.length) {
+        toast.success(`${t("settings.skillsImportDone")} (${targets.length})`, {
+          id: `${toastScope}-import`,
+          appearance: "notice",
+          duration: 0,
+        });
+      }
       if (!skill) {
         setSelectedExternal(new Set());
         setBulkMode(false);
@@ -585,6 +611,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       refresh,
       installedSkillNames,
       showImportToast,
+      toastScope,
       t,
     ],
   );
@@ -998,12 +1025,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     setSettings((prev) => updateSkills(prev, { selected: Array.from(next) }));
   }
 
-  const clearBulkUndoTimer = useCallback(() => {
-    if (bulkUndoTimerRef.current !== null) {
-      window.clearTimeout(bulkUndoTimerRef.current);
-      bulkUndoTimerRef.current = null;
-    }
-  }, []);
+  const dismissBulkUndo = useCallback(() => toast.dismiss(`${toastScope}-undo`), [toastScope]);
 
   const exitBulkMode = useCallback(() => {
     bulkSelectionRef.current = new Set();
@@ -1016,8 +1038,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     (initialName?: string) => {
       setBulkMode(true);
       setPreviewInstalledSkill(null);
-      clearBulkUndoTimer();
-      setBulkUndo(null);
+      dismissBulkUndo();
       if (initialName && !isAlwaysEnabledSkillName(initialName)) {
         const next = new Set([initialName]);
         bulkSelectionRef.current = next;
@@ -1030,14 +1051,13 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         bulkAnchorRef.current = null;
       }
     },
-    [clearBulkUndoTimer],
+    [dismissBulkUndo],
   );
 
   const toggleBulkSelectionName = useCallback(
     (name: string) => {
       if (isAlwaysEnabledSkillName(name)) return;
-      clearBulkUndoTimer();
-      setBulkUndo(null);
+      dismissBulkUndo();
       const next = toggleBulkSelection(bulkSelectionRef.current, name);
       if (next.size === 0) {
         exitBulkMode();
@@ -1047,15 +1067,14 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       setBulkSelection(next);
       bulkAnchorRef.current = name;
     },
-    [clearBulkUndoTimer, exitBulkMode],
+    [dismissBulkUndo, exitBulkMode],
   );
 
   const setBulkSelectionRange = useCallback(
     (names: readonly string[], select: boolean) => {
       const selectable = names.filter((name) => !isAlwaysEnabledSkillName(name));
       if (selectable.length === 0) return;
-      clearBulkUndoTimer();
-      setBulkUndo(null);
+      dismissBulkUndo();
       const next = updateBulkSelection(bulkSelectionRef.current, selectable, select);
       if (next.size === 0) {
         exitBulkMode();
@@ -1064,7 +1083,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       bulkSelectionRef.current = next;
       setBulkSelection(next);
     },
-    [clearBulkUndoTimer, exitBulkMode],
+    [dismissBulkUndo, exitBulkMode],
   );
 
   // 批量选择模式下点击卡片：只改 bulkSelection，不改启用状态、不打开预览。
@@ -1104,12 +1123,29 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       if (changed === 0) return;
 
       requestInstalledSkillFlip("batch", changedNames, target ? changedNames : []);
-      clearBulkUndoTimer();
-      setBulkUndo({ selected: before, count: changed });
-      bulkUndoTimerRef.current = window.setTimeout(() => {
-        setBulkUndo(null);
-        bulkUndoTimerRef.current = null;
-      }, 6000);
+      dismissBulkUndo();
+      toast.success(t("settings.skillsBulkUpdated").replace("{count}", String(changed)), {
+        id: `${toastScope}-undo`,
+        position: "bottom-center",
+        appearance: "notice",
+        duration: 6000,
+        action: {
+          label: t("settings.skillsBulkUndo"),
+          onClick: () => {
+            const current = new Set(selectedSkillsRef.current);
+            const restoreSet = new Set(before);
+            const changedNames = [...new Set([...current, ...restoreSet])].filter(
+              (name) =>
+                !isAlwaysEnabledSkillName(name) && current.has(name) !== restoreSet.has(name),
+            );
+            const followNames = changedNames.filter(
+              (name) => restoreSet.has(name) && !current.has(name),
+            );
+            requestInstalledSkillFlip("batch", changedNames, followNames);
+            setSettings((prev) => updateSkills(prev, { selected: before }));
+          },
+        },
+      });
       exitBulkMode();
       setSettings((prev) => {
         const next = new Set(prev.skills.selected);
@@ -1125,35 +1161,15 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     },
     [
       bulkSelection,
-      clearBulkUndoTimer,
+      dismissBulkUndo,
       exitBulkMode,
       requestInstalledSkillFlip,
       setSettings,
       settings.skills.selected,
+      t,
+      toastScope,
     ],
   );
-
-  const undoBulkSelection = useCallback(() => {
-    clearBulkUndoTimer();
-    if (bulkUndo) {
-      const restore = bulkUndo.selected;
-      const current = new Set(settings.skills.selected);
-      const restoreSet = new Set(restore);
-      const changedNames = [...new Set([...current, ...restoreSet])].filter(
-        (name) => !isAlwaysEnabledSkillName(name) && current.has(name) !== restoreSet.has(name),
-      );
-      const followNames = changedNames.filter((name) => restoreSet.has(name) && !current.has(name));
-      requestInstalledSkillFlip("batch", changedNames, followNames);
-      setSettings((prev) => updateSkills(prev, { selected: restore }));
-    }
-    setBulkUndo(null);
-  }, [
-    bulkUndo,
-    clearBulkUndoTimer,
-    requestInstalledSkillFlip,
-    setSettings,
-    settings.skills.selected,
-  ]);
 
   async function deleteBulkSelectedInstalledSkills() {
     if (lockedByChatMode || deletingSkillName || !bulkMode) return;
@@ -1228,7 +1244,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     await refresh({ silent: true });
   }
 
-  useEffect(() => clearBulkUndoTimer, [clearBulkUndoTimer]);
+  useEffect(() => dismissBulkUndo, [dismissBulkUndo]);
 
   // 切换视图时退出批量模式并清空选择与锚点。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 只需在 view 变化时触发；exitBulkMode 是稳定回调
@@ -1364,15 +1380,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const skillsEnabled = settings.skills.enabled;
   const showInitialInstalledContentLoading =
     skills.length > 0 && !hasPresentedInstalledSkills && installedContentPending;
-  const scanFeedbackDetails =
-    scanFeedback?.status === "success"
-      ? scanFeedback.added + scanFeedback.updated + scanFeedback.removed > 0
-        ? t("settings.skillsScanChanged")
-            .replace("{added}", String(scanFeedback.added))
-            .replace("{updated}", String(scanFeedback.updated))
-            .replace("{removed}", String(scanFeedback.removed))
-        : t("settings.skillsScanNoChanges")
-      : scanFeedback?.message;
   return (
     <div
       className={cn(
@@ -1380,65 +1387,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         "bg-background",
       )}
     >
-      {scanFeedback ? (
-        <div
-          className={cn(
-            "pointer-events-none absolute bottom-5 inset-x-4 z-50 flex justify-end",
-            "sm:left-auto sm:right-6",
-          )}
-        >
-          <div
-            className={cn(
-              "pointer-events-auto flex w-full max-w-sm items-start gap-2.5",
-              "rounded-lg border bg-background px-3 py-2.5 text-sm shadow-xl",
-              scanFeedback.status === "success" ? "border-emerald-600/30" : "border-destructive/30",
-            )}
-            role={scanFeedback.status === "error" ? "alert" : "status"}
-            aria-live={scanFeedback.status === "error" ? "assertive" : "polite"}
-          >
-            <div
-              className={cn(
-                "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full",
-                scanFeedback.status === "success"
-                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "bg-destructive/10 text-destructive",
-              )}
-            >
-              {scanFeedback.status === "success" ? (
-                <Check className="size-3.5" />
-              ) : (
-                <AlertTriangle className="size-3.5" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-medium text-foreground">
-                {scanFeedback.status === "success"
-                  ? t("settings.skillsScanComplete")
-                  : t("settings.skillsScanFailed")}
-              </div>
-              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                {scanFeedback.status === "success" ? (
-                  <>
-                    {t("settings.skillsScanFound").replace("{count}", String(scanFeedback.total))}
-                    <span aria-hidden="true"> · </span>
-                  </>
-                ) : null}
-                {scanFeedbackDetails}
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="shrink-0 text-muted-foreground"
-              onClick={dismissScanFeedback}
-              aria-label={t("settings.close")}
-              title={t("settings.close")}
-            >
-              <X className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-      ) : null}
       <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden">
         <HubHeader
           embedded={props.embedded}
@@ -1676,7 +1624,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         )}
                       >
                         <div className="flex flex-col gap-3">
-                          {skills.length > 0 ? (
+                          {skills.length > 0 || loading ? (
                             <StoreCategoryChips
                               value={installedCategory}
                               counts={installedCategoryCounts}
@@ -1823,14 +1771,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         selected={selectedExternal}
                         installedNames={installedSkillNames}
                         importProgress={importProgress}
-                        importErrors={importErrors}
-                        importedCount={importedCount}
-                        importToast={importToast}
-                        onDismissImportToast={() => setImportToast(null)}
-                        onDismissImportResult={() => {
-                          setImportErrors([]);
-                          setImportedCount(null);
-                        }}
                         bulkMode={bulkMode}
                         onToggle={toggleExternalSkill}
                         onBatchToggle={batchToggleExternalSkills}
@@ -1857,10 +1797,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         onClose={() => setPreviewInstalledSkill(null)}
       />
 
-      {bulkMode &&
-      view === "installed" &&
-      !lockedByChatMode &&
-      (!bulkUndo || bulkSelection.size > 0) ? (
+      {bulkMode && view === "installed" && !lockedByChatMode ? (
         <div
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3",
@@ -1969,35 +1906,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                 </Button>
               </>
             )}
-          </div>
-        </div>
-      ) : null}
-
-      {bulkUndo && bulkSelection.size === 0 ? (
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3",
-            "max-sm:bottom-safe-bottom-offset",
-          )}
-        >
-          <div
-            className={cn(
-              "pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3",
-              "rounded-full border border-border/50 bg-background/95",
-              "py-2 pl-4 pr-2 text-xs shadow-ui-skillshubpage-51 dark:border-white/[0.1] dark:bg-popover/95",
-            )}
-          >
-            <span className="text-foreground">
-              {t("settings.skillsBulkUpdated").replace("{count}", String(bulkUndo.count))}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={undoBulkSelection}
-              className="h-7 rounded-full px-3 text-xs"
-            >
-              {t("settings.skillsBulkUndo")}
-            </Button>
           </div>
         </div>
       ) : null}

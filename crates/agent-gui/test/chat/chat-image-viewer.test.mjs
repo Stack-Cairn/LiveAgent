@@ -289,7 +289,8 @@ test("chat attachment sources preserve verified metadata and keep menus scoped t
   assert.doesNotMatch(viewerSource, /role="dialog"/);
   assert.doesNotMatch(viewerSource, /aria-modal="true"/);
   assert.match(viewerSource, /layer-popover fixed min-w-52/);
-  assert.match(viewerSource, /layer-toast fixed inset-x-0/);
+  assert.match(viewerSource, /toast.error\(props.message/);
+  assert.match(viewerSource, /toast.dismiss\(id\)/);
   assert.match(viewerSource, /eventDetails\.reason === "escape-key"/);
   assert.match(viewerSource, /event\.stopPropagation\(\)/);
   assert.match(viewerSource, /document\.addEventListener\("keydown", onKeyDown, true\)/);

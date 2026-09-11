@@ -24,6 +24,7 @@
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "1.1.1",
     "docx-preview": "^0.4.0",
     "monaco-editor": "^0.56.0",
     "motion": "13.2.0",

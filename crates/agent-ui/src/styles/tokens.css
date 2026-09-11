@@ -1,6 +1,6 @@
 /* Shared style values. Typography uses Tailwind rem scales; other values retain existing units.
  * Standard py-*, px-*, gap-*, w-* and h-* utilities use --spacing.
- * See docs/ui-style-variables.md for scope and usage. */
+ * See docs/ui-refactor/ui-style-variables.md for temporary migration notes. */
 
 @theme {
   --spacing: 0.25rem;
@@ -138,8 +138,6 @@
     0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-18px)
     color-mix(in oklab, var(--color-black) 32%, transparent);
   --shadow-ui-commitcomposer-31: 0 0 0 var(--spacing-3px) hsl(var(--primary) / 0.08);
-  --shadow-ui-resourceactivationswitch-32: 0 var(--spacing-2px) var(--spacing-10px)
-    var(--spacing-minus-3px) var(--ui-color-rgba-16-185-129-0p65);
   --shadow-ui-dockintentoverlay-33: inset 0 0 0 var(--spacing-1px) var(--color-background);
   --shadow-ui-workspacesftppanel-34:
     0 var(--spacing-18px) var(--spacing-44px) var(--spacing-minus-14px)
@@ -1281,7 +1279,6 @@
   --ui-color-rgba-15-23-42-0p24: rgba(15, 23, 42, 0.24);
   --ui-color-rgba-15-23-42-0p18: rgba(15, 23, 42, 0.18);
   --ui-color-hsl-160-84-25-0p42: hsl(160 84% 25% / 0.42);
-  --ui-color-rgba-16-185-129-0p65: rgba(16, 185, 129, 0.65);
   --spacing-minus-34px: -34px;
   --ui-color-rgba-20-22-28-0p9: rgba(20, 22, 28, 0.9);
   --ui-color-rgba-15-23-42-0p28: rgba(15, 23, 42, 0.28);

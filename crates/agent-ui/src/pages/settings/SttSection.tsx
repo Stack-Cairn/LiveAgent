@@ -16,6 +16,7 @@ import {
   Trash2,
   XCircle,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -437,7 +438,7 @@ export function SttSection({
                 "group relative flex min-w-0 items-center gap-3 rounded-xl border",
                 "p-3 text-left transition-all duration-150",
                 active
-                  ? "border-primary/50 bg-primary/5 shadow-sm ring-1 ring-primary/25"
+                  ? "border-primary/50 bg-primary/5 shadow-sm"
                   : "border-border/50 bg-background/40 hover:border-border hover:bg-muted/40",
               )}
             >
@@ -692,15 +693,10 @@ export function SttSection({
           </div>
         ) : null}
         {error ? (
-          <div
-            className={cn(
-              "flex items-start gap-2",
-              "rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive",
-            )}
-          >
+          <SettingsNotice variant="compact-error" className="items-start text-xs text-destructive">
             <XCircle className="mt-px size-3.5 shrink-0" />
             <p className="break-words">{error}</p>
-          </div>
+          </SettingsNotice>
         ) : null}
       </div>
     </div>

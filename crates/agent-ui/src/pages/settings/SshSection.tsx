@@ -997,7 +997,7 @@ function SshHostCard(props: {
         className={cn(
           "group relative z-0 flex flex-col",
           "rounded-xl border border-border/60 bg-card p-4 transition-all duration-200",
-          "hover:z-10 hover:border-emerald-500/40 hover:shadow-md hover:shadow-emerald-500/10",
+          "hover:z-10 hover:border-emerald-500/40",
         )}
       >
         <div className="absolute right-3 top-3">{actions}</div>
@@ -1036,7 +1036,7 @@ function SshHostCard(props: {
       className={cn(
         "group relative z-0",
         "rounded-xl border border-border/60 bg-card transition-all duration-200",
-        "hover:z-10 hover:border-emerald-500/40 hover:shadow-md hover:shadow-emerald-500/10",
+        "hover:z-10 hover:border-emerald-500/40",
       )}
     >
       <div className="settings-card-row flex items-center gap-3 px-4 py-3">
@@ -1087,7 +1087,7 @@ function SshViewModeToggle(props: { value: SshViewMode; onChange: (value: SshVie
     <fieldset
       className={cn(
         "relative isolate grid min-w-0 grid-cols-2",
-        "rounded-lg border border-border/60 bg-muted/30 p-0.5 shadow-inner !shadow-black/5",
+        "rounded-lg border border-border/60 bg-muted/30 p-0.5",
       )}
     >
       <legend className="sr-only">{groupLabel}</legend>
@@ -1095,7 +1095,7 @@ function SshViewModeToggle(props: { value: SshViewMode; onChange: (value: SshVie
         aria-hidden="true"
         className={cn(
           "pointer-events-none absolute inset-y-0.5 left-0.5 w-half-minus-gap",
-          "rounded-md bg-emerald-500/10 shadow-sm shadow-emerald-500/10 ring-1 ring-emerald-500/30",
+          "rounded-md bg-emerald-500/10",
           "transition-transform duration-200 ease-out motion-reduce:transition-none",
           value === "grid" ? "translate-x-full" : "translate-x-0",
         )}

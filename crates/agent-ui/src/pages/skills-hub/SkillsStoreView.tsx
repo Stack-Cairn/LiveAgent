@@ -383,7 +383,7 @@ export function SkillsStoreView(props: {
                     className={cn(
                       "flex h-full cursor-pointer flex-col",
                       "rounded-2xl border bg-card p-3.5 text-left shadow-xs",
-                      "focus:outline-none focus:ring-2 focus:ring-ring",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       done
                         ? "border-emerald-500/40 dark:border-emerald-400/35"
                         : "border-border/70",

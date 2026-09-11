@@ -52,8 +52,9 @@ test("manual Skill scans announce a persistent, dismissible result", () => {
 
   assert.match(source, /refresh\(\{ announce: true \}\)/);
   assert.match(source, /SCAN_FEEDBACK_DURATION_MS/);
-  assert.match(source, /role=\{scanFeedback\.status === "error" \? "alert" : "status"\}/);
-  assert.match(source, /onClick=\{dismissScanFeedback\}/);
+  assert.match(source, /toast\[feedback.status\]/);
+  assert.match(source, /duration: SCAN_FEEDBACK_DURATION_MS/);
+  assert.match(source, /id: `\$\{toastScope\}-scan`/);
   assert.match(source, /summarizeSkillScan\(skillsSnapshotRef\.current, discovery\.skills\)/);
 });
 

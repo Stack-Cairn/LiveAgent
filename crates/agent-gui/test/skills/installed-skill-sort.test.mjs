@@ -174,7 +174,7 @@ for (const { label, loader, sources } of implementations) {
     assert.match(source, /pb-safe-bottom-10rem sm:pb-24/);
     assert.equal(
       source.match(/max-sm:bottom-safe-bottom-offset(?=[\s"])/g)?.length,
-      2,
+      1,
     );
     assert.match(source, /max-sm:bottom-safe-bottom-offset-compact/);
     assert.equal(source.match(/<SheetPopup/g)?.length, 2);
@@ -184,11 +184,11 @@ for (const { label, loader, sources } of implementations) {
     assert.doesNotMatch(source, /createPortal/);
     assert.equal(
       source.match(/pointer-events-auto[^"\n]*bg-background\/95/g)?.length,
-      3,
+      2,
     );
     assert.match(
       source,
-      /pointer-events-auto[^"]*border-amber-500\/30[^"]*bg-background/,
+      /toast.warning\(message,[\s\S]*?appearance: "notice"/,
     );
     assert.doesNotMatch(source, /<select[^>]*backdrop-blur/);
     assert.doesNotMatch(source, /<input[^>]*backdrop-blur/);

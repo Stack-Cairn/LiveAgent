@@ -12,6 +12,7 @@ import {
   Search,
   Sparkles,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { SwitchRoot, SwitchThumb } from "@liveagent/ui/components/ui/switch";
@@ -181,15 +182,10 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
       ) : (
         <>
           {loadError ? (
-            <div
-              className={cn(
-                "flex items-center gap-2",
-                "rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5",
-              )}
-            >
+            <SettingsNotice variant="compact-error">
               <AlertTriangle className="size-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">{loadError}</span>
-            </div>
+            </SettingsNotice>
           ) : null}
 
           {!settings.skills.enabled ? (

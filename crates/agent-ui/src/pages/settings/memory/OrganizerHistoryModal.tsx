@@ -6,6 +6,7 @@
 // Shared implementation owned by @liveagent/ui.
 
 import { AlertTriangle, BrushCleaning, Check, RefreshCw } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import {
   AlertDialog,
   AlertDialogActions,
@@ -372,14 +373,9 @@ export function OrganizerHistoryModal(props: {
 
           <section className="min-h-0 overflow-auto p-5">
             {error ? (
-              <div
-                className={cn(
-                  "mb-4 whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2",
-                  "text-xs text-destructive",
-                )}
-              >
+              <SettingsNotice variant="multiline-error" className="mb-4">
                 {error}
-              </div>
+              </SettingsNotice>
             ) : null}
             {historyFeedback ? (
               <div

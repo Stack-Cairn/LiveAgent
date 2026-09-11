@@ -19,6 +19,7 @@ import {
   Settings2,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import {
   AlertDialog,
   AlertDialogActions,
@@ -408,14 +409,9 @@ export function MemoryPanel(props: {
             </div>
           ) : null}
           {error ? (
-            <div
-              className={cn(
-                "mt-3 whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2",
-                "text-xs text-destructive",
-              )}
-            >
+            <SettingsNotice variant="multiline-error" className="mt-3">
               {error}
-            </div>
+            </SettingsNotice>
           ) : null}
         </div>
 

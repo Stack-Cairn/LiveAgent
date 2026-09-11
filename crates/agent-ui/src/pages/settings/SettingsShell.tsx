@@ -62,6 +62,12 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   } = props;
   const { t } = useLocale();
   const [section, setSection] = useState(initialSection);
+  const [previousInitialSection, setPreviousInitialSection] = useState(initialSection);
+  // Synchronize before children commit, so a deep link never paints the old section.
+  if (previousInitialSection !== initialSection) {
+    setPreviousInitialSection(initialSection);
+    setSection(initialSection);
+  }
   const [navQuery, setNavQuery] = useState("");
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const sections = useMemo(
@@ -99,7 +105,6 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
       .filter(([, definitions]) => definitions.length > 0);
   }, [groups, navQuery, t]);
 
-  useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => {
     if (!sections.some((definition) => definition.id === section)) {
       setSection(sections[0]?.id ?? "system");

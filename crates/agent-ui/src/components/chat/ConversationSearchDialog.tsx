@@ -1,5 +1,11 @@
 import { Clock3, Loader2, MessageSquareText, Pin, Search } from "@liveagent/ui/components/IconSet";
 import {
+  Command,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@liveagent/ui/components/ui/command";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -89,7 +95,6 @@ export function ConversationSearchDialog({
   const [status, setStatus] = useState<SearchStatus>("idle");
   const [activeIndex, setActiveIndex] = useState(0);
   const requestSequenceRef = useRef(0);
-  const resultsListRef = useRef<HTMLDivElement>(null);
   const normalizedQuery = query.trim();
 
   const performSearch = useCallback(
@@ -182,13 +187,6 @@ export function ConversationSearchDialog({
     setActiveIndex((current) => Math.min(current, Math.max(0, selectableItems.length - 1)));
   }, [selectableItems.length]);
 
-  useEffect(() => {
-    const active = resultsListRef.current?.querySelector<HTMLElement>(
-      `[data-conversation-search-index="${activeIndex}"]`,
-    );
-    active?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
-
   const selectConversation = (id: string) => {
     onOpenChange(false);
     const isLocalDraft =
@@ -207,160 +205,215 @@ export function ConversationSearchDialog({
           {t("chat.searchConversationsDescription")}
         </DialogDescription>
 
-        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/60 px-4">
-          {status === "loading" ? (
-            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-          ) : (
-            <Search className="size-4 shrink-0 text-muted-foreground" />
-          )}
-          <Input
-            autoFocus
-            type="search"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setActiveIndex(0);
-            }}
-            onKeyDownCapture={(event) => {
-              if (event.key !== "Escape") return;
-              event.preventDefault();
-              event.stopPropagation();
-              onOpenChange(false);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setActiveIndex((current) =>
-                  Math.min(selectableItems.length - 1, Math.max(0, current + 1)),
-                );
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setActiveIndex((current) => Math.max(0, current - 1));
-              } else if (event.key === "Enter") {
-                const selected = selectableItems[activeIndex];
-                if (selected) {
-                  event.preventDefault();
-                  selectConversation(selected.id);
-                }
-              }
-            }}
-            placeholder={t("chat.searchConversationsPlaceholder")}
-            aria-label={t("chat.searchConversations")}
-            className={cn(
-              "h-auto flex-1 border-0 bg-transparent px-0 text-base shadow-none",
-              "placeholder:text-muted-foreground/70 focus-visible:ring-0",
-            )}
-          />
-          <kbd
-            className={cn(
-              "hidden rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5",
-              "text-tiny font-medium text-muted-foreground sm:inline-flex",
-            )}
-          >
-            Esc
-          </kbd>
-        </div>
-
-        <div
-          ref={resultsListRef}
-          className="min-h-220px flex-1 overflow-y-auto overscroll-contain p-2"
-          role="listbox"
+        <Command
+          className="contents"
+          label={t("chat.searchConversations")}
+          shouldFilter={false}
+          loop={false}
+          vimBindings={false}
+          disablePointerSelection
+          value={selectableItems[activeIndex]?.id ?? ""}
+          onValueChange={(value) => {
+            const index = selectableItems.findIndex((item) => item.id === value);
+            if (index >= 0) setActiveIndex(index);
+          }}
         >
-          {status === "error" ? (
-            <div
+          <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/60 px-4">
+            {status === "loading" ? (
+              <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+            ) : (
+              <Search className="size-4 shrink-0 text-muted-foreground" />
+            )}
+            <CommandInput
+              asChild
+              value={query}
+              onValueChange={(value) => {
+                setQuery(value);
+                setActiveIndex(0);
+              }}
+            >
+              <Input
+                autoFocus
+                type="search"
+                autoComplete={undefined}
+                autoCorrect={undefined}
+                spellCheck={undefined}
+                onKeyDownCapture={(event) => {
+                  // Preserve the existing composition-time key policy in this refactor.
+                  // cmdk otherwise suppresses all list keys while composing.
+                  if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setActiveIndex((current) =>
+                        event.key === "ArrowDown"
+                          ? Math.min(selectableItems.length - 1, Math.max(0, current + 1))
+                          : Math.max(0, current - 1),
+                      );
+                    } else if (event.key === "Enter") {
+                      const selected = selectableItems[activeIndex];
+                      if (selected) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        selectConversation(selected.id);
+                      }
+                    }
+                  }
+                  // Keep Home/End editing the query, rather than navigating results.
+                  if (event.key === "Home" || event.key === "End") {
+                    event.stopPropagation();
+                    return;
+                  }
+                  // The old input moves one result even with modifier keys held.
+                  if (
+                    (event.metaKey || event.altKey) &&
+                    (event.key === "ArrowDown" || event.key === "ArrowUp")
+                  ) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setActiveIndex((current) =>
+                      Math.max(
+                        0,
+                        Math.min(
+                          selectableItems.length - 1,
+                          current + (event.key === "ArrowDown" ? 1 : -1),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  if (event.key !== "Escape") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onOpenChange(false);
+                }}
+                placeholder={t("chat.searchConversationsPlaceholder")}
+                aria-label={t("chat.searchConversations")}
+                className={cn(
+                  "h-auto flex-1 border-0 bg-transparent px-0 text-base shadow-none",
+                  "placeholder:text-muted-foreground/70 focus-visible:ring-0",
+                )}
+              />
+            </CommandInput>
+            <kbd
               className={cn(
-                "flex min-h-200px flex-col items-center justify-center gap-3 px-8",
-                "text-center text-sm text-destructive",
+                "hidden rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5",
+                "text-tiny font-medium text-muted-foreground sm:inline-flex",
               )}
             >
-              <span>{t("chat.conversationSearchFailed")}</span>
-              <button
-                type="button"
-                onClick={() => void performSearch(normalizedQuery)}
+              Esc
+            </kbd>
+          </div>
+
+          <CommandList
+            label={t("chat.searchConversations")}
+            className="min-h-220px flex-1 overflow-y-auto overscroll-contain p-2"
+          >
+            {status === "error" ? (
+              <div
                 className={cn(
-                  "rounded-lg border border-border/70 px-3 py-1.5",
-                  "text-xs font-medium text-foreground transition-colors",
-                  "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "flex min-h-200px flex-col items-center justify-center gap-3 px-8",
+                  "text-center text-sm text-destructive",
                 )}
               >
-                {t("chat.retryConversationSearch")}
-              </button>
-            </div>
-          ) : normalizedQuery && status === "ready" && results.length === 0 ? (
-            <div className="flex min-h-200px flex-col items-center justify-center px-8 text-center">
-              <MessageSquareText className="mb-3 size-8 text-muted-foreground/35" />
-              <div className="text-sm font-medium text-foreground">
-                {t("chat.noConversationSearchResults")}
+                <span>{t("chat.conversationSearchFailed")}</span>
+                <button
+                  type="button"
+                  onKeyDown={(event) => event.stopPropagation()}
+                  onClick={() => void performSearch(normalizedQuery)}
+                  className={cn(
+                    "rounded-lg border border-border/70 px-3 py-1.5",
+                    "text-xs font-medium text-foreground transition-colors",
+                    "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  )}
+                >
+                  {t("chat.retryConversationSearch")}
+                </button>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {t("chat.searchConversationsDescription")}
+            ) : normalizedQuery && status === "ready" && results.length === 0 ? (
+              <div className="flex min-h-200px flex-col items-center justify-center px-8 text-center">
+                <MessageSquareText className="mb-3 size-8 text-muted-foreground/35" />
+                <div className="text-sm font-medium text-foreground">
+                  {t("chat.noConversationSearchResults")}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {t("chat.searchConversationsDescription")}
+                </div>
               </div>
-            </div>
-          ) : !normalizedQuery && selectableItems.length === 0 ? (
-            <div className="flex min-h-200px flex-col items-center justify-center px-8 text-center">
-              <Search className="mb-3 size-8 text-muted-foreground/35" />
-              <div className="text-sm text-muted-foreground">
-                {t("chat.searchConversationsDescription")}
+            ) : !normalizedQuery && selectableItems.length === 0 ? (
+              <div className="flex min-h-200px flex-col items-center justify-center px-8 text-center">
+                <Search className="mb-3 size-8 text-muted-foreground/35" />
+                <div className="text-sm text-muted-foreground">
+                  {t("chat.searchConversationsDescription")}
+                </div>
               </div>
-            </div>
-          ) : (
-            groups.map((group) => {
-              if (group.items.length === 0) return null;
-              const GroupIcon = group.icon;
-              const groupStartIndex = groups
-                .slice(0, groups.indexOf(group))
-                .reduce((total, item) => total + item.items.length, 0);
-              return (
-                <fieldset key={group.id} className="m-0 border-0 p-0 pb-2 last:pb-0">
-                  <legend className="sr-only">{group.label}</legend>
-                  <div className="flex h-8 items-center gap-2 px-2 text-xs font-medium text-muted-foreground/75">
-                    <GroupIcon className="size-3.5" />
-                    <span>{group.label}</span>
-                  </div>
-                  <div className="space-y-0.5">
-                    {group.items.map((item, itemIndex) => {
-                      const index = groupStartIndex + itemIndex;
-                      const updatedAt = formatUpdatedAt(item.updatedAt, locale);
-                      const meta = [item.cwd, updatedAt].filter(Boolean).join(" · ");
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          role="option"
-                          aria-selected={index === activeIndex}
-                          data-conversation-search-index={index}
-                          onMouseEnter={() => setActiveIndex(index)}
-                          onClick={() => selectConversation(item.id)}
-                          className={cn(
-                            "w-full rounded-xl px-3 py-2.5 text-left outline-none transition-colors",
-                            index === activeIndex
-                              ? "bg-foreground/[0.07] text-foreground"
-                              : "text-foreground/90 hover:bg-foreground/[0.045]",
-                          )}
-                        >
-                          <div className="truncate text-sm font-medium leading-5">{item.title}</div>
-                          {item.searchPreview ? (
-                            <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                              {renderSearchPreview(item.searchPreview)}
-                            </div>
-                          ) : null}
-                          {meta ? (
-                            <div
-                              className="mt-1 truncate text-xs leading-4 text-muted-foreground/70"
-                              title={meta}
+            ) : (
+              groups.map((group) => {
+                if (group.items.length === 0) return null;
+                const GroupIcon = group.icon;
+                const groupStartIndex = groups
+                  .slice(0, groups.indexOf(group))
+                  .reduce((total, item) => total + item.items.length, 0);
+                return (
+                  <fieldset key={group.id} className="m-0 border-0 p-0 pb-2 last:pb-0">
+                    <legend className="sr-only">{group.label}</legend>
+                    <div className="flex h-8 items-center gap-2 px-2 text-xs font-medium text-muted-foreground/75">
+                      <GroupIcon className="size-3.5" />
+                      <span>{group.label}</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      {group.items.map((item, itemIndex) => {
+                        const index = groupStartIndex + itemIndex;
+                        const updatedAt = formatUpdatedAt(item.updatedAt, locale);
+                        const meta = [item.cwd, updatedAt].filter(Boolean).join(" · ");
+                        return (
+                          <CommandItem
+                            key={item.id}
+                            value={item.id}
+                            asChild
+                            onSelect={() => selectConversation(item.id)}
+                          >
+                            <button
+                              onKeyDown={(event) => event.stopPropagation()}
+                              type="button"
+                              role="option"
+                              aria-selected={index === activeIndex}
+                              data-conversation-search-index={index}
+                              onMouseEnter={() => setActiveIndex(index)}
+                              className={cn(
+                                "w-full rounded-xl px-3 py-2.5 text-left outline-none transition-colors",
+                                index === activeIndex
+                                  ? "bg-foreground/[0.07] text-foreground"
+                                  : "text-foreground/90 hover:bg-foreground/[0.045]",
+                              )}
                             >
-                              {meta}
-                            </div>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              );
-            })
-          )}
-        </div>
+                              <div className="truncate text-sm font-medium leading-5">
+                                {item.title}
+                              </div>
+                              {item.searchPreview ? (
+                                <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                  {renderSearchPreview(item.searchPreview)}
+                                </div>
+                              ) : null}
+                              {meta ? (
+                                <div
+                                  className="mt-1 truncate text-xs leading-4 text-muted-foreground/70"
+                                  title={meta}
+                                >
+                                  {meta}
+                                </div>
+                              ) : null}
+                            </button>
+                          </CommandItem>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                );
+              })
+            )}
+          </CommandList>
+        </Command>
       </DialogContent>
     </Dialog>
   );

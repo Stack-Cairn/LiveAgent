@@ -4,6 +4,10 @@ import { cn } from "../../lib/shared/utils";
 const variants = {
   "action-error":
     "flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive",
+  "compact-error":
+    "flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5",
+  "multiline-error":
+    "whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2 text-xs text-destructive",
   validation:
     "flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive",
   warning:

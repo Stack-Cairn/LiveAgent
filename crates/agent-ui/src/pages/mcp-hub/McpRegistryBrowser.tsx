@@ -239,7 +239,7 @@ function RegistryCard(props: {
       className={cn(
         "group relative flex h-full min-h-228px cursor-pointer flex-col",
         "rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color]",
-        "focus:outline-none focus:ring-2 focus:ring-ring",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         done ? "border-emerald-600/25" : "border-border hover:border-foreground/20 hover:shadow-md",
       )}
     >

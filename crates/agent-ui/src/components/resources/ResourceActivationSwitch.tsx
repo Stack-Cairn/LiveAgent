@@ -43,12 +43,10 @@ export function ResourceActivationSwitch(props: {
         onCheckedChange={props.onCheckedChange}
         onKeyDown={stopEventPropagation}
         className={cn(
-          "relative inline-flex shrink-0 items-center rounded-full ring-1 transition-all",
+          "relative inline-flex shrink-0 items-center rounded-full ring-1 ring-border/40 transition-all",
           "disabled:cursor-not-allowed disabled:opacity-45",
           compact ? "h-5 w-9" : "h-6 w-11",
-          props.checked
-            ? "bg-emerald-500 ring-emerald-400/45 shadow-ui-resourceactivationswitch-32 dark:bg-emerald-400"
-            : "bg-muted-foreground/25 ring-border/40",
+          props.checked ? "bg-emerald-500 dark:bg-emerald-400" : "bg-muted-foreground/25",
         )}
       >
         <SwitchThumb
@@ -57,10 +55,10 @@ export function ResourceActivationSwitch(props: {
             compact ? "size-3.5" : "size-18px",
             props.checked
               ? compact
-                ? "translate-x-[1.05rem]"
+                ? "translate-x-4.75"
                 : "translate-x-23px"
               : compact
-                ? "translate-x-[0.15rem]"
+                ? "translate-x-0.75"
                 : "translate-x-3px",
           )}
         />

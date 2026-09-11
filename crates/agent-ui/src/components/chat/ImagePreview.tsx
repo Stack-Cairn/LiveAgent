@@ -31,7 +31,6 @@ import {
   resolveImagePreviewData,
   zoomImageViewerAtPoint,
 } from "@liveagent/ui/components/chat/imagePreviewModel";
-import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import {
   ChevronRight,
   Copy,
@@ -53,6 +52,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -232,16 +232,22 @@ export function ImagePreviewActionFeedback(props: {
   message: string | null;
   onDismiss: () => void;
 }) {
-  if (!props.message || typeof document === "undefined") return null;
-  return createPortal(
-    <div className="layer-toast fixed inset-x-0 top-0 h-0">
-      <NotifyToast
-        items={[{ id: "image-preview-action-error", type: "error", message: props.message }]}
-        onDismiss={props.onDismiss}
-      />
-    </div>,
-    document.body,
-  );
+  const dismissRef = useRef(props.onDismiss);
+  dismissRef.current = props.onDismiss;
+  useEffect(() => {
+    if (!props.message) return;
+    let active = true;
+    const id = toast.error(props.message, {
+      onDismiss: () => {
+        if (active) dismissRef.current();
+      },
+    });
+    return () => {
+      active = false;
+      toast.dismiss(id);
+    };
+  }, [props.message]);
+  return null;
 }
 
 export function runImagePreviewContextMenuAction(params: {

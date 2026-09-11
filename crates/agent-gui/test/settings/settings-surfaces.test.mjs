@@ -9,6 +9,10 @@ test("settings surfaces preserve native nodes, props, refs and existing class se
   const { SettingsNotice } = env.loadModule("@liveagent/ui/components/settings/SettingsNotice.tsx");
   const { ChoiceCard } = env.loadModule("@liveagent/ui/components/settings/ChoiceCard.tsx");
   const cases = [
+    [SettingsNotice, {variant: "compact-error"}, "div", "flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5"],
+    [SettingsNotice, {variant: "compact-error", className: "items-start text-xs text-destructive"}, "div", "flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive"],
+    [SettingsNotice, {variant: "multiline-error"}, "div", "whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2 text-xs text-destructive"],
+
     [SettingsNotice, {variant: "action-error"}, "div", "flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive"],
     [SettingsNotice, {variant: "action-error", className: "shrink-0"}, "div", "flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive shrink-0"],
     [SettingsPanel, {variant: "collapsible"}, "div", "overflow-hidden rounded-xl border border-border/60 bg-muted/20"],
@@ -23,7 +27,7 @@ test("settings surfaces preserve native nodes, props, refs and existing class se
     for (const selected of [false, true]) {
       cases.push([ChoiceCard, {kind, selected}, "button",
         "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all " +
-        (selected ? `border-${color}-500/50 bg-${color}-500/5 shadow-sm shadow-${color}-500/10` : "border-border/60 bg-background hover:border-border hover:bg-muted/20")]);
+        (selected ? `border-${color}-500/50 bg-${color}-500/5` : "border-border/60 bg-background hover:border-border hover:bg-muted/20")]);
     }
   }
   const container = document.createElement("div");

@@ -1,5 +1,5 @@
-import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ToastTone, toast } from "@liveagent/ui/components/ui/toast-manager";
+import { useEffect, useId } from "react";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 
 type UseNotifyToastsParams = {
@@ -9,36 +9,27 @@ type UseNotifyToastsParams = {
 };
 
 /**
- * Owns the toast list and bridges errorMessage / hookWarning /
+ * Bridges errorMessage / hookWarning /
  * compaction-failed transitions into toast notifications.
  */
 export function useNotifyToasts(params: UseNotifyToastsParams) {
   const { errorMessage, hookWarning, compactionStatus } = params;
-  const [notifyItems, setNotifyItems] = useState<NotifyItem[]>([]);
-  const notifyIdCounter = useRef(0);
-
-  const addNotify = useCallback((type: NotifyItem["type"], message: string) => {
-    const id = `notify-${++notifyIdCounter.current}`;
-    setNotifyItems((prev) => [...prev, { id, type, message }]);
-  }, []);
-
-  const dismissNotify = useCallback((id: string) => {
-    setNotifyItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const scope = useId();
+  useEffect(() => {
+    if (errorMessage) toast.error(errorMessage, { id: `${scope}-error` });
+  }, [errorMessage, scope]);
 
   useEffect(() => {
-    if (errorMessage) addNotify("error", errorMessage);
-  }, [errorMessage, addNotify]);
-
-  useEffect(() => {
-    if (hookWarning) addNotify("warning", hookWarning);
-  }, [hookWarning, addNotify]);
+    if (hookWarning) toast.warning(hookWarning, { id: `${scope}-hook` });
+  }, [hookWarning, scope]);
 
   useEffect(() => {
     if (compactionStatus.phase === "failed") {
-      addNotify("error", `上下文压缩失败：${compactionStatus.message}`);
+      toast.error(`上下文压缩失败：${compactionStatus.message}`, { id: `${scope}-compaction` });
     }
-  }, [compactionStatus, addNotify]);
+  }, [compactionStatus, scope]);
 
-  return { notifyItems, addNotify, dismissNotify };
+  return { addNotify };
 }
+
+const addNotify = (type: ToastTone, message: string) => toast[type](message);

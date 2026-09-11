@@ -403,7 +403,7 @@ function CustomSettingsModelField(props: {
         placeholder={followCurrentLabel}
         noneLabel={followCurrentLabel}
         ariaLabel={label}
-        triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-sm shadow-sm dark:bg-background/40"
+        triggerClassName="h-9 rounded-lg border border-foreground/10 bg-white/70 text-sm shadow-none dark:bg-background/40 focus-visible:ring-2 focus-visible:ring-ring"
       />
     </div>
   );

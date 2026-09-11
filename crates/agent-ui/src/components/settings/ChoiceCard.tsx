@@ -2,9 +2,9 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/shared/utils";
 
 const selectedClasses = {
-  command: "border-blue-500/50 bg-blue-500/5 shadow-sm shadow-blue-500/10",
-  http: "border-emerald-500/50 bg-emerald-500/5 shadow-sm shadow-emerald-500/10",
-  prompt: "border-violet-500/50 bg-violet-500/5 shadow-sm shadow-violet-500/10",
+  command: "border-blue-500/50 bg-blue-500/5",
+  http: "border-emerald-500/50 bg-emerald-500/5",
+  prompt: "border-violet-500/50 bg-violet-500/5",
 } as const;
 
 /** Selection is presentational; native button behavior stays with the caller. */

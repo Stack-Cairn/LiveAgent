@@ -6,7 +6,6 @@ import { ConversationViewTabs } from "@liveagent/ui/components/chat/Conversation
 import type { RunClarifyTurn } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
-import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
@@ -853,7 +852,7 @@ export function ChatPage(props: ChatPageProps) {
     }
   }, [conversationRuntimeCacheRef, runningConversationIds, sidebarStore]);
 
-  const { notifyItems, addNotify, dismissNotify } = useNotifyToasts({
+  const { addNotify } = useNotifyToasts({
     errorMessage,
     hookWarning,
     compactionStatus,
@@ -4038,7 +4037,6 @@ export function ChatPage(props: ChatPageProps) {
               onToggle={() => setRightDockOpen((open) => !open)}
             />
           }
-          overlay={<NotifyToast items={notifyItems} onDismiss={dismissNotify} />}
         />
 
         {workspaceCreateModalOpen ? (

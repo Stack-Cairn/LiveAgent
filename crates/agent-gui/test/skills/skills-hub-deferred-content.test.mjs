@@ -16,8 +16,8 @@ const hostTranslations = [
   ],
 ];
 
-test("the shared Skills Hub defers the initial installed list behind a loading state", () => {
-    assert.match(source, /const deferredSkills = useDeferredValue\(skills, EMPTY_SKILLS\)/);
+test("the shared Skills Hub preserves the initial list and defers subsequent updates", () => {
+    assert.match(source, /const deferredSkills = useDeferredValue\(skills\)/);
     assert.match(source, /const installedContentPending = deferredSkills !== skills/);
     assert.match(
       source,

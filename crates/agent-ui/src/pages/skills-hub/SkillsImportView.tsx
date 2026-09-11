@@ -6,7 +6,6 @@ import {
   Download,
   Loader2,
   RefreshCw,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -31,11 +30,6 @@ export function SkillsImportView(props: {
   installedNames: ReadonlySet<string>;
   importProgress: { done: number; total: number } | null;
   importingExternalBaseDir: string | null;
-  importErrors: Array<{ baseDir: string; name: string; message: string }>;
-  importedCount: number | null;
-  importToast: string | null;
-  onDismissImportToast: () => void;
-  onDismissImportResult: () => void;
   bulkMode: boolean;
   onToggle: (baseDir: string) => void;
   onBatchToggle: (baseDirs: string[], on: boolean) => void;
@@ -52,11 +46,6 @@ export function SkillsImportView(props: {
     installedNames,
     importProgress,
     importingExternalBaseDir,
-    importErrors,
-    importedCount,
-    importToast,
-    onDismissImportToast,
-    onDismissImportResult,
     bulkMode,
     onToggle,
     onBatchToggle,
@@ -155,82 +144,6 @@ export function SkillsImportView(props: {
 
   return (
     <div className="relative h-full min-h-0">
-      {importToast || importErrors.length > 0 || (importedCount !== null && importedCount > 0) ? (
-        <div className="pointer-events-none absolute inset-x-2 top-2 z-40 flex justify-end">
-          {importToast ? (
-            <div
-              role="status"
-              className={cn(
-                "pointer-events-auto flex w-full max-w-md items-start gap-2.5",
-                "rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl",
-              )}
-            >
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <p className="min-w-0 flex-1 leading-relaxed text-foreground">{importToast}</p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismissImportToast}
-                className="mt-0.5 size-6 shrink-0"
-                aria-label={t("settings.close")}
-              >
-                <X className="size-3.5" />
-              </Button>
-            </div>
-          ) : importErrors.length > 0 ? (
-            <div
-              role="alert"
-              className={cn(
-                "pointer-events-auto flex w-full max-w-md items-start gap-2.5",
-                "rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl",
-              )}
-            >
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-destructive">{t("settings.skillsImportFailed")}</p>
-                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto pr-1 text-xs leading-relaxed text-muted-foreground">
-                  {importErrors.map((failure) => (
-                    <p key={failure.baseDir} className="break-words">
-                      {failure.name}: {failure.message}
-                    </p>
-                  ))}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismissImportResult}
-                className="mt-0.5 size-6 shrink-0"
-                aria-label={t("settings.close")}
-              >
-                <X className="size-3.5" />
-              </Button>
-            </div>
-          ) : (
-            <div
-              role="status"
-              className={cn(
-                "pointer-events-auto flex w-full max-w-md items-start gap-2.5",
-                "rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl",
-              )}
-            >
-              <Check className="mt-0.5 size-4 shrink-0 text-[hsl(var(--chat-success))]" />
-              <p className="min-w-0 flex-1 leading-relaxed text-foreground">
-                {t("settings.skillsImportDone")} ({importedCount})
-              </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismissImportResult}
-                className="mt-0.5 size-6 shrink-0"
-                aria-label={t("settings.close")}
-              >
-                <X className="size-3.5" />
-              </Button>
-            </div>
-          )}
-        </div>
-      ) : null}
       <div
         className={cn(
           "h-full min-h-0 overflow-y-auto px-1.5 pb-4 pt-1.5",

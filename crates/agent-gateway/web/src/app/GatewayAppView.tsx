@@ -9,7 +9,6 @@ import type {
 } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
-import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
@@ -20,6 +19,7 @@ import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
+import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import {
   type ProjectToolPaneEnvironment,
@@ -167,7 +167,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
-    dismissNotify,
     displayedConversationBusyRef,
     displayedConversationId,
     displayedConversationWorkdir,
@@ -291,7 +290,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
-    notifyItems,
     openSettings,
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
@@ -1248,6 +1246,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     ) : null;
   return (
     <LocaleContext.Provider value={localeContextValue}>
+      <Toaster />
       <AppErrorBoundary>
         <div className={GATEWAY_SHELL_CLASS}>
           <input
@@ -1463,11 +1462,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                       onLogout={handleLogout}
                     />
                   </>
-                }
-                overlay={
-                  <div className="relative z-50">
-                    <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
-                  </div>
                 }
               />
               <ApplicationView

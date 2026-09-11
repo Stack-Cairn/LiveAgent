@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@liveagent/ui/components/ui/radio-group";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
@@ -100,9 +101,11 @@ function RedactionPicker(props: {
   const { value, disabled, onChange } = props;
   const { t } = useLocale();
   return (
-    <fieldset
-      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；互斥单选语义需要向读屏表达。
-      role="radiogroup"
+    <RadioGroup
+      render={<fieldset />}
+      value={value}
+      disabled={disabled}
+      onValueChange={onChange}
       aria-label={t("sharedHistory.redactionTitle")}
       className={cn(
         "inline-flex min-w-0 shrink-0 items-center",
@@ -110,13 +113,18 @@ function RedactionPicker(props: {
         disabled && "pointer-events-none opacity-60",
       )}
     >
-      {/* biome-ignore lint/a11y/useSemanticElements: 分段控件保留 button 样式；互斥语义用 radio 表达，改原生 radio input 需要视觉重构。 */}
-      <button
-        type="button"
-        role="radio"
-        aria-checked={value}
+      <RadioGroupItem
+        nativeButton
+        render={<button type="button" />}
+        value={true}
         disabled={disabled}
-        onClick={() => onChange(true)}
+        onKeyDown={(event) => {
+          // Preserve native button Enter activation; the radio primitive cancels it.
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.click();
+          }
+        }}
         className={cn(
           "relative rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/35 disabled:cursor-not-allowed",
@@ -126,14 +134,19 @@ function RedactionPicker(props: {
         )}
       >
         {t("settings.enable")}
-      </button>
-      {/* biome-ignore lint/a11y/useSemanticElements: 同上——radio 语义配 button 样式。 */}
-      <button
-        type="button"
-        role="radio"
-        aria-checked={!value}
+      </RadioGroupItem>
+      <RadioGroupItem
+        nativeButton
+        render={<button type="button" />}
+        value={false}
         disabled={disabled}
-        onClick={() => onChange(false)}
+        onKeyDown={(event) => {
+          // Preserve native button Enter activation; the radio primitive cancels it.
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.click();
+          }
+        }}
         className={cn(
           "relative rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed",
@@ -143,8 +156,8 @@ function RedactionPicker(props: {
         )}
       >
         {t("settings.disable")}
-      </button>
-    </fieldset>
+      </RadioGroupItem>
+    </RadioGroup>
   );
 }
 

@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@liveagent/ui/components/ui/radio-group";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
@@ -57,14 +58,18 @@ function RedactionPicker(props: {
   const { value, disabled, onChange } = props;
   const redactionGroupName = useId();
   return (
-    <div
-      role="radiogroup"
+    <RadioGroup
+      value={value}
+      disabled={disabled}
+      onValueChange={onChange}
+      name={redactionGroupName}
       aria-label="工具调用脱敏"
       className={cn(
         "inline-flex shrink-0 items-center rounded-full border border-border/60 bg-muted/40 p-0.5",
         disabled && "pointer-events-none opacity-60",
       )}
     >
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders its associated native radio inside this label. */}
       <label
         className={cn(
           "cursor-pointer",
@@ -76,16 +81,10 @@ function RedactionPicker(props: {
             : "text-muted-foreground hover:text-foreground",
         )}
       >
-        <input
-          type="radio"
-          name={redactionGroupName}
-          className="sr-only"
-          checked={value}
-          disabled={disabled}
-          onChange={() => onChange(true)}
-        />
+        <RadioGroupItem className="sr-only" value={true} disabled={disabled} />
         开启
       </label>
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders its associated native radio inside this label. */}
       <label
         className={cn(
           "cursor-pointer",
@@ -97,17 +96,10 @@ function RedactionPicker(props: {
             : "text-muted-foreground hover:text-foreground",
         )}
       >
-        <input
-          type="radio"
-          name={redactionGroupName}
-          className="sr-only"
-          checked={!value}
-          disabled={disabled}
-          onChange={() => onChange(false)}
-        />
+        <RadioGroupItem className="sr-only" value={false} disabled={disabled} />
         关闭
       </label>
-    </div>
+    </RadioGroup>
   );
 }
 

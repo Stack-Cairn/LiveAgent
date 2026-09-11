@@ -35,7 +35,7 @@ test("installed bulk mode exits on empty selection, all-deselect, actions, and E
     source,
     /allVisibleBulkSelected\s*\? t\("settings\.skillsBulkDeselectAll"\)/,
   );
-  assert.match(source, /setBulkUndo\([\s\S]*?exitBulkMode\(\);[\s\S]*?setSettings/);
+  assert.match(source, /toast.success\([\s\S]*?skillsBulkUndo[\s\S]*?exitBulkMode\(\);[\s\S]*?setSettings/);
   assert.match(source, /if \(event\.key === "Escape"\) \{\s*exitBulkMode\(\);/);
 });
 

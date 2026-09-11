@@ -16,6 +16,7 @@ import type {
   TrajectorySection,
 } from "../../../lib/trajectory/types";
 import { X } from "../../IconSet";
+import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
 import { DetailsResizeHandle } from "./DetailsResizeHandle";
 import { DiffTab } from "./tabs/DiffTab";
 import { InputTab } from "./tabs/InputTab";
@@ -214,20 +215,28 @@ export function DetailsPanel(props: {
         </button>
       </header>
 
-      <div
-        role="tablist"
+      <Tabs
+        value={currentTab}
+        onValueChange={(value) => {
+          const tab = tabs.find((tab) => tab === value);
+          if (tab !== undefined) setActiveTab(tab);
+        }}
+        render={<TabsList variant="plain" activateOnFocus={false} loopFocus={false} />}
         className={cn(
-          "flex shrink-0 flex-wrap gap-1 border-b border-border/60 px-2 py-1",
+          "relative flex shrink-0 flex-wrap gap-1 border-b border-border/60 px-2 py-1",
           "@max-[520px]:flex-nowrap @max-[520px]:overflow-x-auto",
         )}
       >
         {tabs.map((tab) => (
-          <button
+          <TabsTrigger
             key={tab}
-            type="button"
-            role="tab"
-            aria-selected={currentTab === tab}
-            onClick={() => setActiveTab(tab)}
+            value={tab}
+            variant="plain"
+            onClick={() => {
+              // Clicking the fallback tab used to make it an explicit selection.
+              // Preserve that choice if this record later exposes a different tab set.
+              if (currentTab === tab) setActiveTab(tab);
+            }}
             className={cn(
               "shrink-0 rounded px-2 py-0.5 text-xs transition-colors",
               currentTab === tab
@@ -236,9 +245,9 @@ export function DetailsPanel(props: {
             )}
           >
             {t(`trajectory.details.tab.${tab}`)}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
+      </Tabs>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3 text-xs @max-[520px]:p-2.5">
         {ActiveTab === null ? null : <ActiveTab {...tabProps} />}

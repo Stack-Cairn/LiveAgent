@@ -111,16 +111,16 @@ export function ModelPicker({
 
   const filteredGroups = normalizedSearch
     ? groups
-        .map((group) => ({
-          ...group,
-          opts: group.opts.filter(
-            (option) =>
-              option.label.toLowerCase().includes(normalizedSearch) ||
-              option.providerName.toLowerCase().includes(normalizedSearch) ||
-              option.description?.toLowerCase().includes(normalizedSearch),
-          ),
-        }))
-        .filter((group) => group.opts.length > 0)
+      .map((group) => ({
+        ...group,
+        opts: group.opts.filter(
+          (option) =>
+            option.label.toLowerCase().includes(normalizedSearch) ||
+            option.providerName.toLowerCase().includes(normalizedSearch) ||
+            option.description?.toLowerCase().includes(normalizedSearch),
+        ),
+      }))
+      .filter((group) => group.opts.length > 0)
     : groups;
 
   // Menu.Root is a fragment. When open, Base UI injects FocusGuard siblings
@@ -198,7 +198,7 @@ export function ModelPicker({
                   "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
                   "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
                   value === "" &&
-                    "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
+                  "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
                 )}
               >
                 <span className="flex min-w-0 items-center gap-2">
@@ -257,36 +257,36 @@ export function ModelPicker({
                     ) : null}
                     {!collapsibleGroups || expanded
                       ? group.opts.map((option) => {
-                          const isSelected = option.value === value;
-                          return (
-                            <DropdownMenuItem
-                              key={option.value}
-                              onSelect={() => onChange(option.value)}
-                              className={cn(
-                                "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
-                                "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
-                                isSelected &&
-                                  "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
-                              )}
-                            >
-                              <span className="flex min-w-0 items-center gap-2">
-                                <ProviderBrandIcon
-                                  type={option.providerType}
-                                  className={cn("opacity-70", isSelected && "opacity-100")}
-                                />
-                                <span className="min-w-0 truncate">{option.label}</span>
-                                {option.description ? (
-                                  <span className="min-w-0 truncate text-xs text-muted-foreground/70">
-                                    {option.description}
-                                  </span>
-                                ) : null}
-                              </span>
-                              {isSelected ? (
-                                <Check className="size-4 shrink-0 text-primary" />
+                        const isSelected = option.value === value;
+                        return (
+                          <DropdownMenuItem
+                            key={option.value}
+                            onSelect={() => onChange(option.value)}
+                            className={cn(
+                              "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
+                              "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
+                              isSelected &&
+                              "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
+                            )}
+                          >
+                            <span className="flex min-w-0 items-center gap-2">
+                              <ProviderBrandIcon
+                                type={option.providerType}
+                                className={cn("opacity-70", isSelected && "opacity-100")}
+                              />
+                              <span className="min-w-0 truncate">{option.label}</span>
+                              {option.description ? (
+                                <span className="min-w-0 truncate text-xs text-muted-foreground/70">
+                                  {option.description}
+                                </span>
                               ) : null}
-                            </DropdownMenuItem>
-                          );
-                        })
+                            </span>
+                            {isSelected ? (
+                              <Check className="size-4 shrink-0 text-primary" />
+                            ) : null}
+                          </DropdownMenuItem>
+                        );
+                      })
                       : null}
                   </div>
                 );

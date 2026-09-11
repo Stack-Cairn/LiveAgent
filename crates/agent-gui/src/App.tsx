@@ -2,6 +2,7 @@ import type { Context } from "@earendil-works/pi-ai";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
 import {
   applyGatewaySettingsSyncPayload,
@@ -701,6 +702,7 @@ export default function App() {
   if (!settingsReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
+        <Toaster />
         <AppChrome>
           <AppBootShell loadingLabel={translate("app.loading", settings.locale)} />
         </AppChrome>
@@ -713,6 +715,7 @@ export default function App() {
 
   return (
     <LocaleContext.Provider value={localeContextValue}>
+      <Toaster />
       <AppChrome>
         {backgroundHostsReady ? (
           <Suspense fallback={null}>
