@@ -1034,7 +1034,7 @@ export function GitBranchSelector(props: {
           className={cn(
             "composer-branch-dropdown flex w-72 origin-[var(--transform-origin)]",
             "flex-col overflow-hidden p-0",
-            "transition-[opacity,transform] duration-180 ease-ui-enter",
+            "transition-[opacity,transform,translate,scale] duration-180 ease-ui-enter",
             "data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in",
             "motion-reduce:transition-none!",
           )}
