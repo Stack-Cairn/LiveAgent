@@ -167,3 +167,12 @@ rem 尺寸优先使用 Tailwind 标准尺度，例如 `h-10`、`w-8`、`max-w-48
 
 字重使用 Tailwind 默认名称和变量（例如 `font-semibold`、`--font-weight-semibold`）。
 局部 450 字重使用 `font-[450]`；不再维护 `--font-weight-400/450/500/600/700`。
+
+## 状态颜色
+
+沿用 shadcn 主题模式：在 `:root/.dark` 定义颜色，通过 `@theme inline` 映射。
+错误反馈和危险操作统一使用 `destructive`，成功使用项目扩展 `success`；对应
+`*-foreground` 表示实心底色上的文字。浅底和边框透明度由 Badge 等共享变体管理。
+
+当前这两组变量是完整颜色值，直接 `var(...)`；其他旧 HSL 角色暂时仍需要
+`hsl(var(...))`。不要混用。映射、视觉变化与后续计划见 [UI 颜色迁移](ui-color-migration.md)。

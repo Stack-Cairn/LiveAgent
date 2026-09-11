@@ -465,8 +465,10 @@
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: var(--color-red-700);
+    --destructive-foreground: var(--color-white);
+    --success: var(--color-emerald-800);
+    --success-foreground: var(--color-white);
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
@@ -554,8 +556,10 @@
     --accent: 220 18% 17%;
     --accent-foreground: 210 30% 96%;
 
-    --destructive: 0 62.8% 36%;
-    --destructive-foreground: 210 30% 96%;
+    --destructive: var(--color-red-300);
+    --destructive-foreground: var(--color-red-950);
+    --success: var(--color-emerald-300);
+    --success-foreground: var(--color-emerald-950);
 
     --border: 220 14% 26%;
     --input: 220 14% 26%;

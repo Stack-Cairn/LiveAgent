@@ -215,10 +215,7 @@ export function ToolApprovalBar({
 
       <div className="flex h-9 shrink-0 items-center justify-end gap-1.5 px-3 pb-2">
         {errorText ? (
-          <span
-            role="alert"
-            className="mr-auto min-w-0 flex-1 truncate text-tiny text-red-600 dark:text-red-400"
-          >
+          <span role="alert" className="mr-auto min-w-0 flex-1 truncate text-tiny text-destructive">
             {errorText}
           </span>
         ) : null}

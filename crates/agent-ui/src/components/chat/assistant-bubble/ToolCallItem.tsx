@@ -467,7 +467,7 @@ function ToolCallItem({
           // collapsed "view return" toggle.
           if (result.isError) {
             return (
-              <ToolScrollablePre className="max-h-56 bg-red-500/[0.05] text-red-700/90 dark:bg-red-500/[0.08] dark:text-red-300/90">
+              <ToolScrollablePre className="max-h-56 bg-destructive/10 text-destructive">
                 {previewText(resultText, 6000)}
               </ToolScrollablePre>
             );
@@ -538,7 +538,9 @@ function ToolCallItem({
               label={t("chat.tool.return")}
               trailing={
                 result?.isError ? (
-                  <span className="text-xs font-medium text-red-500">{t("chat.tool.error")}</span>
+                  <span className="text-xs font-medium text-destructive">
+                    {t("chat.tool.error")}
+                  </span>
                 ) : null
               }
             >

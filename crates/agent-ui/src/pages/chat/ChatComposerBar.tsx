@@ -1892,9 +1892,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         }
                       : isSending
                         ? {
-                            backgroundColor: "hsl(var(--destructive))",
+                            backgroundColor: "var(--destructive)",
                             backgroundImage: "none",
-                            color: "hsl(var(--destructive-foreground))",
+                            color: "var(--destructive-foreground)",
                           }
                         : undefined
                   }
