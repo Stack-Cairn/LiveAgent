@@ -6,6 +6,7 @@
  * `*RunningSinceAt` 让展示层用心跳补齐，聚合结果因此保持纯函数、可缓存。
  */
 
+import { cachedNumberFormat } from "../shared/intlFormatters";
 import type { TrajectoryLedger } from "./types";
 
 export type ConversationStats = {
@@ -189,15 +190,19 @@ export function formatStatLatency(ms: number): string {
 
 export function formatStatTokens(value: number, locale: string): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
-  return new Intl.NumberFormat(locale, {
+  // 两个档位各自成键：<1000 不留小数位（892 → "892"，而不是 compact 的 "0.9K"）。
+  // formatter 按 (variant, locale) 缓存——这一族函数在状态栏渲染体里被逐个调用，
+  // 而状态栏运行中每秒重渲染一次（see ConversationStatsBar 心跳）。
+  const formatter = cachedNumberFormat(locale, value < 1000 ? "compact-whole" : "compact-1", {
     notation: "compact",
     maximumFractionDigits: value < 1000 ? 0 : 1,
-  }).format(Math.round(value));
+  });
+  return formatter.format(Math.round(value));
 }
 
 export function formatStatCount(value: number, locale: string): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
-  return new Intl.NumberFormat(locale).format(Math.round(value));
+  return cachedNumberFormat(locale, "count").format(Math.round(value));
 }
 
 export function formatStatThroughput(tokPerSec: number): string {

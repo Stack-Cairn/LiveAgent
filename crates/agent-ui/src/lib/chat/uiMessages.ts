@@ -859,6 +859,9 @@ export function appendThinkingBlockFromAssistant(
 }
 
 function rebalanceHostedSearchTextBoundaries(blocks: UiRoundContentBlock[]): UiRoundContentBlock[] {
+  // 绝大多数回复里没有任何 hosted-search 块：直接返回同一数组。否则每次文本增量
+  // 都会重建整个块数组（长会话里等价于每 delta 一次全量分配 + 数组拷贝）。
+  if (!blocks.some((block) => block.kind === "hostedSearch")) return blocks;
   const out: UiRoundContentBlock[] = [];
   for (let index = 0; index < blocks.length; index += 1) {
     const current = blocks[index];

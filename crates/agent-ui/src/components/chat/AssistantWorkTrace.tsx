@@ -1,5 +1,6 @@
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
@@ -120,7 +121,12 @@ export function AssistantWorkTrace({
       if (startedAt !== null) setElapsedMs(Math.max(0, Date.now() - startedAt));
     };
     updateElapsed();
-    const timer = window.setInterval(updateElapsed, 1_000);
+    // 不可见时停表：work trace 的秒表只服务于"看着它跑"的观感，隐藏窗口里的
+    // 每秒重渲染纯属白烧 CPU；重新可见时 effect 重跑，读数立即补上。
+    const timer = window.setInterval(() => {
+      if (isDocumentHidden()) return;
+      updateElapsed();
+    }, 1_000);
     return () => window.clearInterval(timer);
   }, [durationMs, running]);
 

@@ -2,6 +2,7 @@ import { ArrowLeft, Search } from "@liveagent/ui/components/IconSet";
 import { useEffect, useMemo, useState } from "react";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";
+import { useDocumentHidden } from "../../lib/shared/documentVisibility";
 import { cn } from "../../lib/shared/utils";
 
 type SettingsShellProps<Context> = {
@@ -16,28 +17,8 @@ type SettingsShellProps<Context> = {
 // 文档隐藏时 WebKit/Chromium 会暂停 CSS keyframe 动画，`.settings-section-enter`
 // 与 `.settings-section-title-enter` 因此停在 from 态（opacity:0 + 位移缩放），
 // 整个设置页看起来是空白。useSettingsOverlay 只兜底了外层浮层容器，内层区块
-// 需要这一份。
-//
-// 两个信号都当作隐藏：`document.hidden` 与 `document.visibilityState` 本该同步，
-// 但 Tauri/WKWebView 的后台启动状态下出现过 hidden=true 而 visibilityState 仍是
-// "visible" 的组合。
-function isDocumentHidden() {
-  if (typeof document === "undefined") return false;
-  return document.hidden || document.visibilityState === "hidden";
-}
-
-function useIsDocumentHidden() {
-  const [hidden, setHidden] = useState(isDocumentHidden);
-  useEffect(() => {
-    const sync = () => setHidden(isDocumentHidden());
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => {
-      document.removeEventListener("visibilitychange", sync);
-    };
-  }, []);
-  return hidden;
-}
+// 需要这一份。可见性判定（含 Tauri/WKWebView 的 hidden/visibilityState 不同步
+// 组合）与其它按可见性收敛的定时器共用 lib/shared/documentVisibility。
 
 function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) {
   switch (state.status) {
@@ -75,7 +56,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   const { t } = useLocale();
   const [section, setSection] = useState(initialSection);
   const [navQuery, setNavQuery] = useState("");
-  const isDocumentHidden = useIsDocumentHidden();
+  const isDocumentHidden = useDocumentHidden();
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const sections = useMemo(
     () =>
