@@ -1109,13 +1109,13 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         {t("settings.cliIdentityHeaders")}
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-64">
-                        <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
+                        <DropdownMenuLabel>
                           {t("settings.cliIdentityHeadersHint")}
                         </DropdownMenuLabel>
                         {listCliIdentityProviderIds(providerType).map((identity) => (
                           <DropdownMenuItem
                             key={identity}
-                            className="items-center gap-2 rounded-md py-1.5 text-xs"
+                            className="gap-2"
                             onSelect={() => applyCliIdentityHeaders(identity)}
                           >
                             <span className="shrink-0 whitespace-nowrap font-medium leading-5">

@@ -1055,10 +1055,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                     align="start"
                     sideOffset={6}
                     collisionPadding={12}
-                    className={cn(
-                      "w-max max-w-viewport-inset-2rem min-w-[var(--anchor-width)]",
-                      "rounded-xl border-border/70 bg-popover/95 p-1 shadow-ui-sshtunnelpanel-30 backdrop-blur-xl",
-                    )}
+                    className={cn("w-max max-w-viewport-inset-2rem min-w-[var(--anchor-width)]")}
                   >
                     <div className="max-h-72 overflow-y-auto p-0.5">
                       {createHosts.map((host) => {
@@ -1068,10 +1065,9 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                             key={host.id}
                             onSelect={() => selectCreateHost(host.id)}
                             className={cn(
-                              "group/item flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5",
-                              "text-left outline-none transition-all",
-                              "focus:translate-x-0.5 focus:bg-emerald-500/10 focus:text-foreground",
-                              selected && "bg-emerald-500/10 text-foreground",
+                              "group/item cursor-pointer gap-2",
+                              "text-left",
+                              selected && "bg-accent text-accent-foreground",
                             )}
                           >
                             <span

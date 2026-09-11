@@ -1715,23 +1715,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     ) : null}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
-                    className={cn(
-                      "composer-add-dropdown flex w-60 origin-[var(--transform-origin)]",
-                      "flex-col overflow-hidden p-1",
-                      "transition-[opacity,transform] duration-180 ease-ui-enter",
-                      "data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in",
-                      "motion-reduce:transition-none!",
-                    )}
+                    className={cn("composer-add-dropdown flex w-60", "flex-col overflow-hidden")}
                     side="top"
                     align="start"
                   >
-                    <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
-                      {t("chat.upload.addSection")}
-                    </DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("chat.upload.addSection")}</DropdownMenuLabel>
                     <DropdownMenuItem
                       onSelect={onPickReadableFiles}
                       disabled={uploadDisabled}
-                      className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                      className="composer-safety-item gap-2"
                     >
                       <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="font-medium leading-5">{t("chat.upload.files")}</span>
@@ -1739,7 +1731,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     <DropdownMenuItem
                       onSelect={onPickWorkspaceFolder}
                       disabled={uploadDisabled}
-                      className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                      className="composer-safety-item gap-2"
                     >
                       <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="font-medium leading-5">{t("chat.upload.folder")}</span>
@@ -1758,7 +1750,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                             planModeEnabled: !chatRuntimeControls.planModeEnabled,
                           })
                         }
-                        className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                        className="composer-safety-item gap-2"
                       >
                         <Lightbulb
                           className={cn(

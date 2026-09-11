@@ -931,16 +931,13 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   }
                   return true;
                 }}
-                className={cn(
-                  SIDEBAR_CONTEXT_MENU_CLASS,
-                  "min-w-40 rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
-                )}
+                className={cn(SIDEBAR_CONTEXT_MENU_CLASS, "min-w-40")}
               >
                 {!item.isPending ? (
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={handleTogglePinned}
-                    className="text-xs gap-2"
+                    className="gap-2"
                   >
                     {item.isPinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
                     {item.isPinned ? t("chat.conversationUnpin") : t("chat.conversationPin")}
@@ -963,7 +960,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <DropdownMenuItem
                   disabled={isInteractionDisabled || isRunning || isBusy}
                   onSelect={handleEnterSelectionMode}
-                  className="text-xs gap-2"
+                  className="gap-2"
                 >
                   <ListChecks className="size-3.5" />
                   {t("chat.conversationBulkSelect")}
@@ -972,7 +969,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onOpenInWorkbenchSplit(item)}
-                    className="text-xs gap-2"
+                    className="gap-2"
                   >
                     <Columns2 className="size-3.5" />
                     {t("workbench.openInSplit")}
@@ -981,7 +978,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <DropdownMenuItem
                   disabled={isInteractionDisabled}
                   onSelect={handleStartRenamingFromMenu}
-                  className="text-xs gap-2"
+                  className="gap-2"
                 >
                   <Edit3 className="size-3.5" />
                   {t("chat.conversationRename")}
@@ -991,17 +988,12 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     disabled={
                       isInteractionDisabled || isRunning || isBusy || moveWorkspaces.length === 0
                     }
-                    className="text-xs gap-2"
+                    className="gap-2"
                   >
                     <Folder className="size-3.5" />
                     {t("chat.conversationMoveToWorkspace")}
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent
-                    className={cn(
-                      SIDEBAR_CONTEXT_MENU_CLASS,
-                      "max-h-72 min-w-48 overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
-                    )}
-                  >
+                  <DropdownMenuSubContent className={cn(SIDEBAR_CONTEXT_MENU_CLASS, "max-h-72")}>
                     {moveWorkspaces.map((workspace) => (
                       <DropdownMenuItem
                         key={workspace.id}
@@ -1012,7 +1004,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                           workspace.path === item.cwd
                         }
                         onSelect={() => handleMoveToWorkspace(workspace.path)}
-                        className="text-xs gap-2"
+                        className="gap-2"
                       >
                         <FolderClosed className="size-3.5 shrink-0" />
                         <span className="truncate">{workspace.path}</span>
@@ -1024,7 +1016,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={handleShare}
-                    className="text-xs gap-2"
+                    className="gap-2"
                   >
                     <Share2 className="size-3.5" />
                     {t("chat.conversationShare")}
@@ -1033,7 +1025,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <DropdownMenuItem
                   disabled={isInteractionDisabled || isDeleteDisabled}
                   onSelect={handleRequestDelete}
-                  className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                 >
                   <Trash2 className="size-3.5" />
                   {t("chat.conversationDelete")}
@@ -1194,14 +1186,14 @@ export function ProjectGroupHeader(props: {
               suppressMenuReturnFocusRef.current = true;
               onStartRename();
             }}
-            className="gap-2 text-xs"
+            className="gap-2"
           >
             <Edit3 className="size-3.5" />
             <span>{t("chat.workspaceGroupRename")}</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={onDelete}
-            className="gap-2 text-xs text-destructive focus:bg-destructive/10 focus:text-destructive"
+            className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
           >
             <Trash2 className="size-3.5" />
             <span>{t("chat.workspaceGroupDelete")}</span>
@@ -1695,7 +1687,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onConfigureProject(project)}
-                    className="text-xs gap-2"
+                    className="gap-2"
                   >
                     <Settings className="size-3.5 text-muted-foreground" />
                     {t("chat.workspaceConfigure")}
@@ -1703,10 +1695,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   {/* 无任何分组时隐藏“移动到分组”，避免展开空的子菜单。 */}
                   {onMoveProjectToGroup && workspaceProjectGroups.length > 0 ? (
                     <DropdownMenuSub>
-                      <DropdownMenuSubTrigger
-                        disabled={isInteractionDisabled}
-                        className="text-xs gap-2"
-                      >
+                      <DropdownMenuSubTrigger disabled={isInteractionDisabled} className="gap-2">
                         <Folder className="size-3.5 text-muted-foreground" />
                         <span className="min-w-0 flex-1">{t("chat.workspaceGroupMove")}</span>
                         <ChevronRight className="size-3.5 text-muted-foreground" />
@@ -1722,7 +1711,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                             key={group.id}
                             disabled={group.id === currentGroupId}
                             onSelect={() => onMoveProjectToGroup(project.path, group.id)}
-                            className="gap-2 text-xs"
+                            className="gap-2"
                           >
                             {group.id === currentGroupId ? (
                               <Check className="size-3.5" />
@@ -1737,7 +1726,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onSelect={() => onMoveProjectToGroup(project.path, null)}
-                              className="gap-2 text-xs"
+                              className="gap-2"
                             >
                               <X className="size-3.5 text-muted-foreground" />
                               <span>{t("chat.workspaceGroupUngroup")}</span>
@@ -1751,7 +1740,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleArchive}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
                       <Archive className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceArchive")}
@@ -1761,7 +1750,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleUnarchive}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
                       <ArchiveRestore className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceUnarchive")}
@@ -1775,7 +1764,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleBrowseInFileTree}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
                       <FolderTree className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInFileTree")}
@@ -1785,7 +1774,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleBrowseInSystemFileManager}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
                       <FolderOpen className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInSystemFileManager")}
@@ -1798,7 +1787,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       <DropdownMenuItem
                         disabled={isInteractionDisabled}
                         onSelect={handleRequestRemove}
-                        className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                       >
                         <X className="size-3.5" />
                         {t("chat.workspaceRemoveOnly")}
@@ -1807,7 +1796,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                         <DropdownMenuItem
                           disabled={isInteractionDisabled}
                           onSelect={handleRequestDeleteWorktree}
-                          className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                          className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                         >
                           <Trash2 className="size-3.5" />
                           {t("chat.workspaceDeleteWorktree")}

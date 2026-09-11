@@ -7,7 +7,6 @@ const require = createRequire(new URL("../../package.json", import.meta.url));
 test("popup transitions include Tailwind v4's independent scale and translate properties", async () => {
   const sources = [
     ["../../../agent-ui/src/components/ui/popover.tsx", ["scale", "opacity"]],
-    ["../../../agent-ui/src/components/git/GitBranchSelector.tsx", ["scale", "translate", "opacity"]],
   ];
   for (const [path, properties] of sources) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
@@ -23,4 +22,14 @@ test("popup transitions include Tailwind v4's independent scale and translate pr
     assert.ok(transitions.some((values) => properties.every((p) => values.includes(p))),
       `${path}: exiting popup must transition ${properties.join(", ")}`);
   }
+});
+
+
+test("branch menu inherits shared dropdown animation without a second transition", () => {
+  const source = readFileSync(new URL("../../../agent-ui/src/components/git/GitBranchSelector.tsx", import.meta.url), "utf8");
+  const popup = source.slice(source.indexOf("<DropdownMenuContent"), source.indexOf("</DropdownMenuContent>"));
+  assert.doesNotMatch(popup, /data-\[starting-style\]|data-\[ending-style\]/);
+  const primitive = readFileSync(new URL("../../../agent-ui/src/components/ui/dropdown-menu.tsx", import.meta.url), "utf8");
+  assert.match(primitive, /data-\[open\]:animate-in/);
+  assert.match(primitive, /data-\[closed\]:animate-out/);
 });

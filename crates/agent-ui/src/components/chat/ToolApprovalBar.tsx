@@ -297,7 +297,6 @@ export function ToolApprovalBar({
                   onDecide(current.toolCallId, "approve_session"),
                 )
               }
-              className="text-xs"
             >
               {t("chat.toolApproval.approveSession").replace("{tool}", displayToolName)}
             </DropdownMenuItem>
@@ -306,14 +305,13 @@ export function ToolApprovalBar({
                 <DropdownMenuItem
                   disabled={submitting}
                   onSelect={() => void runGuarded("approve-all", () => onDecideAll("approve"))}
-                  className="text-xs"
                 >
                   {t("chat.toolApproval.approveAll")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={submitting}
                   onSelect={() => void runGuarded("deny-all", () => onDecideAll("deny"))}
-                  className="text-xs text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive"
+                  className="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive"
                 >
                   {t("chat.toolApproval.denyAll")}
                 </DropdownMenuItem>

@@ -1856,10 +1856,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         side="top"
                         align="start"
                         collisionPadding={12}
-                        className={cn(
-                          SIDEBAR_CONTEXT_MENU_CLASS,
-                          "max-h-72 min-w-48 overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
-                        )}
+                        className={cn(SIDEBAR_CONTEXT_MENU_CLASS, "max-h-72")}
                       >
                         {activeProjects.map((workspace) => (
                           <DropdownMenuItem

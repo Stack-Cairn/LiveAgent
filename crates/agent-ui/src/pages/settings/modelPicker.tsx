@@ -74,16 +74,15 @@ function ModelOptionItem({
     <DropdownMenuItem
       onSelect={onSelect}
       className={cn(
-        "h-30px max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0",
-        "text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
-        selected && "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
+        "justify-between gap-3 overflow-hidden",
+        selected && "bg-accent text-accent-foreground",
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
         <span className={cn("flex shrink-0 opacity-70", selected && "opacity-100")}>{icon}</span>
         <span className="min-w-0 truncate">{label}</span>
         {description ? (
-          <span className="min-w-0 truncate text-xs text-muted-foreground/70">{description}</span>
+          <span className="min-w-0 truncate text-muted-foreground">{description}</span>
         ) : null}
       </span>
       {selected ? <Check className="size-4 shrink-0 text-primary" /> : null}
@@ -210,9 +209,8 @@ export function ModelPicker({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          sideOffset={4}
           collisionPadding={8}
-          className="w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
+          className="w-(--anchor-width) overflow-hidden p-0"
         >
           <div className="px-2 py-1.5">
             <div
@@ -227,7 +225,7 @@ export function ModelPicker({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={searchPlaceholder ?? t("chat.searchModel")}
-                className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+                className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
                 onKeyDown={(e) => e.stopPropagation()}
               />
             </div>
@@ -242,7 +240,7 @@ export function ModelPicker({
               />
             ) : null}
             {filteredGroups.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+              <div className="px-2 py-6 text-center text-sm text-muted-foreground">
                 {emptyLabel ?? t("chat.noModelFound")}
               </div>
             ) : (
@@ -251,7 +249,7 @@ export function ModelPicker({
                 return (
                   <div key={group.id} className="flex flex-col gap-0.5">
                     {groupIndex > 0 || (noneLabel && !normalizedSearch) ? (
-                      <DropdownMenuSeparator className="bg-border/30" />
+                      <DropdownMenuSeparator />
                     ) : null}
                     {collapsibleGroups ? (
                       <DropdownMenuItem
@@ -259,11 +257,7 @@ export function ModelPicker({
                         onSelect={() => toggleGroup(group.id)}
                         aria-expanded={expanded}
                         title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                        className={cn(
-                          "sticky top-0 z-10 h-30px shrink-0 cursor-pointer",
-                          "gap-1.5 rounded-md bg-popover/60 py-0",
-                          "text-xs font-medium text-muted-foreground/80 backdrop-blur-xl data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40",
-                        )}
+                        className={cn("sticky top-0 z-10 cursor-pointer", "gap-1.5 bg-popover")}
                       >
                         <ProviderBrandIcon
                           type={group.providerType}

@@ -87,7 +87,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
   const terminalItem =
     shellOptions.length > 1 ? (
       <DropdownMenuSub>
-        <DropdownMenuSubTrigger disabled={!terminalReady || creating} className="gap-2 text-xs">
+        <DropdownMenuSubTrigger disabled={!terminalReady || creating} className="gap-2">
           <Terminal className="size-3.5" />
           <span className="min-w-0 flex-1">{t("projectTools.newTerminal")}</span>
           <ChevronRight className="size-3.5 text-muted-foreground" />
@@ -98,7 +98,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
               key={option.id}
               onSelect={() => onCreateTerminal(option.id)}
               disabled={!terminalReady || creating}
-              className="gap-2 text-xs"
+              className="gap-2"
               title={option.command || option.label}
             >
               <Terminal className="size-3.5" />
@@ -111,7 +111,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
       <DropdownMenuItem
         onSelect={() => onCreateTerminal()}
         disabled={!terminalReady || creating}
-        className="gap-2 text-xs"
+        className="gap-2"
         title={terminalDisabledMessage}
       >
         <Terminal className="size-3.5" />
@@ -139,7 +139,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
           <DropdownMenuItem
             onSelect={onOpenNewTerminalInWorkbench}
             disabled={!terminalReady || creating}
-            className="gap-2 text-xs"
+            className="gap-2"
             title={terminalDisabledMessage}
           >
             <Columns2 className="size-3.5" />
@@ -152,7 +152,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
               key={definition.kind}
               onSelect={() => onStartTool(definition.kind)}
               disabled={definition.projectRequired ? !projectReady : !tunnelAvailable}
-              className="gap-2 text-xs"
+              className="gap-2"
             >
               {definition.icon("size-3.5")}
               {t(definition.createTitleKey)}
@@ -160,7 +160,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
           ),
         )}
         {leasedTools.has("backgroundTasks") ? null : (
-          <DropdownMenuItem onSelect={onOpenBackgroundTasks} className="gap-2 text-xs">
+          <DropdownMenuItem onSelect={onOpenBackgroundTasks} className="gap-2">
             <Cpu className="size-3.5" />
             {t("projectTools.backgroundTasksTitle")}
           </DropdownMenuItem>

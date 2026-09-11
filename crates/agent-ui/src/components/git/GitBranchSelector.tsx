@@ -938,7 +938,7 @@ export function GitBranchSelector(props: {
       className={cn(
         // active: gives touch long-press (contextmenu) visible pressed
         // feedback; on desktop it coincides with the hover highlight.
-        "group/branch gap-2 text-xs active:bg-accent active:text-accent-foreground",
+        "group/branch gap-2 active:bg-accent active:text-accent-foreground",
         (isCurrent || !canWrite) && "text-muted-foreground",
       )}
     >
@@ -999,13 +999,7 @@ export function GitBranchSelector(props: {
           <ChevronDown className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, menuOpen && "rotate-180")} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          className={cn(
-            "composer-branch-dropdown flex w-72 origin-[var(--transform-origin)]",
-            "flex-col overflow-hidden p-0",
-            "transition-[opacity,transform,translate,scale] duration-180 ease-ui-enter",
-            "data-[starting-style]:translate-y-6px data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in",
-            "motion-reduce:transition-none!",
-          )}
+          className={cn("composer-branch-dropdown flex w-72", "flex-col overflow-hidden p-0")}
           side="top"
           align="start"
         >
@@ -1110,7 +1104,7 @@ export function GitBranchSelector(props: {
               <DropdownMenuSub open={repoMenuOpen} onOpenChange={setRepoMenuOpen}>
                 <DropdownMenuSubTrigger
                   clickToggle
-                  className="w-full gap-2 text-xs"
+                  className="w-full gap-2"
                   title={t("git.branchSelector.switchRepository")}
                   aria-label={t("git.branchSelector.switchRepository")}
                 >
@@ -1216,7 +1210,7 @@ export function GitBranchSelector(props: {
                 <DropdownMenuItem
                   disabled={!canWrite || initializing}
                   onSelect={openInitModal}
-                  className="gap-2 text-xs"
+                  className="gap-2"
                   title={!canWrite ? disabledMessage : undefined}
                 >
                   {initializing ? (
@@ -1230,17 +1224,13 @@ export function GitBranchSelector(props: {
             ) : noRepo ? null : (
               <>
                 {filteredLocalBranches.length > 0 ? (
-                  <DropdownMenuLabel className="px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
-                    {t("git.branchSelector.localBranches")}
-                  </DropdownMenuLabel>
+                  <DropdownMenuLabel>{t("git.branchSelector.localBranches")}</DropdownMenuLabel>
                 ) : null}
                 {filteredLocalBranches.map((branch) =>
                   renderBranchRow(branch, branch.current, branch.name),
                 )}
                 {filteredRemoteBranches.length > 0 ? (
-                  <DropdownMenuLabel className="px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
-                    {t("git.branchSelector.remoteBranches")}
-                  </DropdownMenuLabel>
+                  <DropdownMenuLabel>{t("git.branchSelector.remoteBranches")}</DropdownMenuLabel>
                 ) : null}
                 {filteredRemoteBranches.slice(0, REMOTE_BRANCH_DISPLAY_LIMIT).map((branch) => {
                   const isCurrentUpstream =
@@ -1326,7 +1316,7 @@ export function GitBranchSelector(props: {
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger
                         clickToggle
-                        className="shrink-0 px-1.5 text-xs"
+                        className="px-1.5"
                         aria-label={t("git.branchSelector.moreActions")}
                         title={t("git.branchSelector.moreActions")}
                       >
@@ -1340,7 +1330,7 @@ export function GitBranchSelector(props: {
                               void runBranchMutation(() => gitClient.stashPush(workdir));
                             }
                           }}
-                          className="gap-2 text-xs"
+                          className="gap-2"
                         >
                           <Download className="size-3.5" />
                           <span>{t("git.branchSelector.stashPush")}</span>
@@ -1352,7 +1342,7 @@ export function GitBranchSelector(props: {
                               void runBranchMutation(() => gitClient.stashPop(workdir));
                             }
                           }}
-                          className="gap-2 text-xs"
+                          className="gap-2"
                         >
                           <Upload className="size-3.5" />
                           <span>

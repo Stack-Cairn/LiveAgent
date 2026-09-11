@@ -114,13 +114,7 @@ export function CommandSafetyModeSelector(props: {
         {modeIcon(selected, triggerIconClass(selected))}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className={cn(
-          "composer-safety-dropdown flex w-72 origin-(--transform-origin)",
-          "flex-col gap-1 overflow-hidden p-1",
-          "transition-[opacity,transform] duration-180 ease-ui-enter",
-          "data-starting-style:translate-y-6px data-starting-style:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-5px data-[ending-style]:scale-[0.975] data-[ending-style]:opacity-0 data-[ending-style]:duration-120 data-[ending-style]:ease-in",
-          "motion-reduce:transition-none! web:font-app",
-        )}
+        className={cn("composer-safety-dropdown flex w-72", "flex-col gap-1 overflow-hidden")}
         side="top"
         align="start"
       >
@@ -138,8 +132,8 @@ export function CommandSafetyModeSelector(props: {
               disabled={entryDisabled}
               onSelect={() => onChange(mode)}
               className={cn(
-                "composer-safety-item items-start gap-2 whitespace-normal rounded-md py-1.5 text-xs web:font-app",
-                isSelected && "bg-foreground/[0.07] font-medium data-highlighted:bg-foreground/9",
+                "composer-safety-item items-start gap-2 whitespace-normal",
+                isSelected && "bg-accent text-accent-foreground",
               )}
             >
               {modeIcon(mode, "mt-0.5 size-3.5 shrink-0 text-muted-foreground")}

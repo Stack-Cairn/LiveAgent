@@ -36,7 +36,7 @@ export function DrawerSelect(props: {
     .join(" ");
 
   return (
-    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+    <Select items={options} value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger aria-label={ariaLabel} className={triggerClass}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

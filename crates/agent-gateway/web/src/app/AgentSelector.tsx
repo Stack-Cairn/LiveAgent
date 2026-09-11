@@ -81,9 +81,7 @@ export function AgentSelector({
       : t("settings.devicesOfflineStatus");
     return (
       <div className="px-1">
-        <DropdownMenuLabel className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-          {t("settings.devicesTitle")}
-        </DropdownMenuLabel>
+        <DropdownMenuLabel>{t("settings.devicesTitle")}</DropdownMenuLabel>
         <div className="px-2.5 pb-2.5 pt-1">
           <div className="flex min-w-0 items-center gap-2.5">
             <span
@@ -123,9 +121,7 @@ export function AgentSelector({
 
   return (
     <>
-      <DropdownMenuLabel className="px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-        {t("settings.devicesTitle")}
-      </DropdownMenuLabel>
+      <DropdownMenuLabel>{t("settings.devicesTitle")}</DropdownMenuLabel>
       <div className="max-h-64 overflow-y-auto px-1">
         {sortedAgents.map((agent) => {
           const agentID = agent.agent_id?.trim() || "";

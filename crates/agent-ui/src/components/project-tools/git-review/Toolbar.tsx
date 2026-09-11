@@ -520,7 +520,7 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
         if (isCurrent || writeDisabled) return;
         void switchBranch(branch.fullName, branch.kind);
       }}
-      className={cn("gap-2 text-xs", (isCurrent || writeDisabled) && "text-muted-foreground")}
+      className={cn("gap-2", (isCurrent || writeDisabled) && "text-muted-foreground")}
       title={branch.fullName}
     >
       {isCurrent ? (
@@ -554,9 +554,7 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
         <ChevronDown className="size-3 shrink-0 text-muted-foreground opacity-70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56 max-w-72">
-        <DropdownMenuLabel className="px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {t("projectTools.gitReview.switchBranch")}
-        </DropdownMenuLabel>
+        <DropdownMenuLabel>{t("projectTools.gitReview.switchBranch")}</DropdownMenuLabel>
         {branchesLoading ? (
           <div className="flex items-center justify-center px-2 py-3">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -566,15 +564,11 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
         ) : (
           <>
             {localBranches.length > 0 ? (
-              <DropdownMenuLabel className="px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground/70">
-                {t("git.branchSelector.localBranches")}
-              </DropdownMenuLabel>
+              <DropdownMenuLabel>{t("git.branchSelector.localBranches")}</DropdownMenuLabel>
             ) : null}
             {localBranches.map((branch) => renderBranchRow(branch, branch.current, branch.name))}
             {remoteBranches.length > 0 ? (
-              <DropdownMenuLabel className="px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground/70">
-                {t("git.branchSelector.remoteBranches")}
-              </DropdownMenuLabel>
+              <DropdownMenuLabel>{t("git.branchSelector.remoteBranches")}</DropdownMenuLabel>
             ) : null}
             {remoteBranches.slice(0, GIT_REVIEW_REMOTE_BRANCH_DISPLAY_LIMIT).map((branch) => {
               const isCurrentUpstream =
@@ -757,7 +751,7 @@ export function GitReviewToolbar(props: {
                 <ChevronDown className="size-3 shrink-0 text-muted-foreground opacity-70" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-56 max-w-72">
-                <DropdownMenuLabel className="px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <DropdownMenuLabel>
                   {t("projectTools.gitReview.repositoryPicker")}
                 </DropdownMenuLabel>
                 {repositories.map((repo) => {
@@ -770,7 +764,7 @@ export function GitReviewToolbar(props: {
                       onSelect={() => {
                         if (!selected) selectRepository(value);
                       }}
-                      className="gap-2 text-xs"
+                      className="gap-2"
                       title={repo.root}
                     >
                       {selected ? (

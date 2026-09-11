@@ -135,7 +135,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
     kind: RightDockLeasedToolKind,
   ): Pick<DockTabDescriptor, "menuItems" | "dragProps"> => ({
     menuItems: onOpenToolInWorkbench ? (
-      <DropdownMenuItem onSelect={() => onOpenToolInWorkbench(kind)} className="gap-2 text-xs">
+      <DropdownMenuItem onSelect={() => onOpenToolInWorkbench(kind)} className="gap-2">
         <Columns2 className="size-3.5" />
         {t("workbench.openInSplit")}
       </DropdownMenuItem>
@@ -345,10 +345,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
         // 拖入画板(租约)的会话不在 dock 列表里,这里的 tab 都可自由进入
         // 工作台;菜单是拖拽之外的键盘/指针等价入口。
         const menuItems = onOpenTerminalInWorkbench ? (
-          <DropdownMenuItem
-            onSelect={() => onOpenTerminalInWorkbench(session)}
-            className="gap-2 text-xs"
-          >
+          <DropdownMenuItem onSelect={() => onOpenTerminalInWorkbench(session)} className="gap-2">
             <Columns2 className="size-3.5" />
             {t("workbench.openInSplit")}
           </DropdownMenuItem>
