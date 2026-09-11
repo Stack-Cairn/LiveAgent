@@ -1,4 +1,5 @@
 import { CheckCircle2 } from "@liveagent/ui/components/IconSet";
+import { SettingsSurface } from "@liveagent/ui/components/settings/SettingsSurface";
 import type { ReactNode } from "react";
 import { Switch } from "../../components/ui/switch";
 import { cn } from "../../lib/shared/utils";
@@ -12,9 +13,7 @@ export function SettingsGroup({ title, children }: { title: string; children: Re
   return (
     <section className="space-y-2.5">
       <h2 className="px-1 text-15px font-semibold tracking-tight text-foreground">{title}</h2>
-      <div className="overflow-hidden rounded-2xl border border-border/75 bg-card shadow-ui-cuadriversection-47">
-        {children}
-      </div>
+      <SettingsSurface>{children}</SettingsSurface>
     </section>
   );
 }

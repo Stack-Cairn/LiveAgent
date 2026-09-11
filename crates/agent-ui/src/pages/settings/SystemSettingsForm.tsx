@@ -29,8 +29,8 @@ import {
   Sun,
   Wrench,
 } from "@liveagent/ui/components/IconSet";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { Input } from "@liveagent/ui/components/ui/input";
-import { Label } from "@liveagent/ui/components/ui/label";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
@@ -504,10 +504,8 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
               ) : null}
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-ssh-form sm:items-start">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    {t("settings.systemProxyType")}
-                  </Label>
+                <FormField density="compact">
+                  <FormFieldLabel size="compact">{t("settings.systemProxyType")}</FormFieldLabel>
                   <Select
                     value={systemProxy.type}
                     onValueChange={(value) => patchSystemProxy({ type: value as SystemProxyType })}
@@ -520,14 +518,11 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                       <SelectItem value="socks5">SOCKS5</SelectItem>
                     </SettingsSelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-host"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="system-proxy-host" size="compact">
                     {t("settings.systemProxyHost")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
                     id="system-proxy-host"
                     className="rounded-lg"
@@ -536,14 +531,11 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                     onChange={(event) => setProxyHostDraft(event.currentTarget.value)}
                     onBlur={commitProxyHostDraft}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-port"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="system-proxy-port" size="compact">
                     {t("settings.systemProxyPort")}
-                  </Label>
+                  </FormFieldLabel>
                   <NumberInput
                     id="system-proxy-port"
                     className="rounded-lg"
@@ -571,17 +563,14 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                       commitProxyPortDraft(value === null ? "" : String(value))
                     }
                   />
-                </div>
+                </FormField>
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-username"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="system-proxy-username" size="compact">
                     {t("settings.systemProxyUsername")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
                     id="system-proxy-username"
                     className="rounded-lg"
@@ -589,14 +578,11 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                     onChange={(event) => setProxyUsernameDraft(event.currentTarget.value)}
                     onBlur={commitProxyUsernameDraft}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-password"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="system-proxy-password" size="compact">
                     {t("settings.systemProxyPassword")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
                     id="system-proxy-password"
                     className="rounded-lg"
@@ -621,7 +607,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                       </button>
                     </div>
                   ) : null}
-                </div>
+                </FormField>
               </div>
             </div>
           ) : null}

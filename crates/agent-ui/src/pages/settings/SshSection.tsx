@@ -24,6 +24,7 @@ import {
   Trash2,
   Upload,
 } from "@liveagent/ui/components/IconSet";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -41,7 +42,6 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import { NumberInput } from "../../components/ui/number-input";
 import { Textarea } from "../../components/ui/textarea";
 import { createUuid } from "../../lib/shared/id";
@@ -333,42 +333,42 @@ function SshHostModal(props: {
 
         <DialogBody>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="ssh-name" className="text-xs font-medium text-muted-foreground">
+            <FormField density="compact">
+              <FormFieldLabel htmlFor="ssh-name" size="compact">
                 {t("settings.sshName")}
                 <span className="ml-0.5 text-red-500">*</span>
-              </Label>
+              </FormFieldLabel>
               <Input
                 id="ssh-name"
                 value={name}
                 onChange={(event) => setName(event.currentTarget.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ssh-host" className="text-xs font-medium text-muted-foreground">
+            </FormField>
+            <FormField density="compact">
+              <FormFieldLabel htmlFor="ssh-host" size="compact">
                 {t("settings.sshHost")}
                 <span className="ml-0.5 text-red-500">*</span>
-              </Label>
+              </FormFieldLabel>
               <Input
                 id="ssh-host"
                 value={host}
                 onChange={(event) => setHost(event.currentTarget.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ssh-username" className="text-xs font-medium text-muted-foreground">
+            </FormField>
+            <FormField density="compact">
+              <FormFieldLabel htmlFor="ssh-username" size="compact">
                 {t("settings.sshUsername")}
-              </Label>
+              </FormFieldLabel>
               <Input
                 id="ssh-username"
                 value={username}
                 onChange={(event) => setUsername(event.currentTarget.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ssh-port" className="text-xs font-medium text-muted-foreground">
+            </FormField>
+            <FormField density="compact">
+              <FormFieldLabel htmlFor="ssh-port" size="compact">
                 {t("settings.sshPort")}
-              </Label>
+              </FormFieldLabel>
               <NumberInput
                 id="ssh-port"
                 min={1}
@@ -380,7 +380,7 @@ function SshHostModal(props: {
                 decrementLabel={`${t("settings.sshPort")} -`}
                 onValueChange={(value) => setPort(value === null ? "" : String(value))}
               />
-            </div>
+            </FormField>
           </div>
 
           <div className="mt-4 space-y-2">
@@ -493,10 +493,10 @@ function SshHostModal(props: {
               data-state={isPasswordAuth ? "open" : "closed-up"}
               style={passwordAuthPanelStyle}
             >
-              <div className="space-y-1.5">
-                <Label htmlFor="ssh-password" className="text-xs font-medium text-muted-foreground">
+              <FormField density="compact">
+                <FormFieldLabel htmlFor="ssh-password" size="compact">
                   {t("settings.sshPassword")}
-                </Label>
+                </FormFieldLabel>
                 <SshPasswordInput
                   id="ssh-password"
                   value={password}
@@ -508,7 +508,7 @@ function SshHostModal(props: {
                     {t("settings.sshPasswordConfigured")}
                   </div>
                 ) : null}
-              </div>
+              </FormField>
             </div>
 
             <div
@@ -555,13 +555,10 @@ function SshHostModal(props: {
                     {t("settings.sshPrivateKeyConfigured")}
                   </div>
                 ) : null}
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="ssh-private-key-passphrase"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="ssh-private-key-passphrase" size="compact">
                     {t("settings.sshPrivateKeyPassphrase")}
-                  </Label>
+                  </FormFieldLabel>
                   <SshPasswordInput
                     id="ssh-private-key-passphrase"
                     value={privateKeyPassphrase}
@@ -573,7 +570,7 @@ function SshHostModal(props: {
                       {t("settings.sshPrivateKeyPassphraseConfigured")}
                     </div>
                   ) : null}
-                </div>
+                </FormField>
               </div>
             </div>
           </div>
@@ -609,10 +606,8 @@ function SshHostModal(props: {
                 inert={!advancedOpen}
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium text-muted-foreground">
-                      {t("settings.sshProxyType")}
-                    </Label>
+                  <FormField density="compact" className="sm:col-span-2">
+                    <FormFieldLabel size="compact">{t("settings.sshProxyType")}</FormFieldLabel>
                     <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/60 bg-background p-1">
                       {(
                         [
@@ -648,16 +643,13 @@ function SshHostModal(props: {
                         {t("settings.sshProxyUseSystemHint")}
                       </p>
                     ) : null}
-                  </div>
+                  </FormField>
                   {proxyUseSystem ? null : (
                     <>
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="ssh-proxy-url"
-                          className="text-xs font-medium text-muted-foreground"
-                        >
+                      <FormField density="compact">
+                        <FormFieldLabel htmlFor="ssh-proxy-url" size="compact">
                           {t("settings.sshProxyUrl")}
-                        </Label>
+                        </FormFieldLabel>
                         <Input
                           id="ssh-proxy-url"
                           value={proxyUrl}
@@ -668,14 +660,11 @@ function SshHostModal(props: {
                           )}
                           onChange={(event) => setProxyUrl(event.currentTarget.value)}
                         />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="ssh-proxy-port"
-                          className="text-xs font-medium text-muted-foreground"
-                        >
+                      </FormField>
+                      <FormField density="compact">
+                        <FormFieldLabel htmlFor="ssh-proxy-port" size="compact">
                           {t("settings.sshProxyPort")}
-                        </Label>
+                        </FormFieldLabel>
                         <NumberInput
                           id="ssh-proxy-port"
                           min={1}
@@ -689,27 +678,21 @@ function SshHostModal(props: {
                             setProxyPort(value === null ? "" : String(value))
                           }
                         />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="ssh-proxy-username"
-                          className="text-xs font-medium text-muted-foreground"
-                        >
+                      </FormField>
+                      <FormField density="compact">
+                        <FormFieldLabel htmlFor="ssh-proxy-username" size="compact">
                           {t("settings.sshProxyUsername")}
-                        </Label>
+                        </FormFieldLabel>
                         <Input
                           id="ssh-proxy-username"
                           value={proxyUsername}
                           onChange={(event) => setProxyUsername(event.currentTarget.value)}
                         />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="ssh-proxy-password"
-                          className="text-xs font-medium text-muted-foreground"
-                        >
+                      </FormField>
+                      <FormField density="compact">
+                        <FormFieldLabel htmlFor="ssh-proxy-password" size="compact">
                           {t("settings.sshProxyPassword")}
-                        </Label>
+                        </FormFieldLabel>
                         <SshPasswordInput
                           id="ssh-proxy-password"
                           value={proxyPassword}
@@ -720,7 +703,7 @@ function SshHostModal(props: {
                             {t("settings.sshProxyPasswordConfigured")}
                           </div>
                         ) : null}
-                      </div>
+                      </FormField>
                     </>
                   )}
                 </div>

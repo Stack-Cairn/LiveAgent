@@ -1,5 +1,6 @@
 import type { McpServerConfig } from "@liveagent/app/lib/settings/index";
 import { AlertTriangle, Plus, Sparkles } from "@liveagent/ui/components/IconSet";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
-import { Label } from "@liveagent/ui/components/ui/label";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
@@ -327,24 +327,21 @@ export function McpRegistryConfigureModal(props: {
           <DialogBody>
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5 sm:col-span-1">
-                  <Label htmlFor="mcp-store-config-id" className="text-xs text-muted-foreground">
+                <FormField density="compact" className="sm:col-span-1">
+                  <FormFieldLabel htmlFor="mcp-store-config-id" size="compact">
                     {t("mcpHub.serverName")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
                     id="mcp-store-config-id"
                     value={draft.id}
                     placeholder={t("mcpHub.serverNamePlaceholder")}
                     onChange={(event) => updateDraft({ id: event.currentTarget.value })}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="mcp-store-config-transport"
-                    className="text-xs text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="mcp-store-config-transport" size="compact">
                     {t("mcpHub.transport")}
-                  </Label>
+                  </FormFieldLabel>
                   <Select
                     value={draft.transport}
                     onValueChange={(value) => {
@@ -362,14 +359,11 @@ export function McpRegistryConfigureModal(props: {
                       <SelectItem value="sse">{t("mcpHub.sse")}</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="mcp-store-config-timeout"
-                    className="text-xs text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="mcp-store-config-timeout" size="compact">
                     {t("mcpHub.timeout")}
-                  </Label>
+                  </FormFieldLabel>
                   <NumberInput
                     id="mcp-store-config-timeout"
                     min={1}
@@ -383,19 +377,16 @@ export function McpRegistryConfigureModal(props: {
                       updateDraft({ timeoutMs: value === null ? "" : String(value) })
                     }
                   />
-                </div>
+                </FormField>
               </div>
 
               {isStdio ? (
                 <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="mcp-store-config-command"
-                        className="text-xs text-muted-foreground"
-                      >
+                    <FormField density="compact">
+                      <FormFieldLabel htmlFor="mcp-store-config-command" size="compact">
                         {t("mcpHub.command")}
-                      </Label>
+                      </FormFieldLabel>
                       <Input
                         id="mcp-store-config-command"
                         value={draft.command}
@@ -403,14 +394,11 @@ export function McpRegistryConfigureModal(props: {
                         className="font-mono text-12p5px"
                         onChange={(event) => updateDraft({ command: event.currentTarget.value })}
                       />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="mcp-store-config-cwd"
-                        className="text-xs text-muted-foreground"
-                      >
+                    </FormField>
+                    <FormField density="compact">
+                      <FormFieldLabel htmlFor="mcp-store-config-cwd" size="compact">
                         {t("mcpHub.cwd")}
-                      </Label>
+                      </FormFieldLabel>
                       <Input
                         id="mcp-store-config-cwd"
                         value={draft.cwd}
@@ -418,15 +406,12 @@ export function McpRegistryConfigureModal(props: {
                         className="font-mono text-12p5px"
                         onChange={(event) => updateDraft({ cwd: event.currentTarget.value })}
                       />
-                    </div>
+                    </FormField>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="mcp-store-config-args"
-                      className="text-xs text-muted-foreground"
-                    >
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-args" size="compact">
                       {t("mcpHub.args")}
-                    </Label>
+                    </FormFieldLabel>
                     <Textarea
                       id="mcp-store-config-args"
                       value={draft.argsText}
@@ -434,11 +419,11 @@ export function McpRegistryConfigureModal(props: {
                       className="min-h-92px font-mono text-12p5px"
                       onChange={(event) => updateDraft({ argsText: event.currentTarget.value })}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mcp-store-config-env" className="text-xs text-muted-foreground">
+                  </FormField>
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-env" size="compact">
                       {t("mcpHub.env")}
-                    </Label>
+                    </FormFieldLabel>
                     <Textarea
                       id="mcp-store-config-env"
                       value={draft.envText}
@@ -446,14 +431,14 @@ export function McpRegistryConfigureModal(props: {
                       className="min-h-92px font-mono text-12p5px"
                       onChange={(event) => updateDraft({ envText: event.currentTarget.value })}
                     />
-                  </div>
+                  </FormField>
                 </div>
               ) : (
                 <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mcp-store-config-url" className="text-xs text-muted-foreground">
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-url" size="compact">
                       {draft.transport === "http" ? t("mcpHub.urlHttp") : t("mcpHub.urlSse")}
-                    </Label>
+                    </FormFieldLabel>
                     <Input
                       id="mcp-store-config-url"
                       value={draft.url}
@@ -465,15 +450,12 @@ export function McpRegistryConfigureModal(props: {
                       className="font-mono text-12p5px"
                       onChange={(event) => updateDraft({ url: event.currentTarget.value })}
                     />
-                  </div>
+                  </FormField>
                   {isSse ? (
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="mcp-store-config-message-url"
-                        className="text-xs text-muted-foreground"
-                      >
+                    <FormField density="compact">
+                      <FormFieldLabel htmlFor="mcp-store-config-message-url" size="compact">
                         {t("mcpHub.messageUrl")}
-                      </Label>
+                      </FormFieldLabel>
                       <Input
                         id="mcp-store-config-message-url"
                         value={draft.messageUrl}
@@ -481,15 +463,12 @@ export function McpRegistryConfigureModal(props: {
                         className="font-mono text-12p5px"
                         onChange={(event) => updateDraft({ messageUrl: event.currentTarget.value })}
                       />
-                    </div>
+                    </FormField>
                   ) : null}
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="mcp-store-config-headers"
-                      className="text-xs text-muted-foreground"
-                    >
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-headers" size="compact">
                       {t("mcpHub.headers")}
-                    </Label>
+                    </FormFieldLabel>
                     <Textarea
                       id="mcp-store-config-headers"
                       value={draft.headersText}
@@ -497,7 +476,7 @@ export function McpRegistryConfigureModal(props: {
                       className="min-h-92px font-mono text-12p5px"
                       onChange={(event) => updateDraft({ headersText: event.currentTarget.value })}
                     />
-                  </div>
+                  </FormField>
                 </div>
               )}
 
@@ -515,13 +494,10 @@ export function McpRegistryConfigureModal(props: {
                     {requiredConfig.map((input) => {
                       const key = mcpRegistryConfigInputKey(input);
                       return (
-                        <div key={key} className="space-y-1.5">
-                          <Label
-                            htmlFor={`mcp-store-config-${key}`}
-                            className="text-xs text-muted-foreground"
-                          >
+                        <FormField key={key} density="compact">
+                          <FormFieldLabel htmlFor={`mcp-store-config-${key}`} size="compact">
                             {input.label ?? input.name}
-                          </Label>
+                          </FormFieldLabel>
                           <Input
                             id={`mcp-store-config-${key}`}
                             type={input.secret ? "password" : "text"}
@@ -537,7 +513,7 @@ export function McpRegistryConfigureModal(props: {
                             </span>
                             {input.description ? <span>{input.description}</span> : null}
                           </div>
-                        </div>
+                        </FormField>
                       );
                     })}
                   </div>

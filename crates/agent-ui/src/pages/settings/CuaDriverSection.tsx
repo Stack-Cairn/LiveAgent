@@ -24,6 +24,7 @@ import {
   Terminal,
   Video,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsSurface } from "@liveagent/ui/components/settings/SettingsSurface";
 import type { UiSurface } from "@liveagent/ui/contracts/registry";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -105,9 +106,7 @@ function TimelineItem(props: {
           <h2 className="text-14px font-semibold tracking-tight text-foreground">{title}</h2>
           {action}
         </div>
-        <div className="mt-2 overflow-hidden rounded-2xl border border-border/75 bg-card shadow-ui-cuadriversection-47">
-          {children}
-        </div>
+        <SettingsSurface className="mt-2">{children}</SettingsSurface>
       </div>
     </div>
   );

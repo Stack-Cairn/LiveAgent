@@ -112,3 +112,22 @@ Web Animations 的 `easing` 和 xterm 的颜色解析器不接受 CSS 变量表�
 - 阴影、背景图、drop-shadow 的 Tailwind 合并名称登记在
   `style-token-names.generated.json`，由共享 UI 的契约测试核对其与 `tokens.css` 一致。
   `cn()` 直接消费登记表，避免用组件名称前缀猜测工具类类型。
+
+## 设置与配置表单组合
+
+共享设置、模型配置和 MCP 表单优先复用
+`components/settings/FormField.tsx`：
+
+- `FormField` 只输出一个 div；默认沿用 `space-y-2`，`density="compact"`
+  沿用 `space-y-1.5`。列跨度、外边距等页面布局仍由调用方提供。
+- `FormFieldLabel` 复用现有 `Label`；默认保留 muted 文字，`size="compact"`
+  保留小号文字。`htmlFor`、ref 和其他原生属性继续透传。
+- `FormFieldDescription` 沿用 p 标签及 `text-xs leading-5 text-muted-foreground`。
+  其他行高、颜色或错误提示没有强行并成这一档。
+- 标签、控件、说明通过 children 组合；ID、`aria-describedby`、校验、受控值、事件、
+  加载和保存状态继续由业务组件管理，不自动生成关联或额外 DOM。
+- `SettingsSurface` 集中普通设置分组与 CUA 步骤卡片相同的表面样式。
+  `shadow-settings-surface` 沿用原阴影数值；不同表面的阴影不近似合并。
+
+现有 `SettingsRow`、`SettingsChoiceRow`、`DialogActions` 和基础输入控件继续复用。
+不要仅因其他结构也使用相同间距，就把工具栏、标签操作行或整个页面套进 FormField。

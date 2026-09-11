@@ -18,6 +18,7 @@ import {
   Terminal,
 } from "@liveagent/ui/components/IconSet";
 import { ChoiceCard } from "@liveagent/ui/components/settings/ChoiceCard";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { StepMarker } from "@liveagent/ui/components/settings/StepMarker";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -45,7 +46,6 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import {
   Select,
   SelectContent,
@@ -391,10 +391,8 @@ export function CronTaskModal({
 
             <div className="space-y-4">
               <div className="settings-form-grid grid gap-4 sm:grid-cols-provider-credentials">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    {t("settings.cronTaskName")}
-                  </Label>
+                <FormField density="compact">
+                  <FormFieldLabel size="compact">{t("settings.cronTaskName")}</FormFieldLabel>
                   <Input
                     value={name}
                     placeholder={t("settings.cronTaskNamePlaceholder")}
@@ -403,11 +401,9 @@ export function CronTaskModal({
                       setName(e.currentTarget.value);
                     }}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    {t("settings.cronExpression")}
-                  </Label>
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel size="compact">{t("settings.cronExpression")}</FormFieldLabel>
                   <Input
                     value={cron}
                     placeholder={t("settings.cronExpressionPlaceholder")}
@@ -417,11 +413,11 @@ export function CronTaskModal({
                       setCron(e.currentTarget.value);
                     }}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel size="compact">
                     {t("settings.cronRemainingExecutions")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
                     value={remainingExecutions}
                     inputMode="numeric"
@@ -433,13 +429,11 @@ export function CronTaskModal({
                       setRemainingExecutions(next);
                     }}
                   />
-                </div>
+                </FormField>
               </div>
               <div className="settings-form-grid grid gap-4 sm:grid-cols-provider-field">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    {t("settings.cronTaskDesc")}
-                  </Label>
+                <FormField density="compact">
+                  <FormFieldLabel size="compact">{t("settings.cronTaskDesc")}</FormFieldLabel>
                   <Input
                     value={description}
                     placeholder={t("settings.cronTaskDescPlaceholder")}
@@ -448,11 +442,9 @@ export function CronTaskModal({
                       setDescription(e.currentTarget.value);
                     }}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    {t("settings.cronTimeoutSeconds")}
-                  </Label>
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel size="compact">{t("settings.cronTimeoutSeconds")}</FormFieldLabel>
                   <Input
                     value={timeoutSeconds}
                     inputMode="numeric"
@@ -470,7 +462,7 @@ export function CronTaskModal({
                       String(maxCronTimeoutSeconds(type)),
                     )}
                   </p>
-                </div>
+                </FormField>
               </div>
             </div>
           </div>
@@ -669,10 +661,8 @@ export function CronTaskModal({
             {/* Workspace pin — first row of the config step; bash/prompt run
                 inside a directory, http does not */}
             {type !== "http" ? (
-              <div className="mb-4 space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">
-                  {t("settings.cronWorkdirLabel")}
-                </Label>
+              <FormField density="compact" className="mb-4">
+                <FormFieldLabel size="compact">{t("settings.cronWorkdirLabel")}</FormFieldLabel>
                 <Select
                   value={
                     customWorkdir ? CUSTOM_WORKDIR_VALUE : workdir || FOLLOW_ACTIVE_WORKSPACE_VALUE
@@ -789,7 +779,7 @@ export function CronTaskModal({
                     {t("settings.cronWorkdirHint")}
                   </div>
                 )}
-              </div>
+              </FormField>
             ) : null}
 
             {/* Shell script config */}
@@ -846,10 +836,10 @@ export function CronTaskModal({
                 ) : null}
 
                 <div className="settings-form-grid grid gap-4 sm:grid-cols-provider-field">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">
+                  <FormField density="compact">
+                    <FormFieldLabel size="compact">
                       {t("settings.cronPromptModelLabel")}
-                    </Label>
+                    </FormFieldLabel>
                     <ModelPicker
                       options={promptModelOptions}
                       value={selectedModelValue}
@@ -864,11 +854,11 @@ export function CronTaskModal({
                         );
                       }}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">
+                  </FormField>
+                  <FormField density="compact">
+                    <FormFieldLabel size="compact">
                       {t("settings.cronReasoningLabel")}
-                    </Label>
+                    </FormFieldLabel>
                     <Select
                       value={reasoning}
                       onValueChange={(value) => {
@@ -889,7 +879,7 @@ export function CronTaskModal({
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </FormField>
                 </div>
                 {promptModelOptions.length === 0 ? (
                   <div

@@ -330,3 +330,34 @@ UI 边界检查通过。9 个修改消费者在归一化类名、JSX 格式空�
 默认值、浏览器全局滚动条和 Streamdown document-level portal 等无法由 React 消费节点
 携带 class 的规则。重复的 Markdown、Hub 动效和 Gateway 布局组合分别集中为 TypeScript
 样式常量，重复结构则继续使用展示组件，避免把新的业务选择器放回全局样式表。
+
+### 设置与配置表单收口（2026-09-11）
+
+本批以拉取后的工作区为基线，覆盖 Provider、MCP 手动/注册表配置、SSH、定时任务、
+Hook、系统设置、HTTP 请求编辑和 Agent 模板。76 处字段容器、78 处标签、5 处说明文字
+迁入 `FormField` / `FormFieldLabel` / `FormFieldDescription`，保留默认和紧凑两档样式。
+普通设置分组与 CUA 步骤的两处相同卡片表面归入 `SettingsSurface`，阴影去掉迁移编号，
+改为 `shadow-settings-surface`；同步更新类名合并注册表，数值保持不变。
+
+保留项：特殊字号/行高、带操作按钮的标签行、条件校验提示、不同卡片表面继续原样；
+已有 SettingsRow、SettingsChoiceRow、DialogActions 和基础控件没有重复实现。
+本批不调整请求、加载、校验、保存或键盘处理，不新增全局 token 尺度。
+
+验证记录：
+
+- 11 个消费者与本批修改前源码做 AST 对比，展开展示组件并归一化类名和格式后一致，
+  业务条件、处理函数、控件属性和层级保留。
+- 新增真实 React DOM 测试，验证两档样式、标签关联、说明 ID、ref、原生属性透传，
+  以及重渲染后输入节点、未保存输入和焦点保持。
+- 共享 UI 类型检查、UI 边界检查、改动 TSX Biome、两端生产构建通过。
+- 设置目录 394 项测试和 Gateway 718 项测试通过。
+- Gateway 当前停在认证入口，未执行登录后整页业务流程验收；浏览器夹具加载实际 React
+  组件和 Gateway CSS，比较元素及伪元素样式。宿主标记切换不能替代桌面宿主的独立验收。
+- 浏览器计算样式共 128 组无差异：390/1440px 宽度、亮暗主题、16/20px 根字号、
+  Gateway/无 Gateway 标记、两档字段、默认/焦点与启用/禁用状态；包含伪元素。
+  对比使用同一份应用 CSS，阴影改名的数值等价另由源码及 token 编译检查确认。
+- 额外执行 `pnpm test:gui`：该次报告 3092 项通过、1 个测试文件进程失败
+  （`transcript-width-controls-history-switch.test.mjs`）；单独以 Node TAP reporter
+  重跑该文件，7 项全部通过。该次全量运行不记为全量通过，失败原因尚未确定。
+- 拉取后本地依赖缺失；使用 manifest 指定的 pnpm 10.32.1 与 frozen lockfile
+  完成依赖同步，未修改依赖声明或锁文件。本轮没有执行提交。

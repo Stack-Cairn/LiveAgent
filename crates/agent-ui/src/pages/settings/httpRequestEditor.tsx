@@ -1,4 +1,5 @@
 import { ChevronDown, Globe, Trash2 } from "@liveagent/ui/components/IconSet";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   canHttpMethodHaveBody,
@@ -8,7 +9,6 @@ import {
 } from "@liveagent/ui/lib/automation/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import {
   Select,
   SelectContent,
@@ -239,8 +239,8 @@ export function HttpRequestListEditor({
             {isExpanded ? (
               <div className="border-t border-border/30 bg-muted/10 p-4">
                 <div className="settings-form-grid grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">Headers</Label>
+                  <FormField density="compact">
+                    <FormFieldLabel size="compact">Headers</FormFieldLabel>
                     <Textarea
                       value={request.headersText}
                       placeholder={'{\n  "Authorization": "Bearer ..."\n}'}
@@ -250,9 +250,9 @@ export function HttpRequestListEditor({
                         updateRequest(request.id, { headersText: e.currentTarget.value });
                       }}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">Body</Label>
+                  </FormField>
+                  <FormField density="compact">
+                    <FormFieldLabel size="compact">Body</FormFieldLabel>
                     {bodyEnabled ? (
                       <Textarea
                         value={request.bodyText}
@@ -273,7 +273,7 @@ export function HttpRequestListEditor({
                         {t("settings.cronHttpBodyDisabled")}
                       </div>
                     )}
-                  </div>
+                  </FormField>
                 </div>
               </div>
             ) : null}

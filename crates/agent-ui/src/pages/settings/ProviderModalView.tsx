@@ -30,6 +30,11 @@ import {
   X,
   Zap,
 } from "@liveagent/ui/components/IconSet";
+import {
+  FormField,
+  FormFieldDescription,
+  FormFieldLabel,
+} from "@liveagent/ui/components/settings/FormField";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -331,24 +336,22 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
               <section key="general">
                 <div className="text-sm font-semibold">{t("settings.basicInformation")}</div>
 
-                <div className="mt-3 space-y-2">
-                  <Label htmlFor="modal-name" className="text-muted-foreground">
-                    {t("settings.providerName")}
-                  </Label>
+                <FormField className="mt-3">
+                  <FormFieldLabel htmlFor="modal-name">{t("settings.providerName")}</FormFieldLabel>
                   <Input
                     id="modal-name"
                     className="h-8 shadow-none"
                     value={name}
                     onChange={(event) => setName(event.currentTarget.value)}
                   />
-                </div>
+                </FormField>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                   <div className="space-y-2">
                     <div className="flex min-h-7 flex-wrap items-center gap-2.5">
-                      <Label htmlFor="modal-baseurl" className="text-muted-foreground">
+                      <FormFieldLabel htmlFor="modal-baseurl">
                         {t("settings.baseUrl")}
-                      </Label>
+                      </FormFieldLabel>
                       <div className="ml-auto flex items-center gap-1.5">
                         <Link2
                           className={cn(
@@ -380,17 +383,15 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       onChange={(event) => setBaseUrl(event.currentTarget.value)}
                     />
                     {isFullUrl ? (
-                      <p className="text-xs leading-5 text-muted-foreground">
+                      <FormFieldDescription>
                         {t("settings.providerFullUrlHint")}
-                      </p>
+                      </FormFieldDescription>
                     ) : null}
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex min-h-7 items-center">
-                      <Label htmlFor="modal-apikey" className="text-muted-foreground">
-                        API Key
-                      </Label>
+                      <FormFieldLabel htmlFor="modal-apikey">API Key</FormFieldLabel>
                     </div>
                     <div className="relative">
                       <Input
@@ -421,10 +422,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 </div>
 
                 {providerType !== "gemini" ? (
-                  <div className="mt-4 space-y-2">
-                    <Label htmlFor="modal-models-url" className="text-muted-foreground">
+                  <FormField className="mt-4">
+                    <FormFieldLabel htmlFor="modal-models-url">
                       {t("settings.providerModelsUrl")}
-                    </Label>
+                    </FormFieldLabel>
                     <Input
                       id="modal-models-url"
                       className="h-8 shadow-none"
@@ -432,15 +433,15 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       placeholder={t("settings.providerModelsUrlPlaceholder")}
                       onChange={(event) => setModelsUrl(event.currentTarget.value)}
                     />
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <FormFieldDescription>
                       {t("settings.providerModelsUrlHint")}
-                    </p>
-                  </div>
+                    </FormFieldDescription>
+                  </FormField>
                 ) : null}
 
                 {providerType === "codex" ? (
-                  <div className="mt-4 space-y-2">
-                    <Label className="text-muted-foreground">{t("settings.requestFormat")}</Label>
+                  <FormField className="mt-4">
+                    <FormFieldLabel>{t("settings.requestFormat")}</FormFieldLabel>
                     <Select
                       value={requestFormat}
                       onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
@@ -456,7 +457,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </FormField>
                 ) : null}
 
                 <div className="mt-6 text-sm font-semibold">{t("settings.models")}</div>
@@ -705,10 +706,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             {isEditingModel && editingModel ? (
                               <div className="mx-3 mb-3 rounded-lg border bg-muted/20 p-3">
                                 <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                                  <div className="space-y-2">
-                                    <Label className="text-muted-foreground">
-                                      {t("settings.contextWindow")}
-                                    </Label>
+                                  <FormField>
+                                    <FormFieldLabel>{t("settings.contextWindow")}</FormFieldLabel>
                                     <Input
                                       inputMode="numeric"
                                       aria-invalid={
@@ -727,11 +726,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                         );
                                       }}
                                     />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label className="text-muted-foreground">
-                                      {t("settings.maxOutputToken")}
-                                    </Label>
+                                  </FormField>
+                                  <FormField>
+                                    <FormFieldLabel>{t("settings.maxOutputToken")}</FormFieldLabel>
                                     <Input
                                       inputMode="numeric"
                                       aria-invalid={
@@ -750,12 +747,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                         );
                                       }}
                                     />
-                                  </div>
+                                  </FormField>
                                   {canOverrideModelInputModalities ? (
-                                    <div className="col-span-2 space-y-2 max-[720px]:col-span-1">
-                                      <Label className="text-muted-foreground">
+                                    <FormField className="col-span-2 max-[720px]:col-span-1">
+                                      <FormFieldLabel>
                                         {t("settings.modelInputModalities")}
-                                      </Label>
+                                      </FormFieldLabel>
                                       <Select
                                         value={editingModelInputModalitiesMode}
                                         onValueChange={(value) => {
@@ -794,16 +791,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                           </SelectItem>
                                         </SelectContent>
                                       </Select>
-                                      <p className="text-xs leading-5 text-muted-foreground">
+                                      <FormFieldDescription>
                                         {t("settings.modelInputModalitiesHint")}
-                                      </p>
-                                    </div>
+                                      </FormFieldDescription>
+                                    </FormField>
                                   ) : null}
                                   {providerType === "codex" ? (
-                                    <div className="col-span-2 space-y-2 max-[720px]:col-span-1">
-                                      <Label className="text-muted-foreground">
+                                    <FormField className="col-span-2 max-[720px]:col-span-1">
+                                      <FormFieldLabel>
                                         {t("settings.promptCacheHintModelOverride")}
-                                      </Label>
+                                      </FormFieldLabel>
                                       <Select
                                         value={editingModel.model.promptCacheHintMode ?? "inherit"}
                                         onValueChange={(value) =>
@@ -846,7 +843,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                           ))}
                                         </SelectContent>
                                       </Select>
-                                    </div>
+                                    </FormField>
                                   ) : null}
                                 </div>
 
@@ -967,12 +964,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   </div>
                   {streamRetryMode === "custom" ? (
                     <div className="mt-3 flex flex-wrap items-center gap-3 border-t pt-3">
-                      <Label
-                        htmlFor="provider-stream-retry-count"
-                        className="text-xs text-muted-foreground"
-                      >
+                      <FormFieldLabel htmlFor="provider-stream-retry-count" size="compact">
                         {t("settings.providerStreamRetryMaxRetries")}
-                      </Label>
+                      </FormFieldLabel>
                       <Input
                         id="provider-stream-retry-count"
                         type="number"
@@ -1486,10 +1480,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-border" />
                     </div>
 
-                    <div className="mt-4 space-y-2">
-                      <Label className="text-muted-foreground">
-                        {t("settings.providerUsageMode")}
-                      </Label>
+                    <FormField className="mt-4">
+                      <FormFieldLabel>{t("settings.providerUsageMode")}</FormFieldLabel>
                       <Select
                         value={usageQuery.mode}
                         onValueChange={(mode) =>
@@ -1526,7 +1518,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                           </SelectItem>
                         </SelectContent>
                       </Select>
-                    </div>
+                    </FormField>
 
                     {usageQuery.mode !== "custom" ? (
                       <p
@@ -1565,10 +1557,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     {/* 只有通用模板需要用户自行填写 baseUrl / apiKey 覆盖。 */}
                     {usageQuery.mode === "general" ? (
                       <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                        <div className="space-y-2">
-                          <Label htmlFor="usage-query-base-url" className="text-muted-foreground">
+                        <FormField>
+                          <FormFieldLabel htmlFor="usage-query-base-url">
                             {t("settings.providerUsageBaseUrl")}
-                          </Label>
+                          </FormFieldLabel>
                           <Input
                             id="usage-query-base-url"
                             className="h-8 shadow-none"
@@ -1582,11 +1574,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               }));
                             }}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="usage-query-api-key" className="text-muted-foreground">
+                        </FormField>
+                        <FormField>
+                          <FormFieldLabel htmlFor="usage-query-api-key">
                             {t("settings.providerUsageApiKey")}
-                          </Label>
+                          </FormFieldLabel>
                           <Input
                             id="usage-query-api-key"
                             className="h-8 shadow-none"
@@ -1602,7 +1594,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               }));
                             }}
                           />
-                        </div>
+                        </FormField>
                       </div>
                     ) : null}
 
@@ -1677,13 +1669,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                     {usageQuery.mode === "newapi" ? (
                       <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="usage-query-access-token"
-                            className="text-muted-foreground"
-                          >
+                        <FormField>
+                          <FormFieldLabel htmlFor="usage-query-access-token">
                             {t("settings.providerUsageAccessToken")}
-                          </Label>
+                          </FormFieldLabel>
                           <Input
                             id="usage-query-access-token"
                             className="h-8 shadow-none"
@@ -1699,11 +1688,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               }));
                             }}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="usage-query-user-id" className="text-muted-foreground">
+                        </FormField>
+                        <FormField>
+                          <FormFieldLabel htmlFor="usage-query-user-id">
                             {t("settings.providerUsageUserId")}
-                          </Label>
+                          </FormFieldLabel>
                           <Input
                             id="usage-query-user-id"
                             className="h-8 shadow-none"
@@ -1716,7 +1705,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               }));
                             }}
                           />
-                        </div>
+                        </FormField>
                       </div>
                     ) : null}
 
@@ -1747,13 +1736,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                         {activeCodingPlanProvider === "zenmux" ? (
                           <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                            <div className="space-y-2">
-                              <Label
-                                htmlFor="usage-query-zenmux-base-url"
-                                className="text-muted-foreground"
-                              >
+                            <FormField>
+                              <FormFieldLabel htmlFor="usage-query-zenmux-base-url">
                                 {t("settings.providerUsageBaseUrl")}
-                              </Label>
+                              </FormFieldLabel>
                               <Input
                                 id="usage-query-zenmux-base-url"
                                 className="h-8 shadow-none"
@@ -1767,14 +1753,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   }));
                                 }}
                               />
-                            </div>
-                            <div className="space-y-2">
-                              <Label
-                                htmlFor="usage-query-zenmux-api-key"
-                                className="text-muted-foreground"
-                              >
+                            </FormField>
+                            <FormField>
+                              <FormFieldLabel htmlFor="usage-query-zenmux-api-key">
                                 {t("settings.providerUsageApiKey")}
-                              </Label>
+                              </FormFieldLabel>
                               <Input
                                 id="usage-query-zenmux-api-key"
                                 className="h-8 shadow-none"
@@ -1791,7 +1774,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   }));
                                 }}
                               />
-                            </div>
+                            </FormField>
                           </div>
                         ) : null}
 
@@ -1815,13 +1798,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               </a>
                             </p>
                             <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                              <div className="space-y-2">
-                                <Label
-                                  htmlFor="usage-query-team-organization-id"
-                                  className="text-muted-foreground"
-                                >
+                              <FormField>
+                                <FormFieldLabel htmlFor="usage-query-team-organization-id">
                                   {t("settings.providerUsageOrganizationId")}
-                                </Label>
+                                </FormFieldLabel>
                                 <Input
                                   id="usage-query-team-organization-id"
                                   className="h-8 shadow-none"
@@ -1835,14 +1815,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                     }));
                                   }}
                                 />
-                              </div>
-                              <div className="space-y-2">
-                                <Label
-                                  htmlFor="usage-query-team-project-id"
-                                  className="text-muted-foreground"
-                                >
+                              </FormField>
+                              <FormField>
+                                <FormFieldLabel htmlFor="usage-query-team-project-id">
                                   {t("settings.providerUsageProjectId")}
-                                </Label>
+                                </FormFieldLabel>
                                 <Input
                                   id="usage-query-team-project-id"
                                   className="h-8 shadow-none"
@@ -1856,7 +1833,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                     }));
                                   }}
                                 />
-                              </div>
+                              </FormField>
                             </div>
                           </>
                         ) : null}
@@ -1881,13 +1858,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               </a>
                             </p>
                             <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                              <div className="space-y-2">
-                                <Label
-                                  htmlFor="usage-query-access-key-id"
-                                  className="text-muted-foreground"
-                                >
+                              <FormField>
+                                <FormFieldLabel htmlFor="usage-query-access-key-id">
                                   {t("settings.providerUsageAccessKeyId")}
-                                </Label>
+                                </FormFieldLabel>
                                 <Input
                                   id="usage-query-access-key-id"
                                   className="h-8 shadow-none"
@@ -1900,14 +1874,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                     }));
                                   }}
                                 />
-                              </div>
-                              <div className="space-y-2">
-                                <Label
-                                  htmlFor="usage-query-secret-access-key"
-                                  className="text-muted-foreground"
-                                >
+                              </FormField>
+                              <FormField>
+                                <FormFieldLabel htmlFor="usage-query-secret-access-key">
                                   {t("settings.providerUsageSecretAccessKey")}
-                                </Label>
+                                </FormFieldLabel>
                                 <Input
                                   id="usage-query-secret-access-key"
                                   className="h-8 shadow-none"
@@ -1923,7 +1894,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                     }));
                                   }}
                                 />
-                              </div>
+                              </FormField>
                             </div>
                           </>
                         ) : null}
@@ -1931,10 +1902,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     ) : null}
 
                     <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-                      <div className="space-y-2">
-                        <Label htmlFor="usage-query-timeout" className="text-muted-foreground">
+                      <FormField>
+                        <FormFieldLabel htmlFor="usage-query-timeout">
                           {t("settings.providerUsageTimeout")}
-                        </Label>
+                        </FormFieldLabel>
                         <Input
                           id="usage-query-timeout"
                           className="h-8 shadow-none"
@@ -1949,16 +1920,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         <p className="text-xs text-muted-foreground">
                           {t("settings.providerUsageTimeoutHint")}
                         </p>
-                      </div>
+                      </FormField>
                     </div>
 
                     {usageQuery.mode === "custom" ||
                     usageQuery.mode === "general" ||
                     usageQuery.mode === "newapi" ? (
-                      <div className="mt-4 space-y-2">
-                        <Label htmlFor="usage-query-script" className="text-muted-foreground">
+                      <FormField className="mt-4">
+                        <FormFieldLabel htmlFor="usage-query-script">
                           {t("settings.providerUsageScript")}
-                        </Label>
+                        </FormFieldLabel>
                         <Textarea
                           id="usage-query-script"
                           value={usageQuery.script}
@@ -1971,7 +1942,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             setUsageQuery((previous) => setUsageQueryScript(previous, value));
                           }}
                         />
-                      </div>
+                      </FormField>
                     ) : null}
 
                     {/* 测试查询:独占一行的 card——按钮居左,结果内容就地靠左展示。 */}

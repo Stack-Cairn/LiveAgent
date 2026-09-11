@@ -8,6 +8,7 @@ import {
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { ChoiceCard } from "@liveagent/ui/components/settings/ChoiceCard";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { StepMarker } from "@liveagent/ui/components/settings/StepMarker";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -31,7 +32,6 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import {
   createEmptyRequestDraft,
@@ -149,10 +149,10 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
 
             <div className="space-y-4">
               <div className="settings-form-grid grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="hook-name" className="text-xs font-medium text-muted-foreground">
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="hook-name" size="compact">
                     {t("settings.hooksName")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
                     id="hook-name"
                     value={name}
@@ -162,14 +162,11 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                       setName(e.currentTarget.value);
                     }}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="hook-description"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="hook-description" size="compact">
                     {t("settings.hooksDescription")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
                     id="hook-description"
                     value={description}
@@ -179,7 +176,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                       setDescription(e.currentTarget.value);
                     }}
                   />
-                </div>
+                </FormField>
               </div>
             </div>
           </div>
@@ -348,13 +345,10 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                   />
                 </div>
                 <div className="settings-form-grid grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="hook-timeout"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="hook-timeout" size="compact">
                       {t("settings.hooksTimeout")}
-                    </Label>
+                    </FormFieldLabel>
                     <Input
                       id="hook-timeout"
                       value={timeoutSeconds}
@@ -367,7 +361,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
                         setTimeoutSeconds(next);
                       }}
                     />
-                  </div>
+                  </FormField>
                 </div>
               </div>
             ) : (

@@ -1,5 +1,6 @@
 import type { AgentPromptTemplate } from "@liveagent/app/lib/settings";
 import { BookOpen, Check, FileText, ScrollText } from "@liveagent/ui/components/IconSet";
+import { FormField } from "@liveagent/ui/components/settings/FormField";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
@@ -99,7 +100,7 @@ export function AgentPromptTemplateModal({
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <FormField>
                 <Label htmlFor="agent-template-name" className="text-xs font-semibold">
                   {t("settings.agentsName")}
                   <span className="ml-1 text-muted-foreground/70">*</span>
@@ -111,7 +112,7 @@ export function AgentPromptTemplateModal({
                   className="h-10 px-3.5"
                   onChange={(e) => setName(e.currentTarget.value)}
                 />
-              </div>
+              </FormField>
 
               <div className="mt-5 flex min-h-0 flex-1 flex-col gap-2">
                 <Label htmlFor="agent-template-description" className="text-xs font-semibold">
