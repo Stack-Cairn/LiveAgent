@@ -3425,8 +3425,11 @@ fn workspace_open_command(target: &Path, mode: &str) -> Command {
 
 #[cfg(target_os = "macos")]
 pub(crate) fn spawn_workspace_open_command(target: &Path, mode: &str) -> Result<(), String> {
-    workspace_open_command(target, mode)
-        .spawn()
+    // 启动器进程不等，但必须收尸：Child 直接丢掉的话，子进程退出后没人
+    // wait()，每次在 Finder/资源管理器里打开或显示文件都会在本进程下留一个
+    // <defunct>（实测报告里长会话的僵尸累积就是这条路径）。
+    let mut command = workspace_open_command(target, mode);
+    crate::runtime::process::spawn_and_reap(&mut command)
         .map(|_| ())
         .map_err(|e| format!("Failed to open path with macOS open: {e}"))
 }
@@ -3452,8 +3455,11 @@ fn workspace_open_command(target: &Path, mode: &str) -> Command {
 
 #[cfg(target_os = "windows")]
 pub(crate) fn spawn_workspace_open_command(target: &Path, mode: &str) -> Result<(), String> {
-    workspace_open_command(target, mode)
-        .spawn()
+    // 启动器进程不等，但必须收尸：Child 直接丢掉的话，子进程退出后没人
+    // wait()，每次在 Finder/资源管理器里打开或显示文件都会在本进程下留一个
+    // <defunct>（实测报告里长会话的僵尸累积就是这条路径）。
+    let mut command = workspace_open_command(target, mode);
+    crate::runtime::process::spawn_and_reap(&mut command)
         .map(|_| ())
         .map_err(|e| format!("Failed to open path with Windows Explorer: {e}"))
 }
@@ -3472,8 +3478,11 @@ fn workspace_open_command(target: &Path, mode: &str) -> Command {
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 pub(crate) fn spawn_workspace_open_command(target: &Path, mode: &str) -> Result<(), String> {
-    workspace_open_command(target, mode)
-        .spawn()
+    // 启动器进程不等，但必须收尸：Child 直接丢掉的话，子进程退出后没人
+    // wait()，每次在 Finder/资源管理器里打开或显示文件都会在本进程下留一个
+    // <defunct>（实测报告里长会话的僵尸累积就是这条路径）。
+    let mut command = workspace_open_command(target, mode);
+    crate::runtime::process::spawn_and_reap(&mut command)
         .map(|_| ())
         .map_err(|e| format!("Failed to open path with xdg-open: {e}"))
 }
