@@ -216,3 +216,18 @@ rem 尺寸优先使用 Tailwind 标准尺度，例如 `h-10`、`w-8`、`max-w-48
 四个分类的色值仅定义在 CSS 中，键帽、提示点和图例使用同一组 tone 类。
 键帽统一声明背景与阴影；状态按 bound、held、down、Enter 的顺序覆盖局部变量。
 当前配色仍引用历史原语，本批结构整理没有同时近似迁移彩色值。
+
+## 复制能力与反馈
+
+`lib/shared/clipboard.ts` 维护浏览器 Clipboard API 与 execCommand 兜底；返回是否成功，
+失败路径也清理临时 textarea。`components/ui/copy-button.tsx` 保留原导出作为兼容入口。
+原来只使用原生 Clipboard API 的分享和后台任务保持原有策略，不自动增加兜底或新提示。
+
+`useCopyFeedback` 只维护成功反馈、复位计时器和卸载清理。布尔值与列表项 ID 都可以作为
+反馈值；失败提示、关闭菜单、Tooltip 展示仍由调用方负责。连续复制会从最新成功操作
+重新计时，旧计时器不会清除新反馈。1200/1500/1600/2000ms 四档原时长集中在
+`COPY_FEEDBACK_DURATION`，不统一改成一个时长。
+
+设置里的 `SettingsCopyButton` 保留 CUA 的紧凑按钮和远程设置的普通按钮样式，CUA 的
+原 title 由调用方继续传入；确认复制成功后才展示勾选反馈。通用 CopyButton 继续保留
+原来的 Tooltip 和屏幕阅读器反馈，不把这种行为自动加到菜单项或设置按钮上。

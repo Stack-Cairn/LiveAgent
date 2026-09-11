@@ -22,6 +22,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
 
@@ -206,7 +207,11 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
 }: SharedHistoryManagerModalProps<Conversation>) {
   const { locale, t } = useLocale();
   const [query, setQuery] = useState("");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const {
+    copied: copiedId,
+    showCopied,
+    resetCopied,
+  } = useCopyFeedback<string | null>(null, COPY_FEEDBACK_DURATION.default);
   const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredConversations = useMemo(
@@ -241,10 +246,9 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
     void navigator.clipboard
       .writeText(url)
       .then(() => {
-        setCopiedId(conversationId);
-        window.setTimeout(() => setCopiedId(null), 1500);
+        showCopied(conversationId);
       })
-      .catch(() => setCopiedId(null));
+      .catch(() => resetCopied());
   }
 
   return (

@@ -35,6 +35,8 @@ import {
   COMPOSER_CONTROL_LABEL_CLASS,
   COMPOSER_CONTROL_TRIGGER_CLASS,
 } from "@liveagent/ui/lib/chat/composerControlStyles";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import { useWorkspaceInvalidation } from "@liveagent/ui/lib/workspace-activity/useWorkspaceInvalidation";
@@ -82,29 +84,9 @@ function worktreeDirectoryNameFromBranch(branch: string) {
     .replace(/\s+/g, "-");
 }
 
-// Legacy fallback for environments where the async clipboard API is missing
-// or rejects (insecure context, denied permission).
-function fallbackCopyToClipboard(text: string): boolean {
-  try {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    const copied = document.execCommand("copy");
-    textarea.remove();
-    return copied;
-  } catch {
-    return false;
-  }
-}
-
 const GIT_BRANCH_SELECTOR_POLL_INTERVAL_MS = 3000;
 const REMOTE_BRANCH_DISPLAY_LIMIT = 40;
 const BRANCH_FILTER_THRESHOLD = 8;
-const COPY_FEEDBACK_MS = 1500;
 
 const HEADER_ICON_BUTTON_CLASS =
   "rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45";
@@ -184,7 +166,11 @@ export function GitBranchSelector(props: {
   const [actionDraft, setActionDraft] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
-  const [copiedName, setCopiedName] = useState(false);
+  const {
+    copied: copiedName,
+    showCopied,
+    resetCopied,
+  } = useCopyFeedback(false, COPY_FEEDBACK_DURATION.default);
   const [initModalOpen, setInitModalOpen] = useState(false);
   const [worktreeModalOpen, setWorktreeModalOpen] = useState(false);
   const [worktreeBranchDraft, setWorktreeBranchDraft] = useState("");
@@ -202,7 +188,6 @@ export function GitBranchSelector(props: {
   // Mirrors actionError so the delete flow can inspect the latest failure
   // message synchronously (state updates lag behind the await).
   const actionErrorRef = useRef("");
-  const copyResetTimerRef = useRef(0);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   const refresh = useCallback(
@@ -298,10 +283,6 @@ export function GitBranchSelector(props: {
     },
     [workspaceCwd],
   );
-
-  useEffect(() => {
-    return () => window.clearTimeout(copyResetTimerRef.current);
-  }, []);
 
   // Push-based refresh: workspace-activity events with the git flag replace
   // both the old window-event broadcast and the constant poll.
@@ -457,19 +438,19 @@ export function GitBranchSelector(props: {
     setActionDraft("");
     setActionError("");
     actionErrorRef.current = "";
-    setCopiedName(false);
-  }, []);
+    resetCopied();
+  }, [resetCopied]);
 
   const openBranchActions = useCallback(
     (branch: GitBranchInfo) => {
       setActionDraft("");
       setActionError("");
       actionErrorRef.current = "";
-      setCopiedName(false);
+      resetCopied();
       setBranchAction({ mode: "menu", branch });
       handleMenuOpenChange(false);
     },
-    [handleMenuOpenChange],
+    [handleMenuOpenChange, resetCopied],
   );
 
   const showCreateFrom = useCallback(() => {
@@ -547,30 +528,17 @@ export function GitBranchSelector(props: {
   const copyBranchName = useCallback(async () => {
     if (!branchAction) return;
     const text = branchAction.branch.fullName;
-    let copied = false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        copied = true;
-      }
-    } catch {
-      copied = false;
-    }
-    if (!copied) {
-      copied = fallbackCopyToClipboard(text);
-    }
+    const copied = await copyTextToClipboard(text);
     if (copied) {
       setActionError("");
       actionErrorRef.current = "";
-      setCopiedName(true);
-      window.clearTimeout(copyResetTimerRef.current);
-      copyResetTimerRef.current = window.setTimeout(() => setCopiedName(false), COPY_FEEDBACK_MS);
+      showCopied(true);
     } else {
       const message = t("git.branchSelector.copyFailed");
       actionErrorRef.current = message;
       setActionError(message);
     }
-  }, [branchAction, t]);
+  }, [branchAction, t, showCopied]);
 
   const confirmForceDeleteBranch = useCallback(
     async (branch: GitBranchInfo) => {

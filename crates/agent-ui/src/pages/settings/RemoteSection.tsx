@@ -3,10 +3,8 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
 import {
-  Check,
   Clock3,
   Cloud,
-  Copy,
   Eye,
   EyeOff,
   GitBranch,
@@ -24,6 +22,7 @@ import {
   Wifi,
   WifiOff,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsCopyButton } from "@liveagent/ui/components/settings/SettingsCopyButton";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -35,30 +34,6 @@ import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const REMOTE_GATEWAY_PORT_MAX = 65_535;
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    if (!value) return;
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors",
-        "hover:bg-muted/60 hover:text-foreground",
-      )}
-    >
-      {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-    </button>
-  );
-}
 
 function PasswordInput({
   id,
@@ -94,7 +69,7 @@ function PasswordInput({
         >
           {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         </button>
-        {value ? <CopyButton value={value} /> : null}
+        {value ? <SettingsCopyButton value={value} /> : null}
       </div>
     </div>
   );
@@ -413,7 +388,7 @@ export function RemoteSection(props: SettingsSectionProps) {
           >
             <Globe className="size-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate font-mono">{gatewayEndpointPreview}</span>
-            <CopyButton value={gatewayEndpointPreview} />
+            <SettingsCopyButton value={gatewayEndpointPreview} />
           </div>
         ) : null}
       </div>
@@ -461,7 +436,7 @@ export function RemoteSection(props: SettingsSectionProps) {
               className="bg-muted/30 pr-12 font-mono text-sm"
             />
             <div className="absolute right-1 top-1/2 -translate-y-1/2">
-              <CopyButton value={settings.remote.agentId} />
+              <SettingsCopyButton value={settings.remote.agentId} />
             </div>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground/70">

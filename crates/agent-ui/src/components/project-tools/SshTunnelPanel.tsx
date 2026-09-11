@@ -45,6 +45,8 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { SshLocalForwardState } from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
 import { reduceSshLocalForwardState } from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
@@ -178,32 +180,6 @@ function isTerminalSessionNotFoundError(error: unknown) {
   return message.includes("terminal session not found") || message.includes("session not found");
 }
 
-function writeTextToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    return navigator.clipboard.writeText(text).then(
-      () => true,
-      () => fallbackWriteTextToClipboard(text),
-    );
-  }
-  return Promise.resolve(fallbackWriteTextToClipboard(text));
-}
-
-function fallbackWriteTextToClipboard(text: string) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.top = "-9999px";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    return document.execCommand("copy");
-  } finally {
-    document.body.removeChild(textarea);
-  }
-}
-
 let workspaceSshTerminalOverlayPreload: Promise<unknown> | null = null;
 
 function preloadWorkspaceSshTerminalOverlay() {
@@ -294,7 +270,10 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
   const [forwardErrorsBySessionId, setForwardErrorsBySessionId] = useState<Record<string, string>>(
     {},
   );
-  const [copiedForwardId, setCopiedForwardId] = useState("");
+  const { copied: copiedForwardId, showCopied } = useCopyFeedback(
+    "",
+    COPY_FEEDBACK_DURATION.default,
+  );
   const latencyRequestsRef = useRef<Set<string>>(new Set());
   const pendingCreateRef = useRef<PendingSshCreate | null>(null);
   const onSshSessionsReconcileRef = useRef(onSshSessionsReconcile);
@@ -505,16 +484,15 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
       });
   }, []);
 
-  const handleCopyForward = useCallback((forwardId: string, address: string) => {
-    void writeTextToClipboard(address).then((copied) => {
-      if (!copied) return;
-      setCopiedForwardId(forwardId);
-      window.setTimeout(
-        () => setCopiedForwardId((current) => (current === forwardId ? "" : current)),
-        1500,
-      );
-    });
-  }, []);
+  const handleCopyForward = useCallback(
+    (forwardId: string, address: string) => {
+      void copyTextToClipboard(address).then((copied) => {
+        if (!copied) return;
+        showCopied(forwardId);
+      });
+    },
+    [showCopied],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: membership key intentionally triggers an immediate latency refresh
   useEffect(() => {

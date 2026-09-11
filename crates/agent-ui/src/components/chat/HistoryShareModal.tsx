@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useId, useMemo, useState } from "react";
 
@@ -149,7 +150,10 @@ export function HistoryShareModal({
   onRedactToolContentChange,
   onClose,
 }: HistoryShareModalProps) {
-  const [copied, setCopied] = useState(false);
+  const { copied, showCopied, resetCopied } = useCopyFeedback(
+    false,
+    COPY_FEEDBACK_DURATION.default,
+  );
   const [redactToolContent, setRedactToolContent] = useState(false);
   const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort);
   const token = share?.enabled === true ? (share.token?.trim() ?? "") : "";
@@ -183,11 +187,10 @@ export function HistoryShareModal({
     void navigator.clipboard
       .writeText(shareUrl)
       .then(() => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
+        showCopied(true);
       })
       .catch(() => {
-        setCopied(false);
+        resetCopied();
       });
   }
 

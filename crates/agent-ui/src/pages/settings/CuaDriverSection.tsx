@@ -10,7 +10,6 @@ import {
   Check,
   CheckCircle2,
   Clock3,
-  Copy,
   Download,
   ExternalLink,
   type IconComponent,
@@ -24,6 +23,7 @@ import {
   Terminal,
   Video,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsCopyButton } from "@liveagent/ui/components/settings/SettingsCopyButton";
 import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { SettingsSurface } from "@liveagent/ui/components/settings/SettingsSurface";
 import type { UiSurface } from "@liveagent/ui/contracts/registry";
@@ -125,32 +125,6 @@ function CardBlock(props: { className?: string; children: ReactNode }) {
     >
       {props.children}
     </div>
-  );
-}
-
-function CopyButton({ value, className }: { value: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    if (!value) return;
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title={value}
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
-        "hover:bg-muted/60 hover:text-foreground",
-        className,
-      )}
-    >
-      {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-    </button>
   );
 }
 
@@ -664,7 +638,9 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              {displayCommand ? <CopyButton value={displayCommand} /> : null}
+              {displayCommand ? (
+                <SettingsCopyButton size="compact" title={displayCommand} value={displayCommand} />
+              ) : null}
               {installed || !canProvision ? null : (
                 <Button
                   size="sm"
@@ -750,7 +726,9 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
                     >
                       {preview.display}
                     </pre>
-                    <CopyButton
+                    <SettingsCopyButton
+                      size="compact"
+                      title={preview.display}
                       value={preview.display}
                       className="absolute top-1 right-1 bg-background/60"
                     />

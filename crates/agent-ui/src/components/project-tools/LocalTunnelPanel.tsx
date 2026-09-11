@@ -18,6 +18,8 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../lib/shared/utils";
 import {
@@ -181,32 +183,6 @@ function formatRemaining(seconds: number) {
 function formatDateTime(seconds: number) {
   if (!seconds) return "";
   return new Date(seconds * 1000).toLocaleString();
-}
-
-function writeTextToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    return navigator.clipboard.writeText(text).then(
-      () => true,
-      () => fallbackWriteTextToClipboard(text),
-    );
-  }
-  return Promise.resolve(fallbackWriteTextToClipboard(text));
-}
-
-function fallbackWriteTextToClipboard(text: string) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.top = "-9999px";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    return document.execCommand("copy");
-  } finally {
-    document.body.removeChild(textarea);
-  }
 }
 
 function displayTunnelName(tunnel: TunnelStatus) {
@@ -694,7 +670,7 @@ export function LocalTunnelPanel({
   const [pendingActions, setPendingActions] = useState<Record<string, TunnelRowAction>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [checkingAll, setCheckingAll] = useState(false);
-  const [copiedId, setCopiedId] = useState("");
+  const { copied: copiedId, showCopied } = useCopyFeedback("", COPY_FEEDBACK_DURATION.tooltip);
   const targetValidationKey = useMemo(() => validateLocalHttpTarget(targetUrl), [targetUrl]);
   const editTargetValidationKey = useMemo(
     () => (editingId ? validateLocalHttpTarget(editTargetUrl) : null),
@@ -742,12 +718,6 @@ export function LocalTunnelPanel({
     cancelEdit();
     setListError(t("projectTools.tunnelEditingClosed"));
   }, [cancelEdit, editingId, snapshot, t, tunnels]);
-
-  useEffect(() => {
-    if (!copiedId) return;
-    const timer = window.setTimeout(() => setCopiedId(""), 1600);
-    return () => window.clearTimeout(timer);
-  }, [copiedId]);
 
   const gatewayUnsupported = snapshot?.gatewayUnsupported === true;
   const mutationsEnabled = enabled && !gatewayUnsupported && Boolean(client);
@@ -905,15 +875,15 @@ export function LocalTunnelPanel({
     (tunnel: TunnelStatus) => {
       const url = publicUrlFor(tunnel);
       if (!url) return;
-      void writeTextToClipboard(url)
+      void copyTextToClipboard(url)
         .then((copied) => {
           if (copied) {
-            setCopiedId(tunnel.id);
+            showCopied(tunnel.id);
           }
         })
         .catch(() => {});
     },
-    [publicUrlFor],
+    [publicUrlFor, showCopied],
   );
 
   const openLink = useCallback(

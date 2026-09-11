@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import {
   memo,
   type MouseEvent as ReactMouseEvent,
@@ -329,7 +330,7 @@ function BackgroundTaskRow(props: {
   const { t } = useLocale();
   const [pendingStop, setPendingStop] = useState(false);
   const [stopping, setStopping] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copied, showCopied } = useCopyFeedback(false, COPY_FEEDBACK_DURATION.default);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -337,12 +338,6 @@ function BackgroundTaskRow(props: {
     const timer = window.setTimeout(() => setPendingStop(false), 3000);
     return () => window.clearTimeout(timer);
   }, [pendingStop]);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 1500);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
 
   const runAction = useCallback(async (action: () => Promise<void>) => {
     setError(null);
@@ -366,9 +361,9 @@ function BackgroundTaskRow(props: {
   const handleCopy = useCallback(() => {
     void runAction(async () => {
       await navigator.clipboard.writeText(processCopyText(process));
-      setCopied(true);
+      showCopied(true);
     });
-  }, [process, runAction]);
+  }, [process, runAction, showCopied]);
 
   const handleClear = useCallback(() => {
     void runAction(() => clearManagedProcesses(process.id));
