@@ -522,3 +522,10 @@ execCommand 兜底的入口统一调用；分享与后台任务保留原生 Clip
 3099 项通过、1 个文件级失败，失败文件为 transcript-width-controls-history-switch；
 日志仅报告 test failed，未给出具体断言原因。该文件随后单独复跑 7 项全部通过，
 因此尚不能将 GUI 全量标记为通过，也未据此认定具体根因。
+
+### 设置操作错误提示复用（2026-09-11）
+
+Cron/Hooks 操作错误提示接入 SettingsNotice 的 action-error 变体。
+Hooks 的 shrink-0 保留在消费者，两个页面的错误条件、图标和截断不变。
+扩展现有设置表面 DOM 测试覆盖默认和 shrink-0 规格；双端生产构建、
+UI 边界、改动源码 Biome 与该 DOM 测试通过。未执行全业务浏览器验收。

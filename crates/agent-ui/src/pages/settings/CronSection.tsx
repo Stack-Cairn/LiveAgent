@@ -12,6 +12,7 @@ import {
   Terminal,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -189,15 +190,10 @@ export function CronSection(props: SettingsSectionProps) {
       ) : null}
 
       {actionError ? (
-        <div
-          className={cn(
-            "flex items-center gap-2",
-            "rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive",
-          )}
-        >
+        <SettingsNotice variant="action-error">
           <AlertTriangle className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{actionError}</span>
-        </div>
+        </SettingsNotice>
       ) : null}
 
       {/* Task List */}

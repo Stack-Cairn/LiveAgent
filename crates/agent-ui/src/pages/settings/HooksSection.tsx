@@ -16,6 +16,7 @@ import {
   Wrench,
   Zap,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   applyHookOps,
@@ -267,15 +268,10 @@ export function HooksSection(_props: SettingsSectionProps) {
       </div>
 
       {actionError ? (
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-2",
-            "rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive",
-          )}
-        >
+        <SettingsNotice variant="action-error" className="shrink-0">
           <AlertTriangle className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{actionError}</span>
-        </div>
+        </SettingsNotice>
       ) : null}
 
       <div

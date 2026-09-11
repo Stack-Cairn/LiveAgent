@@ -9,6 +9,8 @@ test("settings surfaces preserve native nodes, props, refs and existing class se
   const { SettingsNotice } = env.loadModule("@liveagent/ui/components/settings/SettingsNotice.tsx");
   const { ChoiceCard } = env.loadModule("@liveagent/ui/components/settings/ChoiceCard.tsx");
   const cases = [
+    [SettingsNotice, {variant: "action-error"}, "div", "flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive"],
+    [SettingsNotice, {variant: "action-error", className: "shrink-0"}, "div", "flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive shrink-0"],
     [SettingsPanel, {variant: "collapsible"}, "div", "overflow-hidden rounded-xl border border-border/60 bg-muted/20"],
     [SettingsPanel, {variant: "configuration"}, "div", "space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4"],
     [SettingsHint, {}, "p", "rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground"],
@@ -32,7 +34,7 @@ test("settings surfaces preserve native nodes, props, refs and existing class se
       let clicks = 0;
       const ref = React.createRef();
       await act(async () => root.render(React.createElement(Component,
-        {...variantProps, ref, id: "surface", "aria-label": "Example", className: "mt-3", onClick: () => clicks++, ...(tag === "button" ? {type: "button"} : {})},
+        {...variantProps, ref, id: "surface", "aria-label": "Example", className: [variantProps.className, "mt-3"].filter(Boolean).join(" "), onClick: () => clicks++, ...(tag === "button" ? {type: "button"} : {})},
         React.createElement("span", null, "Content"))));
       const node = container.firstElementChild;
       assert.equal(node.localName, tag);
