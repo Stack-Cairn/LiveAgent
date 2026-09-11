@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -113,27 +114,16 @@ function RedactionPicker(props: {
 function ShareSwitch(props: { checked: boolean; disabled: boolean; onToggle: () => void }) {
   const { checked, disabled, onToggle } = props;
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
+    <Switch
+      size="lg"
+      nativeButton
+      render={<button type="button" />}
+      checked={checked}
       aria-label={checked ? "关闭分享" : "开启分享"}
       title={checked ? "关闭分享" : "开启分享"}
       disabled={disabled}
-      onClick={onToggle}
-      className={cn(
-        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed disabled:opacity-60",
-        checked ? "bg-sky-500" : "bg-muted-foreground/20 hover:bg-muted-foreground/30",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform",
-          checked ? "translate-x-5" : "translate-x-0",
-        )}
-      />
-    </button>
+      onCheckedChange={() => onToggle()}
+    />
   );
 }
 

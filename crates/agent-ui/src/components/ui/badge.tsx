@@ -10,6 +10,7 @@ const badgeVariants = cva(
     variants: {
       size: {
         default: "",
+        compact: "rounded-full border-0 px-1.5 text-tiny leading-none",
         "filter-count":
           "h-4 min-w-4 rounded-full px-1 text-tiny font-semibold tabular-nums group-data-[active]:bg-foreground/[0.08] group-data-[active]:text-foreground",
       },

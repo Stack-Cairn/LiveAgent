@@ -17,6 +17,7 @@ import {
   Plus,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
+import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -228,14 +229,9 @@ export function AgentsSection(props: SettingsSectionProps) {
                             {template.name}
                           </span>
                           {template.enabled ? (
-                            <span
-                              className={cn(
-                                "shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5",
-                                "text-tiny font-medium leading-none text-emerald-600 dark:text-emerald-400",
-                              )}
-                            >
+                            <Badge size="compact" variant="success">
                               {t("settings.agentsGlobalDefault")}
-                            </span>
+                            </Badge>
                           ) : null}
                         </div>
                         {template.description ? (

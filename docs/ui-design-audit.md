@@ -529,3 +529,55 @@ Cron/Hooks 操作错误提示接入 SettingsNotice 的 action-error 变体。
 Hooks 的 shrink-0 保留在消费者，两个页面的错误条件、图标和截断不变。
 扩展现有设置表面 DOM 测试覆盖默认和 shrink-0 规格；双端生产构建、
 UI 边界、改动源码 Biome 与该 DOM 测试通过。未执行全业务浏览器验收。
+
+### 紧凑状态徽标（2026-09-11）
+
+Badge 新增 compact 规格并迁移 Cron 调度错误、Agents 全局启用标记；
+只统一组件表现，保留状态判断、错误 title 和图标。Agents 采用主题 success，
+普通及 filter-count 规格不变。亮暗局部浏览器对照确认 flex 上下文中的宽高
+一致；DOM 展示原语测试通过。详见 ui-component-drift-audit.md。
+
+### 设置页空状态复用（2026-09-11）
+
+Cron 无任务与 SSH 导入无候选接入 EmptyState settings/compact，保留
+Cron 的 block 段落排版、SSH 的 flex gap 和原显示条件。既有默认规格不变。
+8 个亮暗宽窄局部浏览器场景前后对照一致；双端构建、4 项展示原语 DOM 测试、
+UI 边界及改动源码 Biome 通过。未执行完整任务/导入业务流程验收。
+
+
+### 分享开关接入标准 Switch（S1，2026-09-11）
+
+HistoryShareModal 与 SharedHistoryManagerModal 的 ShareSwitch 接入共享 Switch lg。
+保留原生 button、原尺寸和焦点环、禁用态、外部受控状态及管理列表只关闭的行为。
+现有 default/sm 与 success tone 保留。两端构建、边界、源码 Biome、6项定向测试通过；
+桌面 CSS 浏览器夹具16组几何/样式对照通过，Enter/Space 各单次回调。
+未验收完整分享服务端流程与 Gateway 视觉，未运行全量测试；未提交。
+详细证据与下一批范围见 ui-shadcn-migration-plan.md 第8节及 S2/S3。
+
+
+### 设置开关接入标准原语（S2，2026-09-11）
+
+SkillsSettingsForm 与 DialogSwitch 使用共享 SwitchRoot/SwitchThumb，保留原样式与
+原生按钮；DialogSwitch 五处消费者保持不变，Skills 保留锁定与选中列表。
+双端构建、边界、源码 Biome、3项定向测试通过。两端 CSS 的48组浏览器夹具比较及
+两类控件的 Enter/Space 单次回调检查完成；一处浮点级坐标差稳定后复核一致。
+未验证完整业务持久化和原生 WebView，未跑全量测试，未提交。
+详见 ui-shadcn-migration-plan.md 第9节。
+
+
+### 资源开关接入标准原语（S3，2026-09-11）
+
+ResourceActivationSwitch接入SwitchRoot/SwitchThumb，保留两档原样式和卡片隔离策略。
+DOM测试发现并修复隐藏input的额外click冒泡；display:contents边界仅拦截内部事件。
+三处直接消费者未改。26项定向测试、GUI全量3112项、Gateway全量718项、双端构建、
+边界和源码Biome通过。两端64组夹具对照通过（几何容差0.0001px），真实键盘隔离检查通过。
+未执行实际技能/MCP持久化或系统WebView验收，未提交。详见迁移计划第10节。
+
+
+### 会话顶部 Tabs 保守迁移（T1，2026-09-11）
+
+ConversationViewTabs接入标准Tabs，通过render维持原单层列表；新增plain规格保留原皮肤，
+不搬移内容、宿主或视图状态。方向键只移焦点、Enter/Space激活，重复选中不回调。
+两端构建、边界、源码Biome及GUI3113/Web718全量测试通过；两端16组样式夹具一致，
+真实键盘手动激活与Tab离组通过。图标夹具使用同尺寸占位，未验证完整原生工作区流程。
+未提交，DetailsPanel留待T2单独验证。详见迁移计划第11节。

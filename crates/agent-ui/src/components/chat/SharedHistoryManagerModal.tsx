@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
@@ -78,26 +79,16 @@ function ShareSwitch(props: { disabled: boolean; onDisable: () => void }) {
   const { disabled, onDisable } = props;
   const { t } = useLocale();
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked="true"
+    <Switch
+      size="lg"
+      nativeButton
+      render={<button type="button" />}
+      checked
       aria-label={t("sharedHistory.disableShare")}
       title={t("sharedHistory.disableShare")}
       disabled={disabled}
-      onClick={onDisable}
-      className={cn(
-        "relative h-6 w-11 shrink-0 rounded-full bg-sky-500 transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed disabled:opacity-60",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute left-0.5 top-0.5 size-5 translate-x-5",
-          "rounded-full bg-white shadow-sm transition-transform",
-        )}
-      />
-    </button>
+      onCheckedChange={() => onDisable()}
+    />
   );
 }
 

@@ -231,3 +231,17 @@ rem 尺寸优先使用 Tailwind 标准尺度，例如 `h-10`、`w-8`、`max-w-48
 设置里的 `SettingsCopyButton` 保留 CUA 的紧凑按钮和远程设置的普通按钮样式，CUA 的
 原 title 由调用方继续传入；确认复制成功后才展示勾选反馈。通用 CopyButton 继续保留
 原来的 Tooltip 和屏幕阅读器反馈，不把这种行为自动加到菜单项或设置按钮上。
+
+## 紧凑状态徽标
+
+使用 `<Badge size="compact" variant="success">` 表达紧凑成功状态，
+错误和中性状态分别使用 destructive、muted；这是无边框、圆角胶囊、10px 字号与单倍行高的规格。图标和文案由
+消费者传入，保留 title 等原生属性。普通 Badge 和 filter-count 用途保持不变；
+任务类型等分类标签不要仅因颜色相近就当作成功状态。
+
+## 设置页紧凑空状态
+
+`<EmptyState variant="settings" size="compact">` 用于保留 py-12/gap-3 的
+紧凑设置卡片；默认 settings 的 py-14/gap-4 不变。size 只调整 settings
+变体，不影响 workspace。内容与状态条件由消费者负责；已有块布局可用
+className="block" 保留段落 margin，避免与 flex gap 同时计入间距。

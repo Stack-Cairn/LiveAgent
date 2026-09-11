@@ -8,6 +8,7 @@ import {
   Info,
   OpenaiChatgptIcon,
 } from "@liveagent/ui/components/IconSet";
+import { SwitchRoot, SwitchThumb } from "@liveagent/ui/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -233,16 +234,16 @@ export function DialogSwitch(props: {
 }) {
   const { checked, onCheckedChange, ariaLabel } = props;
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
+    <SwitchRoot
+      nativeButton
+      render={<button type="button" />}
+      checked={checked}
       aria-label={ariaLabel}
       className={cn(
         "relative inline-flex size-8 shrink-0 items-center justify-center rounded-lg outline-none",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       )}
-      onClick={() => onCheckedChange(!checked)}
+      onCheckedChange={onCheckedChange}
     >
       <span
         className={cn(
@@ -253,14 +254,14 @@ export function DialogSwitch(props: {
         {/* The thumb is placed with left-0.5 and then translated, so the travel
             is trackWidth - thumbWidth - both insets (28 - 12 - 2 - 2), not the
             single-inset figure the transform-only Switch primitive uses. */}
-        <span
+        <SwitchThumb
           className={cn(
             "absolute left-0.5 top-0.5 size-3 rounded-full bg-background shadow-sm transition-transform",
             checked && "translate-x-3",
           )}
         />
       </span>
-    </button>
+    </SwitchRoot>
   );
 }
 

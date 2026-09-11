@@ -14,6 +14,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
+import { SwitchRoot, SwitchThumb } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -119,28 +120,26 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
             </div>
           ) : null}
 
-          <button
-            type="button"
-            role="switch"
-            aria-checked={settings.skills.enabled ? "true" : "false"}
+          <SwitchRoot
+            nativeButton
+            render={<button type="button" />}
+            checked={settings.skills.enabled}
             aria-label={t("settings.skillsEnable")}
             disabled={skillsLockedByChatMode}
-            onClick={() =>
-              setSettings((prev) => updateSkills(prev, { enabled: !prev.skills.enabled }))
-            }
+            onCheckedChange={(enabled) => setSettings((prev) => updateSkills(prev, { enabled }))}
             className={cn(
               "relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors",
               "disabled:cursor-not-allowed disabled:opacity-50",
               settings.skills.enabled ? "bg-primary" : "bg-muted-foreground/30",
             )}
           >
-            <span
+            <SwitchThumb
               className={cn(
                 "pointer-events-none inline-block size-4 rounded-full bg-white shadow-xs transition-transform",
                 settings.skills.enabled ? "translate-x-5" : "translate-x-1",
               )}
             />
-          </button>
+          </SwitchRoot>
 
           <Button
             variant="outline"

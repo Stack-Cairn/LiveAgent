@@ -18,6 +18,7 @@ const tabsListVariants = cva(
     variants: {
       variant: {
         default: "",
+        plain: "",
         filter:
           "flex h-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
       },
@@ -33,7 +34,7 @@ export const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     data-slot="tabs-list"
-    className={cn(tabsListVariants({ variant }), className)}
+    className={cn(variant !== "plain" && tabsListVariants({ variant }), className)}
     {...props}
   />
 ));
@@ -41,15 +42,17 @@ TabsList.displayName = "TabsList";
 
 export const TabsTrigger = React.forwardRef<
   HTMLElement,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Tab>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Tab> & { variant?: "default" | "plain" }
+>(({ className, variant = "default", ...props }, ref) => (
   <TabsPrimitive.Tab
     ref={ref}
     data-slot="tabs-trigger"
     className={cn(
-      "inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-md px-3 py-1",
-      "text-sm font-medium transition-colors",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
+      variant !== "plain" && [
+        "inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-md px-3 py-1",
+        "text-sm font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
+      ],
       className,
     )}
     {...props}

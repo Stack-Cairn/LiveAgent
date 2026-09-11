@@ -13,7 +13,9 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
+import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   applyCronOps,
@@ -198,13 +200,13 @@ export function CronSection(props: SettingsSectionProps) {
 
       {/* Task List */}
       {tasks.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center">
+        <EmptyState variant="settings" size="compact" className="block">
           <Clock3 className="mx-auto size-8 text-muted-foreground/30" />
           <p className="mt-3 text-sm font-medium text-muted-foreground">
             {t("settings.cronEmpty")}
           </p>
           <p className="mt-1 text-xs text-muted-foreground/70">{t("settings.cronEmptyDesc")}</p>
-        </div>
+        </EmptyState>
       ) : (
         <div className="space-y-2">
           {tasks.map((task) => {
@@ -255,16 +257,10 @@ export function CronSection(props: SettingsSectionProps) {
                         {t(tone.label)}
                       </span>
                       {task.lastError ? (
-                        <span
-                          title={task.lastError}
-                          className={cn(
-                            "flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5",
-                            "text-tiny font-medium leading-none text-destructive",
-                          )}
-                        >
+                        <Badge size="compact" variant="destructive" title={task.lastError}>
                           <AlertTriangle className="size-2.5" />
                           {t("settings.cronScheduleError")}
-                        </span>
+                        </Badge>
                       ) : null}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">

@@ -818,12 +818,7 @@ function SshImportModal(props: {
               </div>
 
               {candidates.length === 0 ? (
-                <div
-                  className={cn(
-                    "flex flex-col items-center gap-3",
-                    "rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center",
-                  )}
-                >
+                <EmptyState variant="settings" size="compact">
                   <Key className="size-8 text-muted-foreground/50" />
                   <div>
                     <div className="text-sm font-medium">{t("settings.sshImportEmpty")}</div>
@@ -831,7 +826,7 @@ function SshImportModal(props: {
                       {t("settings.sshImportEmptyHint")}
                     </div>
                   </div>
-                </div>
+                </EmptyState>
               ) : (
                 <div className="space-y-2">
                   {candidates.map((candidate) => (
