@@ -269,7 +269,7 @@ export function SkillsImportView(props: {
               <Button
                 variant="outline"
                 size="sm"
-                className="min-w-6p75rem justify-center gap-1.5"
+                className="min-w-27 justify-center gap-1.5"
                 disabled={loading || importing || initializing}
                 aria-busy={loading}
                 onClick={() => void handleRescan()}

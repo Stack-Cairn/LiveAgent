@@ -38,7 +38,7 @@ export function SkillsContentLoadingState(props: { title: string; description: s
               <Skeleton className="size-9 shrink-0 rounded-lg" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-3.5 w-28 rounded" />
-                <Skeleton className="h-3 w-full max-w-12rem rounded" />
+                <Skeleton className="h-3 w-full max-w-48 rounded" />
               </div>
             </div>
           </LoadingSurface>

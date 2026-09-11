@@ -399,7 +399,7 @@ export function useNativeInputContextMenu(): {
             ref={menuRef}
             role="menu"
             className={cn(
-              "origin-top-left layer-popover fixed w-max min-w-9p5rem max-w-viewport-inset-1p5rem select-none overflow-hidden",
+              "origin-top-left layer-popover fixed w-max min-w-38 max-w-viewport-inset-1p5rem select-none overflow-hidden",
               "rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
             )}
             style={snapshot ? { left: snapshot.x, top: snapshot.y } : undefined}

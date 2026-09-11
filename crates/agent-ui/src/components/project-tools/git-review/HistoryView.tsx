@@ -240,7 +240,7 @@ function CommitRefTags({
           title={ref.title}
           className={cn(
             commitRefChipClass(ref.kind, selected),
-            variant === "detail" ? "max-w-12rem shrink-0" : "max-w-8p5rem shrink",
+            variant === "detail" ? "max-w-48 shrink-0" : "max-w-34 shrink",
           )}
         >
           <CommitRefTagIcon kind={ref.kind} variant={variant} />

@@ -155,3 +155,15 @@ Web Animations 的 `easing` 和 xterm 的颜色解析器不接受 CSS 变量表�
 
 Markdown 行内代码和公式的局部比例直接写在消费处：`text-[0.9em]`、
 `text-[0.92em]`、`text-[1.04em]`，不注册全局字号变量。
+
+## rem 尺寸与字重去重（2026-09-11）
+
+rem 尺寸优先使用 Tailwind 标准尺度，例如 `h-10`、`w-8`、`max-w-48`、
+`px-2`。当前 `--spacing: 0.25rem`，替换保持原数值。局部特殊尺寸直接使用
+`min-w-[1.1rem]`、`translate-x-[0.15rem]`，不额外注册数值命名的 token。
+
+复杂布局、safe-area 和弹层尺寸的语义表达式继续集中管理；其中固定 rem 常量
+直接写在表达式中，不再经 `--spacing-1rem` 等变量间接引用。px 尺寸保留现状。
+
+字重使用 Tailwind 默认名称和变量（例如 `font-semibold`、`--font-weight-semibold`）。
+局部 450 字重使用 `font-[450]`；不再维护 `--font-weight-400/450/500/600/700`。

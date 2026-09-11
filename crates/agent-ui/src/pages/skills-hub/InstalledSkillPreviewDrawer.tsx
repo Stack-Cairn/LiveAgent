@@ -387,7 +387,7 @@ function InstalledSkillPreviewPopup(props: {
                   ) : (
                     <pre
                       className={cn(
-                        "max-h-24rem overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3",
+                        "max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3",
                         "font-mono text-xs leading-5 text-foreground",
                       )}
                     >

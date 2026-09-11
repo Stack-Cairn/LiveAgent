@@ -46,7 +46,7 @@ test("sandbox control is icon-only and sits before the model picker", () => {
   );
   assert.match(
     safetySelectorSource,
-    /web:max-480:w-2rem[^"\n]*web:max-480:px-0/,
+    /web:max-480:w-8[^"\n]*web:max-480:px-0/,
   );
 });
 

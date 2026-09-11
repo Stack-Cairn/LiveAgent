@@ -151,7 +151,7 @@ export function HostedSearchGroupView({
         aria-label={expanded ? t("chat.search.collapseActivity") : t("chat.search.expandActivity")}
         className={cn(
           "-mx-1.5 flex h-auto max-w-bleed-0p75rem items-center gap-1.5 rounded-lg",
-          "px-1.5 py-1 text-sm font-450 text-foreground/60 transition-colors",
+          "px-1.5 py-1 text-sm font-[450] text-foreground/60 transition-colors",
           "hover:bg-foreground/[0.04] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
         onClick={() => setExpanded((current) => !current)}

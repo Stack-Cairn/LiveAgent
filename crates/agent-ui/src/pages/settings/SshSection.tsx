@@ -236,13 +236,13 @@ function SshHostModal(props: {
   const isPrivateKeyAuth = authType === "privateKey";
   const isKeyboardInteractiveAuth = authType === "keyboardInteractive";
   const passwordAuthPanelStyle: CSSProperties = {
-    maxHeight: isPasswordAuth ? "var(--spacing-7rem)" : "0",
+    maxHeight: isPasswordAuth ? "7rem" : "0",
     opacity: isPasswordAuth ? 1 : 0,
     pointerEvents: isPasswordAuth ? "auto" : "none",
     transform: isPasswordAuth ? "translateY(0)" : "translateY(var(--spacing-minus-4px))",
   };
   const privateKeyAuthPanelStyle: CSSProperties = {
-    maxHeight: isPrivateKeyAuth ? "var(--spacing-29rem)" : "0",
+    maxHeight: isPrivateKeyAuth ? "29rem" : "0",
     opacity: isPrivateKeyAuth ? 1 : 0,
     pointerEvents: isPrivateKeyAuth ? "auto" : "none",
     transform: isPrivateKeyAuth ? "translateY(0)" : "translateY(var(--spacing-4px))",

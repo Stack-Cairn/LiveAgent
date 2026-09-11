@@ -49,7 +49,7 @@ export function McpImportSourcePicker(props: {
               )}
             >
               <ExternalToolSourceIcon tool={scan.tool} className="size-3.5" />
-              <span className="max-w-10rem truncate">{toolLabel}</span>
+              <span className="max-w-40 truncate">{toolLabel}</span>
               <Badge variant="muted" size="filter-count">
                 {scan.exists ? scan.servers.length : "—"}
               </Badge>

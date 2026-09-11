@@ -329,8 +329,8 @@ export function SkillsStoreView(props: {
                       <div className="flex items-center gap-3">
                         <Skeleton className="size-9 shrink-0 rounded-lg" />
                         <div className="flex-1 space-y-2">
-                          <Skeleton className="h-3.5 w-full max-w-8rem rounded" />
-                          <Skeleton className="h-3 w-full max-w-11rem rounded" />
+                          <Skeleton className="h-3.5 w-full max-w-32 rounded" />
+                          <Skeleton className="h-3 w-full max-w-44 rounded" />
                         </div>
                       </div>
                       <Skeleton className="h-8 w-full rounded-xl" />
@@ -668,7 +668,7 @@ function SkillsStorePreviewPopup(props: {
       side="right"
       variant="inset"
       closeLabel={t("settings.cronViewClose")}
-      className="w-full sm:max-w-34rem"
+      className="w-full sm:max-w-136"
     >
       <SheetHeader className="flex-row items-start gap-3 border-b border-border px-5 py-4 pr-14">
         <div

@@ -104,7 +104,7 @@ export function CommandSafetyModeSelector(props: {
             className={cn(
               COMPOSER_CONTROL_TRIGGER_CLASS,
               "w-8 justify-center gap-0 px-0",
-              "data-popup-open:bg-muted/60 web:max-480:flex-none web:max-480:w-2rem web:max-480:min-w-2rem web:max-480:justify-center web:max-480:gap-0 web:max-480:px-0",
+              "data-popup-open:bg-muted/60 web:max-480:flex-none web:max-480:w-8 web:max-480:min-w-8 web:max-480:justify-center web:max-480:gap-0 web:max-480:px-0",
             )}
           />
         }

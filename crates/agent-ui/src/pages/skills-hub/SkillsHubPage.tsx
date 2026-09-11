@@ -1472,7 +1472,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 min-w-6p5rem justify-center gap-1.5 px-3"
+                className="h-8 min-w-26 justify-center gap-1.5 px-3"
                 onClick={() => void refresh({ announce: true })}
                 disabled={loading || scanButtonComplete || lockedByChatMode}
                 aria-busy={loading}
@@ -1599,7 +1599,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                             : t("settings.skillsBulkImportHint")
                         }
                         className={cn(
-                          "h-8 w-6p25rem shrink-0 justify-center gap-1.5 whitespace-nowrap px-2.5 text-xs",
+                          "h-8 w-25 shrink-0 justify-center gap-1.5 whitespace-nowrap px-2.5 text-xs",
                           bulkMode ? "text-foreground" : "text-muted-foreground",
                         )}
                       >
@@ -1623,8 +1623,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           aria-label={t("settings.skillsInstalledSortLabel")}
                           title={t("settings.skillsInstalledSortLabel")}
                           className={cn(
-                            "h-8 w-auto max-w-11rem shrink-0 gap-2 border-0 bg-transparent px-2.5",
-                            "text-xs font-medium text-foreground shadow-none hover:bg-muted max-sm:max-w-8rem",
+                            "h-8 w-auto max-w-44 shrink-0 gap-2 border-0 bg-transparent px-2.5",
+                            "text-xs font-medium text-foreground shadow-none hover:bg-muted max-sm:max-w-32",
                           )}
                         >
                           <SelectValue>

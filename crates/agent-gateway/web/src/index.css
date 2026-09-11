@@ -102,7 +102,7 @@ html[data-liveagent-webui="gateway"].dark {
 }
 
 .workspace-ssh-terminal-overlay .project-terminal-viewport {
-  --project-terminal-padding-x: var(--spacing-1rem);
+  --project-terminal-padding-x: 1rem;
 }
 
 @media (max-width: 820px) {

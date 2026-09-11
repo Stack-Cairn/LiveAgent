@@ -66,7 +66,7 @@ test("named size, color and shadow utilities keep caller override behavior", () 
   );
   assert.equal(cn("ring-2", "ring-3px"), "ring-3px");
   assert.equal(cn("grid-cols-form-label", "grid-cols-2"), "grid-cols-2");
-  assert.equal(cn("font-450", "font-medium"), "font-medium");
+  assert.equal(cn("font-[450]", "font-medium"), "font-medium");
   assert.equal(cn("duration-220ms", "duration-200"), "duration-200");
   assert.equal(cn("animate-hub-loading-progress", "animate-spin"), "animate-spin");
   assert.equal(cn("animate-chat-bubble-enter", "animate-none"), "animate-none");

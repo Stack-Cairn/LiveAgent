@@ -401,7 +401,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
         className={cn(
           "flex h-10 shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden",
           "border-b border-border bg-background px-2 pt-1",
-          "web:overscroll-x-contain web:[scrollbar-width:none]! web:[-ms-overflow-style:none] web:[-webkit-overflow-scrolling:touch] web:scroll-px-0p5rem web:[&::-webkit-scrollbar]:hidden web:[&::-webkit-scrollbar]:size-0 web:max-820:h-44px",
+          "web:overscroll-x-contain web:[scrollbar-width:none]! web:[-ms-overflow-style:none] web:[-webkit-overflow-scrolling:touch] web:scroll-px-2 web:[&::-webkit-scrollbar]:hidden web:[&::-webkit-scrollbar]:size-0 web:max-820:h-44px",
           "web:max-820:px-8px web:max-820:scroll-px-8px",
         )}
       >
@@ -416,9 +416,9 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
               }
             }}
             className={cn(
-              "group flex h-8 max-w-14rem shrink-0 items-center gap-1.5",
+              "group flex h-8 max-w-56 shrink-0 items-center gap-1.5",
               "rounded-t-md border border-b-0 px-2 text-xs transition-colors",
-              "web:max-w-workspace-ssh-terminal-tab-max-w web:max-820:max-w-workspace-ssh-terminal-tab-max-w-2 web:max-820:[&_>_button:last-child]:size-1p75rem",
+              "web:max-w-workspace-ssh-terminal-tab-max-w web:max-820:max-w-workspace-ssh-terminal-tab-max-w-2 web:max-820:[&_>_button:last-child]:size-7",
               tab.id === effectiveActiveTabId
                 ? "border-border bg-muted text-foreground"
                 : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",

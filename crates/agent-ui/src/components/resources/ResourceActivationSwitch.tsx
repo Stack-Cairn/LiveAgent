@@ -44,10 +44,10 @@ export function ResourceActivationSwitch(props: {
           compact ? "size-3.5" : "size-18px",
           props.checked
             ? compact
-              ? "translate-x-1p05rem"
+              ? "translate-x-[1.05rem]"
               : "translate-x-23px"
             : compact
-              ? "translate-x-0p15rem"
+              ? "translate-x-[0.15rem]"
               : "translate-x-3px",
         )}
       />

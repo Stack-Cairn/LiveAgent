@@ -240,8 +240,8 @@
 
 /* Shared component defaults that are consumed by Tailwind utilities. */
 .project-terminal-viewport {
-  --project-terminal-padding-x: var(--spacing-0p75rem);
-  --project-terminal-padding-y: var(--spacing-0p625rem);
+  --project-terminal-padding-x: 0.75rem;
+  --project-terminal-padding-y: 0.625rem;
   --project-terminal-scrollbar-size: var(--spacing-8px);
   --project-terminal-background: hsl(var(--background));
 }

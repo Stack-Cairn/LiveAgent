@@ -933,7 +933,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 }}
                 className={cn(
                   SIDEBAR_CONTEXT_MENU_CLASS,
-                  "min-w-10rem rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
+                  "min-w-40 rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
                 )}
               >
                 {!item.isPending ? (
@@ -999,7 +999,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuSubContent
                     className={cn(
                       SIDEBAR_CONTEXT_MENU_CLASS,
-                      "max-h-18rem min-w-12rem overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
+                      "max-h-72 min-w-48 overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
                     )}
                   >
                     {moveWorkspaces.map((workspace) => (

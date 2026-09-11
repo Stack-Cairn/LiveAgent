@@ -878,7 +878,7 @@ function GitFileMentionChip({ file }: { file: GitFileDisplayReference }) {
     >
       <Icon className="size-3 shrink-0 self-center" />
       <span>{fileName}</span>
-      <span className="max-w-8rem truncate text-tiny opacity-70">@{refLabel}</span>
+      <span className="max-w-32 truncate text-tiny opacity-70">@{refLabel}</span>
     </span>
   );
 }

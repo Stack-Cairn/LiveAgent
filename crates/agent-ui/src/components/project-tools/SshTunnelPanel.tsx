@@ -1358,7 +1358,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                   <Key className="size-5" />
                 </div>
                 <div className="text-xs font-medium text-foreground/80">{emptyTitle}</div>
-                <div className="max-w-16rem text-xs leading-relaxed text-muted-foreground">
+                <div className="max-w-64 text-xs leading-relaxed text-muted-foreground">
                   {emptyHint}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center justify-center gap-2">

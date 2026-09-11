@@ -957,7 +957,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
             <div
               key={tab.key}
               className={cn(
-                "group flex h-8 max-w-14rem shrink-0 items-center gap-1.5",
+                "group flex h-8 max-w-56 shrink-0 items-center gap-1.5",
                 "rounded-t-md border border-b-0 px-2 text-xs transition-colors",
                 tab.key === activeKey
                   ? "border-border bg-muted text-foreground"

@@ -325,7 +325,7 @@ export function McpImportView(props: {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="min-w-6p75rem justify-center gap-1.5 rounded-full"
+                  className="min-w-27 justify-center gap-1.5 rounded-full"
                   disabled={loading}
                   aria-busy={loading}
                   onClick={() => void handleRescan()}
@@ -484,7 +484,7 @@ export function McpImportView(props: {
                               {server.origin !== "user" ? (
                                 <span
                                   className={cn(
-                                    "inline-flex max-w-10rem shrink-0 items-center",
+                                    "inline-flex max-w-40 shrink-0 items-center",
                                     "truncate rounded-full bg-muted/70 px-1.5 py-0.5 text-tiny text-muted-foreground",
                                   )}
                                   title={server.origin}

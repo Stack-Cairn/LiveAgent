@@ -923,7 +923,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
               <div
                 className={cn(
                   "flex h-11 shrink-0 items-center gap-2 border-b border-border px-3",
-                  "desktop:h-3p25rem web:max-820:h-auto web:max-820:min-h-44px web:max-820:gap-6px web:max-820:px-8px web:max-820:pt-6px web:max-820:pb-8px",
+                  "desktop:h-13 web:max-820:h-auto web:max-820:min-h-44px web:max-820:gap-6px web:max-820:px-8px web:max-820:pt-6px web:max-820:pb-8px",
                 )}
               >
                 <div
@@ -937,7 +937,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                     ref={tabsScrollRef}
                     className={cn(
                       "project-tools-panel-tabs flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden",
-                      "overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0 desktop:h-2p5rem! desktop:py-0p25rem!",
+                      "overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0 desktop:h-10! desktop:py-1!",
                     )}
                   >
                     <RightDockTabStrip

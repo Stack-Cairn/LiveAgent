@@ -186,9 +186,9 @@ function HistoryLoadingState(props: { title?: string }) {
           >
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
-          <div className="max-w-28rem text-sm font-medium text-foreground/90">正在加载会话历史</div>
+          <div className="max-w-112 text-sm font-medium text-foreground/90">正在加载会话历史</div>
           {title ? (
-            <div className="mt-1 max-w-28rem truncate text-xs text-muted-foreground">{title}</div>
+            <div className="mt-1 max-w-112 truncate text-xs text-muted-foreground">{title}</div>
           ) : null}
         </div>
       </div>

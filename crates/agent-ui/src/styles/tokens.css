@@ -182,109 +182,48 @@
   --color-status-integrity-start: rgba(41, 255, 214, 0.96);
   --color-status-integrity-end: rgba(20, 184, 255, 0.96);
   --color-status-integrity-track: rgba(30, 39, 68, 0.88);
-  --font-weight-400: 400;
-  --font-weight-450: 450;
-  --font-weight-500: 500;
-  --font-weight-600: 600;
-  --font-weight-700: 700;
-  --spacing-0p5rem: 0.5rem;
   --spacing-0p8px: 0.8px;
-  --spacing-0p15rem: 0.15rem;
-  --spacing-0p25rem: 0.25rem;
-  --spacing-0p28rem: 0.28rem;
-  --spacing-0p75rem: 0.75rem;
-  --spacing-0p375rem: 0.375rem;
-  --spacing-0p625rem: 0.625rem;
-  --spacing-0p875rem: 0.875rem;
   --spacing-1ch: 1ch;
   --spacing-1em: 1em;
-  --spacing-1p1rem: 1.1rem;
   --spacing-1p5px: 1.5px;
-  --spacing-1p5rem: 1.5rem;
-  --spacing-1p05rem: 1.05rem;
   --spacing-1p6px: 1.6px;
-  --spacing-1p15rem: 1.15rem;
-  --spacing-1p25rem: 1.25rem;
-  --spacing-1p75rem: 1.75rem;
-  --spacing-1p125rem: 1.125rem;
   --spacing-1px: 1px;
-  --spacing-1rem: 1rem;
   --spacing-2em: 2em;
   --spacing-2p5px: 2.5px;
-  --spacing-2p5rem: 2.5rem;
-  --spacing-2p75rem: 2.75rem;
   --spacing-2px: 2px;
-  --spacing-2rem: 2rem;
   --spacing-3ch: 3ch;
-  --spacing-3p5rem: 3.5rem;
-  --spacing-3p25rem: 3.25rem;
   --spacing-3px: 3px;
-  --spacing-3rem: 3rem;
-  --spacing-4p5rem: 4.5rem;
-  --spacing-4p25rem: 4.25rem;
   --spacing-4px: 4px;
-  --spacing-5p5rem: 5.5rem;
-  --spacing-5p8rem: 5.8rem;
-  --spacing-5p25rem: 5.25rem;
-  --spacing-5p75rem: 5.75rem;
   --spacing-5px: 5px;
-  --spacing-5rem: 5rem;
-  --spacing-6p5rem: 6.5rem;
-  --spacing-6p25rem: 6.25rem;
-  --spacing-6p75rem: 6.75rem;
   --spacing-6px: 6px;
   --spacing-7p5px: 7.5px;
   --spacing-7px: 7px;
-  --spacing-7rem: 7rem;
-  --spacing-8p5rem: 8.5rem;
-  --spacing-8p75rem: 8.75rem;
   --spacing-8px: 8px;
-  --spacing-8rem: 8rem;
-  --spacing-9p5rem: 9.5rem;
   --spacing-9px: 9px;
-  --spacing-9rem: 9rem;
-  --spacing-10p5rem: 10.5rem;
   --spacing-10px: 10px;
-  --spacing-10rem: 10rem;
   --spacing-11px: 11px;
-  --spacing-11rem: 11rem;
-  --spacing-12p25rem: 12.25rem;
   --spacing-12px: 12px;
-  --spacing-12rem: 12rem;
-  --spacing-13p5rem: 13.5rem;
   --spacing-13px: 13px;
   --spacing-14px: 14px;
-  --spacing-14rem: 14rem;
   --spacing-15px: 15px;
   --spacing-16px: 16px;
-  --spacing-16rem: 16rem;
   --spacing-17px: 17px;
   --spacing-18px: 18px;
-  --spacing-18rem: 18rem;
   --spacing-20px: 20px;
   --spacing-22px: 22px;
-  --spacing-22rem: 22rem;
   --spacing-23px: 23px;
   --spacing-24px: 24px;
-  --spacing-24rem: 24rem;
-  --spacing-25rem: 25rem;
   --spacing-26px: 26px;
-  --spacing-26rem: 26rem;
   --spacing-27px: 27px;
   --spacing-28px: 28px;
-  --spacing-28rem: 28rem;
   --spacing-30dvh: 30dvh;
   --spacing-30px: 30px;
   --spacing-32px: 32px;
-  --spacing-32rem: 32rem;
   --spacing-33px: 33px;
   --spacing-34dvh: 34dvh;
   --spacing-34px: 34px;
-  --spacing-34rem: 34rem;
   --spacing-35px: 35px;
-  --spacing-35rem: 35rem;
   --spacing-36px: 36px;
-  --spacing-36rem: 36rem;
   --spacing-36svh: 36svh;
   --spacing-37px: 37px;
   --spacing-38px: 38px;
@@ -401,16 +340,8 @@
   --spacing-1912px: 1912px;
   --spacing-minus-0p05em: -0.05em;
   --spacing-minus-0p8px: -0.8px;
-  --spacing-minus-0p75rem: -0.75rem;
-  --spacing-minus-0p125rem: -0.125rem;
-  --spacing-minus-1p5rem: -1.5rem;
   --spacing-minus-1px: -1px;
-  --spacing-minus-2p5rem: -2.5rem;
-  --spacing-minus-2p25rem: -2.25rem;
-  --spacing-minus-2rem: -2rem;
   --spacing-minus-3px: -3px;
-  --spacing-minus-3rem: -3rem;
-  --spacing-minus-4p75rem: -4.75rem;
   --spacing-minus-4px: -4px;
   --spacing-minus-5p33px: -5.33px;
   --spacing-minus-5px: -5px;
@@ -984,47 +915,29 @@
 }
 
 @theme inline {
-  --spacing-dialog-36rem: min(var(--spacing-36rem), calc(100% - var(--spacing-2rem)));
-  --spacing-panel-36rem: min(100%, var(--spacing-36rem));
+  --spacing-dialog-36rem: min(36rem, calc(100% - 2rem));
+  --spacing-panel-36rem: min(100%, 36rem);
   --grid-template-columns-activity-dots: repeat(3, var(--spacing-4px));
-  --spacing-viewport-inset-5rem: calc(var(--spacing-100vw) - var(--spacing-5rem));
-  --spacing-popover-26rem: min(var(--spacing-26rem), var(--available-height, var(--spacing-26rem)));
-  --spacing-popover-25rem: min(
-    var(--spacing-25rem),
-    calc(var(--spacing-100vw) - var(--spacing-1rem))
-  );
-  --spacing-dialog-640px: min(
-    var(--spacing-640px),
-    calc(var(--spacing-100vh) - var(--spacing-2rem))
-  );
-  --spacing-user-bubble-gui: min(85%, calc(var(--spacing-50em) + var(--spacing-2p5rem)));
-  --spacing-bleed-0p75rem: calc(100% + var(--spacing-0p75rem));
+  --spacing-viewport-inset-5rem: calc(var(--spacing-100vw) - 5rem);
+  --spacing-popover-26rem: min(26rem, var(--available-height, 26rem));
+  --spacing-popover-25rem: min(25rem, calc(var(--spacing-100vw) - 1rem));
+  --spacing-dialog-640px: min(var(--spacing-640px), calc(var(--spacing-100vh) - 2rem));
+  --spacing-user-bubble-gui: min(85%, calc(var(--spacing-50em) + 2.5rem));
+  --spacing-bleed-0p75rem: calc(100% + 0.75rem);
   --spacing-image-preview-height: min(var(--spacing-78vh), var(--spacing-760px));
   --spacing-image-preview-width: min(var(--spacing-82vw), var(--spacing-1120px));
-  --spacing-panel-28rem: min(var(--spacing-28rem), calc(100% - var(--spacing-1p5rem)));
+  --spacing-panel-28rem: min(28rem, calc(100% - 1.5rem));
   --transition-duration-220ms: 220ms;
-  --spacing-viewport-inset-1p5rem: calc(var(--spacing-100vw) - var(--spacing-1p5rem));
-  --spacing-notification: min(
-    var(--spacing-18rem),
-    calc(var(--spacing-100vw) - var(--spacing-2rem))
-  );
-  --spacing-popover-320px: min(
-    var(--spacing-320px),
-    calc(var(--spacing-100vw) - var(--spacing-3rem))
-  );
+  --spacing-viewport-inset-1p5rem: calc(var(--spacing-100vw) - 1.5rem);
+  --spacing-notification: min(18rem, calc(var(--spacing-100vw) - 2rem));
+  --spacing-popover-320px: min(var(--spacing-320px), calc(var(--spacing-100vw) - 3rem));
   --spacing-popover-300px: min(var(--spacing-300px), var(--spacing-42vh));
-  --spacing-popover-360px: min(
-    var(--spacing-360px),
-    calc(var(--spacing-100vw) - var(--spacing-2rem))
-  );
+  --spacing-popover-360px: min(var(--spacing-360px), calc(var(--spacing-100vw) - 2rem));
   --spacing-third-minus-gap: calc(33.333% - var(--spacing-5p33px));
-  --spacing-viewport-inset-2rem: calc(var(--spacing-100vw) - var(--spacing-2rem));
-  --spacing-viewport-inset-2rem-vh: calc(var(--spacing-100vh) - var(--spacing-2rem));
-  --spacing-dialog-650px: min(
-    var(--spacing-650px),
-    calc(var(--spacing-100dvh) - var(--spacing-2rem))
-  );
-  --spacing-inset-1p5rem: calc(100% - var(--spacing-1p5rem));
+  --spacing-viewport-inset-2rem: calc(var(--spacing-100vw) - 2rem);
+  --spacing-viewport-inset-2rem-vh: calc(var(--spacing-100vh) - 2rem);
+  --spacing-dialog-650px: min(var(--spacing-650px), calc(var(--spacing-100dvh) - 2rem));
+  --spacing-inset-1p5rem: calc(100% - 1.5rem);
   --background-image-surface-glow-1: radial-gradient(
     circle at top left,
     var(--ui-color-hsl-0-0-100-0p85),
@@ -1055,70 +968,59 @@
     var(--ui-color-hsl-224-18-14-0p5),
     transparent 60%
   );
-  --spacing-dialog-36rem-dvh: min(var(--spacing-80dvh), var(--spacing-36rem));
-  --grid-template-columns-file-icon: var(--spacing-2p75rem) minmax(0, 1fr);
-  --spacing-dialog-34rem-vh: min(var(--spacing-72vh), var(--spacing-34rem));
-  --spacing-composer-popover: min(var(--spacing-10rem), var(--spacing-30dvh));
-  --grid-template-columns-trajectory-details: clamp(
-      var(--spacing-9p5rem),
-      38%,
-      var(--spacing-18rem)
-    )
-    minmax(var(--spacing-10rem), 1fr);
+  --spacing-dialog-36rem-dvh: min(var(--spacing-80dvh), 36rem);
+  --grid-template-columns-file-icon: 2.75rem minmax(0, 1fr);
+  --spacing-dialog-34rem-vh: min(var(--spacing-72vh), 34rem);
+  --spacing-composer-popover: min(10rem, var(--spacing-30dvh));
+  --grid-template-columns-trajectory-details: clamp(9.5rem, 38%, 18rem) minmax(10rem, 1fr);
   --spacing-trajectory-details: calc(100% - var(--spacing-140px));
-  --spacing-safe-bottom: max(var(--spacing-1rem), env(safe-area-inset-bottom));
-  --spacing-safe-top: max(var(--spacing-1rem), env(safe-area-inset-top));
-  --spacing-safe-top-compact: max(var(--spacing-0p75rem), env(safe-area-inset-top));
-  --spacing-safe-bottom-compact: max(var(--spacing-0p75rem), env(safe-area-inset-bottom));
+  --spacing-safe-bottom: max(1rem, env(safe-area-inset-bottom));
+  --spacing-safe-top: max(1rem, env(safe-area-inset-top));
+  --spacing-safe-top-compact: max(0.75rem, env(safe-area-inset-top));
+  --spacing-safe-bottom-compact: max(0.75rem, env(safe-area-inset-bottom));
   --spacing-select-popup: min(var(--available-height), var(--spacing-66vh));
-  --spacing-inset-3rem: calc(100% - var(--spacing-3rem));
+  --spacing-inset-3rem: calc(100% - 3rem);
   --spacing-viewport-inset-32px: calc(var(--spacing-100vw) - var(--spacing-32px));
   --ring-width-3px: 3px;
-  --grid-template-columns-composer-control: minmax(0, 1fr) var(--spacing-5p5rem);
-  --spacing-inset-2p25rem: calc(100% - var(--spacing-2p25rem));
+  --grid-template-columns-composer-control: minmax(0, 1fr) 5.5rem;
+  --spacing-inset-2p25rem: calc(100% - 2.25rem);
   --spacing-transcript-gui: calc(
     var(--chat-transcript-content-width, var(--spacing-768px)) -
-    var(--spacing-4p75rem)
+    4.75rem
   );
   --spacing-transcript-search: min(78%, var(--spacing-560px));
-  --spacing-container-inset-2rem: calc(100cqw - var(--spacing-2rem));
-  --spacing-container-inset-5rem: calc(100cqw - var(--spacing-5rem));
-  --grid-template-columns-form-label: var(--spacing-7rem) minmax(0, 1fr);
-  --grid-template-columns-mcp-actions: auto var(--spacing-2rem) var(--spacing-2rem);
-  --grid-template-columns-model-picker: minmax(0, var(--spacing-16rem)) minmax(0, 1fr);
-  --grid-template-columns-provider-credentials: minmax(0, 1fr) minmax(0, 1fr) var(--spacing-9rem);
-  --grid-template-columns-provider-field: minmax(0, 1fr) var(--spacing-9rem);
+  --spacing-container-inset-2rem: calc(100cqw - 2rem);
+  --spacing-container-inset-5rem: calc(100cqw - 5rem);
+  --grid-template-columns-form-label: 7rem minmax(0, 1fr);
+  --grid-template-columns-mcp-actions: auto 2rem 2rem;
+  --grid-template-columns-model-picker: minmax(0, 16rem) minmax(0, 1fr);
+  --grid-template-columns-provider-credentials: minmax(0, 1fr) minmax(0, 1fr) 9rem;
+  --grid-template-columns-provider-field: minmax(0, 1fr) 9rem;
   --grid-template-columns-settings-navigation: var(--spacing-300px) minmax(0, 1fr);
-  --spacing-dialog-600px: min(
-    var(--spacing-600px),
-    calc(var(--spacing-100dvh) - var(--spacing-2rem))
-  );
-  --grid-template-columns-ssh-entry: auto minmax(0, 1fr) var(--spacing-2p5rem) var(--spacing-2p5rem);
-  --spacing-half-minus-gap: calc(50% - var(--spacing-0p125rem));
-  --grid-template-columns-ssh-form: auto minmax(0, 1fr) var(--spacing-7rem);
-  --spacing-inset-0p75rem: calc(100% - var(--spacing-0p75rem));
+  --spacing-dialog-600px: min(var(--spacing-600px), calc(var(--spacing-100dvh) - 2rem));
+  --grid-template-columns-ssh-entry: auto minmax(0, 1fr) 2.5rem 2.5rem;
+  --spacing-half-minus-gap: calc(50% - 0.125rem);
+  --grid-template-columns-ssh-form: auto minmax(0, 1fr) 7rem;
+  --spacing-inset-0p75rem: calc(100% - 0.75rem);
   --grid-template-columns-stt-settings: var(--spacing-380px) minmax(0, 1fr);
   --grid-template-columns-memory-field: 1fr var(--spacing-108px);
-  --spacing-dialog-760px: min(
-    var(--spacing-760px),
-    calc(var(--spacing-100dvh) - var(--spacing-2rem))
-  );
+  --spacing-dialog-760px: min(var(--spacing-760px), calc(var(--spacing-100dvh) - 2rem));
   --grid-template-columns-memory-navigation: var(--spacing-280px) minmax(0, 1fr);
-  --grid-template-columns-skill-filter: auto minmax(var(--spacing-9rem), auto);
-  --spacing-popover-14rem: min(var(--spacing-14rem), var(--available-height, var(--spacing-14rem)));
-  --spacing-safe-bottom-10rem: calc(var(--spacing-10rem) + env(safe-area-inset-bottom));
-  --spacing-safe-bottom-offset: calc(var(--spacing-1rem) + env(safe-area-inset-bottom));
-  --spacing-safe-bottom-5rem: calc(var(--spacing-5rem) + env(safe-area-inset-bottom));
-  --spacing-safe-bottom-offset-compact: calc(var(--spacing-0p25rem) + env(safe-area-inset-bottom));
-  --spacing-dialog-34rem-dvh: min(var(--spacing-34rem), var(--spacing-85dvh));
+  --grid-template-columns-skill-filter: auto minmax(9rem, auto);
+  --spacing-popover-14rem: min(14rem, var(--available-height, 14rem));
+  --spacing-safe-bottom-10rem: calc(10rem + env(safe-area-inset-bottom));
+  --spacing-safe-bottom-offset: calc(1rem + env(safe-area-inset-bottom));
+  --spacing-safe-bottom-5rem: calc(5rem + env(safe-area-inset-bottom));
+  --spacing-safe-bottom-offset-compact: calc(0.25rem + env(safe-area-inset-bottom));
+  --spacing-dialog-34rem-dvh: min(34rem, var(--spacing-85dvh));
   --spacing-transcript-web: calc(
     var(--chat-transcript-content-width, var(--spacing-768px)) -
-    var(--spacing-2p5rem)
+    2.5rem
   );
-  --spacing-user-bubble-web: min(85%, calc(var(--spacing-50em) + var(--spacing-2rem)));
+  --spacing-user-bubble-web: min(85%, calc(var(--spacing-50em) + 2rem));
   --grid-template-columns-gateway-settings: minmax(0, 1fr) var(--spacing-360px);
   --grid-template-columns-gateway-settings-compact: minmax(0, 1fr) var(--spacing-300px);
-  --spacing-dialog-35rem: min(var(--spacing-35rem), var(--spacing-88dvh));
+  --spacing-dialog-35rem: min(35rem, var(--spacing-88dvh));
   --spacing-dialog-650px-vh: min(var(--spacing-650px), var(--spacing-92vh));
 }
 
@@ -1130,7 +1032,7 @@
   --shadow-gateway-history-switch-overlay-card: 0 var(--spacing-10px) var(--spacing-28px)
     var(--ui-color-hsl-220-22-10-0p12);
   --spacing-gateway-transcript-bottom-spacer-h: max(
-    var(--spacing-12rem),
+    12rem,
     calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-18px))
   );
   --shadow-chat-user-bubble-editor:
@@ -1196,18 +1098,12 @@
   --color-hsl-0-0-100-0p3: var(--ui-color-hsl-0-0-100-0p3);
   --color-hsl-0-0-100-0p05: var(--ui-color-hsl-0-0-100-0p05);
   --color-hsl-0-0-100-0p02: var(--ui-color-hsl-0-0-100-0p02);
-  --spacing-project-tools-panel-tab-max-w: min(
-    var(--spacing-12rem),
-    calc(var(--spacing-100vw) - var(--spacing-10rem))
-  );
-  --spacing-project-tools-panel-tab-max-w-2: min(
-    var(--spacing-10rem),
-    calc(var(--spacing-100vw) - var(--spacing-8p5rem))
-  );
+  --spacing-project-tools-panel-tab-max-w: min(12rem, calc(var(--spacing-100vw) - 10rem));
+  --spacing-project-tools-panel-tab-max-w-2: min(10rem, calc(var(--spacing-100vw) - 8.5rem));
   --spacing-settings-memory-panel-pb: max(var(--spacing-14px), env(safe-area-inset-bottom));
   --spacing-settings-provider-empty-min-h: min(var(--spacing-42svh), var(--spacing-280px));
   --spacing-settings-provider-empty-min-h-2: min(var(--spacing-36svh), var(--spacing-240px));
-  --spacing-settings-provider-empty-add-w: min(100%, var(--spacing-16rem));
+  --spacing-settings-provider-empty-add-w: min(100%, 16rem);
   --spacing-settings-provider-custom-sheet-header-pt: max(
     var(--spacing-18px),
     env(safe-area-inset-top)
@@ -1283,14 +1179,8 @@
 @custom-variant web (&:is(html[data-liveagent-webui="gateway"] *));
 
 @theme inline {
-  --spacing-workspace-ssh-terminal-tab-max-w: min(
-    var(--spacing-14rem),
-    calc(var(--spacing-100vw) - var(--spacing-2rem))
-  );
-  --spacing-workspace-ssh-terminal-tab-max-w-2: min(
-    var(--spacing-13p5rem),
-    calc(var(--spacing-100vw) - var(--spacing-1rem))
-  );
+  --spacing-workspace-ssh-terminal-tab-max-w: min(14rem, calc(var(--spacing-100vw) - 2rem));
+  --spacing-workspace-ssh-terminal-tab-max-w-2: min(13.5rem, calc(var(--spacing-100vw) - 1rem));
   --spacing-settings-memory-entry-list-max-h: min(var(--spacing-42svh), var(--spacing-320px));
 }
 
@@ -1302,7 +1192,6 @@
 
 /* Fixed presentation values consumed by CSS and drawing-library adapters. */
 :root {
-  --spacing-29rem: 29rem;
   --ui-color-ffb000: #ffb000;
   --ui-color-dc267f: #dc267f;
   --ui-color-994f00: #994f00;
@@ -1480,9 +1369,6 @@
   --ui-color-rgb-16-185-129-0p12: rgb(16 185 129 / 0.12);
   --ui-color-rgb-244-63-94-0p1: rgb(244 63 94 / 0.1);
   --spacing-5p33px: 5.33px;
-  --spacing-2p25rem: 2.25rem;
-  --spacing-4p75rem: 4.75rem;
-  --spacing-0p125rem: 0.125rem;
 }
 
 /* Shared loading components and inline motion keep their original values. */
@@ -1529,7 +1415,7 @@
   --mask-image-sidebar-project-name-fade: linear-gradient(
     to right,
     var(--ui-color-000) 0,
-    var(--ui-color-000) calc(100% - var(--spacing-1p25rem)),
+    var(--ui-color-000) calc(100% - 1.25rem),
     transparent 100%
   );
   --transition-ssh-auth-panel:

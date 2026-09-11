@@ -181,7 +181,7 @@ function EmptyState(props: { isFiltered: boolean }) {
       <div className="mt-4 text-sm font-semibold text-foreground">
         {isFiltered ? t("sharedHistory.emptyFilteredTitle") : t("sharedHistory.emptyTitle")}
       </div>
-      <div className="mt-1 max-w-22rem text-xs leading-5 text-muted-foreground">
+      <div className="mt-1 max-w-88 text-xs leading-5 text-muted-foreground">
         {isFiltered ? t("sharedHistory.emptyFilteredDesc") : t("sharedHistory.emptyDesc")}
       </div>
     </div>
@@ -434,7 +434,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                               ),
                             )}
                           </span>
-                          <span className="max-w-18rem truncate">{conversation.model}</span>
+                          <span className="max-w-72 truncate">{conversation.model}</span>
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">

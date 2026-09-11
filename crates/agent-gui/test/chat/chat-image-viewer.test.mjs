@@ -279,7 +279,7 @@ test("chat attachment sources preserve verified metadata and keep menus scoped t
   assert.doesNotMatch(userImageAttachmentSource, /hover:shadow-ui-userattachmentcards-21/);
   assert.match(toolImages, /dataBase64: image\.data/);
   assert.match(toolImages, /src: imageSources\[index\]\?\.src \?\? ""/);
-  assert.match(toolImages, /"block max-h-32rem w-full rounded-md object-contain/);
+  assert.match(toolImages, /"block max-h-128 w-full rounded-md object-contain/);
   assert.match(toolImages, /onContextMenu=\{\(\{ x, y \}\) => setContextMenu\(\{ index, x, y \}\)\}/);
   assert.match(toolImages, /if \(!canPreview\) return;/);
   assert.match(viewerSource, /@liveagent\/ui\/components\/ui\/dialog/);

@@ -273,7 +273,7 @@ function RegistryCard(props: {
             <Select value={card.id} onValueChange={setSelectedCardId}>
               <SelectTrigger
                 className={cn(
-                  "h-7 w-5p75rem overflow-hidden",
+                  "h-7 w-23 overflow-hidden",
                   "rounded-lg border-border/70 bg-background px-2 py-0 text-tiny shadow-xs",
                   "[&>svg]:size-3 [&>svg]:shrink-0",
                 )}
@@ -285,7 +285,7 @@ function RegistryCard(props: {
                   placeholder={t("mcpHub.storeVersionLatest")}
                 />
               </SelectTrigger>
-              <SelectContent className="min-w-5p75rem">
+              <SelectContent className="min-w-23">
                 {versionOptions.map((option) => (
                   <SelectItem key={option.id} value={option.id} className="text-xs">
                     {option.label}
@@ -458,7 +458,7 @@ function McpRegistryPreviewDrawer(props: {
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
-        className="max-w-none border-border/70 shadow-ui-mcpregistrybrowser-45 md:w-2/5 md:max-w-34rem dark:shadow-ui-mcpregistrybrowser-46"
+        className="max-w-none border-border/70 shadow-ui-mcpregistrybrowser-45 md:w-2/5 md:max-w-136 dark:shadow-ui-mcpregistrybrowser-46"
         closeLabel={t("settings.cancel")}
       >
         <div className="flex flex-col gap-2.5 border-b border-border/70 px-5 py-4">
@@ -1037,7 +1037,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
                       <Skeleton className="size-10 shrink-0 rounded-xl" />
                       <div className="flex-1 space-y-2">
                         <Skeleton className="h-3.5 w-28 rounded" />
-                        <Skeleton className="h-3 w-full max-w-12rem rounded" />
+                        <Skeleton className="h-3 w-full max-w-48 rounded" />
                       </div>
                     </div>
                     <div className="mt-3 space-y-2">

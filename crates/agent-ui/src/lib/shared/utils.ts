@@ -13,7 +13,6 @@ const twMerge = extendTailwindMerge({
     theme: {
       text: ["tiny", isSizeToken],
       spacing: [isNamedToken],
-      "font-weight": [isSizeToken],
       animate: [isNamedToken],
       ease: [isNamedToken],
       leading: [isSizeToken],

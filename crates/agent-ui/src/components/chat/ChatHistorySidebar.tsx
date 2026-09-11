@@ -1858,7 +1858,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         collisionPadding={12}
                         className={cn(
                           SIDEBAR_CONTEXT_MENU_CLASS,
-                          "max-h-18rem min-w-12rem overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
+                          "max-h-72 min-w-48 overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl",
                         )}
                       >
                         {activeProjects.map((workspace) => (

@@ -96,7 +96,7 @@ type DockTabDescriptor = {
 // NOTE: `transform` is deliberately absent from the transition list — drag
 // positioning drives `transform` via inline styles with its own transitions.
 const TAB_BASE_CLASS =
-  "group relative flex h-8 max-w-12rem shrink-0 select-none items-center gap-1 rounded-md border border-transparent px-1.5 text-xs text-muted-foreground transition-[background-color,border-color,color,opacity,box-shadow] hover:bg-muted/80 hover:text-foreground web:max-820:max-w-project-tools-panel-tab-max-w web:max-380:max-w-project-tools-panel-tab-max-w-2 web:max-380:pl-6px web:max-380:pr-6px";
+  "group relative flex h-8 max-w-48 shrink-0 select-none items-center gap-1 rounded-md border border-transparent px-1.5 text-xs text-muted-foreground transition-[background-color,border-color,color,opacity,box-shadow] hover:bg-muted/80 hover:text-foreground web:max-820:max-w-project-tools-panel-tab-max-w web:max-380:max-w-project-tools-panel-tab-max-w-2 web:max-380:pl-6px web:max-380:pr-6px";
 
 const CLOSE_BUTTON_CLASS =
   "relative z-10 ml-0.5 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-background hover:text-foreground focus-visible:bg-background focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";

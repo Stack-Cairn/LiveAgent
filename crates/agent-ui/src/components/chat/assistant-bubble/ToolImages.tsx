@@ -423,7 +423,7 @@ export function ToolResultImagePreview(props: {
           loading="lazy"
           decoding="async"
           className={cn(
-            "block max-h-32rem w-full rounded-md object-contain transition-opacity duration-200",
+            "block max-h-128 w-full rounded-md object-contain transition-opacity duration-200",
             imageStatus === "loaded"
               ? "opacity-100"
               : "pointer-events-none absolute inset-0 h-full max-h-none opacity-0",
@@ -591,8 +591,8 @@ function NativeDisplayImageTile(props: {
             isGallery
               ? "absolute inset-0 size-full p-1"
               : isSvgImage
-                ? "h-auto max-h-32rem w-full max-w-full p-1"
-                : "h-auto max-h-32rem max-w-full",
+                ? "h-auto max-h-128 w-full max-w-full p-1"
+                : "h-auto max-h-128 max-w-full",
             imageStatus === "loaded"
               ? "opacity-100"
               : "pointer-events-none absolute inset-0 size-full max-h-none opacity-0",

@@ -1255,7 +1255,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-0 bg-background"
-        style={{ height: "var(--spacing-1rem)" }}
+        style={{ height: "1rem" }}
       />
       {/* Desktop aligns to the assistant message body: transcript px-5 + px-5
           = 40px removed from the column, and the column itself already gives
@@ -1355,7 +1355,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                               {item.previewText || t("chat.queue.emptyMessage")}
                             </span>
                             {item.fileCount > 0 ? (
-                              <span className="max-w-4p5rem shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-tiny leading-4 text-muted-foreground">
+                              <span className="max-w-18 shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-tiny leading-4 text-muted-foreground">
                                 {t("chat.queue.fileCount").replace(
                                   "{count}",
                                   String(item.fileCount),

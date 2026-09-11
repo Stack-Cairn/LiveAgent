@@ -241,7 +241,7 @@ export function ModelPicker({
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
                         <span
                           className={cn(
-                            "inline-flex h-4 min-w-1p1rem shrink-0 items-center justify-center rounded-full bg-muted/70",
+                            "inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70",
                             "px-1 text-tiny tabular-nums",
                           )}
                         >

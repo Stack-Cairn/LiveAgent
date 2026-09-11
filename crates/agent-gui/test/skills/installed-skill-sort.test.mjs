@@ -159,7 +159,7 @@ for (const { label, loader, sources } of implementations) {
     assert.match(source, /element\.style\.translate/);
     assert.match(
       source,
-      /<SelectTrigger[\s\S]*h-8 w-auto max-w-11rem[^"]*bg-transparent/,
+      /<SelectTrigger[\s\S]*h-8 w-auto max-w-44[^"]*bg-transparent/,
     );
     assert.match(source, /<Input[\s\S]*h-11 rounded-full[^"]*bg-background/);
     assert.match(source, /from "@liveagent\/ui\/components\/ui\/select"/);
@@ -168,7 +168,7 @@ for (const { label, loader, sources } of implementations) {
       source,
       /max-w-full[^"]*overflow-x-auto[^"]*\[scrollbar-width:none\] \[&::-webkit-scrollbar\]:hidden/,
     );
-    assert.match(source, /max-sm:max-w-8rem/);
+    assert.match(source, /max-sm:max-w-32/);
     assert.match(source, /className="relative mb-5"/);
     assert.equal(source.match(/2xl:grid-cols-5/g)?.length, 5);
     assert.match(source, /pb-safe-bottom-10rem sm:pb-24/);
