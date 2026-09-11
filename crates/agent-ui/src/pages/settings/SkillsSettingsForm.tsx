@@ -265,7 +265,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                 className={cn(
                   "h-9 w-full rounded-lg border bg-background pl-9 pr-3",
                   "text-sm outline-hidden transition-colors",
-                  "placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 web:text-0p75rem",
+                  "placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 web:text-xs",
                 )}
               />
             </div>
@@ -298,7 +298,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                           {skill.description}
                         </p>
                       ) : null}
-                      <div className="mt-0.5 flex items-center gap-1 text-11px text-muted-foreground/60">
+                      <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground/60">
                         <FileText className="size-3" />
                         <span className="truncate">{skill.skillFile}</span>
                       </div>
@@ -308,7 +308,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                       <div
                         className={cn(
                           "flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2 py-1",
-                          "text-11px font-medium text-primary",
+                          "text-xs font-medium text-primary",
                         )}
                         title={t("settings.skillsAlwaysOn")}
                       >

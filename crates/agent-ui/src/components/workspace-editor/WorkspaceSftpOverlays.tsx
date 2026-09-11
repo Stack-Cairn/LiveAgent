@@ -69,7 +69,7 @@ export function CreateFolderDialog(props: {
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             {path ? (
-              <DialogDescription className="mt-1 truncate font-mono text-11px">
+              <DialogDescription className="mt-1 truncate font-mono text-xs">
                 {path}
               </DialogDescription>
             ) : null}
@@ -214,7 +214,7 @@ export function RenameEntryDialog(props: {
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             {path ? (
-              <DialogDescription className="mt-1 truncate font-mono text-11px">
+              <DialogDescription className="mt-1 truncate font-mono text-xs">
                 {path}
               </DialogDescription>
             ) : null}
@@ -287,18 +287,18 @@ export function TransferToast(props: {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="shrink-0 text-11px font-medium leading-none text-foreground">
+          <span className="shrink-0 text-xs font-medium leading-none text-foreground">
             {statusLabel}
           </span>
-          <span className="min-w-0 flex-1 truncate font-mono text-11px leading-none text-muted-foreground/90">
+          <span className="min-w-0 flex-1 truncate font-mono text-xs leading-none text-muted-foreground/90">
             {currentPath}
           </span>
-          <span className="shrink-0 font-mono text-10px leading-none text-muted-foreground">
+          <span className="shrink-0 font-mono text-tiny leading-none text-muted-foreground">
             {progress}%
           </span>
         </div>
         {transfer.error ? (
-          <div className="mt-1.5 truncate text-11px leading-none text-destructive">
+          <div className="mt-1.5 truncate text-xs leading-none text-destructive">
             {transfer.error}
           </div>
         ) : (
@@ -312,10 +312,10 @@ export function TransferToast(props: {
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <span className="shrink-0 text-10px leading-none text-muted-foreground">
+            <span className="shrink-0 text-tiny leading-none text-muted-foreground">
               {transfer.filesDone}/{transfer.filesTotal || queueCount || 1} {filesLabel}
             </span>
-            <span className="shrink-0 font-mono text-10px leading-none text-muted-foreground">
+            <span className="shrink-0 font-mono text-tiny leading-none text-muted-foreground">
               {formatBytes(transfer.bytesDone)} / {formatBytes(transfer.bytesTotal)}
             </span>
           </div>
@@ -324,7 +324,7 @@ export function TransferToast(props: {
       {onCancel ? (
         <button
           type="button"
-          className="shrink-0 rounded px-1.5 py-0.5 text-11px text-destructive hover:bg-destructive/10"
+          className="shrink-0 rounded px-1.5 py-0.5 text-xs text-destructive hover:bg-destructive/10"
           onClick={onCancel}
         >
           {cancelLabel}
@@ -372,17 +372,17 @@ export function DragPreview(props: {
           {previewEntry.name}
           {count > 1 ? ` +${count - 1}` : ""}
         </span>
-        <span className="block truncate text-10px leading-3 text-white/75">
+        <span className="block truncate text-tiny leading-3 text-white/75">
           {typeLabel(previewEntry)}
           {previewEntry.kind === "directory" ? "" : ` · ${formatBytes(previewEntry.sizeBytes)}`}
         </span>
       </span>
       {count > 1 ? (
-        <span className="shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-10px text-white/90">
+        <span className="shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-tiny text-white/90">
           {count}
         </span>
       ) : previewEntry.kind === "directory" ? null : (
-        <span className="shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-10px text-white/90">
+        <span className="shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-tiny text-white/90">
           {formatBytes(previewEntry.sizeBytes)}
         </span>
       )}

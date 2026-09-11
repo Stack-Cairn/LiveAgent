@@ -79,7 +79,7 @@ export function CompactionSeamRow(props: {
         {() => (
           <div className="overflow-hidden px-0.5 pb-1 pt-1.5">
             <div className="border-l border-violet-500/25 pl-3 dark:border-violet-400/25">
-              <div className="mb-1 text-scaled-11px text-muted-foreground/70">
+              <div className="mb-1 text-xs text-muted-foreground/70">
                 {seam.generatedBy.providerId} · {seam.generatedBy.model}
               </div>
               <Markdown

@@ -30,7 +30,7 @@ function TranscriptTimestampLabel(props: { timestamp?: number; className?: strin
   return (
     <span
       className={cn(
-        "select-none text-scaled-11px tabular-nums text-[hsl(var(--muted-foreground)/0.7)]",
+        "select-none text-xs tabular-nums text-[hsl(var(--muted-foreground)/0.7)]",
         props.className,
       )}
     >

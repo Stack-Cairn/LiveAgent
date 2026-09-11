@@ -354,7 +354,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
         <div
           className={cn(
             "absolute left-1/2 top-2 -translate-x-1/2",
-            "rounded-md border border-border/70 bg-background px-2 py-1 text-11px font-medium",
+            "rounded-md border border-border/70 bg-background px-2 py-1 text-xs font-medium",
             "tabular-nums text-muted-foreground shadow-sm",
           )}
         >

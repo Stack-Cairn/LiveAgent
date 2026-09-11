@@ -8,12 +8,12 @@ const require = createRequire(new URL("../../package.json", import.meta.url));
 const postcss = require("postcss");
 const tailwind = require("@tailwindcss/postcss");
 
-test("native theme utilities retain the original dimensions without adding line heights", async () => {
+test("theme utilities use standard typography and preserve explicit line heights", async () => {
   const result = await postcss([tailwind({ optimize: false })]).process(
     `@import "tailwindcss" source(none);
      @import "../../agent-ui/src/styles/tokens.css";
      @reference "../../agent-ui/src/styles/semantic-colors.css";
-     @source inline("py-2 py-1px h-18px text-14px text-11p5px text-scaled-14px leading-scaled-22px pb-safe-bottom-10rem ring-3px status-compact:grid-cols-3");`,
+     @source inline("py-2 py-1px h-18px text-sm text-xs text-tiny text-sm/5 text-[0.92em] leading-scaled-22px pb-safe-bottom-10rem ring-3px status-compact:grid-cols-3");`,
     { from: new URL("../../src/style-theme-test.css", import.meta.url).pathname },
   );
   const root = postcss.parse(result.css);
@@ -26,13 +26,13 @@ test("native theme utilities retain the original dimensions without adding line 
   assert.equal(properties(".py-2").get("padding-block"), "calc(var(--spacing) * 2)");
   assert.equal(properties(".py-1px").get("padding-block"), "var(--spacing-1px)");
   assert.equal(properties(".h-18px").get("height"), "var(--spacing-18px)");
-  assert.equal(properties(".text-14px").get("font-size"), "var(--text-14px)");
-  assert.equal(properties(".text-14px").has("line-height"), false);
-  assert.equal(properties(".text-11p5px").get("font-size"), "var(--text-11p5px)");
-  assert.equal(
-    properties(".text-scaled-14px").get("font-size"),
-    "calc(var(--text-14px) * var(--zone-font-scale, 1))",
-  );
+  assert.equal(properties(".text-sm").get("font-size"), "var(--text-sm)");
+  assert.match(properties(".text-sm").get("line-height"), /--text-sm--line-height/);
+  assert.equal(properties(".text-xs").get("font-size"), "var(--text-xs)");
+  assert.equal(properties(".text-tiny").get("font-size"), "var(--text-tiny)");
+  assert.match(properties(".text-sm\\/5").get("line-height"), /--spacing/);
+  assert.equal(properties(".text-\\[0\\.92em\\]").get("font-size"), "0.92em");
+  assert.equal(properties(".text-\\[0\\.92em\\]").has("line-height"), false);
   assert.equal(
     properties(".leading-scaled-22px").get("line-height"),
     "calc(var(--leading-22px) * var(--zone-font-scale, 1))",
@@ -52,9 +52,11 @@ test("native theme utilities retain the original dimensions without adding line 
 });
 
 test("named size, color and shadow utilities keep caller override behavior", () => {
-  assert.equal(cn("text-sm text-red-500", "text-14px"), "text-red-500 text-14px");
-  assert.equal(cn("text-14px", "text-sm"), "text-sm");
-  assert.equal(cn("text-11p5px", "text-scaled-14px"), "text-scaled-14px");
+  assert.equal(cn("text-sm text-red-500", "text-tiny"), "text-red-500 text-tiny");
+  assert.equal(cn("text-tiny", "text-sm"), "text-sm");
+  assert.equal(cn("text-[0.92em]", "text-xs"), "text-xs");
+  assert.equal(cn("text-sm leading-none", "text-tiny"), "text-tiny");
+  assert.equal(cn("text-sm", "text-tiny leading-none"), "text-tiny leading-none");
   assert.equal(cn("py-2", "py-1px"), "py-1px");
   assert.equal(cn("max-w-panel-36rem", "max-w-80"), "max-w-80");
   assert.equal(cn("shadow-ui-composerattachmentcard-1", "shadow-lg"), "shadow-lg");

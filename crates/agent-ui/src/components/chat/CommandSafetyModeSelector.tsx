@@ -145,7 +145,7 @@ export function CommandSafetyModeSelector(props: {
               {modeIcon(mode, "mt-0.5 size-3.5 shrink-0 text-muted-foreground")}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-medium leading-5">{t(MODE_I18N_KEYS[mode])}</span>
-                <span className="text-11px font-normal leading-4 text-muted-foreground">
+                <span className="text-xs font-normal leading-4 text-muted-foreground">
                   {entryDisabled ? disabledHint : t(modeDescKey(mode))}
                 </span>
               </span>

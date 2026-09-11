@@ -41,19 +41,19 @@ export function ContextCheckpointCard(props: {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-scaled-13px font-medium text-foreground/90">
+            <span className="text-sm font-medium text-foreground/90">
               {t("chat.contextCheckpoint.title")}
             </span>
             <span
               className={cn(
-                "inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-1px text-scaled-11px font-normal",
+                "inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-1px text-xs font-normal",
                 "tabular-nums text-muted-foreground dark:bg-white/[0.08]",
               )}
             >
               {messageCountLabel}
             </span>
           </div>
-          <div className="mt-2px text-scaled-11px text-muted-foreground/70">
+          <div className="mt-2px text-xs text-muted-foreground/70">
             {generatedBy.providerId} · {generatedBy.model}
           </div>
         </div>

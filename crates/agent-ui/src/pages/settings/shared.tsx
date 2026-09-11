@@ -12,7 +12,7 @@ export {
 export function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2.5">
-      <h2 className="px-1 text-15px font-semibold tracking-tight text-foreground">{title}</h2>
+      <h2 className="px-1 text-base font-semibold tracking-tight text-foreground">{title}</h2>
       <SettingsSurface>{children}</SettingsSurface>
     </section>
   );
@@ -91,7 +91,7 @@ export function PromptTag({ label, muted = false }: { label: string; muted?: boo
     <span
       className={cn(
         "inline-flex shrink-0 items-center",
-        "whitespace-nowrap rounded-full border px-2 py-0.5 text-11px leading-none",
+        "whitespace-nowrap rounded-full border px-2 py-0.5 text-xs leading-none",
         muted
           ? "border-border/60 bg-muted/40 text-muted-foreground"
           : "border-border/70 bg-muted/60 text-foreground/80",

@@ -66,7 +66,7 @@ const ChangedFileRow = memo(function ChangedFileRow({ file }: { file: ChangedFil
       {dir ? (
         <span
           className={cn(
-            "min-w-0 truncate text-scaled-10p5px leading-tight text-muted-foreground/65",
+            "min-w-0 truncate text-tiny leading-tight text-muted-foreground/65",
             file.deleted && "line-through",
           )}
         >
@@ -76,7 +76,7 @@ const ChangedFileRow = memo(function ChangedFileRow({ file }: { file: ChangedFil
       {/* shrink-0 keeps the file name intact while the directory truncates first. */}
       <span
         className={cn(
-          "max-w-full shrink-0 truncate text-scaled-11p5px font-medium leading-tight text-foreground/85",
+          "max-w-full shrink-0 truncate text-xs font-medium leading-tight text-foreground/85",
           file.deleted && "text-muted-foreground line-through",
         )}
       >
@@ -110,7 +110,7 @@ const ChangedFileRow = memo(function ChangedFileRow({ file }: { file: ChangedFil
         <span
           className={cn(
             "shrink-0 rounded-full bg-muted/70 px-1.5 py-0.5",
-            "text-scaled-10px leading-none text-muted-foreground transition-opacity",
+            "text-tiny leading-none text-muted-foreground transition-opacity",
             hasRowActions &&
               "group-hover/changed-file:opacity-0 group-focus-within/changed-file:opacity-0",
           )}
@@ -200,13 +200,13 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
           <FilePenLine className="size-4" />
         </div>
         <div className="flex min-h-8 min-w-0 flex-1 flex-col justify-center gap-0.5">
-          <span className="truncate text-scaled-13px font-semibold leading-tight text-foreground/90">
+          <span className="truncate text-sm font-semibold leading-tight text-foreground/90">
             {title}
           </span>
           <FileChangeBadge
             added={summary.totalAdded}
             removed={summary.totalRemoved}
-            className="text-scaled-11p5px"
+            className="text-xs"
           />
         </div>
         {canOpenReview ? (
@@ -216,7 +216,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
             className={cn(
               "flex h-7 shrink-0 items-center gap-1.5",
               "rounded-lg border border-border/55 bg-transparent px-2.5",
-              "text-scaled-11px font-medium leading-none text-muted-foreground transition-colors",
+              "text-xs font-medium leading-none text-muted-foreground transition-colors",
               "hover:border-border/80 hover:bg-foreground/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:border-white/[0.1]",
               "dark:hover:border-white/[0.16] dark:hover:bg-white/[0.06]",
             )}
@@ -238,7 +238,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
             aria-expanded={filesExpanded}
             className={cn(
               "flex min-h-8 w-full items-center gap-1 rounded-lg px-2.5 py-0.5",
-              "text-left text-scaled-11p5px font-medium text-foreground/80 transition-colors",
+              "text-left text-xs font-medium text-foreground/80 transition-colors",
               "hover:bg-foreground/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             )}
           >

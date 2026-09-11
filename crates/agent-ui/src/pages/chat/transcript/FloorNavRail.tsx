@@ -284,7 +284,7 @@ export function FloorNavRail(props: {
           type="button"
           onClick={() => handleJump(floor.rowKey)}
           className={cn(
-            "min-h-11 min-w-0 flex-1 truncate p-2 text-left text-12px leading-tight",
+            "min-h-11 min-w-0 flex-1 truncate p-2 text-left text-xs leading-tight",
             isActive ? "font-medium text-foreground" : "text-muted-foreground",
           )}
           title={floor.preview}
@@ -358,7 +358,7 @@ export function FloorNavRail(props: {
                 <div
                   className={cn(
                     "flex items-center gap-1.5 px-1.5 pb-1 pt-0.5",
-                    "text-10p5px font-medium text-amber-600/90 dark:text-amber-400/90",
+                    "text-tiny font-medium text-amber-600/90 dark:text-amber-400/90",
                   )}
                 >
                   <Pin className="size-2.5 fill-current" />
@@ -444,11 +444,11 @@ export function FloorNavRail(props: {
                 "hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.06]",
               )}
             >
-              <span className="block truncate text-13px font-medium leading-5 text-foreground">
+              <span className="block truncate text-sm font-medium leading-5 text-foreground">
                 {hoveredFloor.preview}
               </span>
               {hoveredFloor.responsePreview ? (
-                <span className="mt-1 block line-clamp-3 text-12px leading-1p55 text-muted-foreground">
+                <span className="mt-1 block line-clamp-3 text-xs leading-1p55 text-muted-foreground">
                   {hoveredFloor.responsePreview}
                 </span>
               ) : null}

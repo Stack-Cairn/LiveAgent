@@ -98,7 +98,7 @@ function FailoverNumberField(props: {
         onValueChange={setDraft}
         onValueCommitted={commitDraft}
         className="h-8 rounded-lg"
-        inputClassName="px-2 py-1 text-12p5px"
+        inputClassName="px-2 py-1 text-xs"
       />
     </div>
   );
@@ -212,7 +212,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
           <span
             className={cn(
               "inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground/[0.05] px-2 py-0.5",
-              "text-10p5px font-medium text-foreground/60",
+              "text-tiny font-medium text-foreground/60",
             )}
           >
             <ProviderBrandIcon type={providerType} />
@@ -263,17 +263,17 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                       <span
                         className={cn(
                           "flex h-5 w-6 shrink-0 items-center justify-center",
-                          "rounded-md bg-foreground/[0.05] font-mono text-10px font-semibold text-foreground/55",
+                          "rounded-md bg-foreground/[0.05] font-mono text-tiny font-semibold text-foreground/55",
                         )}
                       >
                         P{index + 1}
                       </span>
                       <span className="min-w-0 flex-1 leading-tight">
-                        <span className="block truncate text-12p5px font-medium text-foreground/90">
+                        <span className="block truncate text-xs font-medium text-foreground/90">
                           {queueEntryLabel(entry)}
                         </span>
                         {queueEntryDetail(entry) ? (
-                          <span className="block truncate text-10p5px text-muted-foreground/70">
+                          <span className="block truncate text-tiny text-muted-foreground/70">
                             {queueEntryDetail(entry)}
                           </span>
                         ) : null}
@@ -297,7 +297,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 <div
                   className={cn(
                     "rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2",
-                    "text-11px leading-relaxed text-amber-700 dark:text-amber-300",
+                    "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
                   )}
                 >
                   {t("settings.failoverQueueEmpty")}
@@ -317,7 +317,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 />
               ) : null}
               {unavailableProviderCount > 0 ? (
-                <p className="text-10p5px leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-tiny leading-relaxed text-amber-700/90 dark:text-amber-300/90">
                   {t("settings.failoverQueueUnavailableCandidates").replace(
                     "{count}",
                     String(unavailableProviderCount),
@@ -325,7 +325,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 </p>
               ) : null}
               {unavailableQueuedProviderCount > 0 ? (
-                <p className="text-10p5px leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-tiny leading-relaxed text-amber-700/90 dark:text-amber-300/90">
                   {t("settings.failoverQueueUnavailableExisting").replace(
                     "{count}",
                     String(unavailableQueuedProviderCount),
@@ -407,7 +407,7 @@ function CustomSettingsModelField(props: {
         placeholder={followCurrentLabel}
         noneLabel={followCurrentLabel}
         ariaLabel={label}
-        triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-13px shadow-sm dark:bg-background/40"
+        triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-sm shadow-sm dark:bg-background/40"
       />
     </div>
   );
@@ -450,7 +450,7 @@ function CustomSettingsDrawer(
         showCloseButton={false}
       >
         <div className="relative flex items-center gap-3 px-6 pb-4 pt-22px web:max-820:pt-settings-provider-custom-sheet-header-pt">
-          <SheetTitle className="min-w-0 flex-1 text-17px leading-tight tracking-tight text-foreground/95">
+          <SheetTitle className="min-w-0 flex-1 text-lg leading-tight tracking-tight text-foreground/95">
             {t("settings.customSettings")}
           </SheetTitle>
           <button
@@ -500,7 +500,7 @@ function CustomSettingsDrawer(
                   <div
                     className={cn(
                       "rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2",
-                      "text-11px leading-relaxed text-amber-700 dark:text-amber-300",
+                      "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
                     )}
                   >
                     {t("settings.customSettingsModelEmpty")}
@@ -577,7 +577,7 @@ function CustomSettingsDrawer(
                     )
                   }
                 />
-                <p className="text-11px leading-relaxed text-muted-foreground/70">
+                <p className="text-xs leading-relaxed text-muted-foreground/70">
                   {contextDisplayModeDesc[settings.customSettings.composerContextDisplay]}
                 </p>
               </div>
@@ -596,7 +596,7 @@ function CustomSettingsDrawer(
 }
 
 const PROVIDER_ACTION_CLASS =
-  "settings-provider-action inline-flex h-full min-w-0 items-center justify-center gap-6px rounded-[calc(var(--radius)-var(--radius-4px))] border-0 bg-transparent px-10px py-0 text-12p5px font-medium text-muted-foreground shadow-none transition-[background-color,color,box-shadow] duration-150 ease-default has-hover:hover:bg-background/72 has-hover:hover:text-foreground data-[open]:bg-background data-[open]:text-foreground data-[open]:shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)] data-[popup-open]:bg-background data-[popup-open]:text-foreground data-[popup-open]:shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)] focus-visible:z-1 focus-visible:outline-none focus-visible:shadow-[0_0_0_var(--spacing-2px)_hsl(var(--background)),0_0_0_var(--spacing-4px)_hsl(var(--ring))] motion-reduce:transition-none max-[860px]:min-w-32px max-[860px]:px-8px";
+  "settings-provider-action inline-flex h-full min-w-0 items-center justify-center gap-6px rounded-[calc(var(--radius)-var(--radius-4px))] border-0 bg-transparent px-10px py-0 text-xs font-medium text-muted-foreground shadow-none transition-[background-color,color,box-shadow] duration-150 ease-default has-hover:hover:bg-background/72 has-hover:hover:text-foreground data-[open]:bg-background data-[open]:text-foreground data-[open]:shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)] data-[popup-open]:bg-background data-[popup-open]:text-foreground data-[popup-open]:shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)] focus-visible:z-1 focus-visible:outline-none focus-visible:shadow-[0_0_0_var(--spacing-2px)_hsl(var(--background)),0_0_0_var(--spacing-4px)_hsl(var(--ring))] motion-reduce:transition-none max-[860px]:min-w-32px max-[860px]:px-8px";
 
 function ProviderActionGroup(props: {
   activeTab: ProviderId;
@@ -1104,7 +1104,7 @@ export function ProvidersSection(
                 className={cn(
                   "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md",
                   "px-3 py-1 text-sm font-medium transition-all",
-                  "web:max-820:min-h-34px web:max-820:pl-10px web:max-820:pr-10px web:max-820:text-13px web:max-520:pl-8px web:max-520:pr-8px",
+                  "web:max-820:min-h-34px web:max-820:pl-10px web:max-820:pr-10px web:max-820:text-sm web:max-520:pl-8px web:max-520:pr-8px",
                   activeTab === tab
                     ? "bg-background text-foreground shadow"
                     : "hover:text-foreground/80",
@@ -1116,7 +1116,7 @@ export function ProvidersSection(
                   <span
                     className={cn(
                       "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1",
-                      "text-10px font-semibold leading-none tabular-nums transition-colors",
+                      "text-tiny font-semibold leading-none tabular-nums transition-colors",
                       activeTab === tab
                         ? "bg-foreground/[0.08] text-foreground/70"
                         : "bg-foreground/[0.06] text-muted-foreground/80",

@@ -1,6 +1,6 @@
 # UI 样式变量
 
-这一步只集中管理现有样式值，不重新设计界面。桌面 GUI 和 Gateway WebUI
+样式值集中管理；字号按已确认的 Tailwind 标准档位收敛。桌面 GUI 和 Gateway WebUI
 都通过共享 `base.css` 引入 `crates/agent-ui/src/styles/tokens.css`。
 
 ## Tailwind v4 用法
@@ -13,13 +13,13 @@
 @theme {
   --spacing: 0.25rem;
   --spacing-18px: 18px;
-  --text-14px: 14px;
+  --text-tiny: 0.625rem;
 }
 ```
 
 ```tsx
 <div className="py-2 gap-3 text-xs">标准 Tailwind 尺度</div>
-<div className="py-1px h-18px text-14px">保留原来的特殊尺寸</div>
+<div className="py-1px h-18px text-sm">保留原来的特殊尺寸</div>
 ```
 
 宽高值和变体前缀完全相同时使用 `size-*`，例如 `h-4 w-4` 合并为 `size-4`，
@@ -28,12 +28,13 @@
 
 `py-2` 等标准工具类继续通过 `--spacing` 管理；已有的 Tailwind 默认色板、
 字号和其他尺度直接使用 Tailwind 提供的变量。特殊值才新增代号，
-例如 `text-11p5px` 对应 `11.5px`，不把不同值近似成同一档。
-像素字号没有附加默认行高，以保留原来 `text-[14px]` 的行为。
+普通字号使用 `text-xs` 到 `text-5xl`，仅为紧凑徽标、计数和键帽保留
+`text-tiny`（0.625rem）。标准字号采用默认行高；已有显式 `leading-*` 继续控制行高。
 
-原本随区域字号缩放的文本使用 `text-scaled-14px`。这类表达式在
-`@theme inline` 中引用 `--zone-font-scale`，在实际元素上计算，保留弹窗和
-聊天区域的字号设置。安全区、转录宽度、弹窗尺寸也采用具名表达式。
+区域和弹层在 `base.css` 中按 `--zone-font-scale` 重定义标准字号，
+原 `text-scaled-*px` 消费方也直接使用标准类。Markdown 行内代码及公式保留
+相对段落字号的 `em`。xterm 的数值像素字号属于终端 API，不参与 UI 字号归并。
+安全区、转录宽度、弹窗尺寸继续采用具名表达式。
 
 普通 CSS 和内联样式可以引用同一组变量，例如 `var(--spacing-18px)`。
 颜色、阴影、圆角、行高和动画时长保留原数值；亮暗主题的原始颜色通道也在
@@ -49,7 +50,7 @@
 ## 单处使用的样式
 
 仅在一个标签消费的布局、字号、颜色和动画类，直接写成该标签的 Tailwind
-工具类。保留数值和原有条件，例如 `text-14px`、`animate-mention-popup-enter`
+工具类。保留数值和原有条件，例如 `text-sm`、`animate-mention-popup-enter`
 和 `motion-reduce:animate-none!`。动画变量与关键帧统一在 `animations.css` 管理；阴影、网格等表达式继续在
 `tokens.css` 的 `@theme inline` 中集中管理。
 
@@ -67,7 +68,7 @@
 
 动画时长只使用毫秒 token，例如 `--ui-duration-120ms`；`0.12s` 和 `120ms`
 不再分别维护。完全相同的颜色原语共用一个值，阴影、渐变和 API 调色板引用它。
-不同语义角色仍可以有名称，但值通过引用共用原语；不把相近颜色或 px/rem 近似合并。
+不同语义角色仍可以有名称，但值通过引用共用原语；不把相近颜色近似合并；字号统一使用 rem 档位。
 
 动画曲线通过 `--ease-*` 管理，标签使用 `ease-ui-enter` 等具名类。
 Web Animations 的 `easing` 和 xterm 的颜色解析器不接受 CSS 变量表达式，
@@ -131,3 +132,26 @@ Web Animations 的 `easing` 和 xterm 的颜色解析器不接受 CSS 变量表�
 
 现有 `SettingsRow`、`SettingsChoiceRow`、`DialogActions` 和基础输入控件继续复用。
 不要仅因其他结构也使用相同间距，就把工具栏、标签操作行或整个页面套进 FormField。
+
+## 字号收敛（2026-09-11）
+
+普通界面统一使用 rem 字号，删除数值命名的 px/rem 字号及 `text-scaled-*px`。
+本次归并按下面的尺度执行；后续组件优先直接选择标准档位，不恢复半像素字号。
+
+| 原字号（px，rem 以 16px 根字号换算） | 工具类 |
+| --- | --- |
+| 8–10.5 | `text-tiny`（仅紧凑徽标、计数和键帽等小文字） |
+| 11–12.5 | `text-xs` |
+| 13–14.5 | `text-sm` |
+| 15–16 | `text-base` |
+| 17–18 | `text-lg` |
+| 20–21 | `text-xl` |
+| 22–26 | `text-2xl` |
+| 28 / 36 / 46 | `text-3xl` / `text-4xl` / `text-5xl` |
+
+这次是有意统一排版，并非逐像素等价替换。已有 `leading-*` 类和区域缩放入口保留；
+未显式指定行高的标准字号使用 Tailwind 默认行高。`cn()` 继续遵循原来的覆盖顺序，
+调用方同时覆盖字号与行高时应一起传入，例如 `text-xs leading-none`。
+
+Markdown 行内代码和公式的局部比例直接写在消费处：`text-[0.9em]`、
+`text-[0.92em]`、`text-[1.04em]`，不注册全局字号变量。

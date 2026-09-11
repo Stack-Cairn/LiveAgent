@@ -441,14 +441,14 @@ export function GitReviewStatusView(props: {
             </span>
             <span
               className={cn(
-                "block truncate text-scaled-11px leading-4 text-muted-foreground",
+                "block truncate text-xs leading-4 text-muted-foreground",
                 deleted && "line-through",
               )}
             >
               {filePath}
             </span>
           </span>
-          <span className={cn("mt-0.5 shrink-0 text-scaled-10px font-semibold", statusTone(entry))}>
+          <span className={cn("mt-0.5 shrink-0 text-tiny font-semibold", statusTone(entry))}>
             {statusLabel(entry)}
           </span>
         </button>
@@ -490,7 +490,7 @@ export function GitReviewStatusView(props: {
             )}
             aria-hidden="true"
           />
-          <span className="min-w-0 truncate text-scaled-11px font-semibold text-muted-foreground">
+          <span className="min-w-0 truncate text-xs font-semibold text-muted-foreground">
             {title}
           </span>
         </button>
@@ -498,7 +498,7 @@ export function GitReviewStatusView(props: {
           className={cn(
             "inline-flex h-4 min-w-6 shrink-0 items-center justify-center justify-self-end",
             "rounded bg-background/70 px-1.5",
-            "text-center text-scaled-10px font-medium tabular-nums text-muted-foreground",
+            "text-center text-tiny font-medium tabular-nums text-muted-foreground",
           )}
         >
           {sectionEntries.length}

@@ -239,11 +239,11 @@ export function MemoryPanel(props: {
       >
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 truncate text-xs font-semibold">{entryTitle(entry)}</div>
-          <div className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-10px text-muted-foreground">
+          <div className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground">
             {memoryTypeLabel(entry.memoryType, t)}
           </div>
         </div>
-        <div className="mt-1 truncate font-mono text-11px text-muted-foreground/70">
+        <div className="mt-1 truncate font-mono text-xs text-muted-foreground/70">
           id: {entry.slug}
         </div>
       </Button>
@@ -451,7 +451,7 @@ export function MemoryPanel(props: {
                   >
                     <Globe2 className="size-3.5 shrink-0" />
                     <span className="truncate">{t("settings.memoryCategoryGlobal")}</span>
-                    <span className="shrink-0 text-10px text-muted-foreground">
+                    <span className="shrink-0 text-tiny text-muted-foreground">
                       {globalEntryCount}
                     </span>
                   </TabsTrigger>
@@ -461,7 +461,7 @@ export function MemoryPanel(props: {
                   >
                     <Folder className="size-3.5 shrink-0" />
                     <span className="truncate">{t("settings.memoryCategoryProject")}</span>
-                    <span className="shrink-0 text-10px text-muted-foreground">
+                    <span className="shrink-0 text-tiny text-muted-foreground">
                       {projectEntryCount}
                     </span>
                   </TabsTrigger>
@@ -471,7 +471,7 @@ export function MemoryPanel(props: {
                   >
                     <BookOpen className="size-3.5 shrink-0" />
                     <span className="truncate">{t("settings.memoryCategoryJournal")}</span>
-                    <span className="shrink-0 text-10px text-muted-foreground">
+                    <span className="shrink-0 text-tiny text-muted-foreground">
                       {dailyEntryCount}
                     </span>
                   </TabsTrigger>
@@ -536,7 +536,7 @@ export function MemoryPanel(props: {
                         <span className="min-w-0 flex-1 truncate font-medium" title={group.label}>
                           {group.label}
                         </span>
-                        <span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-10px text-muted-foreground">
+                        <span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-tiny text-muted-foreground">
                           {group.entries.length}
                         </span>
                       </summary>
@@ -645,14 +645,14 @@ export function MemoryPanel(props: {
                         <div className="truncate text-sm font-semibold">
                           {selectedTitle(selected)}
                         </div>
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-10px text-muted-foreground">
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground">
                           {memoryScopeLabel(selected.scope, t)}
                         </span>
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-10px text-muted-foreground">
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground">
                           {memoryTypeLabel(selected.memoryType, t)}
                         </span>
                         {selected.meta.unreviewed ? (
-                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-10px text-amber-700 dark:text-amber-300">
+                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-tiny text-amber-700 dark:text-amber-300">
                             {t("settings.memoryUnreviewed")}
                           </span>
                         ) : null}
@@ -660,11 +660,11 @@ export function MemoryPanel(props: {
                       <div className="mt-1 text-xs text-muted-foreground">
                         {t("settings.memoryUpdated")} {formatTime(selected.meta.updatedAt)}
                       </div>
-                      <div className="mt-1 truncate font-mono text-11px text-muted-foreground/70">
+                      <div className="mt-1 truncate font-mono text-xs text-muted-foreground/70">
                         id: {selected.slug}
                       </div>
                       {selectedEntry?.scope === "project" ? (
-                        <div className="mt-1 truncate font-mono text-11px text-muted-foreground/70">
+                        <div className="mt-1 truncate font-mono text-xs text-muted-foreground/70">
                           {selectedEntry.workdirPath || selectedEntry.workdirHash}
                         </div>
                       ) : null}

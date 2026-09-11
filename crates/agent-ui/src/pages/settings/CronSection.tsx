@@ -253,7 +253,7 @@ export function CronSection(props: SettingsSectionProps) {
                       </span>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-10px font-medium leading-none",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-tiny font-medium leading-none",
                           tone.bg,
                           tone.text,
                         )}
@@ -265,7 +265,7 @@ export function CronSection(props: SettingsSectionProps) {
                           title={task.lastError}
                           className={cn(
                             "flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5",
-                            "text-10px font-medium leading-none text-red-600 dark:text-red-400",
+                            "text-tiny font-medium leading-none text-red-600 dark:text-red-400",
                           )}
                         >
                           <AlertTriangle className="size-2.5" />
@@ -282,7 +282,7 @@ export function CronSection(props: SettingsSectionProps) {
                   <div
                     className={cn(
                       "hidden w-140px shrink-0 items-center justify-center gap-1.5 rounded-full bg-amber-500/10",
-                      "px-2.5 py-1 text-11px font-medium text-amber-600 dark:text-amber-400 md:flex",
+                      "px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400 md:flex",
                     )}
                   >
                     <Clock3 className="size-3 shrink-0" />
@@ -291,7 +291,7 @@ export function CronSection(props: SettingsSectionProps) {
                   <div
                     className={cn(
                       "hidden w-74px shrink-0 items-center justify-center gap-1 rounded-full",
-                      "px-2 py-1 text-11px font-medium md:flex",
+                      "px-2 py-1 text-xs font-medium md:flex",
                       exhausted
                         ? "bg-red-500/10 text-red-600 dark:text-red-400"
                         : task.remainingExecutions == null

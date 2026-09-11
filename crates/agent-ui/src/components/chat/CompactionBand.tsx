@@ -35,7 +35,7 @@ export function CompactionBand(props: {
       </span>
       <span
         className={cn(
-          "min-w-0 truncate text-scaled-12p5px font-medium text-violet-800 dark:text-violet-200",
+          "min-w-0 truncate text-xs font-medium text-violet-800 dark:text-violet-200",
           active && "shimmer",
         )}
       >
@@ -85,7 +85,7 @@ export function CompactionMetaChip({ children }: { children: ReactNode }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-md bg-violet-500/[0.08] px-1.5 py-1px text-scaled-10p5px font-medium tabular-nums",
+        "shrink-0 rounded-md bg-violet-500/[0.08] px-1.5 py-1px text-tiny font-medium tabular-nums",
         "text-violet-700/80 dark:bg-violet-400/[0.1] dark:text-violet-300/80",
       )}
     >

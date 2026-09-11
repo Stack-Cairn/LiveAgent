@@ -309,7 +309,7 @@ function ToolCallItem({
       <span
         className={cn(
           "shrink-0 font-450 text-foreground/62",
-          compactChip ? "text-scaled-13px" : "text-scaled-13px",
+          compactChip ? "text-sm" : "text-sm",
           displayIsRunning && "animate-pulse",
         )}
       >
@@ -318,7 +318,7 @@ function ToolCallItem({
       <span
         className={cn(
           "inline-flex min-w-0 flex-1 items-center gap-2 font-mono text-foreground/52",
-          compactChip ? "h-22px text-scaled-11p5px" : "text-scaled-11p5px",
+          compactChip ? "h-22px text-xs" : "text-xs",
         )}
       >
         <FileOperationTarget
@@ -351,15 +351,13 @@ function ToolCallItem({
         ) : null}
       </span>
 
-      <span className="shrink-0 text-scaled-13px font-450 text-foreground/62">
-        {summaryTitleName}
-      </span>
+      <span className="shrink-0 text-sm font-450 text-foreground/62">{summaryTitleName}</span>
 
       {compactChipText || fileChangeStats ? (
         <span
           className={cn(
             "inline-flex h-22px min-w-0 flex-1 items-center gap-2",
-            "font-mono text-scaled-11p5px text-foreground/48",
+            "font-mono text-xs text-foreground/48",
           )}
         >
           {compactChipText ? (
@@ -383,7 +381,7 @@ function ToolCallItem({
       )}
 
       {displayIsRunning || result?.isError || shellSessionFailed ? (
-        <span className={cn("shrink-0 text-scaled-10p5px", statusTextClass)}>{statusLabel}</span>
+        <span className={cn("shrink-0 text-tiny", statusTextClass)}>{statusLabel}</span>
       ) : null}
     </>
   ) : (
@@ -397,13 +395,13 @@ function ToolCallItem({
         {/* Container carries the summary styling so the truncation ellipsis
             (styled per the block container) matches the summary text */}
         <div
-          className="min-w-0 truncate font-mono text-scaled-11p5px leading-5 text-foreground/48"
+          className="min-w-0 truncate font-mono text-xs leading-5 text-foreground/48"
           title={inlineCommandTitle || toolArgsSummary || undefined}
         >
-          <span className="font-sans text-scaled-13px font-450 text-foreground/62 group-hover/tool:text-foreground/75">
+          <span className="font-sans text-sm font-450 text-foreground/62 group-hover/tool:text-foreground/75">
             {summaryTitleName}
             {title.action ? (
-              <span className="font-mono text-scaled-11p5px font-normal text-foreground/48">
+              <span className="font-mono text-xs font-normal text-foreground/48">
                 {" · "}
                 {title.action}
               </span>
@@ -425,13 +423,13 @@ function ToolCallItem({
       <div className="flex shrink-0 items-center gap-2">
         {displayIsRunning ? (
           <AssistantStatus
-            className="min-h-0 gap-1.5 text-scaled-11px text-foreground/45"
+            className="min-h-0 gap-1.5 text-xs text-foreground/45"
             iconClassName="size-3"
           >
             {statusLabel}
           </AssistantStatus>
         ) : (
-          <span className={cn("text-scaled-11px", statusTextClass)}>{statusLabel}</span>
+          <span className={cn("text-xs", statusTextClass)}>{statusLabel}</span>
         )}
         {canExpand ? (
           <ChevronRight
@@ -479,7 +477,7 @@ function ToolCallItem({
             <details className="group/result">
               <summary
                 className={cn(
-                  "flex cursor-pointer select-none items-center gap-1 text-scaled-10p5px text-muted-foreground/50",
+                  "flex cursor-pointer select-none items-center gap-1 text-tiny text-muted-foreground/50",
                   "transition-colors duration-150 hover:text-foreground/60",
                 )}
               >
@@ -540,9 +538,7 @@ function ToolCallItem({
               label={t("chat.tool.return")}
               trailing={
                 result?.isError ? (
-                  <span className="text-scaled-11px font-medium text-red-500">
-                    {t("chat.tool.error")}
-                  </span>
+                  <span className="text-xs font-medium text-red-500">{t("chat.tool.error")}</span>
                 ) : null
               }
             >

@@ -282,7 +282,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {name ? (
           <ToolSurface>
             <ToolSurfaceLabel label="agent" />
-            <div className="break-words text-scaled-11p5px font-semibold leading-1p55 text-foreground/86">
+            <div className="break-words text-xs font-semibold leading-1p55 text-foreground/86">
               {name}
             </div>
           </ToolSurface>
@@ -290,17 +290,13 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {role ? (
           <ToolSurface>
             <ToolSurfaceLabel label="role" />
-            <div className="break-words text-scaled-11p5px leading-1p55 text-foreground/78">
-              {role}
-            </div>
+            <div className="break-words text-xs leading-1p55 text-foreground/78">{role}</div>
           </ToolSurface>
         ) : null}
         {task ? (
           <ToolSurface>
             <ToolSurfaceLabel label="task" />
-            <div className="break-words text-scaled-11p5px leading-1p6 text-foreground/82">
-              {task}
-            </div>
+            <div className="break-words text-xs leading-1p6 text-foreground/82">{task}</div>
           </ToolSurface>
         ) : null}
       </div>
@@ -334,7 +330,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="path" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6"
+              className="block min-w-0 break-all font-mono text-xs leading-1p6"
             />
           </ToolSurface>
         ) : null}
@@ -352,7 +348,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="query" />
             <div className="flex items-start gap-2">
               <Search className="mt-2px size-3.5 shrink-0 text-muted-foreground/35" />
-              <span className="min-w-0 break-all font-mono text-scaled-11p5px leading-1p6 text-foreground/82">
+              <span className="min-w-0 break-all font-mono text-xs leading-1p6 text-foreground/82">
                 {display.pattern}
               </span>
             </div>
@@ -363,7 +359,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="scope" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6"
+              className="block min-w-0 break-all font-mono text-xs leading-1p6"
             />
           </ToolSurface>
         ) : null}
@@ -460,9 +456,7 @@ export function ShellToolDisplay({
       aria-label="Shell"
       data-shell-tool-display=""
     >
-      <div className="px-3 pb-0.5 pt-2.5 text-scaled-12px font-medium text-muted-foreground/75">
-        Shell
-      </div>
+      <div className="px-3 pb-0.5 pt-2.5 text-xs font-medium text-muted-foreground/75">Shell</div>
       <ToolScrollablePre
         className={cn(
           "max-h-72 rounded-none bg-transparent px-3 pb-3 pt-1.5 text-foreground/78",
@@ -843,17 +837,14 @@ export function ToolResultDisplay({
               <div
                 key={`${entry.kind}-${entry.path}`}
                 className={cn(
-                  "flex items-start gap-2 rounded-md px-1.5 py-1 text-scaled-11px leading-1p5",
+                  "flex items-start gap-2 rounded-md px-1.5 py-1 text-xs leading-1p5",
                   "even:bg-black/[0.02] dark:even:bg-white/[0.03]",
                 )}
               >
-                <span className="mt-1px shrink-0 text-scaled-10px font-semibold uppercase text-muted-foreground/35">
+                <span className="mt-1px shrink-0 text-tiny font-semibold uppercase text-muted-foreground/35">
                   {entry.kind}
                 </span>
-                <PathDisplay
-                  path={entry.path}
-                  className="min-w-0 break-all font-mono text-scaled-11px"
-                />
+                <PathDisplay path={entry.path} className="min-w-0 break-all font-mono text-xs" />
               </div>
             ))}
           </div>
@@ -885,7 +876,7 @@ export function ToolResultDisplay({
                 path={entry}
                 className={cn(
                   "block rounded-md px-1.5 py-1",
-                  "break-all font-mono text-scaled-11px leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]",
+                  "break-all font-mono text-xs leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]",
                 )}
               />
             ))}
@@ -921,7 +912,7 @@ export function ToolResultDisplay({
                 >
                   <PathDisplay
                     path={file.path}
-                    className="block break-all font-mono text-scaled-11px leading-1p5"
+                    className="block break-all font-mono text-xs leading-1p5"
                   />
                   <MetaTags
                     tags={[
@@ -946,12 +937,12 @@ export function ToolResultDisplay({
                 <div className="flex items-start gap-2">
                   <PathDisplay
                     path={match.path}
-                    className="min-w-0 break-all font-mono text-scaled-11px leading-1p5"
+                    className="min-w-0 break-all font-mono text-xs leading-1p5"
                   />
                   <span
                     className={cn(
                       "shrink-0 rounded bg-black/[0.04] px-1.5 py-1px",
-                      "text-scaled-10px font-semibold text-muted-foreground/60 dark:bg-white/[0.05]",
+                      "text-tiny font-semibold text-muted-foreground/60 dark:bg-white/[0.05]",
                     )}
                   >
                     line {match.line}
@@ -987,7 +978,7 @@ export function ToolResultDisplay({
             { label: "issues", value: String(issues.length) },
           ]}
         />
-        <div className="text-scaled-12px font-semibold leading-1p45 text-foreground/90">
+        <div className="text-xs font-semibold leading-1p45 text-foreground/90">
           Agent call rejected — no subagents were started
         </div>
         {issues.length > 0 ? (
@@ -1044,21 +1035,21 @@ export function ToolResultDisplay({
       <ToolSurface className="space-y-2">
         <MetaTags tags={tags} />
         <div className="space-y-2">
-          <div className="text-scaled-12px font-semibold leading-1p45 text-foreground/90">
+          <div className="text-xs font-semibold leading-1p45 text-foreground/90">
             {agentDisplayName}
           </div>
           {agent.role ? (
-            <div className="text-scaled-11px font-medium leading-1p55 text-foreground/78">
+            <div className="text-xs font-medium leading-1p55 text-foreground/78">
               <span className="text-muted-foreground">role</span> {agent.role}
             </div>
           ) : null}
           {agentTask ? (
-            <div className="break-words text-scaled-11px font-medium leading-1p6 text-foreground/80">
+            <div className="break-words text-xs font-medium leading-1p6 text-foreground/80">
               <span className="text-muted-foreground">task</span> {agentTask}
             </div>
           ) : null}
           {shouldShowSubagentWorktreeLocation(agent) ? (
-            <div className="break-all text-scaled-10px text-muted-foreground/70">
+            <div className="break-all text-tiny text-muted-foreground/70">
               {agent.branchName ? `${agent.branchName} | ` : ""}
               {agent.worktreeRoot}
             </div>
@@ -1147,14 +1138,14 @@ export function ToolResultDisplay({
           ]}
         />
         {details.subject ? (
-          <div className="break-words text-scaled-11p5px font-semibold leading-1p5 text-foreground/86">
+          <div className="break-words text-xs font-semibold leading-1p5 text-foreground/86">
             {details.subject}
           </div>
         ) : null}
         {details.bodyPreview ? (
           <div
             className={cn(
-              "rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-scaled-11p5px leading-1p6",
+              "rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-xs leading-1p6",
               "dark:border-white/[0.07] dark:bg-white/[0.03]",
             )}
           >

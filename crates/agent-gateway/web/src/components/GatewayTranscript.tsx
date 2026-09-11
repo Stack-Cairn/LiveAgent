@@ -186,13 +186,9 @@ function HistoryLoadingState(props: { title?: string }) {
           >
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
-          <div className="max-w-28rem text-scaled-14px font-medium text-foreground/90">
-            正在加载会话历史
-          </div>
+          <div className="max-w-28rem text-sm font-medium text-foreground/90">正在加载会话历史</div>
           {title ? (
-            <div className="mt-1 max-w-28rem truncate text-scaled-12px text-muted-foreground">
-              {title}
-            </div>
+            <div className="mt-1 max-w-28rem truncate text-xs text-muted-foreground">{title}</div>
           ) : null}
         </div>
       </div>
@@ -236,7 +232,7 @@ function GatewayUserMessageBubbleBody(props: {
       className={cn(
         "ml-auto w-fit max-w-full",
         "whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5",
-        "font-chat text-scaled-14p5px leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
+        "font-chat text-sm leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
       )}
     >
       <UserAttachmentCards
@@ -1048,10 +1044,10 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 "border-destructive/30 bg-destructive/5",
               )}
             >
-              <div className="text-11px font-bold tracking-0p12em uppercase text-muted-foreground">
+              <div className="text-xs font-bold tracking-0p12em uppercase text-muted-foreground">
                 Error
               </div>
-              <div className="gateway-bubble-content mt-10px text-14px leading-1p72 text-foreground">
+              <div className="gateway-bubble-content mt-10px text-sm leading-1p72 text-foreground">
                 <pre>{row.text}</pre>
               </div>
             </div>
@@ -1188,7 +1184,7 @@ export function GatewayTranscript({
           <div
             className={cn(
               "rounded-14px border border-solid border-destructive/16 bg-destructive/8 px-12px py-10px",
-              "text-13px text-destructive",
+              "text-sm text-destructive",
             )}
           >
             {inlineErrorText}

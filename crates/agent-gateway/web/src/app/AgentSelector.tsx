@@ -101,13 +101,13 @@ export function AgentSelector({
               <span className="block truncate text-sm font-medium" title={name || agentID}>
                 {name || truncateMiddle(agentID)}
               </span>
-              <span className="block truncate font-mono text-11px text-muted-foreground">
+              <span className="block truncate font-mono text-xs text-muted-foreground">
                 {truncateMiddle(agentID)}
               </span>
             </span>
             <span
               className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-10px font-medium",
+                "shrink-0 rounded-full px-2 py-0.5 text-tiny font-medium",
                 agent.online
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : "bg-rose-500/10 text-rose-600 dark:text-rose-400",
@@ -158,7 +158,7 @@ export function AgentSelector({
                 </span>
                 {name ? (
                   <span
-                    className="block truncate font-mono text-11px text-muted-foreground"
+                    className="block truncate font-mono text-xs text-muted-foreground"
                     title={agentID}
                   >
                     {truncateMiddle(agentID)}

@@ -47,7 +47,7 @@ test("narrow trajectory controls preserve horizontal content space", () => {
   assert.match(toolbarSource, /@max-\[520px\]:order-last[\s\S]*?@max-\[520px\]:w-full/);
   assert.match(timelineSource, /@max-\[520px\]:gap-1 @max-\[520px\]:px-2/);
   assert.match(timelineSource, /@max-\[520px\]:w-8/);
-  assert.match(rowSource, /@max-\[520px\]:w-12 @max-\[520px\]:text-11px/);
+  assert.match(rowSource, /@max-\[520px\]:w-12 @max-\[520px\]:text-xs/);
 });
 
 test("trajectory details resizing remains available in narrow containers", () => {

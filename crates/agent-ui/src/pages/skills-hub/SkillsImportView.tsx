@@ -335,7 +335,7 @@ export function SkillsImportView(props: {
             </div>
           ) : activeScan ? (
             <div key={activeScan.tool} className="flex flex-col gap-3">
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-11px text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <span className="font-mono">{activeScan.rootDir}</span>
                 {activeScan.tool === "codebuddy" && activeScan.exists ? (
                   <>
@@ -470,10 +470,10 @@ export function SkillsImportView(props: {
                                   <SearchHighlight
                                     text={skill.name}
                                     query={query}
-                                    className="truncate text-13px font-semibold leading-tight text-foreground"
+                                    className="truncate text-sm font-semibold leading-tight text-foreground"
                                   />
                                   {alreadyInstalled ? (
-                                    <Badge variant="success" className="h-5 px-1.5 text-10px">
+                                    <Badge variant="success" className="h-5 px-1.5 text-tiny">
                                       {t("settings.skillsImportInstalledBadge")}
                                     </Badge>
                                   ) : null}
@@ -491,7 +491,7 @@ export function SkillsImportView(props: {
                             </p>
                             <div className="mt-auto space-y-2.5">
                               <span
-                                className="block truncate px-0.5 text-10p5px text-muted-foreground"
+                                className="block truncate px-0.5 text-tiny text-muted-foreground"
                                 title={skill.baseDir}
                               >
                                 <SearchHighlight text={skill.baseDir} query={query} />
@@ -544,7 +544,7 @@ export function SkillsImportView(props: {
           <div
             className={cn(
               "pointer-events-auto flex max-w-full flex-wrap items-center gap-2",
-              "rounded-full border border-border/50 bg-background/95 text-12p5px shadow-ui-skillshubpage-51",
+              "rounded-full border border-border/50 bg-background/95 text-xs shadow-ui-skillshubpage-51",
               "max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
               importableSelectedCount > 0 || importing ? "py-2 pl-4 pr-2" : "px-4 py-2.5",
             )}

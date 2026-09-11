@@ -440,7 +440,7 @@ export function TrajectoryView(props: {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-13px text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         {t("trajectory.loading")}
       </div>
     );
@@ -472,7 +472,7 @@ export function TrajectoryView(props: {
           <button
             type="button"
             className={cn(
-              "rounded px-2 py-1 text-11px text-muted-foreground",
+              "rounded px-2 py-1 text-xs text-muted-foreground",
               "hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60",
             )}
             disabled={loadingMore}
@@ -484,7 +484,7 @@ export function TrajectoryView(props: {
       )}
 
       {notice !== null && (
-        <p className="shrink-0 border-b border-border/60 bg-muted/30 px-3 py-1 text-11px text-muted-foreground">
+        <p className="shrink-0 border-b border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
           {notice}
         </p>
       )}

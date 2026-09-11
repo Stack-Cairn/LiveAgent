@@ -172,7 +172,7 @@ function ConfigChips({ card }: { card: McpRegistryCard }) {
           key={`${input.target}:${input.name}`}
           className={cn(
             "inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5",
-            "text-10px text-muted-foreground ring-1 ring-border/60",
+            "text-tiny text-muted-foreground ring-1 ring-border/60",
           )}
           title={input.description ?? input.name}
         >
@@ -181,7 +181,7 @@ function ConfigChips({ card }: { card: McpRegistryCard }) {
         </span>
       ))}
       {inputs.length > 5 ? (
-        <span className="rounded-md bg-muted px-1.5 py-0.5 text-10px text-muted-foreground ring-1 ring-border/60">
+        <span className="rounded-md bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground ring-1 ring-border/60">
           +{inputs.length - 5}
         </span>
       ) : null}
@@ -274,7 +274,7 @@ function RegistryCard(props: {
               <SelectTrigger
                 className={cn(
                   "h-7 w-5p75rem overflow-hidden",
-                  "rounded-lg border-border/70 bg-background px-2 py-0 text-10p5px shadow-xs",
+                  "rounded-lg border-border/70 bg-background px-2 py-0 text-tiny shadow-xs",
                   "[&>svg]:size-3 [&>svg]:shrink-0",
                 )}
                 title={versionLabelForCard(card) ?? t("mcpHub.storeVersionLatest")}
@@ -312,14 +312,14 @@ function RegistryCard(props: {
             <SearchHighlight
               text={card.displayName}
               query={searchQuery}
-              className="truncate text-13px font-semibold leading-tight text-foreground"
+              className="truncate text-sm font-semibold leading-tight text-foreground"
             />
             {card.verified ? <Shield className="size-3.5 shrink-0 text-foreground/65" /> : null}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span
               className={cn(
-                "inline-flex rounded-md border px-1.5 py-0.5 text-10px font-medium",
+                "inline-flex rounded-md border px-1.5 py-0.5 text-tiny font-medium",
                 sourceTone(card.source),
               )}
             >
@@ -329,7 +329,7 @@ function RegistryCard(props: {
               <span
                 key={transport}
                 className={cn(
-                  "inline-flex rounded-md px-1.5 py-0.5 text-10px font-semibold uppercase ring-1",
+                  "inline-flex rounded-md px-1.5 py-0.5 text-tiny font-semibold uppercase ring-1",
                   transportTone(transport),
                 )}
               >
@@ -340,7 +340,7 @@ function RegistryCard(props: {
         </div>
       </div>
 
-      <p className="mt-3 line-clamp-3 min-h-48px text-11p5px leading-1p45 text-muted-foreground">
+      <p className="mt-3 line-clamp-3 min-h-48px text-xs leading-1p45 text-muted-foreground">
         <SearchHighlight
           text={card.description || t("mcpHub.storeNoDescription")}
           query={searchQuery}
@@ -352,7 +352,7 @@ function RegistryCard(props: {
           {card.tags.slice(0, 4).map((tag) => (
             <span
               key={tag}
-              className="rounded-md bg-muted px-1.5 py-0.5 text-10px text-muted-foreground ring-1 ring-border/60"
+              className="rounded-md bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground ring-1 ring-border/60"
             >
               <SearchHighlight text={tag} query={searchQuery} />
             </span>
@@ -368,11 +368,11 @@ function RegistryCard(props: {
         )}
       >
         {configureDraft?.commandPreview ? (
-          <code className="line-clamp-2 w-full break-all text-10p5px leading-1p45 text-muted-foreground">
+          <code className="line-clamp-2 w-full break-all text-tiny leading-1p45 text-muted-foreground">
             <SearchHighlight text={configureDraft.commandPreview} query={searchQuery} />
           </code>
         ) : (
-          <span className="text-10p5px text-muted-foreground">
+          <span className="text-tiny text-muted-foreground">
             {card.installUnavailableReason === "needs-manual-command"
               ? t("mcpHub.storeNeedsCommand")
               : t("mcpHub.storeManualOnly")}
@@ -386,7 +386,7 @@ function RegistryCard(props: {
 
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3">
         <span
-          className="min-w-0 truncate text-10p5px text-muted-foreground"
+          className="min-w-0 truncate text-tiny text-muted-foreground"
           title={done ? `${t("mcpHub.storeInstalledAs")} ${installedId}` : card.name}
         >
           <SearchHighlight
@@ -472,15 +472,15 @@ function McpRegistryPreviewDrawer(props: {
               {data.remote ? <Globe2 className="size-5" /> : <Server className="size-5" />}
             </div>
             <div className="min-w-0 flex-1">
-              <SheetDescription className="text-10p5px font-medium uppercase tracking-wider">
+              <SheetDescription className="text-tiny font-medium uppercase tracking-wider">
                 {t("mcpHub.storePreviewTitle")}
               </SheetDescription>
-              <SheetTitle className="mt-0.5 truncate text-15px tracking-tight">
+              <SheetTitle className="mt-0.5 truncate text-base tracking-tight">
                 {data.displayName}
               </SheetTitle>
             </div>
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-11px text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span
               className={cn("inline-flex rounded-md border px-1.5 py-0.5", sourceTone(data.source))}
             >
@@ -508,7 +508,7 @@ function McpRegistryPreviewDrawer(props: {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-4">
-            <p className="text-13px leading-6 text-muted-foreground">
+            <p className="text-sm leading-6 text-muted-foreground">
               {data.description || t("mcpHub.storeNoDescription")}
             </p>
 
@@ -522,7 +522,7 @@ function McpRegistryPreviewDrawer(props: {
 
             {loading ? (
               <div className="space-y-2 rounded-2xl border border-border/70 bg-card p-3 shadow-xs">
-                <div className="flex items-center gap-2 text-12px text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="size-3.5 animate-spin text-foreground/65" />
                   {t("mcpHub.storePreviewLoadingDetail")}
                 </div>
@@ -533,7 +533,7 @@ function McpRegistryPreviewDrawer(props: {
 
             {error ? (
               <div className="rounded-2xl border border-border/70 bg-muted/50 p-3">
-                <div className="flex items-start gap-2 text-12px text-muted-foreground">
+                <div className="flex items-start gap-2 text-xs text-muted-foreground">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-foreground/65" />
                   <span>{t("mcpHub.storePreviewDetailUnavailable")}</span>
                 </div>
@@ -542,14 +542,14 @@ function McpRegistryPreviewDrawer(props: {
 
             {data.tags.length > 0 ? (
               <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-xs">
-                <div className="mb-2 text-12px font-semibold text-foreground">
+                <div className="mb-2 text-xs font-semibold text-foreground">
                   {t("mcpHub.storePreviewTags")}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {data.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-md bg-muted/55 px-1.5 py-0.5 text-10p5px text-muted-foreground ring-1 ring-border/30"
+                      className="rounded-md bg-muted/55 px-1.5 py-0.5 text-tiny text-muted-foreground ring-1 ring-border/30"
                     >
                       {tag}
                     </span>
@@ -559,7 +559,7 @@ function McpRegistryPreviewDrawer(props: {
             ) : null}
 
             <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-xs">
-              <div className="mb-2 text-12px font-semibold text-foreground">
+              <div className="mb-2 text-xs font-semibold text-foreground">
                 {t("mcpHub.storePreviewInstallPreview")}
               </div>
               {draft?.commandPreview ? (
@@ -567,7 +567,7 @@ function McpRegistryPreviewDrawer(props: {
                   className={cn(
                     "mb-2 block max-h-28 overflow-y-auto",
                     "whitespace-pre-wrap break-all rounded-xl border border-border/70 bg-muted/50 px-3 py-2",
-                    "text-11px leading-5 text-muted-foreground",
+                    "text-xs leading-5 text-muted-foreground",
                   )}
                 >
                   {draft.commandPreview}
@@ -576,7 +576,7 @@ function McpRegistryPreviewDrawer(props: {
                 <div
                   className={cn(
                     "mb-2 rounded-xl border border-border/70 bg-muted/50 px-3 py-2",
-                    "text-12px text-muted-foreground",
+                    "text-xs text-muted-foreground",
                   )}
                 >
                   {data.installUnavailableReason === "needs-manual-command"
@@ -620,7 +620,7 @@ function McpRegistryPreviewDrawer(props: {
             </div>
 
             <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-xs">
-              <div className="mb-2 text-12px font-semibold text-foreground">
+              <div className="mb-2 text-xs font-semibold text-foreground">
                 {t("mcpHub.storePreviewRequiredConfig")}
               </div>
               {requiredConfig.length > 0 ? (
@@ -634,15 +634,15 @@ function McpRegistryPreviewDrawer(props: {
                         {input.secret ? (
                           <Key className="size-3.5 shrink-0 text-foreground/65" />
                         ) : null}
-                        <span className="min-w-0 flex-1 truncate text-12px font-medium text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
                           {input.label ?? input.name}
                         </span>
-                        <span className="rounded-md bg-background px-1.5 py-0.5 text-10px text-muted-foreground ring-1 ring-border/60">
+                        <span className="rounded-md bg-background px-1.5 py-0.5 text-tiny text-muted-foreground ring-1 ring-border/60">
                           {configTargetLabel(input, t)}
                         </span>
                       </div>
                       {input.description ? (
-                        <div className="mt-1 text-11px leading-4 text-muted-foreground">
+                        <div className="mt-1 text-xs leading-4 text-muted-foreground">
                           {input.description}
                         </div>
                       ) : null}
@@ -650,7 +650,7 @@ function McpRegistryPreviewDrawer(props: {
                   ))}
                 </div>
               ) : (
-                <div className="text-12px text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   {t("mcpHub.storePreviewNoRequiredConfig")}
                 </div>
               )}
@@ -658,10 +658,10 @@ function McpRegistryPreviewDrawer(props: {
 
             {warnings.length > 0 ? (
               <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-xs">
-                <div className="mb-2 text-12px font-semibold text-foreground/85">
+                <div className="mb-2 text-xs font-semibold text-foreground/85">
                   {t("mcpHub.storePreviewWarnings")}
                 </div>
-                <div className="space-y-1 text-12px text-muted-foreground">
+                <div className="space-y-1 text-xs text-muted-foreground">
                   {warnings.map((warning) => (
                     <div key={warning}>{warning}</div>
                   ))}
@@ -671,7 +671,7 @@ function McpRegistryPreviewDrawer(props: {
 
             {links.length > 0 ? (
               <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-xs">
-                <div className="mb-2 text-12px font-semibold text-foreground">
+                <div className="mb-2 text-xs font-semibold text-foreground">
                   {t("mcpHub.storePreviewLinks")}
                 </div>
                 <div className="space-y-1.5">
@@ -682,12 +682,12 @@ function McpRegistryPreviewDrawer(props: {
                       onClick={() => void openUrl(link.url)}
                       className={cn(
                         "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5",
-                        "text-left text-12px text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+                        "text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
                       )}
                     >
                       <ExternalLink className="size-3.5 shrink-0" />
                       <span className="shrink-0">{t(link.labelKey)}</span>
-                      <span className="min-w-0 truncate font-mono text-11px opacity-70">
+                      <span className="min-w-0 truncate font-mono text-xs opacity-70">
                         {link.url}
                       </span>
                     </button>
@@ -741,7 +741,7 @@ function McpRegistryPreviewDrawer(props: {
 function McpPreviewMetric(props: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-border/70 bg-card px-3 py-2.5 shadow-xs">
-      <div className="text-10p5px text-muted-foreground">{props.label}</div>
+      <div className="text-tiny text-muted-foreground">{props.label}</div>
       <div className="mt-1 truncate text-sm font-semibold text-foreground" title={props.value}>
         {props.value}
       </div>
@@ -752,12 +752,12 @@ function McpPreviewMetric(props: { label: string; value: string }) {
 function McpPreviewField(props: { label: string; value?: string | null; mono?: boolean }) {
   if (!props.value) return null;
   return (
-    <div className="grid grid-cols-form-label gap-3 py-2 text-12px">
+    <div className="grid grid-cols-form-label gap-3 py-2 text-xs">
       <div className="text-muted-foreground">{props.label}</div>
       <div
         className={cn(
           "min-w-0 break-words text-foreground",
-          props.mono && "whitespace-pre-wrap font-mono text-11px",
+          props.mono && "whitespace-pre-wrap font-mono text-xs",
         )}
       >
         {props.value}
@@ -1019,10 +1019,10 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
                 <div className="flex items-center gap-3.5">
                   <FrostSpinner />
                   <div className="min-w-0 flex-1">
-                    <div className="text-13px font-medium tracking-tight text-foreground">
+                    <div className="text-sm font-medium tracking-tight text-foreground">
                       {t("mcpHub.storeLoadingTitle")}
                     </div>
-                    <div className="mt-0.5 truncate text-11px text-muted-foreground">
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
                       {t("mcpHub.storeLoadingDesc").replace("{source}", currentSourceLabel)}
                     </div>
                   </div>

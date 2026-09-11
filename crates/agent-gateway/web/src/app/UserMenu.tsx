@@ -62,7 +62,7 @@ export function UserMenu(props: UserMenuProps) {
         <span
           className={cn(
             "relative flex size-6 items-center justify-center rounded-full bg-gradient-to-br",
-            "from-emerald-500/90 to-sky-500/90 text-scaled-11px font-semibold text-white",
+            "from-emerald-500/90 to-sky-500/90 text-xs font-semibold text-white",
           )}
         >
           {userAvatarLabel || <User className="size-3.5" />}

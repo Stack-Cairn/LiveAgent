@@ -333,7 +333,7 @@ export function HooksSection(_props: SettingsSectionProps) {
                         {phaseHookCount > 0 ? (
                           <span
                             className={cn(
-                              "rounded-full px-1.5 py-0.5 text-10px font-semibold leading-none",
+                              "rounded-full px-1.5 py-0.5 text-tiny font-semibold leading-none",
                               group.phase.bgColor,
                             )}
                           >
@@ -408,7 +408,7 @@ export function HooksSection(_props: SettingsSectionProps) {
                                   <div className="flex items-center gap-1.5">
                                     <span
                                       className={cn(
-                                        "text-13px font-medium transition-colors web:max-820:min-w-0",
+                                        "text-sm font-medium transition-colors web:max-820:min-w-0",
                                         selected
                                           ? "text-foreground"
                                           : "text-muted-foreground group-hover:text-foreground",
@@ -419,7 +419,7 @@ export function HooksSection(_props: SettingsSectionProps) {
                                     {hasHooks ? (
                                       <span
                                         className={cn(
-                                          "rounded-full px-1.5 py-0.5 text-10px font-semibold leading-none",
+                                          "rounded-full px-1.5 py-0.5 text-tiny font-semibold leading-none",
                                           selected
                                             ? "bg-primary/15 text-primary"
                                             : "bg-muted/60 text-muted-foreground",
@@ -481,11 +481,11 @@ export function HooksSection(_props: SettingsSectionProps) {
                 })()}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold web:max-820:text-15px">
+                    <h3 className="text-base font-semibold web:max-820:text-base">
                       {getHookEventLabel(t, activeEvent)}
                     </h3>
                   </div>
-                  <p className="mt-0.5 text-sm text-muted-foreground web:max-820:text-12p5px web:max-820:leading-1p5">
+                  <p className="mt-0.5 text-sm text-muted-foreground web:max-820:text-xs web:max-820:leading-1p5">
                     {t(HOOK_EVENT_DESCRIPTION_TRANSLATION_KEYS[activeEvent])}
                   </p>
                 </div>
@@ -557,12 +557,12 @@ export function HooksSection(_props: SettingsSectionProps) {
 
                         <div className="min-w-0 flex-1 web:max-520:min-w-0">
                           <div className="settings-hooks-card-meta flex flex-wrap items-center gap-2">
-                            <span className="truncate text-sm font-semibold web:max-820:text-13p5px">
+                            <span className="truncate text-sm font-semibold web:max-820:text-sm">
                               {hook.name}
                             </span>
                             <span
                               className={cn(
-                                "settings-hooks-card-badge rounded-md bg-muted/50 px-1.5 py-0.5 text-10px font-medium tabular-nums",
+                                "settings-hooks-card-badge rounded-md bg-muted/50 px-1.5 py-0.5 text-tiny font-medium tabular-nums",
                                 "text-muted-foreground",
                               )}
                             >
@@ -572,7 +572,7 @@ export function HooksSection(_props: SettingsSectionProps) {
                                 : t("settings.hooksRequestsCount")}
                             </span>
                           </div>
-                          <p className="mt-1 text-sm leading-relaxed text-muted-foreground web:max-820:text-12p5px web:max-820:leading-1p5">
+                          <p className="mt-1 text-sm leading-relaxed text-muted-foreground web:max-820:text-xs web:max-820:leading-1p5">
                             {hook.description || t("settings.hooksNoDescription")}
                           </p>
                         </div>

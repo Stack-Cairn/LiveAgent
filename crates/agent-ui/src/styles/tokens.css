@@ -1,17 +1,14 @@
-/* Shared style values. Keep existing values and units; this is not a visual redesign.
+/* Shared style values. Typography uses Tailwind rem scales; other values retain existing units.
  * Standard py-*, px-*, gap-*, w-* and h-* utilities use --spacing.
  * See docs/ui-style-variables.md for scope and usage. */
 
 @theme {
   --spacing: 0.25rem;
+  /* Compact badges, counts and key legends. Other UI text uses Tailwind defaults. */
+  --text-tiny: 0.625rem;
+  --text-tiny--line-height: 1.2;
   /* Variant and prose mono utilities follow the user-configurable code font. */
   --font-mono: var(--code-font-family);
-  --text-xs: var(--text-0p75rem);
-  --text-sm: var(--text-0p875rem);
-  --text-base: var(--text-1rem);
-  --text-lg: var(--text-1p125rem);
-  --text-xl: var(--text-1p25rem);
-  --text-2xl: var(--text-1p5rem);
 }
 
 /* Existing application colors, shared by the GUI and gateway. */
@@ -165,8 +162,7 @@
     var(--spacing-minus-28px) var(--ui-color-rgba-15-23-42-0p45);
   --shadow-ui-mcpregistrybrowser-46: var(--spacing-minus-18px) 0 var(--spacing-45px)
     var(--spacing-minus-28px) var(--ui-color-rgba-0-0-0-0p7);
-  --shadow-settings-surface: 0 var(--spacing-1px) var(--spacing-2px)
-    hsl(var(--foreground) / 0.02);
+  --shadow-settings-surface: 0 var(--spacing-1px) var(--spacing-2px) hsl(var(--foreground) / 0.02);
   --shadow-ui-systemsettingsform-48: 0 var(--spacing-1px) var(--spacing-2px)
     hsl(var(--foreground) / 0.035);
   --shadow-ui-systemsettingsform-49: 0 var(--spacing-10px) var(--spacing-30px)
@@ -186,38 +182,6 @@
   --color-status-integrity-start: rgba(41, 255, 214, 0.96);
   --color-status-integrity-end: rgba(20, 184, 255, 0.96);
   --color-status-integrity-track: rgba(30, 39, 68, 0.88);
-  --text-0p9em: 0.9em;
-  --text-0p75rem: 0.75rem;
-  --text-0p92em: 0.92em;
-  --text-1p04em: 1.04em;
-  --text-1rem: 1rem;
-  --text-8px: 8px;
-  --text-9p5px: 9.5px;
-  --text-9px: 9px;
-  --text-10p5px: 10.5px;
-  --text-10px: 10px;
-  --text-11p5px: 11.5px;
-  --text-11px: 11px;
-  --text-12p5px: 12.5px;
-  --text-12px: 12px;
-  --text-13p5px: 13.5px;
-  --text-13px: 13px;
-  --text-14p5px: 14.5px;
-  --text-14px: 14px;
-  --text-15px: 15px;
-  --text-16px: 16px;
-  --text-17px: 17px;
-  --text-18px: 18px;
-  --text-20px: 20px;
-  --text-21px: 21px;
-  --text-22px: 22px;
-  --text-23px: 23px;
-  --text-24px: 24px;
-  --text-25px: 25px;
-  --text-26px: 26px;
-  --text-28px: 28px;
-  --text-36px: 36px;
-  --text-46px: 46px;
   --font-weight-400: 400;
   --font-weight-450: 450;
   --font-weight-500: 500;
@@ -532,32 +496,13 @@
   --tracking-minus-0p012em: -0.012em;
   --tracking-minus-0p018em: -0.018em;
   --tracking-minus-0p035em: -0.035em;
-  --text-0p875rem: 0.875rem;
-  --text-1p125rem: 1.125rem;
-  --text-1p25rem: 1.25rem;
-  --text-1p5rem: 1.5rem;
 }
 
 @theme inline {
-  --text-scaled-11px: calc(var(--text-11px) * var(--zone-font-scale, 1));
-  --text-scaled-13px: calc(var(--text-13px) * var(--zone-font-scale, 1));
-  --text-scaled-12p5px: calc(var(--text-12p5px) * var(--zone-font-scale, 1));
-  --text-scaled-10p5px: calc(var(--text-10p5px) * var(--zone-font-scale, 1));
-  --text-scaled-11p5px: calc(var(--text-11p5px) * var(--zone-font-scale, 1));
-  --text-scaled-10px: calc(var(--text-10px) * var(--zone-font-scale, 1));
-  --text-scaled-22px: calc(var(--text-22px) * var(--zone-font-scale, 1));
-  --text-scaled-20px: calc(var(--text-20px) * var(--zone-font-scale, 1));
-  --text-scaled-14px: calc(var(--text-14px) * var(--zone-font-scale, 1));
-  --text-scaled-14p5px: calc(var(--text-14p5px) * var(--zone-font-scale, 1));
-  --text-scaled-15px: calc(var(--text-15px) * var(--zone-font-scale, 1));
-  --text-scaled-12px: calc(var(--text-12px) * var(--zone-font-scale, 1));
-  --text-scaled-9px: calc(var(--text-9px) * var(--zone-font-scale, 1));
   --leading-scaled-22px: calc(var(--leading-22px) * var(--zone-font-scale, 1));
   --leading-scaled-30px: calc(var(--leading-30px) * var(--zone-font-scale, 1));
-  --text-scaled-17px: calc(var(--text-17px) * var(--zone-font-scale, 1));
   --leading-scaled-26px: calc(var(--leading-26px) * var(--zone-font-scale, 1));
   --leading-scaled-20px: calc(var(--leading-20px) * var(--zone-font-scale, 1));
-  --text-scaled-13p5px: calc(var(--text-13p5px) * var(--zone-font-scale, 1));
 }
 
 @layer base {

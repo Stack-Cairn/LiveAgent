@@ -10,7 +10,7 @@ const WEB_SETTINGS_RESPONSIVE_CLASS = [
   "web:max-820:[&_.settings-content-hooks]:overflow-y-auto web:max-820:[&_.settings-content-hooks]:overscroll-y-contain web:max-820:[&_.settings-content-hooks]:[-webkit-overflow-scrolling:touch] web:max-820:[&_.settings-content-memory]:overflow-y-auto web:max-820:[&_.settings-content-memory]:overscroll-y-contain web:max-820:[&_.settings-content-memory]:[-webkit-overflow-scrolling:touch]",
   "web:max-820:[&_.settings-section-shell-hooks]:block web:max-820:[&_.settings-section-shell-hooks]:min-h-auto web:max-820:[&_.settings-section-shell-hooks]:flex-none web:max-820:[&_.settings-section-shell-memory]:block web:max-820:[&_.settings-section-shell-memory]:min-h-auto web:max-820:[&_.settings-section-shell-memory]:flex-none",
   "web:max-820:[&_.settings-section-heading-row]:flex-col web:max-820:[&_.settings-section-heading-row]:items-stretch web:max-820:[&_.settings-section-heading-row]:gap-12px web:max-820:[&_.settings-section-title-group]:min-w-0 web:max-820:[&_.settings-section-actions]:w-full web:max-820:[&_.settings-section-actions]:flex-wrap web:max-820:[&_.settings-section-actions]:justify-start web:max-820:[&_.settings-card-actions]:opacity-100 web:max-820:[&_.settings-hover-actions]:opacity-100 web:touch-primary:[&_.settings-card-actions]:opacity-100 web:touch-primary:[&_.settings-hover-actions]:opacity-100",
-  "web:max-820:[&_.settings-form-grid]:grid-cols-1 web:max-820:[&_.settings-choice-grid]:grid-cols-1 web:max-820:[&_.settings-hooks-stat]:gap-6px web:max-820:[&_.settings-hooks-stat]:px-9px web:max-820:[&_.settings-hooks-stat]:py-5px web:max-820:[&_.settings-hooks-stat-label]:text-11px web:max-820:[&_.settings-hooks-stat-value]:text-12px",
+  "web:max-820:[&_.settings-form-grid]:grid-cols-1 web:max-820:[&_.settings-choice-grid]:grid-cols-1 web:max-820:[&_.settings-hooks-stat]:gap-6px web:max-820:[&_.settings-hooks-stat]:px-9px web:max-820:[&_.settings-hooks-stat]:py-5px web:max-820:[&_.settings-hooks-stat-label]:text-xs web:max-820:[&_.settings-hooks-stat-value]:text-xs",
   "web:max-820:[&_.settings-log-row]:flex-wrap web:max-820:[&_.settings-log-row>span]:w-auto web:max-820:[&_.settings-log-row>span:first-of-type]:flex-[1_1_100%] web:max-820:[&_.settings-log-row>span:nth-of-type(3)]:ml-0",
   "web:max-640:[&_.settings-card-row]:p-12px web:max-640:[&_.settings-card-actions]:ml-auto web:max-640:[&_.settings-inline-form]:flex-col web:max-640:[&_.settings-inline-form>button]:w-full web:max-640:[&_.settings-hooks-card-actions]:min-h-32px web:max-640:[&_.settings-hooks-card-actions]:items-center web:max-640:[&_.settings-hooks-card-actions]:gap-4px",
   "web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:size-auto web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:h-20px web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:w-36px web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:self-center web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:border web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:border-border/58 web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:bg-muted-foreground/18 web:max-640:[&_.settings-hooks-card-actions_[role=switch][aria-checked=true]]:border-primary/40 web:max-640:[&_.settings-hooks-card-actions_[role=switch][aria-checked=true]]:bg-primary web:max-640:[&_.settings-hooks-card-actions>button:not([role=switch])]:size-30px",
@@ -224,7 +224,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                         >
                           {definition.icon}
                         </span>
-                        <span className="min-w-0 truncate leading-tight web:max-820:text-12px">
+                        <span className="min-w-0 truncate leading-tight web:max-820:text-xs">
                           {t(definition.labelKey)}
                         </span>
                       </button>
@@ -242,7 +242,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
           {!web && showSaveIndicator ? (
             <div className="border-t border-border/60 px-3 py-2.5">
               <div
-                className="flex items-center gap-1.5 px-2.5 text-11px text-muted-foreground"
+                className="flex items-center gap-1.5 px-2.5 text-xs text-muted-foreground"
                 title={saveIndicator.title}
               >
                 <div className={cn("size-1.5 rounded-full", saveIndicator.dotClass)} />
@@ -265,7 +265,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                 activeSection.id === "system" && "mx-auto max-w-920px",
               )}
             >
-              <div key={activeSection.id} className="text-28px font-semibold tracking-tight">
+              <div key={activeSection.id} className="text-3xl font-semibold tracking-tight">
                 {t(activeSection.labelKey)}
               </div>
             </div>

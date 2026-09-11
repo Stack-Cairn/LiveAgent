@@ -646,7 +646,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
         <p className="truncate text-sm leading-5 text-foreground/80">
           {t("chat.conversationDeleteConfirm").replace("{title}", item.title)}
         </p>
-        <p className="mt-0.5 text-scaled-11px leading-4 text-muted-foreground">
+        <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
           {t("chat.conversationDeleteWarning")}
         </p>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -724,7 +724,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
             className={cn(
               "h-7 min-w-0 flex-1",
               "rounded-none border-0 bg-transparent p-0",
-              "text-scaled-14px font-normal shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent",
+              "text-sm font-normal shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent",
             )}
             disabled={isInteractionDisabled || isBusy}
           />
@@ -804,14 +804,14 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     <MessageSquare className="size-4 text-muted-foreground" />
                   </span>
                 ) : null}
-                <span className="[mask-image:var(--mask-image-sidebar-project-name-fade)] min-w-0 flex-1 overflow-hidden whitespace-nowrap text-scaled-14px font-normal leading-5">
+                <span className="[mask-image:var(--mask-image-sidebar-project-name-fade)] min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm font-normal leading-5">
                   {item.title}
                 </span>
                 {!isSelectionMode && blockedBadgeLabel ? (
                   <span
                     className={cn(
                       "inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2",
-                      "text-scaled-10p5px font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300",
+                      "text-tiny font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300",
                     )}
                   >
                     {blockedBadgeLabel}
@@ -1156,10 +1156,10 @@ export function ProjectGroupHeader(props: {
             )}
           />
         </span>
-        <span className="min-w-0 flex-1 truncate text-scaled-13px font-semibold leading-5">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">
           {group.name}
         </span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-10px leading-4 text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-tiny leading-4 text-muted-foreground">
           {memberCount}
         </span>
       </button>
@@ -1405,7 +1405,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
               : "chat.workspaceRemoveConfirm",
           ).replace("{name}", project.name)}
         </p>
-        <p className="mt-0.5 text-scaled-11px leading-4 text-destructive/75">
+        <p className="mt-0.5 text-xs leading-4 text-destructive/75">
           {isRunning
             ? t("chat.workspaceRemoveRunning")
             : t(
@@ -1416,11 +1416,11 @@ export const ProjectRow = memo(function ProjectRow(props: {
         </p>
         {deletingWorktree ? (
           <>
-            <p className="mt-1 break-all font-mono text-10px leading-4 text-destructive/70">
+            <p className="mt-1 break-all font-mono text-tiny leading-4 text-destructive/70">
               {project.path}
             </p>
             {project.worktree?.branch ? (
-              <label className="mt-2 flex cursor-pointer items-start gap-2 text-11px leading-4 text-foreground">
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs leading-4 text-foreground">
                 <input
                   type="checkbox"
                   checked={deleteBranchWithWorktree}
@@ -1567,7 +1567,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
               />
               <span
                 className={cn(
-                  "[mask-image:var(--mask-image-sidebar-project-name-fade)] min-w-0 flex-1 overflow-hidden whitespace-nowrap text-scaled-14px font-normal leading-5",
+                  "[mask-image:var(--mask-image-sidebar-project-name-fade)] min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm font-normal leading-5",
                   isMissing ? "text-destructive" : undefined,
                 )}
               >

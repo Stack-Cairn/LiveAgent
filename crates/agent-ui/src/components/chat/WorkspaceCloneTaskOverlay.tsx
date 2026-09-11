@@ -73,7 +73,7 @@ function CloneTaskCard({
             <span className="min-w-0 flex-1 truncate text-sm font-medium">
               {task.repositoryName}
             </span>
-            <span className="shrink-0 text-11px tabular-nums text-muted-foreground">
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
               {progress === null || !active ? "" : `${progress}%`}
             </span>
           </div>
@@ -112,7 +112,7 @@ function CloneTaskCard({
             )}
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate text-11px text-muted-foreground">{task.detail}</span>
+            <span className="min-w-0 truncate text-xs text-muted-foreground">{task.detail}</span>
             {task.status === "running" ? (
               <Button
                 type="button"

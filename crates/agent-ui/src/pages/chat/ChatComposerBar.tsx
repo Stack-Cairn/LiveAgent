@@ -1349,13 +1349,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                             <span
                               className={cn(
                                 "block min-w-0 flex-1 overflow-hidden",
-                                "text-ellipsis whitespace-nowrap text-scaled-11px leading-4 text-foreground/88",
+                                "text-ellipsis whitespace-nowrap text-xs leading-4 text-foreground/88",
                               )}
                             >
                               {item.previewText || t("chat.queue.emptyMessage")}
                             </span>
                             {item.fileCount > 0 ? (
-                              <span className="max-w-4p5rem shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-scaled-9px leading-4 text-muted-foreground">
+                              <span className="max-w-4p5rem shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-tiny leading-4 text-muted-foreground">
                                 {t("chat.queue.fileCount").replace(
                                   "{count}",
                                   String(item.fileCount),
@@ -1459,7 +1459,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               ) : (
                 <ChevronUp className="size-3" />
               )}
-              <span className="text-scaled-10px font-medium leading-none tabular-nums">
+              <span className="text-tiny font-medium leading-none tabular-nums">
                 {queuedTurns.length}
               </span>
             </button>
@@ -1706,7 +1706,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         className={cn(
                           "absolute -right-0.5 -top-0.5 flex h-15px min-w-15px items-center justify-center",
                           "rounded-full bg-sky-500 px-3px",
-                          "text-scaled-9px font-semibold leading-none text-white shadow-ui-chatcomposerbar-41",
+                          "text-tiny font-semibold leading-none text-white shadow-ui-chatcomposerbar-41",
                           "dark:bg-sky-400 dark:text-slate-900 dark:shadow-ui-chatcomposerbar-42",
                         )}
                       >
@@ -1804,7 +1804,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     aria-label={t("chat.runtime.planModeSlashOff")}
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5",
-                      "text-11px font-medium text-sky-700 outline-hidden transition-colors",
+                      "text-xs font-medium text-sky-700 outline-hidden transition-colors",
                       "hover:bg-sky-500/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40 dark:text-sky-300",
                     )}
                   >

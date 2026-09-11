@@ -284,12 +284,12 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
             className="truncate text-sm font-semibold text-foreground"
           />
           {alwaysEnabled ? (
-            <Badge variant="muted" className="h-5 gap-1 px-1.5 text-10px">
+            <Badge variant="muted" className="h-5 gap-1 px-1.5 text-tiny">
               <Lock className="size-2.5" />
               {t("settings.skillsAlwaysOn")}
             </Badge>
           ) : effectivelyEnabled ? (
-            <Badge variant="success" className="h-5 px-1.5 text-10px">
+            <Badge variant="success" className="h-5 px-1.5 text-tiny">
               {t("settings.skillsHubEnabledBadge")}
             </Badge>
           ) : null}
@@ -308,7 +308,7 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
             <span
               className={cn(
                 "pointer-events-none col-start-1 row-start-1 inline-flex min-w-0 items-center gap-1",
-                "text-10px text-muted-foreground transition-opacity",
+                "text-tiny text-muted-foreground transition-opacity",
                 !bulkMode &&
                   "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0",
               )}

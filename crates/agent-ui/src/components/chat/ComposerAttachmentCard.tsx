@@ -177,7 +177,7 @@ export function ComposerAttachmentCard(props: {
         {fallbackIcon}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-scaled-11px font-medium leading-4 tracking-tight text-foreground/90">
+      <span className="min-w-0 flex-1 truncate text-xs font-medium leading-4 tracking-tight text-foreground/90">
         {fileName}
       </span>
 

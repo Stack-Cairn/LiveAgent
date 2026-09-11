@@ -396,9 +396,7 @@ export function SttSection({
             桌面端配置会同步到 Gateway WebUI；浏览器仅接收脱敏配置，录音统一为 16 kHz 单声道 PCM。
           </p>
           {service.runtimeLabel ? (
-            <p className="mt-1 text-11px text-muted-foreground">
-              当前运行端：{service.runtimeLabel}
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">当前运行端：{service.runtimeLabel}</p>
           ) : null}
         </div>
       </div>
@@ -449,10 +447,10 @@ export function SttSection({
                 iconClassName="size-18px"
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-13px font-medium leading-tight">
+                <span className="block truncate text-sm font-medium leading-tight">
                   {item.label}
                 </span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-11px text-muted-foreground">
+                <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span className="truncate">{item.vendor}</span>
                   <span
                     className={cn(
@@ -488,8 +486,8 @@ export function SttSection({
               iconClassName="size-4"
             />
             <div className="min-w-0">
-              <div className="truncate text-13px font-medium leading-tight">{definition.label}</div>
-              <div className="mt-0.5 text-11px text-muted-foreground">
+              <div className="truncate text-sm font-medium leading-tight">{definition.label}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
                 {provider.configured
                   ? "凭据已保存，可直接使用语音输入"
                   : "填写凭据后保存并测试连接"}
@@ -500,7 +498,7 @@ export function SttSection({
             <span
               className={cn(
                 "inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5",
-                "text-11px text-emerald-600 dark:text-emerald-400",
+                "text-xs text-emerald-600 dark:text-emerald-400",
               )}
             >
               <Shield className="size-3" />
@@ -625,12 +623,12 @@ export function SttSection({
           })}
         </div>
         {service.secretRevealMode === "field-name" ? (
-          <p className="text-11px text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             WebUI 的查看按钮只显示字段名；已保存的密钥内容不会下发到浏览器。
           </p>
         ) : null}
         {definition.id === "baidu_cloud" ? (
-          <p className="text-11px text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             appid 必须是数字；dev_pid 不提供默认值，请按百度模型填写。
           </p>
         ) : null}

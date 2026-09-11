@@ -148,7 +148,7 @@ export function TrajectoryTimeline(props: {
         {LANE_LABEL_KEYS.map((key, lane) => (
           <div
             key={key}
-            className="flex items-center text-10px leading-14px text-muted-foreground"
+            className="flex items-center text-tiny leading-14px text-muted-foreground"
             style={{ height: model.laneRows[lane] * LANE_ROW_PITCH }}
           >
             <span className="truncate">{t(key)}</span>
@@ -204,7 +204,7 @@ export function TrajectoryTimeline(props: {
                   })}
                   className={cn(
                     "absolute top-0 flex h-12px items-center gap-1 overflow-hidden rounded-xs",
-                    "px-1 text-9px leading-none",
+                    "px-1 text-tiny leading-none",
                     status === "running"
                       ? "bg-primary/15 text-primary"
                       : status === "error"
@@ -338,7 +338,7 @@ export function TrajectoryTimeline(props: {
             className={cn(
               "pointer-events-none absolute top-0 z-10 max-w-320px -translate-x-1/2 -translate-y-full",
               "whitespace-pre-wrap break-all rounded-md border bg-popover px-2 py-1",
-              "text-11px leading-snug text-popover-foreground shadow-md",
+              "text-xs leading-snug text-popover-foreground shadow-md",
             )}
             style={{ left: `${hovered.leftPct}%`, top: trackHeight + 4 }}
           >
@@ -360,7 +360,7 @@ export function TrajectoryTimeline(props: {
             <span
               key={tick.at}
               aria-hidden="true"
-              className="absolute inset-y-0 text-9px leading-13px text-muted-foreground"
+              className="absolute inset-y-0 text-tiny leading-13px text-muted-foreground"
               style={{ left: `${pct(tick.at)}%` }}
             >
               <span className="absolute bottom-0 left-0 h-3px w-px bg-border" />

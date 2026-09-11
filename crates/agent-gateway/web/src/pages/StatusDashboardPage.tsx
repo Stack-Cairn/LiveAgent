@@ -124,7 +124,7 @@ const dashboardToneClass: Record<DashboardTone, string> = {
 };
 
 const statusActionClass =
-  "flex h-33px items-center gap-7px rounded-full border border-[rgba(var(--status-cyan),0.2)] bg-rgba-255-255-255-0p055 px-12px py-0 text-11px text-rgba-233-245-255-0p84 uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-[rgba(var(--status-cyan),0.48)] hover:bg-[rgba(var(--status-cyan),0.1)] hover:text-(--ui-color-ffffff)";
+  "flex h-33px items-center gap-7px rounded-full border border-[rgba(var(--status-cyan),0.2)] bg-rgba-255-255-255-0p055 px-12px py-0 text-xs text-rgba-233-245-255-0p84 uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-[rgba(var(--status-cyan),0.48)] hover:bg-[rgba(var(--status-cyan),0.1)] hover:text-(--ui-color-ffffff)";
 
 const statusEntrySurfaceClass =
   "border border-[rgba(var(--status-board-tone,191,210,232),0.14)] bg-[rgba(var(--status-board-tone,191,210,232),0.055)]";
@@ -344,7 +344,7 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
     <span
       className={cn(
         "flex h-33px items-center gap-7px",
-        "rounded-full border border-status-cyan/20 bg-rgba-255-255-255-0p055 px-12px py-0 text-11px text-rgba-233-245-255-0p84",
+        "rounded-full border border-status-cyan/20 bg-rgba-255-255-255-0p055 px-12px py-0 text-xs text-rgba-233-245-255-0p84",
         "uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px",
         "transition-[transform,border-color,background-color] duration-160ms ease-default",
         online &&
@@ -378,15 +378,15 @@ function MetricTile({ metric }: { metric: MetricCard }) {
       </div>
       <div>
         <StatusLabel>{metric.label}</StatusLabel>
-        <strong className="inline-block mr-5px text-(--ui-color-ffffff) text-22px leading-none tracking-minus-0p04em">
+        <strong className="inline-block mr-5px text-(--ui-color-ffffff) text-2xl leading-none tracking-minus-0p04em">
           {metric.value}
         </strong>
-        <em className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic uppercase">
+        <em className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic uppercase">
           {metric.unit}
         </em>
         <span
           className={cn(
-            "text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic block overflow-hidden mt-4px",
+            "text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic block overflow-hidden mt-4px",
             "leading-1p25 text-ellipsis whitespace-nowrap",
           )}
         >
@@ -402,7 +402,7 @@ function EmptyState({ children }: { children: string }) {
     <div
       className={cn(
         statusEntrySurfaceClass,
-        "rounded-14px px-9px py-8px text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
+        "rounded-14px px-9px py-8px text-tiny leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
       )}
     >
       {children}
@@ -421,27 +421,27 @@ function FactList({ items, className }: { items: FactItem[]; className?: string 
             item.tone && dashboardToneClass[item.tone],
           )}
         >
-          <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-9px tracking-0p12em uppercase">
+          <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-tiny tracking-0p12em uppercase">
             {item.label}
           </span>
           <strong
             className={cn(
               "inline-block overflow-hidden max-w-full mt-3px",
-              "text-(--ui-color-rgba-255-255-255-0p94) text-13px leading-1p12 text-ellipsis whitespace-nowrap",
+              "text-(--ui-color-rgba-255-255-255-0p94) text-sm leading-1p12 text-ellipsis whitespace-nowrap",
             )}
             title={item.value}
           >
             {item.value}
           </strong>
           {item.unit && (
-            <b className="ml-5px inline-block text-9px font-medium text-[rgba(var(--status-board-tone),0.9)] uppercase">
+            <b className="ml-5px inline-block text-tiny font-medium text-[rgba(var(--status-board-tone),0.9)] uppercase">
               {item.unit}
             </b>
           )}
           {item.note && (
             <em
               className={cn(
-                "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-10px not-italic",
+                "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-tiny not-italic",
                 "leading-1p22 text-ellipsis whitespace-nowrap",
               )}
               title={item.note}
@@ -1119,22 +1119,22 @@ export function StatusDashboardPage() {
               <Sparkles size={19} strokeWidth={2.4} />
             </div>
             <div className="items-start flex-col gap-2px flex">
-              <p className="m-0 text-(--ui-color-rgba-186-216-246-0p6) text-10px tracking-0p18em uppercase">
+              <p className="m-0 text-(--ui-color-rgba-186-216-246-0p6) text-tiny tracking-0p18em uppercase">
                 LiveAgent Nexus
               </p>
-              <h1 className="m-0 text-(--ui-color-rgba-255-255-255-0p96) tracking-minus-0p035em overflow-hidden max-w-360px text-23px text-ellipsis whitespace-nowrap">
+              <h1 className="m-0 text-(--ui-color-rgba-255-255-255-0p96) tracking-minus-0p035em overflow-hidden max-w-360px text-2xl text-ellipsis whitespace-nowrap">
                 实时遥测指挥舱
               </h1>
             </div>
           </div>
           <div className="absolute left-1/2 grid min-w-360px -translate-x-1/2 justify-items-center text-center [&>strong]:[text-shadow:0_0_var(--spacing-24px)_rgba(var(--status-cyan),0.42)]">
-            <span className="text-(--ui-color-rgba-181-213-244-0p58) text-10px not-italic tracking-0p2em uppercase">
+            <span className="text-(--ui-color-rgba-181-213-244-0p58) text-tiny not-italic tracking-0p2em uppercase">
               1912×948 Telemetry Surface
             </span>
-            <strong className="text-(--ui-color-rgba-255-255-255-0p98) text-25px tracking-0p05em leading-none">
+            <strong className="text-(--ui-color-rgba-255-255-255-0p98) text-2xl tracking-0p05em leading-none">
               {formatClock(now)}
             </strong>
-            <em className="text-(--ui-color-rgba-181-213-244-0p58) text-10px not-italic tracking-0p2em uppercase">
+            <em className="text-(--ui-color-rgba-181-213-244-0p58) text-tiny not-italic tracking-0p2em uppercase">
               {snapshot.lastRefreshAt
                 ? `sync age ${formatDuration(now - snapshot.lastRefreshAt)}`
                 : "syncing snapshot"}
@@ -1175,7 +1175,7 @@ export function StatusDashboardPage() {
             className={cn(
               "absolute top-82px right-24px z-6 flex max-w-540px items-center gap-9px",
               "border border-solid border-status-amber/30 rounded-16px px-12px py-9px",
-              "bg-rgba-56-35-4-0p5 text-rgba-255-232-190-0p92 text-12px shadow-status-board-warning backdrop-blur-18px",
+              "bg-rgba-56-35-4-0p5 text-rgba-255-232-190-0p92 text-xs shadow-status-board-warning backdrop-blur-18px",
             )}
           >
             <AlertCircle size={16} />
@@ -1206,22 +1206,22 @@ export function StatusDashboardPage() {
                   <div className="absolute inset-minus-8px animate-status-board-reactor-ring-a rounded-[inherit] border border-[rgba(var(--status-cyan),0.24)]" />
                   <div className="absolute inset-28px animate-status-board-reactor-ring-b rounded-[inherit] border border-status-violet/28!" />
                   <div className="relative z-1 grid justify-items-center">
-                    <strong className="text-46px leading-0p92 tracking-minus-0p06em text-(--ui-color-ffffff) [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
+                    <strong className="text-5xl leading-0p92 tracking-minus-0p06em text-(--ui-color-ffffff) [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
                       {integrityScore}
                     </strong>
-                    <span className="text-(--status-muted) text-10px not-italic tracking-0p12em uppercase">
+                    <span className="text-(--status-muted) text-tiny not-italic tracking-0p12em uppercase">
                       derived %
                     </span>
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <span className="text-(--status-muted) text-10px not-italic tracking-0p12em uppercase">
+                  <span className="text-(--status-muted) text-tiny not-italic tracking-0p12em uppercase">
                     Runtime: {runtimeState}
                   </span>
-                  <strong className="block overflow-hidden my-7px mx-0 text-(--ui-color-rgba-255-255-255-0p94) text-17px text-ellipsis whitespace-nowrap">
+                  <strong className="block overflow-hidden my-7px mx-0 text-(--ui-color-rgba-255-255-255-0p94) text-lg text-ellipsis whitespace-nowrap">
                     {status?.agent_id ? truncateMiddle(status.agent_id, 24) : "等待 Agent 接入"}
                   </strong>
-                  <em className="text-(--status-muted) text-10px not-italic tracking-0p12em uppercase">
+                  <em className="text-(--status-muted) text-tiny not-italic tracking-0p12em uppercase">
                     我在监听 Gateway 心跳：
                     {status?.last_heartbeat
                       ? `${formatDuration(heartbeatAgeMs)} ago`
@@ -1249,37 +1249,37 @@ export function StatusDashboardPage() {
               >
                 <div>
                   <Globe2 size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
+                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
                     Tunnels
                   </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-23px leading-none">
+                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
                     {activeTunnels.length}
                   </strong>
                 </div>
                 <div>
                   <Terminal size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
+                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
                     Terminals
                   </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-23px leading-none">
+                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
                     {runningTerminals.length}
                   </strong>
                 </div>
                 <div>
                   <Brain size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
+                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
                     Providers
                   </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-23px leading-none">
+                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
                     {activeProviders.length}
                   </strong>
                 </div>
                 <div>
                   <Plug size={17} />
-                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-10px not-italic">
+                  <span className="text-(--ui-color-rgba-190-218-246-0p58) text-tiny not-italic">
                     Remote
                   </span>
-                  <strong className="block mt-5px text-(--ui-color-ffffff) text-23px leading-none">
+                  <strong className="block mt-5px text-(--ui-color-ffffff) text-2xl leading-none">
                     {settingsSnapshot ? `${remoteFeatureCount}/3` : "--"}
                   </strong>
                 </div>
@@ -1321,10 +1321,10 @@ export function StatusDashboardPage() {
                     )}
                   >
                     <Bot size={44} strokeWidth={1.65} />
-                    <strong className="text-(--ui-color-ffffff) text-36px leading-0p8">
+                    <strong className="text-(--ui-color-ffffff) text-4xl leading-0p8">
                       {runtimeActiveRunCount}
                     </strong>
-                    <span className="text-(--status-muted) text-9px tracking-0p12em uppercase">
+                    <span className="text-(--status-muted) text-tiny tracking-0p12em uppercase">
                       active runs
                     </span>
                   </div>
@@ -1344,10 +1344,10 @@ export function StatusDashboardPage() {
 
                 <div className="min-w-0">
                   <div className="mb-10px flex items-baseline justify-between">
-                    <span className="text-(--status-muted) text-11px tracking-0p18em uppercase">
+                    <span className="text-(--status-muted) text-xs tracking-0p18em uppercase">
                       Stream Load
                     </span>
-                    <strong className="text-(--ui-color-rgba-255-255-255-0p95) text-18px">
+                    <strong className="text-(--ui-color-rgba-255-255-255-0p95) text-lg">
                       {compactNumber(liveCounters.events)} events
                     </strong>
                   </div>
@@ -1359,7 +1359,7 @@ export function StatusDashboardPage() {
                         dashboardToneClass[segment.tone],
                       )}
                     >
-                      <span className="text-(--ui-color-rgba-211-232-255-0p66) text-11px not-italic">
+                      <span className="text-(--ui-color-rgba-211-232-255-0p66) text-xs not-italic">
                         {segment.label}
                       </span>
                       <div className="h-10px overflow-hidden rounded-full border border-[rgba(var(--status-board-tone),0.14)] bg-hsl-0-0-100-0p05">
@@ -1368,7 +1368,7 @@ export function StatusDashboardPage() {
                           style={{ width: `${segment.width}%` }}
                         />
                       </div>
-                      <em className="text-(--ui-color-rgba-211-232-255-0p66) text-11px not-italic text-right">
+                      <em className="text-(--ui-color-rgba-211-232-255-0p66) text-xs not-italic text-right">
                         {compactNumber(segment.value)} {segment.unit}
                       </em>
                     </div>
@@ -1404,17 +1404,17 @@ export function StatusDashboardPage() {
                       <span className="size-8px mt-5px rounded-full bg-status-board-tone shadow-status-board-event-dot animate-status-board-event-dot" />
                       <div>
                         <div className="flex items-center justify-between gap-12px">
-                          <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-12px text-ellipsis whitespace-nowrap">
+                          <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-xs text-ellipsis whitespace-nowrap">
                             {event.title}
                           </strong>
-                          <time className="text-(--ui-color-rgba-190-219-248-0p58) text-10px not-italic leading-1p25">
+                          <time className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25">
                             {formatClock(event.at)}
                           </time>
                         </div>
                         <p
                           className={cn(
                             "mx-0 mt-3px mb-0 line-clamp-1 overflow-hidden",
-                            "text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
+                            "text-tiny leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) not-italic",
                           )}
                         >
                           {event.detail}
@@ -1422,7 +1422,7 @@ export function StatusDashboardPage() {
                         {(event.conversationId || event.workdir) && (
                           <span
                             className={cn(
-                              "text-rgba-190-219-248-0p58 text-10px not-italic leading-1p25 inline-flex mt-4px rounded-full",
+                              "text-rgba-190-219-248-0p58 text-tiny not-italic leading-1p25 inline-flex mt-4px rounded-full",
                               "px-6px py-2px bg-rgba-255-255-255-0p06",
                             )}
                           >
@@ -1463,10 +1463,10 @@ export function StatusDashboardPage() {
                     >
                       <div className="mt-5px size-8px flex-none animate-status-board-event-dot rounded-full bg-status-board-tone shadow-status-board-event-dot" />
                       <div>
-                        <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-12px text-ellipsis whitespace-nowrap">
+                        <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-xs text-ellipsis whitespace-nowrap">
                           {truncateMiddle(item.title, 34)}
                         </strong>
-                        <span className="text-(--ui-color-rgba-190-219-248-0p58) text-10px not-italic leading-1p25">
+                        <span className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25">
                           {item.cwd ? basename(item.cwd) : "默认空间"} · {item.messageCount}{" "}
                           messages · {formatDuration(now - item.updatedAt)} ago
                         </span>
@@ -1491,13 +1491,13 @@ export function StatusDashboardPage() {
                   "mb-8px flex-none rounded-14px px-9px py-8px [--status-board-tone:var(--status-cyan)]",
                 )}
               >
-                <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-9px tracking-0p12em uppercase">
+                <span className="block text-(--ui-color-rgba-192-220-248-0p56) text-tiny tracking-0p12em uppercase">
                   Active Workspace
                 </span>
                 <strong
                   className={cn(
                     "inline-block overflow-hidden max-w-full mt-3px",
-                    "text-(--ui-color-rgba-255-255-255-0p94) text-13px leading-1p12 text-ellipsis whitespace-nowrap",
+                    "text-(--ui-color-rgba-255-255-255-0p94) text-sm leading-1p12 text-ellipsis whitespace-nowrap",
                   )}
                   title={activeWorkspaceHint}
                 >
@@ -1505,7 +1505,7 @@ export function StatusDashboardPage() {
                 </strong>
                 <em
                   className={cn(
-                    "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-10px not-italic",
+                    "block overflow-hidden mt-3px text-(--ui-color-rgba-186-213-242-0p58) text-tiny not-italic",
                     "leading-1p22 text-ellipsis whitespace-nowrap",
                   )}
                 >
@@ -1525,17 +1525,17 @@ export function StatusDashboardPage() {
                       )}
                     >
                       <div>
-                        <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-12px text-ellipsis whitespace-nowrap">
+                        <strong className="block overflow-hidden text-(--ui-color-rgba-255-255-255-0p92) text-xs text-ellipsis whitespace-nowrap">
                           {basename(item.path)}
                         </strong>
-                        <span className="text-(--ui-color-rgba-190-219-248-0p58) text-10px not-italic leading-1p25">
+                        <span className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25">
                           {truncateMiddle(item.path, 46)}
                         </span>
                       </div>
                       <div className="h-8px overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.12)] bg-hsl-0-0-100-0p05">
                         <span
                           className={cn(
-                            "block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-10px leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)]",
+                            "block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-tiny leading-1p25 text-(--ui-color-rgba-190-219-248-0p58) shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)]",
                             "not-italic",
                           )}
                           style={{
@@ -1545,7 +1545,7 @@ export function StatusDashboardPage() {
                           }}
                         />
                       </div>
-                      <em className="text-(--ui-color-rgba-190-219-248-0p58) text-10px not-italic leading-1p25 text-right">
+                      <em className="text-(--ui-color-rgba-190-219-248-0p58) text-tiny not-italic leading-1p25 text-right">
                         {item.conversationCount} conversations
                       </em>
                     </article>
@@ -1560,7 +1560,7 @@ export function StatusDashboardPage() {
           className={cn(
             "flex flex-nowrap items-center justify-between gap-10px overflow-hidden",
             "rounded-14px border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px",
-            "text-10px text-(--ui-color-rgba-198-225-250-0p62) backdrop-blur-16px",
+            "text-tiny text-(--ui-color-rgba-198-225-250-0p62) backdrop-blur-16px",
           )}
         >
           <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">

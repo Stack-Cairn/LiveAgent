@@ -79,7 +79,7 @@ function ConfirmDialog(
                 <div
                   className={cn(
                     "break-all rounded-md bg-muted/50 px-2.5 py-1.5",
-                    "font-mono text-scaled-12px leading-5 text-muted-foreground",
+                    "font-mono text-xs leading-5 text-muted-foreground",
                   )}
                 >
                   {detail}

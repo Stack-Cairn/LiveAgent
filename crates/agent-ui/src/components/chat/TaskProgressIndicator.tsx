@@ -137,7 +137,7 @@ export function TaskProgressIndicator({
         aria-label={summaryText}
         className={cn(
           "flex h-8 max-w-full items-center gap-2 rounded-full bg-background/92 px-3",
-          "text-12px text-muted-foreground shadow-ui-taskprogressindicator-14 outline-none backdrop-blur-xl backdrop-saturate-150 transition-[background-color,box-shadow]",
+          "text-xs text-muted-foreground shadow-ui-taskprogressindicator-14 outline-none backdrop-blur-xl backdrop-saturate-150 transition-[background-color,box-shadow]",
           "hover:bg-background focus-visible:ring-2 focus-visible:ring-ring/55 motion-reduce:transition-none dark:shadow-ui-taskprogressindicator-15",
         )}
         data-task-progress-toggle=""
@@ -195,7 +195,7 @@ export function TaskProgressIndicator({
                   render={
                     <span
                       className={cn(
-                        "line-clamp-2 min-w-0 flex-1 break-words text-pretty text-12p5px leading-5",
+                        "line-clamp-2 min-w-0 flex-1 break-words text-pretty text-xs leading-5",
                         taskDisplayState === "completed"
                           ? "text-muted-foreground"
                           : taskDisplayState === "running"

@@ -605,7 +605,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder={t("projectTools.fileTree.searchPlaceholder")}
-            className="h-8 pl-7 text-scaled-11px placeholder:text-scaled-11px"
+            className="h-8 pl-7 text-xs placeholder:text-xs"
           />
         </div>
         <Button
@@ -641,7 +641,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
               }
             }}
             placeholder={actionPlaceholder}
-            className="h-8 text-scaled-11px placeholder:text-scaled-11px"
+            className="h-8 text-xs placeholder:text-xs"
           />
           <Button
             size="icon-sm"
@@ -722,7 +722,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
             })
           )}
           {search.truncated ? (
-            <div className="px-2 pt-1 text-scaled-11px text-muted-foreground">
+            <div className="px-2 pt-1 text-xs text-muted-foreground">
               {t("projectTools.fileTree.resultsTruncated")}
             </div>
           ) : null}

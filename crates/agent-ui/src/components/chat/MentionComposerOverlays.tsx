@@ -335,12 +335,12 @@ export function Popup({
                 {isCategory ? (
                   <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/65" />
                 ) : isSkill ? (
-                  <span className="shrink-0 text-10px uppercase tracking-wider text-muted-foreground/60">
+                  <span className="shrink-0 text-tiny uppercase tracking-wider text-muted-foreground/60">
                     skill
                   </span>
                 ) : (
                   isDir && (
-                    <span className="shrink-0 text-10px uppercase tracking-wider text-muted-foreground/60">
+                    <span className="shrink-0 text-tiny uppercase tracking-wider text-muted-foreground/60">
                       dir
                     </span>
                   )
@@ -488,7 +488,7 @@ export function CommitMentionTooltip({
         <div className="min-w-0">
           <div className="break-words font-medium leading-tight">{authorLabel}</div>
           {date ? (
-            <div className="mt-0.5 text-scaled-11px leading-tight text-muted-foreground">
+            <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
               {date.relative} ({date.absolute})
             </div>
           ) : null}
@@ -500,7 +500,7 @@ export function CommitMentionTooltip({
           {messageBody}
         </div>
       ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-scaled-11px leading-tight">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-tight">
         <span className="text-muted-foreground">{filesChangedLabel}</span>
         <span className="font-medium text-emerald-600 dark:text-emerald-400">
           {insertionsLabel}
@@ -510,7 +510,7 @@ export function CommitMentionTooltip({
       <div
         className={cn(
           "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
-          "pt-1.5 text-scaled-11px leading-tight text-muted-foreground",
+          "pt-1.5 text-xs leading-tight text-muted-foreground",
         )}
       >
         <span className="font-mono text-foreground">{shortSha}</span>

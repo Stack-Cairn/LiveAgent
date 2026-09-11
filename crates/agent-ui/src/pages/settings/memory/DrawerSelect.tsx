@@ -23,7 +23,7 @@ export function DrawerSelect(props: {
 }) {
   const { value, onValueChange, options, ariaLabel, placeholder, disabled, className } = props;
   const triggerClass = [
-    "group/drawer-select inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-13px leading-none text-foreground/90 shadow-xs",
+    "group/drawer-select inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm leading-none text-foreground/90 shadow-xs",
     "outline-none transition-colors duration-150",
     "hover:bg-accent/40",
     "data-[open]:bg-accent/50",
@@ -45,14 +45,14 @@ export function DrawerSelect(props: {
         align="start"
         sideOffset={6}
         collisionPadding={12}
-        className="drawer-select-content min-w-(--anchor-width) rounded-xl border-border bg-background text-13px text-foreground/90 shadow-xl"
+        className="drawer-select-content min-w-(--anchor-width) rounded-xl border-border bg-background text-sm text-foreground/90 shadow-xl"
       >
         {options.map((option) => (
           <SelectItem
             key={option.value}
             value={option.value}
             description={option.description}
-            className="cursor-pointer py-1.5 text-13px leading-tight"
+            className="cursor-pointer py-1.5 text-sm leading-tight"
           >
             {option.label}
           </SelectItem>

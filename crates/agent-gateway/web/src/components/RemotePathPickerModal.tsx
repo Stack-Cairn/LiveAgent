@@ -553,7 +553,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
             <div className="w-24 shrink-0 text-xs font-medium text-muted-foreground">
               {mode === "file" ? t("settings.pathPickerPathLabel") : t("settings.workdir")}
             </div>
-            <Input value={headerPath} readOnly className="font-mono text-13px" />
+            <Input value={headerPath} readOnly className="font-mono text-sm" />
           </div>
         </DialogSubheader>
 

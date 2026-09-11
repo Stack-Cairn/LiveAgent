@@ -135,7 +135,7 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
         ref={textareaRef}
         className={cn(
           "w-full resize-none rounded-lg bg-transparent p-2",
-          "font-chat text-scaled-14p5px leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
+          "font-chat text-sm leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
           textareaClassName,
         )}
         value={draftText}

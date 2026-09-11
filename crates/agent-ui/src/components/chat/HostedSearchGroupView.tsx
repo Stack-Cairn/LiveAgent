@@ -151,7 +151,7 @@ export function HostedSearchGroupView({
         aria-label={expanded ? t("chat.search.collapseActivity") : t("chat.search.expandActivity")}
         className={cn(
           "-mx-1.5 flex h-auto max-w-bleed-0p75rem items-center gap-1.5 rounded-lg",
-          "px-1.5 py-1 text-scaled-13px font-450 text-foreground/60 transition-colors",
+          "px-1.5 py-1 text-sm font-450 text-foreground/60 transition-colors",
           "hover:bg-foreground/[0.04] hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
         onClick={() => setExpanded((current) => !current)}
@@ -192,9 +192,7 @@ export function HostedSearchGroupView({
                       key={query}
                     >
                       <Search className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 truncate text-scaled-12p5px text-foreground">
-                        {query}
-                      </span>
+                      <span className="min-w-0 truncate text-xs text-foreground">{query}</span>
                     </div>
                   ))}
 
@@ -210,10 +208,10 @@ export function HostedSearchGroupView({
                       target="_blank"
                     >
                       <SourceFavicon url={source.url} />
-                      <span className="min-w-0 flex-1 truncate text-scaled-12p5px font-medium text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
                         {source.title || getSourceHost(source.url)}
                       </span>
-                      <span className="max-w-40 shrink-0 truncate text-scaled-11p5px text-muted-foreground">
+                      <span className="max-w-40 shrink-0 truncate text-xs text-muted-foreground">
                         {getSourceHost(source.url)}
                       </span>
                     </a>

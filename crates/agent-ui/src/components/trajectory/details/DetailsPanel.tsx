@@ -152,7 +152,7 @@ export function DetailsPanel(props: {
         className={cn(
           "relative flex min-w-160px max-w-trajectory-details w-[var(--trajectory-details-width)] shrink-0 items-center justify-center",
           "border-l border-border/60 p-6",
-          "text-center text-12px text-muted-foreground @max-[520px]:p-3 @max-[640px]:hidden",
+          "text-center text-xs text-muted-foreground @max-[520px]:p-3 @max-[640px]:hidden",
         )}
         style={{ "--trajectory-details-width": `${props.width}px` } as CSSProperties}
       >
@@ -200,7 +200,7 @@ export function DetailsPanel(props: {
         onWidthChange={props.onWidthChange}
       />
       <header className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
-        <span className="truncate text-12px font-medium">
+        <span className="truncate text-xs font-medium">
           {t(trajectoryKindLabelKey(record.kind))}
           <span className="ml-2 font-normal text-muted-foreground">#{record.index}</span>
         </span>
@@ -229,7 +229,7 @@ export function DetailsPanel(props: {
             aria-selected={currentTab === tab}
             onClick={() => setActiveTab(tab)}
             className={cn(
-              "shrink-0 rounded px-2 py-0.5 text-11px transition-colors",
+              "shrink-0 rounded px-2 py-0.5 text-xs transition-colors",
               currentTab === tab
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -240,7 +240,7 @@ export function DetailsPanel(props: {
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 text-12px @max-[520px]:p-2.5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 text-xs @max-[520px]:p-2.5">
         {ActiveTab === null ? null : <ActiveTab {...tabProps} />}
       </div>
     </aside>

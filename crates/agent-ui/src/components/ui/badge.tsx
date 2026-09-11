@@ -11,7 +11,7 @@ const badgeVariants = cva(
       size: {
         default: "",
         "filter-count":
-          "h-4 min-w-4 rounded-full px-1 text-9p5px font-semibold tabular-nums group-data-[active]:bg-foreground/[0.08] group-data-[active]:text-foreground",
+          "h-4 min-w-4 rounded-full px-1 text-tiny font-semibold tabular-nums group-data-[active]:bg-foreground/[0.08] group-data-[active]:text-foreground",
       },
       variant: {
         default: "border-transparent bg-primary text-primary-foreground",

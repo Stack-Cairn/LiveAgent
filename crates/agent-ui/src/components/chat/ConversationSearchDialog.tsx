@@ -247,14 +247,14 @@ export function ConversationSearchDialog({
             placeholder={t("chat.searchConversationsPlaceholder")}
             aria-label={t("chat.searchConversations")}
             className={cn(
-              "h-auto flex-1 border-0 bg-transparent px-0 text-15px shadow-none",
+              "h-auto flex-1 border-0 bg-transparent px-0 text-base shadow-none",
               "placeholder:text-muted-foreground/70 focus-visible:ring-0",
             )}
           />
           <kbd
             className={cn(
               "hidden rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5",
-              "text-10px font-medium text-muted-foreground sm:inline-flex",
+              "text-tiny font-medium text-muted-foreground sm:inline-flex",
             )}
           >
             Esc
@@ -313,7 +313,7 @@ export function ConversationSearchDialog({
               return (
                 <fieldset key={group.id} className="m-0 border-0 p-0 pb-2 last:pb-0">
                   <legend className="sr-only">{group.label}</legend>
-                  <div className="flex h-8 items-center gap-2 px-2 text-11px font-medium text-muted-foreground/75">
+                  <div className="flex h-8 items-center gap-2 px-2 text-xs font-medium text-muted-foreground/75">
                     <GroupIcon className="size-3.5" />
                     <span>{group.label}</span>
                   </div>
@@ -346,7 +346,7 @@ export function ConversationSearchDialog({
                           ) : null}
                           {meta ? (
                             <div
-                              className="mt-1 truncate text-11px leading-4 text-muted-foreground/70"
+                              className="mt-1 truncate text-xs leading-4 text-muted-foreground/70"
                               title={meta}
                             >
                               {meta}

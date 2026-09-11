@@ -116,7 +116,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
                   <span
                     className={cn(
                       "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5",
-                      "text-scaled-11px font-semibold text-amber-700 dark:text-amber-300",
+                      "text-xs font-semibold text-amber-700 dark:text-amber-300",
                     )}
                   >
                     {runningCount}

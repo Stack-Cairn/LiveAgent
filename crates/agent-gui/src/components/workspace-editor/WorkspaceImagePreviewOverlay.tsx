@@ -148,7 +148,7 @@ export function WorkspaceImagePreviewOverlay(props: WorkspaceImagePreviewOverlay
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceImagePreview.title")}
           </div>
-          <div className="truncate text-11px text-muted-foreground">{activePath}</div>
+          <div className="truncate text-xs text-muted-foreground">{activePath}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
@@ -216,7 +216,7 @@ export function WorkspaceImagePreviewOverlay(props: WorkspaceImagePreviewOverlay
       <div
         className={cn(
           "flex h-8 shrink-0 items-center justify-between gap-3",
-          "border-t border-border bg-muted/35 px-3 text-11px text-muted-foreground",
+          "border-t border-border bg-muted/35 px-3 text-xs text-muted-foreground",
         )}
       >
         <span className="min-w-0 truncate">{activePath}</span>

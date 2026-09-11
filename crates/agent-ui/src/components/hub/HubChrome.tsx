@@ -71,7 +71,7 @@ export function HubHeader(props: {
             <h1
               className={cn(
                 "font-semibold leading-tight tracking-tight text-foreground",
-                prominent ? "text-28px" : "text-21px",
+                prominent ? "text-3xl" : "text-xl",
               )}
             >
               {title}
@@ -81,7 +81,7 @@ export function HubHeader(props: {
             <p
               className={cn(
                 "truncate text-muted-foreground",
-                prominent ? "mt-1.5 text-sm" : "mt-0.5 text-12px",
+                prominent ? "mt-1.5 text-sm" : "mt-0.5 text-xs",
               )}
               title={subtitle}
             >

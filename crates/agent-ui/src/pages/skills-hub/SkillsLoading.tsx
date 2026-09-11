@@ -24,8 +24,8 @@ export function SkillsContentLoadingState(props: { title: string; description: s
         <div className="flex items-center gap-3.5">
           <FrostSpinner />
           <div className="min-w-0 flex-1">
-            <div className="text-13px font-medium tracking-tight text-foreground">{title}</div>
-            <div className="mt-0.5 truncate text-11px text-muted-foreground/80">{description}</div>
+            <div className="text-sm font-medium tracking-tight text-foreground">{title}</div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground/80">{description}</div>
           </div>
         </div>
         <LoadingTrack className="mt-3.5" />

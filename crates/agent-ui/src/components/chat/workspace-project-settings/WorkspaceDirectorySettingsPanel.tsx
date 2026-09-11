@@ -38,7 +38,7 @@ function RootAccessToggle(props: {
           disabled={disabled}
           className={cn(
             "rounded-md px-2 py-0.5",
-            "text-11px font-medium text-muted-foreground transition-colors",
+            "text-xs font-medium text-muted-foreground transition-colors",
             "hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
             value === option && "bg-background text-foreground shadow-sm",
           )}
@@ -92,13 +92,13 @@ export function WorkspaceDirectorySettingsPanel(props: {
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium">{t("chat.workspaceSettingsPrimaryDirectory")}</div>
             <div
-              className="truncate font-mono text-11px leading-4 text-muted-foreground"
+              className="truncate font-mono text-xs leading-4 text-muted-foreground"
               title={project.path}
             >
               {project.path}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 text-11px text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <Lock className="size-3" />
             {t("chat.workspaceSettingsDirectoryWrite")}
           </div>
@@ -150,7 +150,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
                   {root.state !== "active" ? (
                     <span
                       className={cn(
-                        "shrink-0 rounded-full border px-1.5 py-0.5 text-10px font-medium",
+                        "shrink-0 rounded-full border px-1.5 py-0.5 text-tiny font-medium",
                         rootStateTone(root.state),
                       )}
                     >
@@ -164,7 +164,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
                   ) : null}
                 </div>
                 <div
-                  className="truncate font-mono text-11px leading-4 text-muted-foreground"
+                  className="truncate font-mono text-xs leading-4 text-muted-foreground"
                   title={root.displayPath}
                 >
                   {root.displayPath}

@@ -709,15 +709,13 @@ function CommitReferenceTooltip({
             <>
               <div className="break-words font-medium leading-tight">{authorLabel}</div>
               {date ? (
-                <div className="mt-0.5 text-11px leading-tight text-muted-foreground">
+                <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
                   {date.relative} ({date.absolute})
                 </div>
               ) : null}
             </>
           ) : (
-            <div className="font-mono text-11px leading-tight text-muted-foreground">
-              {shortSha}
-            </div>
+            <div className="font-mono text-xs leading-tight text-muted-foreground">{shortSha}</div>
           )}
         </div>
       </div>
@@ -728,7 +726,7 @@ function CommitReferenceTooltip({
         </div>
       ) : null}
       {detailed ? (
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-11px leading-tight">
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-tight">
           <span className="text-muted-foreground">{filesChangedLabel}</span>
           <span className="font-medium text-emerald-600 dark:text-emerald-400">
             {insertionsLabel}
@@ -740,7 +738,7 @@ function CommitReferenceTooltip({
         <div
           className={cn(
             "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
-            "pt-1.5 text-11px leading-tight text-muted-foreground",
+            "pt-1.5 text-xs leading-tight text-muted-foreground",
           )}
         >
           <span className="font-mono text-foreground">{shortSha}</span>
@@ -759,7 +757,7 @@ function CommitReferenceTooltip({
         <div
           className={cn(
             "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
-            "pt-1.5 text-11px leading-tight text-muted-foreground",
+            "pt-1.5 text-xs leading-tight text-muted-foreground",
           )}
         >
           <span className="font-mono text-foreground">{shortSha}</span>
@@ -880,7 +878,7 @@ function GitFileMentionChip({ file }: { file: GitFileDisplayReference }) {
     >
       <Icon className="size-3 shrink-0 self-center" />
       <span>{fileName}</span>
-      <span className="max-w-8rem truncate text-10px opacity-70">@{refLabel}</span>
+      <span className="max-w-8rem truncate text-tiny opacity-70">@{refLabel}</span>
     </span>
   );
 }

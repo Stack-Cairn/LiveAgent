@@ -52,7 +52,7 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryInnerProps, ErrorBoundar
           className={cn(
             "max-h-40 max-w-xl overflow-auto",
             "whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/40 p-3",
-            "text-left font-mono text-11px text-muted-foreground",
+            "text-left font-mono text-xs text-muted-foreground",
           )}
         >
           {error.message}

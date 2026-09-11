@@ -271,12 +271,12 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                         <span className="block truncate text-sm font-medium">
                           {PROVIDER_LABELS[group.type]}
                         </span>
-                        <span className="block text-11px text-muted-foreground">
+                        <span className="block text-xs text-muted-foreground">
                           {group.items.length} 项配置
                         </span>
                       </span>
                       {groupSelected > 0 ? (
-                        <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-10px font-semibold text-primary">
+                        <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-tiny font-semibold text-primary">
                           {groupSelected}
                         </span>
                       ) : null}
@@ -319,16 +319,16 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-2">
                             <strong className="text-sm font-medium">{item.name}</strong>
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-10px text-muted-foreground">
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground">
                               {itemProtocolLabel(item)}
                             </span>
                             {existing ? (
-                              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-10px text-blue-600 dark:text-blue-300">
+                              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-tiny text-blue-600 dark:text-blue-300">
                                 将更新
                               </span>
                             ) : null}
                             {!item.enabled ? (
-                              <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-10px text-amber-700 dark:text-amber-300">
+                              <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-tiny text-amber-700 dark:text-amber-300">
                                 Cherry 中已禁用
                               </span>
                             ) : null}

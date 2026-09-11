@@ -256,7 +256,7 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
       aria-label={`Diff for ${displayPath}`}
       data-chat-code-diff=""
     >
-      <figcaption className="flex h-11 items-center gap-2 border-b border-border/60 px-4 text-12p5px">
+      <figcaption className="flex h-11 items-center gap-2 border-b border-border/60 px-4 text-xs">
         <span className="inline-flex min-w-0 items-center gap-7px">
           <CodeFileIcon />
           <span className="truncate font-mono leading-none text-foreground">{displayPath}</span>
@@ -268,7 +268,7 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
       </figcaption>
 
       <div
-        className="py-3 font-mono text-12p5px leading-1p65 text-foreground/78"
+        className="py-3 font-mono text-xs leading-1p65 text-foreground/78"
         style={
           { "--diff-gutter": `calc(${diff.gutterDigits}ch + var(--spacing-4px))` } as CSSProperties
         }
@@ -303,7 +303,7 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "select-none text-center text-11px tabular-nums",
+                    "select-none text-center text-xs tabular-nums",
                     added
                       ? "text-emerald-700 dark:text-emerald-300"
                       : deleted

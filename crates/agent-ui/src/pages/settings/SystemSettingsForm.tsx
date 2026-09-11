@@ -68,7 +68,7 @@ function SettingsSelectTrigger({ className = "", ...props }: SettingsSelectTrigg
       className={cn(
         "h-8 w-fit max-w-260px gap-1.5",
         "whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0",
-        "text-13px font-normal leading-none shadow-ui-systemsettingsform-48 transition-colors",
+        "text-sm font-normal leading-none shadow-ui-systemsettingsform-48 transition-colors",
         "hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:size-3.5 [&_svg]:opacity-40",
         className,
       )}
@@ -83,7 +83,7 @@ function SettingsSelectContent({ className = "", ...props }: SettingsSelectConte
   return (
     <SelectContent
       className={cn(
-        "rounded-xl border-border/70 shadow-ui-systemsettingsform-49 [&_[role=option]]:min-h-8 [&_[role=option]]:rounded-lg [&_[role=option]]:text-13px",
+        "rounded-xl border-border/70 shadow-ui-systemsettingsform-49 [&_[role=option]]:min-h-8 [&_[role=option]]:rounded-lg [&_[role=option]]:text-sm",
         className,
       )}
       {...props}
@@ -593,7 +593,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                   />
                   {systemProxy.passwordConfigured &&
                   !(proxyPasswordDraft ?? systemProxy.password).trim() ? (
-                    <div className="flex items-center gap-2 text-11px text-muted-foreground">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{t("settings.systemProxyPasswordConfigured")}</span>
                       <button
                         type="button"

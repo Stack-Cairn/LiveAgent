@@ -1692,7 +1692,7 @@ export function createGitFileMentionChip(fileInput: MentionComposerGitFileMentio
   const fileName = file.path.split("/").pop() || file.path;
   chip.appendChild(document.createTextNode(fileName));
   const ref = document.createElement("span");
-  ref.className = "max-w-8rem truncate text-scaled-10px opacity-70";
+  ref.className = "max-w-8rem truncate text-tiny opacity-70";
   ref.textContent = `@${file.refName || file.shortSha}`;
   chip.appendChild(ref);
   return chip;

@@ -52,7 +52,7 @@ export function SkillsImportSourceTabs(props: {
             className={cn(
               "group shrink-0 gap-1",
               "rounded-md border border-transparent px-2",
-              "text-11p5px font-medium text-muted-foreground shadow-none",
+              "text-xs font-medium text-muted-foreground shadow-none",
               "hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none disabled:opacity-60",
             )}
           >

@@ -37,13 +37,17 @@
 @layer components {
   .zone-font-scale,
   .layer-popover {
-    font-size: calc(var(--text-1rem) * var(--zone-font-scale, 1));
-    --text-xs: calc(var(--text-0p75rem) * var(--zone-font-scale, 1));
-    --text-sm: calc(var(--text-0p875rem) * var(--zone-font-scale, 1));
-    --text-base: calc(var(--text-1rem) * var(--zone-font-scale, 1));
-    --text-lg: calc(var(--text-1p125rem) * var(--zone-font-scale, 1));
-    --text-xl: calc(var(--text-1p25rem) * var(--zone-font-scale, 1));
-    --text-2xl: calc(var(--text-1p5rem) * var(--zone-font-scale, 1));
+    font-size: calc(1rem * var(--zone-font-scale, 1));
+    --text-tiny: calc(0.625rem * var(--zone-font-scale, 1));
+    --text-xs: calc(0.75rem * var(--zone-font-scale, 1));
+    --text-sm: calc(0.875rem * var(--zone-font-scale, 1));
+    --text-base: calc(1rem * var(--zone-font-scale, 1));
+    --text-lg: calc(1.125rem * var(--zone-font-scale, 1));
+    --text-xl: calc(1.25rem * var(--zone-font-scale, 1));
+    --text-2xl: calc(1.5rem * var(--zone-font-scale, 1));
+    --text-3xl: calc(1.875rem * var(--zone-font-scale, 1));
+    --text-4xl: calc(2.25rem * var(--zone-font-scale, 1));
+    --text-5xl: calc(3rem * var(--zone-font-scale, 1));
   }
 }
 

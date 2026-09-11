@@ -491,7 +491,7 @@ function PathNavigator(props: {
             }}
             onKeyDown={handleKeyDown}
           />
-          <span className="pointer-events-none absolute right-2 flex items-center gap-1 text-10px text-muted-foreground/70">
+          <span className="pointer-events-none absolute right-2 flex items-center gap-1 text-tiny text-muted-foreground/70">
             {loading ? <Loader2 className="size-3.5 animate-spin text-primary" /> : null}
             <kbd className="rounded-sm border border-border/70 bg-background/80 px-1 py-0.5 font-sans text-muted-foreground/80">
               ↵
@@ -580,7 +580,7 @@ function PathNavigator(props: {
                       <span className="block truncate text-xs font-medium text-foreground">
                         {entry.name}
                       </span>
-                      <span className="block truncate font-mono text-10px text-muted-foreground/80">
+                      <span className="block truncate font-mono text-tiny text-muted-foreground/80">
                         {entry.path}
                       </span>
                     </span>
@@ -600,7 +600,7 @@ function PathNavigator(props: {
             )}
           </div>
 
-          <div className="border-t border-border/50 bg-muted/25 px-3 py-1.5 text-10px text-muted-foreground/80">
+          <div className="border-t border-border/50 bg-muted/25 px-3 py-1.5 text-tiny text-muted-foreground/80">
             {t("workspaceSftp.pathKeyboardHint")}
           </div>
         </div>
@@ -1472,9 +1472,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-foreground">{label}</div>
-                      <div className="truncate font-mono text-11px text-muted-foreground">
-                        {root}
-                      </div>
+                      <div className="truncate font-mono text-xs text-muted-foreground">{root}</div>
                     </div>
                     {pane.selectedPaths.length ? (
                       <button
@@ -1482,7 +1480,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                         className={cn(
                           "inline-flex h-7 max-w-112px shrink-0 items-center",
                           "rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2",
-                          "text-11px font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300",
+                          "text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300",
                         )}
                         title={t("workspaceSftp.clearSelection")}
                         onClick={(event) => {
@@ -1605,7 +1603,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 className={cn(
                                   "mx-auto mt-2 max-w-full",
                                   "truncate rounded bg-background/70 px-2 py-1",
-                                  "font-mono text-11px text-muted-foreground",
+                                  "font-mono text-xs text-muted-foreground",
                                 )}
                               >
                                 {normalizePath(dropPath, side)}
@@ -1740,7 +1738,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 {entryIcon(entry)}
                                 <span className="truncate">{entry.name}</span>
                               </span>
-                              <span className="text-right font-mono text-11px text-muted-foreground">
+                              <span className="text-right font-mono text-xs text-muted-foreground">
                                 {entry.kind === "directory" ? "--" : formatBytes(entry.sizeBytes)}
                               </span>
                             </button>
@@ -1798,7 +1796,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             <div
               className={cn(
                 "mb-1 flex items-center justify-between rounded-lg bg-emerald-500/10 px-2 py-1",
-                "text-11px font-medium text-emerald-700 dark:text-emerald-300",
+                "text-xs font-medium text-emerald-700 dark:text-emerald-300",
               )}
             >
               <span>

@@ -56,7 +56,8 @@ export function readTerminalAppearance(
 ) {
   return {
     theme: readTerminalTheme(theme, style),
-    fontSize: Number.parseFloat(style.getPropertyValue("--text-13px")),
+    // xterm consumes a numeric pixel size, independently of UI typography.
+    fontSize: 13,
     lineHeight: Number.parseFloat(style.getPropertyValue("--leading-1p3")),
     overviewRulerWidth: Number.parseFloat(style.getPropertyValue("--spacing-8px")),
   };

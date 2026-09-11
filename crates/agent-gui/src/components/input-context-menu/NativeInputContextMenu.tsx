@@ -33,7 +33,7 @@ function resolveMenuTarget(target: EventTarget | null): MenuTarget | null {
 }
 
 const MENU_ITEM_CLASS = cn(
-  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
   "disabled:pointer-events-none disabled:opacity-45",
 );
 

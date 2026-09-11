@@ -105,7 +105,7 @@ export function StoreCategoryChips(props: {
                 aria-label={`${t(storeCategoryLabelKey(value))}: ${count}`}
                 className={cn(
                   "group shrink-0 gap-1 rounded-md px-2",
-                  "text-11p5px font-medium text-muted-foreground shadow-none",
+                  "text-xs font-medium text-muted-foreground shadow-none",
                   "hover:text-foreground data-[active]:text-foreground data-[active]:shadow-none",
                   appearance === "outlined"
                     ? "border border-border/70 bg-background hover:border-foreground/20 hover:bg-muted/50 data-[active]:border-foreground/25 data-[active]:bg-muted data-[active]:shadow-xs"
@@ -141,7 +141,7 @@ export function InstalledSkillCategoryChip(props: {
         props.onSelect(props.category);
       }}
       onKeyDown={(event) => event.stopPropagation()}
-      className="h-6 shrink-0 gap-1 px-1.5 text-10px font-medium text-muted-foreground hover:text-foreground"
+      className="h-6 shrink-0 gap-1 px-1.5 text-tiny font-medium text-muted-foreground hover:text-foreground"
     >
       <CategoryIcon className="size-2.5" />
       <span>{t(storeCategoryLabelKey(props.category))}</span>
@@ -170,7 +170,7 @@ export function SkillCategoryBadges(props: {
               props.onSelect(category);
             }}
             onKeyDown={(event) => event.stopPropagation()}
-            className="h-6 shrink-0 gap-1 px-1.5 text-10px font-medium text-muted-foreground hover:text-foreground"
+            className="h-6 shrink-0 gap-1 px-1.5 text-tiny font-medium text-muted-foreground hover:text-foreground"
           >
             <BadgeIcon className="size-2.5" />
             <span>{t(storeCategoryLabelKey(category))}</span>
@@ -180,7 +180,7 @@ export function SkillCategoryBadges(props: {
       {(props.topics ?? []).slice(0, 3).map((topic) => (
         <span
           key={topic}
-          className="shrink-0 rounded-md bg-muted px-1.5 py-1 text-10px text-muted-foreground"
+          className="shrink-0 rounded-md bg-muted px-1.5 py-1 text-tiny text-muted-foreground"
         >
           <SearchHighlight text={topic} query={props.searchQuery ?? ""} />
         </span>

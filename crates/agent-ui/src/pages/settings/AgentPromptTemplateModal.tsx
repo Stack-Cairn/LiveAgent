@@ -172,7 +172,7 @@ export function AgentPromptTemplateModal({
                 placeholder={t("settings.agentsPromptPlaceholder")}
                 className={cn(
                   "h-80 min-h-80 flex-1 resize-none overflow-y-auto overscroll-contain p-4",
-                  "font-mono text-13px leading-6 md:h-auto md:min-h-0",
+                  "font-mono text-sm leading-6 md:h-auto md:min-h-0",
                 )}
                 onChange={(e) => setPrompt(e.currentTarget.value)}
               />

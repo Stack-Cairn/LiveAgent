@@ -203,7 +203,7 @@ export function WorkspaceResourceSettingsPanel(props: {
                       warning={missing}
                       metadata={
                         alwaysEnabled ? (
-                          <Badge variant="muted" className="h-5 px-1.5 text-10px">
+                          <Badge variant="muted" className="h-5 px-1.5 text-tiny">
                             {t("settings.skillsAlwaysOn")}
                           </Badge>
                         ) : null
@@ -239,7 +239,7 @@ export function WorkspaceResourceSettingsPanel(props: {
                       metadata={
                         <Badge
                           variant="muted"
-                          className="h-5 px-1.5 text-10px uppercase tracking-wide"
+                          className="h-5 px-1.5 text-tiny uppercase tracking-wide"
                         >
                           {transportLabel}
                         </Badge>

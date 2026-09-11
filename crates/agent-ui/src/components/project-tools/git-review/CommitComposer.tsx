@@ -281,7 +281,7 @@ export function GitCommitComposer(props: {
               className={cn(
                 "h-7 shrink-0 gap-1",
                 "rounded-full border border-border/60 bg-background/70 px-2",
-                "text-scaled-11px font-medium text-muted-foreground hover:border-primary/35 hover:text-foreground",
+                "text-xs font-medium text-muted-foreground hover:border-primary/35 hover:text-foreground",
                 generating && "border-primary/40 text-primary hover:text-primary",
                 COARSE_POINTER_BUTTON_CLASS,
               )}
@@ -301,7 +301,7 @@ export function GitCommitComposer(props: {
               </span>
             </Button>
           ) : null}
-          <div role="status" className="min-w-0 flex-1 text-scaled-11px leading-4">
+          <div role="status" className="min-w-0 flex-1 text-xs leading-4">
             {generationError ? (
               <p className="truncate text-destructive" title={generationError}>
                 {generationError}
@@ -344,11 +344,11 @@ export function GitCommitComposer(props: {
               <>
                 <span>{t("projectTools.gitReview.commit")}</span>
                 {stagedEntries.length > 0 ? (
-                  <span className="rounded-sm bg-primary-foreground/25 px-1 py-0.5 text-scaled-10px font-semibold leading-none tabular-nums">
+                  <span className="rounded-sm bg-primary-foreground/25 px-1 py-0.5 text-tiny font-semibold leading-none tabular-nums">
                     {stagedEntries.length}
                   </span>
                 ) : null}
-                <kbd className="hidden font-sans text-scaled-10px font-normal leading-none opacity-70 @min-[19rem]:inline">
+                <kbd className="hidden font-sans text-tiny font-normal leading-none opacity-70 @min-[19rem]:inline">
                   {COMMIT_SHORTCUT_HINT}
                 </kbd>
               </>

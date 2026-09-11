@@ -391,7 +391,7 @@ export function McpRegistryConfigureModal(props: {
                         id="mcp-store-config-command"
                         value={draft.command}
                         placeholder="npx"
-                        className="font-mono text-12p5px"
+                        className="font-mono text-xs"
                         onChange={(event) => updateDraft({ command: event.currentTarget.value })}
                       />
                     </FormField>
@@ -403,7 +403,7 @@ export function McpRegistryConfigureModal(props: {
                         id="mcp-store-config-cwd"
                         value={draft.cwd}
                         placeholder={t("mcpHub.cwdDefault")}
-                        className="font-mono text-12p5px"
+                        className="font-mono text-xs"
                         onChange={(event) => updateDraft({ cwd: event.currentTarget.value })}
                       />
                     </FormField>
@@ -416,7 +416,7 @@ export function McpRegistryConfigureModal(props: {
                       id="mcp-store-config-args"
                       value={draft.argsText}
                       placeholder={"-y\n@modelcontextprotocol/server-time"}
-                      className="min-h-92px font-mono text-12p5px"
+                      className="min-h-92px font-mono text-xs"
                       onChange={(event) => updateDraft({ argsText: event.currentTarget.value })}
                     />
                   </FormField>
@@ -428,7 +428,7 @@ export function McpRegistryConfigureModal(props: {
                       id="mcp-store-config-env"
                       value={draft.envText}
                       placeholder={"BRAVE_API_KEY=...\nHTTP_PROXY=..."}
-                      className="min-h-92px font-mono text-12p5px"
+                      className="min-h-92px font-mono text-xs"
                       onChange={(event) => updateDraft({ envText: event.currentTarget.value })}
                     />
                   </FormField>
@@ -447,7 +447,7 @@ export function McpRegistryConfigureModal(props: {
                           ? "http://127.0.0.1:3000/mcp"
                           : "http://127.0.0.1:3000/sse"
                       }
-                      className="font-mono text-12p5px"
+                      className="font-mono text-xs"
                       onChange={(event) => updateDraft({ url: event.currentTarget.value })}
                     />
                   </FormField>
@@ -460,7 +460,7 @@ export function McpRegistryConfigureModal(props: {
                         id="mcp-store-config-message-url"
                         value={draft.messageUrl}
                         placeholder="http://127.0.0.1:3000/message"
-                        className="font-mono text-12p5px"
+                        className="font-mono text-xs"
                         onChange={(event) => updateDraft({ messageUrl: event.currentTarget.value })}
                       />
                     </FormField>
@@ -473,7 +473,7 @@ export function McpRegistryConfigureModal(props: {
                       id="mcp-store-config-headers"
                       value={draft.headersText}
                       placeholder={"Authorization=Bearer ...\nX-API-Key=..."}
-                      className="min-h-92px font-mono text-12p5px"
+                      className="min-h-92px font-mono text-xs"
                       onChange={(event) => updateDraft({ headersText: event.currentTarget.value })}
                     />
                   </FormField>
@@ -507,7 +507,7 @@ export function McpRegistryConfigureModal(props: {
                               updateConfigValue(input, event.currentTarget.value)
                             }
                           />
-                          <div className="flex items-start gap-1.5 text-10p5px text-muted-foreground">
+                          <div className="flex items-start gap-1.5 text-tiny text-muted-foreground">
                             <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground/75">
                               {configTargetLabel(input, t)}
                             </span>

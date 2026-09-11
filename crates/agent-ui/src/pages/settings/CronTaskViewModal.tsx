@@ -93,7 +93,7 @@ function stringifyBody(body?: unknown) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-11px font-semibold uppercase tracking-wider text-muted-foreground/70">
+    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
       {children}
     </div>
   );
@@ -152,7 +152,7 @@ function LeftPanel({
             <div
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1",
-                "text-11px font-semibold",
+                "text-xs font-semibold",
                 cfg.accent,
                 cfg.accentBg,
                 cfg.accentBorder,
@@ -193,7 +193,7 @@ function LeftPanel({
           <h2 className="mt-3 text-base font-bold leading-tight text-foreground">{task.name}</h2>
 
           {/* Description */}
-          <p className="mt-1 text-13px leading-relaxed text-muted-foreground">
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             {task.description || t("settings.cronViewNoDesc")}
           </p>
 
@@ -202,7 +202,7 @@ function LeftPanel({
             <div
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1",
-                "text-11px font-medium text-amber-600 dark:text-amber-400",
+                "text-xs font-medium text-amber-600 dark:text-amber-400",
               )}
             >
               <Clock3 className="size-3" />
@@ -210,7 +210,7 @@ function LeftPanel({
             </div>
             <div
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-11px font-medium",
+                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium",
                 task.enabled
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : "bg-muted text-muted-foreground",
@@ -228,7 +228,7 @@ function LeftPanel({
             </div>
             <div
               className={cn(
-                "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-11px font-medium",
+                "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium",
                 task.remainingExecutions === 0
                   ? "bg-red-500/10 text-red-600 dark:text-red-400"
                   : task.remainingExecutions == null
@@ -251,7 +251,7 @@ function LeftPanel({
             <div
               className={cn(
                 "inline-flex items-center gap-1 rounded-lg bg-muted px-2 py-1",
-                "text-11px font-medium text-muted-foreground",
+                "text-xs font-medium text-muted-foreground",
               )}
               title={t("settings.cronTimeoutSeconds")}
             >
@@ -265,7 +265,7 @@ function LeftPanel({
               <div
                 className={cn(
                   "inline-flex max-w-56 items-center gap-1.5 rounded-lg bg-muted px-2 py-1",
-                  "text-11px font-medium text-muted-foreground",
+                  "text-xs font-medium text-muted-foreground",
                 )}
                 title={task.workdir}
               >
@@ -280,7 +280,7 @@ function LeftPanel({
               className={cn(
                 "mt-3 flex items-start gap-1.5",
                 "rounded-lg border border-red-500/20 bg-red-500/[0.04] px-2.5 py-2",
-                "text-11px leading-relaxed text-red-700 dark:text-red-300",
+                "text-xs leading-relaxed text-red-700 dark:text-red-300",
               )}
             >
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -295,7 +295,7 @@ function LeftPanel({
               className={cn(
                 "mt-3 flex items-start gap-1.5",
                 "rounded-lg border border-red-500/20 bg-red-500/[0.04] px-2.5 py-2",
-                "text-11px leading-relaxed text-red-700 dark:text-red-300",
+                "text-xs leading-relaxed text-red-700 dark:text-red-300",
               )}
             >
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -316,7 +316,7 @@ function LeftPanel({
               <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/30">
                 <div className="flex items-center gap-1.5 border-b border-border/30 px-3 py-2">
                   <Terminal className="size-3 text-muted-foreground/60" />
-                  <span className="text-11px font-medium text-muted-foreground/60">
+                  <span className="text-xs font-medium text-muted-foreground/60">
                     {scriptLineCount} {t("settings.cronCommandsCount")}
                   </span>
                 </div>
@@ -347,12 +347,12 @@ function LeftPanel({
                         <span
                           className={cn(
                             "flex size-5 shrink-0 items-center justify-center",
-                            "rounded-md bg-emerald-500/10 text-10px font-bold text-emerald-600 dark:text-emerald-400",
+                            "rounded-md bg-emerald-500/10 text-tiny font-bold text-emerald-600 dark:text-emerald-400",
                           )}
                         >
                           {i + 1}
                         </span>
-                        <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-11px font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                           {req.method}
                         </span>
                         <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80">
@@ -363,20 +363,20 @@ function LeftPanel({
                         <div className="space-y-px bg-border/10">
                           {hasHeaders ? (
                             <div className="bg-background/60 p-2.5">
-                              <div className="mb-1 text-10px font-semibold uppercase tracking-wider text-muted-foreground/60">
+                              <div className="mb-1 text-tiny font-semibold uppercase tracking-wider text-muted-foreground/60">
                                 {t("settings.cronViewHttpHeaders")}
                               </div>
-                              <pre className="whitespace-pre-wrap break-all font-mono text-11px leading-relaxed text-foreground/70">
+                              <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-foreground/70">
                                 {headersText}
                               </pre>
                             </div>
                           ) : null}
                           {hasBody ? (
                             <div className="bg-background/60 p-2.5">
-                              <div className="mb-1 text-10px font-semibold uppercase tracking-wider text-muted-foreground/60">
+                              <div className="mb-1 text-tiny font-semibold uppercase tracking-wider text-muted-foreground/60">
                                 {t("settings.cronViewHttpBody")}
                               </div>
-                              <pre className="whitespace-pre-wrap break-all font-mono text-11px leading-relaxed text-foreground/70">
+                              <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-foreground/70">
                                 {bodyText}
                               </pre>
                             </div>
@@ -399,7 +399,7 @@ function LeftPanel({
                 <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/30">
                   <div className="flex items-center gap-1.5 border-b border-border/30 px-3 py-2">
                     <MessageSquare className="size-3 text-muted-foreground/60" />
-                    <span className="text-11px font-medium text-muted-foreground/60">
+                    <span className="text-xs font-medium text-muted-foreground/60">
                       {t("settings.cronPromptModelLabel")}
                     </span>
                   </div>
@@ -407,7 +407,7 @@ function LeftPanel({
                     <div className="text-xs font-medium text-foreground/85">
                       {task.selectedModel.model}
                     </div>
-                    <div className="mt-1 text-11px text-muted-foreground/70">
+                    <div className="mt-1 text-xs text-muted-foreground/70">
                       {task.selectedModel.customProviderId}
                     </div>
                   </div>
@@ -418,12 +418,12 @@ function LeftPanel({
                 <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/30">
                   <div className="flex items-center gap-1.5 border-b border-border/30 px-3 py-2">
                     <MessageSquare className="size-3 text-muted-foreground/60" />
-                    <span className="text-11px font-medium text-muted-foreground/60">
+                    <span className="text-xs font-medium text-muted-foreground/60">
                       {t("settings.cronPromptLabel")}
                     </span>
                   </div>
                   <div className="px-3.5 py-3">
-                    <p className="whitespace-pre-wrap text-13px leading-relaxed text-foreground/80">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
                       {task.prompt}
                     </p>
                   </div>
@@ -557,7 +557,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
             <span
               className={cn(
                 "inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5",
-                "text-10px font-semibold leading-none text-emerald-600 dark:text-emerald-400",
+                "text-tiny font-semibold leading-none text-emerald-600 dark:text-emerald-400",
               )}
             >
               <CheckCircle2 className="size-2.5" />
@@ -568,7 +568,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
             <span
               className={cn(
                 "inline-flex items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5",
-                "text-10px font-semibold leading-none text-red-600 dark:text-red-400",
+                "text-tiny font-semibold leading-none text-red-600 dark:text-red-400",
               )}
             >
               <XCircle className="size-2.5" />
@@ -579,7 +579,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
             <span
               className={cn(
                 "inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-1.5 py-0.5",
-                "text-10px font-semibold leading-none text-sky-600 dark:text-sky-400",
+                "text-tiny font-semibold leading-none text-sky-600 dark:text-sky-400",
               )}
             >
               <Loader2 className="size-2.5 animate-spin" />
@@ -596,7 +596,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
             className={cn(
               "mb-3 flex items-start gap-1.5",
               "rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2",
-              "text-11px leading-relaxed text-amber-700 dark:text-amber-300",
+              "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
             )}
           >
             <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -609,7 +609,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
           <div
             className={cn(
               "mb-3 rounded-lg border border-red-500/20 bg-red-500/[0.03] px-3 py-2",
-              "text-11px text-red-700 dark:text-red-300",
+              "text-xs text-red-700 dark:text-red-300",
             )}
           >
             {clearError}
@@ -649,14 +649,14 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                       <XCircle className="size-3.5 shrink-0 text-red-500" />
                     )}
                     {/* Timestamp — fixed width */}
-                    <span className="w-130px shrink-0 font-mono text-11px text-foreground/70">
+                    <span className="w-130px shrink-0 font-mono text-xs text-foreground/70">
                       {formatTimestamp(log.startedAt)}
                     </span>
                     {/* Status tag — fixed width for alignment */}
                     <span
                       className={cn(
                         "w-36px shrink-0 text-center rounded-full px-1.5 py-0.5",
-                        "text-10px font-semibold leading-none",
+                        "text-tiny font-semibold leading-none",
                         isRunning
                           ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
                           : log.success
@@ -673,7 +673,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                             : t("settings.cronViewLogFailed")}
                     </span>
                     {/* Duration — right-aligned fixed width */}
-                    <span className="ml-auto w-48px shrink-0 text-right text-11px tabular-nums text-muted-foreground/50">
+                    <span className="ml-auto w-48px shrink-0 text-right text-xs tabular-nums text-muted-foreground/50">
                       {isRunning ? "—" : formatDuration(log.durationMs)}
                     </span>
                     {/* Chevron */}
@@ -688,7 +688,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                   {/* Detail */}
                   {isExpanded ? (
                     <div className="space-y-2 border-t border-border/30 bg-muted/10 px-3 py-2.5">
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-11px">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                         <span className="text-muted-foreground/60">
                           {t("settings.cronViewLogDuration")}:{" "}
                           <span className="font-medium text-foreground/70">
@@ -713,7 +713,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                       </div>
                       {log.output ? (
                         <div className="space-y-1">
-                          <div className="text-10px font-semibold uppercase tracking-wider text-muted-foreground/50">
+                          <div className="text-tiny font-semibold uppercase tracking-wider text-muted-foreground/50">
                             {task.type === "prompt"
                               ? t("settings.cronViewLogConclusion")
                               : t("settings.cronViewLogOutput")}
@@ -721,7 +721,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                           <pre
                             className={cn(
                               "whitespace-pre-wrap break-all rounded-lg border px-2.5 py-2",
-                              "font-mono text-11px leading-relaxed",
+                              "font-mono text-xs leading-relaxed",
                               log.success
                                 ? "border-border/40 bg-background/60 text-foreground/70"
                                 : "border-red-500/15 bg-red-500/[0.03] text-red-700 dark:text-red-300",
@@ -743,7 +743,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
             <p className="mt-3 text-xs font-medium text-muted-foreground/50">
               {t("settings.cronViewLogsEmpty")}
             </p>
-            <p className="mt-0.5 text-11px text-muted-foreground/35">
+            <p className="mt-0.5 text-xs text-muted-foreground/35">
               {t("settings.cronViewLogsEmptyHint")}
             </p>
           </div>

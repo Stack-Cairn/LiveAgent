@@ -130,7 +130,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               {isEditing ? t("settings.hooksEdit") : t("settings.hooksAdd")}
             </DialogTitle>
             <DialogDescription className="mt-0.5 flex items-center gap-2 text-xs">
-              <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-11px text-muted-foreground">
+              <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-xs text-muted-foreground">
                 {event}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -288,16 +288,16 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               </div>
               {type === "command" ? (
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-11px font-medium text-blue-600 dark:text-blue-400">
+                  <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
                     {scriptLineCount} {t("settings.hooksScriptLinesCount")}
                   </span>
-                  <span className="rounded-md bg-muted/50 px-2 py-0.5 text-11px font-medium text-muted-foreground">
+                  <span className="rounded-md bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
                     {t("settings.hooksSequential")}
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-11px font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     {requests.length} {t("settings.hooksRequestsCount")}
                   </span>
                   <Button
@@ -323,11 +323,11 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
               <div className="space-y-3">
                 <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
                   <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
-                    <div className="flex items-center gap-1.5 text-11px text-muted-foreground">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Terminal className="size-3" />
                       <span className="font-medium">{t("settings.hooksCommandList")}</span>
                     </div>
-                    <span className="text-11px text-muted-foreground/60">
+                    <span className="text-xs text-muted-foreground/60">
                       {t("settings.hooksCommandHint")}
                     </span>
                   </div>

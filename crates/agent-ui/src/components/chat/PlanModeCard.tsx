@@ -98,12 +98,12 @@ export function PlanModeCard({
                 : "text-muted-foreground/60",
           )}
         />
-        <span className="text-scaled-12px font-medium tracking-0p01em text-foreground/90">
+        <span className="text-xs font-medium tracking-0p01em text-foreground/90">
           {t("chat.planMode.cardTitle")}
         </span>
 
         {/* 计划很长时按钮会落在视口外,表头状态让人不用滚到底也知道这份计划的处境。 */}
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-scaled-11px leading-none text-muted-foreground">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-xs leading-none text-muted-foreground">
           {tone === "approved" ? (
             <>
               <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
@@ -140,7 +140,7 @@ export function PlanModeCard({
             onClick={() => void approve()}
             className={cn(
               "group/approve inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary",
-              "px-3.5 text-scaled-12px font-medium text-primary-foreground shadow-ui-planmodecard-13",
+              "px-3.5 text-xs font-medium text-primary-foreground shadow-ui-planmodecard-13",
               "transition-[background-color,transform,box-shadow] duration-150 ease-out",
               "hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background active:scale-[0.98] disabled:pointer-events-none",
               "disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100",
@@ -154,7 +154,7 @@ export function PlanModeCard({
             {submitting ? t("chat.planMode.approving") : t("chat.planMode.approve")}
           </button>
           {errorText ? (
-            <span className="min-w-0 flex-1 text-scaled-11px leading-1p5 text-[hsl(var(--chat-error))]">
+            <span className="min-w-0 flex-1 text-xs leading-1p5 text-[hsl(var(--chat-error))]">
               {errorText}
             </span>
           ) : null}

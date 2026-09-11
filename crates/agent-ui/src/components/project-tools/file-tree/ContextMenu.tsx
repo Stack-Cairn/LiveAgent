@@ -340,9 +340,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <span className="flex size-3.5 items-center justify-center text-scaled-11px font-semibold">
-          @
-        </span>
+        <span className="flex size-3.5 items-center justify-center text-xs font-semibold">@</span>
         {t("projectTools.fileTree.insertReference")}
       </button>
       <div className="mx-1 my-1 h-px bg-border/60" />

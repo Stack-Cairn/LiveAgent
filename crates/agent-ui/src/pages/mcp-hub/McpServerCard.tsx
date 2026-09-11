@@ -34,7 +34,7 @@ function ConfigurationCount(props: { count: number; label: string }) {
     <span
       className={cn(
         "inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2",
-        "text-10px text-muted-foreground ring-1 ring-border/60",
+        "text-tiny text-muted-foreground ring-1 ring-border/60",
       )}
     >
       <span className="font-semibold tabular-nums text-foreground">{props.count}</span>
@@ -123,7 +123,7 @@ function OauthControls(props: { server: McpServerConfig }) {
     <span className="inline-flex items-center gap-1">
       <Badge
         variant={badgeVariant}
-        className="h-5 px-1.5 text-10px"
+        className="h-5 px-1.5 text-tiny"
         title={
           error ??
           (isWebui
@@ -141,7 +141,7 @@ function OauthControls(props: { server: McpServerConfig }) {
             type="button"
             variant="outline"
             size="sm"
-            className="h-5 rounded-full px-2 text-10px"
+            className="h-5 rounded-full px-2 text-tiny"
             disabled={busy}
             onClick={() => void handleConnect()}
           >
@@ -152,7 +152,7 @@ function OauthControls(props: { server: McpServerConfig }) {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-5 rounded-full px-2 text-10px text-muted-foreground"
+              className="h-5 rounded-full px-2 text-tiny text-muted-foreground"
               disabled={busy}
               onClick={() => void handleDisconnect()}
             >
@@ -239,7 +239,7 @@ export const McpServerCard = memo(function McpServerCard(props: {
             <SearchHighlight
               text={displayName}
               query={searchQuery}
-              className="text-13px font-semibold text-foreground"
+              className="text-sm font-semibold text-foreground"
             />
           </button>
           {docsLink ? (
@@ -255,7 +255,7 @@ export const McpServerCard = memo(function McpServerCard(props: {
               <ExternalLink aria-hidden="true" className="size-3" />
             </Button>
           ) : null}
-          <Badge variant="muted" className="h-5 px-1.5 text-10px uppercase tracking-wide">
+          <Badge variant="muted" className="h-5 px-1.5 text-tiny uppercase tracking-wide">
             <SearchHighlight text={transportLabel} query={searchQuery} />
           </Badge>
           {isOauthServer(server) ? <OauthControls server={server} /> : null}
@@ -266,7 +266,7 @@ export const McpServerCard = memo(function McpServerCard(props: {
             onClick={onEdit}
             title={detailLine}
             className={cn(
-              "mt-1 min-w-0 truncate rounded-sm text-left text-11px text-muted-foreground outline-hidden",
+              "mt-1 min-w-0 truncate rounded-sm text-left text-xs text-muted-foreground outline-hidden",
               "focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >

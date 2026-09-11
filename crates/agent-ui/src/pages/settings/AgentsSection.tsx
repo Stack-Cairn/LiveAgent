@@ -231,7 +231,7 @@ export function AgentsSection(props: SettingsSectionProps) {
                             <span
                               className={cn(
                                 "shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5",
-                                "text-10px font-medium leading-none text-emerald-600 dark:text-emerald-400",
+                                "text-tiny font-medium leading-none text-emerald-600 dark:text-emerald-400",
                               )}
                             >
                               {t("settings.agentsGlobalDefault")}
@@ -371,7 +371,7 @@ export function AgentsSection(props: SettingsSectionProps) {
                           </span>
                           <span
                             className={cn(
-                              "shrink-0 rounded-full px-1.5 py-0.5 text-10px font-medium leading-none",
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-tiny font-medium leading-none",
                               configured
                                 ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
                                 : "bg-muted text-muted-foreground",
@@ -397,7 +397,7 @@ export function AgentsSection(props: SettingsSectionProps) {
                           <span
                             className={cn(
                               "shrink-0 rounded-full border border-border/60 bg-muted/40 px-2 py-1",
-                              "text-10px font-medium text-muted-foreground",
+                              "text-tiny font-medium text-muted-foreground",
                             )}
                           >
                             {t(
@@ -589,7 +589,7 @@ function AgentPromptViewModal({
           <span
             className={cn(
               "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1",
-              "text-11px font-medium sm:inline-flex",
+              "text-xs font-medium sm:inline-flex",
               statusBadgeClass,
             )}
           >
@@ -683,13 +683,13 @@ function AgentPromptViewModal({
                     <div key={segment.tone}>
                       {index > 0 ? <div className="my-5 h-px w-full bg-border/70" /> : null}
                       <PromptScopeLabel label={segment.label} tone={segment.tone} />
-                      <pre className="mt-4 whitespace-pre-wrap break-words font-mono text-13px leading-6 text-foreground/90">
+                      <pre className="mt-4 whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground/90">
                         {segment.prompt}
                       </pre>
                     </div>
                   ))
                 ) : (
-                  <pre className="whitespace-pre-wrap break-words font-mono text-13px leading-6 text-foreground/90">
+                  <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground/90">
                     {template.prompt}
                   </pre>
                 )}
@@ -708,7 +708,7 @@ function PromptScopeLabel(props: { label: string; tone: "global" | "project" }) 
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1",
-        "text-11px font-medium",
+        "text-xs font-medium",
         tone === "global"
           ? "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300"
           : "border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300",

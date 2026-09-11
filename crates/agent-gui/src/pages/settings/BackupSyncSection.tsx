@@ -216,7 +216,7 @@ function SyncStatusBanner({
           <span
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-full border",
-              "px-2.5 py-1 text-11px font-medium leading-none",
+              "px-2.5 py-1 text-xs font-medium leading-none",
               view?.autoSync
                 ? "border-emerald-600/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:text-emerald-300"
                 : "border-border/70 bg-muted/45 text-muted-foreground",
@@ -298,7 +298,7 @@ function ScopeItem({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1",
-        "text-11px font-medium leading-none",
+        "text-xs font-medium leading-none",
         excluded ? "bg-muted/30 text-muted-foreground/70" : "bg-muted/45 text-foreground/85",
       )}
     >
@@ -619,7 +619,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               className={cn(
                 "inline-flex items-center gap-1.5",
                 "rounded-full border border-border/70 bg-muted/45 px-2.5 py-1",
-                "text-11px font-medium leading-none text-muted-foreground",
+                "text-xs font-medium leading-none text-muted-foreground",
               )}
             >
               <Lock className="size-3" />
@@ -853,7 +853,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
               />
             </div>
 
-            <div className="flex items-start gap-2 text-11px leading-relaxed text-muted-foreground">
+            <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
               <ArchiveRestore className="mt-0.5 size-3.5 shrink-0" />
               <span>{t("settings.backupAutoBackupHint")}</span>
             </div>
@@ -872,7 +872,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-11px font-medium uppercase tracking-wide text-muted-foreground/70">
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("settings.backupScopeIncluded")}
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -904,7 +904,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-11px font-medium uppercase tracking-wide text-muted-foreground/70">
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("settings.backupScopeExcluded")}
               </div>
               <div className="flex flex-wrap gap-1.5">

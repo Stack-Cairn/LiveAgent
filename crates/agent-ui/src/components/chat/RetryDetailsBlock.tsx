@@ -24,7 +24,7 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
           "retry-details-toggle flex w-full cursor-pointer select-none items-center gap-2 py-1.5",
-          "text-left text-scaled-13px font-normal text-muted-foreground/80 hover:text-foreground",
+          "text-left text-sm font-normal text-muted-foreground/80 hover:text-foreground",
         )}
       >
         <RefreshCw className="size-3.5 shrink-0 text-muted-foreground/60" />
@@ -46,7 +46,7 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: retry attempts are append-only and their reported ordinals can repeat.
                 key={`${index}-${entry.attempt}-${entry.maxAttempts}`}
-                className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-scaled-12px text-muted-foreground"
+                className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground"
               >
                 <div className="font-medium text-foreground/80">
                   {t("chat.retryAttemptLabel")

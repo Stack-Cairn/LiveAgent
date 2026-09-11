@@ -99,11 +99,11 @@ function BrowserModeRow(props: {
                   active
                     ? cn(
                         "rounded-md bg-primary px-2.5 py-1",
-                        "text-11px font-medium leading-none text-primary-foreground transition-colors",
+                        "text-xs font-medium leading-none text-primary-foreground transition-colors",
                       )
                     : cn(
                         "rounded-md px-2.5 py-1",
-                        "text-11px font-medium leading-none text-muted-foreground transition-colors hover:text-foreground",
+                        "text-xs font-medium leading-none text-muted-foreground transition-colors hover:text-foreground",
                       )
                 }
               >
@@ -116,8 +116,8 @@ function BrowserModeRow(props: {
           <span
             className={
               info.connected
-                ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-10px leading-none text-emerald-500"
-                : "rounded-full bg-amber-500/10 px-2 py-0.5 text-10px leading-none text-amber-500"
+                ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-tiny leading-none text-emerald-500"
+                : "rounded-full bg-amber-500/10 px-2 py-0.5 text-tiny leading-none text-amber-500"
             }
           >
             {t(
@@ -128,12 +128,12 @@ function BrowserModeRow(props: {
           </span>
         ) : null}
       </div>
-      <p className="text-11px leading-relaxed text-muted-foreground/80">
+      <p className="text-xs leading-relaxed text-muted-foreground/80">
         {t(`settings.browserMode.${mode}.desc`)}
       </p>
       {showGuide ? (
         <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
-          <p className="text-11px leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {t("settings.browserMode.installGuide")}
           </p>
           {info.extensionDir ? (
@@ -141,7 +141,7 @@ function BrowserModeRow(props: {
               <code
                 className={cn(
                   "min-w-0 flex-1 truncate rounded bg-muted/60 px-1.5 py-1",
-                  "font-mono text-10px leading-none text-muted-foreground",
+                  "font-mono text-tiny leading-none text-muted-foreground",
                 )}
               >
                 {info.extensionDir}
@@ -150,7 +150,7 @@ function BrowserModeRow(props: {
                 type="button"
                 className={cn(
                   "shrink-0 rounded-md border border-border/60 px-2 py-1",
-                  "text-11px font-medium leading-none text-foreground transition-colors hover:bg-muted/60",
+                  "text-xs font-medium leading-none text-foreground transition-colors hover:bg-muted/60",
                 )}
                 onClick={() => {
                   void invoke("browser_extension_reveal_dir", {}).catch(() => {});
@@ -225,7 +225,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
           <span
             className={cn(
               "ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5",
-              "text-11px font-medium leading-none text-primary",
+              "text-xs font-medium leading-none text-primary",
             )}
           >
             {t("settings.toolPermissionsOverridden").replace("{count}", String(overriddenCount))}
@@ -236,7 +236,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
       <div className="space-y-4">
         {groups.map(({ category, entries }) => (
           <div key={category.id} className="space-y-1.5">
-            <div className="text-11px font-medium uppercase tracking-wide text-muted-foreground/70">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
               {t(category.labelKey)}
             </div>
             <div className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-background/60">
@@ -250,11 +250,11 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                           <span className="text-sm font-medium">
                             {t(`settings.builtinTool.${entry.id}.name`)}
                           </span>
-                          <code className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-10px leading-none text-muted-foreground">
+                          <code className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-tiny leading-none text-muted-foreground">
                             {entry.toolName}
                           </code>
                           {entry.isReadOnly ? (
-                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-10px leading-none text-emerald-500">
+                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-tiny leading-none text-emerald-500">
                               {t("settings.toolDetailReadOnly")}
                             </span>
                           ) : null}
@@ -264,7 +264,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                         </div>
                       </div>
                       {entry.isReadOnly ? (
-                        <span className="shrink-0 text-11px text-muted-foreground/60">
+                        <span className="shrink-0 text-xs text-muted-foreground/60">
                           {t("settings.toolPolicy.allow")}
                         </span>
                       ) : (

@@ -206,7 +206,7 @@ export const SelectItem = React.forwardRef<
     ) : (
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-        <span className="truncate text-10px leading-tight text-muted-foreground/70">
+        <span className="truncate text-tiny leading-tight text-muted-foreground/70">
           {description}
         </span>
       </span>

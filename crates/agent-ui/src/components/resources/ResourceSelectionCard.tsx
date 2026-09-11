@@ -32,7 +32,7 @@ export function ResourceSelectionCard(props: {
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="truncate text-13px font-semibold text-foreground">{props.title}</span>
+          <span className="truncate text-sm font-semibold text-foreground">{props.title}</span>
           {props.metadata}
         </div>
         <p

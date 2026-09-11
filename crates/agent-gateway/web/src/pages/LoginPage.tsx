@@ -104,8 +104,8 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
             </div>
             <h1
               className={cn(
-                "m-0 text-28px font-bold leading-1p15 tracking-minus-0p035em text-foreground",
-                "max-820:text-26px max-640:text-24px max-380:text-22px",
+                "m-0 text-3xl font-bold leading-1p15 tracking-minus-0p035em text-foreground",
+                "max-820:text-2xl max-640:text-2xl max-380:text-2xl",
               )}
             >
               LiveAgent Gateway
@@ -114,8 +114,8 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
           <p
             className={cn(
               "mx-0 mt-14px mb-0",
-              "text-14px leading-1p7 text-muted-foreground",
-              "max-640:text-13px max-640:mt-10px max-380:text-12p5px max-380:leading-1p6",
+              "text-sm leading-1p7 text-muted-foreground",
+              "max-640:text-sm max-640:mt-10px max-380:text-xs max-380:leading-1p6",
             )}
           >
             安全连接到远程代理会话，在浏览器中获得完整的控制台体验。
@@ -145,10 +145,10 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                   <f.icon size={16} strokeWidth={2} />
                 </div>
                 <div className="min-w-0">
-                  <strong className="block text-13px font-semibold mb-2px text-foreground max-640:text-12p5px max-640:mb-0">
+                  <strong className="block text-sm font-semibold mb-2px text-foreground max-640:text-xs max-640:mb-0">
                     {f.title}
                   </strong>
-                  <span className="block text-11p5px leading-1p55 text-muted-foreground max-820:text-11px max-640:hidden">
+                  <span className="block text-xs leading-1p55 text-muted-foreground max-820:text-xs max-640:hidden">
                     {f.desc}
                   </span>
                 </div>
@@ -177,11 +177,11 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 >
                   <Lock size={16} strokeWidth={2} />
                 </div>
-                <h2 className="m-0 text-22px font-bold tracking-minus-0p02em text-foreground max-820:text-20px max-380:text-18px">
+                <h2 className="m-0 text-2xl font-bold tracking-minus-0p02em text-foreground max-820:text-xl max-380:text-lg">
                   连接控制台
                 </h2>
               </div>
-              <p className="mx-0 mt-8px mb-0 text-13px leading-1p6 text-muted-foreground max-640:text-12p5px max-380:text-12px">
+              <p className="mx-0 mt-8px mb-0 text-sm leading-1p6 text-muted-foreground max-640:text-xs max-380:text-xs">
                 输入 Gateway 服务端的 Access Token 以验证身份
               </p>
             </div>
@@ -201,7 +201,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 htmlFor="access-token"
                 className={cn(
                   "flex items-center gap-6px mb-10px",
-                  "text-11px font-semibold tracking-0p08em uppercase text-muted-foreground max-380:mb-8px max-380:text-10px",
+                  "text-xs font-semibold tracking-0p08em uppercase text-muted-foreground max-380:mb-8px max-380:text-tiny",
                 )}
               >
                 <Key size={12} strokeWidth={2.5} />
@@ -220,8 +220,8 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 onBlur={() => setIsFocused(false)}
                 className={cn(
                   "min-h-72px resize-none border-0 bg-transparent p-0",
-                  "font-mono text-13px leading-1p6 text-foreground shadow-none",
-                  "focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none touch-primary:text-16px",
+                  "font-mono text-sm leading-1p6 text-foreground shadow-none",
+                  "focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none touch-primary:text-base",
                 )}
               />
             </div>
@@ -230,7 +230,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               <p
                 className={cn(
                   "mx-0 mt-0 mb-14px px-14px py-10px",
-                  "rounded-10px text-13px leading-1p5 text-hsl-0-72-50 bg-hsl-0-80-50-0p06 border border-solid border-hsl-0-80-50-0p1",
+                  "rounded-10px text-sm leading-1p5 text-hsl-0-72-50 bg-hsl-0-80-50-0p06 border border-solid border-hsl-0-80-50-0p1",
                   "dark:text-hsl-0-80-68 dark:bg-hsl-0-80-50-0p1 dark:border-hsl-0-80-50-0p15",
                 )}
               >
@@ -245,7 +245,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               onClick={onSubmit}
               className={cn(
                 "h-46px w-full cursor-pointer gap-8px",
-                "rounded-13px text-14px font-semibold",
+                "rounded-13px text-sm font-semibold",
                 "transition-[transform,box-shadow,opacity] duration-200ms ease-default",
                 "enabled:hover:-translate-y-1px enabled:hover:shadow-[0_var(--spacing-4px)_var(--spacing-20px)_hsl(var(--primary)/0.2)] enabled:active:translate-y-0 enabled:active:scale-[0.985] touch-primary:enabled:hover:translate-y-0 touch-primary:enabled:hover:shadow-none touch-primary:enabled:active:scale-[0.98]",
               )}
@@ -260,7 +260,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               )}
             </Button>
 
-            <p className="mt-16px text-center text-11p5px text-muted-foreground/60 max-640:text-11px max-380:mt-12px">
+            <p className="mt-16px text-center text-xs text-muted-foreground/60 max-640:text-xs max-380:mt-12px">
               Token 验证通过后将本地保存，下次自动登录
             </p>
           </div>

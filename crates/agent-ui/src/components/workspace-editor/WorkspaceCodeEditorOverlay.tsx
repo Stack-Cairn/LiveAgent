@@ -886,7 +886,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceEditor.title")}
           </div>
-          <div className="truncate text-11px text-muted-foreground">
+          <div className="truncate text-xs text-muted-foreground">
             {activeTab ? activeTab.path : t("workspaceEditor.empty")}
           </div>
         </div>
@@ -1011,7 +1011,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           {activeTab?.status === "conflict" ? (
             <button
               type="button"
-              className="rounded border border-amber-500/30 px-2 py-1 text-11px font-medium hover:bg-amber-500/10"
+              className="rounded border border-amber-500/30 px-2 py-1 text-xs font-medium hover:bg-amber-500/10"
               onClick={() => requestReloadTab(activeTab.key)}
             >
               {t("workspaceEditor.reloadFromDisk")}
@@ -1132,7 +1132,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       <div
         className={cn(
           "flex h-7 shrink-0 items-center gap-3",
-          "border-t border-border bg-muted/45 px-3 text-11px text-muted-foreground",
+          "border-t border-border bg-muted/45 px-3 text-xs text-muted-foreground",
         )}
       >
         <span className="truncate">
@@ -1195,7 +1195,7 @@ function ContextMenuItem(props: {
       role="menuitem"
       className={cn(
         "flex h-30px w-full items-center gap-2.5 rounded-lg px-2",
-        "text-left text-13px text-popover-foreground/90 transition-colors",
+        "text-left text-sm text-popover-foreground/90 transition-colors",
         "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none",
       )}
       onClick={props.onClick}
@@ -1207,7 +1207,7 @@ function ContextMenuItem(props: {
       )}
       <span className="min-w-0 flex-1 truncate">{props.label}</span>
       {props.shortcut ? (
-        <kbd className="shrink-0 text-11px tracking-wide text-muted-foreground/60">
+        <kbd className="shrink-0 text-xs tracking-wide text-muted-foreground/60">
           {props.shortcut}
         </kbd>
       ) : null}

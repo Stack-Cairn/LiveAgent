@@ -81,7 +81,7 @@ function PasswordInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="pr-16 font-mono text-13px"
+        className="pr-16 font-mono text-sm"
       />
       <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
         <button
@@ -386,7 +386,7 @@ export function RemoteSection(props: SettingsSectionProps) {
                 })
               }
               placeholder="https://gateway.example.com"
-              className="min-w-0 flex-1 font-mono text-13px"
+              className="min-w-0 flex-1 font-mono text-sm"
             />
             <span className="shrink-0 text-xs text-muted-foreground/50">:</span>
             <Input
@@ -396,10 +396,10 @@ export function RemoteSection(props: SettingsSectionProps) {
               onBlur={remoteGatewayPortDraft.handleBlur}
               onChange={(e) => remoteGatewayPortDraft.handleChange(e.target.value)}
               placeholder="443"
-              className="w-24 shrink-0 font-mono text-13px"
+              className="w-24 shrink-0 font-mono text-sm"
             />
           </div>
-          <p className="text-11px leading-relaxed text-muted-foreground/70">
+          <p className="text-xs leading-relaxed text-muted-foreground/70">
             {t("settings.remoteGatewayUrlHint")}
           </p>
         </div>
@@ -408,7 +408,7 @@ export function RemoteSection(props: SettingsSectionProps) {
           <div
             className={cn(
               "flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2",
-              "text-11px text-muted-foreground",
+              "text-xs text-muted-foreground",
             )}
           >
             <Globe className="size-3.5 shrink-0" />
@@ -439,7 +439,7 @@ export function RemoteSection(props: SettingsSectionProps) {
             }
             placeholder={t("settings.remoteTokenPlaceholder")}
           />
-          <p className="text-11px leading-relaxed text-muted-foreground/70">
+          <p className="text-xs leading-relaxed text-muted-foreground/70">
             {t("settings.remoteTokenHint")}
           </p>
         </div>
@@ -458,13 +458,13 @@ export function RemoteSection(props: SettingsSectionProps) {
               type="text"
               readOnly
               value={settings.remote.agentId}
-              className="bg-muted/30 pr-12 font-mono text-13px"
+              className="bg-muted/30 pr-12 font-mono text-sm"
             />
             <div className="absolute right-1 top-1/2 -translate-y-1/2">
               <CopyButton value={settings.remote.agentId} />
             </div>
           </div>
-          <p className="text-11px leading-relaxed text-muted-foreground/70">
+          <p className="text-xs leading-relaxed text-muted-foreground/70">
             {t("settings.remoteAgentIdHint")}
           </p>
         </div>
@@ -504,7 +504,7 @@ export function RemoteSection(props: SettingsSectionProps) {
                 onBlur={remoteHeartbeatDraft.handleBlur}
                 onChange={(e) => remoteHeartbeatDraft.handleChange(e.target.value)}
                 placeholder="30"
-                className="w-24 font-mono text-13px"
+                className="w-24 font-mono text-sm"
               />
               <span className="text-xs text-muted-foreground">
                 {t("settings.remoteHeartbeatUnit")}

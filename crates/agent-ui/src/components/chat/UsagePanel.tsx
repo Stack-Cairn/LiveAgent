@@ -98,7 +98,7 @@ export function UsagePanel(props: {
     <dl
       data-chat-usage-details
       className={cn(
-        "grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1.5 text-scaled-12px leading-5",
+        "grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1.5 text-xs leading-5",
         className,
       )}
     >
@@ -151,7 +151,7 @@ export function UsageInfoPopover(props: {
             displayableEntries.map((entry, index) => (
               <div key={entry.key} className={cn(index > 0 && "border-t border-border/55 pt-2.5")}>
                 {displayableEntries.length > 1 ? (
-                  <div className="mb-1 text-11px font-medium text-muted-foreground/75">
+                  <div className="mb-1 text-xs font-medium text-muted-foreground/75">
                     {label} {index + 1}
                   </div>
                 ) : null}

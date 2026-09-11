@@ -255,7 +255,7 @@ function MermaidFullscreenDialog({ chart, onClose }: { chart: string; onClose: (
             >
               <Minus className="size-4" />
             </MermaidControlButton>
-            <span className="w-12 text-center text-11px tabular-nums text-muted-foreground">
+            <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
               {Math.round((viewportState?.zoom ?? 1) * 100)}%
             </span>
             <MermaidControlButton

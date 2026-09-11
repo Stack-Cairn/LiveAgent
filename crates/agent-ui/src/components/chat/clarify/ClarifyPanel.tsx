@@ -56,7 +56,7 @@ function RecommendedTag({ label }: { label: string }) {
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r",
         "from-amber-400/25 to-amber-500/15 px-1.5 py-0.5",
-        "text-scaled-9px font-semibold leading-none text-amber-700 ring-1 ring-inset ring-amber-500/25",
+        "text-tiny font-semibold leading-none text-amber-700 ring-1 ring-inset ring-amber-500/25",
         "dark:from-amber-300/[0.18] dark:to-amber-400/[0.10] dark:text-amber-300 dark:ring-amber-300/20",
       )}
     >
@@ -223,7 +223,7 @@ function SettledRoundSummary({
         )}
       >
         <CheckCircle2 className="size-3 text-emerald-500" />
-        <span className="text-scaled-10px font-medium uppercase tracking-wide text-muted-foreground/75">
+        <span className="text-tiny font-medium uppercase tracking-wide text-muted-foreground/75">
           {roundLabel}
         </span>
       </div>
@@ -239,12 +239,12 @@ function SettledRoundSummary({
                 <span
                   className={cn(
                     "mt-1px inline-flex h-4 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05]",
-                    "px-1 text-scaled-9px font-semibold leading-none text-muted-foreground/80 dark:bg-white/[0.07]",
+                    "px-1 text-tiny font-semibold leading-none text-muted-foreground/80 dark:bg-white/[0.07]",
                   )}
                 >
                   Q{index + 1}
                 </span>
-                <span className="min-w-0 text-scaled-11px leading-1p5 text-muted-foreground">
+                <span className="min-w-0 text-xs leading-1p5 text-muted-foreground">
                   {question.prompt}
                 </span>
               </div>
@@ -255,7 +255,7 @@ function SettledRoundSummary({
                     className={cn(
                       "inline-flex max-w-full items-center gap-1",
                       "rounded-full border border-primary/25 bg-primary/[0.08] px-1.5 py-0.5",
-                      "text-scaled-11px font-medium leading-1p4 text-foreground/85 dark:border-primary/30 dark:bg-primary/[0.12]",
+                      "text-xs font-medium leading-1p4 text-foreground/85 dark:border-primary/30 dark:bg-primary/[0.12]",
                     )}
                   >
                     <Check className="size-2.5 shrink-0 text-primary" />
@@ -267,7 +267,7 @@ function SettledRoundSummary({
                     className={cn(
                       "inline-flex max-w-full items-center gap-1",
                       "rounded-full border border-dashed border-sky-500/35 bg-sky-500/[0.07] px-1.5 py-0.5",
-                      "text-scaled-11px leading-1p4 text-foreground/80 dark:border-sky-300/30 dark:bg-sky-300/[0.08]",
+                      "text-xs leading-1p4 text-foreground/80 dark:border-sky-300/30 dark:bg-sky-300/[0.08]",
                     )}
                   >
                     <Pencil className="size-2.5 shrink-0 text-sky-600 dark:text-sky-300" />
@@ -275,7 +275,7 @@ function SettledRoundSummary({
                   </span>
                 ) : null}
                 {!answered ? (
-                  <span className="text-scaled-11px italic leading-1p4 text-muted-foreground/55">
+                  <span className="text-xs italic leading-1p4 text-muted-foreground/55">
                     {skippedLabel}
                   </span>
                 ) : null}
@@ -457,7 +457,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
       )}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-1.5">
-        <span className="flex items-center gap-1.5 text-scaled-11px font-medium text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <WandSparkles className="size-3.5" />
           {t("chat.clarify.title")}
         </span>
@@ -491,10 +491,10 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
         <div className="flex flex-col gap-2">
           {state.draftText ? (
             <div className="rounded-xl bg-primary/10 px-2.5 py-1.5">
-              <span className="mr-1.5 text-scaled-10px font-medium uppercase tracking-wide text-muted-foreground/70">
+              <span className="mr-1.5 text-tiny font-medium uppercase tracking-wide text-muted-foreground/70">
                 {t("chat.clarify.draftLabel")}
               </span>
-              <span className="line-clamp-2 whitespace-pre-wrap break-words text-scaled-11px leading-relaxed text-foreground/80">
+              <span className="line-clamp-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground/80">
                 {state.draftText}
               </span>
             </div>
@@ -532,7 +532,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                               onClick={() => goToQuestion(index)}
                               className={cn(
                                 "flex shrink-0 items-center gap-1 rounded-lg px-2 py-1",
-                                "text-scaled-11px font-medium leading-none transition-colors",
+                                "text-xs font-medium leading-none transition-colors",
                                 isActive
                                   ? "bg-foreground/[0.07] text-foreground dark:bg-white/[0.09]"
                                   : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground/80",
@@ -551,10 +551,10 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                       direction={switchDirection}
                       className="flex flex-col gap-1.5"
                     >
-                      <div className="text-scaled-12p5px font-medium leading-1p55 text-foreground/90">
+                      <div className="text-xs font-medium leading-1p55 text-foreground/90">
                         {activeQuestion.prompt}
                         {activeQuestion.allowMultiple ? (
-                          <span className="ml-1.5 text-scaled-10px font-normal text-muted-foreground/70">
+                          <span className="ml-1.5 text-tiny font-normal text-muted-foreground/70">
                             {t("chat.clarify.multiHint")}
                           </span>
                         ) : null}
@@ -581,7 +581,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                               />
                               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                                 <span className="flex flex-wrap items-center gap-1.5">
-                                  <span className="text-scaled-12px font-medium leading-1p5 text-foreground/85">
+                                  <span className="text-xs font-medium leading-1p5 text-foreground/85">
                                     {option.label}
                                   </span>
                                   {option.recommended ? (
@@ -589,7 +589,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                                   ) : null}
                                 </span>
                                 {option.description ? (
-                                  <span className="text-scaled-11px leading-1p5 text-muted-foreground/80">
+                                  <span className="text-xs leading-1p5 text-muted-foreground/80">
                                     {option.description}
                                   </span>
                                 ) : null}
@@ -614,7 +614,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                               multiple={activeQuestion.allowMultiple}
                             />
                             <span className="flex min-w-0 flex-1 flex-col gap-1">
-                              <span className="text-scaled-12px font-medium leading-1p5 text-foreground/85">
+                              <span className="text-xs font-medium leading-1p5 text-foreground/85">
                                 {t("chat.clarify.customOption")}
                               </span>
                               {customVisible ? (
@@ -636,7 +636,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                                   }
                                   className={cn(
                                     "h-7 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2",
-                                    "text-scaled-12px text-foreground outline-none transition-[border-color,background-color]",
+                                    "text-xs text-foreground outline-none transition-[border-color,background-color]",
                                     "placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]",
                                   )}
                                 />
@@ -659,7 +659,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                             }
                             className={cn(
                               "h-8 w-full rounded-lg border border-black/[0.08] bg-white/65 px-2.5",
-                              "text-scaled-12px text-foreground outline-none transition-[border-color,background-color]",
+                              "text-xs text-foreground outline-none transition-[border-color,background-color]",
                               "placeholder:text-muted-foreground/45 focus:border-primary/45 focus:bg-white/80 dark:border-white/[0.1] dark:bg-white/[0.05] dark:focus:border-primary/40 dark:focus:bg-white/[0.08]",
                             )}
                           />
@@ -675,7 +675,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
             <div
               className={cn(
                 "max-w-[92%] self-start whitespace-pre-wrap rounded-xl bg-muted/60 px-2.5 py-1.5",
-                "text-scaled-12px leading-relaxed text-foreground/90",
+                "text-xs leading-relaxed text-foreground/90",
               )}
             >
               {state.streamingText}
@@ -685,7 +685,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
             <div
               className={cn(
                 "flex items-center gap-1.5 self-start rounded-xl bg-muted/60 px-2.5 py-1.5",
-                "text-scaled-12px text-muted-foreground",
+                "text-xs text-muted-foreground",
               )}
             >
               <Loader2 className="size-3 animate-spin" />
@@ -696,7 +696,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
             <div
               className={cn(
                 "flex items-center gap-2 self-start rounded-xl bg-destructive/10 px-2.5 py-1.5",
-                "text-scaled-12px text-destructive",
+                "text-xs text-destructive",
               )}
             >
               <span className="min-w-0 flex-1">
@@ -725,7 +725,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
             "px-2.5 py-1.5 dark:border-white/[0.08]",
           )}
         >
-          <span className="min-w-0 truncate text-scaled-11px tabular-nums text-muted-foreground/70">
+          <span className="min-w-0 truncate text-xs tabular-nums text-muted-foreground/70">
             {progressText}
           </span>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -736,7 +736,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
               className={cn(
                 "inline-flex h-7 items-center gap-1",
                 "rounded-full border border-black/[0.06] px-2.5",
-                "text-scaled-11px font-medium text-muted-foreground transition-colors",
+                "text-xs font-medium text-muted-foreground transition-colors",
                 "hover:bg-muted/60 hover:text-foreground dark:border-white/[0.12]",
               )}
             >
@@ -749,7 +749,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
               onClick={submit}
               className={cn(
                 "inline-flex h-7 items-center rounded-full bg-primary px-3",
-                "text-scaled-11px font-medium text-primary-foreground transition-opacity",
+                "text-xs font-medium text-primary-foreground transition-opacity",
                 "hover:opacity-90 disabled:pointer-events-none disabled:opacity-40",
               )}
             >

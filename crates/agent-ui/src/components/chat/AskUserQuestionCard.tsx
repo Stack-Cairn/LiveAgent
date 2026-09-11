@@ -62,7 +62,7 @@ function useAnswerCountdown(active: boolean, deadlineAt?: number) {
 
 function RecommendedTag({ label }: { label: string }) {
   return (
-    <Badge variant="success" className="border-transparent px-1.5 text-scaled-11px">
+    <Badge variant="success" className="border-transparent px-1.5 text-xs">
       {label}
     </Badge>
   );
@@ -224,7 +224,7 @@ export function AskUserQuestionCard({
                   panelKey={question.id}
                   direction={switchDirection}
                 >
-                  <div className="text-scaled-13px font-medium leading-1p5 text-foreground">
+                  <div className="text-sm font-medium leading-1p5 text-foreground">
                     {question.prompt}
                   </div>
 
@@ -282,7 +282,7 @@ export function AskUserQuestionCard({
                             <span className="flex flex-wrap items-center gap-1.5">
                               <span
                                 className={cn(
-                                  "text-scaled-12p5px leading-1p45",
+                                  "text-xs leading-1p45",
                                   selected ? "font-medium text-foreground" : "text-foreground/78",
                                 )}
                               >
@@ -293,7 +293,7 @@ export function AskUserQuestionCard({
                               ) : null}
                             </span>
                             {option.description ? (
-                              <span className="text-scaled-11px leading-1p5 text-muted-foreground/72">
+                              <span className="text-xs leading-1p5 text-muted-foreground/72">
                                 {option.description}
                               </span>
                             ) : null}
@@ -361,7 +361,7 @@ export function AskUserQuestionCard({
                             }));
                           }}
                           className={cn(
-                            "h-8 min-w-0 flex-1 bg-transparent text-scaled-12p5px shadow-none",
+                            "h-8 min-w-0 flex-1 bg-transparent text-xs shadow-none",
                             questionCustomSelected ? "border-foreground/35" : "border-border/60",
                           )}
                         />
@@ -376,7 +376,7 @@ export function AskUserQuestionCard({
                         >
                           <span className="size-1.5 rounded-full bg-background" />
                         </span>
-                        <span className="min-w-0 flex-1 wrap-break-word text-scaled-12p5px font-medium leading-1p45 text-foreground">
+                        <span className="min-w-0 flex-1 wrap-break-word text-xs font-medium leading-1p45 text-foreground">
                           {questionCustomText}
                         </span>
                       </div>
@@ -388,7 +388,7 @@ export function AskUserQuestionCard({
           </div>
 
           {errorText ? (
-            <div role="alert" className="mt-2 text-scaled-11px leading-1p5 text-destructive">
+            <div role="alert" className="mt-2 text-xs leading-1p5 text-destructive">
               {errorText}
             </div>
           ) : null}
@@ -415,7 +415,7 @@ export function AskUserQuestionCard({
                 >
                   <ChevronUp className="size-3.5" />
                 </button>
-                <span className="inline-flex items-center text-scaled-11px font-medium tabular-nums leading-none">
+                <span className="inline-flex items-center text-xs font-medium tabular-nums leading-none">
                   {safeActiveIndex + 1} / {questions.length}
                 </span>
                 <button
@@ -433,10 +433,7 @@ export function AskUserQuestionCard({
               </>
             ) : null}
             {interactive && !isSettled && !cancelled ? (
-              <span
-                role="timer"
-                className="truncate text-scaled-11px tabular-nums text-muted-foreground/60"
-              >
+              <span role="timer" className="truncate text-xs tabular-nums text-muted-foreground/60">
                 {questions.length > 1 ? "· " : null}
                 {formatCountdown(remainingMs)} {t("chat.askUser.timeoutHint")}
               </span>
@@ -444,16 +441,16 @@ export function AskUserQuestionCard({
           </div>
 
           {cancelled ? (
-            <span className="text-right text-scaled-11px leading-1p35 text-muted-foreground/70">
+            <span className="text-right text-xs leading-1p35 text-muted-foreground/70">
               {t("chat.askUser.cancelled")}
             </span>
           ) : isSettled ? (
             timedOut ? (
-              <span className="text-right text-scaled-11px leading-1p35 text-amber-600 dark:text-amber-400">
+              <span className="text-right text-xs leading-1p35 text-amber-600 dark:text-amber-400">
                 {t("chat.askUser.timedOut")}
               </span>
             ) : (
-              <Badge variant="success" className="text-scaled-11px">
+              <Badge variant="success" className="text-xs">
                 <Check className="size-3" />
                 {t("chat.askUser.answered")}
               </Badge>
@@ -467,7 +464,7 @@ export function AskUserQuestionCard({
                   size="sm"
                   disabled={!canInteract}
                   onClick={() => goToQuestion(safeActiveIndex + 1)}
-                  className="h-7 rounded-full px-3 text-scaled-11px text-muted-foreground hover:text-foreground"
+                  className="h-7 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
                 >
                   {t("chat.askUser.skip")}
                 </Button>
@@ -484,7 +481,7 @@ export function AskUserQuestionCard({
                   if (safeActiveIndex === questions.length - 1) void submit();
                   else goToQuestion(safeActiveIndex + 1);
                 }}
-                className="h-7 gap-1.5 rounded-full px-3.5 text-scaled-11px"
+                className="h-7 gap-1.5 rounded-full px-3.5 text-xs"
               >
                 {submitting
                   ? t("chat.askUser.submitting")

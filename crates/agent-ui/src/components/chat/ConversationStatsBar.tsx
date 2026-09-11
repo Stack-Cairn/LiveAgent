@@ -180,7 +180,7 @@ export function ConversationStatsBar(props: {
       aria-hidden="true"
       className={cn(
         "flex min-w-0 items-center overflow-hidden",
-        "text-scaled-11px leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums",
+        "text-xs leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums",
       )}
     >
       {prefix === "" ? null : <span className="mr-1">{t("chat.stats.approximate")}</span>}

@@ -195,11 +195,11 @@ function UserImageAttachmentCard(props: {
       )}
       <div className="flex items-center gap-1.5 px-2.5 py-1.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-scaled-11px font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+          <div className="truncate text-xs font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
             {file.fileName}
           </div>
         </div>
-        <span className="shrink-0 text-scaled-10px tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
+        <span className="shrink-0 text-tiny tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </span>
       </div>
@@ -235,10 +235,10 @@ function UserFileAttachmentCard(props: {
         <TypeIcon className="size-4.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-scaled-11px font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+        <div className="truncate text-xs font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
           {file.fileName}
         </div>
-        <div className="mt-0.5 text-scaled-10px tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
+        <div className="mt-0.5 text-tiny tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </div>
       </div>

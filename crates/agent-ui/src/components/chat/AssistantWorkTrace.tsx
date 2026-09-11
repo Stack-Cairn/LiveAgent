@@ -162,7 +162,7 @@ export function AssistantWorkTrace({
           type="button"
           className={cn(
             "group/work-trace flex w-full items-center gap-2 rounded-lg py-1",
-            "text-scaled-13px font-450 transition-colors",
+            "text-sm font-450 transition-colors",
             "hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
           aria-expanded={expanded}
@@ -171,7 +171,7 @@ export function AssistantWorkTrace({
           {header}
         </button>
       ) : (
-        <div className="flex items-center gap-2 py-1 text-scaled-13px font-450">{header}</div>
+        <div className="flex items-center gap-2 py-1 text-sm font-450">{header}</div>
       )}
 
       {hasDetails ? (

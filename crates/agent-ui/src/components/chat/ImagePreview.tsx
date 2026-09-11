@@ -747,7 +747,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 >
                   <ChevronRight className="size-4" />
                 </ImagePreviewToolButton>
-                <span className="ml-1 shrink-0 text-11px tabular-nums text-muted-foreground">
+                <span className="ml-1 shrink-0 text-xs tabular-nums text-muted-foreground">
                   {clampedIndex + 1} / {imageCount}
                 </span>
               </>
@@ -761,7 +761,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
             >
               <Minus className="size-4" />
             </ImagePreviewToolButton>
-            <span className="w-11 text-center text-11px tabular-nums text-muted-foreground">
+            <span className="w-11 text-center text-xs tabular-nums text-muted-foreground">
               {Math.round(viewerState.scale * 100)}%
             </span>
             <ImagePreviewToolButton

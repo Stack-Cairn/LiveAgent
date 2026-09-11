@@ -504,7 +504,7 @@ function SshHostModal(props: {
                   onChange={setPassword}
                 />
                 {initialData?.passwordConfigured && !password.trim() ? (
-                  <div className="text-11px text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     {t("settings.sshPasswordConfigured")}
                   </div>
                 ) : null}
@@ -551,7 +551,7 @@ function SshHostModal(props: {
                   />
                 </div>
                 {initialData?.privateKeyConfigured && !privateKey.trim() ? (
-                  <div className="text-11px text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     {t("settings.sshPrivateKeyConfigured")}
                   </div>
                 ) : null}
@@ -566,7 +566,7 @@ function SshHostModal(props: {
                     onChange={setPrivateKeyPassphrase}
                   />
                   {initialData?.privateKeyPassphraseConfigured && !privateKeyPassphrase.trim() ? (
-                    <div className="text-11px text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                       {t("settings.sshPrivateKeyPassphraseConfigured")}
                     </div>
                   ) : null}
@@ -639,7 +639,7 @@ function SshHostModal(props: {
                       ))}
                     </div>
                     {proxyUseSystem ? (
-                      <p className="text-11px leading-relaxed text-muted-foreground">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
                         {t("settings.sshProxyUseSystemHint")}
                       </p>
                     ) : null}
@@ -699,7 +699,7 @@ function SshHostModal(props: {
                           onChange={setProxyPassword}
                         />
                         {initialData?.proxy.passwordConfigured && !proxyPassword.trim() ? (
-                          <div className="text-11px text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             {t("settings.sshProxyPasswordConfigured")}
                           </div>
                         ) : null}

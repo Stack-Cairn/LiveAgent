@@ -242,7 +242,7 @@ export function ModelPicker({
                         <span
                           className={cn(
                             "inline-flex h-4 min-w-1p1rem shrink-0 items-center justify-center rounded-full bg-muted/70",
-                            "px-1 text-10px tabular-nums",
+                            "px-1 text-tiny tabular-nums",
                           )}
                         >
                           {group.opts.length}
@@ -276,7 +276,7 @@ export function ModelPicker({
                                 />
                                 <span className="min-w-0 truncate">{option.label}</span>
                                 {option.description ? (
-                                  <span className="min-w-0 truncate text-11px text-muted-foreground/70">
+                                  <span className="min-w-0 truncate text-xs text-muted-foreground/70">
                                     {option.description}
                                   </span>
                                 ) : null}

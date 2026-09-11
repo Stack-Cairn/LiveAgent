@@ -44,7 +44,7 @@ export function ResourceTabsList<Value extends string>(props: {
             {item.countLabel !== null && item.countLabel !== undefined ? (
               <Badge
                 variant={active ? "secondary" : "muted"}
-                className="ml-0.5 h-5 px-1.5 text-10px tabular-nums"
+                className="ml-0.5 h-5 px-1.5 text-tiny tabular-nums"
               >
                 {item.countLabel}
               </Badge>

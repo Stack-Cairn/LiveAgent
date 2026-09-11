@@ -48,7 +48,7 @@ export function ToolPolicyToggle(props: {
             aria-checked={active}
             onClick={() => onChange(option)}
             className={cn(
-              "rounded-md text-11px font-medium leading-none transition-colors",
+              "rounded-md text-xs font-medium leading-none transition-colors",
               buttonPad,
               active ? POLICY_ACTIVE_STYLE[option] : "text-muted-foreground hover:text-foreground",
             )}

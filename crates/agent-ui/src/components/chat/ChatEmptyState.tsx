@@ -96,7 +96,7 @@ export function ChatEmptyState({
 
       {variant === "no-models" ? (
         <>
-          <div className="mb-1.5 text-center text-scaled-22px font-semibold leading-7 tracking-tight text-foreground">
+          <div className="mb-1.5 text-center text-2xl font-semibold leading-7 tracking-tight text-foreground">
             {t("chat.welcome")}
           </div>
           <div className="mb-0.5 text-center text-sm leading-5 text-muted-foreground">
@@ -122,7 +122,7 @@ export function ChatEmptyState({
         </>
       ) : (
         <>
-          <div className="whitespace-nowrap text-center text-scaled-20px font-semibold leading-7 tracking-tight text-foreground">
+          <div className="whitespace-nowrap text-center text-xl font-semibold leading-7 tracking-tight text-foreground">
             {t(GREETING_KEYS[period])}，{t("chat.greetingSubtitle")}
           </div>
           {onSuggestionSelect ? (
@@ -151,7 +151,7 @@ export function ChatEmptyState({
                   >
                     <card.icon className="size-4" />
                   </span>
-                  <span className="min-w-0 truncate text-scaled-14px font-medium leading-5 text-foreground/90">
+                  <span className="min-w-0 truncate text-sm font-medium leading-5 text-foreground/90">
                     {t(card.titleKey)}
                   </span>
                 </button>

@@ -26,7 +26,7 @@ export function SystemPromptTab(props: DetailTabProps) {
     <div className="space-y-4">
       {visible.map(({ slot, index }) => (
         <section key={slot} className="space-y-1">
-          <p className="text-10px font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-tiny font-medium uppercase tracking-wide text-muted-foreground">
             {props.t(`trajectory.details.slot.${slot}`)}
           </p>
           <TextBlock value={sectionContentAt(props.header, index, props.sectionById)} t={props.t} />

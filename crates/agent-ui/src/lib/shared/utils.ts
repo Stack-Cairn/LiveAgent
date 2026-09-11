@@ -7,11 +7,11 @@ const isSizeToken = (value: string) =>
 const isNamedToken = (value: string) => !value.startsWith("[") && !value.startsWith("(");
 
 // Teach the class merger about the additional @theme names. In particular,
-// text-14px must remain a font size when paired with a text-color utility.
+// text-tiny must remain a font size when paired with a text-color utility.
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: [isSizeToken],
+      text: ["tiny", isSizeToken],
       spacing: [isNamedToken],
       "font-weight": [isSizeToken],
       animate: [isNamedToken],

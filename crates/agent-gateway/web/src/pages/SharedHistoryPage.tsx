@@ -107,7 +107,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
             {state.status === "ready" ? (
               <div
                 className={cn(
-                  "history-share-meta flex shrink-0 flex-wrap justify-end gap-8px text-muted-foreground text-12px",
+                  "history-share-meta flex shrink-0 flex-wrap justify-end gap-8px text-muted-foreground text-xs",
                   "max-820:justify-start [&>span]:border [&>span]:border-border/65 [&>span]:bg-background/72",
                 )}
               >

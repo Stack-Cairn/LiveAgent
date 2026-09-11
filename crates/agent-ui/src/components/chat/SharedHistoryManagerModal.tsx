@@ -126,7 +126,7 @@ function RedactionPicker(props: {
         disabled={disabled}
         onClick={() => onChange(true)}
         className={cn(
-          "relative rounded-full px-2.5 py-0.5 text-scaled-11px font-medium transition-colors",
+          "relative rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/35 disabled:cursor-not-allowed",
           value
             ? "bg-emerald-500 text-white shadow-sm"
@@ -143,7 +143,7 @@ function RedactionPicker(props: {
         disabled={disabled}
         onClick={() => onChange(false)}
         className={cn(
-          "relative rounded-full px-2.5 py-0.5 text-scaled-11px font-medium transition-colors",
+          "relative rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
@@ -278,7 +278,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
 
           <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="min-w-0 rounded-2xl border border-border/60 bg-muted/25 px-2.5 py-2 sm:px-3">
-              <div className="truncate text-scaled-10px font-medium uppercase leading-4 text-muted-foreground sm:text-scaled-11px">
+              <div className="truncate text-tiny font-medium uppercase leading-4 text-muted-foreground sm:text-xs">
                 {t("sharedHistory.summaryShared")}
               </div>
               <div className="mt-1 text-lg font-semibold text-foreground">
@@ -286,13 +286,13 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
               </div>
             </div>
             <div className="min-w-0 rounded-2xl border border-border/60 bg-muted/25 px-2.5 py-2 sm:px-3">
-              <div className="truncate text-scaled-10px font-medium uppercase leading-4 text-muted-foreground sm:text-scaled-11px">
+              <div className="truncate text-tiny font-medium uppercase leading-4 text-muted-foreground sm:text-xs">
                 {t("sharedHistory.summaryCopyable")}
               </div>
               <div className="mt-1 text-lg font-semibold text-foreground">{copyableCount}</div>
             </div>
             <div className="min-w-0 rounded-2xl border border-border/60 bg-muted/25 px-2.5 py-2 sm:px-3">
-              <div className="truncate text-scaled-10px font-medium uppercase leading-4 text-muted-foreground sm:text-scaled-11px">
+              <div className="truncate text-tiny font-medium uppercase leading-4 text-muted-foreground sm:text-xs">
                 {t("sharedHistory.summaryStatus")}
               </div>
               <div
@@ -406,7 +406,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                           <span
                             className={cn(
                               "shrink-0 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5",
-                              "text-scaled-11px font-medium text-sky-600 dark:text-sky-400",
+                              "text-xs font-medium text-sky-600 dark:text-sky-400",
                             )}
                           >
                             {t("sharedHistory.publicBadge")}
@@ -415,14 +415,14 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                             <span
                               className={cn(
                                 "shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5",
-                                "text-scaled-11px font-medium text-emerald-600 dark:text-emerald-400",
+                                "text-xs font-medium text-emerald-600 dark:text-emerald-400",
                               )}
                             >
                               {t("sharedHistory.redactedBadge")}
                             </span>
                           ) : null}
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-scaled-11px text-muted-foreground">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                           <span>{messageCount}</span>
                           <span>
                             {t("sharedHistory.updatedAt").replace(
@@ -545,7 +545,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                             {t("sharedHistory.redactionTitle")}
                           </div>
                           <div
-                            className="mt-0.5 truncate text-scaled-11px leading-4 text-muted-foreground"
+                            className="mt-0.5 truncate text-xs leading-4 text-muted-foreground"
                             title={t("sharedHistory.redactionDescriptionTitle")}
                           >
                             {t("sharedHistory.redactionDescription")}

@@ -245,7 +245,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
               <DialogTitle className="text-sm leading-normal">
                 {isEditing ? t("settings.editProvider") : t("settings.addProvider")}
               </DialogTitle>
-              <span className="rounded-full border bg-muted/60 px-2.5 py-0.5 text-11px text-muted-foreground">
+              <span className="rounded-full border bg-muted/60 px-2.5 py-0.5 text-xs text-muted-foreground">
                 {typeLabel} {t("settings.compatible")}
               </span>
             </div>
@@ -298,7 +298,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
               {customHeaders.length > 0 ? (
                 <span
                   className={cn(
-                    "min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-10px tabular-nums",
+                    "min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-tiny tabular-nums",
                     "text-muted-foreground",
                     activePanel === "request" && "bg-primary text-primary-foreground",
                   )}
@@ -625,7 +625,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                     <span
                                       className={cn(
                                         "shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5",
-                                        "text-10px font-semibold leading-none tracking-wide text-primary transition-all duration-500 max-[420px]:px-1.5",
+                                        "text-tiny font-semibold leading-none tracking-wide text-primary transition-all duration-500 max-[420px]:px-1.5",
                                         newModelPhase === "fading" && "scale-95 opacity-0",
                                       )}
                                     >
@@ -636,7 +636,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               </div>
                               <div
                                 className={cn(
-                                  "flex shrink-0 items-center whitespace-nowrap text-11px tabular-nums text-muted-foreground",
+                                  "flex shrink-0 items-center whitespace-nowrap text-xs tabular-nums text-muted-foreground",
                                   "max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0",
                                 )}
                               >
@@ -663,7 +663,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   <span
                                     className={cn(
                                       "ml-1.5 rounded-full border border-border/70 bg-muted/60 px-1.5 py-0.5",
-                                      "text-10px font-medium leading-none text-muted-foreground",
+                                      "text-tiny font-medium leading-none text-muted-foreground",
                                     )}
                                   >
                                     {t("settings.estimatedLimitsBadge")}
@@ -1087,7 +1087,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   <div className="flex min-w-0 items-center gap-2 max-[720px]:w-full">
                     <span className="text-sm font-semibold">{t("settings.customHeaders")}</span>
                     {customHeaders.length > 0 ? (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-10px font-medium tabular-nums text-muted-foreground">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-tiny font-medium tabular-nums text-muted-foreground">
                         {customHeaders.length}
                       </span>
                     ) : null}
@@ -1124,13 +1124,13 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               <span
                                 className={cn(
                                   "shrink-0 whitespace-nowrap rounded bg-primary/10 px-1 py-px",
-                                  "text-10px font-medium text-primary",
+                                  "text-tiny font-medium text-primary",
                                 )}
                               >
                                 {t("settings.cliIdentityRecommended")}
                               </span>
                             ) : null}
-                            <span className="ml-auto min-w-0 truncate font-mono text-10px text-muted-foreground">
+                            <span className="ml-auto min-w-0 truncate font-mono text-tiny text-muted-foreground">
                               {CLI_IDENTITY_USER_AGENTS[identity].split(" ")[0]}
                             </span>
                           </DropdownMenuItem>
@@ -1252,7 +1252,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     <span className="mt-1 text-xs font-medium text-muted-foreground">
                       {t("settings.noCustomHeaders")}
                     </span>
-                    <span className="text-11px text-muted-foreground/75">
+                    <span className="text-xs text-muted-foreground/75">
                       {t("settings.noCustomHeadersHint")}
                     </span>
                   </button>
@@ -2029,7 +2029,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         <pre
                           className={cn(
                             "mt-1 overflow-x-auto rounded-md border bg-background/60 p-2",
-                            "font-mono text-11px leading-4",
+                            "font-mono text-xs leading-4",
                           )}
                         >
                           {USAGE_QUERY_SCRIPT_HELP_EXAMPLE}

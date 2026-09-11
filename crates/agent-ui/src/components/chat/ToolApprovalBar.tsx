@@ -188,27 +188,25 @@ export function ToolApprovalBar({
       <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3">
         <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
           <Terminal className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-scaled-11p5px leading-none">
-            {displayToolName}
-          </span>
+          <span className="min-w-0 flex-1 truncate text-xs leading-none">{displayToolName}</span>
           <span
             role="timer"
             title={`${formatCountdown(remainingMs)} ${t("chat.toolApproval.timeoutHint")}`}
-            className="shrink-0 text-scaled-10p5px tabular-nums text-muted-foreground/65"
+            className="shrink-0 text-tiny tabular-nums text-muted-foreground/65"
           >
             {pending.length > 1 ? `1 / ${pending.length} · ` : null}
             {formatCountdown(remainingMs)}
           </span>
         </div>
 
-        <p className="mt-2 truncate text-scaled-13px font-medium leading-1p5 text-foreground/92">
+        <p className="mt-2 truncate text-sm font-medium leading-1p5 text-foreground/92">
           {t("chat.toolApproval.body").replace("{tool}", displayToolName)}
         </p>
 
         {current.summary ? (
           <pre
             title={current.summary}
-            className="mt-1.5 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-scaled-11p5px leading-1p45 text-muted-foreground"
+            className="mt-1.5 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs leading-1p45 text-muted-foreground"
           >
             {current.summary}
           </pre>
@@ -219,7 +217,7 @@ export function ToolApprovalBar({
         {errorText ? (
           <span
             role="alert"
-            className="mr-auto min-w-0 flex-1 truncate text-scaled-10p5px text-red-600 dark:text-red-400"
+            className="mr-auto min-w-0 flex-1 truncate text-tiny text-red-600 dark:text-red-400"
           >
             {errorText}
           </span>
@@ -236,7 +234,7 @@ export function ToolApprovalBar({
               onDecide(current.toolCallId, "deny"),
             )
           }
-          className="h-7 shrink-0 px-3 text-scaled-11px"
+          className="h-7 shrink-0 px-3 text-xs"
         >
           {submittingAction === `deny:${current.toolCallId}` ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -246,7 +244,7 @@ export function ToolApprovalBar({
             aria-hidden="true"
             className={cn(
               "rounded bg-muted px-1 py-0.5",
-              "font-sans text-9px font-normal leading-none text-muted-foreground",
+              "font-sans text-tiny font-normal leading-none text-muted-foreground",
             )}
           >
             Esc
@@ -265,7 +263,7 @@ export function ToolApprovalBar({
                   onDecide(current.toolCallId, "approve"),
                 )
               }
-              className="h-7 rounded-r-none px-3 text-scaled-11px shadow-none"
+              className="h-7 rounded-r-none px-3 text-xs shadow-none"
             >
               {submittingAction === `approve:${current.toolCallId}` ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -275,7 +273,7 @@ export function ToolApprovalBar({
                 aria-hidden="true"
                 className={cn(
                   "rounded bg-primary-foreground/10 px-1 py-0.5",
-                  "font-sans text-10px font-normal leading-none text-primary-foreground/75",
+                  "font-sans text-tiny font-normal leading-none text-primary-foreground/75",
                 )}
               >
                 ↵

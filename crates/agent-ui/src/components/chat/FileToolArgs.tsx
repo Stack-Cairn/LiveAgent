@@ -18,7 +18,7 @@ import {
 function StreamingArgPlaceholder({ label }: { label: string }) {
   return (
     <ToolSurface>
-      <div className="text-scaled-11p5px leading-1p6 text-muted-foreground/62">{label}</div>
+      <div className="text-xs leading-1p6 text-muted-foreground/62">{label}</div>
     </ToolSurface>
   );
 }
@@ -43,12 +43,12 @@ function StreamingTextPreviewSurface({
             {preview.text}
           </ToolScrollablePre>
         ) : (
-          <div className="px-2.5 pb-2 text-scaled-11p5px leading-1p6 text-muted-foreground/62">
+          <div className="px-2.5 pb-2 text-xs leading-1p6 text-muted-foreground/62">
             {emptyLabel}
           </div>
         )
       ) : (
-        <div className="px-2.5 pb-2 text-scaled-11p5px leading-1p6 text-muted-foreground/62">
+        <div className="px-2.5 pb-2 text-xs leading-1p6 text-muted-foreground/62">
           Waiting for {label}...
         </div>
       )}
@@ -73,7 +73,7 @@ function PathSurface({ path }: { path: string }) {
           <PathDisplay
             path={path}
             className={cn(
-              "block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6 transition-colors",
+              "block min-w-0 break-all font-mono text-xs leading-1p6 transition-colors",
               "hover:text-foreground hover:underline",
             )}
           />
@@ -81,7 +81,7 @@ function PathSurface({ path }: { path: string }) {
       ) : (
         <PathDisplay
           path={path}
-          className="block min-w-0 break-all font-mono text-scaled-11p5px leading-1p6"
+          className="block min-w-0 break-all font-mono text-xs leading-1p6"
         />
       )}
     </ToolSurface>

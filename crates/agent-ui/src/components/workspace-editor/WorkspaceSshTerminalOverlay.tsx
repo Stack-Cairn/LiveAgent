@@ -363,7 +363,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceSshTerminal.title")}
           </div>
-          <div className="truncate font-mono text-11px text-muted-foreground">
+          <div className="truncate font-mono text-xs text-muted-foreground">
             {activeSession ? sessionEndpointLabel(activeSession) : t("workspaceSshTerminal.empty")}
           </div>
         </div>

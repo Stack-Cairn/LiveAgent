@@ -2067,7 +2067,7 @@ export const MentionComposer = memo(
                   disabled={!contextMenuCanMutate || !contextMenuHasSelection}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
-                    "text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
@@ -2082,7 +2082,7 @@ export const MentionComposer = memo(
                   disabled={!contextMenuHasSelection}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
-                    "text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
@@ -2097,7 +2097,7 @@ export const MentionComposer = memo(
                   disabled={!contextMenuCanMutate}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
-                    "text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
@@ -2115,7 +2115,7 @@ export const MentionComposer = memo(
                   disabled={!composerContextMenu.hasContent}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
-                    "text-left text-scaled-13px text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
@@ -2156,7 +2156,7 @@ export const MentionComposer = memo(
             "mention-composer min-h-10 max-h-160px w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto",
             "whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
             "[&.is-empty::before]:pointer-events-none [&.is-empty::before]:absolute [&.is-empty::before]:text-muted-foreground [&.is-empty::before]:content-[attr(data-placeholder)] web:[&.is-empty::before]:inset-x-0 web:[&.is-empty::before]:pe-[inherit] [&_.mention-chip]:me-0p375rem [&_.mention-chip]:cursor-default",
-            "[&_.mention-chip]:select-none [&_.mention-chip]:align-baseline [&_.mention-chip]:text-scaled-13px [&_.mention-chip]:leading-1p5",
+            "[&_.mention-chip]:select-none [&_.mention-chip]:align-baseline [&_.mention-chip]:text-sm [&_.mention-chip]:leading-1p5",
             "text-sm",
             isDomEmpty && "is-empty",
             disabled && "cursor-not-allowed opacity-60",

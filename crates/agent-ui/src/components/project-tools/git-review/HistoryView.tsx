@@ -152,7 +152,7 @@ function graphCircleColor(row: GraphRow) {
 
 function commitRefChipClass(kind: CommitRefKind, selected: boolean) {
   const baseClass =
-    "inline-flex h-5 min-w-0 items-center gap-1 rounded-full border px-1.5 text-scaled-10px font-semibold leading-14px shadow-sm ring-1 ring-inset";
+    "inline-flex h-5 min-w-0 items-center gap-1 rounded-full border px-1.5 text-tiny font-semibold leading-14px shadow-sm ring-1 ring-inset";
 
   if (selected) {
     return cn(
@@ -1063,11 +1063,11 @@ export function GitReviewHistoryView(props: {
                           title={title}
                         >
                           <GitGraphSvgCell row={graphRow} />
-                          <span className="min-w-0 flex-1 truncate text-scaled-12px font-medium">
+                          <span className="min-w-0 flex-1 truncate text-xs font-medium">
                             {label}
                           </span>
                           {refLabel ? (
-                            <span className="shrink-0 truncate text-scaled-11px text-muted-foreground">
+                            <span className="shrink-0 truncate text-xs text-muted-foreground">
                               {refLabel}
                             </span>
                           ) : null}
@@ -1119,13 +1119,11 @@ export function GitReviewHistoryView(props: {
                           <TypeIcon className="size-4 shrink-0" aria-hidden="true" />
                           <span className="min-w-0 flex-1 truncate">
                             <span className="font-medium">{fileName}</span>
-                            <span className="ml-1 text-scaled-10px text-muted-foreground">
-                              {filePath}
-                            </span>
+                            <span className="ml-1 text-tiny text-muted-foreground">{filePath}</span>
                           </span>
                           <span
                             className={cn(
-                              "shrink-0 text-scaled-10px font-semibold",
+                              "shrink-0 text-tiny font-semibold",
                               commitFileStatusTone(row.file),
                             )}
                           >
@@ -1164,7 +1162,7 @@ export function GitReviewHistoryView(props: {
                         onClick={() => selectCommitRow(commit)}
                       >
                         {graphRow ? <GitGraphSvgCell row={graphRow} /> : null}
-                        <span className="min-w-0 flex-1 truncate text-scaled-12px font-medium">
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium">
                           {commit.subject || commit.shortSha}
                         </span>
                         <CommitRefTags
@@ -1211,7 +1209,7 @@ export function GitReviewHistoryView(props: {
                     variant="detail"
                     limit={COMMIT_DETAIL_REF_TAG_LIMIT}
                   />
-                  <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-scaled-11px text-muted-foreground">
+                  <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="font-mono">{selectedCommit.shortSha}</span>
                     <span>{selectedCommit.authorName}</span>
                     <span>{formatCommitDate(selectedCommit.authorDate)}</span>
@@ -1236,7 +1234,7 @@ export function GitReviewHistoryView(props: {
                         {historyDiffTitle || t("projectTools.gitReview.commitDiff")}
                       </div>
                       <div
-                        className="truncate text-scaled-11px text-muted-foreground"
+                        className="truncate text-xs text-muted-foreground"
                         title={
                           historyDiffSubtitle || selectedCommitFile?.path || selectedCommit.sha
                         }

@@ -302,13 +302,13 @@ function ToolImageStatusCard(props: {
         />
       </div>
       <div className="max-w-full space-y-1">
-        <div className={cn("text-scaled-12px font-medium", !isError && "shimmer")}>
+        <div className={cn("text-xs font-medium", !isError && "shimmer")}>
           {title ?? (isError ? t("chat.image.unavailable") : t("chat.image.loading"))}
         </div>
         {detail ? (
           <div
             className={cn(
-              "max-w-full truncate text-scaled-11px",
+              "max-w-full truncate text-xs",
               isError ? "text-red-700/75 dark:text-red-200/75" : "text-muted-foreground",
             )}
             title={detail}
@@ -394,8 +394,8 @@ export function ToolResultImagePreview(props: {
           <Eye className="size-4" />
         </div>
         <div className="max-w-full space-y-1">
-          <div className="text-scaled-12px font-medium">{t("chat.image.clickToLoad")}</div>
-          <div className="max-w-full truncate text-scaled-11px" title={imageDetail}>
+          <div className="text-xs font-medium">{t("chat.image.clickToLoad")}</div>
+          <div className="max-w-full truncate text-xs" title={imageDetail}>
             {imageDetail}
           </div>
         </div>

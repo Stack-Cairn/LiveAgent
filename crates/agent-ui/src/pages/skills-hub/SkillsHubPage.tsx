@@ -1873,7 +1873,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
             className={cn(
               "pointer-events-auto flex max-w-full flex-wrap items-center gap-2",
               "rounded-full border border-border/50 bg-background/95",
-              "py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51",
+              "py-2 pl-4 pr-2 text-xs shadow-ui-skillshubpage-51",
               "max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
             )}
           >
@@ -1894,7 +1894,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 rounded-full px-2.5 text-12px"
+                  className="h-7 rounded-full px-2.5 text-xs"
                   onClick={() => {
                     if (allVisibleBulkSelected) exitBulkMode();
                     else setBulkSelectionRange(filteredSelectableInstalledNames, true);
@@ -1911,7 +1911,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   variant="ghost"
                   size="sm"
                   disabled={bulkEnableChangeCount === 0}
-                  className="h-7 rounded-full px-2.5 text-12px"
+                  className="h-7 rounded-full px-2.5 text-xs"
                   onClick={() => applyBulkEnableState(true)}
                 >
                   {`${t("settings.skillsBulkEnable")}${bulkEnableChangeCount > 0 ? ` (${bulkEnableChangeCount})` : ""}`}
@@ -1920,7 +1920,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   variant="ghost"
                   size="sm"
                   disabled={bulkDisableChangeCount === 0}
-                  className="h-7 rounded-full px-2.5 text-12px"
+                  className="h-7 rounded-full px-2.5 text-xs"
                   onClick={() => applyBulkEnableState(false)}
                 >
                   {`${t("settings.skillsBulkDisable")}${bulkDisableChangeCount > 0 ? ` (${bulkDisableChangeCount})` : ""}`}
@@ -1937,7 +1937,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                       size="sm"
                       disabled={bulkDeleteNames.length === 0 || deletingSkillName !== null}
                       onClick={open}
-                      className="h-7 gap-1 rounded-full px-2.5 text-12px text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="h-7 gap-1 rounded-full px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2 className="size-3.5" />
                       {`${t("settings.skillsHubBulkDelete")}${bulkDeleteNames.length > 0 ? ` (${bulkDeleteNames.length})` : ""}`}
@@ -1948,7 +1948,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   variant="secondary"
                   size="sm"
                   onClick={exitBulkMode}
-                  className="h-7 gap-1 rounded-full px-3 text-12px"
+                  className="h-7 gap-1 rounded-full px-3 text-xs"
                 >
                   <X className="size-3.5" />
                   {t("settings.skillsBulkDone")}
@@ -1963,7 +1963,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   variant="secondary"
                   size="sm"
                   onClick={exitBulkMode}
-                  className="h-7 rounded-full px-3 text-12px"
+                  className="h-7 rounded-full px-3 text-xs"
                 >
                   {t("settings.skillsBulkDone")}
                 </Button>
@@ -1984,7 +1984,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
             className={cn(
               "pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3",
               "rounded-full border border-border/50 bg-background/95",
-              "py-2 pl-4 pr-2 text-12p5px shadow-ui-skillshubpage-51 dark:border-white/[0.1] dark:bg-popover/95",
+              "py-2 pl-4 pr-2 text-xs shadow-ui-skillshubpage-51 dark:border-white/[0.1] dark:bg-popover/95",
             )}
           >
             <span className="text-foreground">
@@ -1994,7 +1994,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
               variant="secondary"
               size="sm"
               onClick={undoBulkSelection}
-              className="h-7 rounded-full px-3 text-12px"
+              className="h-7 rounded-full px-3 text-xs"
             >
               {t("settings.skillsBulkUndo")}
             </Button>

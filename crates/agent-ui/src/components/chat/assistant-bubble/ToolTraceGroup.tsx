@@ -198,7 +198,7 @@ function ToolTraceGroupInner(props: {
         className={cn(
           "-mx-1.5 flex w-fit max-w-bleed-0p75rem cursor-pointer select-none items-center gap-1.5",
           "rounded-lg px-1.5 py-1",
-          "text-left text-scaled-13px font-450 text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75",
+          "text-left text-sm font-450 text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75",
         )}
         onClick={() => setOpen((prev) => !prev)}
       >
@@ -212,9 +212,9 @@ function ToolTraceGroupInner(props: {
           )}
         />
         {showStatus ? (
-          <span className="shrink-0 text-scaled-11px text-foreground/45">
+          <span className="shrink-0 text-xs text-foreground/45">
             {showTurnStatus && counts.running > 0 ? (
-              <AssistantStatus className="min-h-0 text-scaled-11px text-foreground/45">
+              <AssistantStatus className="min-h-0 text-xs text-foreground/45">
                 {statusLabel}
               </AssistantStatus>
             ) : (

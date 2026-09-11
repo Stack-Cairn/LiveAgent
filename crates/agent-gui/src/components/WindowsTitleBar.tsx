@@ -192,7 +192,7 @@ export function WindowsTitleBar() {
           className="size-15px shrink-0 rounded-xs"
           draggable={false}
         />
-        <span className="truncate text-12px font-medium leading-1p45 tracking-0p01em text-foreground/80">
+        <span className="truncate text-xs font-medium leading-1p45 tracking-0p01em text-foreground/80">
           {t("app.name")}
         </span>
       </div>

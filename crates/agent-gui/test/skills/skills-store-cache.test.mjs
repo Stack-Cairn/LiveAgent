@@ -65,8 +65,8 @@ test("store cards keep a static surface on pointer hover", () => {
 
 test("store cards keep the spacious original information hierarchy", () => {
   assert.match(storeSource, /flex h-full cursor-pointer flex-col rounded-2xl/);
-  assert.match(storeSource, /line-clamp-3 text-11p5px/);
-  assert.match(storeSource, /border-t border-border\/60 pt-2 text-10p5px/);
+  assert.match(storeSource, /line-clamp-3 text-xs/);
+  assert.match(storeSource, /border-t border-border\/60 pt-2 text-tiny/);
   assert.match(storeSource, /mt-auto h-9 w-full gap-1\.5 rounded-xl/);
   assert.doesNotMatch(storeSource, /w-fit self-end/);
 });

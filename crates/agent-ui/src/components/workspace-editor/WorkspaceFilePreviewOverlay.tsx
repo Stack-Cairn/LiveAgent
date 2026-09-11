@@ -546,7 +546,7 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceFilePreview.title")}
           </div>
-          <div className="truncate text-11px text-muted-foreground">{activePath}</div>
+          <div className="truncate text-xs text-muted-foreground">{activePath}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {canOpenEditor && activePreviewRequest ? (
@@ -662,7 +662,7 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
       <div
         className={cn(
           "flex h-8 shrink-0 items-center justify-between gap-3",
-          "border-t border-border bg-muted/35 px-3 text-11px text-muted-foreground",
+          "border-t border-border bg-muted/35 px-3 text-xs text-muted-foreground",
         )}
       >
         <span className="min-w-0 truncate">{activePath}</span>
@@ -852,7 +852,7 @@ function PreviewBody(props: {
           )}
         </div>
         {spreadsheet?.truncatedRows || spreadsheet?.truncatedColumns ? (
-          <div className="shrink-0 border-t border-border bg-muted/35 px-3 py-1.5 text-11px text-muted-foreground">
+          <div className="shrink-0 border-t border-border bg-muted/35 px-3 py-1.5 text-xs text-muted-foreground">
             {t("workspaceFilePreview.truncated")}
           </div>
         ) : null}
@@ -1220,7 +1220,7 @@ function WorkspaceImagePreviewBody(props: {
           >
             <ChevronRight className="size-4" />
           </ImagePreviewToolButton>
-          <span className="ml-1 shrink-0 text-11px text-muted-foreground">{counter}</span>
+          <span className="ml-1 shrink-0 text-xs text-muted-foreground">{counter}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <ImagePreviewToolButton
@@ -1230,7 +1230,7 @@ function WorkspaceImagePreviewBody(props: {
           >
             <Minus className="size-4" />
           </ImagePreviewToolButton>
-          <span className="w-11 text-center text-11px tabular-nums text-muted-foreground">
+          <span className="w-11 text-center text-xs tabular-nums text-muted-foreground">
             {Math.round(viewerState.scale * 100)}%
           </span>
           <ImagePreviewToolButton

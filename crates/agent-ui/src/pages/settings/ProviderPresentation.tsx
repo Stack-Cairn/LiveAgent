@@ -153,7 +153,7 @@ export function HintTip(props: { text: string; label?: string }) {
       <TooltipContent
         side="bottom"
         align="start"
-        className="max-w-60 px-2.5 py-2 text-11px font-normal leading-relaxed text-popover-foreground/90"
+        className="max-w-60 px-2.5 py-2 text-xs font-normal leading-relaxed text-popover-foreground/90"
       >
         {text}
       </TooltipContent>
@@ -183,7 +183,7 @@ export function DrawerGroupLabel(props: { label: string; hint?: string }) {
     <div className="flex items-center gap-2">
       <span
         className={cn(
-          "flex shrink-0 items-center gap-1 text-10p5px font-semibold uppercase",
+          "flex shrink-0 items-center gap-1 text-tiny font-semibold uppercase",
           "leading-none tracking-0p08em text-muted-foreground/65",
         )}
       >
@@ -215,7 +215,7 @@ export function DrawerSectionHeader(props: {
         {icon}
       </span>
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <h3 className="truncate text-13px font-semibold tracking-tight text-foreground/90">
+        <h3 className="truncate text-sm font-semibold tracking-tight text-foreground/90">
           {title}
         </h3>
         {hint ? <HintTip text={hint} label={title} /> : null}

@@ -40,9 +40,7 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
             )}
           </div>
           <div className="min-w-0">
-            <div className="truncate text-scaled-14px font-semibold leading-5 text-foreground">
-              {title}
-            </div>
+            <div className="truncate text-sm font-semibold leading-5 text-foreground">{title}</div>
             <div className="hidden max-w-420px truncate text-xs leading-5 text-muted-foreground sm:block">
               {description}
             </div>
@@ -50,7 +48,7 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
           <div
             className={cn(
               "hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1",
-              "text-scaled-11px font-medium md:inline-flex",
+              "text-xs font-medium md:inline-flex",
               canDropUpload
                 ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
                 : "border-destructive/20 bg-destructive/[0.05] text-destructive/80",
@@ -114,7 +112,7 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
         </div>
 
         <div className="flex flex-col items-center gap-1.5">
-          <div className="text-scaled-15px font-semibold leading-tight tracking-tight text-foreground">
+          <div className="text-base font-semibold leading-tight tracking-tight text-foreground">
             {title}
           </div>
           <div className="max-w-280px text-xs leading-5 text-muted-foreground">{description}</div>
@@ -125,7 +123,7 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
         <div
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1",
-            "text-scaled-11px font-medium",
+            "text-xs font-medium",
             canDropUpload
               ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
               : "border-destructive/20 bg-destructive/[0.05] text-destructive/80",

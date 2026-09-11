@@ -60,7 +60,7 @@ export function SegmentedSlider<T extends string>(props: SegmentedSliderProps<T>
           key={option.value}
           className={cn(
             "relative inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-md px-2.5",
-            "text-11px font-medium leading-none transition-colors",
+            "text-xs font-medium leading-none transition-colors",
             "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
             disabled ? "cursor-not-allowed" : "cursor-pointer",
             option.value === value ? "text-foreground" : "hover:text-foreground/80",

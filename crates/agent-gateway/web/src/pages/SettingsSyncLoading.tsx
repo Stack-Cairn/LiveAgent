@@ -46,7 +46,7 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
         </div>
       </div>
 
-      <strong className="text-14px font-semibold tracking-minus-0p01em text-foreground">
+      <strong className="text-sm font-semibold tracking-minus-0p01em text-foreground">
         {translate("chat.runtime.settingsSyncTitle", locale)}
       </strong>
 

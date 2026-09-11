@@ -33,7 +33,7 @@ test("Skill and workspace files share the document Markdown presentation", () =>
 
 test("document Markdown keeps its typography separate from chat Markdown", () => {
   assert.match(markdownStyles, /DOCUMENT_MARKDOWN_CLASS/);
-  assert.match(markdownStyles, /\[&_p\]:text-scaled-13px/);
+  assert.match(markdownStyles, /\[&_p\]:text-sm/);
   assert.match(markdownStyles, /\[&_\[data-streamdown=heading-2\]\]/);
   assert.match(markdownStyles, /\[&_\[data-streamdown=list-item\]>p\]:my-0/);
   assert.match(markdownStyles, /\[&_\[data-streamdown=code-block-body\]\]:rounded-lg/);
