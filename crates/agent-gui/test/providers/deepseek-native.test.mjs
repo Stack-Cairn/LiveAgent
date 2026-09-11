@@ -660,17 +660,18 @@ test("DeepSeek replay state is provider-scoped and requires a web search call", 
   assert.deepEqual(normalized.input, input);
 });
 
-test("DeepSeek rejects image input before sending a request", async () => {
-  let fetchCalled = false;
+test("DeepSeek sends user image input on the wire for vision-capable models", async () => {
+  const imageBase64 = "iVBORw0KGgoAAAANSUhEUg".repeat(32);
+  const calls = [];
   const stream = deepseek.streamDeepSeekResponses(
-    createModel(),
+    createModel({ input: ["text", "image"] }),
     createContext({
       messages: [
         {
           role: "user",
           content: [
             { type: "text", text: "describe" },
-            { type: "image", data: "AAAA", mimeType: "image/png" },
+            { type: "image", data: imageBase64, mimeType: "image/png" },
           ],
           timestamp: 1,
         },
@@ -678,18 +679,69 @@ test("DeepSeek rejects image input before sending a request", async () => {
     }),
     {
       apiKey: "sk-test",
-      fetch: async () => {
-        fetchCalled = true;
-        throw new Error("fetch should not run");
+      streamRetry: { disabled: true },
+      fetch: async (_url, init) => {
+        calls.push(JSON.parse(String(init.body)));
+        return responseFromEvents(
+          completedSearchResponseEvents({ includeFunctionCall: false }).events,
+        );
       },
     },
   );
-  const { events, result } = await consume(stream);
+  const { result } = await consume(stream);
 
-  assert.equal(fetchCalled, false);
-  assert.equal(events.at(-1).type, "error");
-  assert.equal(result.stopReason, "error");
-  assert.match(result.errorMessage, /does not support image input/);
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+  assert.equal(calls.length, 1);
+  const userItem = calls[0].input.find((item) => item.role === "user");
+  assert.ok(userItem, "the user message must be on the wire");
+  const parts = userItem.content;
+  assert.deepEqual(
+    parts.map((part) => part.type),
+    ["input_text", "input_image"],
+  );
+  assert.equal(parts[1].image_url, `data:image/png;base64,${imageBase64}`);
+  assert.equal(parts[1].detail, "auto");
+});
+
+test("DeepSeek degrades user image input for text-only models instead of failing the request", async () => {
+  // 曾行为：fetch 之前直接抛 "DeepSeek Responses does not support image input"，
+  // 而用户消息留在历史里，此后每一轮都会以同一原因失败。现在图片能力听
+  // model.input，纯文本模型交给 pi-ai 降级成占位文本，请求照常发出。
+  const imageBase64 = "iVBORw0KGgoAAAANSUhEUg".repeat(32);
+  const calls = [];
+  const stream = deepseek.streamDeepSeekResponses(
+    createModel({ input: ["text"] }),
+    createContext({
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "describe" },
+            { type: "image", data: imageBase64, mimeType: "image/png" },
+          ],
+          timestamp: 1,
+        },
+      ],
+    }),
+    {
+      apiKey: "sk-test",
+      streamRetry: { disabled: true },
+      fetch: async (_url, init) => {
+        calls.push(JSON.parse(String(init.body)));
+        return responseFromEvents(
+          completedSearchResponseEvents({ includeFunctionCall: false }).events,
+        );
+      },
+    },
+  );
+  const { result } = await consume(stream);
+
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+  assert.equal(calls.length, 1);
+  const wire = JSON.stringify(calls[0]);
+  assert.ok(!wire.includes(imageBase64), "text-only wire must not carry image bytes");
+  assert.ok(!wire.includes("input_image"), "text-only wire must not declare image parts");
+  assert.match(wire, /model does not support images/);
 });
 
 test("DeepSeek degrades image tool results to text instead of failing the request", async () => {

@@ -5,8 +5,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // inputModalities（模型输入模态用户覆盖）的反漂移锁：
 // 1. normalizer 的过滤/补齐/规范顺序契约；
 // 2. 设置加载往返不丢字段；
-// 3. modelFactory 只在附件发送确实受 model.input 门控的分支（codex/gemini）
-//    应用覆盖，deepseek/anthropic 不适用（避免虚假能力声明）。
+// 3. modelFactory 只在附件发送确实受 model.input 门控的分支（codex/gemini/
+//    deepseek）应用覆盖，anthropic 不适用（避免虚假能力声明）。
 const loader = createTsModuleLoader();
 const { normalizeInputModalities, normalizeProviderModelConfig, normalizeProviderModelConfigs } =
   loader.loadModule("src/lib/settings/index.ts");
@@ -105,7 +105,7 @@ test(
     assert.equal(providerSupportsModelInputModalitiesOverride("codex"), true);
     assert.equal(providerSupportsModelInputModalitiesOverride("xai"), true);
     assert.equal(providerSupportsModelInputModalitiesOverride("gemini"), true);
-    assert.equal(providerSupportsModelInputModalitiesOverride("deepseek"), false);
+    assert.equal(providerSupportsModelInputModalitiesOverride("deepseek"), true);
     assert.equal(providerSupportsModelInputModalitiesOverride("claude_code"), false);
   },
 );
@@ -137,8 +137,35 @@ test("modelFactory: gemini custom model honors the override", () => {
   assert.deepEqual(model.input, ["text"]);
 });
 
-test("modelFactory: deepseek keeps the hard text-only constraint despite the override", () => {
-  const model = createModelFromConfig(
+test("modelFactory: deepseek infers image input from the model id and honors the override", () => {
+  // 官方《图像理解》指南只承诺 flash 家族吃图，Pro 与更早的模型不跟着放开。
+  const flash = createModelFromConfig(
+    "deepseek",
+    "deepseek-v4-flash",
+    "https://api.deepseek.com",
+  );
+  assert.deepEqual(flash.input, ["text", "image"]);
+
+  const pro = createModelFromConfig("deepseek", "deepseek-v4-pro", "https://api.deepseek.com");
+  assert.deepEqual(pro.input, ["text"]);
+
+  // 中转端点不吃图时用覆盖改回纯文本（覆盖优先于 id 推断）。
+  const forcedText = createModelFromConfig(
+    "deepseek",
+    "deepseek-v4-flash",
+    "https://relay.example.com",
+    undefined,
+    {
+      id: "deepseek-v4-flash",
+      contextWindow: 128000,
+      maxOutputToken: 32000,
+      inputModalities: ["text"],
+    },
+  );
+  assert.deepEqual(forcedText.input, ["text"]);
+
+  // 反向：用户明确知道自家端点支持时，也能给 Pro 开图。
+  const forcedImage = createModelFromConfig(
     "deepseek",
     "deepseek-v4-pro",
     "https://api.deepseek.com",
@@ -150,7 +177,7 @@ test("modelFactory: deepseek keeps the hard text-only constraint despite the ove
       inputModalities: ["text", "image"],
     },
   );
-  assert.deepEqual(model.input, ["text"]);
+  assert.deepEqual(forcedImage.input, ["text", "image"]);
 });
 
 test("modelFactory: anthropic custom model does not apply the override (attachments ignore model.input upstream)", () => {
