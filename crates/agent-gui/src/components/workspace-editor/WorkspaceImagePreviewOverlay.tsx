@@ -128,54 +128,77 @@ export function WorkspaceImagePreviewOverlay(props: WorkspaceImagePreviewOverlay
   return (
     <div
       className={cn(
-        "workspace-image-preview-overlay absolute inset-0 z-50 flex min-h-0 min-w-0 transform-gpu flex-col overflow-hidden border-r border-border bg-background transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+        "absolute inset-0 z-50 flex min-h-0 min-w-0 transform-gpu",
+        "flex-col overflow-hidden border-r border-border bg-background",
+        "transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none web:max-820:z-(--layer-modal)",
         isVisible
           ? "pointer-events-auto translate-x-0 opacity-100 shadow-2xl"
           : "pointer-events-none -translate-x-2 opacity-0 shadow-lg",
       )}
     >
       <MacOsTitleBarSpacer className="bg-muted/45" />
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-muted/45 px-3">
-        <ImageIcon className="h-4 w-4 shrink-0 text-primary" />
+      <div
+        className={cn(
+          "flex h-11 shrink-0 items-center gap-2",
+          "border-b border-border bg-muted/45 px-3",
+        )}
+      >
+        <ImageIcon className="size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceImagePreview.title")}
           </div>
-          <div className="truncate text-[11px] text-muted-foreground">{activePath}</div>
+          <div className="truncate text-xs text-muted-foreground">{activePath}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+              "hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45",
+            )}
             title={t("workspaceImagePreview.reload")}
             aria-label={t("workspaceImagePreview.reload")}
             disabled={!openRequest || loading}
             onClick={() => openRequest && void loadImage(openRequest)}
           >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
           </button>
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+              "hover:bg-muted hover:text-foreground",
+            )}
             title={t("workspaceImagePreview.close")}
             aria-label={t("workspaceImagePreview.close")}
             onClick={onRequestClose}
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         </div>
       </div>
 
       {error ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300",
+          )}
+        >
+          <AlertTriangle className="size-4 shrink-0" />
           <div className="min-w-0 flex-1 truncate">{error}</div>
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/25 p-4 sm:p-6">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/25 p-4",
+          "sm:p-6",
+        )}
+      >
         {loading ? (
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
         ) : source ? (
           <img
             className="max-h-full max-w-full object-contain"
@@ -184,13 +207,18 @@ export function WorkspaceImagePreviewOverlay(props: WorkspaceImagePreviewOverlay
           />
         ) : (
           <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
-            <ImageOff className="h-7 w-7" />
+            <ImageOff className="size-7" />
             <span>{t("workspaceImagePreview.empty")}</span>
           </div>
         )}
       </div>
 
-      <div className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/35 px-3 text-[11px] text-muted-foreground">
+      <div
+        className={cn(
+          "flex h-8 shrink-0 items-center justify-between gap-3",
+          "border-t border-border bg-muted/35 px-3 text-xs text-muted-foreground",
+        )}
+      >
         <span className="min-w-0 truncate">{activePath}</span>
         {image ? (
           <span className="shrink-0">

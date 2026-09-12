@@ -78,12 +78,15 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
       {session ? (
         <div
           data-terminal-pane-ssh-status={status ?? "unknown"}
-          className="flex h-7 shrink-0 items-center gap-2 border-b border-border/60 bg-muted/40 px-3 text-[11px] text-muted-foreground"
+          className={cn(
+            "flex h-7 shrink-0 items-center gap-2",
+            "border-b border-border/60 bg-muted/40 px-3 text-xs text-muted-foreground",
+          )}
         >
           <span
             aria-hidden="true"
             className={cn(
-              "h-1.5 w-1.5 shrink-0 rounded-full",
+              "size-1.5 shrink-0 rounded-full",
               status === "connected"
                 ? "bg-emerald-500"
                 : status === "reconnecting"
@@ -115,13 +118,13 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 gap-1 px-1.5 text-[11px]"
+              className="h-5 gap-1 px-1.5 text-xs"
               title={t("workbench.sshReconnect")}
               aria-label={t("workbench.sshReconnect")}
               disabled={reconnecting}
               onClick={onReconnect}
             >
-              <RefreshCw className={cn("h-3 w-3", reconnecting && "animate-spin")} />
+              <RefreshCw className={cn("size-3", reconnecting && "animate-spin")} />
               {t("workbench.sshReconnect")}
             </Button>
           ) : null}

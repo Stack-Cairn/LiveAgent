@@ -88,7 +88,7 @@ export function isMacOsTauri(): boolean {
 export function MacOsTitleBarSpacer({ className }: { className?: string }) {
   const [show] = useState(isMacOsTauri);
   if (!show) return null;
-  return <div data-tauri-drag-region className={cn("h-[38px] shrink-0", className)} />;
+  return <div data-tauri-drag-region className={cn("h-38px shrink-0", className)} />;
 }
 
 /**
@@ -121,7 +121,10 @@ export function MacOsTitleBarToggle({
     : trafficLightLeft + trafficLightWidth + MAC_OS_TITLEBAR_TOGGLE_GAP;
   return (
     <div
-      className="fixed z-49 flex items-center gap-0.5 transition-[left] duration-200 ease-out [-webkit-app-region:no-drag]"
+      className={cn(
+        "fixed z-49 flex items-center gap-0.5",
+        "transition-[left] duration-200 ease-out [-webkit-app-region:no-drag]",
+      )}
       style={{
         top: toggleTop,
         left: toggleLeft,
@@ -131,13 +134,16 @@ export function MacOsTitleBarToggle({
       <button
         type="button"
         onClick={onToggle}
-        className="flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]"
+        className={cn(
+          "flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors",
+          "hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]",
+        )}
         style={{
           height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
           width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
         }}
       >
-        {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+        {sidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeft className="size-4" />}
       </button>
       {!sidebarOpen && onOpenSettings && (
         <button
@@ -148,13 +154,16 @@ export function MacOsTitleBarToggle({
           data-testid="open-settings"
           aria-label={t("tooltip.settings")}
           title={t("tooltip.settings")}
-          className="flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]"
+          className={cn(
+            "flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors",
+            "hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]",
+          )}
           style={{
             height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
             width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
           }}
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="size-4" />
         </button>
       )}
       {!sidebarOpen && onOpenSettings && appUpdate ? (
@@ -171,5 +180,5 @@ export function MacOsTitleBarToggle({
 export function MacOsTitleBarLeadingInset({ className }: { className?: string }) {
   const [show] = useState(isMacOsTauri);
   if (!show) return null;
-  return <div data-tauri-drag-region className={cn("w-[88px] shrink-0", className)} />;
+  return <div data-tauri-drag-region className={cn("w-88px shrink-0", className)} />;
 }

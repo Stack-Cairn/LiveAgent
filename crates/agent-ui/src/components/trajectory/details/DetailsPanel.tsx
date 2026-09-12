@@ -16,6 +16,7 @@ import type {
   TrajectorySection,
 } from "../../../lib/trajectory/types";
 import { X } from "../../IconSet";
+import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
 import { DetailsResizeHandle } from "./DetailsResizeHandle";
 import { DiffTab } from "./tabs/DiffTab";
 import { InputTab } from "./tabs/InputTab";
@@ -149,7 +150,11 @@ export function DetailsPanel(props: {
     // 窄容器为上下排布：空态占位直接隐藏，把整块高度让给列表。
     return (
       <aside
-        className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 items-center justify-center border-l border-border/60 p-6 text-center text-[12px] text-muted-foreground @max-[520px]:p-3 @max-[640px]:hidden"
+        className={cn(
+          "relative flex min-w-160px max-w-trajectory-details w-[var(--trajectory-details-width)] shrink-0 items-center justify-center",
+          "border-l border-border/60 p-6",
+          "text-center text-xs text-muted-foreground @max-[520px]:p-3 @max-[640px]:hidden",
+        )}
         style={{ "--trajectory-details-width": `${props.width}px` } as CSSProperties}
       >
         <DetailsResizeHandle
@@ -183,7 +188,11 @@ export function DetailsPanel(props: {
 
   return (
     <aside
-      className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 flex-col border-l border-border/60 bg-background @max-[640px]:h-[55%] @max-[640px]:w-full @max-[640px]:min-w-0 @max-[640px]:max-w-none @max-[640px]:border-l-0 @max-[640px]:border-t"
+      className={cn(
+        "relative flex min-w-160px max-w-trajectory-details w-[var(--trajectory-details-width)] shrink-0 flex-col",
+        "border-l border-border/60 bg-background",
+        "@max-[640px]:h-[55%] @max-[640px]:w-full @max-[640px]:min-w-0 @max-[640px]:max-w-none @max-[640px]:border-l-0 @max-[640px]:border-t",
+      )}
       style={{ "--trajectory-details-width": `${props.width}px` } as CSSProperties}
     >
       <DetailsResizeHandle
@@ -192,7 +201,7 @@ export function DetailsPanel(props: {
         onWidthChange={props.onWidthChange}
       />
       <header className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
-        <span className="truncate text-[12px] font-medium">
+        <span className="truncate text-xs font-medium">
           {t(trajectoryKindLabelKey(record.kind))}
           <span className="ml-2 font-normal text-muted-foreground">#{record.index}</span>
         </span>
@@ -206,30 +215,41 @@ export function DetailsPanel(props: {
         </button>
       </header>
 
-      <div
-        role="tablist"
-        className="flex shrink-0 flex-wrap gap-1 border-b border-border/60 px-2 py-1 @max-[520px]:flex-nowrap @max-[520px]:overflow-x-auto"
+      <Tabs
+        value={currentTab}
+        onValueChange={(value) => {
+          const tab = tabs.find((tab) => tab === value);
+          if (tab !== undefined) setActiveTab(tab);
+        }}
+        render={<TabsList variant="plain" activateOnFocus={false} loopFocus={false} />}
+        className={cn(
+          "relative flex shrink-0 flex-wrap gap-1 border-b border-border/60 px-2 py-1",
+          "@max-[520px]:flex-nowrap @max-[520px]:overflow-x-auto",
+        )}
       >
         {tabs.map((tab) => (
-          <button
+          <TabsTrigger
             key={tab}
-            type="button"
-            role="tab"
-            aria-selected={currentTab === tab}
-            onClick={() => setActiveTab(tab)}
+            value={tab}
+            variant="plain"
+            onClick={() => {
+              // Clicking the fallback tab used to make it an explicit selection.
+              // Preserve that choice if this record later exposes a different tab set.
+              if (currentTab === tab) setActiveTab(tab);
+            }}
             className={cn(
-              "shrink-0 rounded px-2 py-0.5 text-[11px] transition-colors",
+              "shrink-0 rounded px-2 py-0.5 text-xs transition-colors",
               currentTab === tab
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
             {t(`trajectory.details.tab.${tab}`)}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
+      </Tabs>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 text-[12px] @max-[520px]:p-2.5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 text-xs @max-[520px]:p-2.5">
         {ActiveTab === null ? null : <ActiveTab {...tabProps} />}
       </div>
     </aside>

@@ -6,6 +6,7 @@
 // Shared implementation owned by @liveagent/ui.
 
 import { AlertTriangle, BrushCleaning, Check, RefreshCw } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
 import {
   AlertDialog,
   AlertDialogActions,
@@ -242,7 +243,7 @@ export function OrganizerHistoryModal(props: {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex h-[min(760px,calc(100dvh-2rem))] max-w-6xl flex-col p-0"
+        className="flex h-dialog-760px max-w-6xl flex-col p-0"
         closeLabel={t("settings.memorySettingsClose")}
         showCloseButton
       >
@@ -253,7 +254,7 @@ export function OrganizerHistoryModal(props: {
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="grid grid-cols-[280px_minmax(0,1fr)] overflow-hidden p-0">
+        <DialogBody className="grid grid-cols-memory-navigation overflow-hidden p-0">
           <aside className="flex min-h-0 flex-col border-r border-border/50">
             <div className="space-y-2 border-b border-border/40 p-3">
               <div className="flex items-center gap-2">
@@ -298,7 +299,7 @@ export function OrganizerHistoryModal(props: {
                   onClick={() => setClearConfirmOpen(true)}
                   disabled={loading || clearingHistory || runs.length === 0}
                 >
-                  <BrushCleaning className="h-3.5 w-3.5" />
+                  <BrushCleaning className="size-3.5" />
                 </Button>
               </div>
               <Button
@@ -309,13 +310,18 @@ export function OrganizerHistoryModal(props: {
                 onClick={() => reload()}
                 disabled={loading}
               >
-                <RefreshCw className={cn("h-3.5 w-3.5", loading ? "animate-spin" : "")} />
+                <RefreshCw className={cn("size-3.5", loading ? "animate-spin" : "")} />
                 {t("settings.memoryRefresh")}
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-2">
               {runs.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border/60 px-3 py-8 text-center text-xs text-muted-foreground">
+                <div
+                  className={cn(
+                    "rounded-lg border border-dashed border-border/60 px-3 py-8",
+                    "text-center text-xs text-muted-foreground",
+                  )}
+                >
                   {t("settings.memoryOrganizerHistoryEmpty")}
                 </div>
               ) : (
@@ -329,7 +335,8 @@ export function OrganizerHistoryModal(props: {
                         aria-pressed={active}
                         onClick={() => reload(run.runId)}
                         className={cn(
-                          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left font-normal",
+                          "h-auto w-full flex-col items-stretch justify-start whitespace-normal rounded-lg",
+                          "px-3 py-2.5 text-left font-normal",
                           active
                             ? "border-primary/50 bg-primary/5"
                             : "border-border/50 bg-background/70 hover:bg-muted/35",
@@ -338,13 +345,13 @@ export function OrganizerHistoryModal(props: {
                         <div className="flex items-center justify-between gap-2">
                           <span
                             className={cn(
-                              "rounded border px-1.5 py-0.5 text-[10px]",
+                              "rounded border px-1.5 py-0.5 text-tiny",
                               organizerStatusClass(run.status),
                             )}
                           >
                             {organizerStatusLabel(run.status, t)}
                           </span>
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-tiny text-muted-foreground">
                             {organizerTriggerLabel(run.trigger, t)}
                           </span>
                         </div>
@@ -353,7 +360,7 @@ export function OrganizerHistoryModal(props: {
                             run.error ||
                             t("settings.memoryOrganizerHistoryPending")}
                         </div>
-                        <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                        <div className="mt-1 truncate text-xs text-muted-foreground">
                           {formatTime(run.startedAt || run.createdAt)} · {modelNameFromRun(run)}
                         </div>
                       </Button>
@@ -366,12 +373,17 @@ export function OrganizerHistoryModal(props: {
 
           <section className="min-h-0 overflow-auto p-5">
             {error ? (
-              <div className="mb-4 whitespace-pre-wrap rounded-lg border border-destructive/20 bg-destructive/[0.05] px-3 py-2 text-xs text-destructive">
+              <SettingsNotice variant="multiline-error" className="mb-4">
                 {error}
-              </div>
+              </SettingsNotice>
             ) : null}
             {historyFeedback ? (
-              <div className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <div
+                className={cn(
+                  "mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2",
+                  "text-xs text-emerald-700 dark:text-emerald-300",
+                )}
+              >
                 {historyFeedback}
               </div>
             ) : null}
@@ -395,11 +407,16 @@ export function OrganizerHistoryModal(props: {
                         {selectedRun.scope} / {selectedRun.mode}
                       </span>
                     </div>
-                    <div className="font-mono text-[11px] text-muted-foreground">
+                    <div className="font-mono text-xs text-muted-foreground">
                       {selectedRun.runId}
                     </div>
                   </div>
-                  <div className="grid shrink-0 grid-cols-[auto_minmax(9rem,auto)] gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                  <div
+                    className={cn(
+                      "grid shrink-0 grid-cols-skill-filter gap-x-2 gap-y-1",
+                      "rounded-md border border-border/50 bg-background/70 px-3 py-2 text-xs text-muted-foreground",
+                    )}
+                  >
                     <span className="whitespace-nowrap">
                       {t("settings.memoryOrganizerStarted")}
                     </span>
@@ -440,7 +457,7 @@ export function OrganizerHistoryModal(props: {
                       key={key}
                       className="rounded-lg border border-border/50 bg-background/70 p-3"
                     >
-                      <div className="text-[11px] text-muted-foreground">{t(String(key))}</div>
+                      <div className="text-xs text-muted-foreground">{t(String(key))}</div>
                       <div className="mt-1 text-lg font-semibold">{value}</div>
                     </div>
                   ))}
@@ -470,7 +487,7 @@ export function OrganizerHistoryModal(props: {
                           onClick={applyManualPreview}
                           disabled={applyingPreview}
                         >
-                          <Check className="h-3.5 w-3.5" />
+                          <Check className="size-3.5" />
                           {t("settings.memoryOrganizerApplySelected")}
                         </Button>
                       ) : null}
@@ -501,41 +518,46 @@ export function OrganizerHistoryModal(props: {
                               className="min-w-0 flex-1"
                             >
                               <span className="flex flex-wrap items-center gap-2">
-                                <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                                <span className="rounded border border-border/60 px-1.5 py-0.5 text-tiny uppercase text-muted-foreground">
                                   {decision.op === "delete"
                                     ? t("settings.memoryOrganizerDecisionDelete")
                                     : t("settings.memoryOrganizerDecisionUpsert")}
                                 </span>
-                                <span className="font-mono text-[11px]">{decision.slug}</span>
+                                <span className="font-mono text-xs">{decision.slug}</span>
                                 {decision.scope ? (
-                                  <span className="text-[11px] text-muted-foreground">
+                                  <span className="text-xs text-muted-foreground">
                                     {decision.scope}
                                     {decision.workdirHash ? `:${decision.workdirHash}` : ""}
                                   </span>
                                 ) : null}
                                 <span
                                   className={cn(
-                                    "rounded border px-1.5 py-0.5 text-[10px]",
+                                    "rounded border px-1.5 py-0.5 text-tiny",
                                     organizerRiskClass(decision.riskLevel),
                                   )}
                                 >
                                   {organizerRiskLabel(decision.riskLevel, t)}
                                 </span>
                                 {decision.confidence != null ? (
-                                  <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                  <span className="rounded border border-border/60 px-1.5 py-0.5 text-tiny text-muted-foreground">
                                     {t("settings.memoryOrganizerConfidence")}{" "}
                                     {decision.confidence.toFixed(2)}
                                   </span>
                                 ) : null}
                                 {decision.requiresUserAck ? (
-                                  <span className="rounded border border-amber-500/30 bg-amber-500/[0.06] px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+                                  <span
+                                    className={cn(
+                                      "rounded border border-amber-500/30 bg-amber-500/[0.06] px-1.5 py-0.5 text-tiny text-amber-700",
+                                      "dark:text-amber-300",
+                                    )}
+                                  >
                                     {t("settings.memoryOrganizerRequiresAck")}
                                   </span>
                                 ) : null}
                                 {decision.applyStatus ? (
                                   <span
                                     className={cn(
-                                      "rounded border px-1.5 py-0.5 text-[10px]",
+                                      "rounded border px-1.5 py-0.5 text-tiny",
                                       organizerApplyStatusClass(decision.applyStatus),
                                     )}
                                   >
@@ -552,7 +574,7 @@ export function OrganizerHistoryModal(props: {
                                 </span>
                               ) : null}
                               {decision.sourceSlugs?.length ? (
-                                <span className="mt-1 block break-words font-mono text-[10px] text-muted-foreground">
+                                <span className="mt-1 block break-words font-mono text-tiny text-muted-foreground">
                                   {t("settings.memoryOrganizerSources")}{" "}
                                   {decision.sourceSlugs.join(", ")}
                                 </span>
@@ -576,7 +598,7 @@ export function OrganizerHistoryModal(props: {
                           key={key}
                           className="rounded-md border border-border/50 bg-background/70 px-3 py-2"
                         >
-                          <div className="text-[11px] text-muted-foreground">{t(key)}</div>
+                          <div className="text-xs text-muted-foreground">{t(key)}</div>
                           <div className="mt-1 text-sm font-semibold">{count}</div>
                         </div>
                       ))}
@@ -599,19 +621,19 @@ export function OrganizerHistoryModal(props: {
                           <div className="mb-1 flex flex-wrap items-center gap-2">
                             <span
                               className={cn(
-                                "rounded border px-1.5 py-0.5 text-[10px]",
+                                "rounded border px-1.5 py-0.5 text-tiny",
                                 organizerReviewItemClass(item),
                               )}
                             >
                               {organizerReviewItemLabel(item, t)}
                             </span>
                             {item.code ? (
-                              <span className="font-mono text-[10px] text-muted-foreground">
+                              <span className="font-mono text-tiny text-muted-foreground">
                                 {item.code}
                               </span>
                             ) : null}
                             {item.slug ? (
-                              <span className="font-mono text-[10px] text-muted-foreground">
+                              <span className="font-mono text-tiny text-muted-foreground">
                                 {item.slug}
                               </span>
                             ) : null}
@@ -647,7 +669,12 @@ export function OrganizerHistoryModal(props: {
                     <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
                       {t("settings.memoryOrganizerTrimmedProtocol")}
                     </summary>
-                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-3 text-[11px]">
+                    <pre
+                      className={cn(
+                        "mt-3 max-h-80 overflow-auto",
+                        "whitespace-pre-wrap break-words rounded bg-muted/30 p-3 text-xs",
+                      )}
+                    >
                       {JSON.stringify(rawBlocks, null, 2)}
                     </pre>
                   </details>
@@ -665,8 +692,8 @@ export function OrganizerHistoryModal(props: {
         <AlertDialog open onOpenChange={setClearConfirmOpen}>
           <AlertDialogContent className="max-w-md p-0">
             <AlertDialogHeader className="flex-row items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                <AlertTriangle className="size-4 text-destructive" />
               </div>
               <div className="min-w-0 flex-1">
                 <AlertDialogTitle className="text-sm">
@@ -693,7 +720,7 @@ export function OrganizerHistoryModal(props: {
                   onClick={clearHistory}
                   disabled={clearingHistory}
                 >
-                  <BrushCleaning className="h-3.5 w-3.5" />
+                  <BrushCleaning className="size-3.5" />
                   {t("settings.memoryOrganizerClearHistory")}
                 </Button>
               </AlertDialogActions>

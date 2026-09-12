@@ -1,8 +1,14 @@
 @import "tailwindcss";
 @import "../../../agent-ui/src/styles/base.css";
-@import "../../../agent-ui/src/styles/transcript.css";
-@import "../../../agent-ui/src/styles/common.css";
-@config "../tailwind.config.js";
+@reference "../../../agent-ui/src/styles/semantic-colors.css";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:is(.dark *));
+@source "../index.html";
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
 @source "../../../agent-ui/src";
 
 @font-face {
@@ -13,135 +19,179 @@
   font-display: swap;
 }
 
-@layer components {
-  .sidebar-context-menu[data-state="open"] {
-    animation: sidebarMenuIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    --tw-enter-opacity: initial;
-    --tw-enter-scale: initial;
-    --tw-enter-translate-x: initial;
-  }
+/* Gateway-wide theme variables and browser scrollbar primitives have no
+   component host; all product layout and state styling lives in TSX classes. */
+html[data-liveagent-webui="gateway"] {
+  --ring: 220 13% 62%;
+  --gateway-scrollbar-size: var(--spacing-10px);
+  --gateway-scrollbar-track: transparent;
+  --gateway-scrollbar-track-hover: hsl(var(--muted) / 0.34);
+  --gateway-scrollbar-thumb: hsl(var(--muted-foreground) / 0.22);
+  --gateway-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.36);
+  --gateway-scrollbar-thumb-active: hsl(var(--muted-foreground) / 0.5);
+  --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.82);
+  --project-tools-tabs-scrollbar-track: hsl(var(--muted) / 0.42);
+  --project-tools-tabs-scrollbar-track-hover: var(--gateway-scrollbar-track-hover);
+  --project-tools-tabs-scrollbar-thumb: var(--gateway-scrollbar-thumb);
+  --project-tools-tabs-scrollbar-thumb-hover: var(--gateway-scrollbar-thumb-hover);
+  --project-tools-tabs-scrollbar-thumb-border: var(--gateway-scrollbar-thumb-border);
+}
 
-  .sidebar-context-menu[data-state="closed"] {
-    animation: sidebarMenuOut 0.12s cubic-bezier(0.4, 0, 1, 1);
-    --tw-exit-opacity: initial;
-    --tw-exit-scale: initial;
-    --tw-exit-translate-x: initial;
-  }
+html[data-liveagent-webui="gateway"].dark {
+  --ring: 220 18% 68%;
+  --gateway-scrollbar-track-hover: hsl(var(--muted) / 0.46);
+  --gateway-scrollbar-thumb: hsl(var(--muted-foreground) / 0.28);
+  --gateway-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.46);
+  --gateway-scrollbar-thumb-active: hsl(var(--muted-foreground) / 0.62);
+  --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.76);
+}
 
-  @keyframes sidebarMenuIn {
-    from {
-      opacity: 0;
-      transform: translate(var(--sidebar-menu-slide-x), var(--sidebar-menu-slide-y)) scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: translate(0, 0) scale(1);
-    }
-  }
+/* react-complex-tree exposes its visual states through CSS variables. Keep the
+   third-party theme bridge here instead of repeating arbitrary properties in JSX. */
+.workdir-picker-tree {
+  --rct-color-tree-bg: transparent;
+  --rct-color-tree-focus-outline: transparent;
+  --rct-color-focustree-item-selected-bg: hsl(var(--accent));
+  --rct-color-focustree-item-selected-text: hsl(var(--accent-foreground));
+  --rct-color-focustree-item-hover-bg: hsl(var(--muted) / 0.72);
+  --rct-color-focustree-item-hover-text: hsl(var(--foreground));
+  --rct-color-focustree-item-active-bg: hsl(var(--muted));
+  --rct-color-focustree-item-active-text: hsl(var(--foreground));
+  --rct-color-focustree-item-focused-border: hsl(var(--ring) / 0.58);
+  --rct-color-focustree-item-draggingover-bg: hsl(var(--accent));
+  --rct-color-focustree-item-draggingover-color: hsl(var(--accent-foreground));
+  --rct-color-nonfocustree-item-selected-bg: hsl(var(--accent) / 0.78);
+  --rct-color-nonfocustree-item-selected-text: hsl(var(--accent-foreground));
+  --rct-color-nonfocustree-item-focused-border: hsl(var(--border));
+  --rct-color-search-highlight-bg: hsl(var(--primary) / 0.18);
+  --rct-color-arrow: hsl(var(--muted-foreground));
+  --rct-bar-color: hsl(var(--ring));
+  --rct-focus-outline: hsl(var(--ring));
+}
 
-  @keyframes sidebarMenuOut {
-    from {
-      opacity: 1;
-      transform: translate(0, 0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translate(
-          calc(var(--sidebar-menu-slide-x) / 2),
-          calc(var(--sidebar-menu-slide-y) / 2)
-        )
-        scale(0.98);
-    }
-  }
+.dark .workdir-picker-tree {
+  --rct-color-focustree-item-selected-bg: hsl(var(--accent) / 0.92);
+  --rct-color-focustree-item-selected-text: hsl(var(--foreground));
+  --rct-color-focustree-item-hover-bg: hsl(var(--muted) / 0.68);
+  --rct-color-focustree-item-active-bg: hsl(var(--muted) / 0.86);
+  --rct-color-nonfocustree-item-selected-bg: hsl(var(--accent) / 0.72);
+  --rct-color-nonfocustree-item-selected-text: hsl(var(--foreground));
+  --rct-color-search-highlight-bg: hsl(var(--primary) / 0.24);
+}
 
-  .mention-composer.is-empty::before {
-    left: 0;
-    right: 0;
-    padding-right: inherit;
-  }
+/* The telemetry dashboard keeps its dark canvas. Surface/text roles follow the shared theme. */
+.status-dashboard-root {
+  --background: 222 47% 5%;
+  --foreground: 210 40% 98%;
+  --card: 222 47% 11%;
+  --card-foreground: var(--foreground);
+  --muted-foreground: 215 20% 72%;
+  --border: 215 28% 24%;
+  --status-amber: 255, 196, 87;
+  --status-cyan: 72, 235, 255;
+  --status-emerald: 68, 255, 196;
+  --status-rose: 255, 78, 142;
+  --status-violet: 169, 119, 255;
+}
 
-  @keyframes composerReasoningDropdownIn {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
+.gateway-chat-frame {
+  --chat-transcript-content-width: var(--spacing-768px);
+  --gateway-chat-column-gutter: var(--spacing-16px);
+  --gateway-chat-composer-bottom: var(--spacing-16px);
+  --gateway-chat-composer-overlay-height: var(--spacing-176px);
+}
 
-  @keyframes composerReasoningDropdownOut {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(5px) scale(0.975);
-    }
-  }
+.workspace-ssh-terminal-overlay .project-terminal-viewport {
+  --project-terminal-padding-x: 1rem;
+}
 
-  .composer-reasoning-trigger[data-state="open"] {
-    box-shadow:
-      0 8px 18px -14px rgba(88, 28, 135, 0.55),
-      inset 0 0 0 1px rgba(167, 139, 250, 0.12);
+@media (max-width: 820px) {
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: var(--spacing-12px);
+    --gateway-chat-composer-bottom: max(var(--spacing-12px), env(safe-area-inset-bottom));
   }
+}
 
-  .composer-add-dropdown,
-  .composer-branch-dropdown,
-  .composer-safety-dropdown {
-    transform-origin: var(--transform-origin, bottom left);
-    transition:
-      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+@media (max-width: 640px) {
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: var(--spacing-10px);
+    --gateway-chat-composer-overlay-height: var(--spacing-168px);
   }
+}
 
-  .composer-add-dropdown[data-starting-style],
-  .composer-add-dropdown[data-ending-style],
-  .composer-branch-dropdown[data-starting-style],
-  .composer-branch-dropdown[data-ending-style],
-  .composer-safety-dropdown[data-starting-style],
-  .composer-safety-dropdown[data-ending-style] {
-    opacity: 0;
-    transform: translateY(6px) scale(0.97);
+@media (max-width: 380px) {
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: var(--spacing-8px);
   }
+}
 
-  .composer-add-dropdown[data-ending-style],
-  .composer-branch-dropdown[data-ending-style],
-  .composer-safety-dropdown[data-ending-style] {
-    transition-duration: 0.12s;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-    transform: translateY(5px) scale(0.975);
-  }
+html[data-liveagent-webui="gateway"],
+html[data-liveagent-webui="gateway"] * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gateway-scrollbar-thumb) transparent;
+}
 
-  .composer-add-dropdown[data-state="open"],
-  .composer-branch-dropdown[data-state="open"],
-  .composer-safety-dropdown[data-state="open"] {
-    animation: composerReasoningDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    transform-origin: var(--transform-origin, bottom left);
-  }
+html[data-liveagent-webui="gateway"]:hover,
+html[data-liveagent-webui="gateway"]:focus-within,
+html[data-liveagent-webui="gateway"] *:hover,
+html[data-liveagent-webui="gateway"] *:focus-within {
+  scrollbar-color: var(--gateway-scrollbar-thumb-hover) transparent;
+}
 
-  .composer-add-dropdown[data-state="closed"],
-  .composer-branch-dropdown[data-state="closed"],
-  .composer-safety-dropdown[data-state="closed"] {
-    animation: composerReasoningDropdownOut 0.12s cubic-bezier(0.4, 0, 1, 1) forwards;
-    transform-origin: var(--transform-origin, bottom left);
-  }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar {
+  width: var(--gateway-scrollbar-size);
+  height: var(--gateway-scrollbar-size);
+}
 
-  @media (prefers-reduced-motion: reduce) {
-    .composer-add-dropdown,
-    .composer-branch-dropdown,
-    .composer-safety-dropdown {
-      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides dropdown open/close animations. */
-      animation: none !important;
-      transition: none !important;
-    }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-track,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-track {
+  @apply rounded-full;
+  background: var(--gateway-scrollbar-track);
+}
 
-    .composer-reasoning-trigger,
-    .composer-reasoning-trigger > svg:last-child {
-      /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion overrides trigger and chevron transitions. */
-      transition: none !important;
-    }
-  }
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-track:hover,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-track:hover {
+  background: var(--gateway-scrollbar-track-hover);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb {
+  min-width: var(--spacing-36px);
+  min-height: var(--spacing-36px);
+  border: var(--spacing-3px) solid transparent;
+  @apply rounded-full;
+  background-color: var(--gateway-scrollbar-thumb);
+  background-clip: content-box;
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb:hover,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb:hover {
+  border-width: var(--spacing-2px);
+  background-color: var(--gateway-scrollbar-thumb-hover);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb:active,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb:active {
+  border-width: var(--spacing-2px);
+  background-color: var(--gateway-scrollbar-thumb-active);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-corner,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.08), transparent 24%),
+    radial-gradient(circle at bottom right, hsl(var(--ring) / 0.08), transparent 28%),
+    hsl(var(--background));
+}
+
+html.dark body {
+  background:
+    radial-gradient(circle at top left, var(--ui-color-hsl-220-60-60-0p08), transparent 24%),
+    radial-gradient(circle at bottom right, var(--ui-color-hsl-260-50-55-0p08), transparent 28%),
+    hsl(var(--background));
 }

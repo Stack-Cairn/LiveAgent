@@ -14,6 +14,7 @@ import type {
   GitRepositoryState,
   GitStatusEntry,
 } from "@liveagent/ui/lib/git/types";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import type { GraphRow } from "../../../lib/git/gitGraph";
 
 // The desktop git client exposes `openSystemFileLocation`; the web client
@@ -23,8 +24,7 @@ export type GitReviewClient = GitClient & {
   openSystemFileLocation?: (workdir: string, path: string) => Promise<GitOperationResponse>;
 };
 
-export const GIT_REVIEW_SPLIT_GRID_CLASS =
-  "grid-cols-[clamp(9.5rem,38%,18rem)_minmax(10rem,1fr)] grid-rows-1";
+export const GIT_REVIEW_SPLIT_GRID_CLASS = "grid-cols-trajectory-details grid-rows-1";
 
 export const LARGE_DIFF_CHUNK_CHAR_LIMIT = 120 * 1024;
 export const LARGE_DIFF_CHUNK_LINE_LIMIT = 1800;
@@ -140,7 +140,7 @@ export type GitFileContextPayload = {
 export const CHANGE_CONTEXT_MENU_ITEM_CLASS =
   "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45";
 export const CONTEXT_MENU_CONTAINER_CLASS =
-  "editor-context-menu select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]";
+  "origin-top-left select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]";
 export const CONTEXT_MENU_SEPARATOR_CLASS = "mx-1 my-1 h-px bg-border/60";
 
 // Clamp a rendered context menu into its bounds using measured rects (no
@@ -579,27 +579,7 @@ export function revealTargetForEntry(entry: GitStatusEntry) {
 
 export function writeTextToClipboard(text: string) {
   if (!text.trim()) return;
-  const value = text;
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(value).catch(() => {
-      fallbackWriteTextToClipboard(value);
-    });
-    return;
-  }
-  fallbackWriteTextToClipboard(value);
-}
-
-export function fallbackWriteTextToClipboard(text: string) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
+  void copyTextToClipboard(text);
 }
 
 export function gitRepositoryStateSignature(state: GitRepositoryState) {

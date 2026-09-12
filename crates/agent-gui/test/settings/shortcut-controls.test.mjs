@@ -30,12 +30,12 @@ await env.act(async () => root.render(env.React.createElement(GlobalShortcutsSec
 
 test("scope switch migrates an existing binding and preserves its accelerator", async () => {
   const row = host.querySelector('[data-ghk-row="newChat"]');
-  const toggle = row.querySelector('button[role="switch"][aria-label]');
+  const toggle = row.querySelector('[role="switch"][aria-label]');
   assert.equal(row.querySelector("select"), null);
   assert.equal(toggle.getAttribute("aria-checked"), "false");
-  assert.match(toggle.textContent, /settings.shortcutScopeGlobal/);
-  assert.match(toggle.textContent, /settings.shortcutScopeApp/);
-  assert.ok(toggle.nextElementSibling.querySelector(".ghk-kbd"));
+  assert.match(toggle.parentElement.textContent, /settings.shortcutScopeGlobal/);
+  assert.match(toggle.parentElement.textContent, /settings.shortcutScopeApp/);
+  assert.ok(toggle.parentElement.nextElementSibling.querySelector(".ghk-kbd"));
   await env.act(async () => toggle.click());
   assert.equal(toggle.getAttribute("aria-checked"), "true");
   assert.deepEqual(shortcuts.readGlobalShortcutBindings().newChat, {
@@ -45,7 +45,7 @@ test("scope switch migrates an existing binding and preserves its accelerator", 
   });
 });
 test("scope switch supports left and right arrow keys without entering recording", async () => {
-  const toggle = host.querySelector('[data-ghk-row="newChat"] button[role="switch"][aria-label]');
+  const toggle = host.querySelector('[data-ghk-row="newChat"] [role="switch"][aria-label]');
   for (const [key, scope] of [
     ["ArrowLeft", "global"],
     ["ArrowRight", "app"],
@@ -60,17 +60,17 @@ test("scope switch supports left and right arrow keys without entering recording
       ),
     );
     assert.equal(shortcuts.readGlobalShortcutBindings().newChat.scope, scope);
-    assert.ok(host.querySelector('[data-ghk-row="newChat"] button[role="switch"][aria-label]'));
+    assert.ok(host.querySelector('[data-ghk-row="newChat"] [role="switch"][aria-label]'));
   }
 });
 test("send shortcut uses a visible inline switch and saves both directions", async () => {
   const row = host.querySelector('[data-ghk-row="sendMessage"]');
   assert.equal(row.parentElement, host.querySelector('[data-ghk-row="newChat"]').parentElement);
   assert.equal(row.querySelector("select"), null);
-  assert.equal(row.querySelectorAll("button").length, 1);
+  assert.equal(row.querySelectorAll('[role="switch"]').length, 1);
   const toggle = row.querySelector('[role="switch"]');
-  assert.match(toggle.textContent, /Enter/);
-  assert.match(toggle.textContent, /Ctrl \+ Enter|⌘ \+ Enter/);
+  assert.match(toggle.parentElement.textContent, /Enter/);
+  assert.match(toggle.parentElement.textContent, /Ctrl \+ Enter|⌘ \+ Enter/);
   assert.equal(toggle.getAttribute("aria-checked"), "false");
   assert.equal(
     toggle.className,

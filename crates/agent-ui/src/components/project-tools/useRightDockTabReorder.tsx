@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { acquireGlobalPointerStyle } from "../../lib/shared/globalPointerStyle";
 import { cn } from "../../lib/shared/utils";
 import {
   applyTabDragInsertIndex,
@@ -24,7 +25,7 @@ import {
 
 // Pointer travel before a press turns into a drag; below this it stays a click.
 const TAB_DRAG_START_DISTANCE_PX = 5;
-const TAB_DRAG_TRANSITION = "transform 180ms cubic-bezier(0.2, 0, 0, 1)";
+const TAB_DRAG_TRANSITION = "transform var(--ui-duration-180ms) var(--ease-ui-curve-5)";
 const TAB_DROP_SETTLE_MS = 220;
 const TAB_DEFAULT_GAP_PX = 4;
 // Wildcard for "suppress the next tab click wherever it lands": after a real
@@ -47,7 +48,7 @@ type TabDragState = {
   baseOrder: string[];
   insertIndex: number;
   draggedOffset: number;
-  previousUserSelect: string;
+  releaseGlobalStyle: (() => void) | null;
 };
 
 type TabDragVisual = {
@@ -212,8 +213,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
         drag.gap = measured.gap;
         drag.startScrollLeft = container.scrollLeft;
         drag.hasMoved = true;
-        drag.previousUserSelect = document.body.style.userSelect;
-        document.body.style.userSelect = "none";
+        drag.releaseGlobalStyle = acquireGlobalPointerStyle({ userSelect: "none" });
         setDraggingTabId(drag.draggedId);
       }
 
@@ -277,7 +277,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
       removeWindowDragListeners();
       if (!drag.hasMoved) return;
 
-      document.body.style.userSelect = drag.previousUserSelect;
+      drag.releaseGlobalStyle?.();
       setDraggingTabId("");
       setDragVisual(null);
       suppressNextTabClick(SUPPRESS_ANY_TAB_CLICK);
@@ -325,7 +325,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
         baseOrder: orderedTabIds,
         insertIndex: -1,
         draggedOffset: 0,
-        previousUserSelect: "",
+        releaseGlobalStyle: null,
       };
       addWindowDragListeners();
     },
@@ -336,9 +336,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
     return () => {
       const drag = dragRef.current;
       dragRef.current = null;
-      if (drag?.hasMoved) {
-        document.body.style.userSelect = drag.previousUserSelect;
-      }
+      drag?.releaseGlobalStyle?.();
       window.clearTimeout(suppressResetTimeoutRef.current);
       stopDragFrameLoop();
       removeWindowDragListeners();
@@ -466,9 +464,14 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
         disabled={!canReorderTabs}
         tabIndex={canReorderTabs ? 0 : -1}
         className={cn(
-          "relative z-10 flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/45 opacity-70 transition-[background-color,color,opacity] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "relative z-10 flex h-6 w-5 shrink-0 items-center justify-center",
+          "rounded text-muted-foreground/45 opacity-70 transition-[background-color,color,opacity]",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           canReorderTabs
-            ? "cursor-grab touch-none hover:bg-background/80 hover:text-foreground hover:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100 active:cursor-grabbing"
+            ? cn(
+                "cursor-grab touch-none",
+                "hover:bg-background/80 hover:text-foreground hover:opacity-100 focus-visible:bg-background focus-visible:text-foreground focus-visible:opacity-100 active:cursor-grabbing",
+              )
             : "cursor-default opacity-30",
         )}
         onClick={() => {
@@ -480,7 +483,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
           beginTabDrag(event, tabId, "handle");
         }}
       >
-        <GripVertical className="h-3.5 w-3.5" />
+        <GripVertical className="size-3.5" />
       </button>
     ),
     [

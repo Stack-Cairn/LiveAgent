@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "node ../../scripts/run-node-tests.mjs test",
@@ -15,7 +15,8 @@
     "export:models": "node ./test/get-providers-get-models-example.js --save",
     "lint": "biome check src/ --max-diagnostics=none",
     "format": "biome format --write src/",
-    "lint:fix": "biome check --write src/"
+    "lint:fix": "biome check --write src/",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -29,7 +30,7 @@
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
-    "@tanstack/react-virtual": "^3.14.8",
+    "@tanstack/react-virtual": "^3.14.6",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@xterm/addon-fit": "^0.11.0",
@@ -47,7 +48,6 @@
     "typebox": "1.3.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
     "@iconify-json/logos": "^1.2.11",
     "@iconify-json/lucide": "^1.2.108",
     "@iconify-json/material-icon-theme": "1.2.67",
@@ -59,7 +59,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "jsdom": "^30.0.1",
+    "jsdom": "30.0.1",
     "postcss": "^8.5.8",
     "tailwindcss": "4.2.2",
     "typescript": "~7.0.2",

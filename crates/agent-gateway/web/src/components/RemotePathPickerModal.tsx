@@ -534,13 +534,13 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       }}
     >
       <DialogContent
-        className="flex h-[min(650px,92vh)] max-h-[92vh] max-w-4xl flex-col p-0"
+        className="flex h-dialog-650px-vh max-h-92vh max-w-4xl flex-col p-0"
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3 px-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            {mode === "file" ? <File className="h-5 w-5" /> : <FolderOpen className="h-5 w-5" />}
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            {mode === "file" ? <File className="size-5" /> : <FolderOpen className="size-5" />}
           </div>
           <div className="min-w-0 flex-1">
             <DialogTitle>{modalTitle}</DialogTitle>
@@ -549,23 +549,23 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
         </DialogHeader>
 
         <DialogSubheader className="px-6">
-          <div className="settings-field-row flex items-center gap-3">
+          <div className="flex items-center gap-3 max-820:min-w-0">
             <div className="w-24 shrink-0 text-xs font-medium text-muted-foreground">
               {mode === "file" ? t("settings.pathPickerPathLabel") : t("settings.workdir")}
             </div>
-            <Input value={headerPath} readOnly className="font-mono text-[13px]" />
+            <Input value={headerPath} readOnly className="font-mono text-sm" />
           </div>
         </DialogSubheader>
 
         <DialogBody className="flex flex-col gap-3 px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
-              <Home className="h-3.5 w-3.5" />
+              <Home className="size-3.5" />
               <span>~</span>
             </div>
             <span className="text-muted-foreground/40">·</span>
             <div className="flex items-center gap-1.5">
-              <HardDrive className="h-3.5 w-3.5" />
+              <HardDrive className="size-3.5" />
               <span>Root</span>
             </div>
           </div>
@@ -603,23 +603,34 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
                   disabled={!canCreateFolder}
                 >
                   {creatingFolder ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="size-3.5" />
                   )}
                   {t("settings.createFolder")}
                 </Button>
               </div>
               {createFolderError ? (
-                <div className="mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <div
+                  className={cn(
+                    "mt-2 flex items-start gap-2",
+                    "rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive",
+                  )}
+                >
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                   <span className="min-w-0 flex-1">{createFolderError}</span>
                 </div>
               ) : null}
             </div>
           ) : null}
 
-          <div className="workdir-picker-tree min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-muted/20 p-2">
+          <div
+            className={cn(
+              "workdir-picker-tree min-h-0 flex-1 overflow-auto",
+              "rounded-xl border border-border/60 bg-muted/20 p-2",
+              "[&_.rct-tree-root]:bg-transparent [&_.rct-tree-root]:text-foreground [&_.rct-tree-root]:font-inherit [&_.rct-tree-item-button]:min-w-0",
+            )}
+          >
             <ControlledTreeEnvironment
               items={items}
               getItemTitle={(item) => item.data.label}
@@ -672,11 +683,11 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
               )}
             >
               {statusLine.kind === "loading" ? (
-                <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
               ) : statusLine.kind === "error" ? (
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               ) : (
-                <FolderOpen className="mt-0.5 h-4 w-4 shrink-0" />
+                <FolderOpen className="mt-0.5 size-4 shrink-0" />
               )}
               <span className="min-w-0 flex-1">{statusLine.text}</span>
             </div>

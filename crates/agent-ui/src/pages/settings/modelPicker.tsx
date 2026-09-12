@@ -1,5 +1,5 @@
 import type { ProviderId } from "@liveagent/app/lib/settings/index";
-import { Check, ChevronDown, Search, Sparkles } from "@liveagent/ui/components/IconSet";
+import { Check, ChevronDown, Search } from "@liveagent/ui/components/IconSet";
 import { ProviderBrandIcon } from "@liveagent/ui/components/ProviderBrandIcon";
 import {
   DropdownMenu,
@@ -12,9 +12,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 
-// Shared provider-grouped model picker used by the cron prompt-task form and
-// the memory settings drawer. The grouped-collapse behavior mirrors the main
-// page model menu while platform-specific data comes from host adapters.
+// Shared searchable model picker. Platform adapters provide model options.
 
 export type ModelPickerOption = {
   value: string;
@@ -48,6 +46,49 @@ function groupOptionsByProvider(options: ModelPickerOption[]): ModelGroup[] {
   return groups;
 }
 
+const TRIGGER_VARIANTS = {
+  plain:
+    "h-9 rounded-lg border-0 bg-settings-tile-hover text-sm shadow-none hover:bg-settings-active",
+  default: "h-10 rounded-md border-input bg-background text-sm shadow-xs",
+  compact: "h-9 rounded-md border-input bg-background text-sm shadow-xs hover:bg-accent/40",
+  quiet:
+    "h-9 rounded-lg border-foreground/10 bg-white/70 text-sm shadow-none dark:bg-background/40",
+  dashed:
+    "h-8 rounded-lg border-dashed border-foreground/[0.13] bg-transparent py-0 text-xs text-muted-foreground shadow-none hover:border-foreground/[0.24] hover:bg-foreground/[0.02]",
+} as const;
+
+function ModelOptionItem({
+  selected,
+  label,
+  description,
+  onSelect,
+}: {
+  selected: boolean;
+  label: string;
+  description?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenuItem
+      onSelect={onSelect}
+      className={cn(
+        "justify-between gap-3 overflow-hidden",
+        selected && "bg-accent text-accent-foreground",
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate">{label}</span>
+        {description ? (
+          <span className="min-w-0 truncate text-muted-foreground">{description}</span>
+        ) : null}
+      </span>
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        {selected ? <Check className="size-3.5" /> : null}
+      </span>
+    </DropdownMenuItem>
+  );
+}
+
 export function ModelPicker({
   options,
   value,
@@ -56,7 +97,7 @@ export function ModelPicker({
   placeholder,
   noneLabel,
   ariaLabel,
-  triggerClassName,
+  variant = "default",
   collapsibleGroups = true,
   searchPlaceholder,
   emptyLabel,
@@ -70,8 +111,8 @@ export function ModelPicker({
   /** When set, a top entry with this label clears the selection (value ""). */
   noneLabel?: string;
   ariaLabel?: string;
-  triggerClassName?: string;
-  /** When false, render grouped options directly without a collapsible group header. */
+  variant?: keyof typeof TRIGGER_VARIANTS;
+  /** Opt into collapsible provider groups for dense model lists. */
   collapsibleGroups?: boolean;
   /** Search input placeholder; defaults to the shared model-search translation. */
   searchPlaceholder?: string;
@@ -88,7 +129,6 @@ export function ModelPicker({
     if (isOpen) {
       setSearch("");
       setExpandedGroups({});
-      setTimeout(() => searchInputRef.current?.focus(), 0);
     }
   }, [isOpen]);
 
@@ -134,76 +174,53 @@ export function ModelPicker({
           disabled={disabled}
           aria-label={ariaLabel}
           className={cn(
-            "flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
-            triggerClassName,
+            "flex w-full cursor-pointer items-center justify-between gap-2 border px-3 py-2 transition-colors",
+            TRIGGER_VARIANTS[variant],
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >
           <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-            <span
-              className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
-                selectedOption
-                  ? "bg-violet-500/10 text-violet-500"
-                  : "bg-muted/60 text-muted-foreground",
-              )}
-            >
-              {selectedOption ? (
-                <ProviderBrandIcon type={selectedOption.providerType} className="h-3.5 w-3.5" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-            </span>
             <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
               {selectedOption ? selectedOption.label : placeholder}
             </span>
           </span>
           <ChevronDown
-            className={cn(
-              "h-4 w-4 shrink-0 text-muted-foreground opacity-50 transition-transform duration-200 ease-out",
-              isOpen && "rotate-180",
-            )}
+            className={cn("size-3.5 shrink-0 text-muted-foreground", isOpen && "rotate-180")}
           />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          sideOffset={4}
           collisionPadding={8}
-          className="w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
+          className="w-(--anchor-width) min-w-64 max-w-[calc(100vw-32px)] overflow-hidden rounded-xl p-1 shadow-lg"
         >
           <div className="px-2 py-1.5">
-            <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+            <div
+              className={cn(
+                "flex items-center gap-1.5",
+                "h-8 rounded-lg bg-settings-tile-hover px-2.5",
+              )}
+            >
+              <Search className="size-3.5 shrink-0 text-muted-foreground/70" />
               <input
                 ref={searchInputRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={searchPlaceholder ?? t("chat.searchModel")}
-                className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+                className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
                 onKeyDown={(e) => e.stopPropagation()}
               />
             </div>
           </div>
-          <div className="max-h-[min(14rem,var(--available-height,14rem))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
+          <div className="max-h-80 overflow-y-auto overscroll-contain px-1 pb-1">
             {noneLabel && !normalizedSearch ? (
-              <DropdownMenuItem
+              <ModelOptionItem
+                selected={value === ""}
                 onSelect={() => onChange("")}
-                className={cn(
-                  "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
-                  value === "" &&
-                    "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <Sparkles
-                    className={cn("h-4 w-4 shrink-0 opacity-70", value === "" && "opacity-100")}
-                  />
-                  <span className="min-w-0 truncate">{noneLabel}</span>
-                </span>
-                {value === "" ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
-              </DropdownMenuItem>
+                label={noneLabel}
+              />
             ) : null}
             {filteredGroups.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+              <div className="px-2 py-6 text-center text-sm text-muted-foreground">
                 {emptyLabel ?? t("chat.noModelFound")}
               </div>
             ) : (
@@ -212,7 +229,7 @@ export function ModelPicker({
                 return (
                   <div key={group.id} className="flex flex-col gap-0.5">
                     {groupIndex > 0 || (noneLabel && !normalizedSearch) ? (
-                      <DropdownMenuSeparator className="bg-border/30" />
+                      <DropdownMenuSeparator />
                     ) : null}
                     {collapsibleGroups ? (
                       <DropdownMenuItem
@@ -220,55 +237,43 @@ export function ModelPicker({
                         onSelect={() => toggleGroup(group.id)}
                         aria-expanded={expanded}
                         title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                        className="sticky top-0 z-10 flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40"
+                        className={cn("sticky top-0 z-10 cursor-pointer", "gap-1.5 bg-popover")}
                       >
                         <ProviderBrandIcon
                           type={group.providerType}
-                          className="h-3.5 w-3.5 opacity-90"
+                          className="size-3.5 opacity-90"
                         />
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                        <span className="inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-[10px] tabular-nums">
+                        <span
+                          className={cn(
+                            "inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70",
+                            "px-1 text-tiny tabular-nums",
+                          )}
+                        >
                           {group.opts.length}
                         </span>
                         <ChevronDown
                           className={cn(
-                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                            "size-3.5 shrink-0 transition-transform duration-200",
                             expanded && "rotate-180",
                           )}
                         />
                       </DropdownMenuItem>
-                    ) : null}
+                    ) : (
+                      <div className="px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+                        {group.name}
+                      </div>
+                    )}
                     {!collapsibleGroups || expanded
-                      ? group.opts.map((option) => {
-                          const isSelected = option.value === value;
-                          return (
-                            <DropdownMenuItem
-                              key={option.value}
-                              onSelect={() => onChange(option.value)}
-                              className={cn(
-                                "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
-                                isSelected &&
-                                  "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
-                              )}
-                            >
-                              <span className="flex min-w-0 items-center gap-2">
-                                <ProviderBrandIcon
-                                  type={option.providerType}
-                                  className={cn("opacity-70", isSelected && "opacity-100")}
-                                />
-                                <span className="min-w-0 truncate">{option.label}</span>
-                                {option.description ? (
-                                  <span className="min-w-0 truncate text-[11px] text-muted-foreground/70">
-                                    {option.description}
-                                  </span>
-                                ) : null}
-                              </span>
-                              {isSelected ? (
-                                <Check className="h-4 w-4 shrink-0 text-primary" />
-                              ) : null}
-                            </DropdownMenuItem>
-                          );
-                        })
+                      ? group.opts.map((option) => (
+                          <ModelOptionItem
+                            key={option.value}
+                            selected={option.value === value}
+                            onSelect={() => onChange(option.value)}
+                            label={option.label}
+                            description={option.description}
+                          />
+                        ))
                       : null}
                   </div>
                 );

@@ -279,7 +279,8 @@ function ToolImageStatusCard(props: {
   return (
     <div
       className={cn(
-        "relative flex min-h-28 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-md border border-dashed px-4 py-5 text-center",
+        "relative flex min-h-28 w-full flex-col items-center justify-center gap-2",
+        "overflow-hidden rounded-md border border-dashed px-4 py-5 text-center",
         isError
           ? "border-red-500/25 bg-red-500/[0.04] text-red-700 dark:border-red-400/25 dark:bg-red-400/[0.06] dark:text-red-300"
           : "border-black/[0.08] bg-black/[0.025] text-muted-foreground dark:border-white/[0.1] dark:bg-white/[0.035]",
@@ -288,30 +289,26 @@ function ToolImageStatusCard(props: {
     >
       <div
         className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-md border bg-white/80 shadow-sm dark:bg-black/20",
+          "flex size-9 items-center justify-center",
+          "rounded-md border bg-white/80 shadow-sm dark:bg-black/20",
           isError ? "border-red-500/20" : "border-black/[0.06] dark:border-white/[0.08]",
         )}
       >
         <Icon
           className={cn(
-            "h-4 w-4",
+            "size-4",
             !isError && "animate-spin text-primary motion-reduce:animate-none",
           )}
         />
       </div>
       <div className="max-w-full space-y-1">
-        <div
-          className={cn(
-            "text-[calc(12px*var(--zone-font-scale,1))] font-medium",
-            !isError && "shimmer",
-          )}
-        >
+        <div className={cn("text-xs font-medium", !isError && "shimmer")}>
           {title ?? (isError ? t("chat.image.unavailable") : t("chat.image.loading"))}
         </div>
         {detail ? (
           <div
             className={cn(
-              "max-w-full truncate text-[calc(11px*var(--zone-font-scale,1))]",
+              "max-w-full truncate text-xs",
               isError ? "text-red-700/75 dark:text-red-200/75" : "text-muted-foreground",
             )}
             title={detail}
@@ -377,22 +374,28 @@ export function ToolResultImagePreview(props: {
     return (
       <button
         type="button"
-        className="group flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5 text-center text-muted-foreground transition-colors hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]"
+        className={cn(
+          "group flex min-h-28 w-full flex-col items-center justify-center gap-2",
+          "rounded-md border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5",
+          "text-center text-muted-foreground transition-colors",
+          "hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]",
+        )}
         onClick={() => setShouldLoad(true)}
         title={alt}
         aria-label={`${t("chat.image.load")} ${alt}`}
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-md border border-black/[0.06] bg-white/80 shadow-sm transition-colors group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]">
-          <Eye className="h-4 w-4" />
+        <div
+          className={cn(
+            "flex size-9 items-center justify-center",
+            "rounded-md border border-black/[0.06] bg-white/80 shadow-sm transition-colors",
+            "group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]",
+          )}
+        >
+          <Eye className="size-4" />
         </div>
         <div className="max-w-full space-y-1">
-          <div className="text-[calc(12px*var(--zone-font-scale,1))] font-medium">
-            {t("chat.image.clickToLoad")}
-          </div>
-          <div
-            className="max-w-full truncate text-[calc(11px*var(--zone-font-scale,1))]"
-            title={imageDetail}
-          >
+          <div className="text-xs font-medium">{t("chat.image.clickToLoad")}</div>
+          <div className="max-w-full truncate text-xs" title={imageDetail}>
             {imageDetail}
           </div>
         </div>
@@ -420,7 +423,7 @@ export function ToolResultImagePreview(props: {
           loading="lazy"
           decoding="async"
           className={cn(
-            "block max-h-[32rem] w-full rounded-md object-contain transition-opacity duration-200",
+            "block max-h-128 w-full rounded-md object-contain transition-opacity duration-200",
             imageStatus === "loaded"
               ? "opacity-100"
               : "pointer-events-none absolute inset-0 h-full max-h-none opacity-0",
@@ -437,7 +440,8 @@ export function ToolResultImagePreview(props: {
       <button
         type="button"
         className={cn(
-          "relative block w-full overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
+          "relative block w-full overflow-hidden rounded-md text-left",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
           canPreview ? "cursor-zoom-in" : "cursor-default",
         )}
         disabled={!canPreview}
@@ -585,13 +589,13 @@ function NativeDisplayImageTile(props: {
           className={cn(
             "block object-contain transition-opacity duration-200",
             isGallery
-              ? "absolute inset-0 h-full w-full p-1"
+              ? "absolute inset-0 size-full p-1"
               : isSvgImage
-                ? "h-auto max-h-[32rem] w-full max-w-full p-1"
-                : "h-auto max-h-[32rem] max-w-full",
+                ? "h-auto max-h-128 w-full max-w-full p-1"
+                : "h-auto max-h-128 max-w-full",
             imageStatus === "loaded"
               ? "opacity-100"
-              : "pointer-events-none absolute inset-0 h-full w-full max-h-none opacity-0",
+              : "pointer-events-none absolute inset-0 size-full max-h-none opacity-0",
           )}
           onLoad={() => setImageStatus("loaded")}
           onError={() => setImageStatus("error")}

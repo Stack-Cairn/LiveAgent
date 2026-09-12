@@ -3,6 +3,9 @@
   "private": true,
   "packageManager": "pnpm@10.32.1",
   "scripts": {
+    "format": "biome format --write crates/agent-ui/src crates/agent-gui/src crates/agent-gateway/web/src",
+    "lint": "biome check crates/agent-ui/src crates/agent-gui/src crates/agent-gateway/web/src --max-diagnostics=none",
+    "lint:fix": "biome check --write crates/agent-ui/src crates/agent-gui/src crates/agent-gateway/web/src --max-diagnostics=none",
     "build:gui": "pnpm --filter liveagent build",
     "build:webui": "pnpm --filter @liveagent/gateway-webui build",
     "dev:stack": "node scripts/dev-stack.mjs start",
@@ -21,6 +24,8 @@
     "lint:ui": "pnpm --filter @liveagent/ui lint",
     "lint:gui": "pnpm --filter liveagent lint",
     "lint:webui": "pnpm --filter @liveagent/gateway-webui lint",
+    "typecheck:gui": "pnpm --filter liveagent typecheck",
+    "typecheck:webui": "pnpm --filter @liveagent/gateway-webui typecheck",
     "test:gui": "pnpm --filter liveagent test:frontend",
     "test:webui": "pnpm --filter @liveagent/gateway-webui test"
   },
@@ -49,6 +54,7 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.15",
     "@babel/parser": "7.29.8",
     "esbuild": "0.28.2"
   }

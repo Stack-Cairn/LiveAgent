@@ -9,6 +9,7 @@
  * 没有事件时回落到从消息推导的降级账本——结构完整、时间为空，甘特图锁在 sequence。
  */
 
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TrajectoryHost } from "../../contracts/trajectory";
 import { useLocale } from "../../i18n/index";
@@ -439,7 +440,7 @@ export function TrajectoryView(props: {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         {t("trajectory.loading")}
       </div>
     );
@@ -470,7 +471,10 @@ export function TrajectoryView(props: {
         <div className="shrink-0 border-b border-border/60 px-3 py-1.5 text-center">
           <button
             type="button"
-            className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+            className={cn(
+              "rounded px-2 py-1 text-xs text-muted-foreground",
+              "hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60",
+            )}
             disabled={loadingMore}
             onClick={() => void loadEarlier()}
           >
@@ -480,7 +484,7 @@ export function TrajectoryView(props: {
       )}
 
       {notice !== null && (
-        <p className="shrink-0 border-b border-border/60 bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground">
+        <p className="shrink-0 border-b border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
           {notice}
         </p>
       )}

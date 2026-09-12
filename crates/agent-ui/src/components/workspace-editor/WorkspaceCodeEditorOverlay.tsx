@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -864,7 +865,9 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     <div
       ref={overlayRef}
       className={cn(
-        "workspace-code-editor-overlay absolute inset-0 flex min-h-0 min-w-0 transform-gpu flex-col overflow-hidden border-r border-border bg-background transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+        "workspace-code-editor-overlay absolute inset-0 flex min-h-0 min-w-0 transform-gpu",
+        "flex-col overflow-hidden border-r border-border bg-background",
+        "transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
         workspaceOverlayStackClassName,
         isVisible
           ? "pointer-events-auto translate-x-0 opacity-100 shadow-2xl"
@@ -872,13 +875,18 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       )}
     >
       <WorkspaceOverlayTitleBar />
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-muted/45 px-3">
-        <FilePenLine className="h-4 w-4 shrink-0 text-primary" />
+      <div
+        className={cn(
+          "flex h-11 shrink-0 items-center gap-2",
+          "border-b border-border bg-muted/45 px-3",
+        )}
+      >
+        <FilePenLine className="size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceEditor.title")}
           </div>
-          <div className="truncate text-[11px] text-muted-foreground">
+          <div className="truncate text-xs text-muted-foreground">
             {activeTab ? activeTab.path : t("workspaceEditor.empty")}
           </div>
         </div>
@@ -894,27 +902,27 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
             onClick={() => activeTab && void saveTab(activeTab.key)}
           >
             {activeTab?.status === "saving" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Save className="h-4 w-4" />
+              <Save className="size-4" />
             )}
           </IconButton>
           <IconButton label={t("workspaceEditor.find")} disabled={!activeTab} onClick={showFind}>
-            <Search className="h-4 w-4" />
+            <Search className="size-4" />
           </IconButton>
           <IconButton
             label={t("workspaceEditor.replace")}
             disabled={!activeTab}
             onClick={showReplace}
           >
-            <Replace className="h-4 w-4" />
+            <Replace className="size-4" />
           </IconButton>
           <IconButton
             label={t("workspaceEditor.reload")}
             disabled={!activeTab || isOpening}
             onClick={() => activeTab && requestReloadTab(activeTab.key)}
           >
-            <RefreshCw className={cn("h-4 w-4", isOpening && "animate-spin")} />
+            <RefreshCw className={cn("size-4", isOpening && "animate-spin")} />
           </IconButton>
           {canPreviewActiveTab && activeTab ? (
             <IconButton
@@ -928,23 +936,29 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
                 })
               }
             >
-              <Eye className="h-4 w-4" />
+              <Eye className="size-4" />
             </IconButton>
           ) : null}
           <IconButton label={t("workspaceEditor.close")} onClick={hideOverlay}>
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </IconButton>
         </div>
       </div>
 
-      <div className="flex h-10 shrink-0 items-end gap-1 overflow-x-auto border-b border-border bg-background px-2 pt-1">
+      <div
+        className={cn(
+          "flex h-10 shrink-0 items-end gap-1 overflow-x-auto",
+          "border-b border-border bg-background px-2 pt-1",
+        )}
+      >
         {tabs.map((tab) => {
           const dirty = tab.content !== tab.savedContent;
           return (
             <div
               key={tab.key}
               className={cn(
-                "group flex h-8 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2 text-xs transition-colors",
+                "group flex h-8 max-w-56 shrink-0 items-center gap-1.5",
+                "rounded-t-md border border-b-0 px-2 text-xs transition-colors",
                 tab.key === activeKey
                   ? "border-border bg-muted text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -957,25 +971,28 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
                 onClick={() => setActiveKey(tab.key)}
               >
                 {tab.status === "conflict" ? (
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
                 ) : tab.remote ? (
-                  <Cloud className="h-3.5 w-3.5 shrink-0 text-sky-500" />
+                  <Cloud className="size-3.5 shrink-0 text-sky-500" />
                 ) : (
-                  <FilePenLine className="h-3.5 w-3.5 shrink-0" />
+                  <FilePenLine className="size-3.5 shrink-0" />
                 )}
                 <span className="min-w-0 truncate">{basename(tab.path)}</span>
-                {dirty ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /> : null}
+                {dirty ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
               </button>
               <button
                 type="button"
-                className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/75 hover:bg-background hover:text-foreground"
+                className={cn(
+                  "ml-0.5 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/75",
+                  "hover:bg-background hover:text-foreground",
+                )}
                 title={t("workspaceEditor.closeTab")}
                 onClick={(event) => {
                   event.stopPropagation();
                   requestCloseTab(tab.key);
                 }}
               >
-                <X className="h-3 w-3" />
+                <X className="size-3" />
               </button>
             </div>
           );
@@ -983,13 +1000,18 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       </div>
 
       {globalError || activeTab?.error ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300",
+          )}
+        >
+          <AlertTriangle className="size-4 shrink-0" />
           <div className="min-w-0 flex-1 truncate">{activeTab?.error ?? globalError}</div>
           {activeTab?.status === "conflict" ? (
             <button
               type="button"
-              className="rounded border border-amber-500/30 px-2 py-1 text-[11px] font-medium hover:bg-amber-500/10"
+              className="rounded border border-amber-500/30 px-2 py-1 text-xs font-medium hover:bg-amber-500/10"
               onClick={() => requestReloadTab(activeTab.key)}
             >
               {t("workspaceEditor.reloadFromDisk")}
@@ -1002,26 +1024,35 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       <div className="relative min-h-0 flex-1 bg-background" onContextMenu={openEditorContextMenu}>
         <div ref={containerRef} className={cn("absolute inset-0", !activeTab && "hidden")} />
         {!activeTab ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
+          <EmptyState variant="workspace">
             {isOpening ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="size-5 animate-spin" />
             ) : (
-              <FilePenLine className="h-6 w-6" />
+              <FilePenLine className="size-6" />
             )}
             <div>{isOpening ? t("workspaceEditor.opening") : t("workspaceEditor.emptyHint")}</div>
             {globalError ? (
-              <div className="max-w-md rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              <div
+                className={cn(
+                  "max-w-md rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2",
+                  "text-xs text-destructive",
+                )}
+              >
                 {globalError}
               </div>
             ) : null}
-          </div>
+          </EmptyState>
         ) : null}
       </div>
 
       {contextMenu ? (
         // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
         <div
-          className="editor-context-menu absolute z-50 w-[220px] overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-sm text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+          className={cn(
+            "origin-top-left absolute z-50 w-220px overflow-hidden",
+            "rounded-xl border border-border/60 bg-popover/80 p-1",
+            "text-sm text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]",
+          )}
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}
@@ -1098,7 +1129,12 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         </div>
       ) : null}
 
-      <div className="flex h-7 shrink-0 items-center gap-3 border-t border-border bg-muted/45 px-3 text-[11px] text-muted-foreground">
+      <div
+        className={cn(
+          "flex h-7 shrink-0 items-center gap-3",
+          "border-t border-border bg-muted/45 px-3 text-xs text-muted-foreground",
+        )}
+      >
         <span className="truncate">
           {activeTab ? dirname(activeTab.path) || "/" : t("workspaceEditor.noFile")}
         </span>
@@ -1157,17 +1193,21 @@ function ContextMenuItem(props: {
     <button
       type="button"
       role="menuitem"
-      className="flex h-[30px] w-full items-center gap-2.5 rounded-lg px-2 text-left text-[13px] text-popover-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none"
+      className={cn(
+        "flex h-30px w-full items-center gap-2.5 rounded-lg px-2",
+        "text-left text-sm text-popover-foreground/90 transition-colors",
+        "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none",
+      )}
       onClick={props.onClick}
     >
       {Icon ? (
-        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
       ) : (
-        <span className="h-3.5 w-3.5 shrink-0" />
+        <span className="size-3.5 shrink-0" />
       )}
       <span className="min-w-0 flex-1 truncate">{props.label}</span>
       {props.shortcut ? (
-        <kbd className="shrink-0 text-[11px] tracking-wide text-muted-foreground/60">
+        <kbd className="shrink-0 text-xs tracking-wide text-muted-foreground/60">
           {props.shortcut}
         </kbd>
       ) : null}
@@ -1189,7 +1229,10 @@ function IconButton(props: {
   return (
     <button
       type="button"
-      className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+      className={cn(
+        "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+        "hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+      )}
       title={label}
       aria-label={label}
       disabled={disabled}

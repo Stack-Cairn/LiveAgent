@@ -1,0 +1,1355 @@
+/* Shared style values. Typography uses Tailwind rem scales; other values retain existing units.
+ * Standard py-*, px-*, gap-*, w-* and h-* utilities use --spacing.
+ * See docs/ui-refactor/ui-style-variables.md for temporary migration notes. */
+
+@theme {
+  --spacing: 0.25rem;
+  /* Compact badges, counts and key legends. Other UI text uses Tailwind defaults. */
+  --text-tiny: 0.625rem;
+  --text-tiny--line-height: 1.2;
+  /* Variant and prose mono utilities follow the user-configurable code font. */
+  --font-mono: var(--code-font-family);
+}
+
+/* Existing application colors, shared by the GUI and gateway. */
+@theme inline {
+  --radius-xs: calc(var(--radius) - var(--radius-6px));
+  --radius-sm: calc(var(--radius) - var(--radius-4px));
+  --radius-md: calc(var(--radius) - var(--radius-2px));
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + var(--radius-4px));
+  --radius-2xl: calc(var(--radius) + var(--radius-8px));
+  --radius-3xl: calc(var(--radius) + var(--radius-12px));
+  --radius-4xl: calc(var(--radius) + var(--radius-16px));
+  --color-ui-2a2a2a: var(--ui-color-2a2a2a);
+  --color-ui-4096ff: var(--ui-color-4096ff);
+  --color-ui-1677ff: var(--ui-color-1677ff);
+  --color-ui-0958d9: var(--ui-color-0958d9);
+  --color-ui-e81123: var(--ui-color-e81123);
+}
+
+@theme inline {
+  --shadow-ui-composerattachmentcard-1: inset 0 var(--spacing-1px) 0
+    color-mix(in oklab, var(--color-white) 64%, transparent);
+  --shadow-ui-composerattachmentcard-2: inset 0 var(--spacing-1px) 0
+    color-mix(in oklab, var(--color-white) 5.5%, transparent);
+  --shadow-ui-contextcheckpointcard-3:
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 4%, transparent),
+    0 var(--spacing-4px) var(--spacing-12px) color-mix(in oklab, var(--color-black) 3%, transparent);
+  --shadow-ui-contextcheckpointcard-4:
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 20%, transparent),
+    0 var(--spacing-4px) var(--spacing-12px)
+    color-mix(in oklab, var(--color-black) 15%, transparent);
+  --shadow-ui-editdiffview-5: 0 var(--spacing-5px) var(--spacing-18px) var(--spacing-minus-14px)
+    hsl(var(--foreground) / 0.28);
+  --shadow-ui-filedropoverlay-6:
+    0 var(--spacing-24px) var(--spacing-60px) var(--spacing-minus-20px)
+    color-mix(in oklab, var(--color-black) 25%, transparent),
+    0 var(--spacing-8px) var(--spacing-20px) var(--spacing-minus-12px)
+    color-mix(in oklab, var(--color-black) 15%, transparent);
+  --shadow-ui-filedropoverlay-7:
+    0 var(--spacing-24px) var(--spacing-60px) var(--spacing-minus-20px)
+    color-mix(in oklab, var(--color-black) 70%, transparent),
+    0 var(--spacing-8px) var(--spacing-20px) var(--spacing-minus-12px)
+    color-mix(in oklab, var(--color-black) 50%, transparent);
+  --shadow-editor-context-menu: 0 var(--spacing-20px) var(--spacing-60px) var(--spacing-minus-20px)
+    var(--ui-color-rgba-15-23-42-0p35);
+  --shadow-ui-planmodecard-9:
+    0 var(--spacing-1px) var(--spacing-2px) var(--spacing-minus-1px)
+    var(--ui-color-rgba-15-23-42-0p07),
+    0 var(--spacing-14px) var(--spacing-32px) var(--spacing-minus-26px)
+    var(--ui-color-rgba-2-132-199-0p55);
+  --shadow-ui-planmodecard-10:
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 6%, transparent),
+    0 var(--spacing-14px) var(--spacing-32px) var(--spacing-minus-24px)
+    color-mix(in oklab, var(--color-black) 70%, transparent);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-planmodecard-11: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 4%, transparent);
+  --shadow-ui-planmodecard-12: var(--spacing-2px) 0 var(--spacing-12px) var(--spacing-minus-2px)
+    var(--ui-color-rgba-2-132-199-0p5);
+  --shadow-ui-planmodecard-13: 0 var(--spacing-1px) var(--spacing-2px) var(--spacing-minus-1px)
+    var(--ui-color-rgba-15-23-42-0p25);
+  --shadow-ui-taskprogressindicator-14:
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-black) 7%, transparent),
+    0 var(--spacing-1px) var(--spacing-2px) var(--spacing-minus-1px)
+    color-mix(in oklab, var(--color-black) 8%, transparent),
+    0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-16px)
+    var(--ui-color-rgba-15-23-42-0p38);
+  --shadow-ui-taskprogressindicator-15:
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-white) 12%, transparent),
+    0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-16px)
+    color-mix(in oklab, var(--color-black) 72%, transparent);
+  --shadow-ui-taskprogressindicator-16:
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-black) 7%, transparent),
+    0 var(--spacing-2px) var(--spacing-4px) var(--spacing-minus-2px)
+    color-mix(in oklab, var(--color-black) 8%, transparent),
+    0 var(--spacing-16px) var(--spacing-40px) var(--spacing-minus-20px)
+    var(--ui-color-rgba-15-23-42-0p45);
+  --shadow-ui-taskprogressindicator-17:
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-white) 12%, transparent),
+    0 var(--spacing-16px) var(--spacing-40px) var(--spacing-minus-20px)
+    color-mix(in oklab, var(--color-black) 80%, transparent);
+  --shadow-ui-toolapprovalbar-18:
+    0 var(--spacing-12px) var(--spacing-40px) var(--spacing-minus-14px)
+    var(--ui-color-rgba-15-23-42-0p22),
+    0 var(--spacing-2px) var(--spacing-6px) var(--spacing-minus-2px)
+    var(--ui-color-rgba-15-23-42-0p08),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 74%, transparent);
+  --shadow-ui-toolapprovalbar-19:
+    0 var(--spacing-12px) var(--spacing-40px) var(--spacing-minus-14px)
+    color-mix(in oklab, var(--color-black) 72%, transparent),
+    0 var(--spacing-2px) var(--spacing-6px) var(--spacing-minus-2px)
+    color-mix(in oklab, var(--color-black) 42%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
+  --shadow-ui-userattachmentcards-20:
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 6%, transparent),
+    0 var(--spacing-1px) var(--spacing-2px) color-mix(in oklab, var(--color-black) 4%, transparent);
+  --shadow-ui-userattachmentcards-21: 0 var(--spacing-2px) var(--spacing-8px)
+    color-mix(in oklab, var(--color-black) 10%, transparent);
+  --shadow-ui-clarifypanel-22:
+    0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-18px)
+    var(--ui-color-rgba-15-23-42-0p24),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 72%, transparent);
+  --shadow-ui-clarifypanel-23:
+    0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-18px)
+    color-mix(in oklab, var(--color-black) 72%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
+  --shadow-ui-hubchrome-24:
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent) inset,
+    0 var(--spacing-6px) var(--spacing-22px) var(--spacing-minus-14px)
+    var(--ui-color-rgba-15-23-42-0p18);
+  --shadow-ui-hubchrome-25:
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 6%, transparent) inset,
+    0 var(--spacing-6px) var(--spacing-22px) var(--spacing-minus-14px)
+    color-mix(in oklab, var(--color-black) 55%, transparent);
+  --shadow-ui-localtunnelpanel-26: 0 var(--spacing-1px) var(--spacing-2px)
+    color-mix(in oklab, var(--color-black) 4%, transparent);
+  --shadow-ui-localtunnelpanel-27: 0 var(--spacing-3px) var(--spacing-10px)
+    color-mix(in oklab, var(--color-black) 7%, transparent);
+  --shadow-ui-localtunnelpanel-28:
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent),
+    0 var(--spacing-1px) var(--spacing-2px) color-mix(in oklab, var(--color-black) 5%, transparent);
+  --shadow-ui-localtunnelpanel-29:
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent),
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 5%, transparent);
+  --shadow-ui-sshtunnelpanel-30:
+    0 var(--spacing-18px) var(--spacing-46px) var(--spacing-minus-24px)
+    var(--ui-color-hsl-160-84-25-0p42),
+    0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-18px)
+    color-mix(in oklab, var(--color-black) 32%, transparent);
+  --shadow-ui-commitcomposer-31: 0 0 0 var(--spacing-3px) hsl(var(--primary) / 0.08);
+  --shadow-ui-dockintentoverlay-33: inset 0 0 0 var(--spacing-1px) var(--color-background);
+  --shadow-ui-workspacesftppanel-34:
+    0 var(--spacing-18px) var(--spacing-44px) var(--spacing-minus-14px)
+    color-mix(in oklab, var(--color-black) 28%, transparent),
+    0 var(--spacing-2px) var(--spacing-10px) color-mix(in oklab, var(--color-black) 6%, transparent);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-chatcomposerbar-35: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 56%, transparent);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-chatcomposerbar-36: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 5%, transparent);
+  --shadow-ui-chatcomposerbar-37:
+    0 var(--spacing-2px) var(--spacing-10px) var(--spacing-minus-4px)
+    var(--ui-color-rgba-15-23-42-0p45),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 85%, transparent);
+  --shadow-ui-chatcomposerbar-38:
+    0 var(--spacing-2px) var(--spacing-10px) var(--spacing-minus-4px)
+    color-mix(in oklab, var(--color-black) 80%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 10%, transparent);
+  /* biome-ignore format: Tailwind shadow parsing requires whitespace on one line. */
+  --shadow-ui-chatcomposerbar-39: 0 var(--spacing-18px) var(--spacing-44px) var(--spacing-minus-34px) color-mix(in oklch, var(--foreground) 42%, transparent);
+  /* biome-ignore format: Tailwind shadow parsing requires whitespace on one line. */
+  --shadow-ui-chatcomposerbar-40: 0 var(--spacing-20px) var(--spacing-48px) var(--spacing-minus-34px) color-mix(in oklch, var(--foreground) 48%, transparent);
+  --shadow-ui-chatcomposerbar-41: 0 0 0 var(--spacing-1p5px)
+    color-mix(in oklab, var(--color-white) 95%, transparent);
+  --shadow-ui-chatcomposerbar-42: 0 0 0 var(--spacing-1p5px) var(--ui-color-rgba-20-22-28-0p9);
+  --shadow-ui-floornavrail-43: 0 var(--spacing-12px) var(--spacing-32px) var(--spacing-minus-16px)
+    var(--ui-color-rgba-15-23-42-0p28);
+  --shadow-ui-floornavrail-44: 0 var(--spacing-14px) var(--spacing-40px) var(--spacing-minus-20px)
+    var(--ui-color-rgba-15-23-42-0p48);
+  --shadow-ui-mcpregistrybrowser-45: var(--spacing-minus-18px) 0 var(--spacing-45px)
+    var(--spacing-minus-28px) var(--ui-color-rgba-15-23-42-0p45);
+  --shadow-ui-mcpregistrybrowser-46: var(--spacing-minus-18px) 0 var(--spacing-45px)
+    var(--spacing-minus-28px) color-mix(in oklab, var(--color-black) 70%, transparent);
+  --shadow-settings-surface: 0 var(--spacing-1px) var(--spacing-2px) hsl(var(--foreground) / 0.02);
+  --shadow-ui-memorysettingsdrawer-50:
+    0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-rgba-15-23-42-0p08),
+    0 var(--spacing-4px) var(--spacing-10px) var(--spacing-minus-6px)
+    var(--ui-color-rgba-15-23-42-0p18);
+  --shadow-ui-skillshubpage-51: 0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-12px)
+    var(--ui-color-rgba-15-23-42-0p35);
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-ui-windowstitlebar-52: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 70%, transparent);
+  --shadow-ui-agentselector-53: 0 0 0 var(--spacing-3px) var(--ui-color-rgb-16-185-129-0p12);
+  --shadow-ui-agentselector-54: 0 0 0 var(--spacing-3px) var(--ui-color-rgb-244-63-94-0p1);
+}
+
+@theme static {
+  --color-status-integrity-start: rgba(41, 255, 214, 0.96);
+  --color-status-integrity-end: rgba(20, 184, 255, 0.96);
+  --color-status-integrity-track: rgba(30, 39, 68, 0.88);
+  --spacing-0p8px: 0.8px;
+  --spacing-1ch: 1ch;
+  --spacing-1em: 1em;
+  --spacing-1p5px: 1.5px;
+  --spacing-1p6px: 1.6px;
+  --spacing-1px: 1px;
+  --spacing-2em: 2em;
+  --spacing-2p5px: 2.5px;
+  --spacing-2px: 2px;
+  --spacing-3ch: 3ch;
+  --spacing-3px: 3px;
+  --spacing-4px: 4px;
+  --spacing-5px: 5px;
+  --spacing-6px: 6px;
+  --spacing-7p5px: 7.5px;
+  --spacing-7px: 7px;
+  --spacing-8px: 8px;
+  --spacing-9px: 9px;
+  --spacing-10px: 10px;
+  --spacing-11px: 11px;
+  --spacing-12px: 12px;
+  --spacing-13px: 13px;
+  --spacing-14px: 14px;
+  --spacing-15px: 15px;
+  --spacing-16px: 16px;
+  --spacing-17px: 17px;
+  --spacing-18px: 18px;
+  --spacing-20px: 20px;
+  --spacing-22px: 22px;
+  --spacing-23px: 23px;
+  --spacing-24px: 24px;
+  --spacing-26px: 26px;
+  --spacing-27px: 27px;
+  --spacing-28px: 28px;
+  --spacing-30dvh: 30dvh;
+  --spacing-30px: 30px;
+  --spacing-32px: 32px;
+  --spacing-33px: 33px;
+  --spacing-34dvh: 34dvh;
+  --spacing-34px: 34px;
+  --spacing-35px: 35px;
+  --spacing-36px: 36px;
+  --spacing-36svh: 36svh;
+  --spacing-37px: 37px;
+  --spacing-38px: 38px;
+  --spacing-38vh: 38vh;
+  --spacing-40px: 40px;
+  --spacing-42px: 42px;
+  --spacing-42svh: 42svh;
+  --spacing-42vh: 42vh;
+  --spacing-44px: 44px;
+  --spacing-46px: 46px;
+  --spacing-48px: 48px;
+  --spacing-50em: 50em;
+  --spacing-50vh: 50vh;
+  --spacing-52px: 52px;
+  --spacing-54px: 54px;
+  --spacing-55px: 55px;
+  --spacing-56px: 56px;
+  --spacing-58px: 58px;
+  --spacing-60px: 60px;
+  --spacing-61px: 61px;
+  --spacing-63px: 63px;
+  --spacing-66px: 66px;
+  --spacing-66vh: 66vh;
+  --spacing-70px: 70px;
+  --spacing-72px: 72px;
+  --spacing-72vh: 72vh;
+  --spacing-74dvh: 74dvh;
+  --spacing-74px: 74px;
+  --spacing-76px: 76px;
+  --spacing-78vh: 78vh;
+  --spacing-80dvh: 80dvh;
+  --spacing-80px: 80px;
+  --spacing-82px: 82px;
+  --spacing-82vw: 82vw;
+  --spacing-84px: 84px;
+  --spacing-85dvh: 85dvh;
+  --spacing-86dvh: 86dvh;
+  --spacing-86px: 86px;
+  --spacing-86vw: 86vw;
+  --spacing-88dvh: 88dvh;
+  --spacing-88px: 88px;
+  --spacing-89px: 89px;
+  --spacing-90dvh: 90dvh;
+  --spacing-92dvh: 92dvh;
+  --spacing-92px: 92px;
+  --spacing-92vh: 92vh;
+  --spacing-92vw: 92vw;
+  --spacing-96px: 96px;
+  --spacing-100dvh: 100dvh;
+  --spacing-100px: 100px;
+  --spacing-100svh: 100svh;
+  --spacing-100vh: 100vh;
+  --spacing-100vw: 100vw;
+  --spacing-108px: 108px;
+  --spacing-112px: 112px;
+  --spacing-120px: 120px;
+  --spacing-126px: 126px;
+  --spacing-130px: 130px;
+  --spacing-132px: 132px;
+  --spacing-140px: 140px;
+  --spacing-154px: 154px;
+  --spacing-160px: 160px;
+  --spacing-168px: 168px;
+  --spacing-170px: 170px;
+  --spacing-172px: 172px;
+  --spacing-176px: 176px;
+  --spacing-180px: 180px;
+  --spacing-188px: 188px;
+  --spacing-196px: 196px;
+  --spacing-200px: 200px;
+  --spacing-206px: 206px;
+  --spacing-210px: 210px;
+  --spacing-220px: 220px;
+  --spacing-228px: 228px;
+  --spacing-232px: 232px;
+  --spacing-240px: 240px;
+  --spacing-250px: 250px;
+  --spacing-260px: 260px;
+  --spacing-272px: 272px;
+  --spacing-280px: 280px;
+  --spacing-300px: 300px;
+  --spacing-310px: 310px;
+  --spacing-320px: 320px;
+  --spacing-330px: 330px;
+  --spacing-340px: 340px;
+  --spacing-360px: 360px;
+  --spacing-380px: 380px;
+  --spacing-390px: 390px;
+  --spacing-400px: 400px;
+  --spacing-410px: 410px;
+  --spacing-420px: 420px;
+  --spacing-438px: 438px;
+  --spacing-440px: 440px;
+  --spacing-460px: 460px;
+  --spacing-500px: 500px;
+  --spacing-520px: 520px;
+  --spacing-540px: 540px;
+  --spacing-560px: 560px;
+  --spacing-600px: 600px;
+  --spacing-620px: 620px;
+  --spacing-640px: 640px;
+  --spacing-650px: 650px;
+  --spacing-720px: 720px;
+  --spacing-760px: 760px;
+  --spacing-768px: 768px;
+  --spacing-860px: 860px;
+  --spacing-920px: 920px;
+  --spacing-940px: 940px;
+  --spacing-948px: 948px;
+  --spacing-980px: 980px;
+  --spacing-1120px: 1120px;
+  --spacing-1320px: 1320px;
+  --spacing-1400px: 1400px;
+  --spacing-1912px: 1912px;
+  --spacing-minus-0p05em: -0.05em;
+  --spacing-minus-0p8px: -0.8px;
+  --spacing-minus-1px: -1px;
+  --spacing-minus-3px: -3px;
+  --spacing-minus-4px: -4px;
+  --spacing-minus-5p33px: -5.33px;
+  --spacing-minus-5px: -5px;
+  --spacing-minus-6px: -6px;
+  --spacing-minus-7px: -7px;
+  --spacing-minus-8px: -8px;
+  --spacing-minus-10px: -10px;
+  --spacing-minus-14px: -14px;
+  --spacing-minus-18px: -18px;
+  --spacing-minus-20px: -20px;
+  --spacing-minus-24px: -24px;
+  --spacing-minus-54px: -54px;
+  --spacing-minus-60px: -60px;
+  --spacing-minus-64px: -64px;
+  --spacing-minus-72px: -72px;
+  --spacing-minus-80px: -80px;
+  --spacing-minus-100px: -100px;
+  --spacing-minus-120px: -120px;
+  --spacing-minus-140px: -140px;
+  --leading-0p8: 0.8;
+  --leading-0p92: 0.92;
+  --leading-1em: 1em;
+  --leading-1p1: 1.1;
+  --leading-1p2: 1.2;
+  --leading-1p3: 1.3;
+  --leading-1p4: 1.4;
+  --leading-1p5: 1.5;
+  --leading-1p6: 1.6;
+  --leading-1p7: 1.7;
+  --leading-1p12: 1.12;
+  --leading-1p15: 1.15;
+  --leading-1p22: 1.22;
+  --leading-1p25: 1.25;
+  --leading-1p25rem: 1.25rem;
+  --leading-1p35: 1.35;
+  --leading-1p45: 1.45;
+  --leading-1p55: 1.55;
+  --leading-1p62: 1.62;
+  --leading-1p65: 1.65;
+  --leading-1p72: 1.72;
+  --leading-1p625: 1.625;
+  --leading-1rem: 1rem;
+  --leading-13px: 13px;
+  --leading-14px: 14px;
+  --leading-18px: 18px;
+  --leading-20px: 20px;
+  --leading-22px: 22px;
+  --leading-26px: 26px;
+  --leading-30px: 30px;
+  --radius-1px: 1px;
+  --radius-3px: 3px;
+  --radius-4px: 4px;
+  --radius-6px: 6px;
+  --radius-7px: 7px;
+  --radius-8px: 8px;
+  --radius-9px: 9px;
+  --radius-10px: 10px;
+  --radius-11px: 11px;
+  --radius-12px: 12px;
+  --radius-13px: 13px;
+  --radius-14px: 14px;
+  --radius-16px: 16px;
+  --radius-18px: 18px;
+  --radius-20px: 20px;
+  --radius-22px: 22px;
+  --radius-24px: 24px;
+  --radius-28px: 28px;
+  --tracking-0p01em: 0.01em;
+  --tracking-0p2em: 0.2em;
+  --tracking-0p04em: 0.04em;
+  --tracking-0p05em: 0.05em;
+  --tracking-0p06em: 0.06em;
+  --tracking-0p08em: 0.08em;
+  --tracking-0p12em: 0.12em;
+  --tracking-0p16em: 0.16em;
+  --tracking-0p18em: 0.18em;
+  --tracking-minus-0p01em: -0.01em;
+  --tracking-minus-0p02em: -0.02em;
+  --tracking-minus-0p04em: -0.04em;
+  --tracking-minus-0p006em: -0.006em;
+  --tracking-minus-0p06em: -0.06em;
+  --tracking-minus-0p012em: -0.012em;
+  --tracking-minus-0p018em: -0.018em;
+  --tracking-minus-0p035em: -0.035em;
+}
+
+@theme inline {
+  --leading-scaled-22px: calc(var(--leading-22px) * var(--zone-font-scale, 1));
+  --leading-scaled-30px: calc(var(--leading-30px) * var(--zone-font-scale, 1));
+  --leading-scaled-26px: calc(var(--leading-26px) * var(--zone-font-scale, 1));
+  --leading-scaled-20px: calc(var(--leading-20px) * var(--zone-font-scale, 1));
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --app-font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --chat-font-family: "OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --code-font-family:
+      "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono",
+      monospace;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    /* Settings surfaces use a neutral scale so hierarchy does not inherit the
+       blue cast of the general-purpose muted token. */
+    --settings-rail: 0 0% 95.7%;
+    --settings-tile: 0 0% 96.5%;
+    --settings-tile-hover: 0 0% 94%;
+    --settings-active: 0 0% 88.5%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: var(--color-red-700);
+    --destructive-foreground: var(--color-white);
+    --success: var(--color-emerald-800);
+    --success-foreground: var(--color-white);
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.625rem;
+
+    /* Modal/popover portals share a plane so later nested portals stay interactive. */
+    --layer-content: 1;
+    --layer-raised: 10;
+    --layer-panel: 20;
+    --layer-popover: 10000;
+    --layer-modal: 10000;
+    --layer-toast: 10010;
+    --layer-critical: 10020;
+
+    /* Sidebar */
+    --sidebar-bg: 220 14% 96%;
+
+    /* Hub pages (MCP/Skills) canvas — in dark it sits below --background so
+         background-tinted glass panels read as elevated surfaces. */
+    --hub-canvas: var(--background);
+
+    /* Chip / pill buttons (MCP, Skills, 新对话) */
+    --chip-bg: 220 13% 91%;
+    --chip-bg-hover: 220 13% 86%;
+    /* Send button disabled */
+    --send-disabled-bg: 220 13% 91%;
+
+    /* Chat-specific tokens */
+    --chat-user-bg: 220 9% 91%;
+    --chat-user-fg: 222 84% 5%;
+    --chat-assistant-bg: 0 0% 100%;
+    --chat-assistant-fg: 222.2 84% 4.9%;
+    --chat-tool-bg: 0 0% 100%;
+    --chat-tool-border: 220 13% 91%;
+    --chat-thinking-bg: 220 14% 97%;
+    --chat-thinking-border: 220 13% 90%;
+    --chat-success: 152 60% 42%;
+    --chat-error: 0 72% 51%;
+    --chat-running: 252 56% 57%;
+
+    /* Tool card frosted glass tokens */
+    --tool-card-bg: 0 0% 100% / 0.72;
+    --tool-card-border: 0 0% 0% / 0.06;
+    --tool-bash-accent: 142 70% 45%;
+    --tool-file-accent: 220 70% 55%;
+    --tool-search-accent: 38 92% 50%;
+    --tool-list-accent: 262 52% 56%;
+
+    /* Context checkpoint tokens – macOS frosted glass */
+    --checkpoint-accent: 220 9% 46%;
+    --checkpoint-bg: 0 0% 100% / 0.72;
+    --checkpoint-border: 0 0% 0% / 0.06;
+    --checkpoint-icon-bg: 220 10% 95%;
+    --checkpoint-icon-fg: 220 9% 46%;
+
+    /* VS Code SCM graph reference colors */
+    --git-review-graph-ref-local: #0063d3;
+    --git-review-graph-ref-remote: #652d90;
+    --git-review-graph-ref-base: #ea5c00;
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    --background: 224 22% 9%;
+    --foreground: 210 30% 96%;
+
+    --card: 224 22% 10%;
+    --card-foreground: 210 30% 96%;
+
+    --popover: 224 20% 12%;
+    --popover-foreground: 210 30% 96%;
+
+    --primary: 210 30% 96%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 220 18% 17%;
+    --secondary-foreground: 210 30% 96%;
+
+    --muted: 220 18% 17%;
+    --muted-foreground: 215 18% 76%;
+
+    --settings-rail: 0 0% 0%;
+    --settings-tile: 224 18% 13%;
+    --settings-tile-hover: 224 16% 16%;
+    --settings-active: 0 0% 10%;
+
+    --accent: 220 18% 17%;
+    --accent-foreground: 210 30% 96%;
+
+    --destructive: var(--color-red-300);
+    --destructive-foreground: var(--color-red-950);
+    --success: var(--color-emerald-300);
+    --success-foreground: var(--color-emerald-950);
+
+    --border: 220 14% 26%;
+    --input: 220 14% 26%;
+    --ring: 212.7 26.8% 83.9%;
+
+    /* Chip / pill buttons (dark) */
+    --chip-bg: 220 16% 24%;
+    --chip-bg-hover: 220 16% 30%;
+    /* Send button disabled (dark) */
+    --send-disabled-bg: 220 16% 24%;
+
+    /* Hub pages canvas (dark) — deeper than --background for glass elevation */
+    --hub-canvas: 224 24% 6.5%;
+
+    /* Chat-specific tokens (dark) */
+    --sidebar-bg: 224 22% 11%;
+    --chat-user-bg: 220 14% 28%;
+    --chat-user-fg: 210 30% 96%;
+    --chat-assistant-bg: 224 22% 9%;
+    --chat-assistant-fg: 210 30% 96%;
+    --chat-tool-bg: 224 22% 9%;
+    --chat-tool-border: 220 14% 24%;
+    --chat-thinking-bg: 220 18% 13%;
+    --chat-thinking-border: 220 14% 22%;
+    --chat-success: 152 56% 52%;
+    --chat-error: 0 75% 65%;
+    --chat-running: 252 60% 70%;
+
+    /* Tool card frosted glass tokens (dark) */
+    --tool-card-bg: 0 0% 100% / 0.08;
+    --tool-card-border: 0 0% 100% / 0.14;
+    --tool-bash-accent: 142 60% 62%;
+    --tool-file-accent: 220 70% 72%;
+    --tool-search-accent: 38 90% 66%;
+    --tool-list-accent: 262 60% 74%;
+
+    /* Context checkpoint tokens – macOS frosted glass (dark) */
+    --checkpoint-accent: 220 12% 78%;
+    --checkpoint-bg: 0 0% 100% / 0.08;
+    --checkpoint-border: 0 0% 100% / 0.14;
+    --checkpoint-icon-bg: 220 12% 22%;
+    --checkpoint-icon-fg: 220 14% 76%;
+
+    /* VS Code SCM graph reference colors (dark) */
+    --git-review-graph-ref-local: #59a4f9;
+    --git-review-graph-ref-remote: #b180d7;
+    --git-review-graph-ref-base: #ea5c00;
+  }
+}
+
+@layer base {
+  :root {
+    /* color */
+    --ui-color-00000000: #00000000;
+    --ui-color-000: #000;
+    --ui-color-0b1017: #0b1017;
+    --ui-color-1d4ed8: #1d4ed8;
+    --ui-color-1e3a8a: #1e3a8a;
+    --ui-color-1e40af: #1e40af;
+    --ui-color-3b82f6: #3b82f6;
+    --ui-color-4c1d95: #4c1d95;
+    --ui-color-6d28d9: #6d28d9;
+    --ui-color-8b5cf6: #8b5cf6;
+    --ui-color-10b981: #10b981;
+    --ui-color-065f46: #065f46;
+    --ui-color-86d5b8: #86d5b8;
+    --ui-color-86efac: #86efac;
+    --ui-color-93b8f0: #93b8f0;
+    --ui-color-94b6ee: #94b6ee;
+    --ui-color-152a63: #152a63;
+    --ui-color-161d28: #161d28;
+    --ui-color-222b38: #222b38;
+    --ui-color-313d4f: #313d4f;
+    --ui-color-571f05: #571f05;
+    --ui-color-04422f: #04422f;
+    --ui-color-10161f: #10161f;
+    --ui-color-14532d: #14532d;
+    --ui-color-15803d: #15803d;
+    --ui-color-37156b: #37156b;
+    --ui-color-047857: #047857;
+    --ui-color-071226: #071226;
+    --ui-color-78350f: #78350f;
+    --ui-color-172554: #172554;
+    --ui-color-475569: #475569;
+
+    /* ui-color */
+    --ui-color-a7f3d0: #a7f3d0;
+    --ui-color-b6c2d4: #b6c2d4;
+    --ui-color-b7a6ee: #b7a6ee;
+    --ui-color-b7c2d1: #b7c2d1;
+    --ui-color-b45309: #b45309;
+    --ui-color-bbf7d0: #bbf7d0;
+    --ui-color-bfdbfe: #bfdbfe;
+    --ui-color-c9d3e0: #c9d3e0;
+    --ui-color-d1fae5: #d1fae5;
+    --ui-color-d6dde8: #d6dde8;
+    --ui-color-dbeafe: #dbeafe;
+    --ui-color-ddd6fe: #ddd6fe;
+    --ui-color-e2c078: #e2c078;
+    --ui-color-e9edf4: #e9edf4;
+    --ui-color-ede9fe: #ede9fe;
+    --ui-color-f59e0b: #f59e0b;
+    --ui-color-fde68a: #fde68a;
+    --ui-color-fdfdfe: #fdfdfe;
+    --ui-color-fef3c7: #fef3c7;
+    --ui-color-ffffff: #ffffff;
+
+    /* color */
+    --ui-color-hsl-0-72-50: hsl(0 72% 50%);
+    --ui-color-hsl-0-80-50-0p1: hsl(0 80% 50% / 0.1);
+    --ui-color-hsl-0-80-50-0p06: hsl(0 80% 50% / 0.06);
+    --ui-color-hsl-0-80-50-0p15: hsl(0 80% 50% / 0.15);
+    --ui-color-hsl-0-80-68: hsl(0 80% 68%);
+    --ui-color-hsl-32-80-50-0p14: hsl(32 80% 50% / 0.14);
+    --ui-color-hsl-32-80-64: hsl(32 80% 64%);
+    --ui-color-hsl-32-90-48: hsl(32 90% 48%);
+    --ui-color-hsl-32-90-48-0p1: hsl(32 90% 48% / 0.1);
+    --ui-color-hsl-38-92-50-0p08: hsl(38 92% 50% / 0.08);
+    --ui-color-hsl-142-72-42-0p09: hsl(142 72% 42% / 0.09);
+    --ui-color-hsl-160-84-39: hsl(160 84% 39%);
+    --ui-color-hsl-200-50-18-0p2: hsl(200 50% 18% / 0.2);
+    --ui-color-hsl-200-60-92-0p3: hsl(200 60% 92% / 0.3);
+    --ui-color-hsl-206-45-28-0p18: hsl(206 45% 28% / 0.18);
+    --ui-color-hsl-210-80-20-0p3: hsl(210 80% 20% / 0.3);
+    --ui-color-hsl-210-80-30-0p2: hsl(210 80% 30% / 0.2);
+    --ui-color-hsl-210-80-32-0p25: hsl(210 80% 32% / 0.25);
+    --ui-color-hsl-210-100-86-0p55: hsl(210 100% 86% / 0.55);
+    --ui-color-hsl-210-100-88-0p5: hsl(210 100% 88% / 0.5);
+    --ui-color-hsl-210-100-92-0p6: hsl(210 100% 92% / 0.6);
+    --ui-color-hsl-215-60-55-0p5: hsl(215 60% 55% / 0.5);
+    --ui-color-hsl-215-60-55-0p08: hsl(215 60% 55% / 0.08);
+    --ui-color-hsl-215-60-55-0p12: hsl(215 60% 55% / 0.12);
+    --ui-color-hsl-215-70-60-0p4: hsl(215 70% 60% / 0.4);
+    --ui-color-hsl-215-70-60-0p06: hsl(215 70% 60% / 0.06);
+    --ui-color-hsl-215-70-60-0p08: hsl(215 70% 60% / 0.08);
+    --ui-color-hsl-215-80-52: hsl(215 80% 52%);
+    --ui-color-hsl-215-80-52-0p1: hsl(215 80% 52% / 0.1);
+    --ui-color-hsl-215-80-60-0p14: hsl(215 80% 60% / 0.14);
+    --ui-color-hsl-215-80-70: hsl(215 80% 70%);
+    --ui-color-hsl-220-15-12-0p04: hsl(220 15% 12% / 0.04);
+    --ui-color-hsl-220-18-98-0p85: hsl(220 18% 98% / 0.85);
+    --ui-color-hsl-220-20-97: hsl(220 20% 97%);
+    --ui-color-hsl-220-22-10-0p04: hsl(220 22% 10% / 0.04);
+    --ui-color-hsl-220-22-10-0p08: hsl(220 22% 10% / 0.08);
+    --ui-color-hsl-220-22-10-0p12: hsl(220 22% 10% / 0.12);
+    --ui-color-hsl-220-22-10-0p16: hsl(220 22% 10% / 0.16);
+    --ui-color-hsl-220-22-10-0p18: hsl(220 22% 10% / 0.18);
+    --ui-color-hsl-220-60-60-0p08: hsl(220 60% 60% / 0.08);
+    --ui-color-hsl-222-18-14-0p55: hsl(222 18% 14% / 0.55);
+    --ui-color-hsl-224-18-14-0p5: hsl(224 18% 14% / 0.5);
+    --ui-color-hsl-224-20-8: hsl(224 20% 8%);
+    --ui-color-hsl-224-20-12-0p6: hsl(224 20% 12% / 0.6);
+    --ui-color-hsl-224-20-14-0p55: hsl(224 20% 14% / 0.55);
+    --ui-color-hsl-250-60-24-0p2: hsl(250 60% 24% / 0.2);
+    --ui-color-hsl-250-60-30-0p15: hsl(250 60% 30% / 0.15);
+    --ui-color-hsl-250-60-32-0p2: hsl(250 60% 32% / 0.2);
+    --ui-color-hsl-250-70-86-0p45: hsl(250 70% 86% / 0.45);
+    --ui-color-hsl-250-70-88-0p4: hsl(250 70% 88% / 0.4);
+    --ui-color-hsl-250-80-92-0p4: hsl(250 80% 92% / 0.4);
+    --ui-color-hsl-255-60-56: hsl(255 60% 56%);
+    --ui-color-hsl-255-60-56-0p1: hsl(255 60% 56% / 0.1);
+    --ui-color-hsl-255-60-60-0p14: hsl(255 60% 60% / 0.14);
+    --ui-color-hsl-255-60-72: hsl(255 60% 72%);
+    --ui-color-hsl-260-50-55-0p08: hsl(260 50% 55% / 0.08);
+    --ui-color-hsl-270-80-62-0p75: hsl(270 80% 62% / 0.75);
+    --ui-color-rgb-15-23-42-p2: rgb(15 23 42 / 0.2);
+    --ui-color-rgb-15-23-42-p16: rgb(15 23 42 / 0.16);
+    --ui-color-rgb-15-23-42-p26: rgb(15 23 42 / 0.26);
+    --ui-color-rgb-37-99-235-p22: rgb(37 99 235 / 0.22);
+    --ui-color-rgb-59-130-246-p28: rgb(59 130 246 / 0.28);
+    --ui-color-rgb-59-130-246-p45: rgb(59 130 246 / 0.45);
+    --ui-color-rgba-2-7-15-0p92: rgba(2, 7, 15, 0.92);
+    --ui-color-rgba-4-11-24-0p64: rgba(4, 11, 24, 0.64);
+    --ui-color-rgba-4-11-24-0p72: rgba(4, 11, 24, 0.72);
+    --ui-color-rgba-4-13-28-0p84: rgba(4, 13, 28, 0.84);
+    --ui-color-rgba-7-17-33-0p4: rgba(7, 17, 33, 0.4);
+    --ui-color-rgba-56-35-4-0p5: rgba(56, 35, 4, 0.5);
+    --ui-color-rgba-190-219-248-0p58: rgba(190, 219, 248, 0.58);
+    --ui-color-rgba-226-242-255-0p7: rgba(226, 242, 255, 0.7);
+    --ui-color-rgba-255-232-190-0p92: rgba(255, 232, 190, 0.92);
+
+    /* duration */
+    --ui-duration-100ms: 100ms;
+    --ui-duration-200ms: 200ms;
+    --ui-duration-20ms: 20ms;
+    --ui-duration-300ms: 300ms;
+    --ui-duration-40ms: 40ms;
+    --ui-duration-400ms: 400ms;
+    --ui-duration-500ms: 500ms;
+    --ui-duration-600ms: 600ms;
+    --ui-duration-60ms: 60ms;
+    --ui-duration-80ms: 80ms;
+    --ui-duration-120ms: 120ms;
+    --ui-duration-150ms: 150ms;
+    --ui-duration-160ms: 160ms;
+    --ui-duration-180ms: 180ms;
+    --ui-duration-220ms: 220ms;
+    --ui-duration-240ms: 240ms;
+    --ui-duration-250ms: 250ms;
+    --ui-duration-260ms: 260ms;
+    --ui-duration-280ms: 280ms;
+    --ui-duration-320ms: 320ms;
+    --ui-duration-350ms: 350ms;
+    --ui-duration-390ms: 390ms;
+    --ui-duration-550ms: 550ms;
+    --ui-duration-1ms: 1ms;
+    --ui-duration-1100ms: 1100ms;
+    --ui-duration-1200ms: 1200ms;
+    --ui-duration-1500ms: 1500ms;
+    --ui-duration-1600ms: 1600ms;
+    --ui-duration-1800ms: 1800ms;
+    --ui-duration-1450ms: 1450ms;
+    --ui-duration-1000ms: 1000ms;
+    --ui-duration-2400ms: 2400ms;
+    --ui-duration-2600ms: 2600ms;
+    --ui-duration-2800ms: 2800ms;
+    --ui-duration-2000ms: 2000ms;
+    --ui-duration-3400ms: 3400ms;
+    --ui-duration-6000ms: 6000ms;
+    --ui-duration-7000ms: 7000ms;
+    --ui-duration-9000ms: 9000ms;
+    --ui-duration-12000ms: 12000ms;
+    --ui-duration-18ms: 18ms;
+    --ui-duration-18000ms: 18000ms;
+    --ui-duration-20000ms: 20000ms;
+    --ui-duration-22000ms: 22000ms;
+    --ui-duration-24000ms: 24000ms;
+    --ui-duration-36ms: 36ms;
+    --ui-duration-50ms: 50ms;
+    --ui-duration-54ms: 54ms;
+    --ui-duration-70ms: 70ms;
+    --ui-duration-72ms: 72ms;
+    --ui-duration-90ms: 90ms;
+    --ui-duration-108ms: 108ms;
+    --ui-duration-126ms: 126ms;
+    --ui-duration-140ms: 140ms;
+    --ui-duration-360ms: 360ms;
+    --ui-duration-380ms: 380ms;
+    --ui-duration-420ms: 420ms;
+    --ui-duration-650ms: 650ms;
+    --ui-duration-minus-500ms: -500ms;
+    --ui-duration-minus-250ms: -250ms;
+    --ui-duration-minus-750ms: -750ms;
+    --ui-duration-minus-83ms: -83ms;
+    --ui-duration-minus-167ms: -167ms;
+    --ui-duration-minus-333ms: -333ms;
+    --ui-duration-minus-417ms: -417ms;
+    --ui-duration-minus-583ms: -583ms;
+    --ui-duration-minus-667ms: -667ms;
+    --ui-duration-minus-833ms: -833ms;
+    --ui-duration-minus-917ms: -917ms;
+    --ui-duration-minus-4000ms: -4000ms;
+    --ui-duration-minus-7000ms: -7000ms;
+
+    /* opacity */
+    --ui-opacity-0p4: 0.4;
+    --ui-opacity-0p5: 0.5;
+    --ui-opacity-0p6: 0.6;
+    --ui-opacity-0p8: 0.8;
+    --ui-opacity-0p9: 0.9;
+    --ui-opacity-0p15: 0.15;
+    --ui-opacity-0p18: 0.18;
+    --ui-opacity-0p22: 0.22;
+    --ui-opacity-0p26: 0.26;
+    --ui-opacity-0p35: 0.35;
+    --ui-opacity-0p42: 0.42;
+    --ui-opacity-0p54: 0.54;
+    --ui-opacity-0p55: 0.55;
+    --ui-opacity-0p72: 0.72;
+    --ui-opacity-0p82: 0.82;
+    --ui-opacity-0p85: 0.85;
+    --ui-opacity-0p95: 0.95;
+
+    /* tracking */
+
+    /* z-index */
+    --ui-z-index-2: 2;
+    --ui-z-index-3: 3;
+  }
+}
+
+/* Named formulas retain local font, popup, viewport and safe-area context. */
+@utility align-minus-0p05em {
+  vertical-align: var(--spacing-minus-0p05em);
+}
+
+@theme {
+  --text-underline-offset-3px: 3px;
+  --blur-1px: 1px;
+}
+
+@theme inline {
+  --spacing-dialog-36rem: min(36rem, calc(100% - 2rem));
+  --spacing-panel-36rem: min(100%, 36rem);
+  --grid-template-columns-activity-dots: repeat(3, var(--spacing-4px));
+  --spacing-viewport-inset-5rem: calc(var(--spacing-100vw) - 5rem);
+  --spacing-popover-26rem: min(26rem, var(--available-height, 26rem));
+  --spacing-popover-25rem: min(25rem, calc(var(--spacing-100vw) - 1rem));
+  --spacing-dialog-640px: min(var(--spacing-640px), calc(var(--spacing-100vh) - 2rem));
+  --spacing-user-bubble-gui: min(85%, calc(var(--spacing-50em) + 2.5rem));
+  --spacing-bleed-0p75rem: calc(100% + 0.75rem);
+  --spacing-image-preview-height: min(var(--spacing-78vh), var(--spacing-760px));
+  --spacing-image-preview-width: min(var(--spacing-82vw), var(--spacing-1120px));
+  --spacing-panel-28rem: min(28rem, calc(100% - 1.5rem));
+  --transition-duration-220ms: 220ms;
+  --spacing-viewport-inset-1p5rem: calc(var(--spacing-100vw) - 1.5rem);
+  --spacing-notification: min(18rem, calc(var(--spacing-100vw) - 2rem));
+  --spacing-popover-320px: min(var(--spacing-320px), calc(var(--spacing-100vw) - 3rem));
+  --spacing-popover-300px: min(var(--spacing-300px), var(--spacing-42vh));
+  --spacing-popover-360px: min(var(--spacing-360px), calc(var(--spacing-100vw) - 2rem));
+  --spacing-third-minus-gap: calc(33.333% - var(--spacing-5p33px));
+  --spacing-viewport-inset-2rem: calc(var(--spacing-100vw) - 2rem);
+  --spacing-viewport-inset-2rem-vh: calc(var(--spacing-100vh) - 2rem);
+  --spacing-dialog-650px: min(var(--spacing-650px), calc(var(--spacing-100dvh) - 2rem));
+  --spacing-inset-1p5rem: calc(100% - 1.5rem);
+  --background-image-surface-glow-1: radial-gradient(
+    circle at top left,
+    color-mix(in oklab, var(--color-white) 85%, transparent),
+    transparent 60%
+  );
+  --background-image-surface-glow-2: radial-gradient(
+    circle at top left,
+    var(--ui-color-hsl-222-18-14-0p55),
+    transparent 60%
+  );
+  --background-image-surface-glow-3: radial-gradient(
+    circle at top left,
+    var(--ui-color-hsl-220-18-98-0p85),
+    transparent 60%
+  );
+  --background-image-surface-glow-4: radial-gradient(
+    circle at top left,
+    var(--ui-color-hsl-224-20-14-0p55),
+    transparent 60%
+  );
+  --background-image-surface-glow-5: radial-gradient(
+    circle at top left,
+    color-mix(in oklab, var(--color-white) 80%, transparent),
+    transparent 60%
+  );
+  --background-image-surface-glow-6: radial-gradient(
+    circle at top left,
+    var(--ui-color-hsl-224-18-14-0p5),
+    transparent 60%
+  );
+  --spacing-dialog-36rem-dvh: min(var(--spacing-80dvh), 36rem);
+  --grid-template-columns-file-icon: 2.75rem minmax(0, 1fr);
+  --spacing-dialog-34rem-vh: min(var(--spacing-72vh), 34rem);
+  --spacing-composer-popover: min(10rem, var(--spacing-30dvh));
+  --grid-template-columns-trajectory-details: clamp(9.5rem, 38%, 18rem) minmax(10rem, 1fr);
+  --spacing-trajectory-details: calc(100% - var(--spacing-140px));
+  --spacing-safe-bottom: max(1rem, env(safe-area-inset-bottom));
+  --spacing-safe-top: max(1rem, env(safe-area-inset-top));
+  --spacing-safe-top-compact: max(0.75rem, env(safe-area-inset-top));
+  --spacing-safe-bottom-compact: max(0.75rem, env(safe-area-inset-bottom));
+  --spacing-select-popup: min(var(--available-height), var(--spacing-66vh));
+  --spacing-inset-3rem: calc(100% - 3rem);
+  --spacing-viewport-inset-32px: calc(var(--spacing-100vw) - var(--spacing-32px));
+  --ring-width-3px: 3px;
+  --grid-template-columns-composer-control: minmax(0, 1fr) 5.5rem;
+  --spacing-inset-2p25rem: calc(100% - 2.25rem);
+  --spacing-transcript-gui: calc(
+    var(--chat-transcript-content-width, var(--spacing-768px)) -
+    4.75rem
+  );
+  --spacing-transcript-search: min(78%, var(--spacing-560px));
+  --spacing-container-inset-2rem: calc(100cqw - 2rem);
+  --spacing-container-inset-5rem: calc(100cqw - 5rem);
+  --grid-template-columns-form-label: 7rem minmax(0, 1fr);
+  --grid-template-columns-mcp-actions: auto 2rem 2rem;
+  --grid-template-columns-model-picker: minmax(0, 16rem) minmax(0, 1fr);
+  --grid-template-columns-provider-credentials: minmax(0, 1fr) minmax(0, 1fr) 9rem;
+  --grid-template-columns-provider-field: minmax(0, 1fr) 9rem;
+  --grid-template-columns-settings-navigation: var(--spacing-300px) minmax(0, 1fr);
+  --spacing-dialog-600px: min(var(--spacing-600px), calc(var(--spacing-100dvh) - 2rem));
+  --grid-template-columns-ssh-entry: auto minmax(0, 1fr) 2.5rem 2.5rem;
+  --spacing-half-minus-gap: calc(50% - 0.125rem);
+  --grid-template-columns-ssh-form: auto minmax(0, 1fr) 7rem;
+  --spacing-inset-0p75rem: calc(100% - 0.75rem);
+  --grid-template-columns-stt-settings: var(--spacing-380px) minmax(0, 1fr);
+  --grid-template-columns-memory-field: 1fr var(--spacing-108px);
+  --spacing-dialog-760px: min(var(--spacing-760px), calc(var(--spacing-100dvh) - 2rem));
+  --grid-template-columns-memory-navigation: var(--spacing-280px) minmax(0, 1fr);
+  --grid-template-columns-skill-filter: auto minmax(9rem, auto);
+  --spacing-popover-14rem: min(14rem, var(--available-height, 14rem));
+  --spacing-safe-bottom-10rem: calc(10rem + env(safe-area-inset-bottom));
+  --spacing-safe-bottom-offset: calc(1rem + env(safe-area-inset-bottom));
+  --spacing-safe-bottom-5rem: calc(5rem + env(safe-area-inset-bottom));
+  --spacing-safe-bottom-offset-compact: calc(0.25rem + env(safe-area-inset-bottom));
+  --spacing-dialog-34rem-dvh: min(34rem, var(--spacing-85dvh));
+  --spacing-transcript-web: calc(
+    var(--chat-transcript-content-width, var(--spacing-768px)) -
+    2.5rem
+  );
+  --spacing-user-bubble-web: min(85%, calc(var(--spacing-50em) + 2rem));
+  --grid-template-columns-gateway-settings: minmax(0, 1fr) var(--spacing-360px);
+  --grid-template-columns-gateway-settings-compact: minmax(0, 1fr) var(--spacing-300px);
+  --spacing-dialog-35rem: min(35rem, var(--spacing-88dvh));
+  --spacing-dialog-650px-vh: min(var(--spacing-650px), var(--spacing-92vh));
+}
+
+/* Values used by utilities moved from single-consumer component selectors. */
+@theme inline {
+  --font-app: var(--app-font-family);
+  --blur-18px: var(--spacing-18px);
+  --blur-2px: var(--spacing-2px);
+  --shadow-gateway-history-switch-overlay-card: 0 var(--spacing-10px) var(--spacing-28px)
+    var(--ui-color-hsl-220-22-10-0p12);
+  --spacing-gateway-transcript-bottom-spacer-h: max(
+    12rem,
+    calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-18px))
+  );
+  --shadow-chat-user-bubble-editor:
+    0 var(--spacing-1px) var(--spacing-2px) var(--ui-color-hsl-220-22-10-0p04),
+    inset 0 0 0 var(--spacing-1px) hsl(var(--border) / 0.45);
+  --spacing-chat-user-bubble-editor-max-w: min(
+    92%,
+    calc(var(--spacing-100vw) - var(--spacing-56px))
+  );
+  --spacing-gateway-bubble-w: min(100%, var(--spacing-760px));
+  --shadow-gateway-bubble: 0 var(--spacing-10px) var(--spacing-38px)
+    var(--ui-color-hsl-220-15-12-0p04);
+  --spacing-settings-back-bar-pt: max(var(--spacing-8px), env(safe-area-inset-top));
+  --grid-template-rows-status-board-stage: var(--spacing-58px) minmax(0, 1fr) var(--spacing-30px);
+  --spacing-status-board-stage-w: min(var(--spacing-100vw), var(--spacing-1912px));
+  --spacing-status-board-stage-h: min(var(--spacing-100dvh), var(--spacing-948px));
+  --color-status-cyan: rgb(var(--status-cyan));
+  /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
+  --shadow-status-board-pill: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
+  --blur-16px: var(--spacing-16px);
+  --transition-duration-160ms: var(--ui-duration-160ms);
+  --ease-default: ease;
+  --grid-template-columns-status-board-cockpit: var(--spacing-360px) minmax(0, 1fr)
+    var(--spacing-390px);
+  --grid-template-columns-status-board-cockpit-2: var(--spacing-310px) minmax(0, 1fr)
+    var(--spacing-330px);
+  --grid-template-rows-status-board-left-rail: 1.04fr 0.96fr;
+  --grid-template-rows-status-board-center-stack: minmax(0, 1fr) var(--spacing-206px);
+  --grid-template-rows-status-board-right-rail: 0.96fr 1.04fr;
+  --grid-template-columns-status-board-reactor-core: var(--spacing-154px) minmax(0, 1fr);
+  --color-status-violet: rgb(var(--status-violet));
+  --grid-template-columns-status-board-radar-deck: minmax(var(--spacing-410px), 0.9fr)
+    minmax(0, 1.1fr);
+  --color-status-board-tone: rgb(var(--status-board-tone));
+  --shadow-status-board-event-dot: 0 0 var(--spacing-16px) rgba(var(--status-board-tone), 0.76);
+  --color-rgba-190-219-248-0p58: var(--ui-color-rgba-190-219-248-0p58);
+  --color-status-amber: rgb(var(--status-amber));
+  --color-rgba-56-35-4-0p5: var(--ui-color-rgba-56-35-4-0p5);
+  --color-rgba-255-232-190-0p92: var(--ui-color-rgba-255-232-190-0p92);
+  --shadow-status-board-warning: 0 0 var(--spacing-32px) rgba(var(--status-amber), 0.16);
+  --grid-template-columns-login-container: 1fr 1fr;
+  --spacing-login-container-w: min(100%, var(--spacing-920px));
+  --blur-40px: var(--spacing-40px);
+  --shadow-login-container:
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-black) 3%, transparent),
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 3%, transparent),
+    0 var(--spacing-8px) var(--spacing-30px) color-mix(in oklab, var(--color-black) 5%, transparent),
+    0 var(--spacing-30px) var(--spacing-80px)
+    color-mix(in oklab, var(--color-black) 4%, transparent);
+  --color-hsl-224-20-12-0p6: var(--ui-color-hsl-224-20-12-0p6);
+  --shadow-login-container-2:
+    0 0 0 var(--spacing-1px) color-mix(in oklab, var(--color-white) 4%, transparent),
+    0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 15%, transparent),
+    0 var(--spacing-8px) var(--spacing-30px)
+    color-mix(in oklab, var(--color-black) 30%, transparent),
+    0 var(--spacing-30px) var(--spacing-80px)
+    color-mix(in oklab, var(--color-black) 25%, transparent);
+  --grid-template-columns-login-container-2: 1fr;
+  --spacing-login-container-w-2: min(100%, var(--spacing-540px));
+  --spacing-project-tools-panel-tab-max-w: min(12rem, calc(var(--spacing-100vw) - 10rem));
+  --spacing-project-tools-panel-tab-max-w-2: min(10rem, calc(var(--spacing-100vw) - 8.5rem));
+  --spacing-settings-memory-panel-pb: max(var(--spacing-14px), env(safe-area-inset-bottom));
+  --spacing-settings-provider-empty-min-h: min(var(--spacing-42svh), var(--spacing-280px));
+  --spacing-settings-provider-empty-min-h-2: min(var(--spacing-36svh), var(--spacing-240px));
+  --spacing-settings-provider-empty-add-w: min(100%, 16rem);
+  --spacing-settings-provider-custom-sheet-header-pt: max(
+    var(--spacing-18px),
+    env(safe-area-inset-top)
+  );
+  --spacing-settings-provider-custom-sheet-body-pb: max(
+    var(--spacing-24px),
+    env(safe-area-inset-bottom)
+  );
+  --grid-template-columns-settings-cron-type-grid: minmax(0, 1fr);
+  --spacing-settings-hooks-section-pb: max(var(--spacing-16px), env(safe-area-inset-bottom));
+  --grid-template-columns-settings-hooks-card-row: var(--spacing-36px) minmax(0, 1fr) auto;
+  --grid-template-columns-settings-hooks-card-row-2: var(--spacing-32px) minmax(0, 1fr) auto;
+  --grid-template-columns-settings-devices-card-row: var(--spacing-36px) minmax(0, 1fr);
+  --transition-duration-250ms: var(--ui-duration-250ms);
+  --color-hsl-210-100-88-0p5: var(--ui-color-hsl-210-100-88-0p5);
+  --color-hsl-210-80-30-0p2: var(--ui-color-hsl-210-80-30-0p2);
+  --color-hsl-250-70-88-0p4: var(--ui-color-hsl-250-70-88-0p4);
+  --color-hsl-250-60-30-0p15: var(--ui-color-hsl-250-60-30-0p15);
+  --grid-template-columns-settings-provider-card-row: var(--spacing-20px) var(--spacing-20px)
+    minmax(0, 1fr) auto;
+  --color-hsl-215-70-60-0p4: var(--ui-color-hsl-215-70-60-0p4);
+  --shadow-login-input-wrap-focus:
+    0 0 0 var(--spacing-3px) var(--ui-color-hsl-215-70-60-0p08),
+    0 var(--spacing-1px) var(--spacing-4px) var(--ui-color-hsl-215-70-60-0p06);
+  --color-hsl-215-60-55-0p5: var(--ui-color-hsl-215-60-55-0p5);
+  --shadow-login-input-wrap--focus-2:
+    0 0 0 var(--spacing-3px) var(--ui-color-hsl-215-60-55-0p12),
+    0 var(--spacing-1px) var(--spacing-4px) var(--ui-color-hsl-215-60-55-0p08);
+  --color-hsl-0-72-50: var(--ui-color-hsl-0-72-50);
+  --color-hsl-0-80-50-0p06: var(--ui-color-hsl-0-80-50-0p06);
+  --color-hsl-0-80-50-0p1: var(--ui-color-hsl-0-80-50-0p1);
+  --color-hsl-0-80-68: var(--ui-color-hsl-0-80-68);
+  --color-hsl-0-80-50-0p15: var(--ui-color-hsl-0-80-50-0p15);
+  --color-hsl-210-100-86-0p55: var(--ui-color-hsl-210-100-86-0p55);
+  --color-hsl-210-80-32-0p25: var(--ui-color-hsl-210-80-32-0p25);
+  --color-hsl-250-70-86-0p45: var(--ui-color-hsl-250-70-86-0p45);
+  --color-hsl-250-60-32-0p2: var(--ui-color-hsl-250-60-32-0p2);
+  --drop-shadow-sync-loading-logo: 0 var(--spacing-6px) var(--spacing-14px)
+    var(--ui-color-hsl-206-45-28-0p18);
+  --grid-template-rows-ssh-collapsible: 0fr;
+  --transition-duration-280ms: var(--ui-duration-280ms);
+  --grid-template-rows-ssh-collapsible-2: 1fr;
+  --transition-duration-1ms: var(--ui-duration-1ms);
+}
+
+@custom-variant max-1080 (@media (max-width: 1080px));
+
+@custom-variant max-820 (@media (max-width: 820px));
+
+@custom-variant max-640 (@media (max-width: 640px));
+
+@custom-variant max-520 (@media (max-width: 520px));
+
+@custom-variant max-480 (@media (max-width: 480px));
+
+@custom-variant max-380 (@media (max-width: 380px));
+
+@custom-variant desktop (&:not(html[data-liveagent-webui="gateway"] *));
+
+@custom-variant no-hover (@media (any-hover: none));
+
+@custom-variant has-hover (@media (any-hover: hover));
+
+@custom-variant status-compact {
+  @media (max-width: 1400px), (max-height: 760px) {
+    @slot;
+  }
+}
+
+@custom-variant web (&:is(html[data-liveagent-webui="gateway"] *));
+
+@theme inline {
+  --spacing-workspace-ssh-terminal-tab-max-w: min(14rem, calc(var(--spacing-100vw) - 2rem));
+  --spacing-workspace-ssh-terminal-tab-max-w-2: min(13.5rem, calc(var(--spacing-100vw) - 1rem));
+  --spacing-settings-memory-entry-list-max-h: min(var(--spacing-42svh), var(--spacing-320px));
+}
+
+@custom-variant touch-primary {
+  @media (hover: none), (pointer: coarse) {
+    @slot;
+  }
+}
+
+/* Fixed presentation values consumed by CSS and drawing-library adapters. */
+:root {
+  --ui-color-ffb000: #ffb000;
+  --ui-color-dc267f: #dc267f;
+  --ui-color-994f00: #994f00;
+  --ui-color-40b0a6: #40b0a6;
+  --ui-color-b66dff: #b66dff;
+  --ui-color-rgba-100-116-139-0-35: rgba(100, 116, 139, 0.35);
+  --ui-color-0b0f14: #0b0f14;
+  --terminal-dark-background: var(--ui-color-0b0f14);
+  --ui-color-4ade80: #4ade80;
+  --terminal-dark-foreground: var(--ui-color-4ade80);
+  --ui-color-f8fafc: #f8fafc;
+  --terminal-dark-cursor: var(--ui-color-f8fafc);
+  --terminal-dark-cursor-accent: var(--ui-color-0b0f14);
+  --ui-color-2c3e57: #2c3e57;
+  --terminal-dark-selection-background: var(--ui-color-2c3e57);
+  --ui-color-22304a: #22304a;
+  --terminal-dark-selection-inactive-background: var(--ui-color-22304a);
+  --ui-color-rgba-148-163-184-0-18: rgba(148, 163, 184, 0.18);
+  --terminal-dark-scrollbar-slider-background: var(--ui-color-rgba-148-163-184-0-18);
+  --ui-color-rgba-148-163-184-0-3: rgba(148, 163, 184, 0.3);
+  --terminal-dark-scrollbar-slider-hover-background: var(--ui-color-rgba-148-163-184-0-3);
+  --ui-color-rgba-148-163-184-0-42: rgba(148, 163, 184, 0.42);
+  --terminal-dark-scrollbar-slider-active-background: var(--ui-color-rgba-148-163-184-0-42);
+  --terminal-dark-overview-ruler-border: var(--ui-color-00000000);
+  --ui-color-1b2733: #1b2733;
+  --terminal-dark-black: var(--ui-color-1b2733);
+  --ui-color-ef4444: #ef4444;
+  --terminal-dark-red: var(--ui-color-ef4444);
+  --ui-color-22c55e: #22c55e;
+  --terminal-dark-green: var(--ui-color-22c55e);
+  --ui-color-eab308: #eab308;
+  --terminal-dark-yellow: var(--ui-color-eab308);
+  --ui-color-38bdf8: #38bdf8;
+  --terminal-dark-blue: var(--ui-color-38bdf8);
+  --ui-color-c084fc: #c084fc;
+  --terminal-dark-magenta: var(--ui-color-c084fc);
+  --ui-color-2dd4bf: #2dd4bf;
+  --terminal-dark-cyan: var(--ui-color-2dd4bf);
+  --ui-color-cbd5e1: #cbd5e1;
+  --terminal-dark-white: var(--ui-color-cbd5e1);
+  --ui-color-64748b: #64748b;
+  --terminal-dark-bright-black: var(--ui-color-64748b);
+  --ui-color-f87171: #f87171;
+  --terminal-dark-bright-red: var(--ui-color-f87171);
+  --terminal-dark-bright-green: var(--ui-color-4ade80);
+  --ui-color-fde047: #fde047;
+  --terminal-dark-bright-yellow: var(--ui-color-fde047);
+  --ui-color-7dd3fc: #7dd3fc;
+  --terminal-dark-bright-blue: var(--ui-color-7dd3fc);
+  --ui-color-d8b4fe: #d8b4fe;
+  --terminal-dark-bright-magenta: var(--ui-color-d8b4fe);
+  --ui-color-5eead4: #5eead4;
+  --terminal-dark-bright-cyan: var(--ui-color-5eead4);
+  --terminal-dark-bright-white: var(--ui-color-f8fafc);
+  --ui-color-fcfcfd: #fcfcfd;
+  --terminal-light-background: var(--ui-color-fcfcfd);
+  --ui-color-1f2933: #1f2933;
+  --terminal-light-foreground: var(--ui-color-1f2933);
+  --ui-color-111827: #111827;
+  --terminal-light-cursor: var(--ui-color-111827);
+  --terminal-light-cursor-accent: var(--ui-color-fcfcfd);
+  --terminal-light-selection-background: var(--ui-color-bfdbfe);
+  --terminal-light-selection-inactive-background: var(--ui-color-dbeafe);
+  --ui-color-rgba-100-116-139-0-16: rgba(100, 116, 139, 0.16);
+  --terminal-light-scrollbar-slider-background: var(--ui-color-rgba-100-116-139-0-16);
+  --ui-color-rgba-100-116-139-0-26: rgba(100, 116, 139, 0.26);
+  --terminal-light-scrollbar-slider-hover-background: var(--ui-color-rgba-100-116-139-0-26);
+  --ui-color-rgba-100-116-139-0-36: rgba(100, 116, 139, 0.36);
+  --terminal-light-scrollbar-slider-active-background: var(--ui-color-rgba-100-116-139-0-36);
+  --terminal-light-overview-ruler-border: var(--ui-color-00000000);
+  --terminal-light-black: var(--ui-color-1f2933);
+  --ui-color-dc2626: #dc2626;
+  --terminal-light-red: var(--ui-color-dc2626);
+  --ui-color-16a34a: #16a34a;
+  --terminal-light-green: var(--ui-color-16a34a);
+  --terminal-light-yellow: var(--ui-color-b45309);
+  --ui-color-2563eb: #2563eb;
+  --terminal-light-blue: var(--ui-color-2563eb);
+  --ui-color-9333ea: #9333ea;
+  --terminal-light-magenta: var(--ui-color-9333ea);
+  --ui-color-0891b2: #0891b2;
+  --terminal-light-cyan: var(--ui-color-0891b2);
+  --ui-color-e2e8f0: #e2e8f0;
+  --terminal-light-white: var(--ui-color-e2e8f0);
+  --terminal-light-bright-black: var(--ui-color-64748b);
+  --terminal-light-bright-red: var(--ui-color-ef4444);
+  --terminal-light-bright-green: var(--ui-color-22c55e);
+  --ui-color-d97706: #d97706;
+  --terminal-light-bright-yellow: var(--ui-color-d97706);
+  --terminal-light-bright-blue: var(--ui-color-3b82f6);
+  --ui-color-a855f7: #a855f7;
+  --terminal-light-bright-magenta: var(--ui-color-a855f7);
+  --ui-color-06b6d4: #06b6d4;
+  --terminal-light-bright-cyan: var(--ui-color-06b6d4);
+  --terminal-light-bright-white: var(--ui-color-f8fafc);
+}
+
+@theme inline {
+  --background-image-trajectory-aborted: repeating-linear-gradient(
+    45deg,
+    transparent 0 var(--spacing-2px),
+    color-mix(in oklab, var(--color-black) 28%, transparent) var(--spacing-2px) var(--spacing-3px)
+  );
+  --background-image-trajectory-idle: repeating-linear-gradient(
+    45deg,
+    transparent 0 var(--spacing-2px),
+    var(--ui-color-rgba-100-116-139-0-35) var(--spacing-2px) var(--spacing-4px)
+  );
+  --background-image-diff-deleted: repeating-linear-gradient(
+    45deg,
+    hsl(var(--chat-error)) 0,
+    hsl(var(--chat-error)) var(--spacing-1p5px),
+    transparent var(--spacing-1p5px),
+    transparent var(--spacing-3px)
+  );
+}
+
+/* Existing motion curves shared by component CSS and Tailwind utilities. */
+@theme static {
+  --ease-ui-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-ui-curve-1: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-ui-curve-2: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-ui-curve-3: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --ease-ui-curve-4: cubic-bezier(0.32, 0.72, 0.22, 1);
+  --ease-ui-curve-5: cubic-bezier(0.2, 0, 0, 1);
+  --ease-ui-curve-6: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-ui-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+:root {
+  --radius-2px: 2px;
+  --ui-color-2a2a2a: #2a2a2a;
+  --ui-color-4096ff: #4096ff;
+  --ui-color-1677ff: #1677ff;
+  --ui-color-0958d9: #0958d9;
+  --ui-color-e81123: #e81123;
+  --spacing-minus-12px: -12px;
+  --ui-color-rgba-15-23-42-0p35: rgba(15, 23, 42, 0.35);
+  --ui-color-rgba-15-23-42-0p07: rgba(15, 23, 42, 0.07);
+  --ui-color-rgba-2-132-199-0p55: rgba(2, 132, 199, 0.55);
+  --spacing-minus-26px: -26px;
+  --ui-color-rgba-2-132-199-0p5: rgba(2, 132, 199, 0.5);
+  --spacing-minus-2px: -2px;
+  --ui-color-rgba-15-23-42-0p25: rgba(15, 23, 42, 0.25);
+  --ui-color-rgba-15-23-42-0p38: rgba(15, 23, 42, 0.38);
+  --spacing-minus-16px: -16px;
+  --ui-color-rgba-15-23-42-0p45: rgba(15, 23, 42, 0.45);
+  --ui-color-rgba-15-23-42-0p22: rgba(15, 23, 42, 0.22);
+  --ui-color-rgba-15-23-42-0p08: rgba(15, 23, 42, 0.08);
+  --ui-color-rgba-15-23-42-0p24: rgba(15, 23, 42, 0.24);
+  --ui-color-rgba-15-23-42-0p18: rgba(15, 23, 42, 0.18);
+  --ui-color-hsl-160-84-25-0p42: hsl(160 84% 25% / 0.42);
+  --spacing-minus-34px: -34px;
+  --ui-color-rgba-20-22-28-0p9: rgba(20, 22, 28, 0.9);
+  --ui-color-rgba-15-23-42-0p28: rgba(15, 23, 42, 0.28);
+  --ui-color-rgba-15-23-42-0p48: rgba(15, 23, 42, 0.48);
+  --spacing-45px: 45px;
+  --spacing-minus-28px: -28px;
+  --ui-color-rgb-16-185-129-0p12: rgb(16 185 129 / 0.12);
+  --ui-color-rgb-244-63-94-0p1: rgb(244 63 94 / 0.1);
+  --spacing-5p33px: 5.33px;
+}
+
+/* Shared loading components and inline motion keep their original values. */
+@theme inline {
+  --blur-24px: var(--spacing-24px);
+  --background-image-hub-frost-hero: linear-gradient(
+    180deg,
+    hsl(var(--background) / 0.82),
+    hsl(var(--background) / 0.55)
+  );
+  --shadow-hub-frost-hero:
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 60%, transparent) inset,
+    0 var(--spacing-8px) var(--spacing-28px) var(--spacing-minus-18px)
+    color-mix(in oklab, var(--color-black) 18%, transparent);
+  --background-image-hub-frost-hero-dark: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-white) 6%, transparent),
+    color-mix(in oklab, var(--color-white) 3%, transparent)
+  );
+  --shadow-hub-frost-hero-dark:
+    0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 5%, transparent) inset,
+    0 var(--spacing-8px) var(--spacing-28px) var(--spacing-minus-18px)
+    color-mix(in oklab, var(--color-black) 60%, transparent);
+  --background-image-compaction-band-progress: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ui-color-hsl-270-80-62-0p75) 50%,
+    transparent 100%
+  );
+  --background-image-git-review-generate-progress: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--primary) / 0.75),
+    transparent
+  );
+  /* Preserve direct HSL alpha values when migrating legacy loading surfaces. */
+  --color-hsl-border-35: hsl(var(--border) / 0.35);
+  --color-hsl-border-55: hsl(var(--border) / 0.55);
+  --color-hsl-background-50: hsl(var(--background) / 0.5);
+  --color-hsl-muted-foreground-10: hsl(var(--muted-foreground) / 0.1);
+  --color-hsl-foreground-72: hsl(var(--foreground) / 0.72);
+  --color-hsl-primary-40: hsl(var(--primary) / 0.4);
+}
+:root {
+  --mask-image-sidebar-project-name-fade: linear-gradient(
+    to right,
+    var(--ui-color-000) 0,
+    var(--ui-color-000) calc(100% - 1.25rem),
+    transparent 100%
+  );
+  --transition-ssh-auth-panel:
+    max-height var(--ui-duration-300ms) var(--ease-ui-enter), opacity var(--ui-duration-220ms) ease,
+    transform var(--ui-duration-300ms) var(--ease-ui-enter);
+}

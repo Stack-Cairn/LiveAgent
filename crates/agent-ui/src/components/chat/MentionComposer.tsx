@@ -31,6 +31,7 @@ import {
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
+import { AnimatePresence } from "motion/react";
 import {
   type ClipboardEvent,
   type FocusEvent,
@@ -137,7 +138,6 @@ import {
   serializeChildren,
   serializeChildrenToSegments,
   stepCaretOverChip,
-  TYPEWRITER_CHAR_FADE_MS,
   writeComposerClipboardSnapshot,
   writeTextToClipboard,
 } from "./MentionComposerInternals";
@@ -735,17 +735,6 @@ export const MentionComposer = memo(
       };
     }, [clearTransientText, setBusy]);
 
-    // ---- Typewriter (typeText) ----
-    // While a run is active the editor drops contentEditable so keyboard and
-    // IME input cannot interleave user text with the scripted text.
-    const typewriterRef = useRef<{
-      timer: number;
-      finish: () => void;
-      settle: (restoreFocus: boolean) => void;
-    } | null>(null);
-    const [isTypewriting, setIsTypewriting] = useState(false);
-    const typewriterFocusPendingRef = useRef(false);
-
     const placeCaretAtEditorEnd = useCallback(() => {
       const el = editorRef.current;
       if (!el) return;
@@ -756,38 +745,6 @@ export const MentionComposer = memo(
       sel?.removeAllRanges();
       sel?.addRange(range);
     }, []);
-
-    const cancelTypewriter = useCallback(() => {
-      const active = typewriterRef.current;
-      if (!active) return;
-      typewriterRef.current = null;
-      window.clearTimeout(active.timer);
-      active.settle(false);
-    }, []);
-
-    // Programmatic draft reads and mention inserts complete the animation
-    // instantly so they always observe the full suggestion text.
-    const finishTypewriter = useCallback(() => {
-      const active = typewriterRef.current;
-      if (!active) return;
-      typewriterRef.current = null;
-      window.clearTimeout(active.timer);
-      active.finish();
-      active.settle(true);
-    }, []);
-
-    useEffect(() => cancelTypewriter, [cancelTypewriter]);
-
-    // Restore focus only after React has re-enabled contentEditable; focusing
-    // inside settle() would race the attribute flip and get dropped.
-    useEffect(() => {
-      if (isTypewriting || !typewriterFocusPendingRef.current) return;
-      typewriterFocusPendingRef.current = false;
-      const el = editorRef.current;
-      if (!el) return;
-      el.focus({ preventScroll: true });
-      placeCaretAtEditorEnd();
-    }, [isTypewriting, placeCaretAtEditorEnd]);
 
     const buildDraft = useCallback((): MentionComposerDraft => {
       const el = editorRef.current;
@@ -960,13 +917,9 @@ export const MentionComposer = memo(
         getText: () => {
           const el = editorRef.current;
           if (!el) return "";
-          finishTypewriter();
           return normalizeSerializedText(serializeChildren(el, largePastesRef.current));
         },
-        getDraft: () => {
-          finishTypewriter();
-          return buildDraft();
-        },
+        getDraft: buildDraft,
         hasContent: () => {
           const el = editorRef.current;
           return el != null && !editorTextIsEmpty(el);
@@ -974,7 +927,6 @@ export const MentionComposer = memo(
         setText: (text: string) => {
           const el = editorRef.current;
           if (!el) return;
-          cancelTypewriter();
           resetPromptHistoryRecall();
           el.innerHTML = "";
           largePastesRef.current.clear();
@@ -988,11 +940,12 @@ export const MentionComposer = memo(
             closeMentionSession();
             refreshEmptyState();
           }
+          placeCaretAtEditorEnd();
+          scheduleComposerSelectionScroll(el);
         },
         setDraft: (draft: MentionComposerDraft) => {
           const el = editorRef.current;
           if (!el) return;
-          cancelTypewriter();
           resetPromptHistoryRecall();
           el.innerHTML = "";
           largePastesRef.current.clear();
@@ -1047,7 +1000,6 @@ export const MentionComposer = memo(
         insertFileMention: (path: string, kind: "file" | "dir") => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           const chip = createFileMentionChip(path, kind);
@@ -1059,7 +1011,6 @@ export const MentionComposer = memo(
         insertSkillMention: (skill: MentionComposerSkillMention) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createSkillMentionChip(skill));
@@ -1069,7 +1020,6 @@ export const MentionComposer = memo(
         insertCommitMention: (commit: MentionComposerCommitMention) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createCommitMentionChip(commit));
@@ -1079,7 +1029,6 @@ export const MentionComposer = memo(
         insertGitFileMention: (file: MentionComposerGitFileMention) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createGitFileMentionChip(file));
@@ -1101,7 +1050,6 @@ export const MentionComposer = memo(
           if (selectedIds.has(conversation.id.trim())) return "duplicate";
           if (selectedIds.size >= MAX_CONVERSATION_MENTIONS) return "limit";
 
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           insertNodeAtCursor(el, normalized);
@@ -1112,7 +1060,6 @@ export const MentionComposer = memo(
         insertCodeMention: (reference: CodeMentionReference) => {
           const el = editorRef.current;
           if (!el) return;
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           const chip = createCodeMentionChip(reference);
@@ -1123,9 +1070,8 @@ export const MentionComposer = memo(
         },
         beginTransientText: () => {
           const el = editorRef.current;
-          if (!el || disabled || isTypewriting) return false;
+          if (!el || disabled) return false;
           clearTransientText(false);
-          finishTypewriter();
           resetPromptHistoryRecall();
           focusEditorAtSavedSelection();
           const selection = window.getSelection();
@@ -1189,7 +1135,6 @@ export const MentionComposer = memo(
           const el = editorRef.current;
           if (!el) return;
           clearTransientText(false);
-          cancelTypewriter();
           resetPromptHistoryRecall();
           el.innerHTML = "";
           largePastesRef.current.clear();
@@ -1199,98 +1144,13 @@ export const MentionComposer = memo(
           refreshEmptyState();
         },
         focus: () => editorRef.current?.focus(),
-        typeText: (text: string) => {
-          const el = editorRef.current;
-          if (!el) return Promise.resolve();
-          cancelTypewriter();
-          resetPromptHistoryRecall();
-          el.innerHTML = "";
-          largePastesRef.current.clear();
-          closeCommitTooltip();
-          closeComposerContextMenu();
-          closeMentionSession();
-          el.focus({ preventScroll: true });
-
-          const chars = Array.from(text);
-          const textNode = document.createTextNode("");
-          el.appendChild(textNode);
-          if (chars.length === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            textNode.data = chars.join("");
-            placeCaretAtEditorEnd();
-            refreshEmptyState();
-            return Promise.resolve();
-          }
-
-          return new Promise<void>((resolve) => {
-            let settled = false;
-            const settle = (restoreFocus: boolean) => {
-              if (settled) return;
-              settled = true;
-              typewriterFocusPendingRef.current = restoreFocus;
-              setIsTypewriting(false);
-              resolve();
-            };
-            setIsTypewriting(true);
-
-            // Freshly typed characters live in short-lived fade-in spans, then
-            // fold into the committed text node once their fade completes, so
-            // the editor always ends up holding one plain text node.
-            const ghosts: HTMLSpanElement[] = [];
-            const foldOldestGhost = () => {
-              const ghost = ghosts.shift();
-              if (!ghost) return;
-              textNode.data += ghost.textContent ?? "";
-              ghost.remove();
-            };
-            const finish = () => {
-              for (const ghost of ghosts) ghost.remove();
-              ghosts.length = 0;
-              textNode.data = chars.join("");
-              placeCaretAtEditorEnd();
-              refreshEmptyState();
-            };
-
-            // Adaptive pace: long prompts speed up so the whole line lands in ~1s.
-            const tickMs = Math.max(12, Math.min(28, Math.round(900 / chars.length)));
-            const maxGhosts = Math.max(1, Math.ceil(TYPEWRITER_CHAR_FADE_MS / tickMs));
-            let index = 0;
-            const tick = () => {
-              if (index < chars.length) {
-                const ghost = document.createElement("span");
-                ghost.className = "composer-typewriter-char";
-                ghost.textContent = chars[index] ?? "";
-                el.appendChild(ghost);
-                ghosts.push(ghost);
-                index += 1;
-                while (ghosts.length > maxGhosts) foldOldestGhost();
-                placeCaretAtEditorEnd();
-                refreshEmptyState();
-                typewriterRef.current = { timer: window.setTimeout(tick, tickMs), finish, settle };
-                return;
-              }
-              if (ghosts.length > 0) {
-                foldOldestGhost();
-                placeCaretAtEditorEnd();
-                typewriterRef.current = { timer: window.setTimeout(tick, tickMs), finish, settle };
-                return;
-              }
-              typewriterRef.current = null;
-              settle(true);
-            };
-            // Commit the first animated character in the same frame as the
-            // replacement so the empty-state placeholder never flashes.
-            tick();
-          });
-        },
       }),
       [
         buildDraft,
-        cancelTypewriter,
         clearTransientText,
         closeCommitTooltip,
         closeComposerContextMenu,
         closeMentionSession,
-        finishTypewriter,
         focusEditorAtSavedSelection,
         insertLargePaste,
         placeCaretAtEditorEnd,
@@ -1299,7 +1159,6 @@ export const MentionComposer = memo(
         conversationMentionsEnabled,
         currentConversationId,
         disabled,
-        isTypewriting,
       ],
     );
 
@@ -1777,12 +1636,6 @@ export const MentionComposer = memo(
           e.preventDefault();
           return;
         }
-        // The typewriter owns the editor while it runs; swallow keys so Enter
-        // cannot send a half-typed suggestion.
-        if (typewriterRef.current) {
-          e.preventDefault();
-          return;
-        }
         const isEnter = isEnterKeyboardEvent(e);
         const isActiveCompositionKey = isComposingRef.current || isActiveImeKeyboardEvent(e);
         const hasLegacyImeSignal = hasLegacyImeKeyboardSignal(e);
@@ -1996,7 +1849,7 @@ export const MentionComposer = memo(
 
     const handleCut = useCallback(
       (event: ClipboardEvent<HTMLDivElement>) => {
-        if (disabled || typewriterRef.current) {
+        if (disabled) {
           event.preventDefault();
           return;
         }
@@ -2026,10 +1879,6 @@ export const MentionComposer = memo(
     const handlePaste = useCallback(
       (e: ClipboardEvent<HTMLDivElement>) => {
         if (disabled) {
-          e.preventDefault();
-          return;
-        }
-        if (typewriterRef.current) {
           e.preventDefault();
           return;
         }
@@ -2169,21 +2018,24 @@ export const MentionComposer = memo(
 
     return (
       <div ref={wrapperRef} className="relative w-full min-w-0 max-w-full flex-1">
-        {popupVisible && (
-          <Popup
-            anchorRef={wrapperRef}
-            trigger={mentionCtx.trigger}
-            mode={mentionMenuMode}
-            suggestions={suggestions}
-            highlightIndex={highlightIdx}
-            isLoading={popupLoading}
-            error={popupError}
-            showEmpty={showEmpty}
-            emptyLabel={popupEmptyLabel}
-            onBack={returnToMentionRoot}
-            onSelect={selectSuggestion}
-          />
-        )}
+        <AnimatePresence initial={false}>
+          {popupVisible ? (
+            <Popup
+              key="mention-popup"
+              anchorRef={wrapperRef}
+              trigger={mentionCtx.trigger}
+              mode={mentionMenuMode}
+              suggestions={suggestions}
+              highlightIndex={highlightIdx}
+              isLoading={popupLoading}
+              error={popupError}
+              showEmpty={showEmpty}
+              emptyLabel={popupEmptyLabel}
+              onBack={returnToMentionRoot}
+              onSelect={selectSuggestion}
+            />
+          ) : null}
+        </AnimatePresence>
         {commitTooltip ? (
           <CommitMentionTooltip
             commit={commitTooltip.commit}
@@ -2197,7 +2049,10 @@ export const MentionComposer = memo(
               <div
                 ref={composerContextMenuRef}
                 role="menu"
-                className="layer-popover fixed w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]"
+                className={cn(
+                  "layer-popover fixed w-max min-w-38 max-w-viewport-inset-1p5rem overflow-hidden",
+                  "rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
+                )}
                 style={{
                   left: contextMenuPosition.left,
                   top: contextMenuPosition.top,
@@ -2211,13 +2066,14 @@ export const MentionComposer = memo(
                   role="menuitem"
                   disabled={!contextMenuCanMutate || !contextMenuHasSelection}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={handleComposerContextCut}
                 >
-                  <Scissors className="h-3.5 w-3.5 shrink-0" />
+                  <Scissors className="size-3.5 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{contextMenuLabels.cut}</span>
                 </button>
                 <button
@@ -2225,13 +2081,14 @@ export const MentionComposer = memo(
                   role="menuitem"
                   disabled={!contextMenuHasSelection}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={handleComposerContextCopy}
                 >
-                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                  <Copy className="size-3.5 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{contextMenuLabels.copy}</span>
                 </button>
                 <button
@@ -2239,7 +2096,8 @@ export const MentionComposer = memo(
                   role="menuitem"
                   disabled={!contextMenuCanMutate}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
@@ -2247,7 +2105,7 @@ export const MentionComposer = memo(
                     void handleComposerContextPaste();
                   }}
                 >
-                  <ClipboardPaste className="h-3.5 w-3.5 shrink-0" />
+                  <ClipboardPaste className="size-3.5 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{contextMenuLabels.paste}</span>
                 </button>
                 <div className="my-1 h-px bg-border/70" />
@@ -2256,13 +2114,14 @@ export const MentionComposer = memo(
                   role="menuitem"
                   disabled={!composerContextMenu.hasContent}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5",
+                    "text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
                     "disabled:pointer-events-none disabled:opacity-45",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={handleComposerContextSelectAll}
                 >
-                  <ScanText className="h-3.5 w-3.5 shrink-0" />
+                  <ScanText className="size-3.5 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{contextMenuLabels.selectAll}</span>
                 </button>
               </div>,
@@ -2272,7 +2131,7 @@ export const MentionComposer = memo(
         {/* biome-ignore lint/a11y/useSemanticElements: The composer is contenteditable so it can host inline mention chips. */}
         <div
           ref={editorRef}
-          contentEditable={!disabled && !isTypewriting}
+          contentEditable={!disabled}
           suppressContentEditableWarning
           role="textbox"
           tabIndex={disabled ? undefined : 0}
@@ -2294,7 +2153,10 @@ export const MentionComposer = memo(
           onCompositionEnd={handleCompositionEnd}
           onBlur={handleBlur}
           className={cn(
-            "mention-composer min-h-10 max-h-[160px] w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
+            "mention-composer min-h-10 max-h-160px w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto",
+            "whitespace-pre-wrap break-words [overflow-wrap:anywhere] outline-hidden",
+            "[&.is-empty::before]:pointer-events-none [&.is-empty::before]:absolute [&.is-empty::before]:text-muted-foreground [&.is-empty::before]:content-[attr(data-placeholder)] web:[&.is-empty::before]:inset-x-0 web:[&.is-empty::before]:pe-[inherit] [&_.mention-chip]:me-1.5 [&_.mention-chip]:cursor-default",
+            "[&_.mention-chip]:select-none [&_.mention-chip]:align-baseline [&_.mention-chip]:text-sm [&_.mention-chip]:leading-1p5",
             "text-sm",
             isDomEmpty && "is-empty",
             disabled && "cursor-not-allowed opacity-60",

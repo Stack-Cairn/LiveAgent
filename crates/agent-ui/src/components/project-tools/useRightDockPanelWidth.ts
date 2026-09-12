@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { acquireGlobalPointerStyle } from "../../lib/shared/globalPointerStyle";
 import {
   ABSOLUTE_RIGHT_DOCK_MAX_PANEL_WIDTH as ABSOLUTE_MAX_PANEL_WIDTH,
   DEFAULT_RIGHT_DOCK_MAX_PANEL_WIDTH as DEFAULT_MAX_PANEL_WIDTH,
@@ -158,16 +159,16 @@ export function useRightDockPanelWidth(options: UseRightDockPanelWidthOptions) {
       const startX = event.clientX;
       const dragMaxWidth = getDynamicMaxPanelWidth(panelRef.current);
       const startWidth = clampPanelWidth(panelWidth, dragMaxWidth);
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
+      const releaseGlobalStyle = acquireGlobalPointerStyle({
+        cursor: "col-resize",
+        userSelect: "none",
+      });
       resizingRef.current = true;
       setMaxPanelWidth(dragMaxWidth);
       setIsResizing(true);
       pendingResizeWidthRef.current = startWidth;
       applyPanelWidthStyle(panelRef.current, startWidth);
       panelRef.current?.setAttribute("data-project-tools-resizing", "true");
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
 
       const schedulePanelWidth = (nextWidth: number) => {
         pendingResizeWidthRef.current = nextWidth;
@@ -187,8 +188,7 @@ export function useRightDockPanelWidth(options: UseRightDockPanelWidthOptions) {
           resizeFrameRef.current = null;
         }
         panelRef.current?.removeAttribute("data-project-tools-resizing");
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
+        releaseGlobalStyle();
         resizingRef.current = false;
         resizeCleanupRef.current = null;
       };

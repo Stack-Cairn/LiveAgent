@@ -53,5 +53,4 @@ export type ChatTranscriptProps = {
   branchPendingMessageId?: string | null;
   onOpenSettings: (section?: SectionId) => void;
   onSuggestionSelect?: (text: string) => void;
-  suggestionsDisabled?: boolean;
 };

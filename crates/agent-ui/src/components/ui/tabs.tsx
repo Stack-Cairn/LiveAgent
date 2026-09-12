@@ -1,4 +1,5 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react";
+import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
@@ -11,17 +12,30 @@ export const Tabs = React.forwardRef<
 ));
 Tabs.displayName = "Tabs";
 
+const tabsListVariants = cva(
+  "inline-flex h-8 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+  {
+    variants: {
+      variant: {
+        default: "",
+        plain: "",
+        segmented: "h-9 gap-0.5 rounded-xl bg-settings-active p-1 ring-1 ring-foreground/5",
+        filter:
+          "flex h-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+      },
+    },
+    defaultVariants: { variant: "default" },
+  },
+);
+
 export const TabsList = React.forwardRef<
   HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>
+>(({ className, variant, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
     data-slot="tabs-list"
-    className={cn(
-      "inline-flex h-8 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
-      className,
-    )}
+    className={cn(variant !== "plain" && tabsListVariants({ variant }), className)}
     {...props}
   />
 ));
@@ -29,13 +43,25 @@ TabsList.displayName = "TabsList";
 
 export const TabsTrigger = React.forwardRef<
   HTMLElement,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Tab>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Tab> & {
+    variant?: "default" | "plain" | "segmented";
+  }
+>(({ className, variant = "default", ...props }, ref) => (
   <TabsPrimitive.Tab
     ref={ref}
     data-slot="tabs-trigger"
     className={cn(
-      "inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
+      variant !== "plain" && [
+        "inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-md px-3 py-1",
+        "text-sm font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
+      ],
+      variant === "segmented" && [
+        "h-7 min-w-9 rounded-lg px-2.5 py-0 text-xs font-normal text-muted-foreground",
+        "hover:bg-background/55 hover:text-foreground",
+        "data-[active]:bg-background data-[active]:font-medium data-[active]:text-foreground",
+        "data-[active]:shadow-sm data-[active]:ring-1 data-[active]:ring-foreground/10",
+      ],
       className,
     )}
     {...props}

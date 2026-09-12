@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { acquireGlobalPointerStyle } from "../shared/globalPointerStyle";
 
 export type SidebarReorderPosition = "before" | "after";
 export type SidebarReorderPointer = {
@@ -63,8 +64,7 @@ export function useSidebarReorderDrag(params: {
       let target: { key: string; position: SidebarReorderPosition } | null = null;
       const origin = event.currentTarget;
       const pointerId = event.pointerId;
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
+      let releaseGlobalStyle: (() => void) | null = null;
       const updateTarget = (x: number, y: number) => {
         const container = callbacksRef.current.containerRef.current;
         const element = document
@@ -99,8 +99,10 @@ export function useSidebarReorderDrag(params: {
           active = true;
           suppressClickRef.current = true;
           setDraggingKey(sourceKey);
-          document.body.style.cursor = "grabbing";
-          document.body.style.userSelect = "none";
+          releaseGlobalStyle = acquireGlobalPointerStyle({
+            cursor: "grabbing",
+            userSelect: "none",
+          });
           origin.setPointerCapture?.(pointerId);
         }
         move.preventDefault();
@@ -129,10 +131,8 @@ export function useSidebarReorderDrag(params: {
         window.removeEventListener("blur", cancel);
         window.removeEventListener("keydown", handleKey);
         if (origin.hasPointerCapture?.(pointerId)) origin.releasePointerCapture(pointerId);
-        if (active) {
-          document.body.style.cursor = previousCursor;
-          document.body.style.userSelect = previousUserSelect;
-        }
+        releaseGlobalStyle?.();
+        releaseGlobalStyle = null;
       };
       window.addEventListener("pointermove", handleMove, { passive: false });
       window.addEventListener("pointerup", handleUp);

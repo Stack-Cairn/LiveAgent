@@ -2,8 +2,19 @@ import { ArrowLeft, Search } from "@liveagent/ui/components/IconSet";
 import { useEffect, useMemo, useState } from "react";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";
-import { useDocumentHidden } from "../../lib/shared/documentVisibility";
 import { cn } from "../../lib/shared/utils";
+
+const WEB_SETTINGS_CONTENT_RESPONSIVE_CLASS = cn(
+  "web:max-820:[&_.settings-content-hooks]:overflow-y-auto web:max-820:[&_.settings-content-hooks]:overscroll-y-contain web:max-820:[&_.settings-content-hooks]:[-webkit-overflow-scrolling:touch] web:max-820:[&_.settings-content-memory]:overflow-y-auto web:max-820:[&_.settings-content-memory]:overscroll-y-contain web:max-820:[&_.settings-content-memory]:[-webkit-overflow-scrolling:touch]",
+  "web:max-820:[&_.settings-section-shell-hooks]:block web:max-820:[&_.settings-section-shell-hooks]:min-h-auto web:max-820:[&_.settings-section-shell-hooks]:flex-none web:max-820:[&_.settings-section-shell-memory]:block web:max-820:[&_.settings-section-shell-memory]:min-h-auto web:max-820:[&_.settings-section-shell-memory]:flex-none",
+  "web:max-820:[&_.settings-card-actions]:opacity-100 web:max-820:[&_.settings-hover-actions]:opacity-100 web:touch-primary:[&_.settings-card-actions]:opacity-100 web:touch-primary:[&_.settings-hover-actions]:opacity-100",
+  "web:max-820:[&_.settings-form-grid]:grid-cols-1 web:max-820:[&_.settings-choice-grid]:grid-cols-1 web:max-820:[&_.settings-hooks-stat]:gap-6px web:max-820:[&_.settings-hooks-stat]:px-9px web:max-820:[&_.settings-hooks-stat]:py-5px web:max-820:[&_.settings-hooks-stat-label]:text-xs web:max-820:[&_.settings-hooks-stat-value]:text-xs",
+  "web:max-820:[&_.settings-log-row]:flex-wrap web:max-820:[&_.settings-log-row>span]:w-auto web:max-820:[&_.settings-log-row>span:first-of-type]:flex-[1_1_100%] web:max-820:[&_.settings-log-row>span:nth-of-type(3)]:ml-0",
+  "web:max-640:[&_.settings-card-actions]:ml-auto web:max-640:[&_.settings-inline-form]:flex-col web:max-640:[&_.settings-inline-form>button]:w-full web:max-640:[&_.settings-hooks-card-actions]:min-h-32px web:max-640:[&_.settings-hooks-card-actions]:items-center web:max-640:[&_.settings-hooks-card-actions]:gap-4px",
+  "web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:size-auto web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:h-20px web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:w-36px web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:self-center web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:border web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:border-border/58 web:max-640:[&_.settings-hooks-card-actions_[role=switch]]:bg-muted-foreground/18 web:max-640:[&_.settings-hooks-card-actions_[role=switch][aria-checked=true]]:border-primary/40 web:max-640:[&_.settings-hooks-card-actions_[role=switch][aria-checked=true]]:bg-primary web:max-640:[&_.settings-hooks-card-actions>button:not([role=switch])]:size-30px",
+  "web:max-520:[&_.settings-section-actions>button:not([role=switch])]:flex-auto web:max-520:[&_.settings-section-actions>.settings-section-action]:flex-auto web:max-520:[&_.settings-card-row]:flex-wrap web:max-520:[&_.settings-card-row]:items-start web:max-520:[&_.settings-log-row]:grid web:max-520:[&_.settings-log-row]:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] web:max-520:[&_.settings-log-row]:items-center web:max-520:[&_.settings-log-row]:gap-6px web:max-520:[&_.settings-log-row]:px-10px web:max-520:[&_.settings-log-row]:py-8px",
+  "web:max-520:[&_.settings-log-row>span]:min-w-0 web:max-520:[&_.settings-log-row>span:first-of-type]:truncate web:max-520:[&_.settings-hooks-card-actions]:ml-auto web:max-520:[&_.settings-hooks-card-actions]:mt-0 web:max-520:[&_.settings-hooks-card-actions]:w-auto web:max-520:[&_.settings-hooks-card-actions]:basis-auto web:max-520:[&_.settings-hooks-card-actions]:justify-end web:max-520:[&_.settings-hooks-card-actions]:border-t-0 web:max-520:[&_.settings-hooks-card-actions]:pt-0 web:max-520:[&_.settings-hooks-stat]:min-w-0 web:max-520:[&_.settings-hooks-stat]:flex-[1_1_calc(50%-var(--spacing-4px))] web:max-520:[&_.settings-hooks-stat]:justify-center",
+);
 
 type SettingsShellProps<Context> = {
   registry: UiExtensionRegistry<Context>;
@@ -13,12 +24,6 @@ type SettingsShellProps<Context> = {
   initialSection?: string;
   hiddenSections?: readonly string[];
 };
-
-// 文档隐藏时 WebKit/Chromium 会暂停 CSS keyframe 动画，`.settings-section-enter`
-// 与 `.settings-section-title-enter` 因此停在 from 态（opacity:0 + 位移缩放），
-// 整个设置页看起来是空白。useSettingsOverlay 只兜底了外层浮层容器，内层区块
-// 需要这一份。可见性判定（含 Tauri/WKWebView 的 hidden/visibilityState 不同步
-// 组合）与其它按可见性收敛的定时器共用 lib/shared/documentVisibility。
 
 function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) {
   switch (state.status) {
@@ -55,8 +60,13 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   } = props;
   const { t } = useLocale();
   const [section, setSection] = useState(initialSection);
+  const [previousInitialSection, setPreviousInitialSection] = useState(initialSection);
+  // Synchronize before children commit, so a deep link never paints the old section.
+  if (previousInitialSection !== initialSection) {
+    setPreviousInitialSection(initialSection);
+    setSection(initialSection);
+  }
   const [navQuery, setNavQuery] = useState("");
-  const isDocumentHidden = useDocumentHidden();
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const sections = useMemo(
     () =>
@@ -93,7 +103,6 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
       .filter(([, definitions]) => definitions.length > 0);
   }, [groups, navQuery, t]);
 
-  useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => {
     if (!sections.some((definition) => definition.id === section)) {
       setSection(sections[0]?.id ?? "system");
@@ -110,53 +119,91 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
 
   return (
     <div
-      className={
-        web ? "settings-page-shell flex h-full bg-background" : "flex h-full flex-col bg-background"
-      }
+      className={cn(
+        "flex h-full bg-background",
+        web &&
+          "web:min-w-0 web:max-820:h-full web:max-820:min-h-0 web:max-820:flex-col web:max-820:overflow-hidden [&_.settings-section-actions]:min-w-0 [&_.settings-card-actions]:min-w-0",
+        web && WEB_SETTINGS_CONTENT_RESPONSIVE_CLASS,
+        !web &&
+          "flex-col desktop:max-640:[&_.settings-section-heading-row]:items-stretch desktop:max-640:[&_.settings-section-actions]:w-full desktop:max-640:[&_.settings-section-actions]:flex-wrap desktop:max-640:[&_.settings-hover-actions]:opacity-100 desktop:no-hover:[&_.settings-hover-actions]:opacity-100",
+      )}
     >
       <div className={web ? "contents" : "flex min-h-0 flex-1"}>
-        <aside className="settings-sidebar flex w-64 shrink-0 flex-col border-r border-border/60 bg-muted/30">
+        <aside
+          className={cn(
+            "flex w-68 shrink-0 flex-col bg-settings-rail",
+            "web:max-820:w-full web:max-820:flex-none web:max-820:bg-background/96",
+          )}
+        >
           {registry.slots.sidebarLeading}
           {web ? (
-            <div className="settings-back-bar">
+            <div
+              className={cn(
+                "web:hidden web:max-820:flex web:max-820:items-center web:max-820:px-10px",
+                "web:max-820:pt-settings-back-bar-pt web:max-820:pb-2 web:max-640:px-8px",
+              )}
+            >
               <button
                 type="button"
                 onClick={onBack}
-                className="settings-back-button flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                className={cn(
+                  "settings-back-button flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5",
+                  "text-sm text-muted-foreground transition-colors duration-150 hover:bg-foreground/5 hover:text-foreground",
+                  "web:max-820:min-h-34px web:max-820:w-auto web:max-820:px-10px web:max-820:py-8px",
+                )}
               >
-                <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+                <ArrowLeft className="size-3.5 shrink-0" />
                 <span>{t("settings.backToChat")}</span>
               </button>
             </div>
           ) : null}
-          <div className="settings-sidebar-header px-3 pb-2 pt-3">
+          <div className="px-3 pb-2 pt-4 web:max-820:hidden">
             <button
               type="button"
               onClick={onBack}
-              className="settings-back-button flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              className={cn(
+                "settings-back-button flex w-full cursor-pointer items-center justify-start gap-1 rounded-md px-2 py-1.5 text-left",
+                "text-sm text-muted-foreground transition-colors duration-150 hover:bg-foreground/5 hover:text-foreground",
+              )}
             >
-              <ArrowLeft className="h-4 w-4 shrink-0" />
+              <ArrowLeft className="size-3.5 shrink-0" />
               <span>{t("settings.backToChat")}</span>
             </button>
-            <div className="relative mt-2">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/75" />
+            <div className="relative mt-2.5">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/75" />
               <input
                 type="search"
                 value={navQuery}
                 onChange={(event) => setNavQuery(event.currentTarget.value)}
                 placeholder={t("settings.searchPlaceholder")}
                 aria-label={t("settings.searchPlaceholder")}
-                className="h-9 w-full rounded-xl border border-border/70 bg-background/85 pl-9 pr-3 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus:border-border focus:ring-2 focus:ring-foreground/5"
+                className={cn(
+                  "h-8 w-full rounded-full border-0 bg-background pl-8 pr-3",
+                  "text-sm outline-none transition-[background-color,box-shadow] duration-150",
+                  "placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-foreground/15",
+                )}
               />
             </div>
           </div>
-          <nav className="settings-nav flex-1 overflow-y-auto px-3 py-3">
+          <nav
+            className={cn(
+              "settings-nav flex-1 overflow-y-auto px-2.5 pb-6 pt-3.5",
+              "web:max-820:flex web:max-820:flex-none web:max-820:flex-nowrap web:max-820:gap-1.5 web:max-820:overflow-x-auto web:max-820:overscroll-x-contain",
+              "web:max-820:px-10px web:max-820:pb-10px web:max-820:pt-2 web:max-820:[scrollbar-width:none] web:max-820:[&::-webkit-scrollbar]:hidden web:max-640:px-8px",
+            )}
+          >
             {visibleGroups.map(([groupKey, definitions], groupIndex) => (
-              <div key={groupKey} className={cn("settings-nav-group", groupIndex > 0 && "mt-5")}>
-                <div className="settings-nav-group-label mb-1 px-3 text-xs font-medium text-muted-foreground/65">
+              <div
+                key={groupKey}
+                className={cn(
+                  "web:max-820:contents web:max-820:mt-0 web:max-820:[&_>_div:last-child]:contents web:max-820:[&_>_div:last-child_>_*_+_*]:mt-0",
+                  groupIndex > 0 && "mt-3.5",
+                )}
+              >
+                <div className="mb-1.5 px-2.5 text-xs font-medium text-muted-foreground/70 web:max-820:hidden">
                   {t(groupKey)}
                 </div>
-                <div className="space-y-0.5">
+                <div className="space-y-px">
                   {definitions.map((definition) => {
                     const active = definition.id === activeSection.id;
                     return (
@@ -164,20 +211,32 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                         key={definition.id}
                         type="button"
                         onClick={() => setSection(definition.id)}
+                        aria-current={active ? "page" : undefined}
                         data-testid={`settings-nav-${definition.id}`}
                         data-settings-nav-id={definition.id}
                         data-active={active ? "true" : "false"}
                         className={cn(
-                          "settings-nav-item group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-all duration-150",
+                          "group relative flex w-full cursor-pointer items-center gap-2.5 rounded-md",
+                          "px-2.5 py-1.5 text-left text-sm leading-tight transition-colors duration-150",
+                          "web:max-820:w-auto web:max-820:flex-none web:max-820:whitespace-nowrap web:max-820:bg-settings-tile web:max-820:px-10px web:max-820:py-8px",
+                          "web:max-820:[&_>_div]:gap-8px web:max-520:px-9px web:max-520:py-7px",
                           active
-                            ? "settings-nav-item-active bg-accent font-medium text-foreground"
-                            : "text-foreground/75 hover:bg-accent/60 hover:text-foreground",
+                            ? "bg-foreground/10 font-medium text-foreground"
+                            : "text-foreground/75 hover:bg-foreground/5 hover:text-foreground",
                         )}
                       >
-                        <span className="settings-nav-icon flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground">
+                        <span
+                          className={cn(
+                            "flex size-4 shrink-0 items-center justify-center transition-colors",
+                            active
+                              ? "text-foreground"
+                              : "text-muted-foreground group-hover:text-foreground",
+                            "web:max-820:size-24px web:max-820:rounded-8px",
+                          )}
+                        >
                           {definition.icon}
                         </span>
-                        <span className="settings-nav-label min-w-0 truncate leading-tight">
+                        <span className="min-w-0 truncate leading-tight web:max-820:text-xs">
                           {t(definition.labelKey)}
                         </span>
                       </button>
@@ -193,50 +252,44 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
             ) : null}
           </nav>
           {!web && showSaveIndicator ? (
-            <div className="border-t border-border/60 px-3 py-2.5">
+            <div className="px-3 py-3">
               <div
-                className="flex items-center gap-1.5 px-2.5 text-[11px] text-muted-foreground"
+                className="flex items-center gap-1.5 px-2.5 text-xs text-muted-foreground"
                 title={saveIndicator.title}
               >
-                <div className={cn("h-1.5 w-1.5 rounded-full", saveIndicator.dotClass)} />
+                <div className={cn("size-1.5 rounded-full", saveIndicator.dotClass)} />
                 {saveIndicator.text}
               </div>
             </div>
           ) : null}
         </aside>
-        <main className="settings-main flex min-w-0 flex-1 flex-col">
+        <main className="flex min-w-0 flex-1 flex-col web:min-w-0 web:max-820:min-h-0 web:max-820:flex-auto">
           {registry.slots.mainLeading}
           <header
             className={cn(
-              "settings-main-header px-8 pb-2 pt-8",
+              "px-10 pb-2 pt-9 web:max-820:gap-3 web:max-820:px-14px web:max-820:py-10px web:max-640:px-10px web:max-640:py-9px",
               web && "flex items-center justify-between",
             )}
           >
             <div
               className={cn(
                 "settings-main-title w-full overflow-hidden",
-                activeSection.id === "system" && "mx-auto max-w-[920px]",
+                !fillContent && "mx-auto max-w-920px",
               )}
             >
-              <div
-                key={activeSection.id}
-                className="settings-section-title-enter text-[28px] font-semibold tracking-tight"
-                data-anim-suspended={isDocumentHidden ? "true" : undefined}
-                style={
-                  isDocumentHidden
-                    ? { animation: "none", opacity: 1, transform: "none" }
-                    : undefined
-                }
-              >
+              <div key={activeSection.id} className="text-2xl font-semibold tracking-tight">
                 {t(activeSection.labelKey)}
               </div>
             </div>
             {web && showSaveIndicator ? (
               <div
-                className="settings-save-indicator flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5",
+                  "whitespace-nowrap text-xs text-muted-foreground web:max-820:flex-none web:max-820:whitespace-nowrap",
+                )}
                 title={saveIndicator.title}
               >
-                <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />
+                <div className={cn("size-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />
                 {saveIndicator.text}
               </div>
             ) : null}
@@ -244,20 +297,16 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
           <div
             key={activeSection.id}
             className={cn(
-              "settings-content settings-section-enter flex-1 px-8 pb-8 pt-6",
+              "flex-1 px-8 pb-8 pt-6 web:min-w-0 web:max-820:min-h-0 web:max-820:p-14px web:max-640:p-10px",
               `settings-content-${activeSection.id}`,
               fillContent ? "flex min-h-0 flex-col overflow-hidden" : "overflow-auto",
             )}
-            data-anim-suspended={isDocumentHidden ? "true" : undefined}
-            style={
-              isDocumentHidden ? { animation: "none", opacity: 1, transform: "none" } : undefined
-            }
           >
             <div
               className={cn(
-                "settings-section-shell",
+                "relative isolate web:min-w-0",
                 `settings-section-shell-${activeSection.id}`,
-                activeSection.id === "system" && "mx-auto w-full max-w-[920px]",
+                !fillContent && "mx-auto w-full max-w-920px",
                 fillContent ? "flex min-h-0 flex-1 flex-col" : "min-h-full",
               )}
             >

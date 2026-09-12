@@ -57,7 +57,6 @@ import {
 } from "./model";
 import { GitDiscardConfirmModal } from "./Toolbar";
 import type { GitReviewData } from "./useGitReviewData";
-import { GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS, useOverlayScrollbar } from "./useOverlayScrollbar";
 
 const INITIAL_CHANGE_ENTRY_RENDER_COUNT = 160;
 const CHANGE_ENTRY_RENDER_BATCH_SIZE = 160;
@@ -72,7 +71,6 @@ export function GitReviewStatusView(props: {
   onStackedPaneChange: (pane: GitReviewStackedPane, dir: "forward" | "back") => void;
   onToggleSection: (section: ChangeListSection) => void;
   panelRef: RefObject<HTMLDivElement | null>;
-  stackedDir: "forward" | "back";
   stackedPane: GitReviewStackedPane;
   useSplitReviewLayout: boolean;
   writeDisabled: boolean;
@@ -87,7 +85,6 @@ export function GitReviewStatusView(props: {
     onStackedPaneChange,
     onToggleSection,
     panelRef,
-    stackedDir,
     stackedPane,
     useSplitReviewLayout,
     writeDisabled,
@@ -112,7 +109,6 @@ export function GitReviewStatusView(props: {
   const onRevealInFileTree = context.fileTree.onRevealInFileTree;
   const { t } = useLocale();
 
-  const handleOverlayScroll = useOverlayScrollbar();
   const [changeContextMenu, setChangeContextMenu] = useState<ChangeContextMenuState | null>(null);
   const [changesMenu, setChangesMenu] = useState<ChangesMenuState | null>(null);
   const [discardConfirm, setDiscardConfirm] = useState<GitDiscardConfirmState | null>(null);
@@ -161,17 +157,6 @@ export function GitReviewStatusView(props: {
       });
     }
   }, [changesMenu, panelRef]);
-
-  useEffect(() => {
-    if (useSplitReviewLayout) return;
-    const el = stackedPane === "list" ? listPaneRef.current : detailPaneRef.current;
-    if (!el) return;
-    const cls =
-      stackedDir === "back" ? "git-review-pane-enter-back" : "git-review-pane-enter-forward";
-    el.classList.remove("git-review-pane-enter-forward", "git-review-pane-enter-back");
-    void el.offsetHeight;
-    el.classList.add(cls);
-  }, [stackedPane, useSplitReviewLayout, stackedDir]);
 
   const entries = state.entries;
   const stagedEntries = useMemo(() => entries.filter(canUnstageEntry), [entries]);
@@ -426,7 +411,8 @@ export function GitReviewStatusView(props: {
       <div
         key={`${section}:${entry.kind}:${entry.oldPath ?? ""}:${entry.path}`}
         className={cn(
-          "select-none border-b border-l-2 border-border/60 border-l-transparent px-3 py-2 transition-colors hover:bg-muted/40",
+          "select-none border-b border-l-2 border-border/60 border-l-transparent px-3 py-2 transition-colors",
+          "hover:bg-muted/40",
           selected && "border-l-emerald-500 bg-emerald-500/10",
           contextMenuOpen && "border-l-primary bg-primary/10 ring-1 ring-inset ring-primary/35",
         )}
@@ -434,11 +420,14 @@ export function GitReviewStatusView(props: {
       >
         <button
           type="button"
-          className="flex w-full select-none items-start gap-2 rounded-sm bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className={cn(
+            "flex w-full select-none items-start gap-2 rounded-sm bg-transparent p-0",
+            "text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          )}
           onClick={() => selectEntry(entry)}
           title={entry.path}
         >
-          <TypeIcon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <TypeIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 select-none">
             <span
               className={cn(
@@ -450,19 +439,14 @@ export function GitReviewStatusView(props: {
             </span>
             <span
               className={cn(
-                "block truncate text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground",
+                "block truncate text-xs leading-4 text-muted-foreground",
                 deleted && "line-through",
               )}
             >
               {filePath}
             </span>
           </span>
-          <span
-            className={cn(
-              "mt-0.5 shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold",
-              statusTone(entry),
-            )}
-          >
+          <span className={cn("mt-0.5 shrink-0 text-tiny font-semibold", statusTone(entry))}>
             {statusLabel(entry)}
           </span>
         </button>
@@ -482,37 +466,51 @@ export function GitReviewStatusView(props: {
     onToggle: () => void,
   ) => (
     <section className="relative border-b border-border/60 bg-background last:border-b-0">
-      <div className="sticky top-0 z-20 grid h-7 w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border/60 bg-muted px-3">
+      <div
+        className={cn(
+          "sticky top-0 z-20 grid h-7 w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center",
+          "gap-2 border-b border-border/60 bg-muted px-3",
+        )}
+      >
         <button
           type="button"
-          className="flex min-w-0 items-center gap-1.5 rounded-sm bg-transparent p-0 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className={cn(
+            "flex min-w-0 items-center gap-1.5 rounded-sm bg-transparent p-0 text-left",
+            "hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          )}
           aria-expanded={!collapsed}
           onClick={onToggle}
         >
           <ChevronRight
             className={cn(
-              "h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none",
+              "size-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none",
               !collapsed && "rotate-90",
             )}
             aria-hidden="true"
           />
-          <span className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] font-semibold text-muted-foreground">
+          <span className="min-w-0 truncate text-xs font-semibold text-muted-foreground">
             {title}
           </span>
         </button>
-        <span className="inline-flex h-4 min-w-6 shrink-0 items-center justify-center justify-self-end rounded bg-background/70 px-1.5 text-center text-[calc(10px*var(--zone-font-scale,1))] font-medium tabular-nums text-muted-foreground">
+        <span
+          className={cn(
+            "inline-flex h-4 min-w-6 shrink-0 items-center justify-center justify-self-end",
+            "rounded bg-background/70 px-1.5",
+            "text-center text-tiny font-medium tabular-nums text-muted-foreground",
+          )}
+        >
           {sectionEntries.length}
         </span>
         <Button
           type="button"
           size="sm"
           variant="ghost"
-          className="-mr-1 h-5 w-5 shrink-0 px-0 text-muted-foreground"
+          className="-mr-1 size-5 shrink-0 px-0 text-muted-foreground"
           title={t("projectTools.gitReview.changesActions")}
           aria-label={t("projectTools.gitReview.changesActions")}
           onClick={(event) => openChangesMenu(event, section)}
         >
-          <MoreHorizontal className="h-3.5 w-3.5" />
+          <MoreHorizontal className="size-3.5" />
         </Button>
       </div>
       <div
@@ -530,7 +528,7 @@ export function GitReviewStatusView(props: {
           )}
         >
           {sectionEntries.length === 0 ? (
-            <div className="px-3 py-3 text-xs text-muted-foreground">{emptyLabel}</div>
+            <div className="p-3 text-xs text-muted-foreground">{emptyLabel}</div>
           ) : (
             <>
               {visibleSectionEntries.map((entry) => renderChangeEntry(entry, section))}
@@ -568,7 +566,7 @@ export function GitReviewStatusView(props: {
       <div
         key="changes"
         className={cn(
-          "git-review-tab-enter min-h-0 flex-1 gap-3 overflow-hidden p-3",
+          "min-h-0 flex-1 gap-3 overflow-hidden p-3",
           useSplitReviewLayout ? `grid ${GIT_REVIEW_SPLIT_GRID_CLASS}` : "flex flex-col",
         )}
       >
@@ -580,13 +578,7 @@ export function GitReviewStatusView(props: {
             !useSplitReviewLayout && "flex-1",
           )}
         >
-          <div
-            className={cn(
-              GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-              "isolate min-h-0 flex-1 overflow-auto [overscroll-behavior:contain]",
-            )}
-            onScroll={handleOverlayScroll}
-          >
+          <div className="isolate min-h-0 flex-1 overflow-auto [overscroll-behavior:contain]">
             {entries.length === 0 ? (
               <div className="px-3 py-6 text-xs text-muted-foreground">
                 {t("projectTools.gitReview.noLocalChanges")}
@@ -642,7 +634,12 @@ export function GitReviewStatusView(props: {
         >
           {selectedEntry ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-              <div className="flex shrink-0 items-center gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs">
+              <div
+                className={cn(
+                  "flex shrink-0 items-center gap-2",
+                  "rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs",
+                )}
+              >
                 <span className="text-muted-foreground">
                   {t("projectTools.gitReview.selected")}
                 </span>
@@ -661,7 +658,13 @@ export function GitReviewStatusView(props: {
               />
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-border/70 bg-muted/10 px-4 text-center text-xs text-muted-foreground">
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 items-center justify-center",
+                "rounded-lg border border-border/70 bg-muted/10 px-4",
+                "text-center text-xs text-muted-foreground",
+              )}
+            >
               {t("projectTools.gitReview.selectFileToViewDiff")}
             </div>
           )}
@@ -692,7 +695,7 @@ export function GitReviewStatusView(props: {
                 disabled={writeDisabled || busy !== "" || !hasStageableChanges}
                 onClick={stageAllChanges}
               >
-                <FilePenLine className="h-3.5 w-3.5" />
+                <FilePenLine className="size-3.5" />
                 <span>{t("projectTools.gitReview.stageAllChanges")}</span>
               </button>
             ) : (
@@ -703,7 +706,7 @@ export function GitReviewStatusView(props: {
                 disabled={writeDisabled || busy !== "" || !hasStagedChanges}
                 onClick={unstageAllChanges}
               >
-                <GitCommitHorizontal className="h-3.5 w-3.5" />
+                <GitCommitHorizontal className="size-3.5" />
                 <span>{t("projectTools.gitReview.unstageAllChanges")}</span>
               </button>
             )}
@@ -714,7 +717,7 @@ export function GitReviewStatusView(props: {
               disabled={writeDisabled || busy !== "" || !hasDiscardableChanges}
               onClick={discardAllChanges}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="size-3.5" />
               <span>{t("projectTools.gitReview.discardAllChanges")}</span>
             </button>
             <button
@@ -727,7 +730,7 @@ export function GitReviewStatusView(props: {
                 void refresh();
               }}
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="size-3.5" />
               <span>{t("projectTools.gitReview.refreshChanges")}</span>
             </button>
           </div>
@@ -752,7 +755,7 @@ export function GitReviewStatusView(props: {
             className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
             onClick={() => viewEntryChanges(contextEntry)}
           >
-            <Eye className="h-3.5 w-3.5" />
+            <Eye className="size-3.5" />
             <span>{t("projectTools.gitReview.viewChanges")}</span>
           </button>
           {contextEntrySection === "staged" ? (
@@ -763,7 +766,7 @@ export function GitReviewStatusView(props: {
               disabled={writeDisabled || busy !== "" || !contextEntryCanUnstage}
               onClick={() => unstageEntry(contextEntry)}
             >
-              <GitCommitHorizontal className="h-3.5 w-3.5" />
+              <GitCommitHorizontal className="size-3.5" />
               <span>{t("projectTools.gitReview.unstageChanges")}</span>
             </button>
           ) : (
@@ -774,7 +777,7 @@ export function GitReviewStatusView(props: {
               disabled={writeDisabled || busy !== "" || !contextEntryCanStage}
               onClick={() => stageEntry(contextEntry)}
             >
-              <FilePenLine className="h-3.5 w-3.5" />
+              <FilePenLine className="size-3.5" />
               <span>{t("projectTools.gitReview.stageChanges")}</span>
             </button>
           )}
@@ -785,7 +788,7 @@ export function GitReviewStatusView(props: {
             disabled={writeDisabled || busy !== ""}
             onClick={() => discardEntry(contextEntry)}
           >
-            <BrushCleaning className="h-3.5 w-3.5" />
+            <BrushCleaning className="size-3.5" />
             <span>{t("projectTools.gitReview.discardChanges")}</span>
           </button>
           {contextEntryCanAddToGitignore ? (
@@ -796,7 +799,7 @@ export function GitReviewStatusView(props: {
               disabled={writeDisabled || busy !== ""}
               onClick={() => addEntryToGitignore(contextEntry)}
             >
-              <GitCommitHorizontal className="h-3.5 w-3.5" />
+              <GitCommitHorizontal className="size-3.5" />
               <span>{t("projectTools.gitReview.addToGitignore")}</span>
             </button>
           ) : null}
@@ -807,7 +810,7 @@ export function GitReviewStatusView(props: {
             disabled={!onRevealInFileTree}
             onClick={() => revealEntryInFileTree(contextEntry)}
           >
-            <FolderTree className="h-3.5 w-3.5" />
+            <FolderTree className="size-3.5" />
             <span>{t("projectTools.gitReview.revealInFileTree")}</span>
           </button>
           {canOpenSystemFileLocation ? (
@@ -817,7 +820,7 @@ export function GitReviewStatusView(props: {
               className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
               onClick={() => openEntrySystemFileLocation(contextEntry)}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="size-3.5" />
               <span>{t("projectTools.gitReview.openSystemFileLocation")}</span>
             </button>
           ) : null}

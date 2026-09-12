@@ -9,7 +9,6 @@ import type {
 } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
-import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
@@ -20,6 +19,7 @@ import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
+import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import {
   type ProjectToolPaneEnvironment,
@@ -98,6 +98,15 @@ import {
   liveTrajectoryEvents,
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_MAIN_BACKDROP_CLASS,
+  GATEWAY_MAIN_SHELL_CLASS,
+  GATEWAY_SCROLL_TO_BOTTOM_CLASS,
+  GATEWAY_SETTINGS_OVERLAY_CLASS,
+  GATEWAY_SHELL_CLASS,
+  GATEWAY_TRANSCRIPT_SCROLL_CLASS,
+} from "@/lib/webStyleClasses";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { openUrl } from "@/shims/tauriOpener";
 import { AgentSelector } from "./AgentSelector";
@@ -119,6 +128,7 @@ import { GatewayTerminalPaneHost } from "./workbench/GatewayTerminalPaneHost";
 import { sessionWorkbench } from "./workbench/sessionWorkbench";
 
 export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }) {
+  const chatFrameRef = useRef<HTMLDivElement | null>(null);
   useWindowFileDropGuard();
   const {
     activeFloorKey,
@@ -157,7 +167,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
-    dismissNotify,
     displayedConversationBusyRef,
     displayedConversationId,
     displayedConversationWorkdir,
@@ -267,7 +276,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     isConversationBusy,
     isFileDropActive,
     isImportingPastedTextRef,
-    isSuggestionTyping,
     isUploadingFiles,
     uploadingConversationId,
     loadComposerHistoryPrompts,
@@ -282,7 +290,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
-    notifyItems,
     openSettings,
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
@@ -729,7 +736,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     (clientX: number, clientY: number) => {
       if (!sessionWorkbench.enabled) return;
       const geometry = workbenchController.geometryRef.current;
-      const canvasElement = document.querySelector("[data-workbench-canvas]");
+      const canvasElement = workbenchController.canvasRef.current;
       if (!geometry || !canvasElement) return;
       const canvasRect = canvasElement.getBoundingClientRect();
       const target = hitTestWorkbenchDrop(
@@ -864,7 +871,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             conversationId={displayedConversationId}
             floors={transcriptFloors}
             activeRowKey={activeFloorKey}
-            bottomOffset="calc(var(--gateway-chat-composer-overlay-height, 176px) + 12px)"
+            bottomOffset="calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-12px))"
             scrollViewport={transcriptViewport}
             onJump={handleFloorJump}
           />
@@ -886,7 +893,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     onBranchConversation: handleBranchConversation,
     branchPendingMessageId,
     onSuggestionSelect: handleEmptyStateSuggestion,
-    suggestionsDisabled: isSuggestionTyping,
     hasMoreHistory: selectedHistoryHasMore,
     isLoadingMoreHistory: loadingOlderHistory,
     onLoadEarlierHistory: selectedHistoryHasMore ? handleLoadEarlierHistory : undefined,
@@ -1034,6 +1040,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     const { workbench, dragState } = workbenchController;
     return (
       <WorkbenchCanvas
+        canvasRef={workbenchController.canvasRef}
         layout={workbench.layout}
         labels={{
           paneRegion: (pane) => {
@@ -1221,12 +1228,15 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       <div
         ref={workbenchController.dragGhostRef}
         data-workbench-drag-ghost=""
-        className="layer-popover pointer-events-none fixed max-w-[220px] truncate rounded-md border border-border bg-background/95 px-2.5 py-1 text-xs text-foreground shadow-md"
+        className={cn(
+          "layer-popover pointer-events-none fixed max-w-220px",
+          "truncate rounded-md border border-border bg-background/95 px-2.5 py-1",
+          "text-xs text-foreground shadow-md",
+        )}
         style={{
           left: 0,
           top: 0,
-          transform:
-            "translate3d(var(--workbench-drag-ghost-x, -9999px), var(--workbench-drag-ghost-y, -9999px), 0)",
+          transform: "translate3d(var(--workbench-drag-ghost-x), var(--workbench-drag-ghost-y), 0)",
           willChange: "transform",
         }}
       >
@@ -1236,14 +1246,15 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     ) : null;
   return (
     <LocaleContext.Provider value={localeContextValue}>
+      <Toaster />
       <AppErrorBoundary>
-        <div className="gateway-shell">
+        <div className={GATEWAY_SHELL_CLASS}>
           <input
             ref={fileInputRef}
             type="file"
             multiple
             aria-label={translate("chat.upload.selectFiles", settings.locale)}
-            className="gateway-hidden-file-input"
+            className="gateway-hidden-file-input hidden"
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
               void handleImportReadableFiles(files);
@@ -1258,7 +1269,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             type="file"
             multiple
             aria-label={translate("chat.upload.selectFolder", settings.locale)}
-            className="gateway-hidden-file-input"
+            className="gateway-hidden-file-input hidden"
             onChange={(event) => {
               handleImportSelectedDirectoryFiles(Array.from(event.currentTarget.files ?? []));
               event.currentTarget.value = "";
@@ -1266,7 +1277,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           />
           {workbenchDragGhost}
 
-          <div className="gateway-editor-host">
+          <div className="gateway-editor-host relative flex min-w-0 min-h-0 flex-1 h-full overflow-hidden">
             <GatewaySidebarContainer
               pinnedOrder={settings.system.sidebarPinnedOrder}
               onReorderPinned={(sidebarPinnedOrder) =>
@@ -1403,8 +1414,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
             {confirmDialog}
 
-            <main className="gateway-main-shell">
-              <div className="gateway-main-backdrop" />
+            <main className={GATEWAY_MAIN_SHELL_CLASS}>
+              <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
               <AppWorkbenchChrome
                 settings={settings}
                 sidebarOpen={sidebarOpen}
@@ -1430,7 +1441,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                       isOpen={rightDockOpen}
                       sessionCount={projectTerminalSessions.length}
                       disabledMessage={projectToolsDisabledMessage}
-                      className="gateway-project-tools-panel-toggle"
+                      className="mr-6px max-520:mr-8px"
                       onToggle={() => setRightDockOpen((open) => !open)}
                     />
                     <UserMenu
@@ -1448,11 +1459,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     />
                   </>
                 }
-                overlay={
-                  <div className="relative z-50">
-                    <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
-                  </div>
-                }
               />
               <ApplicationView
                 activeView={activeView}
@@ -1463,8 +1469,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 initialSkillsRootDir={skillsRootDir}
                 className="contents"
                 chat={{
+                  containerRef: chatFrameRef,
                   containerProps: {
-                    className: "gateway-chat-frame zone-font-scale",
+                    className: `${GATEWAY_CHAT_FRAME_CLASS} zone-font-scale`,
                     style: {
                       "--zone-font-scale": settings.customSettings.fontScale.chat,
                     } as CSSProperties,
@@ -1476,18 +1483,48 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   content: (
                     <>
                       {statusError ? (
-                        <div className="gateway-banner-error">{statusError}</div>
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
+                          {statusError}
+                        </div>
                       ) : null}
                       {chatProtocolIncompatibleMessage && !statusError ? (
-                        <div className="gateway-banner-error">
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
                           {chatProtocolIncompatibleMessage}
                         </div>
                       ) : null}
                       {settingsSyncError ? (
-                        <div className="gateway-banner-error">{settingsSyncError}</div>
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
+                          {settingsSyncError}
+                        </div>
                       ) : null}
                       {chatError && displayedTranscriptRowCount === 0 ? (
-                        <div className="gateway-banner-error">{chatError}</div>
+                        <div
+                          className={cn(
+                            "gateway-banner-error mx-20px mt-12px mb-0",
+                            "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                            "max-640:mx-10px max-640:mt-8px max-640:mb-0",
+                          )}
+                        >
+                          {chatError}
+                        </div>
                       ) : null}
 
                       {sessionWorkbench.enabled ? (
@@ -1495,7 +1532,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                       ) : (
                         <section
                           ref={transcriptStageRef}
-                          className="gateway-transcript-stage"
+                          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden @container"
                           // Preferred (persisted) width, so a fresh mount paints at
                           // the user's width instead of the default.
                           // TranscriptWidthControls narrows this same variable to
@@ -1520,11 +1557,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                               authoritativeRevision={trajectoryAuthoritativeRevision}
                             />
                           ) : (
-                            <div className="gateway-transcript-scroll-shell">
+                            <div className="relative h-full min-h-0">
                               <ScrollArea
                                 ref={setTranscriptScrollAreaRoot}
                                 viewportRef={setTranscriptViewport}
-                                className="gateway-transcript-scroll"
+                                className={GATEWAY_TRANSCRIPT_SCROLL_CLASS}
                               >
                                 <ChangedFilesActionsProvider value={changedFilesActions}>
                                   <CheckpointRewindProvider
@@ -1570,7 +1607,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                       onBranchConversation={handleBranchConversation}
                                       branchPendingMessageId={branchPendingMessageId}
                                       onSuggestionSelect={handleEmptyStateSuggestion}
-                                      suggestionsDisabled={isSuggestionTyping}
                                     />
                                   </CheckpointRewindProvider>
                                 </ChangedFilesActionsProvider>
@@ -1597,7 +1633,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   conversationId={displayedConversationId}
                                   floors={transcriptFloors}
                                   activeRowKey={activeFloorKey}
-                                  bottomOffset="calc(var(--gateway-chat-composer-overlay-height, 176px) + 12px)"
+                                  bottomOffset="calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-12px))"
                                   scrollViewport={transcriptViewport}
                                   onJump={handleFloorJump}
                                 />
@@ -1610,16 +1646,17 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           {renderedConversationView === "conversation" && !transcriptFollowing ? (
                             <button
                               type="button"
-                              className="gateway-scroll-to-bottom"
+                              className={GATEWAY_SCROLL_TO_BOTTOM_CLASS}
                               onClick={transcriptFollow.jumpToBottom}
                               aria-label="滚动到底部"
                               title="滚动到底部"
                             >
-                              <ChevronDown className="h-4 w-4" />
+                              <ChevronDown className="size-4" />
                             </button>
                           ) : null}
                           <ChatComposerBar
                             surface="web"
+                            overlayHeightOwnerRef={chatFrameRef}
                             runClarifyTurn={
                               settings.customSettings.promptClarifyEnabled
                                 ? runClarifyTurn
@@ -2011,8 +2048,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           {settingsOpen ? (
             <div
               className={cn(
-                "gateway-settings-overlay",
-                overlay === "open" ? "gateway-settings-overlay-open" : "",
+                GATEWAY_SETTINGS_OVERLAY_CLASS,
+                // Keep the settled transform at none: a transformed settings scroller
+                // can leave blank rasterized regions on Android Chrome.
+                overlay === "open" ? "opacity-100! transform-none!" : "",
               )}
               onTransitionEnd={handleSettingsTransitionEnd}
             >

@@ -49,6 +49,11 @@ test("shared copy control explains its action and confirms success in a visible 
 });
 
 test("shared copy control supports restricted webviews without the Clipboard API", () => {
-  assert.match(copyButtonSource, /navigator\.clipboard\?\.writeText/);
-  assert.match(copyButtonSource, /document\.execCommand\("copy"\)/);
+  assert.match(copyButtonSource, /import \{ copyTextToClipboard \} from "@liveagent\/ui\/lib\/shared\/clipboard"/);
+  assert.match(copyButtonSource, /await copyTextToClipboard\(value\)/);
+  const clipboardSource = readFileSync(
+    new URL("../../../agent-ui/src/lib/shared/clipboard.ts", import.meta.url), "utf8",
+  );
+  assert.match(clipboardSource, /navigator\.clipboard\?\.writeText/);
+  assert.match(clipboardSource, /document\.execCommand\("copy"\)/);
 });

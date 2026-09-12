@@ -135,8 +135,13 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
       >
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">
-              <Cable className="h-5 w-5" />
+            <div
+              className={cn(
+                "flex size-11 shrink-0 items-center justify-center",
+                "rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300",
+              )}
+            >
+              <Cable className="size-5" />
             </div>
             <div className="min-w-0">
               <DialogTitle className="break-words">
@@ -227,7 +232,12 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
               />
             </div>
 
-            <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
+            <div
+              className={cn(
+                "rounded-lg border border-border/60 bg-muted/25 px-3 py-2",
+                "font-mono text-xs text-muted-foreground",
+              )}
+            >
               127.0.0.1:{previewLocal}
               <span className="mx-1.5 text-muted-foreground/60">→</span>
               {previewHost}:{previewPort}
@@ -250,7 +260,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                 {t("projectTools.sshLocalForwardCancel")}
               </DialogClose>
               <Button type="submit" disabled={submitting}>
-                {submitting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {submitting ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
                 {t("projectTools.sshLocalForwardSubmit")}
               </Button>
             </DialogActions>

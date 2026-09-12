@@ -29,7 +29,10 @@ export const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenu
           <Menu.Popup
             ref={ref}
             className={cn(
-              "min-w-48 max-h-[min(var(--available-height),66vh)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+              "min-w-48 max-h-select-popup overflow-x-hidden overflow-y-auto",
+              "rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+              "data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
+              "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
               className,
             )}
             {...props}
@@ -70,7 +73,9 @@ export const DropdownMenuSubTrigger = React.forwardRef<HTMLElement, DropdownMenu
       ref={ref}
       openOnHover={clickToggle ? false : undefined}
       className={cn(
-        "relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5 text-sm outline-hidden transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground data-[disabled]:opacity-50",
+        "relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5",
+        "text-sm outline-hidden transition-colors",
+        "data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground data-[disabled]:opacity-50",
         className,
       )}
       {...props}
@@ -98,7 +103,10 @@ export const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownM
           <Menu.Popup
             ref={ref}
             className={cn(
-              "min-w-48 max-h-[min(var(--available-height),66vh)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+              "min-w-48 max-h-select-popup overflow-x-hidden overflow-y-auto",
+              "rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+              "data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
+              "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
               className,
             )}
             {...props}
@@ -119,7 +127,9 @@ export const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuIte
     <Menu.Item
       ref={ref}
       className={cn(
-        "relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5 text-sm outline-hidden transition-colors data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5",
+        "text-sm outline-hidden transition-colors",
+        "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
       {...props}
@@ -131,3 +141,23 @@ export const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuIte
   ),
 );
 DropdownMenuItem.displayName = "DropdownMenuItem";
+
+export const DropdownMenuRadioGroup = Menu.RadioGroup;
+export const DropdownMenuRadioItem = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<typeof Menu.RadioItem>
+>(({ className, children, ...props }, ref) => (
+  <Menu.RadioItem
+    ref={ref}
+    className={cn(
+      "flex cursor-default items-center justify-between gap-3 rounded-md px-3 py-2",
+      "text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+    <Menu.RadioItemIndicator aria-hidden="true">✓</Menu.RadioItemIndicator>
+  </Menu.RadioItem>
+));
+DropdownMenuRadioItem.displayName = "DropdownMenuRadioItem";

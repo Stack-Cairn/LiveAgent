@@ -20,7 +20,7 @@ function renderCollapse(root, { open, retainWhileClosed = false }) {
 
 async function waitForCollapseAnimation() {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 240));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   });
 }
 
@@ -32,20 +32,12 @@ test("collapse animates in both directions and releases settled content afterwar
   assert.equal(container.querySelector("[data-heavy-body]"), null);
 
   renderCollapse(root, { open: true });
-  assert.match(container.firstElementChild.className, /grid-rows-\[1fr\]/);
   assert.match(container.firstElementChild.className, /\bh-min\b/);
-  assert.match(container.firstElementChild.className, /\bcontent-start\b/);
-  assert.match(
-    container.querySelector("[data-lazy-collapse-content]").className,
-    /opacity-100/,
-  );
+  assert.notEqual(container.querySelector("[data-lazy-collapse-content]"), null);
+  assert.notEqual(container.querySelector("[data-heavy-body]"), null);
 
   renderCollapse(root, { open: false });
-  assert.match(container.firstElementChild.className, /grid-rows-\[0fr\]/);
-  assert.match(
-    container.querySelector("[data-lazy-collapse-content]").className,
-    /opacity-0/,
-  );
+  assert.match(container.firstElementChild.className, /pointer-events-none/);
   assert.notEqual(container.querySelector("[data-heavy-body]"), null);
 
   await waitForCollapseAnimation();

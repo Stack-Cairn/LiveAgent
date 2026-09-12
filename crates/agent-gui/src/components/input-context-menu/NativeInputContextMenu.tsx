@@ -1,5 +1,7 @@
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
+import { MotionPopover } from "@liveagent/ui/components/MotionPopover";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -11,7 +13,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useMenuExitPresence } from "../../lib/shared/menuMotion";
 import { readClipboardText } from "../../lib/system/clipboardText";
 import {
   clampMenuPosition,
@@ -33,34 +34,13 @@ function resolveMenuTarget(target: EventTarget | null): MenuTarget | null {
 }
 
 const MENU_ITEM_CLASS = cn(
-  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
   "disabled:pointer-events-none disabled:opacity-45",
 );
 
 function writeTextToClipboard(text: string) {
   if (!text) return;
-
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => {
-      fallbackWriteTextToClipboard(text);
-    });
-    return;
-  }
-
-  fallbackWriteTextToClipboard(text);
-}
-
-function fallbackWriteTextToClipboard(text: string) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
+  void copyTextToClipboard(text);
 }
 
 // Writes through the prototype value setter so React's per-node value tracker
@@ -389,74 +369,76 @@ export function useNativeInputContextMenu(): {
     closeMenu();
   }, [closeMenu]);
 
-  // Clearing the snapshot starts the exit animation; the retained snapshot
-  // keeps the menu rendered (inert) until the fade-out completes.
-  const { rendered: renderedSnapshot, isExiting } = useMenuExitPresence(snapshot);
-  const items = renderedSnapshot ? computeMenuItems(renderedSnapshot) : null;
+  const items = snapshot ? computeMenuItems(snapshot) : null;
 
   const menu =
-    renderedSnapshot && items
+    typeof document !== "undefined"
       ? createPortal(
-          <div
+          <MotionPopover
+            open={snapshot !== null && items !== null}
             ref={menuRef}
             role="menu"
             className={cn(
-              "editor-context-menu layer-popover fixed w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
-              isExiting && "editor-context-menu-exit",
+              "origin-top-left layer-popover fixed w-max min-w-38 max-w-viewport-inset-1p5rem select-none overflow-hidden",
+              "rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-editor-context-menu",
             )}
-            style={{ left: renderedSnapshot.x, top: renderedSnapshot.y }}
+            style={snapshot ? { left: snapshot.x, top: snapshot.y } : undefined}
             onContextMenu={(event) => {
               event.preventDefault();
             }}
           >
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canCut}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleCut}
-            >
-              <Scissors className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.cut")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canCopy}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleCopy}
-            >
-              <Copy className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.copy")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canPaste}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                void handlePaste();
-              }}
-            >
-              <ClipboardPaste className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.paste")}</span>
-            </button>
-            <div className="my-1 h-px bg-border/70" />
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canSelectAll}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleSelectAll}
-            >
-              <ScanText className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.selectAll")}</span>
-            </button>
-          </div>,
+            {snapshot && items ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canCut}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleCut}
+                >
+                  <Scissors className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.cut")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canCopy}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleCopy}
+                >
+                  <Copy className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.copy")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canPaste}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    void handlePaste();
+                  }}
+                >
+                  <ClipboardPaste className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.paste")}</span>
+                </button>
+                <div className="my-1 h-px bg-border/70" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!items.canSelectAll}
+                  className={MENU_ITEM_CLASS}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleSelectAll}
+                >
+                  <ScanText className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.selectAll")}</span>
+                </button>
+              </>
+            ) : null}
+          </MotionPopover>,
           document.body,
         )
       : null;

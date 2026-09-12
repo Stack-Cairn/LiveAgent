@@ -35,17 +35,17 @@ test("installed bulk mode exits on empty selection, all-deselect, actions, and E
     source,
     /allVisibleBulkSelected\s*\? t\("settings\.skillsBulkDeselectAll"\)/,
   );
-  assert.match(source, /setBulkUndo\([\s\S]*?exitBulkMode\(\);[\s\S]*?setSettings/);
+  assert.match(source, /toast.success\([\s\S]*?skillsBulkUndo[\s\S]*?exitBulkMode\(\);[\s\S]*?setSettings/);
   assert.match(source, /if \(event\.key === "Escape"\) \{\s*exitBulkMode\(\);/);
 });
 
-test("Skill cards use one selected border and never move on hover", () => {
+test("Skill cards use one selected surface and never move on hover", () => {
   const installed = readSkillHubSource("InstalledSkillCard.tsx");
   const imported = readSkillHubSource("SkillsImportView.tsx");
   const store = readSkillHubSource("SkillsStoreView.tsx");
 
-  assert.match(installed, /bulkSelected\s*\? "border-foreground bg-muted\/30 shadow-sm"/);
-  assert.match(imported, /checked\s*\? "border-foreground bg-muted\/30 shadow-sm"/);
+  assert.match(installed, /bulkSelected && "bg-settings-active"/);
+  assert.match(imported, /checked\s*\? "bg-settings-active"/);
   assert.match(imported, /focus-visible:ring-offset-2/);
   assert.doesNotMatch(installed, /hover:-translate|hover:scale|ring-2 ring-ring\/40/);
   assert.doesNotMatch(imported, /focus:ring-2|ring-2 ring-ring\/40/);
@@ -57,8 +57,8 @@ test("bulk-mode guidance stays in the overlay instead of shifting page content",
   const page = readSkillHubSource("SkillsHubPage.tsx");
   const imported = readSkillHubSource("SkillsImportView.tsx");
 
-  assert.doesNotMatch(page, /hub-panel-enter flex items-center gap-2 text-\[11px\][^>]*skillsBulkHint/);
-  assert.doesNotMatch(imported, /hub-panel-enter flex items-center gap-2 text-\[11px\][^>]*skillsBulkImportHint/);
+  assert.doesNotMatch(page, /hub-panel-enter flex items-center gap-2 text-xs[^>]*skillsBulkHint/);
+  assert.doesNotMatch(imported, /hub-panel-enter flex items-center gap-2 text-xs[^>]*skillsBulkImportHint/);
   assert.match(page, /pointer-events-none absolute inset-x-0 bottom-4/);
   assert.match(page, /settings\.skillsBulkClickToSelect/);
 });

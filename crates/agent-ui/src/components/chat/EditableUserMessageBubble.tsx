@@ -5,18 +5,11 @@ import {
   splitUserAttachmentsForDisplay,
 } from "../../lib/chat/uploadedFiles";
 import type { UploadedImagePreviewLoader } from "../../lib/chat/uploadedImagePreview";
+import { useAutosizeTextarea } from "../../lib/shared/useAutosizeTextarea";
 import { cn } from "../../lib/shared/utils";
 import { UserAttachmentCards } from "./UserAttachmentCards";
 
 const MIN_EDIT_BUBBLE_HEIGHT_PX = 72;
-
-function resizeEditableTextarea(textarea: HTMLTextAreaElement | null) {
-  if (!textarea) {
-    return;
-  }
-  textarea.style.height = "0px";
-  textarea.style.height = `${Math.max(textarea.scrollHeight, MIN_EDIT_BUBBLE_HEIGHT_PX)}px`;
-}
 
 export type EditableUserMessageBubbleProps = {
   initialText: string;
@@ -54,6 +47,12 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
   const [draftText, setDraftText] = useState(initialText);
   const [draftAttachments, setDraftAttachments] = useState(attachments);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutosizeTextarea(
+    textareaRef,
+    draftText,
+    textareaSizing === "content",
+    MIN_EDIT_BUBBLE_HEIGHT_PX,
+  );
 
   useLayoutEffect(() => {
     if (preserveViewportScrollOnFocus) {
@@ -63,12 +62,9 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
     if (!textarea) {
       return;
     }
-    if (textareaSizing === "content") {
-      resizeEditableTextarea(textarea);
-    }
     textarea.focus();
     textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-  }, [preserveViewportScrollOnFocus, textareaSizing]);
+  }, [preserveViewportScrollOnFocus]);
 
   useEffect(() => {
     if (!preserveViewportScrollOnFocus) {
@@ -99,13 +95,6 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
     setDraftAttachments(attachments);
   }, [attachments]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: draft text intentionally invalidates the DOM measurement
-  useLayoutEffect(() => {
-    if (textareaSizing === "content") {
-      resizeEditableTextarea(textareaRef.current);
-    }
-  }, [draftText, textareaSizing]);
-
   const visibleAttachments = useMemo(
     () => splitUserAttachmentsForDisplay(draftAttachments, draftText).visibleFiles,
     [draftAttachments, draftText],
@@ -115,7 +104,7 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
   return (
     <div
       className={cn(
-        "w-full max-w-[min(85%,calc(50em+2.5rem))] rounded-2xl border border-border bg-[hsl(var(--chat-user-bg))] p-3",
+        "w-full max-w-user-bubble-gui rounded-2xl border border-border bg-[hsl(var(--chat-user-bg))] p-3",
         className,
       )}
     >
@@ -134,7 +123,8 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
       <textarea
         ref={textareaRef}
         className={cn(
-          "w-full resize-none rounded-lg bg-transparent p-2 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
+          "w-full resize-none rounded-lg bg-transparent p-2",
+          "font-chat text-sm leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none",
           textareaClassName,
         )}
         value={draftText}
@@ -150,14 +140,20 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
       <div className="mt-2 flex justify-end gap-2">
         <button
           type="button"
-          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
+          className={cn(
+            "rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground",
+            "transition-colors hover:bg-muted",
+          )}
           onClick={onCancel}
         >
           {t("chat.cancel")}
         </button>
         <button
           type="button"
-          className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn(
+            "rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors",
+            "hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
+          )}
           disabled={!canSubmit}
           onClick={() => {
             if (!canSubmit) {

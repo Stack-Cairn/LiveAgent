@@ -1,12 +1,9 @@
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   AlertTriangle,
-  ChevronRight,
   Copy,
   Download,
-  FolderTree,
   Loader2,
-  Pencil,
   Plus,
   RefreshCw,
   SquarePen,
@@ -14,11 +11,14 @@ import {
   Upload,
 } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient, SftpEntry, SftpSide, SftpTransfer } from "@liveagent/ui/lib/sftp/types";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SftpPathNavigator } from "./SftpPathNavigator";
 import {
   CopyPathDialog,
   CopyPathToast,
@@ -37,6 +37,7 @@ import {
   entryIcon,
   formatBytes,
 } from "./workspaceSftpModel";
+import { joinPath, normalizePath, parentPath } from "./workspaceSftpPaths";
 
 export type SftpOpenFileRequest = {
   side: SftpSide;
@@ -100,8 +101,6 @@ const INITIAL_LOCAL_PATH = "";
 const INITIAL_REMOTE_PATH = ".";
 const TERMINAL_TRANSFER_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const POINTER_DRAG_THRESHOLD_PX = 6;
-const REMOTE_PATH_SUGGESTION_LIMIT = 8;
-const REMOTE_PATH_SUGGESTION_DELAY_MS = 180;
 
 function initialPane(path: string): PaneState {
   return {
@@ -111,26 +110,6 @@ function initialPane(path: string): PaneState {
     error: null,
     selectedPaths: [],
   };
-}
-
-function parentPath(path: string, side: SftpSide) {
-  const normalized = normalizePath(path, side);
-  if (!normalized || normalized === "." || normalized === "/") return side === "remote" ? "." : "";
-  const parts = normalized.split("/").filter(Boolean);
-  parts.pop();
-  if (side === "remote" && normalized.startsWith("/")) {
-    return parts.length ? `/${parts.join("/")}` : "/";
-  }
-  return parts.join("/") || (side === "remote" ? "." : "");
-}
-
-function normalizePath(path: string, side: SftpSide) {
-  const normalized = path.trim().replace(/\\/g, "/");
-  if (side === "remote") {
-    if (!normalized || normalized === ".") return ".";
-    return normalized.replace(/\/+/g, "/");
-  }
-  return normalized.replace(/^\/+/, "").replace(/\/+/g, "/");
 }
 
 function isAbsoluteLocalPath(path: string) {
@@ -174,418 +153,6 @@ function absolutePathForCopy(side: SftpSide, path: string, workdir: string) {
   return side === "local"
     ? localAbsolutePathForCopy(workdir, path)
     : remoteAbsolutePathForCopy(path);
-}
-
-function joinPath(parent: string, child: string, side: SftpSide) {
-  const name = child
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
-  if (!name) return normalizePath(parent, side);
-  const base = normalizePath(parent, side);
-  if (side === "remote") {
-    if (base === "/") return `/${name}`;
-    if (!base || base === ".") return name;
-  }
-  if (!base) return name;
-  return `${base.replace(/\/+$/, "")}/${name}`;
-}
-
-function pathCrumbs(path: string, side: SftpSide, projectLabel: string) {
-  const normalized = normalizePath(path, side);
-  const root = side === "remote" ? (normalized.startsWith("/") ? "/" : ".") : "";
-  const parts =
-    normalized === "." || normalized === "/" ? [] : normalized.split("/").filter(Boolean);
-  const crumbs = [{ label: side === "remote" ? root : projectLabel, path: root }];
-  let current = root;
-  for (const part of parts) {
-    current = joinPath(current, part, side);
-    crumbs.push({ label: part, path: current });
-  }
-  return crumbs;
-}
-
-function pathSuggestionTarget(value: string, currentPath: string, side: SftpSide) {
-  const rawValue = value.trim().replace(/\\/g, "/");
-  const normalizedValue = normalizePath(rawValue, side);
-  if (normalizedValue === normalizePath(currentPath, side)) {
-    return { directoryPath: normalizedValue, prefix: "" };
-  }
-  if (!rawValue || rawValue === "." || rawValue === "/" || rawValue.endsWith("/")) {
-    return { directoryPath: normalizedValue, prefix: "" };
-  }
-  return {
-    directoryPath: parentPath(normalizedValue, side),
-    prefix: basename(normalizedValue),
-  };
-}
-
-function PathCrumbRow(props: {
-  crumbs: { label: string; path: string }[];
-  fallbackLabel?: string;
-  onNavigate: (path: string) => void;
-}) {
-  const { crumbs, fallbackLabel, onNavigate } = props;
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (element && crumbs.length) element.scrollLeft = element.scrollWidth;
-  }, [crumbs]);
-
-  return (
-    <div ref={scrollRef} className="sftp-path-scroll flex min-w-0 items-center overflow-x-auto">
-      {crumbs.map((crumb, index) => {
-        const isLast = index === crumbs.length - 1;
-        return (
-          <Fragment key={crumb.path}>
-            {index > 0 ? (
-              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
-            ) : null}
-            <button
-              type="button"
-              className={cn(
-                "shrink-0 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-foreground/[0.05]",
-                isLast
-                  ? "font-medium text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              title={crumb.path || crumb.label}
-              onClick={() => onNavigate(crumb.path)}
-            >
-              {crumb.label || fallbackLabel || crumb.path}
-            </button>
-          </Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-function PathNavigator(props: {
-  side: SftpSide;
-  path: string;
-  loading: boolean;
-  client: SftpClient;
-  sessionId: string;
-  projectPathKey: string;
-  workdir: string;
-  rootLabel: string;
-  onNavigate: (path: string) => void;
-  t: (key: string) => string;
-}) {
-  const {
-    side,
-    path,
-    loading,
-    client,
-    sessionId,
-    projectPathKey,
-    workdir,
-    rootLabel,
-    onNavigate,
-    t,
-  } = props;
-  const listboxId = useId();
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const requestIdRef = useRef(0);
-  const suggestionRefs = useRef(new Map<number, HTMLButtonElement>());
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(path);
-  const [open, setOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<SftpEntry[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [suggestionError, setSuggestionError] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState(-1);
-
-  const crumbs = useMemo(
-    () =>
-      pathCrumbs(path, side, rootLabel).map((crumb, index) =>
-        side === "remote" && index === 0 && crumb.label === "." ? { ...crumb, label: "~" } : crumb,
-      ),
-    [path, rootLabel, side],
-  );
-
-  useEffect(() => {
-    if (!open) {
-      setValue(path);
-    }
-  }, [open, path]);
-
-  useEffect(() => {
-    if (!editing) return;
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  }, [editing]);
-
-  useEffect(() => {
-    if (!open) return;
-    const requestId = ++requestIdRef.current;
-    const { directoryPath, prefix } = pathSuggestionTarget(value, path, side);
-    setSuggestions([]);
-    setSuggestionsLoading(true);
-    setSuggestionError(null);
-    setActiveIndex(-1);
-
-    const timer = window.setTimeout(() => {
-      void client
-        .list({
-          sessionId,
-          projectPathKey,
-          workdir,
-          side,
-          path: directoryPath,
-        })
-        .then((response) => {
-          if (requestIdRef.current !== requestId) return;
-          const normalizedPrefix = prefix.toLocaleLowerCase();
-          const directories = response.entries
-            .filter(
-              (entry) =>
-                entry.kind === "directory" &&
-                (!normalizedPrefix || entry.name.toLocaleLowerCase().startsWith(normalizedPrefix)),
-            )
-            .sort((left, right) => left.name.localeCompare(right.name))
-            .slice(0, REMOTE_PATH_SUGGESTION_LIMIT);
-          setSuggestions(directories);
-          setSuggestionsLoading(false);
-          setActiveIndex(-1);
-        })
-        .catch((error) => {
-          if (requestIdRef.current !== requestId) return;
-          setSuggestions([]);
-          setSuggestionsLoading(false);
-          setSuggestionError(error instanceof Error ? error.message : String(error));
-          setActiveIndex(-1);
-        });
-    }, REMOTE_PATH_SUGGESTION_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-      if (requestIdRef.current === requestId) {
-        requestIdRef.current += 1;
-      }
-    };
-  }, [client, open, path, projectPathKey, sessionId, side, value, workdir]);
-
-  useEffect(() => {
-    if (activeIndex < 0) return;
-    suggestionRefs.current.get(activeIndex)?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
-
-  const beginEdit = () => {
-    setValue(path);
-    setEditing(true);
-    setOpen(true);
-  };
-
-  const closeEditor = () => {
-    setOpen(false);
-    setEditing(false);
-    setValue(path);
-  };
-
-  const navigate = (nextPath: string) => {
-    const normalizedPath = normalizePath(nextPath, side);
-    setValue(normalizedPath);
-    setOpen(false);
-    setEditing(false);
-    inputRef.current?.blur();
-    onNavigate(normalizedPath);
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIndex((current) =>
-        suggestions.length ? (current + 1 + suggestions.length) % suggestions.length : -1,
-      );
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIndex((current) =>
-        suggestions.length
-          ? current < 0
-            ? suggestions.length - 1
-            : (current - 1 + suggestions.length) % suggestions.length
-          : -1,
-      );
-      return;
-    }
-    if (event.key === "Tab" && open && activeIndex >= 0) {
-      event.preventDefault();
-      setValue(suggestions[activeIndex]?.path ?? value);
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      navigate(open && activeIndex >= 0 ? (suggestions[activeIndex]?.path ?? value) : value);
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      inputRef.current?.blur();
-      closeEditor();
-    }
-  };
-
-  return (
-    <fieldset
-      aria-label={t("workspaceSftp.pathSuggestions")}
-      className="relative z-30 flex h-10 min-w-0 shrink-0 items-center border-x-0 border-b border-t-0 border-border/60 bg-muted/15 px-2"
-      onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-        closeEditor();
-      }}
-    >
-      {editing ? (
-        <div className="group relative flex h-8 min-w-0 flex-1 items-center rounded-lg border border-border/60 bg-background/85 shadow-sm transition-all focus-within:border-primary/40 focus-within:bg-background focus-within:ring-[3px] focus-within:ring-primary/10">
-          <FolderTree className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground/70 transition-colors group-focus-within:text-primary" />
-          <input
-            ref={inputRef}
-            value={value}
-            type="text"
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={open}
-            aria-controls={listboxId}
-            aria-activedescendant={
-              open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined
-            }
-            spellCheck={false}
-            autoCapitalize="none"
-            autoCorrect="off"
-            className="h-full min-w-0 flex-1 bg-transparent pl-8 pr-11 font-mono text-xs text-foreground outline-none placeholder:font-sans placeholder:text-muted-foreground/60"
-            placeholder={t(
-              side === "remote"
-                ? "workspaceSftp.pathPlaceholder"
-                : "workspaceSftp.pathPlaceholderLocal",
-            )}
-            onFocus={() => setOpen(true)}
-            onChange={(event) => {
-              setValue(event.target.value);
-              setOpen(true);
-            }}
-            onKeyDown={handleKeyDown}
-          />
-          <span className="pointer-events-none absolute right-2 flex items-center gap-1 text-[10px] text-muted-foreground/70">
-            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : null}
-            <kbd className="rounded-sm border border-border/70 bg-background/80 px-1 py-0.5 font-sans text-muted-foreground/80">
-              ↵
-            </kbd>
-          </span>
-        </div>
-      ) : (
-        <div className="flex h-8 min-w-0 flex-1 items-center rounded-lg px-0.5">
-          <PathCrumbRow crumbs={crumbs} onNavigate={navigate} />
-          <button
-            type="button"
-            className="h-full min-w-4 flex-1 cursor-text"
-            aria-label={t("workspaceSftp.pathEdit")}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={beginEdit}
-          />
-          {loading ? (
-            <Loader2 className="mx-1 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground/70" />
-          ) : null}
-        </div>
-      )}
-
-      {editing && open ? (
-        <div
-          id={listboxId}
-          role="listbox"
-          className="sftp-path-popover-enter absolute inset-x-2 top-full z-50 mt-1.5 overflow-hidden rounded-xl border border-border/50 bg-popover/85 shadow-[0_18px_44px_-14px_rgba(0,0,0,0.28),0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] backdrop-blur-2xl dark:ring-white/[0.06]"
-        >
-          <div className="max-h-64 overflow-y-auto p-1">
-            {suggestionError ? (
-              <div
-                className="flex items-center gap-2 rounded-lg px-2.5 py-3 text-xs text-destructive"
-                title={suggestionError}
-              >
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="truncate">{t("workspaceSftp.pathSearchFailed")}</span>
-              </div>
-            ) : suggestionsLoading ? (
-              <div className="flex items-center justify-center gap-2 px-3 py-5 text-xs text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("workspaceSftp.pathSearching")}
-              </div>
-            ) : suggestions.length ? (
-              suggestions.map((entry, index) => {
-                const DirectoryIcon = getFileTypeIcon(entry.name || entry.path, "dir", {
-                  expanded: true,
-                });
-                return (
-                  <button
-                    key={entry.path}
-                    ref={(element) => {
-                      if (element) suggestionRefs.current.set(index, element);
-                      else suggestionRefs.current.delete(index);
-                    }}
-                    id={`${listboxId}-option-${index}`}
-                    type="button"
-                    role="option"
-                    aria-selected={activeIndex === index}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
-                      activeIndex === index
-                        ? "bg-primary/[0.08] text-foreground"
-                        : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
-                    )}
-                    title={entry.path}
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => navigate(entry.path)}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors",
-                        activeIndex === index
-                          ? "bg-primary/10 text-primary"
-                          : "bg-foreground/[0.04] text-muted-foreground",
-                      )}
-                    >
-                      <DirectoryIcon className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium text-foreground">
-                        {entry.name}
-                      </span>
-                      <span className="block truncate font-mono text-[10px] text-muted-foreground/80">
-                        {entry.path}
-                      </span>
-                    </span>
-                    <ChevronRight
-                      className={cn(
-                        "h-3.5 w-3.5 shrink-0 transition-opacity",
-                        activeIndex === index ? "opacity-60" : "opacity-30",
-                      )}
-                    />
-                  </button>
-                );
-              })
-            ) : (
-              <div className="px-3 py-5 text-center text-xs text-muted-foreground">
-                {t("workspaceSftp.pathNoMatches")}
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-border/50 bg-muted/25 px-3 py-1.5 text-[10px] text-muted-foreground/80">
-            {t("workspaceSftp.pathKeyboardHint")}
-          </div>
-        </div>
-      ) : null}
-    </fieldset>
-  );
 }
 
 function entryTypeLabel(entry: SftpEntry, t: (key: string) => string) {
@@ -1066,10 +633,9 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
   const copyPath = useCallback(
     async (path: string) => {
-      try {
-        await navigator.clipboard.writeText(path);
+      if (await copyTextToClipboard(path)) {
         showCopyToast();
-      } catch {
+      } else {
         setCopyPathDialog(path);
       }
     },
@@ -1368,11 +934,11 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
   if (!connected) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-        <AlertTriangle className="h-8 w-8 text-amber-500" />
+      <EmptyState variant="workspace">
+        <AlertTriangle className="size-8 text-amber-500" />
         <div className="font-medium text-foreground">{t("workspaceSftp.disconnected")}</div>
         <div className="max-w-md text-xs">{t("workspaceSftp.disconnectedHint")}</div>
-      </div>
+      </EmptyState>
     );
   }
 
@@ -1399,14 +965,14 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
       ) : null}
       <div
         className={cn(
-          "sftp-panes-scroll flex min-h-0 flex-1 overflow-y-hidden",
+          "flex min-h-0 flex-1 overflow-y-hidden web:[scrollbar-width:auto]! web:[scrollbar-color:auto]!",
           isMobileLayout ? "overflow-x-hidden" : "overflow-x-auto",
         )}
       >
         <div
           className={cn(
             "grid h-full min-h-0 flex-1 divide-x divide-border",
-            isMobileLayout ? "grid-cols-1" : "min-w-[860px] grid-cols-2",
+            isMobileLayout ? "grid-cols-1" : "min-w-860px grid-cols-2",
           )}
         >
           {(isMobileLayout ? panes.filter((entry) => entry.side === mobilePane) : panes).map(
@@ -1440,20 +1006,27 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                     openContextMenu(event, side, pane.path, "directory", false)
                   }
                 >
-                  <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-background text-muted-foreground">
-                      <PaneFolderIcon className="h-4 w-4" />
+                  <div
+                    className={cn(
+                      "flex h-12 shrink-0 items-center gap-2",
+                      "border-b border-border bg-muted/30 px-3",
+                    )}
+                  >
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-background text-muted-foreground">
+                      <PaneFolderIcon className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-foreground">{label}</div>
-                      <div className="truncate font-mono text-[11px] text-muted-foreground">
-                        {root}
-                      </div>
+                      <div className="truncate font-mono text-xs text-muted-foreground">{root}</div>
                     </div>
                     {pane.selectedPaths.length ? (
                       <button
                         type="button"
-                        className="inline-flex h-7 max-w-[112px] shrink-0 items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300"
+                        className={cn(
+                          "inline-flex h-7 max-w-112px shrink-0 items-center",
+                          "rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2",
+                          "text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300",
+                        )}
                         title={t("workspaceSftp.clearSelection")}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -1470,15 +1043,15 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                     ) : null}
                     <button
                       type="button"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground"
+                      className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground"
                       title={t("workspaceSftp.refresh")}
                       onClick={() => refreshPane(side)}
                     >
-                      <RefreshCw className={cn("h-4 w-4", pane.loading && "animate-spin")} />
+                      <RefreshCw className={cn("size-4", pane.loading && "animate-spin")} />
                     </button>
                   </div>
 
-                  <PathNavigator
+                  <SftpPathNavigator
                     side={side}
                     path={pane.path}
                     loading={pane.loading}
@@ -1492,8 +1065,13 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                   />
 
                   {pane.error ? (
-                    <div className="m-3 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div
+                      className={cn(
+                        "m-3 flex items-start gap-2",
+                        "rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive",
+                      )}
+                    >
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                       <span className="min-w-0 break-words">{pane.error}</span>
                     </div>
                   ) : null}
@@ -1514,44 +1092,45 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                     {dropMode ? (
                       <div
                         className={cn(
-                          "pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg bg-background/80 text-center opacity-75 shadow-inner backdrop-blur-[1px] transition-all",
+                          "pointer-events-none absolute inset-2 z-20 flex items-center justify-center",
+                          "rounded-lg bg-background/80 text-center opacity-75 shadow-inner backdrop-blur-1px transition-all",
                           dropActive && "bg-emerald-500/10 opacity-100",
                         )}
                       >
                         <span
                           className={cn(
-                            "absolute left-0 top-0 h-14 w-14 rounded-tl-lg border-l-2 border-t-2",
+                            "absolute left-0 top-0 size-14 rounded-tl-lg border-l-2 border-t-2",
                             dropActive ? "border-emerald-600" : "border-foreground/65",
                           )}
                         />
                         <span
                           className={cn(
-                            "absolute right-0 top-0 h-14 w-14 rounded-tr-lg border-r-2 border-t-2",
+                            "absolute right-0 top-0 size-14 rounded-tr-lg border-r-2 border-t-2",
                             dropActive ? "border-emerald-600" : "border-foreground/65",
                           )}
                         />
                         <span
                           className={cn(
-                            "absolute bottom-0 left-0 h-14 w-14 rounded-bl-lg border-b-2 border-l-2",
+                            "absolute bottom-0 left-0 size-14 rounded-bl-lg border-b-2 border-l-2",
                             dropActive ? "border-emerald-600" : "border-foreground/65",
                           )}
                         />
                         <span
                           className={cn(
-                            "absolute bottom-0 right-0 h-14 w-14 rounded-br-lg border-b-2 border-r-2",
+                            "absolute bottom-0 right-0 size-14 rounded-br-lg border-b-2 border-r-2",
                             dropActive ? "border-emerald-600" : "border-foreground/65",
                           )}
                         />
                         <div className="flex max-w-[75%] flex-col items-center gap-3">
                           <div
                             className={cn(
-                              "flex h-14 w-14 items-center justify-center rounded-xl border-2 bg-background/90 shadow-sm",
+                              "flex size-14 items-center justify-center rounded-xl border-2 bg-background/90 shadow-sm",
                               dropActive
                                 ? "border-emerald-600 text-emerald-700 dark:text-emerald-300"
                                 : "border-foreground/70 text-foreground",
                             )}
                           >
-                            <DropIcon className="h-7 w-7" />
+                            <DropIcon className="size-7" />
                           </div>
                           <div>
                             <div className="text-sm font-semibold text-foreground">
@@ -1565,7 +1144,13 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                               )}
                             </div>
                             {dropPath ? (
-                              <div className="mx-auto mt-2 max-w-full truncate rounded bg-background/70 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                              <div
+                                className={cn(
+                                  "mx-auto mt-2 max-w-full",
+                                  "truncate rounded bg-background/70 px-2 py-1",
+                                  "font-mono text-xs text-muted-foreground",
+                                )}
+                              >
                                 {normalizePath(dropPath, side)}
                               </div>
                             ) : null}
@@ -1575,7 +1160,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                     ) : null}
                     {pane.loading && pane.entries.length === 0 ? (
                       <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="size-4 animate-spin" />
                         {t("workspaceSftp.loading")}
                       </div>
                     ) : pane.entries.length === 0 ? (
@@ -1598,7 +1183,8 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                               }
                               aria-pressed={isSelected}
                               className={cn(
-                                "grid w-full cursor-default grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted",
+                                "grid w-full cursor-default grid-cols-composer-control items-center gap-3 rounded-md",
+                                "px-2 py-1.5 text-left text-xs hover:bg-muted",
                                 !isMobileLayout && "touch-none",
                                 isSelected &&
                                   "bg-emerald-500/10 text-foreground ring-1 ring-emerald-500/20",
@@ -1697,7 +1283,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 {entryIcon(entry)}
                                 <span className="truncate">{entry.name}</span>
                               </span>
-                              <span className="text-right font-mono text-[11px] text-muted-foreground">
+                              <span className="text-right font-mono text-xs text-muted-foreground">
                                 {entry.kind === "directory" ? "--" : formatBytes(entry.sizeBytes)}
                               </span>
                             </button>
@@ -1713,8 +1299,13 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
         </div>
       </div>
 
-      <div className="flex h-10 shrink-0 items-center gap-2 border-t border-border bg-muted/30 px-3 text-xs text-muted-foreground">
-        {busyMessage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+      <div
+        className={cn(
+          "flex h-10 shrink-0 items-center gap-2",
+          "border-t border-border bg-muted/30 px-3 text-xs text-muted-foreground",
+        )}
+      >
+        {busyMessage ? <Loader2 className="size-3.5 animate-spin" /> : null}
         <span className="min-w-0 flex-1 truncate">
           {busyMessage || (transfer ? "" : t("workspaceSftp.transfer.idle"))}
         </span>
@@ -1737,13 +1328,22 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
       {contextMenu ? (
         <div
-          className="editor-context-menu layer-popover absolute w-[220px] select-none overflow-hidden rounded-xl border border-border/60 bg-popover/90 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+          className={cn(
+            "origin-top-left layer-popover absolute w-220px select-none overflow-hidden",
+            "rounded-xl border border-border/60 bg-popover/90 p-1",
+            "text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]",
+          )}
           role="menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onContextMenu={(event) => event.preventDefault()}
         >
           {contextMenu.items.length > 1 ? (
-            <div className="mb-1 flex items-center justify-between rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+            <div
+              className={cn(
+                "mb-1 flex items-center justify-between rounded-lg bg-emerald-500/10 px-2 py-1",
+                "text-xs font-medium text-emerald-700 dark:text-emerald-300",
+              )}
+            >
               <span>
                 {t("workspaceSftp.selectedCount").replace(
                   "{count}",
@@ -1764,7 +1364,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             </div>
           ) : null}
           <MenuItem
-            icon={<RefreshCw className="h-3.5 w-3.5" />}
+            icon={<RefreshCw className="size-3.5" />}
             label={t("workspaceSftp.refresh")}
             onClick={() => {
               setContextMenu(null);
@@ -1772,7 +1372,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             }}
           />
           <MenuItem
-            icon={<Plus className="h-3.5 w-3.5" />}
+            icon={<Plus className="size-3.5" />}
             label={t("workspaceSftp.newFolder")}
             onClick={() => {
               setContextMenu(null);
@@ -1788,7 +1388,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
           (contextMenu.side === "local" ||
             canEditRemoteEntry({ path: contextMenu.path, kind: contextMenu.kind })) ? (
             <MenuItem
-              icon={<SquarePen className="h-3.5 w-3.5" />}
+              icon={<SquarePen className="size-3.5" />}
               label={t("workspaceSftp.edit")}
               disabled={
                 !contextMenu.isEntry ||
@@ -1803,7 +1403,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             />
           ) : null}
           <MenuItem
-            icon={<Pencil className="h-3.5 w-3.5" />}
+            icon={<SquarePen className="size-3.5" />}
             label={t("workspaceSftp.rename")}
             disabled={
               !contextMenu.isEntry ||
@@ -1817,7 +1417,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             }}
           />
           <MenuItem
-            icon={<Trash2 className="h-3.5 w-3.5" />}
+            icon={<Trash2 className="size-3.5" />}
             label={t("workspaceSftp.delete")}
             disabled={!contextMenu.isEntry || contextMenu.items.length === 0}
             destructive
@@ -1829,7 +1429,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
           <div className="my-1 h-px bg-border/70" />
           {contextMenu.side === "local" ? (
             <MenuItem
-              icon={<Upload className="h-3.5 w-3.5" />}
+              icon={<Upload className="size-3.5" />}
               label={t("workspaceSftp.uploadToRemote")}
               disabled={!contextMenu.isEntry || contextMenu.items.length === 0}
               onClick={() => {
@@ -1848,7 +1448,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             />
           ) : (
             <MenuItem
-              icon={<Download className="h-3.5 w-3.5" />}
+              icon={<Download className="size-3.5" />}
               label={t("workspaceSftp.downloadToLocal")}
               disabled={!contextMenu.isEntry || contextMenu.items.length === 0}
               onClick={() => {
@@ -1867,7 +1467,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             />
           )}
           <MenuItem
-            icon={<Copy className="h-3.5 w-3.5" />}
+            icon={<Copy className="size-3.5" />}
             label={t("workspaceSftp.copyPath")}
             onClick={() => {
               setContextMenu(null);

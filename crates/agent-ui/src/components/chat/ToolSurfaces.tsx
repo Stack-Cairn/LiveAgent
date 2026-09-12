@@ -13,9 +13,7 @@ export function ToolSection(props: { label?: string; trailing?: ReactNode; child
       {label || trailing ? (
         <div className="flex min-h-5 items-center gap-2">
           {label ? (
-            <span className="shrink-0 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground/65">
-              {label}
-            </span>
+            <span className="shrink-0 text-xs font-medium text-muted-foreground/65">{label}</span>
           ) : null}
           {trailing}
         </div>
@@ -31,11 +29,7 @@ export function ToolSurface(props: { children: ReactNode; className?: string }) 
 }
 
 export function ToolSurfaceLabel({ label }: { label: string }) {
-  return (
-    <div className="mb-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground/55">
-      {label}
-    </div>
-  );
+  return <div className="mb-0.5 text-tiny font-medium text-muted-foreground/55">{label}</div>;
 }
 
 export function ToolFactGrid({ tags }: { tags: MetaTag[] }) {
@@ -45,7 +39,7 @@ export function ToolFactGrid({ tags }: { tags: MetaTag[] }) {
       {tags.map((tag) => (
         <ToolSurface key={`${tag.label}-${tag.value}`}>
           <ToolSurfaceLabel label={tag.label} />
-          <div className="break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
+          <div className="break-all font-mono text-xs leading-1p55 text-foreground/78">
             {tag.value}
           </div>
         </ToolSurface>
@@ -101,7 +95,7 @@ export function MetaTags({ tags }: { tags: MetaTag[] }) {
         return (
           <span
             key={stableKey}
-            className="inline-flex min-h-5 items-baseline gap-1 text-[calc(11px*var(--zone-font-scale,1))] leading-5"
+            className="inline-flex min-h-5 items-baseline gap-1 text-xs leading-5"
           >
             <span className="font-medium text-muted-foreground/55">{tag.label}</span>
             <span className="min-w-0 break-all font-mono tabular-nums text-foreground/75">
@@ -119,7 +113,11 @@ export function ToolScrollablePre(props: { children: ReactNode; className?: stri
   return (
     <pre
       className={cn(
-        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-md px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]",
+        "tool-text-scroll overflow-x-auto overflow-y-auto",
+        "whitespace-pre break-normal rounded-md px-2.5 py-2 text-xs leading-1p6",
+        "[scrollbar-color:transparent_transparent] [scrollbar-width:thin] transition-[scrollbar-color] duration-200 ease-default",
+        "hover:[scrollbar-color:hsl(var(--muted-foreground)/0.3)_transparent] [&::-webkit-scrollbar]:size-10px [&::-webkit-scrollbar-track]:m-6px [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/14 [&::-webkit-scrollbar-thumb]:transition-colors [&::-webkit-scrollbar-thumb]:duration-200",
+        "hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/22 hover:[&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/38 web:[&::-webkit-scrollbar]:size-8px",
         className,
       )}
     >

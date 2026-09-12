@@ -1,3 +1,4 @@
+import { cn } from "@liveagent/ui/lib/shared/utils";
 export type WorkbenchEmptyStateProps = {
   title: string;
   description?: string;
@@ -8,7 +9,10 @@ export function WorkbenchEmptyState(props: WorkbenchEmptyStateProps) {
   return (
     <div
       data-workbench-empty-state=""
-      className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-1.5 p-8 text-center"
+      className={cn(
+        "flex size-full min-h-0 flex-col items-center justify-center gap-1.5 p-8",
+        "text-center",
+      )}
     >
       <p className="text-sm font-medium text-muted-foreground">{props.title}</p>
       {props.description ? (

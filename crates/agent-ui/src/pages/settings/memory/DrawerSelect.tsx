@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 
 export type DrawerSelectOption = {
   value: string;
@@ -20,23 +21,28 @@ export function DrawerSelect(props: {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  variant?: "default" | "plain";
 }) {
   const { value, onValueChange, options, ariaLabel, placeholder, disabled, className } = props;
-  const triggerClass = [
-    "group/drawer-select inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-[13px] leading-none text-foreground/90 shadow-xs",
+  const triggerClass = cn(
+    "group/drawer-select inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm leading-none text-foreground/90 shadow-xs",
     "outline-none transition-colors duration-150",
     "hover:bg-accent/40",
     "data-[open]:bg-accent/50",
     "data-[placeholder]:text-muted-foreground",
     "focus-visible:outline-none focus-visible:ring-0",
     "disabled:cursor-not-allowed disabled:opacity-50",
+    props.variant === "plain" &&
+      cn(
+        "border-0 bg-settings-tile-hover shadow-none",
+        "hover:bg-settings-active data-[open]:bg-background",
+        "focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring/25",
+      ),
     className,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  );
 
   return (
-    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+    <Select items={options} value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger aria-label={ariaLabel} className={triggerClass}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
@@ -45,14 +51,14 @@ export function DrawerSelect(props: {
         align="start"
         sideOffset={6}
         collisionPadding={12}
-        className="drawer-select-content min-w-(--anchor-width) rounded-xl border-border bg-background text-[13px] text-foreground/90 shadow-xl"
+        className="drawer-select-content min-w-(--anchor-width) rounded-xl border-border bg-background text-sm text-foreground/90 shadow-xl"
       >
         {options.map((option) => (
           <SelectItem
             key={option.value}
             value={option.value}
             description={option.description}
-            className="cursor-pointer py-1.5 text-[13px] leading-tight"
+            className="cursor-pointer py-1.5 text-sm leading-tight"
           >
             {option.label}
           </SelectItem>

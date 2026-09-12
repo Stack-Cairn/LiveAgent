@@ -10,7 +10,10 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { resolveMentionPopupHorizontalLayout } from "@liveagent/ui/lib/chat/mentionPopupLayout";
+import { UI_MOTION_TRANSITION } from "@liveagent/ui/lib/shared/motion";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { domAnimation, LazyMotion, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -84,6 +87,7 @@ export function Popup({
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLButtonElement>(null);
+  const prefersReducedMotion = useReducedMotion();
   // biome-ignore lint/correctness/useExhaustiveDependencies: highlightIndex is the trigger — hlRef points at a different row after each keyboard move, and the scroll must follow it.
   useEffect(() => {
     hlRef.current?.scrollIntoView({ block: "nearest" });
@@ -123,202 +127,233 @@ export function Popup({
   }, [anchorRef]);
 
   return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: The popup intercepts pointer-down solely to preserve editor focus; it is not an activation target.
-    <div
-      ref={popupRef}
-      className={cn(
-        "mention-popup-enter layer-popover fixed overflow-hidden rounded-2xl",
-        "border border-black/[0.075] bg-popover text-popover-foreground shadow-sm ring-0 dark:border-white/[0.15]",
-      )}
-      onMouseDown={(event) => {
-        // Any mousedown inside the popup must not blur the editor (blur closes
-        // the mention session), except on the native scrollbar strip where
-        // preventDefault would break thumb dragging in some engines.
-        const list = listRef.current;
-        if (list) {
-          const rect = list.getBoundingClientRect();
-          const onScrollbar =
-            event.clientX >= rect.left + list.clientLeft + list.clientWidth &&
-            event.clientY >= rect.top &&
-            event.clientY <= rect.bottom;
-          if (onScrollbar) return;
-        }
-        event.preventDefault();
-      }}
-    >
-      <div className="flex min-h-10 items-center px-3.5 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-        {trigger === "skill" ? (
-          "Skills"
-        ) : mode === "root" ? (
-          t("chat.composer.add")
-        ) : (
-          <button
-            type="button"
-            className="-ml-1 flex min-h-8 items-center gap-1 rounded-md px-1.5 transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-            onMouseDown={(event) => {
-              event.preventDefault();
-              onBack();
-            }}
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {mode === "apps"
-              ? t("chat.composer.mentionGroupApps")
-              : mode === "files"
-                ? t("chat.composer.filesAndFolders")
-                : t("chat.composer.conversations")}
-          </button>
+    <LazyMotion features={domAnimation} strict>
+      <m.div
+        ref={popupRef}
+        initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 6, scale: 0.98 }}
+        animate={{
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          transition: prefersReducedMotion
+            ? UI_MOTION_TRANSITION.instant
+            : UI_MOTION_TRANSITION.popover,
+        }}
+        exit={{
+          opacity: 0,
+          y: prefersReducedMotion ? 0 : 4,
+          scale: prefersReducedMotion ? 1 : 0.98,
+          transition: prefersReducedMotion
+            ? UI_MOTION_TRANSITION.instant
+            : UI_MOTION_TRANSITION.popoverExit,
+        }}
+        className={cn(
+          "origin-bottom min-w-0 layer-popover fixed overflow-hidden rounded-2xl",
+          "border border-black/[0.075] bg-popover text-popover-foreground shadow-sm ring-0 dark:border-white/[0.15]",
         )}
-      </div>
-      <div
-        ref={listRef}
-        role="listbox"
-        aria-label={
-          trigger === "skill"
-            ? "Skills"
-            : mode === "root"
-              ? t("chat.composer.add")
-              : mode === "apps"
+        onMouseDown={(event) => {
+          // Any mousedown inside the popup must not blur the editor (blur closes
+          // the mention session), except on the native scrollbar strip where
+          // preventDefault would break thumb dragging in some engines.
+          const list = listRef.current;
+          if (list) {
+            const rect = list.getBoundingClientRect();
+            const onScrollbar =
+              event.clientX >= rect.left + list.clientLeft + list.clientWidth &&
+              event.clientY >= rect.top &&
+              event.clientY <= rect.bottom;
+            if (onScrollbar) return;
+          }
+          event.preventDefault();
+        }}
+      >
+        <div
+          className={cn(
+            "flex min-h-10 items-center px-3.5 pb-1 pt-2",
+            "text-xs font-medium text-muted-foreground",
+          )}
+        >
+          {trigger === "skill" ? (
+            "Skills"
+          ) : mode === "root" ? (
+            t("chat.composer.add")
+          ) : (
+            <button
+              type="button"
+              className={cn(
+                "-ml-1 flex min-h-8 items-center gap-1 rounded-md px-1.5 transition-colors",
+                "hover:bg-foreground/[0.05] hover:text-foreground",
+              )}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onBack();
+              }}
+            >
+              <ArrowLeft className="size-3.5" />
+              {mode === "apps"
                 ? t("chat.composer.mentionGroupApps")
                 : mode === "files"
                   ? t("chat.composer.filesAndFolders")
-                  : t("chat.composer.conversations")
-        }
-        className="mention-popup-scroll relative flex flex-col overflow-y-auto px-2 pb-2"
-      >
-        {isLoading && (
-          <div className="px-2 py-2 text-xs text-muted-foreground">
-            {mode === "conversations"
-              ? t("chat.composer.searchingConversations")
-              : t("chat.composer.indexingFiles")}
-          </div>
-        )}
-        {error && !isLoading && <div className="px-2 py-2 text-xs text-destructive">{error}</div>}
-        {suggestions.map((suggestion, i) => {
-          const isCategory = suggestion.type === "category";
-          const isSkill = suggestion.type === "skill";
-          const conversation = suggestion.type === "conversation" ? suggestion.conversation : null;
-          const isApp = suggestion.type === "app";
-          const entry = suggestion.type === "file" ? suggestion.entry : null;
-          const skill = suggestion.type === "skill" ? suggestion.skill : null;
-          const app = suggestion.type === "app" ? suggestion.app : null;
-          const isDir = entry?.kind === "dir";
-          const parts = entry ? entry.path.split("/") : [];
-          const fileName = parts.pop() || "";
-          const dirPath = parts.join("/");
-          const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
-          const category = suggestion.type === "category" ? suggestion.category : null;
-          const title =
-            app?.name ??
-            (category === "apps"
-              ? t("chat.composer.mentionGroupApps")
-              : category === "files"
-                ? t("chat.composer.filesAndFolders")
-                : category === "conversations"
-                  ? t("chat.composer.conversations")
-                  : (conversation?.title ?? skill?.name ?? fileName));
-          const updatedAtLabel = conversationUpdatedAtLabel(conversation?.updatedAt, locale);
-          const conversationMeta = [conversation?.cwd, updatedAtLabel].filter(Boolean).join(" · ");
-          const subtitle =
-            category === "apps"
-              ? t("chat.composer.appsHint")
-              : category === "files"
-                ? t("chat.composer.filesAndFoldersHint")
-                : category === "conversations"
-                  ? t("chat.composer.conversationsHint")
-                  : conversation
-                    ? conversation.searchPreview || conversationMeta
-                    : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
-          const RowIcon =
-            category === "apps"
-              ? AppWindow
-              : category === "files"
-                ? Paperclip
-                : category === "conversations" || conversation
-                  ? MessageSquareText
-                  : Icon;
-          return (
-            <button
-              type="button"
-              role="option"
-              aria-selected={i === highlightIndex}
-              key={
-                entry
-                  ? `${entry.kind}:${entry.path}`
-                  : app
-                    ? `app:${app.bundleId || app.path || app.name}`
-                    : conversation
-                      ? `conversation:${conversation.id}`
-                      : category
-                        ? `category:${category}`
-                        : `skill:${skill?.skillFile ?? skill?.name}`
-              }
-              ref={i === highlightIndex ? hlRef : undefined}
-              className={cn(
-                // Rows are 38px hitboxes with 2px transparent borders so the
-                // visual 34px row keeps the 4px gap while clicks in the gap
-                // still land on a row instead of a dead strip. shrink-0 stops
-                // the max-h flex column from compressing rows before it scrolls.
-                "mention-popup-item group flex h-[38px] shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
-                i === highlightIndex
-                  ? "bg-foreground/[0.07] text-foreground"
-                  : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",
-              )}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onSelect(suggestion);
-              }}
-            >
-              <span
-                className={cn(
-                  "flex h-4 w-4 shrink-0 items-center justify-center",
-                  isCategory || conversation
-                    ? "text-muted-foreground"
-                    : isSkill || isApp
-                      ? "text-foreground/85"
-                      : isDir
-                        ? "text-amber-600 dark:text-amber-300"
-                        : "text-muted-foreground",
-                )}
-              >
-                {isApp ? (
-                  app?.iconDataUrl ? (
-                    <img src={app.iconDataUrl} alt="" className="h-4 w-4 rounded-sm" />
-                  ) : (
-                    <AppWindow className="h-4 w-4" />
-                  )
-                ) : RowIcon ? (
-                  <RowIcon width={16} height={16} />
-                ) : (
-                  <Blend className="h-4 w-4" />
-                )}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-left">
-                <span className="font-normal text-foreground/95">{title}</span>
-                {subtitle && (
-                  <span className="ml-2 text-xs text-muted-foreground/75">{subtitle}</span>
-                )}
-              </span>
-              {isCategory ? (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
-              ) : isSkill ? (
-                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                  skill
-                </span>
-              ) : (
-                isDir && (
-                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                    dir
-                  </span>
-                )
-              )}
+                  : t("chat.composer.conversations")}
             </button>
-          );
-        })}
-        {showEmpty && !isLoading && !error && suggestions.length === 0 && (
-          <div className="px-2 py-2 text-xs text-muted-foreground">{emptyLabel}</div>
-        )}
-      </div>
-    </div>,
+          )}
+        </div>
+        <div
+          ref={listRef}
+          role="listbox"
+          aria-label={
+            trigger === "skill"
+              ? "Skills"
+              : mode === "root"
+                ? t("chat.composer.add")
+                : mode === "apps"
+                  ? t("chat.composer.mentionGroupApps")
+                  : mode === "files"
+                    ? t("chat.composer.filesAndFolders")
+                    : t("chat.composer.conversations")
+          }
+          className="relative flex flex-col overflow-y-auto px-2 pb-2 web:[scrollbar-color:var(--gateway-scrollbar-thumb)_transparent] web:[&::-webkit-scrollbar]:size-8px"
+        >
+          {isLoading && (
+            <div className="p-2 text-xs text-muted-foreground">
+              {mode === "conversations"
+                ? t("chat.composer.searchingConversations")
+                : t("chat.composer.indexingFiles")}
+            </div>
+          )}
+          {error && !isLoading && <div className="p-2 text-xs text-destructive">{error}</div>}
+          {suggestions.map((suggestion, i) => {
+            const isCategory = suggestion.type === "category";
+            const isSkill = suggestion.type === "skill";
+            const conversation =
+              suggestion.type === "conversation" ? suggestion.conversation : null;
+            const isApp = suggestion.type === "app";
+            const entry = suggestion.type === "file" ? suggestion.entry : null;
+            const skill = suggestion.type === "skill" ? suggestion.skill : null;
+            const app = suggestion.type === "app" ? suggestion.app : null;
+            const isDir = entry?.kind === "dir";
+            const parts = entry ? entry.path.split("/") : [];
+            const fileName = parts.pop() || "";
+            const dirPath = parts.join("/");
+            const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
+            const category = suggestion.type === "category" ? suggestion.category : null;
+            const title =
+              app?.name ??
+              (category === "apps"
+                ? t("chat.composer.mentionGroupApps")
+                : category === "files"
+                  ? t("chat.composer.filesAndFolders")
+                  : category === "conversations"
+                    ? t("chat.composer.conversations")
+                    : (conversation?.title ?? skill?.name ?? fileName));
+            const updatedAtLabel = conversationUpdatedAtLabel(conversation?.updatedAt, locale);
+            const conversationMeta = [conversation?.cwd, updatedAtLabel]
+              .filter(Boolean)
+              .join(" · ");
+            const subtitle =
+              category === "apps"
+                ? t("chat.composer.appsHint")
+                : category === "files"
+                  ? t("chat.composer.filesAndFoldersHint")
+                  : category === "conversations"
+                    ? t("chat.composer.conversationsHint")
+                    : conversation
+                      ? conversation.searchPreview || conversationMeta
+                      : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
+            const RowIcon =
+              category === "apps"
+                ? AppWindow
+                : category === "files"
+                  ? Paperclip
+                  : category === "conversations" || conversation
+                    ? MessageSquareText
+                    : Icon;
+            return (
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === highlightIndex}
+                key={
+                  entry
+                    ? `${entry.kind}:${entry.path}`
+                    : app
+                      ? `app:${app.bundleId || app.path || app.name}`
+                      : conversation
+                        ? `conversation:${conversation.id}`
+                        : category
+                          ? `category:${category}`
+                          : `skill:${skill?.skillFile ?? skill?.name}`
+                }
+                ref={i === highlightIndex ? hlRef : undefined}
+                className={cn(
+                  // Rows are 38px hitboxes with 2px transparent borders so the
+                  // visual 34px row keeps the 4px gap while clicks in the gap
+                  // still land on a row instead of a dead strip. shrink-0 stops
+                  // the max-h flex column from compressing rows before it scrolls.
+                  "group flex h-38px shrink-0 cursor-pointer items-center gap-3",
+                  "rounded-lg border-y-2 border-transparent bg-clip-padding px-3",
+                  "text-left text-xs leading-5 transition-colors",
+                  i === highlightIndex
+                    ? "bg-foreground/[0.07] text-foreground"
+                    : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(suggestion);
+                }}
+              >
+                <span
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center",
+                    isCategory || conversation
+                      ? "text-muted-foreground"
+                      : isSkill || isApp
+                        ? "text-foreground/85"
+                        : isDir
+                          ? "text-amber-600 dark:text-amber-300"
+                          : "text-muted-foreground",
+                  )}
+                >
+                  {isApp ? (
+                    app?.iconDataUrl ? (
+                      <img src={app.iconDataUrl} alt="" className="size-4 rounded-sm" />
+                    ) : (
+                      <AppWindow className="size-4" />
+                    )
+                  ) : RowIcon ? (
+                    <RowIcon width={16} height={16} />
+                  ) : (
+                    <Blend className="size-4" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-left">
+                  <span className="font-normal text-foreground/95">{title}</span>
+                  {subtitle && (
+                    <span className="ml-2 text-xs text-muted-foreground/75">{subtitle}</span>
+                  )}
+                </span>
+                {isCategory ? (
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/65" />
+                ) : isSkill ? (
+                  <span className="shrink-0 text-tiny uppercase tracking-wider text-muted-foreground/60">
+                    skill
+                  </span>
+                ) : (
+                  isDir && (
+                    <span className="shrink-0 text-tiny uppercase tracking-wider text-muted-foreground/60">
+                      dir
+                    </span>
+                  )
+                )}
+              </button>
+            );
+          })}
+          {showEmpty && !isLoading && !error && suggestions.length === 0 && (
+            <div className="p-2 text-xs text-muted-foreground">{emptyLabel}</div>
+          )}
+        </div>
+      </m.div>
+    </LazyMotion>,
     document.body,
   );
 }
@@ -430,7 +465,11 @@ export function CommitMentionTooltip({
     // biome-ignore lint/a11y/noStaticElementInteractions: Hover and pointer handlers keep this non-interactive tooltip open while the pointer crosses into it.
     <div
       ref={tooltipRef}
-      className="layer-popover fixed overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
+      className={cn(
+        "layer-popover fixed overflow-y-auto",
+        "rounded-xl border border-border bg-popover px-3 py-2.5",
+        "text-xs text-popover-foreground shadow-xl",
+      )}
       style={{
         left,
         top,
@@ -445,11 +484,11 @@ export function CommitMentionTooltip({
       onMouseLeave={onMouseLeave}
     >
       <div className="flex items-start gap-2">
-        <GitHubMarkIcon className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
+        <GitHubMarkIcon className="mt-0.5 size-4 shrink-0 text-foreground" />
         <div className="min-w-0">
           <div className="break-words font-medium leading-tight">{authorLabel}</div>
           {date ? (
-            <div className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
+            <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
               {date.relative} ({date.absolute})
             </div>
           ) : null}
@@ -461,14 +500,19 @@ export function CommitMentionTooltip({
           {messageBody}
         </div>
       ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[calc(11px*var(--zone-font-scale,1))] leading-tight">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-tight">
         <span className="text-muted-foreground">{filesChangedLabel}</span>
         <span className="font-medium text-emerald-600 dark:text-emerald-400">
           {insertionsLabel}
         </span>
         <span className="font-medium text-rose-600 dark:text-rose-400">{deletionsLabel}</span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
+      <div
+        className={cn(
+          "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
+          "pt-1.5 text-xs leading-tight text-muted-foreground",
+        )}
+      >
         <span className="font-mono text-foreground">{shortSha}</span>
         {commit.remoteName ? <span>{commit.remoteName}</span> : null}
         {commit.githubUrl ? (
@@ -479,7 +523,7 @@ export function CommitMentionTooltip({
               className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-primary hover:bg-primary/10"
               onClick={() => commit.githubUrl && void openUrl(commit.githubUrl)}
             >
-              <GitHubMarkIcon className="h-3 w-3" />
+              <GitHubMarkIcon className="size-3" />
               {t("chat.composer.commitTooltipOpenGithub")}
             </button>
           </>

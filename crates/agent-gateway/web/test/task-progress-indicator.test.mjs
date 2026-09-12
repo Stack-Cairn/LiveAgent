@@ -194,7 +194,7 @@ test("web renders a compact trigger whose task list never occupies layout space"
   // 药丸按内容收缩，不再撑成固定宽度的常驻卡片。
   assert.match(root.props.className, /\binline-flex\b/);
   assert.match(root.props.className, /group\/task-progress/);
-  assert.doesNotMatch(root.props.className, /max-w-\[440px\]/);
+  assert.doesNotMatch(root.props.className, /max-w-440px/);
   assert.doesNotMatch(root.props.className, /\bmb-4\b/);
 
   // 触发器只留状态图标与步进文案。

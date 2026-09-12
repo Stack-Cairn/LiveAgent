@@ -9,7 +9,9 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import {
   memo,
   type MouseEvent as ReactMouseEvent,
@@ -46,7 +48,7 @@ type BackgroundTasksPanelProps = {
 };
 
 const ROW_ACTION_CLASS =
-  "h-6 gap-1 rounded-md px-1.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground hover:text-foreground";
+  "h-6 gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:text-foreground";
 
 const LOG_MENU_ITEM_CLASS =
   "flex w-full items-center rounded-sm px-2.5 py-1.5 text-left text-xs text-popover-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50";
@@ -141,9 +143,9 @@ function BackgroundTaskLogDialog(props: {
   }, []);
 
   const copyToClipboard = useCallback((text: string) => {
-    navigator.clipboard
-      .writeText(text)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    void copyTextToClipboard(text).then((copied) => {
+      if (!copied) setError("Clipboard is unavailable");
+    });
   }, []);
 
   const handleCopySelection = useCallback(() => {
@@ -181,7 +183,7 @@ function BackgroundTaskLogDialog(props: {
         layout="bottom-sheet-mobile"
         // 显式声明宽度：这是唯一依赖 primitive 默认值的调用点，默认值从
         // max-w-lg 收到 max-w-md 后它会被动变窄 64px，而它承载等宽终端日志。
-        className="flex h-[85dvh] max-w-lg flex-col p-0 sm:h-[min(80dvh,36rem)]"
+        className="flex h-85dvh max-w-lg flex-col p-0 sm:h-dialog-36rem-dvh"
         closeLabel={t("projectTools.close")}
         showCloseButton
       >
@@ -189,7 +191,7 @@ function BackgroundTaskLogDialog(props: {
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate text-sm">{processDisplayName(process)}</DialogTitle>
             <DialogDescription
-              className="mt-0.5 truncate text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground"
+              className="mt-0.5 truncate text-xs text-muted-foreground"
               title={log?.logPath ?? process.logPath}
             >
               {log?.logPath ?? process.logPath}
@@ -205,9 +207,9 @@ function BackgroundTaskLogDialog(props: {
             onClick={refresh}
           >
             {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="size-3.5" />
             )}
             {t("projectTools.bgTaskRefreshLog")}
           </Button>
@@ -225,7 +227,7 @@ function BackgroundTaskLogDialog(props: {
         <DialogBody
           ref={logRef}
           role="log"
-          className="select-text px-3 py-3 font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground [counter-reset:log-line]"
+          className="select-text p-3 font-mono text-xs leading-4 text-muted-foreground [counter-reset:log-line]"
           onContextMenu={handleLogContextMenu}
         >
           {lines.length === 0 ? (
@@ -238,7 +240,7 @@ function BackgroundTaskLogDialog(props: {
                 // Static tail render, replaced wholesale on refresh.
                 // biome-ignore lint/suspicious/noArrayIndexKey: lines have no identity
                 key={index}
-                className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2 [counter-increment:log-line]"
+                className="grid grid-cols-file-icon gap-2 [counter-increment:log-line]"
               >
                 <span
                   aria-hidden="true"
@@ -265,7 +267,10 @@ function BackgroundTaskLogDialog(props: {
             <div
               role="menu"
               aria-label={t("projectTools.bgTaskViewLog")}
-              className="absolute z-10 min-w-36 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              className={cn(
+                "absolute z-10 min-w-36",
+                "rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg",
+              )}
               style={{ left: contextMenu.x, top: contextMenu.y }}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -327,7 +332,7 @@ function BackgroundTaskRow(props: {
   const { t } = useLocale();
   const [pendingStop, setPendingStop] = useState(false);
   const [stopping, setStopping] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copied, showCopied } = useCopyFeedback(false, COPY_FEEDBACK_DURATION.default);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -335,12 +340,6 @@ function BackgroundTaskRow(props: {
     const timer = window.setTimeout(() => setPendingStop(false), 3000);
     return () => window.clearTimeout(timer);
   }, [pendingStop]);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 1500);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
 
   const runAction = useCallback(async (action: () => Promise<void>) => {
     setError(null);
@@ -363,22 +362,29 @@ function BackgroundTaskRow(props: {
 
   const handleCopy = useCallback(() => {
     void runAction(async () => {
-      await navigator.clipboard.writeText(processCopyText(process));
-      setCopied(true);
+      if (!(await copyTextToClipboard(processCopyText(process)))) {
+        throw new Error("Clipboard is unavailable");
+      }
+      showCopied(true);
     });
-  }, [process, runAction]);
+  }, [process, runAction, showCopied]);
 
   const handleClear = useCallback(() => {
     void runAction(() => clearManagedProcesses(process.id));
   }, [process.id, runAction]);
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+    <div
+      className={cn(
+        "flex flex-col gap-1.5",
+        "rounded-lg border border-border/60 bg-background/60 px-2.5 py-2",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-2">
         <span
           aria-hidden="true"
           className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
+            "size-1.5 shrink-0 rounded-full",
             process.running ? "bg-emerald-500" : "bg-muted-foreground/50",
           )}
         />
@@ -386,17 +392,17 @@ function BackgroundTaskRow(props: {
           {processDisplayName(process)}
         </span>
         {process.isolated ? (
-          <span className="shrink-0 rounded bg-amber-500/15 px-1 py-px text-[calc(10px*var(--zone-font-scale,1))] text-amber-600 dark:text-amber-400">
+          <span className="shrink-0 rounded bg-amber-500/15 px-1 py-px text-tiny text-amber-600 dark:text-amber-400">
             {t("projectTools.bgTaskIsolated")}
           </span>
         ) : null}
         {process.restored ? (
-          <span className="shrink-0 rounded bg-sky-500/15 px-1 py-px text-[calc(10px*var(--zone-font-scale,1))] text-sky-600 dark:text-sky-400">
+          <span className="shrink-0 rounded bg-sky-500/15 px-1 py-px text-tiny text-sky-600 dark:text-sky-400">
             {t("projectTools.bgTaskRestored")}
           </span>
         ) : null}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
         <span className="shrink-0">PID {process.pid}</span>
         {process.running ? (
           <span className="shrink-0 tabular-nums">{formatUptime(process.startedAt, now)}</span>
@@ -411,10 +417,7 @@ function BackgroundTaskRow(props: {
           {process.command}
         </span>
       </div>
-      <div
-        className="min-w-0 truncate text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/70"
-        title={process.cwd}
-      >
+      <div className="min-w-0 truncate text-tiny text-muted-foreground/70" title={process.cwd}>
         {process.cwd}
       </div>
       <div className="flex flex-wrap items-center gap-1">
@@ -431,11 +434,11 @@ function BackgroundTaskRow(props: {
             onClick={handleStop}
           >
             {stopping ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="size-3 animate-spin" />
             ) : pendingStop ? (
-              <Check className="h-3 w-3" />
+              <Check className="size-3" />
             ) : (
-              <Square className="h-3 w-3" />
+              <Square className="size-3" />
             )}
             {pendingStop ? t("projectTools.bgTaskStopConfirm") : t("projectTools.bgTaskStop")}
           </Button>
@@ -448,7 +451,7 @@ function BackgroundTaskRow(props: {
             className={ROW_ACTION_CLASS}
             onClick={handleClear}
           >
-            <Trash2 className="h-3 w-3" />
+            <Trash2 className="size-3" />
             {t("projectTools.bgTaskClear")}
           </Button>
         )}
@@ -460,7 +463,7 @@ function BackgroundTaskRow(props: {
           className={ROW_ACTION_CLASS}
           onClick={() => onViewLog(process)}
         >
-          <FileText className="h-3 w-3" />
+          <FileText className="size-3" />
           {t("projectTools.bgTaskViewLog")}
         </Button>
         <Button
@@ -470,13 +473,11 @@ function BackgroundTaskRow(props: {
           className={ROW_ACTION_CLASS}
           onClick={handleCopy}
         >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
           {copied ? t("projectTools.bgTaskCopied") : t("projectTools.bgTaskCopy")}
         </Button>
       </div>
-      {error ? (
-        <div className="text-[calc(11px*var(--zone-font-scale,1))] text-destructive">{error}</div>
-      ) : null}
+      {error ? <div className="text-xs text-destructive">{error}</div> : null}
     </div>
   );
 }
@@ -536,15 +537,20 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
   return (
     <div className="flex h-full min-h-0 flex-col">
       {actionsDisabled ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground",
+          )}
+        >
+          <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
           <span className="min-w-0 flex-1">{t("projectTools.bgTaskAgentOffline")}</span>
         </div>
       ) : null}
       {/* Fixed-height header with the clear button always mounted: its
           appearance only fades opacity, so the list below never shifts. */}
       <div className="flex h-9 shrink-0 items-center gap-2 px-3">
-        <span className="min-w-0 flex-1 truncate text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {t("projectTools.backgroundTasksTitle")}
         </span>
         <Button
@@ -560,11 +566,11 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
           )}
           onClick={handleClearFinished}
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="size-3" />
           {t("projectTools.bgTaskClearFinished")}
         </Button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-1">
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3", "pt-1")}>
         {state.processes.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
             {t("projectTools.bgTaskEmpty")}

@@ -31,7 +31,7 @@ rquickjs = { version = "0.8", features = ["array-buffer", "classes", "bindgen"] 
 percent-encoding = "2.3.2"
 urlencoding = "2.1.3"
 axum = "0.8.9"
-tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util"] }
+tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "process"] }
 tokio-stream = "0.1.18"
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3.32"

@@ -9,7 +9,6 @@ import {
   Check,
   ChevronRight,
   Columns2,
-  Edit3,
   Folder,
   FolderClosed,
   FolderOpen,
@@ -59,6 +58,11 @@ import {
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { SidebarReorderPointer } from "../../lib/sidebar/useSidebarReorderDrag";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
+import {
+  HISTORY_RENAME_INPUT_CLASS,
+  PROJECT_ICON_BUTTON_CLASS,
+  SIDEBAR_CONTEXT_MENU_CLASS,
+} from "./ChatHistorySidebarStyles";
 
 export type WorkspaceProjectRemoveOptions = {
   deleteWorktree?: boolean;
@@ -71,12 +75,10 @@ type PendingWorkspaceProjectAction = {
 };
 
 const CONVERSATION_MENU_ITEM_CLASS = "gap-2 text-xs";
-const CONVERSATION_MENU_ICON_CLASS = "h-3.5 w-3.5 shrink-0";
+const CONVERSATION_MENU_ICON_CLASS = "size-3.5 shrink-0";
 
 const MOBILE_MENU_LONG_PRESS_MS = 520;
 const MOBILE_MENU_MOVE_TOLERANCE_PX = 10;
-const PROJECT_ICON_BUTTON_CLASS =
-  "h-7 w-7 rounded-lg !bg-transparent text-muted-foreground transition-colors hover:!bg-transparent hover:!text-foreground active:!bg-transparent focus-visible:!bg-transparent data-[state=open]:!bg-transparent data-[state=open]:text-foreground data-[popup-open]:!bg-transparent data-[popup-open]:text-foreground";
 
 function SidebarDropIndicator({ position }: { position?: "before" | "after" }) {
   if (!position) return null;
@@ -89,7 +91,12 @@ function SidebarDropIndicator({ position }: { position?: "before" | "after" }) {
         position === "before" ? "-top-px" : "-bottom-px",
       )}
     >
-      <span className="absolute left-0 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-500 bg-[hsl(var(--sidebar-bg))]" />
+      <span
+        className={cn(
+          "absolute left-0 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2",
+          "rounded-full border-2 border-blue-500 bg-[hsl(var(--sidebar-bg))]",
+        )}
+      />
     </span>
   );
 }
@@ -628,11 +635,16 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
   if (isPendingDelete) {
     return (
-      <div className="chat-history-row rounded-2xl border border-border/70 bg-background px-3 py-2.5 shadow-xs shadow-black/5">
+      <div
+        className={cn(
+          "chat-history-row rounded-2xl border border-border/70 bg-background px-3 py-2.5",
+          "shadow-xs shadow-black/5 [contain:layout_paint_style]",
+        )}
+      >
         <p className="truncate text-sm leading-5 text-foreground/80">
           {t("chat.conversationDeleteConfirm").replace("{title}", item.title)}
         </p>
-        <p className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground">
+        <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
           {t("chat.conversationDeleteWarning")}
         </p>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -669,7 +681,8 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
       style={props.dropPosition ? { contain: "layout style", zIndex: 1 } : undefined}
       className={cn(
         props.isDragging && "opacity-35",
-        "chat-history-row group/item relative grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        "chat-history-row group/item relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg",
+        "pl-1 transition-colors [contain:layout_paint_style]",
         isSelectionMode && isSelected
           ? "bg-primary/10 text-foreground hover:bg-primary/[0.14]"
           : isActive
@@ -681,7 +694,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     >
       <SidebarDropIndicator position={props.dropPosition} />
       {isRenaming ? (
-        <div className="flex h-[30px] min-w-0 items-center px-2">
+        <div className="flex h-30px min-w-0 items-center px-2">
           <Input
             ref={inputRef}
             value={renameDraft}
@@ -706,7 +719,11 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(14px*var(--zone-font-scale,1))] font-normal shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
+            className={cn(
+              "h-7 min-w-0 flex-1",
+              "rounded-none border-0 bg-transparent p-0",
+              "text-sm font-normal shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent",
+            )}
             disabled={isInteractionDisabled || isBusy}
           />
         </div>
@@ -726,7 +743,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                       type="button"
                       aria-hidden="true"
                       tabIndex={-1}
-                      className="chat-history-row-title-menu-anchor absolute inset-0 h-full w-full rounded-2xl opacity-0 pointer-events-none"
+                      className="chat-history-row-title-menu-anchor absolute inset-0 size-full rounded-2xl opacity-0 pointer-events-none"
                     />
                   }
                 />
@@ -757,35 +774,44 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 aria-current={isActive ? "page" : undefined}
                 aria-pressed={isSelectionMode ? isSelected : undefined}
                 disabled={isInteractionDisabled || (isSelectionMode && isSelectionDisabled)}
-                className="chat-history-row-title-button flex h-[30px] w-full min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+                className={cn(
+                  "flex h-30px w-full min-w-0 items-center gap-2 rounded-md px-2",
+                  "text-left outline-hidden transition-colors",
+                  "focus-visible:ring-2 focus-visible:ring-ring web:max-820:[-webkit-touch-callout:none] web:max-820:select-none web:max-820:touch-pan-y",
+                )}
                 title={item.title}
               >
                 {isSelectionMode ? (
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border transition-colors",
+                      "flex size-4 shrink-0 items-center justify-center rounded-xs border transition-colors",
                       isSelected
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-muted-foreground/45 bg-background/50",
                     )}
                   >
-                    {isSelected ? <Check className="h-3 w-3" /> : null}
+                    {isSelected ? <Check className="size-3" /> : null}
                   </span>
                 ) : null}
                 {!isSelectionMode && props.showIcon ? (
                   <span
                     aria-hidden="true"
-                    className="flex h-4 w-4 shrink-0 items-center justify-center"
+                    className="flex size-4 shrink-0 items-center justify-center"
                   >
-                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                    <MessageSquare className="size-4 text-muted-foreground" />
                   </span>
                 ) : null}
-                <span className="sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5">
+                <span className="[mask-image:var(--mask-image-sidebar-project-name-fade)] min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm font-normal leading-5">
                   {item.title}
                 </span>
                 {!isSelectionMode && blockedBadgeLabel ? (
-                  <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300">
+                  <span
+                    className={cn(
+                      "inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2",
+                      "text-tiny font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300",
+                    )}
+                  >
                     {blockedBadgeLabel}
                   </span>
                 ) : null}
@@ -803,7 +829,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     // overflow-hidden. Reserve the spinner slot explicitly
                     // (both axes) and skip the hover/focus swap.
                     isMobileMenuLayout
-                    ? "h-7 w-7 opacity-100"
+                    ? "size-7 opacity-100"
                     : "max-w-7 opacity-100 group-hover/item:max-w-16 group-focus-within/item:max-w-16"
                   : "max-w-0 opacity-0 group-hover/item:max-w-16 group-hover/item:opacity-100 group-focus-within/item:max-w-16 group-focus-within/item:opacity-100",
                 menuOpen && "max-w-16 opacity-100",
@@ -815,7 +841,8 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   aria-label={t("chat.statusRunningReply")}
                   title={t("chat.statusRunningReply")}
                   className={cn(
-                    "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-muted-foreground transition-opacity duration-200",
+                    "pointer-events-none absolute right-1.5 flex size-4 items-center justify-center text-muted-foreground",
+                    "transition-opacity duration-200",
                     isMobileMenuLayout
                       ? "opacity-100"
                       : [
@@ -824,7 +851,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                         ],
                   )}
                 >
-                  <Loader2 className="h-4 w-4 animate-spin [animation-duration:1.6s] motion-reduce:animate-none" />
+                  <Loader2 className="size-4 animate-spin [animation-duration:var(--ui-duration-1600ms)] motion-reduce:animate-none" />
                 </span>
               ) : null}
               <div
@@ -853,9 +880,9 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                       disabled={isInteractionDisabled || isBusy || item.isPending}
                     >
                       {item.isPinned ? (
-                        <PinOff className="h-3.5 w-3.5" />
+                        <PinOff className="size-3.5" />
                       ) : (
-                        <Pin className="h-3.5 w-3.5" />
+                        <Pin className="size-3.5" />
                       )}
                     </Button>
                     <DropdownMenuTrigger
@@ -873,7 +900,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                         />
                       }
                     >
-                      <MoreHorizontal className="h-3.5 w-3.5" />
+                      <MoreHorizontal className="size-3.5" />
                     </DropdownMenuTrigger>
                   </>
                 ) : null}
@@ -893,7 +920,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   }
                   return true;
                 }}
-                className="sidebar-context-menu min-w-[10rem] rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
+                className={cn(SIDEBAR_CONTEXT_MENU_CLASS, "min-w-40")}
               >
                 {!item.isPending ? (
                   <DropdownMenuItem
@@ -932,7 +959,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   onSelect={handleStartRenamingFromMenu}
                   className={CONVERSATION_MENU_ITEM_CLASS}
                 >
-                  <Edit3 className={CONVERSATION_MENU_ICON_CLASS} />
+                  <SquarePen className={CONVERSATION_MENU_ICON_CLASS} />
                   {t("chat.conversationRename")}
                 </DropdownMenuItem>
                 <DropdownMenuSub>
@@ -945,7 +972,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     <Folder className={CONVERSATION_MENU_ICON_CLASS} />
                     {t("chat.conversationMoveToWorkspace")}
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="sidebar-context-menu max-h-[18rem] min-w-[12rem] overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl">
+                  <DropdownMenuSubContent className={cn(SIDEBAR_CONTEXT_MENU_CLASS, "max-h-72")}>
                     {moveWorkspaces.map((workspace) => (
                       <DropdownMenuItem
                         key={workspace.id}
@@ -1040,13 +1067,13 @@ export function ProjectGroupHeader(props: {
     return (
       // Same geometry as the non-renaming header below, chevron included, so
       // the name stays put when the row flips into and out of edit mode.
-      <div className="flex h-[30px] items-center rounded-lg pl-1">
-        <div className="flex h-[30px] min-w-0 flex-1 items-center gap-2 px-2">
-          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+      <div className="flex h-30px items-center rounded-lg pl-1">
+        <div className="flex h-30px min-w-0 flex-1 items-center gap-2 px-2">
+          <span className="flex size-4 shrink-0 items-center justify-center">
             <ChevronRight
               aria-hidden="true"
               className={cn(
-                "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                "size-3.5 text-muted-foreground transition-transform duration-200",
                 group.collapsed ? "" : "rotate-90",
               )}
             />
@@ -1073,7 +1100,7 @@ export function ProjectGroupHeader(props: {
                 onCancelRename();
               }
             }}
-            className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(13px*var(--zone-font-scale,1))] font-semibold shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
+            className={HISTORY_RENAME_INPUT_CLASS}
           />
         </div>
       </div>
@@ -1081,28 +1108,32 @@ export function ProjectGroupHeader(props: {
   }
 
   return (
-    <div className="group/project-group flex h-[30px] items-center rounded-lg pl-1 transition-colors hover:bg-foreground/[0.04]">
+    <div className="group/project-group flex h-30px items-center rounded-lg pl-1 transition-colors hover:bg-foreground/[0.04]">
       <button
         type="button"
-        className="flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "flex h-30px min-w-0 flex-1 items-center gap-2 rounded-md px-2",
+          "text-left outline-hidden transition-colors",
+          "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        )}
         onClick={onToggleCollapsed}
         title={t("chat.workspaceGroupToggle")}
       >
         {/* 14px chevron in a 16px slot: the slot has to match ProjectRow's
             folder icon so group names and workspace names share a left edge. */}
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+        <span className="flex size-4 shrink-0 items-center justify-center">
           <ChevronRight
             aria-hidden="true"
             className={cn(
-              "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+              "size-3.5 text-muted-foreground transition-transform duration-200",
               group.collapsed ? "" : "rotate-90",
             )}
           />
         </span>
-        <span className="min-w-0 flex-1 truncate text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-5">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">
           {group.name}
         </span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] leading-4 text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-tiny leading-4 text-muted-foreground">
           {memberCount}
         </span>
       </button>
@@ -1111,13 +1142,16 @@ export function ProjectGroupHeader(props: {
           render={
             <button
               type="button"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors",
+                "hover:bg-foreground/[0.06] hover:text-foreground",
+              )}
             />
           }
           aria-label={t("chat.workspaceGroupActions")}
           title={t("chat.workspaceGroupActions")}
         >
-          <MoreHorizontal className="h-3.5 w-3.5" />
+          <MoreHorizontal className="size-3.5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           className="min-w-40"
@@ -1134,16 +1168,16 @@ export function ProjectGroupHeader(props: {
               suppressMenuReturnFocusRef.current = true;
               onStartRename();
             }}
-            className="gap-2 text-xs"
+            className="gap-2"
           >
-            <Edit3 className="h-3.5 w-3.5" />
+            <SquarePen className="size-3.5" />
             <span>{t("chat.workspaceGroupRename")}</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={onDelete}
-            className="gap-2 text-xs text-destructive focus:bg-destructive/10 focus:text-destructive"
+            className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="size-3.5" />
             <span>{t("chat.workspaceGroupDelete")}</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -1332,7 +1366,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
   if (pendingAction) {
     const deletingWorktree = pendingAction === "deleteWorktree" && Boolean(project.worktree);
     return (
-      <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-sm text-destructive shadow-xs shadow-black/5">
+      <div
+        className={cn(
+          "rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5",
+          "text-sm text-destructive shadow-xs shadow-black/5",
+        )}
+      >
         <p className="truncate font-medium leading-5 text-destructive">
           {t(
             deletingWorktree
@@ -1340,7 +1379,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
               : "chat.workspaceRemoveConfirm",
           ).replace("{name}", project.name)}
         </p>
-        <p className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-destructive/75">
+        <p className="mt-0.5 text-xs leading-4 text-destructive/75">
           {isRunning
             ? t("chat.workspaceRemoveRunning")
             : t(
@@ -1351,17 +1390,17 @@ export const ProjectRow = memo(function ProjectRow(props: {
         </p>
         {deletingWorktree ? (
           <>
-            <p className="mt-1 break-all font-mono text-[10px] leading-4 text-destructive/70">
+            <p className="mt-1 break-all font-mono text-tiny leading-4 text-destructive/70">
               {project.path}
             </p>
             {project.worktree?.branch ? (
-              <label className="mt-2 flex cursor-pointer items-start gap-2 text-[11px] leading-4 text-foreground">
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs leading-4 text-foreground">
                 <input
                   type="checkbox"
                   checked={deleteBranchWithWorktree}
                   onChange={(event) => setDeleteBranchWithWorktree(event.currentTarget.checked)}
                   disabled={isInteractionDisabled || isRunning}
-                  className="mt-0.5 h-3.5 w-3.5 rounded border-border accent-destructive"
+                  className="mt-0.5 size-3.5 rounded border-border accent-destructive"
                 />
                 <span>
                   {t("chat.workspaceDeleteWorktreeBranch").replace(
@@ -1407,7 +1446,8 @@ export const ProjectRow = memo(function ProjectRow(props: {
       data-sidebar-reorder-key={props.reorderKey}
       className={cn(
         props.isDragging && "opacity-35",
-        "group/project relative grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        "group/project relative grid h-30px grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1",
+        "transition-colors",
         indented && "pl-5",
         isMissing
           ? "text-destructive hover:bg-destructive/10"
@@ -1431,7 +1471,8 @@ export const ProjectRow = memo(function ProjectRow(props: {
               aria-expanded={props.onToggleExpanded ? props.expanded : undefined}
               draggable={false}
               className={cn(
-                "flex h-[30px] min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-30px min-w-0 items-center gap-2 rounded-md px-2",
+                "text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 isMissing
                   ? "hover:text-destructive focus-visible:bg-destructive/10"
                   : isArchived
@@ -1490,7 +1531,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
             >
               <ProjectFolderIcon
                 className={cn(
-                  "h-4 w-4 shrink-0 transition-colors",
+                  "size-4 shrink-0 transition-colors",
                   isMissing
                     ? "text-destructive"
                     : isArchived
@@ -1500,7 +1541,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
               />
               <span
                 className={cn(
-                  "sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5",
+                  "[mask-image:var(--mask-image-sidebar-project-name-fade)] min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm font-normal leading-5",
                   isMissing ? "text-destructive" : undefined,
                 )}
               >
@@ -1536,12 +1577,13 @@ export const ProjectRow = memo(function ProjectRow(props: {
             aria-label={t("chat.statusRunningReply")}
             title={t("chat.statusRunningReply")}
             className={cn(
-              "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-muted-foreground transition-opacity duration-200",
+              "pointer-events-none absolute right-1.5 flex size-4 items-center justify-center text-muted-foreground",
+              "transition-opacity duration-200",
               "opacity-100 group-hover/project:opacity-0 group-focus-within/project:opacity-0",
               menuOpen && "opacity-0",
             )}
           >
-            <Loader2 className="h-4 w-4 animate-spin [animation-duration:1.6s] motion-reduce:animate-none" />
+            <Loader2 className="size-4 animate-spin [animation-duration:var(--ui-duration-1600ms)] motion-reduce:animate-none" />
           </span>
         ) : null}
         <div
@@ -1568,7 +1610,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                 onClick={handleRequestRemove}
                 disabled={isInteractionDisabled}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="size-3.5" />
               </Button>
             ) : null
           ) : (
@@ -1584,7 +1626,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   onClick={() => props.onNewConversation?.(project)}
                   disabled={isInteractionDisabled || !props.onNewConversation}
                 >
-                  <SquarePen className="h-3.5 w-3.5" />
+                  <SquarePen className="size-3.5" />
                 </Button>
               ) : null}
               <DropdownMenu
@@ -1605,13 +1647,13 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     />
                   }
                 >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
+                  <MoreHorizontal className="size-3.5" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   side="right"
                   align="start"
                   sideOffset={6}
-                  className="sidebar-context-menu"
+                  className={SIDEBAR_CONTEXT_MENU_CLASS}
                 >
                   {!isArchived && (
                     <DropdownMenuItem
@@ -1619,11 +1661,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       onSelect={handleTogglePinned}
                       className="gap-2"
                     >
-                      {isPinned ? (
-                        <PinOff className="h-3.5 w-3.5" />
-                      ) : (
-                        <Pin className="h-3.5 w-3.5" />
-                      )}
+                      {isPinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
                       {isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
                     </DropdownMenuItem>
                   )}
@@ -1631,21 +1669,18 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onConfigureProject(project)}
-                    className="text-xs gap-2"
+                    className="gap-2"
                   >
-                    <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Settings className="size-3.5 text-muted-foreground" />
                     {t("chat.workspaceConfigure")}
                   </DropdownMenuItem>
                   {/* 无任何分组时隐藏“移动到分组”，避免展开空的子菜单。 */}
                   {onMoveProjectToGroup && workspaceProjectGroups.length > 0 ? (
                     <DropdownMenuSub>
-                      <DropdownMenuSubTrigger
-                        disabled={isInteractionDisabled}
-                        className="text-xs gap-2"
-                      >
-                        <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+                      <DropdownMenuSubTrigger disabled={isInteractionDisabled} className="gap-2">
+                        <Folder className="size-3.5 text-muted-foreground" />
                         <span className="min-w-0 flex-1">{t("chat.workspaceGroupMove")}</span>
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        <ChevronRight className="size-3.5 text-muted-foreground" />
                       </DropdownMenuSubTrigger>
                       <DropdownMenuSubContent
                         side="right"
@@ -1658,12 +1693,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
                             key={group.id}
                             disabled={group.id === currentGroupId}
                             onSelect={() => onMoveProjectToGroup(project.path, group.id)}
-                            className="gap-2 text-xs"
+                            className="gap-2"
                           >
                             {group.id === currentGroupId ? (
-                              <Check className="h-3.5 w-3.5" />
+                              <Check className="size-3.5" />
                             ) : (
-                              <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+                              <Folder className="size-3.5 text-muted-foreground" />
                             )}
                             <span className="min-w-0 flex-1 truncate">{group.name}</span>
                           </DropdownMenuItem>
@@ -1673,9 +1708,9 @@ export const ProjectRow = memo(function ProjectRow(props: {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onSelect={() => onMoveProjectToGroup(project.path, null)}
-                              className="gap-2 text-xs"
+                              className="gap-2"
                             >
-                              <X className="h-3.5 w-3.5 text-muted-foreground" />
+                              <X className="size-3.5 text-muted-foreground" />
                               <span>{t("chat.workspaceGroupUngroup")}</span>
                             </DropdownMenuItem>
                           </>
@@ -1687,9 +1722,9 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleArchive}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
-                      <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Archive className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceArchive")}
                     </DropdownMenuItem>
                   ) : null}
@@ -1697,9 +1732,9 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleUnarchive}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
-                      <ArchiveRestore className="h-3.5 w-3.5 text-muted-foreground" />
+                      <ArchiveRestore className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceUnarchive")}
                     </DropdownMenuItem>
                   ) : null}
@@ -1711,9 +1746,9 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleBrowseInFileTree}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
-                      <FolderTree className="h-3.5 w-3.5 text-muted-foreground" />
+                      <FolderTree className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInFileTree")}
                     </DropdownMenuItem>
                   ) : null}
@@ -1721,9 +1756,9 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <DropdownMenuItem
                       disabled={isInteractionDisabled}
                       onSelect={handleBrowseInSystemFileManager}
-                      className="text-xs gap-2"
+                      className="gap-2"
                     >
-                      <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                      <FolderOpen className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInSystemFileManager")}
                     </DropdownMenuItem>
                   ) : null}
@@ -1734,18 +1769,18 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       <DropdownMenuItem
                         disabled={isInteractionDisabled}
                         onSelect={handleRequestRemove}
-                        className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <X className="size-3.5" />
                         {t("chat.workspaceRemoveOnly")}
                       </DropdownMenuItem>
                       {project.worktree ? (
                         <DropdownMenuItem
                           disabled={isInteractionDisabled}
                           onSelect={handleRequestDeleteWorktree}
-                          className="text-xs gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                          className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="size-3.5" />
                           {t("chat.workspaceDeleteWorktree")}
                         </DropdownMenuItem>
                       ) : null}

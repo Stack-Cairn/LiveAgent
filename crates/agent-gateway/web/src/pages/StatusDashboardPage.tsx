@@ -48,6 +48,8 @@ import type {
   HistoryWorkdirSummary,
 } from "@/lib/gatewayTypes";
 import { clearToken, loadToken, saveToken } from "@/lib/storage";
+import { StatusPanel, statusPanelSurfaceClass } from "../components/StatusPanel";
+import { StatusHeading, StatusLabel, StatusSectionHeader } from "../components/StatusTypography";
 import { LoginPage } from "./LoginPage";
 
 type DashboardTone = "cyan" | "violet" | "rose" | "amber" | "emerald" | "slate";
@@ -112,6 +114,21 @@ const HISTORY_PAGE_SIZE = 80;
 const SNAPSHOT_REFRESH_MS = 10_000;
 const LIVE_FLUSH_MS = 500;
 const MAX_RECENT_EVENTS = 12;
+
+const dashboardToneClass: Record<DashboardTone, string> = {
+  cyan: "[--status-board-tone:var(--status-cyan)]",
+  violet: "[--status-board-tone:var(--status-violet)]",
+  rose: "[--status-board-tone:var(--status-rose)]",
+  amber: "[--status-board-tone:var(--status-amber)]",
+  emerald: "[--status-board-tone:var(--status-emerald)]",
+  slate: "[--status-board-tone:191,210,232]",
+};
+
+const statusActionClass =
+  "flex h-33px items-center gap-7px rounded-full border border-[rgba(var(--status-cyan),0.2)] bg-white/[0.055] px-12px py-0 text-xs text-foreground uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-[rgba(var(--status-cyan),0.48)] hover:bg-[rgba(var(--status-cyan),0.1)] hover:text-foreground";
+
+const statusEntrySurfaceClass =
+  "border border-[rgba(var(--status-board-tone,191,210,232),0.14)] bg-[rgba(var(--status-board-tone,191,210,232),0.055)]";
 
 const initialCounters = (): LiveCounters => ({
   events: 0,
@@ -313,12 +330,14 @@ function updateHistoryListWithEvent(
   };
 }
 
-function useNow(tickMs = 1000) {
+function useNow(enabled: boolean, tickMs = 1000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!enabled) return undefined;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), tickMs);
     return () => window.clearInterval(timer);
-  }, [tickMs]);
+  }, [enabled, tickMs]);
   return now;
 }
 
@@ -326,11 +345,16 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
   return (
     <span
       className={cn(
-        "status-board-pill",
-        online ? "status-board-pill--online" : "status-board-pill--offline",
+        "flex h-33px items-center gap-7px",
+        "rounded-full border border-border bg-card/60 px-12px py-0 text-xs text-foreground",
+        "uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px",
+        "transition-[transform,border-color,background-color] duration-160ms ease-default",
+        online
+          ? "border-success/25 bg-success/10 text-success"
+          : "border-destructive/25 bg-destructive/10 text-destructive",
       )}
     >
-      <span className="status-board-pill-dot" />
+      <span className="size-8px rounded-full bg-current shadow-[0_0_var(--spacing-18px)_currentColor]" />
       {label}
     </span>
   );
@@ -340,37 +364,92 @@ function MetricTile({ metric }: { metric: MetricCard }) {
   const Icon = metric.icon;
   return (
     <section
-      className={cn("status-board-card status-board-metric", `status-board-tone-${metric.tone}`)}
+      className={cn(
+        statusPanelSurfaceClass,
+        "relative grid min-h-82px min-w-0 grid-cols-[var(--spacing-34px)_minmax(0,1fr)] items-center gap-9px overflow-hidden",
+        "rounded-14px border border-[rgba(var(--status-cyan),0.12)] bg-rgba-255-255-255-0p045 p-10px",
+        dashboardToneClass[metric.tone],
+      )}
     >
-      <div className="status-board-metric-icon">
+      <div
+        className={cn(
+          "grid size-34px place-items-center",
+          "rounded-12px border border-[rgba(var(--status-cyan),0.3)] bg-[rgba(var(--status-board-tone),0.11)] text-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
+        )}
+      >
         <Icon size={18} strokeWidth={2.2} />
       </div>
       <div>
-        <p className="status-board-label">{metric.label}</p>
-        <strong>{metric.value}</strong>
-        <em>{metric.unit}</em>
-        <span>{metric.detail}</span>
+        <StatusLabel>{metric.label}</StatusLabel>
+        <strong className="inline-block mr-5px text-foreground text-2xl leading-none tracking-minus-0p04em">
+          {metric.value}
+        </strong>
+        <em className="text-muted-foreground text-tiny not-italic uppercase">{metric.unit}</em>
+        <span
+          className={cn(
+            "text-muted-foreground text-tiny not-italic block overflow-hidden mt-4px",
+            "leading-1p25 text-ellipsis whitespace-nowrap",
+          )}
+        >
+          {metric.detail}
+        </span>
       </div>
     </section>
   );
 }
 
 function EmptyState({ children }: { children: string }) {
-  return <div className="status-board-empty">{children}</div>;
+  return (
+    <div
+      className={cn(
+        statusEntrySurfaceClass,
+        "rounded-14px px-9px py-8px text-tiny leading-1p25 text-muted-foreground not-italic",
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
-function FactList({ items }: { items: FactItem[] }) {
+function FactList({ items, className }: { items: FactItem[]; className?: string }) {
   return (
-    <div className="status-board-fact-list">
+    <div className={cn("grid grid-cols-2 gap-7px", className)}>
       {items.map((item) => (
         <div
           key={item.label}
-          className={cn("status-board-fact", item.tone && `status-board-fact--${item.tone}`)}
+          className={cn(
+            "min-w-0 rounded-13px border border-[rgba(var(--status-board-tone),0.15)] bg-[image:linear-gradient(135deg,rgba(var(--status-board-tone),0.08),transparent),color-mix(in_oklab,_var(--color-white)_4.5%,_transparent)] p-8px [--status-board-tone:191,210,232]",
+            item.tone && dashboardToneClass[item.tone],
+          )}
         >
-          <span>{item.label}</span>
-          <strong title={item.value}>{item.value}</strong>
-          {item.unit && <b>{item.unit}</b>}
-          {item.note && <em title={item.note}>{item.note}</em>}
+          <span className="block text-muted-foreground text-tiny tracking-0p12em uppercase">
+            {item.label}
+          </span>
+          <strong
+            className={cn(
+              "inline-block overflow-hidden max-w-full mt-3px",
+              "text-foreground text-sm leading-1p12 text-ellipsis whitespace-nowrap",
+            )}
+            title={item.value}
+          >
+            {item.value}
+          </strong>
+          {item.unit && (
+            <b className="ml-5px inline-block text-tiny font-medium text-[rgba(var(--status-board-tone),0.9)] uppercase">
+              {item.unit}
+            </b>
+          )}
+          {item.note && (
+            <em
+              className={cn(
+                "block overflow-hidden mt-3px text-muted-foreground text-tiny not-italic",
+                "leading-1p22 text-ellipsis whitespace-nowrap",
+              )}
+              title={item.note}
+            >
+              {item.note}
+            </em>
+          )}
         </div>
       ))}
     </div>
@@ -465,7 +544,6 @@ function useDashboardAuth() {
 }
 
 export function StatusDashboardPage() {
-  const now = useNow();
   const {
     token,
     loginToken,
@@ -476,6 +554,7 @@ export function StatusDashboardPage() {
     submit,
     logout,
   } = useDashboardAuth();
+  const now = useNow(token !== "");
   const api = useMemo(() => (token ? getGatewayWebSocketClient(token) : null), [token]);
   const pendingEventsRef = useRef<DashboardEvent[]>([]);
   const pendingCountersRef = useRef<PendingCounters>(initialPendingCounters());
@@ -979,34 +1058,90 @@ export function StatusDashboardPage() {
   }
 
   return (
-    <main className="status-board-shell">
-      <div className="status-board-aurora" aria-hidden="true" />
-      <div className="status-board-noise" aria-hidden="true" />
-      <div className="status-board-orb status-board-orb--a" aria-hidden="true" />
-      <div className="status-board-orb status-board-orb--b" aria-hidden="true" />
-      <div className="status-board-orb status-board-orb--c" aria-hidden="true" />
+    <main
+      className={cn(
+        "status-dashboard-root dark relative grid h-100dvh min-h-0 w-100vw place-items-center overflow-hidden",
+        "bg-[radial-gradient(circle_at_16%_15%,rgba(var(--status-cyan),0.18),transparent_25%),radial-gradient(circle_at_76%_18%,rgba(var(--status-violet),0.18),transparent_27%),radial-gradient(circle_at_56%_85%,rgba(var(--status-emerald),0.1),transparent_30%),linear-gradient(hsl(var(--background)),hsl(var(--background)))] font-app text-foreground",
+        "before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(var(--status-cyan),0.08)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.06)_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_50%_50%,transparent_0_44%,rgba(var(--status-cyan),0.08)_45%,transparent_46%)] before:bg-[length:var(--spacing-48px)_var(--spacing-48px),var(--spacing-48px)_var(--spacing-48px),var(--spacing-620px)_var(--spacing-620px)]",
+        "before:opacity-(--ui-opacity-0p9) before:[mask-image:radial-gradient(circle_at_50%_50%,color-mix(in_oklab,_var(--color-black)_94%,_transparent),transparent_78%)] before:content-['']",
+      )}
+    >
+      <div
+        className="pointer-events-none absolute inset-[-30%_-18%] bg-[conic-gradient(from_90deg_at_50%_50%,transparent,rgba(var(--status-cyan),0.16),transparent,rgba(var(--status-violet),0.16),transparent,rgba(var(--status-emerald),0.12),transparent),radial-gradient(circle_at_48%_46%,color-mix(in_oklab,_var(--color-white)_8%,_transparent),transparent_28%)] opacity-(--ui-opacity-0p95) blur-28px"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_26%,color-mix(in_oklab,_var(--color-white)_20%,_transparent)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_72%_62%,rgba(var(--status-cyan),0.18)_0_var(--spacing-1px),transparent_var(--spacing-1px)),radial-gradient(circle_at_46%_82%,rgba(var(--status-violet),0.16)_0_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-37px)_var(--spacing-37px),var(--spacing-61px)_var(--spacing-61px),var(--spacing-89px)_var(--spacing-89px)] opacity-(--ui-opacity-0p26) mix-blend-screen"
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute top-[9%] left-[4%] size-220px",
+          "rounded-full bg-[radial-gradient(circle,rgba(var(--status-cyan),0.3),transparent_64%)] opacity-(--ui-opacity-0p8) blur-2px",
+        )}
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute top-[11%] right-[8%] size-280px",
+          "rounded-full bg-[radial-gradient(circle,rgba(var(--status-violet),0.26),transparent_66%)] opacity-(--ui-opacity-0p8) blur-2px",
+        )}
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute right-[18%] bottom-[-4%] size-340px",
+          "rounded-full bg-[radial-gradient(circle,rgba(var(--status-emerald),0.16),transparent_68%)] opacity-(--ui-opacity-0p8) blur-2px",
+        )}
+        aria-hidden="true"
+      />
 
-      <section className="status-board-stage">
-        <header className="status-board-header status-board-command">
-          <div className="status-board-brand">
-            <div className="status-board-logo status-board-logo--hot">
+      <section
+        className={cn(
+          "relative z-1 box-border grid grid-rows-status-board-stage gap-12px w-status-board-stage-w h-status-board-stage-h",
+          "min-h-0 px-18px pt-14px pb-12px",
+          "status-compact:w-100vw status-compact:h-100dvh status-compact:p-10px",
+        )}
+      >
+        <header
+          className={cn(
+            "relative flex items-center justify-between gap-16px",
+            "rounded-20px border border-[rgba(var(--status-cyan),0.2)] bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-[0_var(--spacing-18px)_var(--spacing-60px)_color-mix(in_oklab,_var(--color-black)_26%,_transparent),inset_0_var(--spacing-1px)_0_color-mix(in_oklab,_var(--color-white)_8%,_transparent),inset_0_0_var(--spacing-48px)_rgba(var(--status-cyan),0.05)] backdrop-blur-22px",
+            "before:absolute before:inset-x-[22%] before:bottom-minus-1px before:h-1px before:bg-[linear-gradient(90deg,transparent,rgba(var(--status-cyan),0.82),transparent)] before:shadow-[0_0_var(--spacing-18px)_rgba(var(--status-cyan),0.72)] before:content-['']",
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-12px">
+            <div
+              className={cn(
+                "flex size-38px flex-col place-items-center items-start gap-2px",
+                "rounded-14px border border-[rgba(var(--status-cyan),0.3)] bg-[image:linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),color-mix(in_oklab,_var(--color-white)_6%,_transparent)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
+              )}
+            >
               <Sparkles size={19} strokeWidth={2.4} />
             </div>
-            <div>
-              <p>LiveAgent Nexus</p>
-              <h1>实时遥测指挥舱</h1>
+            <div className="items-start flex-col gap-2px flex">
+              <p className="m-0 text-muted-foreground text-tiny tracking-0p18em uppercase">
+                LiveAgent Nexus
+              </p>
+              <h1 className="m-0 text-foreground tracking-minus-0p035em overflow-hidden max-w-360px text-2xl text-ellipsis whitespace-nowrap">
+                实时遥测指挥舱
+              </h1>
             </div>
           </div>
-          <div className="status-board-command-center">
-            <span>1912×948 Telemetry Surface</span>
-            <strong>{formatClock(now)}</strong>
-            <em>
+          <div className="absolute left-1/2 grid min-w-360px -translate-x-1/2 justify-items-center text-center [&>strong]:[text-shadow:0_0_var(--spacing-24px)_rgba(var(--status-cyan),0.42)]">
+            <span className="text-muted-foreground text-tiny not-italic tracking-0p2em uppercase">
+              1912×948 Telemetry Surface
+            </span>
+            <strong className="text-foreground text-2xl tracking-0p05em leading-none">
+              {formatClock(now)}
+            </strong>
+            <em className="text-muted-foreground text-tiny not-italic tracking-0p2em uppercase">
               {snapshot.lastRefreshAt
                 ? `sync age ${formatDuration(now - snapshot.lastRefreshAt)}`
                 : "syncing snapshot"}
             </em>
           </div>
-          <div className="status-board-actions">
+          <div className="flex items-center flex-nowrap justify-end gap-8px">
             <StatusPill
               online={status?.online === true}
               label={status?.online ? "Agent online" : "Agent offline"}
@@ -1014,7 +1149,7 @@ export function StatusDashboardPage() {
             <Button
               type="button"
               variant="ghost"
-              className="status-board-action-button"
+              className={statusActionClass}
               onClick={() => setRefreshVersion((value) => value + 1)}
               disabled={snapshot.loading}
             >
@@ -1025,16 +1160,11 @@ export function StatusDashboardPage() {
               )}
               Sync
             </Button>
-            <a className="status-board-link-button" href="./" title="回到 Gateway 控制台">
+            <a className={statusActionClass} href="./" title="回到 Gateway 控制台">
               Console
               <ExternalLink size={14} />
             </a>
-            <Button
-              type="button"
-              variant="ghost"
-              className="status-board-action-button"
-              onClick={logout}
-            >
+            <Button type="button" variant="ghost" className={statusActionClass} onClick={logout}>
               <LogOut size={15} />
               Exit
             </Button>
@@ -1042,45 +1172,57 @@ export function StatusDashboardPage() {
         </header>
 
         {snapshot.error && (
-          <div className="status-board-warning">
+          <div
+            className={cn(
+              "absolute top-82px right-24px z-6 flex max-w-540px items-center gap-9px",
+              "border border-solid border-status-amber/30 rounded-16px px-12px py-9px",
+              "bg-rgba-56-35-4-0p5 text-rgba-255-232-190-0p92 text-xs shadow-status-board-warning backdrop-blur-18px",
+            )}
+          >
             <AlertCircle size={16} />
             <span>{snapshot.error}</span>
           </div>
         )}
 
-        <section className="status-board-cockpit">
-          <aside className="status-board-left-rail">
-            <section className="status-board-card status-board-panel status-board-reactor-panel">
-              <div className="status-board-section-head">
+        <section className="grid grid-cols-status-board-cockpit gap-12px min-h-0 status-compact:grid-cols-status-board-cockpit-2 status-compact:gap-8px">
+          <aside className="grid min-h-0 gap-12px grid-rows-status-board-left-rail status-compact:gap-8px">
+            <StatusPanel>
+              <StatusSectionHeader>
                 <div>
-                  <p className="status-board-label">Core Reactor</p>
-                  <h3>运行中枢</h3>
+                  <StatusLabel>Core Reactor</StatusLabel>
+                  <StatusHeading>运行中枢</StatusHeading>
                 </div>
                 <Shield size={18} />
-              </div>
-              <div className="status-board-reactor-core">
+              </StatusSectionHeader>
+              <div className="grid grid-cols-status-board-reactor-core items-center gap-14px mb-12px">
                 <div
                   className={cn(
-                    "status-board-reactor",
-                    status?.online && "status-board-reactor--online",
+                    "relative grid size-154px place-items-center rounded-full shadow-[0_0_var(--spacing-46px)_rgba(var(--status-cyan),0.22),inset_0_0_var(--spacing-34px)_color-mix(in_oklab,_var(--color-black)_58%,_transparent)]",
+                    "before:absolute before:inset-12px before:rounded-[inherit] before:bg-[radial-gradient(circle,color-mix(in_oklab,_var(--color-white)_12%,_transparent),transparent_42%),var(--ui-color-071226)] before:shadow-[inset_0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.12)] before:content-['']",
                   )}
                   style={{
-                    background: `conic-gradient(from -90deg, rgba(41, 255, 214, 0.96) 0deg, rgba(20, 184, 255, 0.96) ${integrityScore * 3.6}deg, rgba(30, 39, 68, 0.88) ${integrityScore * 3.6}deg 360deg)`,
+                    background: `conic-gradient(from -90deg, var(--color-status-integrity-start) 0deg, var(--color-status-integrity-end) ${integrityScore * 3.6}deg, var(--color-status-integrity-track) ${integrityScore * 3.6}deg 360deg)`,
                   }}
                 >
-                  <div className="status-board-reactor-ring status-board-reactor-ring--a" />
-                  <div className="status-board-reactor-ring status-board-reactor-ring--b" />
-                  <div className="status-board-reactor-number">
-                    <strong>{integrityScore}</strong>
-                    <span>derived %</span>
+                  <div className="absolute inset-minus-8px rounded-[inherit] border border-[rgba(var(--status-cyan),0.24)]" />
+                  <div className="absolute inset-28px rounded-[inherit] border border-status-violet/28!" />
+                  <div className="relative z-1 grid justify-items-center">
+                    <strong className="text-5xl leading-0p92 tracking-minus-0p06em text-foreground [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
+                      {integrityScore}
+                    </strong>
+                    <span className="text-muted-foreground text-tiny not-italic tracking-0p12em uppercase">
+                      derived %
+                    </span>
                   </div>
                 </div>
-                <div className="status-board-reactor-copy">
-                  <span>Runtime: {runtimeState}</span>
-                  <strong>
+                <div className="min-w-0">
+                  <span className="text-muted-foreground text-tiny not-italic tracking-0p12em uppercase">
+                    Runtime: {runtimeState}
+                  </span>
+                  <strong className="block overflow-hidden my-7px mx-0 text-foreground text-lg text-ellipsis whitespace-nowrap">
                     {status?.agent_id ? truncateMiddle(status.agent_id, 24) : "等待 Agent 接入"}
                   </strong>
-                  <em>
+                  <em className="text-muted-foreground text-tiny not-italic tracking-0p12em uppercase">
                     我在监听 Gateway 心跳：
                     {status?.last_heartbeat
                       ? `${formatDuration(heartbeatAgeMs)} ago`
@@ -1089,75 +1231,102 @@ export function StatusDashboardPage() {
                 </div>
               </div>
               <FactList items={runtimeFacts} />
-            </section>
+            </StatusPanel>
 
-            <section className="status-board-card status-board-panel status-board-fabric-panel">
-              <div className="status-board-section-head">
+            <StatusPanel>
+              <StatusSectionHeader>
                 <div>
-                  <p className="status-board-label">Gateway Fabric</p>
-                  <h3>能力矩阵</h3>
+                  <StatusLabel>Gateway Fabric</StatusLabel>
+                  <StatusHeading>能力矩阵</StatusHeading>
                 </div>
                 <Server size={18} />
-              </div>
+              </StatusSectionHeader>
               <FactList items={fabricFacts} />
-              <div className="status-board-mini-grid status-board-mini-grid--matrix">
-                <div className="status-board-mini-card">
+              <div
+                className={cn(
+                  "mt-10px grid grid-cols-2 gap-8px",
+                  "[&>div]:min-w-0 [&>div]:rounded-14px [&>div]:border [&>div]:border-[rgba(var(--status-cyan),0.12)] [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-[rgba(var(--status-cyan),0.84)]",
+                )}
+              >
+                <div>
                   <Globe2 size={17} />
-                  <span>Tunnels</span>
-                  <strong>{activeTunnels.length}</strong>
+                  <span className="text-muted-foreground text-tiny not-italic">Tunnels</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
+                    {activeTunnels.length}
+                  </strong>
                 </div>
-                <div className="status-board-mini-card">
+                <div>
                   <Terminal size={17} />
-                  <span>Terminals</span>
-                  <strong>{runningTerminals.length}</strong>
+                  <span className="text-muted-foreground text-tiny not-italic">Terminals</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
+                    {runningTerminals.length}
+                  </strong>
                 </div>
-                <div className="status-board-mini-card">
+                <div>
                   <Brain size={17} />
-                  <span>Providers</span>
-                  <strong>{activeProviders.length}</strong>
+                  <span className="text-muted-foreground text-tiny not-italic">Providers</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
+                    {activeProviders.length}
+                  </strong>
                 </div>
-                <div className="status-board-mini-card">
+                <div>
                   <Plug size={17} />
-                  <span>Remote</span>
-                  <strong>{settingsSnapshot ? `${remoteFeatureCount}/3` : "--"}</strong>
+                  <span className="text-muted-foreground text-tiny not-italic">Remote</span>
+                  <strong className="block mt-5px text-foreground text-2xl leading-none">
+                    {settingsSnapshot ? `${remoteFeatureCount}/3` : "--"}
+                  </strong>
                 </div>
               </div>
-            </section>
+            </StatusPanel>
           </aside>
 
-          <section className="status-board-center-stack">
-            <section className="status-board-card status-board-panel status-board-radar-panel">
-              <div className="status-board-section-head">
+          <section className="grid min-h-0 gap-12px grid-rows-status-board-center-stack status-compact:gap-8px">
+            <StatusPanel>
+              <StatusSectionHeader>
                 <div>
-                  <p className="status-board-label">Live Telemetry</p>
-                  <h3>系统数据雷达</h3>
+                  <StatusLabel>Live Telemetry</StatusLabel>
+                  <StatusHeading>系统数据雷达</StatusHeading>
                 </div>
                 <span>{eventsPerMinute.toFixed(1)} events/min</span>
-              </div>
+              </StatusSectionHeader>
 
-              <section className="status-board-metrics-grid">
+              <section className="grid gap-8px grid-cols-6 flex-none status-compact:grid-cols-3">
                 {metrics.map((metric) => (
                   <MetricTile key={metric.label} metric={metric} />
                 ))}
               </section>
 
-              <div className="status-board-radar-deck">
+              <div className="grid grid-cols-status-board-radar-deck items-center gap-14px min-h-0 flex-auto mt-12px">
                 <div
-                  className="status-board-radar-screen"
+                  className={cn(
+                    "relative grid size-[min(var(--spacing-42vh),var(--spacing-410px))] place-items-center justify-self-center overflow-hidden",
+                    "rounded-full border border-[rgba(var(--status-cyan),0.22)] bg-[radial-gradient(circle,rgba(var(--status-cyan),0.13),transparent_7%),repeating-radial-gradient(circle,transparent_0_var(--spacing-54px),rgba(var(--status-cyan),0.13)_var(--spacing-55px)_var(--spacing-56px)),radial-gradient(circle_at_center,var(--ui-color-rgba-7-17-33-0p4),var(--ui-color-rgba-2-7-15-0p92))] shadow-[0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.16),inset_0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.08)] status-compact:size-[min(var(--spacing-38vh),var(--spacing-320px))]",
+                  )}
                   role="img"
                   aria-label="live signal radar"
                 >
-                  <div className="status-board-radar-grid" />
-                  <div className="status-board-radar-sweep" />
-                  <div className="status-board-radar-core">
+                  <div className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-46px)_var(--spacing-46px)] opacity-(--ui-opacity-0p42) [mask-image:radial-gradient(circle,black_0_68%,transparent_69%)]" />
+                  <div
+                    className={cn(
+                      "relative z-2 grid size-126px place-items-center",
+                      "rounded-full border border-[rgba(var(--status-cyan),0.26)] bg-rgba-4-13-28-0p84 shadow-[0_0_var(--spacing-40px)_rgba(var(--status-cyan),0.23),inset_0_0_var(--spacing-26px)_rgba(var(--status-cyan),0.08)] [&>svg]:text-[rgba(var(--status-cyan),0.9)]",
+                    )}
+                  >
                     <Bot size={44} strokeWidth={1.65} />
-                    <strong>{runtimeActiveRunCount}</strong>
-                    <span>active runs</span>
+                    <strong className="text-foreground text-4xl leading-0p8">
+                      {runtimeActiveRunCount}
+                    </strong>
+                    <span className="text-muted-foreground text-tiny tracking-0p12em uppercase">
+                      active runs
+                    </span>
                   </div>
                   {throughputSegments.map((segment, index) => (
                     <span
                       key={segment.label}
-                      className={cn("status-board-radar-node", `status-board-tone-${segment.tone}`)}
+                      className={cn(
+                        "absolute z-3 size-10px rounded-full bg-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-20px)_rgba(var(--status-board-tone),0.82),0_0_var(--spacing-46px)_rgba(var(--status-board-tone),0.38)] [--status-board-tone:var(--status-cyan)]",
+                        dashboardToneClass[segment.tone],
+                      )}
                       style={{
                         transform: `rotate(${index * 72 - 18}deg) translateX(${118 + segment.width * 0.62}px)`,
                       }}
@@ -1165,39 +1334,51 @@ export function StatusDashboardPage() {
                   ))}
                 </div>
 
-                <div className="status-board-throughput">
-                  <div className="status-board-throughput-head">
-                    <span>Stream Load</span>
-                    <strong>{compactNumber(liveCounters.events)} events</strong>
+                <div className="min-w-0">
+                  <div className="mb-10px flex items-baseline justify-between">
+                    <span className="text-muted-foreground text-xs tracking-0p18em uppercase">
+                      Stream Load
+                    </span>
+                    <strong className="text-foreground text-lg">
+                      {compactNumber(liveCounters.events)} events
+                    </strong>
                   </div>
                   {throughputSegments.map((segment) => (
                     <div
                       key={segment.label}
-                      className={cn("status-board-load-row", `status-board-tone-${segment.tone}`)}
+                      className={cn(
+                        "mb-8px grid grid-cols-[var(--spacing-112px)_minmax(0,1fr)_var(--spacing-92px)] items-center gap-9px [--status-board-tone:var(--status-cyan)]",
+                        dashboardToneClass[segment.tone],
+                      )}
                     >
-                      <span>{segment.label}</span>
-                      <div>
-                        <i style={{ width: `${segment.width}%` }} />
+                      <span className="text-muted-foreground text-xs not-italic">
+                        {segment.label}
+                      </span>
+                      <div className="h-10px overflow-hidden rounded-full border border-[rgba(var(--status-board-tone),0.14)] bg-white/5">
+                        <i
+                          className="block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgba(var(--status-board-tone),0.25),rgba(var(--status-board-tone),0.95))] shadow-[0_0_var(--spacing-16px)_rgba(var(--status-board-tone),0.44)]"
+                          style={{ width: `${segment.width}%` }}
+                        />
                       </div>
-                      <em>
+                      <em className="text-muted-foreground text-xs not-italic text-right">
                         {compactNumber(segment.value)} {segment.unit}
                       </em>
                     </div>
                   ))}
-                  <FactList items={telemetryFacts} />
+                  <FactList items={telemetryFacts} className="mt-10px grid-cols-4" />
                 </div>
               </div>
-            </section>
+            </StatusPanel>
 
-            <section className="status-board-card status-board-panel status-board-stream-panel">
-              <div className="status-board-section-head">
+            <StatusPanel className="pb-12px">
+              <StatusSectionHeader>
                 <div>
-                  <p className="status-board-label">Event Stream</p>
-                  <h3>实时事件流</h3>
+                  <StatusLabel>Event Stream</StatusLabel>
+                  <StatusHeading>实时事件流</StatusHeading>
                 </div>
                 <MessageSquareText size={18} />
-              </div>
-              <div className="status-board-event-list">
+              </StatusSectionHeader>
+              <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {recentEvents.length === 0 ? (
                   <EmptyState>
                     我还没收到实时事件；当 token、thinking 或 tool_call 抵达时，这里会亮起来。
@@ -1206,17 +1387,37 @@ export function StatusDashboardPage() {
                   recentEvents.slice(0, 6).map((event) => (
                     <article
                       key={event.id}
-                      className={cn("status-board-event", `status-board-tone-${event.tone}`)}
+                      className={cn(
+                        statusEntrySurfaceClass,
+                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px px-9px py-8px [--status-board-tone:191,210,232]",
+                        dashboardToneClass[event.tone],
+                      )}
                     >
-                      <span className="status-board-event-dot" />
+                      <span className="mt-5px size-8px rounded-full bg-status-board-tone shadow-status-board-event-dot" />
                       <div>
-                        <div className="status-board-event-title-row">
-                          <strong>{event.title}</strong>
-                          <time>{formatClock(event.at)}</time>
+                        <div className="flex items-center justify-between gap-12px">
+                          <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
+                            {event.title}
+                          </strong>
+                          <time className="text-muted-foreground text-tiny not-italic leading-1p25">
+                            {formatClock(event.at)}
+                          </time>
                         </div>
-                        <p>{event.detail}</p>
+                        <p
+                          className={cn(
+                            "mx-0 mt-3px mb-0 line-clamp-1 overflow-hidden",
+                            "text-tiny leading-1p25 text-muted-foreground not-italic",
+                          )}
+                        >
+                          {event.detail}
+                        </p>
                         {(event.conversationId || event.workdir) && (
-                          <span className="status-board-event-meta">
+                          <span
+                            className={cn(
+                              "text-rgba-190-219-248-0p58 text-tiny not-italic leading-1p25 inline-flex mt-4px rounded-full",
+                              "px-6px py-2px bg-white/6",
+                            )}
+                          >
                             {event.workdir
                               ? basename(event.workdir)
                               : truncateMiddle(event.conversationId ?? "", 18)}
@@ -1227,29 +1428,37 @@ export function StatusDashboardPage() {
                   ))
                 )}
               </div>
-            </section>
+            </StatusPanel>
           </section>
 
-          <aside className="status-board-right-rail">
-            <section className="status-board-card status-board-panel status-board-model-panel">
-              <div className="status-board-section-head">
+          <aside className="grid min-h-0 gap-12px grid-rows-status-board-right-rail status-compact:gap-8px">
+            <StatusPanel>
+              <StatusSectionHeader>
                 <div>
-                  <p className="status-board-label">Model Route</p>
-                  <h3>模型与任务</h3>
+                  <StatusLabel>Model Route</StatusLabel>
+                  <StatusHeading>模型与任务</StatusHeading>
                 </div>
                 <Radio size={18} />
-              </div>
+              </StatusSectionHeader>
               <FactList items={modelFacts} />
-              <div className="status-board-running-list">
+              <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {runningConversations.length === 0 ? (
                   <EmptyState>暂无运行中会话。</EmptyState>
                 ) : (
                   runningConversations.slice(0, 4).map((item) => (
-                    <article key={item.id} className="status-board-running-item">
-                      <div className="status-board-running-dot" />
+                    <article
+                      key={item.id}
+                      className={cn(
+                        statusEntrySurfaceClass,
+                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px px-9px py-8px [--status-board-tone:var(--status-violet)]",
+                      )}
+                    >
+                      <div className="mt-5px size-8px flex-none rounded-full bg-status-board-tone shadow-status-board-event-dot" />
                       <div>
-                        <strong>{truncateMiddle(item.title, 34)}</strong>
-                        <span>
+                        <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
+                          {truncateMiddle(item.title, 34)}
+                        </strong>
+                        <span className="text-muted-foreground text-tiny not-italic leading-1p25">
                           {item.cwd ? basename(item.cwd) : "默认空间"} · {item.messageCount}{" "}
                           messages · {formatDuration(now - item.updatedAt)} ago
                         </span>
@@ -1258,33 +1467,69 @@ export function StatusDashboardPage() {
                   ))
                 )}
               </div>
-            </section>
+            </StatusPanel>
 
-            <section className="status-board-card status-board-panel status-board-workspace-panel">
-              <div className="status-board-section-head">
+            <StatusPanel>
+              <StatusSectionHeader>
                 <div>
-                  <p className="status-board-label">Workspace Heat</p>
-                  <h3>项目热力图</h3>
+                  <StatusLabel>Workspace Heat</StatusLabel>
+                  <StatusHeading>项目热力图</StatusHeading>
                 </div>
                 <HardDrive size={18} />
+              </StatusSectionHeader>
+              <div
+                className={cn(
+                  statusEntrySurfaceClass,
+                  "mb-8px flex-none rounded-14px px-9px py-8px [--status-board-tone:var(--status-cyan)]",
+                )}
+              >
+                <span className="block text-muted-foreground text-tiny tracking-0p12em uppercase">
+                  Active Workspace
+                </span>
+                <strong
+                  className={cn(
+                    "inline-block overflow-hidden max-w-full mt-3px",
+                    "text-foreground text-sm leading-1p12 text-ellipsis whitespace-nowrap",
+                  )}
+                  title={activeWorkspaceHint}
+                >
+                  {activeWorkspaceName}
+                </strong>
+                <em
+                  className={cn(
+                    "block overflow-hidden mt-3px text-muted-foreground text-tiny not-italic",
+                    "leading-1p22 text-ellipsis whitespace-nowrap",
+                  )}
+                >
+                  {activeWorkspaceHint}
+                </em>
               </div>
-              <div className="status-board-active-workspace">
-                <span>Active Workspace</span>
-                <strong title={activeWorkspaceHint}>{activeWorkspaceName}</strong>
-                <em>{activeWorkspaceHint}</em>
-              </div>
-              <div className="status-board-workdir-list">
+              <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {workdirs.length === 0 ? (
                   <EmptyState>暂无项目维度历史。</EmptyState>
                 ) : (
                   workdirs.slice(0, 6).map((item) => (
-                    <article key={item.path} className="status-board-workdir">
+                    <article
+                      key={item.path}
+                      className={cn(
+                        statusEntrySurfaceClass,
+                        "grid grid-cols-[minmax(0,1fr)_var(--spacing-86px)_var(--spacing-82px)] items-center gap-9px rounded-14px px-9px py-8px",
+                      )}
+                    >
                       <div>
-                        <strong>{basename(item.path)}</strong>
-                        <span>{truncateMiddle(item.path, 46)}</span>
+                        <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
+                          {basename(item.path)}
+                        </strong>
+                        <span className="text-muted-foreground text-tiny not-italic leading-1p25">
+                          {truncateMiddle(item.path, 46)}
+                        </span>
                       </div>
-                      <div className="status-board-workdir-meter">
+                      <div className="h-8px overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.12)] bg-white/5">
                         <span
+                          className={cn(
+                            "block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-tiny leading-1p25 text-muted-foreground shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)]",
+                            "not-italic",
+                          )}
                           style={{
                             width: percentage(
                               ((item.conversationCount || 0) / maxWorkdirCount) * 100,
@@ -1292,30 +1537,38 @@ export function StatusDashboardPage() {
                           }}
                         />
                       </div>
-                      <em>{item.conversationCount} conversations</em>
+                      <em className="text-muted-foreground text-tiny not-italic leading-1p25 text-right">
+                        {item.conversationCount} conversations
+                      </em>
                     </article>
                   ))
                 )}
               </div>
-            </section>
+            </StatusPanel>
           </aside>
         </section>
 
-        <footer className="status-board-footer">
-          <span>
+        <footer
+          className={cn(
+            "flex flex-nowrap items-center justify-between gap-10px overflow-hidden",
+            "rounded-14px border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px",
+            "text-tiny text-muted-foreground backdrop-blur-16px",
+          )}
+        >
+          <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <CheckCircle2 size={14} />
             Sources: status.get / settings.get / history.list / terminal.list / tunnel.state /
             providers.list
           </span>
-          <span>
+          <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <Timer size={14} />
             Snapshot interval {SNAPSHOT_REFRESH_MS / 1000} s · realtime batch {LIVE_FLUSH_MS} ms
           </span>
-          <span>
+          <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <Wrench size={14} />
             Tool stream {compactNumber(liveCounters.toolCalls + liveCounters.toolResults)} events
           </span>
-          <span>
+          <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <Zap size={14} />
             /dashboard · {status?.session_id ? truncateMiddle(status.session_id, 18) : "no session"}
           </span>

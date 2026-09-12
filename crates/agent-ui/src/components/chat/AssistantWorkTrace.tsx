@@ -2,7 +2,7 @@ import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
 import { useAttentionDisclosure } from "./useAttentionDisclosure";
 
@@ -18,16 +18,6 @@ const PIXEL_KEYS = [
   "bottom-end",
 ] as const;
 
-const PIXEL_DELAYS = Array.from({ length: 9 }, (_, index) => {
-  const row = Math.floor(index / 3);
-  const column = index % 3;
-  return (column + Math.abs(row - 1)) * 90;
-});
-
-type LoadingPixelStyle = CSSProperties & {
-  "--chat-work-delay": `${number}ms`;
-};
-
 function WorkPixelGrid({ active }: { active: boolean }) {
   return (
     // 3×4px + 2×1.5px = 15px，比下方活动行的 12px 图标列宽：居中溢出到图标列
@@ -37,13 +27,12 @@ function WorkPixelGrid({ active }: { active: boolean }) {
       className="flex w-3 shrink-0 items-center justify-center"
       data-chat-work-grid=""
     >
-      <span className="grid shrink-0 grid-cols-[repeat(3,4px)] gap-[1.5px]">
-        {PIXEL_DELAYS.map((delay, index) => (
+      <span className="grid shrink-0 grid-cols-activity-dots gap-1p5px">
+        {PIXEL_KEYS.map((key) => (
           <span
-            key={PIXEL_KEYS[index]}
-            className="chat-work-pixel size-1 bg-foreground"
+            key={key}
+            className={cn("size-1 bg-foreground opacity-15", "data-paused:opacity-45")}
             data-paused={active ? undefined : ""}
-            style={{ "--chat-work-delay": `${delay}ms` } as LoadingPixelStyle}
           />
         ))}
       </span>
@@ -143,7 +132,8 @@ export function AssistantWorkTrace({
       {hasDetails ? (
         <ChevronDown
           className={cn(
-            "h-3 w-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 group-hover/work-trace:opacity-100 group-focus-visible/work-trace:opacity-100 motion-reduce:transition-none",
+            "size-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150",
+            "group-hover/work-trace:opacity-100 group-focus-visible/work-trace:opacity-100 motion-reduce:transition-none",
             !expanded && "-rotate-90",
           )}
         />
@@ -162,16 +152,18 @@ export function AssistantWorkTrace({
       {hasDetails ? (
         <button
           type="button"
-          className="group/work-trace flex w-full items-center gap-2 rounded-lg py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450] transition-colors hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            "group/work-trace flex w-full items-center gap-2 rounded-lg py-1",
+            "text-sm font-[450] transition-colors",
+            "hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
         >
           {header}
         </button>
       ) : (
-        <div className="flex items-center gap-2 py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450]">
-          {header}
-        </div>
+        <div className="flex items-center gap-2 py-1 text-sm font-[450]">{header}</div>
       )}
 
       {hasDetails ? (

@@ -1,3 +1,4 @@
+import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -22,8 +23,8 @@ const conversationViewTabsSource = readFileSync(
   new URL("../../../agent-ui/src/components/chat/ConversationViewTabs.tsx", import.meta.url),
   "utf8",
 );
-const commonComponentsCss = readFileSync(
-  new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
+const markdownStylesSource = readFileSync(
+  new URL("../../../agent-ui/src/components/markdown/markdownStyles.ts", import.meta.url),
   "utf8",
 );
 const rightDockPanelSource = readFileSync(
@@ -87,7 +88,7 @@ test("application chrome is attached to the center column instead of the right d
   );
   assert.doesNotMatch(chromeSource, /autoHideActions/);
   assert.doesNotMatch(headerSource, /autoHideActions|app-workbench-chrome-actions/);
-  assert.doesNotMatch(commonComponentsCss, /\.app-workbench-chrome-actions/);
+  assert.doesNotMatch(markdownStylesSource, /\.app-workbench-chrome-actions/);
 });
 
 test("conversation view switcher lives in the chrome and waits for an assistant reply", () => {
@@ -123,14 +124,8 @@ test("multi-pane conversation panes reveal trajectory and close controls togethe
   );
   // The toggle is a top-left dot styled exactly like the top-right close dot.
   assert.match(paneChromeSource, /data-workbench-pane-trajectory-toggle/);
-  assert.match(
-    paneChromeSource,
-    /left-1\.5 top-1\/2 flex h-3\.5 w-3\.5 -translate-y-1\/2 items-center justify-center rounded-full/,
-  );
-  assert.match(
-    paneChromeSource,
-    /right-1\.5 top-1\/2 flex h-3\.5 w-3\.5 -translate-y-1\/2 items-center justify-center rounded-full/,
-  );
+  assertJsxDimensions(paneChromeSource, "button", { width: "3.5", height: "3.5" }, ["left-1.5", "top-1/2", "flex", "-translate-y-1/2", "items-center", "justify-center", "rounded-full"]);
+  assertJsxDimensions(paneChromeSource, "button", { width: "3.5", height: "3.5" }, ["right-1.5", "top-1/2", "flex", "-translate-y-1/2", "items-center", "justify-center", "rounded-full"]);
   // Both dots share the hover-reveal treatment and palette.
   assert.equal(
     paneChromeSource.match(/bg-muted-foreground\/25 text-background/g)?.length,

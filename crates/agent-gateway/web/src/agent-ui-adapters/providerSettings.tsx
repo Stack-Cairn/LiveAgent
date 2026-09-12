@@ -1,4 +1,4 @@
-import type { AppSettings, CustomProvider, ProviderId } from "../lib/settings";
+import type { AppSettings, CustomProvider } from "../lib/settings";
 import type { SettingsSectionProps } from "../pages/settings/types";
 
 /** WebUI 会脱敏 API Key，复制配置按钮仅在桌面端提供。 */
@@ -9,7 +9,6 @@ export function ProviderCopyConfigButton(_props: {
 }
 
 export function ProviderSettingsExtension(_props: {
-  activeTab: ProviderId;
   settings: AppSettings;
   setSettings: SettingsSectionProps["setSettings"];
   triggerClassName?: string;

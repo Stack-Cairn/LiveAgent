@@ -3,6 +3,7 @@ import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import {
   type ForwardedRef,
@@ -112,7 +113,12 @@ function RegisteredRestorableConversationPaneHost(props: {
       return <PaneLoadingSkeleton label={t("chat.loadingConversation")} />;
     }
     return (
-      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center">
+      <div
+        className={cn(
+          "flex size-full min-h-0 flex-col items-center justify-center gap-3 p-6",
+          "text-center",
+        )}
+      >
         <p className="text-sm text-muted-foreground">{title || t("chat.pendingTitle")}</p>
         <button
           type="button"

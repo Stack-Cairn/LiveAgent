@@ -5,10 +5,10 @@ import {
   Key,
   Loader2,
   MonitorSmartphone,
-  Pencil,
   Plus,
   RefreshCw,
   Save,
+  SquarePen,
   Trash2,
   Wifi,
   WifiOff,
@@ -28,6 +28,7 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ConfirmActionPopover } from "@liveagent/ui/pages/settings/shared";
 import { useCallback, useEffect, useState } from "react";
@@ -233,8 +234,8 @@ export function DevicesSection({
     <div className="space-y-5">
       <div className="settings-section-heading-row flex items-center justify-between gap-4">
         <div className="settings-section-title-group flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10">
-            <MonitorSmartphone className="h-[18px] w-[18px] text-sky-500" />
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-500/10">
+            <MonitorSmartphone className="size-18px text-sky-500" />
           </div>
           <div>
             <h3 className="text-sm font-semibold">{t("settings.devicesTitle")}</h3>
@@ -248,15 +249,20 @@ export function DevicesSection({
             className="settings-section-action gap-1.5"
             onClick={openAddDialog}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="size-3.5" />
             {t("settings.devicesAdd")}
           </Button>
         ) : null}
       </div>
 
       {error ? (
-        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <div
+          className={cn(
+            "flex items-start gap-2",
+            "rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive",
+          )}
+        >
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>{error}</span>
         </div>
       ) : null}
@@ -264,8 +270,8 @@ export function DevicesSection({
       {!authed ? (
         <div className="max-w-xl rounded-2xl border border-border/60 bg-card p-5">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
-              <Key className="h-4 w-4 text-amber-500" />
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
+              <Key className="size-4 text-amber-500" />
             </div>
             <div className="min-w-0 flex-1">
               <h4 className="text-sm font-medium">{t("settings.devicesLoginTitle")}</h4>
@@ -284,7 +290,7 @@ export function DevicesSection({
                   }}
                 />
                 <Button disabled={loading} onClick={() => void handleLogin()}>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : null}
                   {t("settings.devicesLogin")}
                 </Button>
               </div>
@@ -318,7 +324,8 @@ export function DevicesSection({
                   disabled={loading}
                   onClick={() => handleStatusFilter(value)}
                   className={cn(
-                    "inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50",
+                    "inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md px-3",
+                    "text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50",
                     statusFilter === value
                       ? "bg-background text-foreground shadow"
                       : "hover:text-foreground/80",
@@ -335,7 +342,7 @@ export function DevicesSection({
               disabled={loading}
               onClick={() => void load(page)}
             >
-              <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+              <RefreshCw className={loading ? "size-3.5 animate-spin" : "size-3.5"} />
               {t("settings.devicesRefresh")}
             </Button>
           </div>
@@ -420,8 +427,13 @@ function AddClientDialog({
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400">
-                <Plus className="h-5 w-5" />
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                )}
+              >
+                <Plus className="size-5" />
               </div>
               <div className="min-w-0">
                 <DialogTitle>{t("settings.devicesAddTitle")}</DialogTitle>
@@ -434,8 +446,13 @@ function AddClientDialog({
 
           <DialogBody className="space-y-4 py-5">
             {error ? (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div
+                className={cn(
+                  "flex items-start gap-2",
+                  "rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive",
+                )}
+              >
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <span>{error}</span>
               </div>
             ) : null}
@@ -444,6 +461,7 @@ function AddClientDialog({
                 {t("settings.devicesName")}
               </Label>
               <Input
+                variant="plain"
                 id="admin-agent-name-dialog"
                 autoFocus
                 placeholder={t("settings.devicesNamePlaceholder")}
@@ -458,6 +476,7 @@ function AddClientDialog({
                 <span className="ml-0.5 text-red-500">*</span>
               </Label>
               <Input
+                variant="plain"
                 id="admin-agent-id-dialog"
                 className="font-mono"
                 placeholder={t("settings.devicesAgentIdPlaceholder")}
@@ -474,9 +493,9 @@ function AddClientDialog({
               </Button>
               <Button type="submit" className="gap-1.5" disabled={loading}>
                 {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Key className="h-3.5 w-3.5" />
+                  <Key className="size-3.5" />
                 )}
                 {t("settings.devicesIssueShort")}
               </Button>
@@ -499,8 +518,7 @@ function IssuedTokenDialog({
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
-    if (!navigator.clipboard?.writeText) return;
-    await navigator.clipboard.writeText(issuedToken.token);
+    if (!(await copyTextToClipboard(issuedToken.token))) return;
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }
@@ -510,8 +528,13 @@ function IssuedTokenDialog({
       <DialogContent className="max-w-lg p-0" closeLabel={t("settings.close")} showCloseButton>
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Key className="h-5 w-5" />
+            <div
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center",
+                "rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+              )}
+            >
+              <Key className="size-5" />
             </div>
             <div className="min-w-0">
               <DialogTitle>{t("settings.devicesIssuedTitle")}</DialogTitle>
@@ -528,6 +551,7 @@ function IssuedTokenDialog({
           </p>
           <div className="relative">
             <Input
+              variant="plain"
               readOnly
               value={issuedToken.token}
               className="pr-11 font-mono text-xs"
@@ -536,15 +560,15 @@ function IssuedTokenDialog({
             <button
               type="button"
               onClick={() => void handleCopy()}
-              className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+              className={cn(
+                "absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center",
+                "rounded-lg text-muted-foreground transition-colors",
+                "hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+              )}
               title={copied ? t("chat.markdown.copied") : t("chat.copy")}
               aria-label={copied ? t("chat.markdown.copied") : t("chat.copy")}
             >
-              {copied ? (
-                <Check className="h-4 w-4 text-emerald-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
+              {copied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
             </button>
           </div>
         </DialogBody>
@@ -587,8 +611,13 @@ function DeviceDirectory(props: {
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-sm text-muted-foreground">
-        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+      <div
+        className={cn(
+          "flex items-center justify-center",
+          "rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-sm text-muted-foreground",
+        )}
+      >
+        {loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
         {loading ? t("settings.devicesLoading") : t("settings.devicesEmpty")}
       </div>
     );
@@ -597,8 +626,13 @@ function DeviceDirectory(props: {
   if (data.agents.length === 0) {
     const filtered = statusFilter !== "all";
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center">
-        <MonitorSmartphone className="h-8 w-8 text-muted-foreground/30" />
+      <div
+        className={cn(
+          "flex flex-col items-center gap-3",
+          "rounded-2xl border border-dashed border-border/60 bg-muted/20 py-12 text-center",
+        )}
+      >
+        <MonitorSmartphone className="size-8 text-muted-foreground/30" />
         <div>
           <p className="text-sm font-medium text-muted-foreground">
             {t(filtered ? "settings.devicesFilterEmpty" : "settings.devicesEmpty")}
@@ -660,22 +694,27 @@ function DeviceRow(props: {
 
   return (
     <div className="group rounded-xl border border-border/60 bg-card transition-colors hover:border-border hover:bg-accent/20">
-      <div className="settings-card-row settings-devices-card-row flex items-center gap-3 px-4 py-3">
+      <div
+        className={cn(
+          "settings-card-row flex items-center gap-3 px-4 py-3",
+          "max-820:grid max-820:grid-cols-settings-devices-card-row max-820:[align-items:start] max-820:gap-y-10px max-820:gap-x-12px",
+        )}
+      >
         <div
           className={
             agent.online
-              ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10"
-              : "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/60"
+              ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10"
+              : "flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60"
           }
         >
           {agent.online ? (
-            <Wifi className="h-4 w-4 text-emerald-500" />
+            <Wifi className="size-4 text-emerald-500" />
           ) : (
-            <WifiOff className="h-4 w-4 text-muted-foreground" />
+            <WifiOff className="size-4 text-muted-foreground" />
           )}
         </div>
 
-        <div className="settings-devices-card-main min-w-0 flex-1">
+        <div className="min-w-0 flex-1 max-820:min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={cn(
@@ -689,8 +728,8 @@ function DeviceRow(props: {
             <span
               className={
                 agent.online
-                  ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
-                  : "rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                  ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-tiny font-medium text-emerald-600 dark:text-emerald-400"
+                  : "rounded-full bg-muted px-2 py-0.5 text-tiny font-medium text-muted-foreground"
               }
             >
               {agent.online
@@ -698,7 +737,12 @@ function DeviceRow(props: {
                 : t("settings.devicesOfflineStatus")}
             </span>
           </div>
-          <div className="settings-devices-card-meta mt-1 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <div
+            className={cn(
+              "mt-1 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground",
+              "max-820:min-w-0",
+            )}
+          >
             {displayName ? (
               <span className="settings-devices-card-agent-id min-w-0 max-w-full truncate font-mono">
                 {agent.agent_id}
@@ -716,7 +760,13 @@ function DeviceRow(props: {
           </div>
         </div>
 
-        <div className="settings-devices-card-actions flex shrink-0 flex-wrap items-center justify-end gap-1">
+        <div
+          className={cn(
+            "flex shrink-0 flex-wrap items-center justify-end gap-1",
+            "max-820:col-span-full max-820:w-full max-820:justify-stretch max-820:gap-6px max-820:border-t max-820:border-solid max-820:border-t-border/50 max-820:pt-8px",
+            "max-820:[&_>_button]:min-w-0 max-820:[&_>_button]:flex-[1_1_0] max-820:[&_>_button]:justify-center max-820:[&_>_button]:px-8px",
+          )}
+        >
           {agent.has_token ? (
             <ConfirmActionPopover
               title={t("settings.devicesRotateTitle")}
@@ -734,9 +784,9 @@ function DeviceRow(props: {
                   onClick={open}
                 >
                   {rotating ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <Key className="h-3.5 w-3.5" />
+                    <Key className="size-3.5" />
                   )}
                   {t("settings.devicesRotate")}
                 </Button>
@@ -751,9 +801,9 @@ function DeviceRow(props: {
               onClick={onRotate}
             >
               {rotating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Key className="h-3.5 w-3.5" />
+                <Key className="size-3.5" />
               )}
               {t("settings.devicesIssueShort")}
             </Button>
@@ -765,7 +815,7 @@ function DeviceRow(props: {
             disabled={deleting || updatingName}
             onClick={beginEditing}
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <SquarePen className="size-3.5" />
             {t("settings.devicesEditName")}
           </Button>
           <ConfirmActionPopover
@@ -788,9 +838,9 @@ function DeviceRow(props: {
                 onClick={open}
               >
                 {deleting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="size-3.5" />
                 )}
                 {t("settings.devicesDelete")}
               </Button>
@@ -799,7 +849,12 @@ function DeviceRow(props: {
         </div>
       </div>
       {editing ? (
-        <div className="flex flex-col gap-2 border-t border-border/50 px-4 py-3 sm:flex-row sm:items-end">
+        <div
+          className={cn(
+            "flex flex-col gap-2 border-t border-border/50 px-4 py-3",
+            "sm:flex-row sm:items-end",
+          )}
+        >
           <div className="min-w-0 flex-1 space-y-1.5">
             <Label
               htmlFor={`agent-name-${agent.agent_id}`}
@@ -829,7 +884,7 @@ function DeviceRow(props: {
               disabled={updatingName}
               onClick={() => setEditing(false)}
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="size-3.5" />
               {t("settings.cancel")}
             </Button>
             <Button
@@ -839,9 +894,9 @@ function DeviceRow(props: {
               onClick={() => void saveName()}
             >
               {updatingName ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Save className="h-3.5 w-3.5" />
+                <Save className="size-3.5" />
               )}
               {t("settings.save")}
             </Button>

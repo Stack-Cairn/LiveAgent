@@ -1,4 +1,6 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "./ui/button";
 
@@ -37,12 +39,23 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryInnerProps, ErrorBoundar
       return this.props.children;
     }
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background p-8 text-center">
+      <div
+        className={cn(
+          "flex size-full flex-col items-center justify-center gap-4 bg-background p-8",
+          "text-center",
+        )}
+      >
         <div className="text-base font-semibold text-foreground">{this.props.labels.title}</div>
         <div className="max-w-md text-sm text-muted-foreground">
           {this.props.labels.description}
         </div>
-        <div className="max-h-40 max-w-xl overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/40 p-3 text-left font-mono text-[11px] text-muted-foreground">
+        <div
+          className={cn(
+            "max-h-40 max-w-xl overflow-auto",
+            "whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/40 p-3",
+            "text-left font-mono text-xs text-muted-foreground",
+          )}
+        >
           {error.message}
           {import.meta.env.DEV && this.state.componentStack
             ? `\n${this.state.componentStack}`
@@ -53,7 +66,7 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryInnerProps, ErrorBoundar
           <Button
             variant="ghost"
             onClick={() => {
-              void navigator.clipboard.writeText(
+              void copyTextToClipboard(
                 `${error.stack ?? error.message}\n${this.state.componentStack}`,
               );
             }}

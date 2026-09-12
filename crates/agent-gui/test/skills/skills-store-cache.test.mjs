@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const hubSource = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
   "utf8",
 );
-const storeSource = readFileSync(
-  new URL("../../../agent-ui/src/pages/skills-hub/SkillsStoreView.tsx", import.meta.url),
-  "utf8",
+const storeSource = normalizeClassGroups(
+  readFileSync(
+    new URL("../../../agent-ui/src/pages/skills-hub/SkillsStoreView.tsx", import.meta.url),
+    "utf8",
+  ),
 );
 const cacheSource = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/skillStoreCache.ts", import.meta.url),
@@ -48,7 +51,7 @@ test("an opened skill detail is shown from cache and refreshed only when stale",
 
 test("background catalog refresh does not move the tabs or disable the card grid", () => {
   assert.match(storeSource, /absolute inset-x-0 -bottom-1 h-px/);
-  assert.match(storeSource, /hub-loading-progress h-full rounded-full bg-foreground\/45/);
+  assert.match(storeSource, /w-\[42%\] origin-left animate-hub-loading-progress motion-reduce:animate-none! h-full rounded-full bg-foreground\/45/);
   assert.doesNotMatch(storeSource, /Loader2 aria-hidden=\{!refreshing\}/);
   assert.doesNotMatch(storeSource, /blur-\[1px\]/);
   assert.doesNotMatch(storeSource, /pointer-events-none saturate/);
@@ -62,8 +65,8 @@ test("store cards keep a static surface on pointer hover", () => {
 
 test("store cards keep the spacious original information hierarchy", () => {
   assert.match(storeSource, /flex h-full cursor-pointer flex-col rounded-2xl/);
-  assert.match(storeSource, /line-clamp-3 text-\[11\.5px\]/);
-  assert.match(storeSource, /border-t border-border\/60 pt-2 text-\[10\.5px\]/);
+  assert.match(storeSource, /line-clamp-3 text-xs/);
+  assert.match(storeSource, /border-t border-border\/60 pt-2 text-tiny/);
   assert.match(storeSource, /mt-auto h-9 w-full gap-1\.5 rounded-xl/);
   assert.doesNotMatch(storeSource, /w-fit self-end/);
 });

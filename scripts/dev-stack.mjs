@@ -189,8 +189,8 @@ function serviceCommand(service) {
     ensureWebUiEmbedStub();
     mkdirSync(gatewayDataDir, { recursive: true });
     return {
-      args: ["exec", "--", "go", "-C", "crates/agent-gateway", "run", "./cmd/gateway"],
-      command: "mise",
+      args: ["-C", "crates/agent-gateway", "run", "./cmd/gateway"],
+      command: "go",
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -204,9 +204,6 @@ function serviceCommand(service) {
   if (service === "webui") {
     return {
       args: [
-        "exec",
-        "--",
-        "node",
         "node_modules/vite/bin/vite.js",
         "--host",
         "localhost",
@@ -214,14 +211,14 @@ function serviceCommand(service) {
         String(ports.webui),
         "--strictPort",
       ],
-      command: "mise",
+      command: process.execPath,
       cwd: join(repoRoot, "crates/agent-gateway/web"),
       env: { ...process.env, npm_config_proxy_api: urls.gateway },
     };
   }
   return {
-    args: ["exec", "--", "pnpm", "--dir", "crates/agent-gui", "tauri", "dev"],
-    command: "mise",
+    args: ["--dir", "crates/agent-gui", "tauri", "dev"],
+    command: "pnpm",
     cwd: repoRoot,
     env: {
       ...process.env,

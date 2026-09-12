@@ -43,6 +43,7 @@ const GLOBAL_KEYS = [
   "SVGElement",
   "DocumentFragment",
   "MutationObserver",
+  "ResizeObserver",
 ];
 
 export async function createDomTestEnv(options = {}) {
@@ -51,6 +52,7 @@ export async function createDomTestEnv(options = {}) {
     url: "http://localhost/",
     pretendToBeVisual: true,
   });
+  dom.window.scrollTo = () => {};
 
   const previous = new Map();
   for (const key of GLOBAL_KEYS) {
@@ -91,6 +93,13 @@ export async function createDomTestEnv(options = {}) {
   setGlobal("SVGElement", dom.window.SVGElement);
   setGlobal("DocumentFragment", dom.window.DocumentFragment);
   setGlobal("MutationObserver", dom.window.MutationObserver);
+  // jsdom has no layout engine. Consumers that assert resizing supply their own
+  // observer; ordinary component tests only need the subscription lifecycle.
+  setGlobal("ResizeObserver", class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
 
   // React reads this to silence act() environment warnings in tests.
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;

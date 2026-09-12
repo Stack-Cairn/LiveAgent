@@ -401,7 +401,7 @@ test("a running tool batch names the current operation and caps its expanded hei
 
   click(button);
   const scrollRegion = container.querySelector("[data-tool-trace-scroll]");
-  assert.match(scrollRegion.className, /max-h-\[400px\]/);
+  assert.match(scrollRegion.className, /max-h-400px/);
   assert.match(scrollRegion.className, /overflow-y-auto/);
 
   act(() => root.unmount());

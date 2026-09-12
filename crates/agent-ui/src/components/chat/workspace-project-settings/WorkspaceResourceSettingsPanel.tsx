@@ -119,14 +119,14 @@ export function WorkspaceResourceSettingsPanel(props: {
                 aria-checked={isActive}
                 onClick={() => onModeChange(value)}
                 className={cn(
-                  "flex flex-col gap-1 rounded-lg p-2.5 text-left transition-colors focus-visible:outline-hidden",
-                  isActive ? "bg-primary/[0.08]" : "bg-muted/40 hover:bg-muted/70",
+                  "flex flex-col gap-1 rounded-lg p-2.5 text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive ? "bg-settings-active" : "bg-settings-tile hover:bg-settings-tile-hover",
                 )}
               >
                 <span className="flex items-center gap-2">
                   <Icon
                     className={cn(
-                      "h-4 w-4 shrink-0 text-muted-foreground",
+                      "size-4 shrink-0 text-muted-foreground",
                       isActive && "text-primary",
                     )}
                   />
@@ -139,16 +139,20 @@ export function WorkspaceResourceSettingsPanel(props: {
         </div>
       </div>
 
-      <div className="flex min-h-[360px] flex-1 flex-col px-6 py-4 max-[720px]:px-4">
+      <div className="flex min-h-360px flex-1 flex-col px-6 py-4 max-[720px]:px-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-60 max-w-full">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              variant="plain"
               type="search"
               value={query}
               onChange={(event) => onQueryChange(event.currentTarget.value)}
               placeholder={t("chat.workspaceResourcesSearch")}
-              className="h-8 rounded-lg border-border bg-background pl-9 pr-3 text-sm shadow-none placeholder:text-muted-foreground"
+              className={cn(
+                "h-9 rounded-lg pl-9 pr-3 text-sm",
+                "placeholder:text-muted-foreground",
+              )}
             />
           </div>
           <Tabs
@@ -200,7 +204,7 @@ export function WorkspaceResourceSettingsPanel(props: {
                       warning={missing}
                       metadata={
                         alwaysEnabled ? (
-                          <Badge variant="muted" className="h-5 px-1.5 text-[10px]">
+                          <Badge variant="muted" className="h-5 px-1.5 text-tiny">
                             {t("settings.skillsAlwaysOn")}
                           </Badge>
                         ) : null
@@ -236,7 +240,7 @@ export function WorkspaceResourceSettingsPanel(props: {
                       metadata={
                         <Badge
                           variant="muted"
-                          className="h-5 px-1.5 text-[10px] uppercase tracking-wide"
+                          className="h-5 px-1.5 text-tiny uppercase tracking-wide"
                         >
                           {transportLabel}
                         </Badge>

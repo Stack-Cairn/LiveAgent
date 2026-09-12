@@ -47,13 +47,6 @@ const SPAN_TONE: Record<TrajectoryRecordKind, string> = {
   subtool: "bg-orange-400/70",
 };
 
-/** 已中断的条目叠一层斜纹，和「完成了但很短」一眼区分。 */
-const ABORTED_HATCH =
-  "repeating-linear-gradient(45deg, transparent 0 2px, rgba(0,0,0,0.28) 2px 3px)";
-/** duration 模式被压缩掉的空闲间隙。 */
-const IDLE_HATCH =
-  "repeating-linear-gradient(45deg, transparent 0 2px, rgba(100,116,139,0.35) 2px 4px)";
-
 const TURN_BAND_HEIGHT = 14;
 const LANE_ROW_PITCH = 14;
 const SPAN_BAR_HEIGHT = 10;
@@ -143,7 +136,10 @@ export function TrajectoryTimeline(props: {
   return (
     <section
       aria-label={t("trajectory.timeline.aria")}
-      className="flex shrink-0 gap-2 border-b border-border/60 px-3 pt-1.5 pb-2 @max-[520px]:gap-1 @max-[520px]:px-2"
+      className={cn(
+        "flex shrink-0 gap-2 border-b border-border/60",
+        "px-3 pt-1.5 pb-2 @max-[520px]:gap-1 @max-[520px]:px-2",
+      )}
     >
       <div
         className="flex w-11 shrink-0 flex-col @max-[520px]:w-8"
@@ -152,7 +148,7 @@ export function TrajectoryTimeline(props: {
         {LANE_LABEL_KEYS.map((key, lane) => (
           <div
             key={key}
-            className="flex items-center text-[10px] leading-[14px] text-muted-foreground"
+            className="flex items-center text-tiny leading-14px text-muted-foreground"
             style={{ height: model.laneRows[lane] * LANE_ROW_PITCH }}
           >
             <span className="truncate">{t(key)}</span>
@@ -207,7 +203,8 @@ export function TrajectoryTimeline(props: {
                     statusLabel: t(`trajectory.status.${status}`),
                   })}
                   className={cn(
-                    "absolute top-0 flex h-[12px] items-center gap-1 overflow-hidden rounded-xs px-1 text-[9px] leading-none",
+                    "absolute top-0 flex h-12px items-center gap-1 overflow-hidden rounded-xs",
+                    "px-1 text-tiny leading-none",
                     status === "running"
                       ? "bg-primary/15 text-primary"
                       : status === "error"
@@ -218,7 +215,7 @@ export function TrajectoryTimeline(props: {
                 >
                   {`T${boundary.turn}`}
                   {status === "running" ? (
-                    <span className="inline-block size-[4px] animate-pulse rounded-full bg-current" />
+                    <span className="inline-block size-4px animate-pulse rounded-full bg-current" />
                   ) : status === "error" ? (
                     "✕"
                   ) : (
@@ -248,7 +245,6 @@ export function TrajectoryTimeline(props: {
               top: `${laneTops[span.lane] + span.row * LANE_ROW_PITCH + (LANE_ROW_PITCH - SPAN_BAR_HEIGHT) / 2}px`,
               height: SPAN_BAR_HEIGHT,
             };
-            if (span.status === "aborted") spanStyle.backgroundImage = ABORTED_HATCH;
             return (
               <span
                 key={span.index}
@@ -256,6 +252,7 @@ export function TrajectoryTimeline(props: {
                 className={cn(
                   "absolute overflow-hidden rounded-xs transition-opacity",
                   span.isError ? "bg-red-500/85" : SPAN_TONE[span.kind],
+                  span.status === "aborted" && "bg-trajectory-aborted",
                   span.status === "running" && "animate-pulse",
                   dimmed && "opacity-25",
                   props.selectedIndex === span.index && "ring-1 ring-primary",
@@ -290,13 +287,12 @@ export function TrajectoryTimeline(props: {
                   key={gap.at}
                   aria-hidden="true"
                   title={`${t("trajectory.timeline.idleGap")} · ${formatCompactMs(gap.ms)}`}
-                  className="absolute"
+                  className="absolute bg-trajectory-idle"
                   style={{
                     left: `calc(${pct(gap.at)}% - ${IDLE_GAP_WIDTH_PX / 2}px)`,
                     top: TURN_BAND_HEIGHT,
                     bottom: 0,
                     width: IDLE_GAP_WIDTH_PX,
-                    backgroundImage: IDLE_HATCH,
                   }}
                 />
               ))}
@@ -308,7 +304,7 @@ export function TrajectoryTimeline(props: {
               <span
                 key={boundary.turn}
                 aria-hidden="true"
-                className="absolute top-0 bottom-0 w-px bg-border"
+                className="absolute inset-y-0 w-px bg-border"
                 style={{ left: `${pct(boundary.time)}%` }}
               />
             ))}
@@ -318,7 +314,7 @@ export function TrajectoryTimeline(props: {
             <span
               aria-hidden="true"
               title={t("trajectory.timeline.now")}
-              className="absolute top-0 bottom-0 w-px animate-pulse bg-primary/70"
+              className="absolute inset-y-0 w-px animate-pulse bg-primary/70"
               style={{ left: `${pct(nowAt)}%` }}
             />
           )}
@@ -326,7 +322,7 @@ export function TrajectoryTimeline(props: {
           {gestures.draft !== null && (
             <span
               aria-hidden="true"
-              className="absolute top-0 bottom-0 border-x border-primary/60 bg-primary/10"
+              className="absolute inset-y-0 border-x border-primary/60 bg-primary/10"
               style={{
                 left: `${gestures.draft.start * 100}%`,
                 width: `${Math.max(0, gestures.draft.end - gestures.draft.start) * 100}%`,
@@ -339,7 +335,11 @@ export function TrajectoryTimeline(props: {
         {hoveredRecord !== null && gestures.draft === null && hovered !== null && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute top-0 z-10 max-w-[320px] -translate-x-1/2 -translate-y-full whitespace-pre-wrap break-all rounded-md border bg-popover px-2 py-1 text-[11px] leading-snug text-popover-foreground shadow-md"
+            className={cn(
+              "pointer-events-none absolute top-0 z-10 max-w-320px -translate-x-1/2 -translate-y-full",
+              "whitespace-pre-wrap break-all rounded-md border bg-popover px-2 py-1",
+              "text-xs leading-snug text-popover-foreground shadow-md",
+            )}
             style={{ left: `${hovered.leftPct}%`, top: trackHeight + 4 }}
           >
             {spanTooltip({
@@ -360,10 +360,10 @@ export function TrajectoryTimeline(props: {
             <span
               key={tick.at}
               aria-hidden="true"
-              className="absolute bottom-0 top-0 text-[9px] leading-[13px] text-muted-foreground"
+              className="absolute inset-y-0 text-tiny leading-13px text-muted-foreground"
               style={{ left: `${pct(tick.at)}%` }}
             >
-              <span className="absolute bottom-0 left-0 h-[3px] w-px bg-border" />
+              <span className="absolute bottom-0 left-0 h-3px w-px bg-border" />
               <span className="absolute left-1 whitespace-nowrap">{tick.label}</span>
             </span>
           ))}
@@ -412,9 +412,9 @@ export function TrajectoryTimeline(props: {
                 )}
                 style={{
                   left: `${left}%`,
-                  width: `max(2px, ${width}%)`,
+                  width: `max(var(--spacing-2px), ${width}%)`,
                   top: 2 + span.lane * 6,
-                  height: 4,
+                  height: "var(--spacing-4px)",
                   opacity: 0.75,
                 }}
               />
@@ -426,12 +426,11 @@ export function TrajectoryTimeline(props: {
               <span
                 key={gap.at}
                 aria-hidden="true"
-                className="absolute w-[2px]"
+                className="absolute w-2px bg-trajectory-idle"
                 style={{
                   left: `${((gap.at - model.start) / fullSpan) * 100}%`,
-                  top: 1,
-                  bottom: 1,
-                  backgroundImage: IDLE_HATCH,
+                  top: "var(--spacing-1px)",
+                  bottom: "var(--spacing-1px)",
                 }}
               />
             );

@@ -90,6 +90,7 @@ import {
   type DragEvent as ReactDragEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -186,7 +187,7 @@ function PendingComposerAttachment(props: {
       pathTitle={file.relativePath}
       imageSrc={imageSrc}
       isImageLoading={isLoading}
-      fallbackIcon={<TypeIcon className="h-4 w-4" />}
+      fallbackIcon={<TypeIcon className="size-4" />}
       disabled={disabled}
       removeLabel={removeLabel}
       previewLabel={previewLabel}
@@ -216,7 +217,7 @@ const DEFAULT_QUEUE_SCROLLBAR_STATE: QueueScrollbarState = {
 };
 
 const COMPOSER_EXPAND_ANIMATION_MS = 280;
-const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
+const COMPOSER_EXPAND_EASING = "--ease-ui-curve-4";
 const CONVERSATION_DROP_NOTICE_MS = 800;
 
 // 宿主未注入澄清执行器时的占位：clarifyEnabled=false 已把入口全部藏起，
@@ -281,6 +282,8 @@ function prefersReducedMotion() {
 
 export type ChatComposerBarProps = {
   surface: "desktop" | "web";
+  /** Web surface that owns the measured composer-height CSS variable. */
+  overlayHeightOwnerRef?: RefObject<HTMLElement | null>;
   conversationId: string;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   isSending: boolean;
@@ -401,6 +404,7 @@ export type ChatComposerBarProps = {
 export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposerBarProps) {
   const {
     surface,
+    overlayHeightOwnerRef,
     conversationId,
     composerRef,
     isSending,
@@ -869,7 +873,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         { minHeight: `${fromHeight}px`, maxHeight: `${fromHeight}px` },
         { minHeight: `${toHeight}px`, maxHeight: `${toHeight}px` },
       ],
-      { duration: COMPOSER_EXPAND_ANIMATION_MS, easing: COMPOSER_EXPAND_EASING },
+      {
+        duration: COMPOSER_EXPAND_ANIMATION_MS,
+        easing: getComputedStyle(card).getPropertyValue(COMPOSER_EXPAND_EASING).trim(),
+      },
     );
     expandAnimationRef.current = animation;
     const clear = () => {
@@ -1186,8 +1193,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       };
     }
 
-    const chatFrame = composerLayer.closest(".gateway-chat-frame");
-    if (!(chatFrame instanceof HTMLElement)) return;
+    const chatFrame = overlayHeightOwnerRef?.current;
+    if (!chatFrame) return;
 
     const updateComposerOverlayHeight = () => {
       // 展开态占满聊天区，保留最近一次常规高度，避免底部预留跟着跳动；
@@ -1227,6 +1234,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onCenterOffsetChange,
     surface,
     taskProgressBarElement,
+    overlayHeightOwnerRef,
   ]);
 
   return (
@@ -1234,8 +1242,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       ref={composerLayerRef}
       className={cn(
         surface === "desktop"
-          ? "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-5 pb-4"
-          : "gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center",
+          ? cn(
+              "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-5",
+              "pb-4",
+            )
+          : cn(
+              "gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20 grid max-h-full",
+              "grid-cols-[minmax(var(--gateway-chat-column-gutter,var(--spacing-16px)),1fr)_minmax(0,min(calc(var(--chat-transcript-content-width,var(--spacing-768px))-var(--spacing-40px)),100%))_minmax(var(--gateway-chat-column-gutter,var(--spacing-16px)),1fr)] pb-[var(--gateway-chat-composer-bottom,var(--spacing-16px))] max-640:pb-[var(--gateway-chat-composer-bottom,var(--spacing-12px))]",
+            ),
         isComposerExpanded && (surface === "desktop" ? "top-14" : "top-0 pt-3"),
         hidden && "hidden",
       )}
@@ -1257,8 +1271,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         ref={composerColumnRef}
         className={cn(
           surface === "desktop"
-            ? "pointer-events-auto relative w-[calc(100%-2.25rem)] max-w-[calc(var(--chat-transcript-content-width,768px)-4.75rem)]"
-            : "gateway-chat-column pointer-events-auto relative",
+            ? "pointer-events-auto relative w-inset-2p25rem max-w-transcript-gui"
+            : cn(
+                "gateway-chat-column pointer-events-auto relative col-[2] flex w-full min-w-0 max-h-full",
+                "flex-col justify-end [&_[data-clarify-panel]]:min-h-0 [&_[data-clarify-panel]]:shrink",
+              ),
           // justify-end：展开动画途中卡片被钳在中间高度时保持贴底，向上生长。
           isComposerExpanded && "flex min-h-0 flex-col justify-end",
         )}
@@ -1266,16 +1283,16 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         {taskProgressBar ? (
           <div
             ref={setTaskProgressBarElement}
-            className="pointer-events-none absolute inset-x-0 bottom-full z-40 mb-3 flex justify-center px-3"
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-full z-40 mb-3 flex justify-center",
+              "px-3",
+            )}
           >
             {taskProgressBar}
           </div>
         ) : null}
         {queuedTurns.length > 0 ? (
-          <div
-            ref={queuePanelRef}
-            className="relative z-30 mx-auto mb-[-1px] w-[calc(100%-1.5rem)]"
-          >
+          <div ref={queuePanelRef} className="relative z-30 mx-auto mb-minus-1px w-inset-1p5rem">
             <div
               aria-hidden={queueCollapsed}
               className={cn(
@@ -1284,22 +1301,35 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               )}
             >
               <div className="min-h-0 overflow-hidden">
-                <div className="rounded-t-lg border border-b-0 border-black/[0.055] bg-white/70 px-1 pb-1 pt-2 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.24),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_8px_24px_-18px_rgba(0,0,0,0.72),inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <div
+                  className={cn(
+                    "rounded-t-lg border border-b-0 border-black/[0.055] bg-white/70",
+                    "px-1 pb-1 pt-2",
+                    "shadow-ui-clarifypanel-22 backdrop-blur-2xl backdrop-saturate-[165%]",
+                    "dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-clarifypanel-23",
+                  )}
+                >
                   <div className="relative min-h-0">
                     <ul
                       ref={queueListRef}
                       data-scrollable={queuedTurns.length > 2 ? "true" : "false"}
                       className={cn(
-                        "chat-queue-scroll flex min-w-0 flex-col gap-1 overflow-x-hidden",
+                        "chat-queue-scroll flex min-w-0 flex-col gap-1 overflow-x-hidden overscroll-contain",
+                        "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0",
                         queuedTurns.length > 2
-                          ? "h-[76px] overflow-y-scroll pr-3"
-                          : "max-h-[76px] overflow-y-hidden pr-1",
+                          ? "h-76px overflow-y-scroll pr-3"
+                          : "max-h-76px overflow-y-hidden pr-1",
                       )}
                     >
                       {queuedTurns.map((item, index) => (
                         <li
                           key={item.id}
-                          className="relative grid h-9 min-h-9 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md border border-black/[0.035] bg-white/42 px-2 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.56)] backdrop-blur-xl backdrop-saturate-[150%] transition-[border-color,background-color] dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                          className={cn(
+                            "relative grid h-9 min-h-9 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5",
+                            "rounded-md border border-black/[0.035] bg-white/42 px-2",
+                            "text-xs shadow-ui-chatcomposerbar-35 backdrop-blur-xl backdrop-saturate-[150%] transition-[border-color,background-color]",
+                            "dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-ui-chatcomposerbar-36",
+                          )}
                         >
                           <div className="flex shrink-0 items-center gap-0.5">
                             {index > 0 ? (
@@ -1308,21 +1338,29 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                                 disabled={queueCollapsed}
                                 onClick={() => onMoveQueuedTurnUp(item.id)}
                                 aria-label={t("chat.queue.moveUp")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+                                className={cn(
+                                  "inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                  "hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
+                                )}
                               >
-                                <ChevronUp className="h-3 w-3" />
+                                <ChevronUp className="size-3" />
                               </button>
                             ) : (
-                              <span aria-hidden className="h-6 w-6" />
+                              <span aria-hidden className="size-6" />
                             )}
-                            <Clock3 className="h-3 w-3 shrink-0 text-muted-foreground/65" />
+                            <Clock3 className="size-3 shrink-0 text-muted-foreground/65" />
                           </div>
                           <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                            <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-foreground/88">
+                            <span
+                              className={cn(
+                                "block min-w-0 flex-1 overflow-hidden",
+                                "text-ellipsis whitespace-nowrap text-xs leading-4 text-foreground/88",
+                              )}
+                            >
                               {item.previewText || t("chat.queue.emptyMessage")}
                             </span>
                             {item.fileCount > 0 ? (
-                              <span className="max-w-[4.5rem] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(9px*var(--zone-font-scale,1))] leading-4 text-muted-foreground">
+                              <span className="max-w-18 shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-tiny leading-4 text-muted-foreground">
                                 {t("chat.queue.fileCount").replace(
                                   "{count}",
                                   String(item.fileCount),
@@ -1337,9 +1375,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                                 disabled={queueCollapsed}
                                 onClick={() => onEditQueuedTurn(item.id)}
                                 aria-label={t("chat.queue.edit")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+                                className={cn(
+                                  "inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                  "hover:bg-background/80 hover:text-foreground",
+                                )}
                               >
-                                <SquarePen className="h-3 w-3" />
+                                <SquarePen className="size-3" />
                               </button>
                             </RuntimeControlTooltip>
                             <RuntimeControlTooltip label={t("chat.queue.runNow")}>
@@ -1348,9 +1389,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                                 disabled={queueCollapsed}
                                 onClick={() => onRunQueuedTurnNow(item.id)}
                                 aria-label={t("chat.queue.runNow")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+                                className={cn(
+                                  "inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                  "hover:bg-background/80 hover:text-foreground",
+                                )}
                               >
-                                <Play className="h-3 w-3" />
+                                <Play className="size-3" />
                               </button>
                             </RuntimeControlTooltip>
                             <RuntimeControlTooltip label={t("chat.queue.delete")}>
@@ -1359,9 +1403,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                                 disabled={queueCollapsed}
                                 onClick={() => onRemoveQueuedTurn(item.id)}
                                 aria-label={t("chat.queue.delete")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                className={cn(
+                                  "inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                  "hover:bg-destructive/10 hover:text-destructive",
+                                )}
                               >
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className="size-3" />
                               </button>
                             </RuntimeControlTooltip>
                           </div>
@@ -1372,14 +1419,21 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       <div
                         ref={queueScrollbarTrackRef}
                         aria-hidden
-                        className="chat-queue-scrollbar"
+                        className={cn(
+                          "chat-queue-scrollbar absolute inset-y-2px right-1px z-2 w-8px touch-none",
+                          "rounded-full bg-muted/36 shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--background)/0.42)] [&:hover_.chat-queue-scrollbar-thumb]:bg-muted-foreground/56",
+                        )}
                         onPointerCancel={handleQueueScrollbarPointerUp}
                         onPointerDown={handleQueueScrollbarPointerDown}
                         onPointerMove={handleQueueScrollbarPointerMove}
                         onPointerUp={handleQueueScrollbarPointerUp}
                       >
                         <div
-                          className="chat-queue-scrollbar-thumb"
+                          className={cn(
+                            "chat-queue-scrollbar-thumb absolute inset-x-1px top-0 min-h-24px",
+                            "rounded-full bg-muted-foreground/42 shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--background)/0.55),0_var(--spacing-1px)_var(--spacing-2px)_var(--ui-color-hsl-220-22-10-0p08)]",
+                            "transition-colors duration-160 ease-default active:bg-muted-foreground/70",
+                          )}
                           style={{
                             height: `${queueScrollbar.thumbHeight}px`,
                             transform: `translateY(${queueScrollbar.thumbTop}px)`,
@@ -1397,14 +1451,20 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               title={toggleQueueTooltip}
               aria-label={toggleQueueTooltip}
               aria-expanded={!queueCollapsed}
-              className="absolute left-1/2 top-0 z-40 inline-flex h-[18px] -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-black/[0.07] bg-white/90 pl-1.5 pr-2 text-muted-foreground shadow-[0_2px_10px_-4px_rgba(15,23,42,0.45),inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-xl backdrop-saturate-150 transition-[background-color,color,scale] hover:bg-white hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:border-white/[0.12] dark:bg-zinc-900/90 dark:shadow-[0_2px_10px_-4px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.10)] dark:hover:bg-zinc-900"
+              className={cn(
+                "absolute left-1/2 top-0 z-40 inline-flex h-18px -translate-x-1/2 -translate-y-1/2",
+                "items-center gap-1 rounded-full border border-black/[0.07] bg-white/90 pl-1.5 pr-2",
+                "text-muted-foreground shadow-ui-chatcomposerbar-37 backdrop-blur-xl backdrop-saturate-150 transition-[background-color,color,scale]",
+                "hover:bg-white hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:border-white/[0.12] dark:bg-zinc-900/90",
+                "dark:shadow-ui-chatcomposerbar-38 dark:hover:bg-zinc-900",
+              )}
             >
               {queueCollapsed ? (
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="size-3" />
               ) : (
-                <ChevronUp className="h-3 w-3" />
+                <ChevronUp className="size-3" />
               )}
-              <span className="text-[calc(10px*var(--zone-font-scale,1))] font-medium leading-none tabular-nums">
+              <span className="text-tiny font-medium leading-none tabular-nums">
                 {queuedTurns.length}
               </span>
             </button>
@@ -1457,7 +1517,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             // 展开态切换 flex-grow 时会被一并动画，导致卡片先跳顶再长满的闪动。
             // 常驻 flex-col：FLIP 动画把卡片钳在中间高度时，flex-1 的编辑器
             // 区吸收多余空间，工具栏才能始终贴住卡片底边。
-            "composer-glass-card @container relative flex flex-col overflow-hidden rounded-4xl border border-border/65 bg-muted shadow-[0_18px_44px_-34px_color-mix(in_oklch,var(--foreground)_42%,transparent)] transition-[border-color,box-shadow] focus-within:border-border focus-within:shadow-[0_20px_48px_-34px_color-mix(in_oklch,var(--foreground)_48%,transparent)]",
+            "composer-glass-card @container relative flex flex-col overflow-hidden",
+            "rounded-4xl border border-border/65 bg-muted shadow-ui-chatcomposerbar-39 transition-[border-color,box-shadow] focus-within:border-border focus-within:shadow-ui-chatcomposerbar-40",
             surface === "desktop" && "z-10",
             isComposerExpanded && "min-h-0 flex-1",
           )}
@@ -1466,7 +1527,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             <div
               aria-hidden
               className={cn(
-                "pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-3xl border-2 border-dashed bg-background/90 text-sm font-medium backdrop-blur-sm",
+                "pointer-events-none absolute inset-0 z-40 flex items-center justify-center",
+                "rounded-3xl border-2 border-dashed bg-background/90 text-sm font-medium backdrop-blur-sm",
                 workspacePathDropState === "accept"
                   ? "border-sky-500/70 text-sky-600 dark:text-sky-300"
                   : "border-destructive/60 text-destructive",
@@ -1477,8 +1539,19 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 : t("chat.workspacePathDrop.crossProject")}
             </div>
           ) : conversationDropReference ? (
-            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-3xl border border-dashed border-primary/45 bg-background/88 px-6 text-center shadow-inner backdrop-blur-sm">
-              <span className="max-w-full truncate rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-1 z-50 flex items-center justify-center",
+                "rounded-3xl border border-dashed border-primary/45 bg-background/88 px-6",
+                "text-center shadow-inner backdrop-blur-sm",
+              )}
+            >
+              <span
+                className={cn(
+                  "max-w-full truncate rounded-full bg-primary/10 px-3 py-1.5",
+                  "text-xs font-medium text-primary",
+                )}
+              >
                 {t("chat.conversationReference.drop").replace(
                   "{title}",
                   conversationDropReference.title,
@@ -1486,8 +1559,19 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </span>
             </div>
           ) : conversationDropNoticeText ? (
-            <div className="pointer-events-none absolute inset-1 z-50 flex items-center justify-center rounded-3xl border border-dashed border-amber-500/45 bg-background/90 px-6 text-center shadow-inner backdrop-blur-sm">
-              <span className="max-w-full rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-1 z-50 flex items-center justify-center",
+                "rounded-3xl border border-dashed border-amber-500/45 bg-background/90 px-6",
+                "text-center shadow-inner backdrop-blur-sm",
+              )}
+            >
+              <span
+                className={cn(
+                  "max-w-full rounded-full bg-amber-500/10 px-3 py-1.5",
+                  "text-xs font-medium text-amber-700 dark:text-amber-300",
+                )}
+              >
                 {conversationDropNoticeText}
               </span>
             </div>
@@ -1501,7 +1585,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             {pendingUploadedFiles.length > 0 ? (
               <div
                 ref={attachmentListRef}
-                className="upload-file-list relative z-10 flex shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden pb-1 pl-4 pr-12 pt-2"
+                className={cn(
+                  "upload-file-list relative z-10 flex shrink-0 items-center gap-1.5 overflow-x-auto",
+                  "overflow-y-hidden overscroll-x-contain pb-1 pl-4 pr-12 pt-2",
+                  "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0",
+                )}
               >
                 {pendingUploadedFiles.map((file) => (
                   <PendingComposerAttachment
@@ -1526,12 +1614,16 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 title={toggleComposerExpandTooltip}
                 aria-label={toggleComposerExpandTooltip}
                 aria-expanded={isComposerExpanded}
-                className="absolute right-3 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-clip-content p-0.5 text-muted-foreground/70 outline-hidden transition-[background-color,color,scale] hover:bg-muted/60 hover:text-foreground active:scale-90 focus-visible:bg-muted/60"
+                className={cn(
+                  "absolute right-3 top-2 z-20 inline-flex size-8 items-center justify-center",
+                  "rounded-full bg-clip-content p-0.5 text-muted-foreground/70 outline-hidden transition-[background-color,color,scale]",
+                  "hover:bg-muted/60 hover:text-foreground active:scale-90 focus-visible:bg-muted/60",
+                )}
               >
                 {isComposerExpanded ? (
-                  <Minimize2 className="h-4 w-4" />
+                  <Minimize2 className="size-4" />
                 ) : (
-                  <Maximize2 className="h-4 w-4" />
+                  <Maximize2 className="size-4" />
                 )}
               </button>
             ) : null}
@@ -1579,7 +1671,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
                   // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。
                   // min-h 覆盖编辑器默认 70px，为卡片下方的会话统计栏留出高度预算。
-                  "min-h-[60px] px-0 py-0",
+                  "min-h-60px p-0",
                   isComposerExpanded &&
                     (surface === "desktop" ? "h-full max-h-none" : "h-full! max-h-none!"),
                 )}
@@ -1597,7 +1689,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         aria-label={addMenuTooltip}
                         title={addMenuTooltip}
                         className={cn(
-                          "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 data-[popup-open]:bg-muted/60",
+                          "composer-toolbar-action relative inline-flex size-8 shrink-0 items-center justify-center",
+                          "rounded-full outline-hidden transition-colors",
+                          "hover:bg-muted/60 focus-visible:bg-muted/60 data-[popup-open]:bg-muted/60",
                           "disabled:pointer-events-none disabled:opacity-40",
                           pendingUploadedFiles.length > 0
                             ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
@@ -1607,41 +1701,44 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     }
                   >
                     {isUploadingFiles ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="size-4 animate-spin" />
                     ) : (
-                      <Plus className="h-4 w-4" />
+                      <Plus className="size-4" />
                     )}
                     {pendingUploadedFiles.length > 0 ? (
                       <span
                         aria-hidden
-                        className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-sky-500 px-[3px] text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:bg-sky-400 dark:text-slate-900 dark:shadow-[0_0_0_1.5px_rgba(20,22,28,0.9)]"
+                        className={cn(
+                          "absolute -right-0.5 -top-0.5 flex h-15px min-w-15px items-center justify-center",
+                          "rounded-full bg-sky-500 px-3px",
+                          "text-tiny font-semibold leading-none text-white shadow-ui-chatcomposerbar-41",
+                          "dark:bg-sky-400 dark:text-slate-900 dark:shadow-ui-chatcomposerbar-42",
+                        )}
                       >
                         {pendingUploadedFiles.length}
                       </span>
                     ) : null}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
-                    className="composer-add-dropdown flex w-60 flex-col overflow-hidden p-1"
+                    className={cn("composer-add-dropdown flex w-60", "flex-col overflow-hidden")}
                     side="top"
                     align="start"
                   >
-                    <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
-                      {t("chat.upload.addSection")}
-                    </DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("chat.upload.addSection")}</DropdownMenuLabel>
                     <DropdownMenuItem
                       onSelect={onPickReadableFiles}
                       disabled={uploadDisabled}
-                      className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                      className="composer-safety-item gap-2"
                     >
-                      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="font-medium leading-5">{t("chat.upload.files")}</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={onPickWorkspaceFolder}
                       disabled={uploadDisabled}
-                      className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                      className="composer-safety-item gap-2"
                     >
-                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="font-medium leading-5">{t("chat.upload.folder")}</span>
                     </DropdownMenuItem>
                     {isAgentMode ? (
@@ -1658,11 +1755,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                             planModeEnabled: !chatRuntimeControls.planModeEnabled,
                           })
                         }
-                        className="composer-safety-item items-center gap-2 rounded-md py-1.5 text-xs"
+                        className="composer-safety-item gap-2"
                       >
                         <Lightbulb
                           className={cn(
-                            "h-3.5 w-3.5 shrink-0 transition-colors",
+                            "size-3.5 shrink-0 transition-colors",
                             chatRuntimeControls.planModeEnabled
                               ? "text-sky-600 dark:text-sky-300"
                               : "text-muted-foreground",
@@ -1676,7 +1773,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         <span
                           aria-hidden
                           className={cn(
-                            "ml-auto inline-flex h-[18px] w-8 shrink-0 items-center rounded-full transition-colors",
+                            "ml-auto inline-flex h-18px w-8 shrink-0 items-center rounded-full transition-colors",
                             chatRuntimeControls.planModeEnabled
                               ? "bg-sky-500 dark:bg-sky-400"
                               : "bg-muted-foreground/25",
@@ -1684,7 +1781,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         >
                           <span
                             className={cn(
-                              "block h-3.5 w-3.5 translate-x-[2px] rounded-full bg-white shadow-sm transition-transform dark:bg-slate-100",
+                              "block size-3.5 translate-x-2px rounded-full bg-white shadow-sm transition-transform dark:bg-slate-100",
                               chatRuntimeControls.planModeEnabled && "translate-x-4",
                             )}
                           />
@@ -1702,9 +1799,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     onClick={() => onChatRuntimeControlsChange({ planModeEnabled: false })}
                     title={t("chat.runtime.planModeSlashOff")}
                     aria-label={t("chat.runtime.planModeSlashOff")}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 text-[11px] font-medium text-sky-700 outline-hidden transition-colors hover:bg-sky-500/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40 dark:text-sky-300"
+                    className={cn(
+                      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5",
+                      "text-xs font-medium text-sky-700 outline-hidden transition-colors",
+                      "hover:bg-sky-500/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40 dark:text-sky-300",
+                    )}
                   >
-                    <Lightbulb className="h-3.5 w-3.5 shrink-0" />
+                    <Lightbulb className="size-3.5 shrink-0" />
                     <span className="truncate">{t("chat.runtime.planMode")}</span>
                   </button>
                 ) : null}
@@ -1719,12 +1820,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       aria-pressed={clarifyOpen}
                       title={clarifyButtonDisabled ? t("chat.clarify.buttonDisabled") : undefined}
                       className={cn(
-                        "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                        "composer-toolbar-action inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-hidden",
+                        "transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
                         "disabled:pointer-events-none disabled:opacity-40",
                         clarifyOpen && "bg-muted/60 text-foreground",
                       )}
                     >
-                      <WandSparkles className="h-4 w-4" />
+                      <WandSparkles className="size-4" />
                     </button>
                   </RuntimeControlTooltip>
                 ) : null}
@@ -1738,7 +1840,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       aria-label={stt.active ? "停止语音输入" : "开始语音输入"}
                       aria-pressed={stt.active}
                       className={cn(
-                        "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                        "composer-toolbar-action inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-hidden",
+                        "transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
                         "disabled:pointer-events-none disabled:opacity-40",
                         stt.active
                           ? "bg-red-500/10 text-red-600"
@@ -1748,11 +1851,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       {stt.state === "requesting-permission" ||
                       stt.state === "buffering" ||
                       stt.state === "stopping" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="size-4 animate-spin" />
                       ) : stt.active ? (
-                        <Square className="h-3.5 w-3.5 fill-current" />
+                        <Square className="size-3.5 fill-current" />
                       ) : (
-                        <Mic className="h-4 w-4" />
+                        <Mic className="size-4" />
                       )}
                     </button>
                   </RuntimeControlTooltip>
@@ -1780,22 +1883,23 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   style={
                     canQueueDraftWhileSending
                       ? {
-                          backgroundColor: "hsl(160 84% 39%)",
+                          backgroundColor: "var(--ui-color-hsl-160-84-39)",
                           backgroundImage: "none",
                           color: "white",
                         }
                       : isSending
                         ? {
-                            backgroundColor: "hsl(var(--destructive))",
+                            backgroundColor: "var(--destructive)",
                             backgroundImage: "none",
-                            color: "hsl(var(--destructive-foreground))",
+                            color: "var(--destructive-foreground)",
                           }
                         : undefined
                   }
                   className={cn(
                     // 点击区保持 32px；背景经 p-0.5 + bg-clip-content 只涂 28px 内圆，
                     // 与用量环外径、展开按钮悬停圆等大，避免实心圆盘显大。
-                    "h-8 w-8 shrink-0 rounded-full border-0 bg-clip-content p-0.5 shadow-none transition-all [&_svg]:stroke-[2.25]",
+                    "size-8 shrink-0 rounded-full border-0 bg-clip-content p-0.5 shadow-none transition-all",
+                    "[&_svg]:stroke-[2.25]",
                     canQueueDraftWhileSending
                       ? "hover:brightness-105 active:scale-95"
                       : isSending
@@ -1804,23 +1908,28 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   )}
                 >
                   {canQueueDraftWhileSending ? (
-                    <ArrowUp className="h-4 w-4" />
+                    <ArrowUp className="size-4" />
                   ) : isSending ? (
-                    <Square className="h-3 w-3 fill-current" />
+                    <Square className="size-3 fill-current" />
                   ) : (
-                    <ArrowUp className="h-4 w-4" />
+                    <ArrowUp className="size-4" />
                   )}
                 </Button>
               </div>
             </div>
           </div>
 
-          <div className="composer-control-deck relative z-0 flex min-h-9 shrink-0 items-center justify-between gap-2 bg-muted px-3 py-1">
+          <div
+            className={cn(
+              "composer-control-deck relative z-0 flex min-h-9 shrink-0 items-center justify-between",
+              "gap-2 bg-muted px-3 py-1",
+            )}
+          >
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-              {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
+              {commandSafetyMode && onCommandSafetyModeChange ? (
                 <CommandSafetyModeSelector
                   value={commandSafetyMode}
-                  disabled={controlsDisabled}
+                  disabled={controlsDisabled || !isAgentMode}
                   onChange={onCommandSafetyModeChange}
                 />
               ) : null}

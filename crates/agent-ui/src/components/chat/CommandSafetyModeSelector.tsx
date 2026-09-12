@@ -54,10 +54,10 @@ function modeIcon(mode: CommandSafetyMode, className: string) {
 
 function triggerIconClass(mode: CommandSafetyMode) {
   if (mode === "sandbox" || mode === "sandboxOffline") {
-    return "h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400";
+    return "size-4 shrink-0 text-emerald-600 dark:text-emerald-400";
   }
-  if (mode === "ask") return "h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400";
-  return "h-4 w-4 shrink-0 text-muted-foreground";
+  if (mode === "ask") return "size-4 shrink-0 text-sky-600 dark:text-sky-400";
+  return "size-4 shrink-0 text-muted-foreground";
 }
 
 export function CommandSafetyModeSelector(props: {
@@ -103,7 +103,8 @@ export function CommandSafetyModeSelector(props: {
             disabled={disabled}
             className={cn(
               COMPOSER_CONTROL_TRIGGER_CLASS,
-              "composer-safety-trigger w-8 justify-center gap-0 px-0 data-[popup-open]:bg-muted/60",
+              "w-8 justify-center gap-0 px-0",
+              "data-popup-open:bg-muted/60 web:max-480:flex-none web:max-480:w-8 web:max-480:min-w-8 web:max-480:justify-center web:max-480:gap-0 web:max-480:px-0",
             )}
           />
         }
@@ -113,7 +114,7 @@ export function CommandSafetyModeSelector(props: {
         {modeIcon(selected, triggerIconClass(selected))}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="composer-safety-dropdown flex w-72 flex-col gap-1 overflow-hidden p-1"
+        className={cn("composer-safety-dropdown flex w-72", "flex-col gap-1 overflow-hidden")}
         side="top"
         align="start"
       >
@@ -131,22 +132,21 @@ export function CommandSafetyModeSelector(props: {
               disabled={entryDisabled}
               onSelect={() => onChange(mode)}
               className={cn(
-                "composer-safety-item items-start gap-2 whitespace-normal rounded-md py-1.5 text-xs",
-                isSelected &&
-                  "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
+                "composer-safety-item items-start gap-2 whitespace-normal",
+                isSelected && "bg-accent text-accent-foreground",
               )}
             >
-              {modeIcon(mode, "mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground")}
+              {modeIcon(mode, "mt-0.5 size-3.5 shrink-0 text-muted-foreground")}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-medium leading-5">{t(MODE_I18N_KEYS[mode])}</span>
-                <span className="text-[11px] font-normal leading-4 text-muted-foreground">
+                <span className="text-xs font-normal leading-4 text-muted-foreground">
                   {entryDisabled ? disabledHint : t(modeDescKey(mode))}
                 </span>
               </span>
               {isSelected ? (
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <Check className="mt-0.5 size-4 shrink-0 text-primary" />
               ) : (
-                <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <span className="mt-0.5 size-4 shrink-0" aria-hidden />
               )}
             </DropdownMenuItem>
           );

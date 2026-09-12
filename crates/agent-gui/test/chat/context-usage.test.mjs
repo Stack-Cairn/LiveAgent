@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const loader = createTsModuleLoader();
 const contextUsage = loader.loadModule("@liveagent/ui/lib/chat/contextUsage.ts");
@@ -119,18 +120,19 @@ test("composer editor row reserves the right rail so the scrollbar clears expand
 });
 
 test("composer uses the opaque Tessera surface and a compact idle height", () => {
+  const classSource = normalizeClassGroups(chatComposerBarSource);
   assert.match(
-    chatComposerBarSource,
+    classSource,
     /composer-glass-card[^\n]+rounded-4xl[^\n]+border-border\/65 bg-muted/,
   );
   assert.match(
-    chatComposerBarSource,
+    classSource,
     /composer-input-surface[^\n]+rounded-4xl bg-background/,
   );
-  assert.match(chatComposerBarSource, /composer-control-deck[^\n]+min-h-9[^\n]+bg-muted/);
-  assert.doesNotMatch(chatComposerBarSource, /composer-input-surface[^\n]+bg-white\/76/);
-  assert.doesNotMatch(chatComposerBarSource, /composer-glass-card[^\n]+bg-black\/\[0\.035\]/);
-  assert.match(mentionComposerSource, /mention-composer min-h-10 max-h-\[160px\]/);
+  assert.match(classSource, /composer-control-deck[^\n]+min-h-9[^\n]+bg-muted/);
+  assert.doesNotMatch(classSource, /composer-input-surface[^\n]+bg-white\/76/);
+  assert.doesNotMatch(classSource, /composer-glass-card[^\n]+bg-black\/\[0\.035\]/);
+  assert.match(mentionComposerSource, /mention-composer min-h-10 max-h-160px/);
 });
 
 test("composer expand toggle appears only after the editor overflows", () => {

@@ -9,7 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-
+import { acquireGlobalPointerStyle } from "../../../lib/shared/globalPointerStyle";
 import { cn } from "../../../lib/shared/utils";
 import {
   clampWidthToStage,
@@ -211,15 +211,15 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
       const dragMaxWidth = measureStageMaxWidth(host);
       const startX = event.clientX;
       const startWidth = clampWidthToStage(width, dragMaxWidth);
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
+      const releaseGlobalStyle = acquireGlobalPointerStyle({
+        cursor: "col-resize",
+        userSelect: "none",
+      });
       pendingWidthRef.current = startWidth;
       resizingRef.current = true;
       setMaxWidth(dragMaxWidth);
       setResizingWidth(startWidth);
       applyWidth(host, startWidth);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
 
       const scheduleWidth = (nextWidth: number) => {
         pendingWidthRef.current = clampWidthToStage(nextWidth, dragMaxWidth);
@@ -241,8 +241,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
           cancelAnimationFrame(resizeFrameRef.current);
           resizeFrameRef.current = null;
         }
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
+        releaseGlobalStyle();
         resizingRef.current = false;
         cleanupRef.current = null;
         endResizeRef.current = null;
@@ -313,7 +312,8 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
         onPointerDown={(event) => handleResizeStart(side, event)}
         onDoubleClick={resetWidth}
         className={cn(
-          "group pointer-events-auto absolute inset-y-0 z-10 flex w-[17px] touch-none cursor-col-resize items-center justify-center border-0 bg-transparent p-0 focus-visible:outline-none",
+          "group pointer-events-auto absolute inset-y-0 z-10 flex w-17px touch-none",
+          "cursor-col-resize items-center justify-center border-0 bg-transparent p-0 focus-visible:outline-none",
           isPrimary ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2",
         )}
       >
@@ -331,7 +331,10 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
 
   return (
     <div
-      className="transcript-width-controls pointer-events-none absolute inset-y-0 left-1/2 z-10 -translate-x-1/2"
+      className={cn(
+        "transcript-width-controls pointer-events-none absolute inset-y-0 left-1/2 z-10 -translate-x-1/2",
+        "max-820:hidden touch-primary:hidden",
+      )}
       // The root stays mounted in every state and names the gate that hides
       // the handles, so a runtime look at a pane that lost them tells the
       // gates apart instead of finding nothing to inspect (#749). `hidden`
@@ -347,7 +350,13 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
       {handlesVisible ? renderHandle("left") : null}
       {handlesVisible ? renderHandle("right") : null}
       {handlesVisible && resizingWidth !== null ? (
-        <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-md border border-border/70 bg-background px-2 py-1 text-[11px] font-medium tabular-nums text-muted-foreground shadow-sm">
+        <div
+          className={cn(
+            "absolute left-1/2 top-2 -translate-x-1/2",
+            "rounded-md border border-border/70 bg-background px-2 py-1 text-xs font-medium",
+            "tabular-nums text-muted-foreground shadow-sm",
+          )}
+        >
           {effectiveWidth} px
         </div>
       ) : null}

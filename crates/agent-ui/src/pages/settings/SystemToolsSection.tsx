@@ -14,8 +14,17 @@ import {
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { invoke } from "@liveagent/app/shims/tauriCore";
-import { Wrench } from "@liveagent/ui/components/IconSet";
+import { Search } from "@liveagent/ui/components/IconSet";
+import { SettingsSection } from "@liveagent/ui/components/settings/SettingsLayout";
+import {
+  SettingsToggleGroup,
+  SettingsToggleGroupItem,
+} from "@liveagent/ui/components/settings/SettingsToggleGroup";
+import { Badge } from "@liveagent/ui/components/ui/badge";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useMemo, useState } from "react";
 import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";
 import {
@@ -72,42 +81,30 @@ function BrowserModeRow(props: {
   const showGuide = needsExtension && info !== null && !info.connected;
 
   return (
-    <div className="space-y-2 bg-muted/20 px-3 py-2.5">
+    <div className="space-y-2 bg-settings-tile-hover px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="text-xs text-muted-foreground">{t("settings.browserMode.label")}</span>
-        <fieldset
-          // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: 同 ToolPolicyToggle——互斥单选语义需要向读屏表达。
-          role="radiogroup"
+        <SettingsToggleGroup
+          value={[mode]}
           aria-label={t("settings.browserMode.label")}
-          className="inline-flex min-w-0 shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
+          className="min-w-0 shrink-0 bg-background"
+          onValueChange={(values) => {
+            const nextMode = values[0] as BrowserAutomationMode | undefined;
+            if (nextMode) onChange(nextMode);
+          }}
         >
-          {BROWSER_AUTOMATION_MODES.map((option) => {
-            const active = mode === option;
-            return (
-              // biome-ignore lint/a11y/useSemanticElements: 同 ToolPolicyToggle——分段控件保留 button 样式。
-              <button
-                key={option}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => onChange(option)}
-                className={
-                  active
-                    ? "rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium leading-none text-primary-foreground transition-colors"
-                    : "rounded-md px-2.5 py-1 text-[11px] font-medium leading-none text-muted-foreground transition-colors hover:text-foreground"
-                }
-              >
-                {t(`settings.browserMode.${option}`)}
-              </button>
-            );
-          })}
-        </fieldset>
+          {BROWSER_AUTOMATION_MODES.map((option) => (
+            <SettingsToggleGroupItem key={option} value={option}>
+              {t(`settings.browserMode.${option}`)}
+            </SettingsToggleGroupItem>
+          ))}
+        </SettingsToggleGroup>
         {needsExtension && info !== null ? (
           <span
             className={
               info.connected
-                ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] leading-none text-emerald-500"
-                : "rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] leading-none text-amber-500"
+                ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-tiny leading-none text-emerald-500"
+                : "rounded-full bg-amber-500/10 px-2 py-0.5 text-tiny leading-none text-amber-500"
             }
           >
             {t(
@@ -118,22 +115,30 @@ function BrowserModeRow(props: {
           </span>
         ) : null}
       </div>
-      <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+      <p className="text-xs leading-relaxed text-muted-foreground/80">
         {t(`settings.browserMode.${mode}.desc`)}
       </p>
       {showGuide ? (
         <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {t("settings.browserMode.installGuide")}
           </p>
           {info.extensionDir ? (
             <div className="flex flex-wrap items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded bg-muted/60 px-1.5 py-1 font-mono text-[10px] leading-none text-muted-foreground">
+              <code
+                className={cn(
+                  "min-w-0 flex-1 truncate rounded bg-muted/60 px-1.5 py-1",
+                  "font-mono text-tiny leading-none text-muted-foreground",
+                )}
+              >
                 {info.extensionDir}
               </code>
               <button
                 type="button"
-                className="shrink-0 rounded-md border border-border/60 px-2 py-1 text-[11px] font-medium leading-none text-foreground transition-colors hover:bg-muted/60"
+                className={cn(
+                  "shrink-0 rounded-md border border-border/60 px-2 py-1",
+                  "text-xs font-medium leading-none text-foreground transition-colors hover:bg-muted/60",
+                )}
                 onClick={() => {
                   void invoke("browser_extension_reveal_dir", {}).catch(() => {});
                 }}
@@ -153,14 +158,29 @@ export function SystemToolsSection(props: SettingsSectionProps) {
   const { t } = useLocale();
 
   const policies = settings.system.toolPolicies ?? {};
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const query = search.trim().toLocaleLowerCase();
 
   const groups = useMemo(
     () =>
       BUILTIN_TOOL_CATEGORIES.map((category) => ({
         category,
-        entries: BUILTIN_TOOL_CATALOG.filter((entry) => entry.categoryId === category.id),
+        entries: BUILTIN_TOOL_CATALOG.filter((entry) => {
+          if (entry.categoryId !== category.id) return false;
+          if (filter === "configurable" && entry.isReadOnly) return false;
+          return (
+            !query ||
+            [
+              entry.toolName,
+              t(`settings.builtinTool.${entry.id}.name`),
+              t(`settings.builtinTool.${entry.id}.desc`),
+              t(category.labelKey),
+            ].some((text) => text.toLocaleLowerCase().includes(query))
+          );
+        }),
       })).filter((group) => group.entries.length > 0),
-    [],
+    [filter, query, t],
   );
 
   // 只读工具无副作用,恒定放行(与 resolveToolPolicy 的缺省一致),不提供切换。
@@ -192,81 +212,116 @@ export function SystemToolsSection(props: SettingsSectionProps) {
   const overriddenCount = Object.keys(policies).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <Wrench className="h-[18px] w-[18px] text-primary" />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold">{t("settings.systemTools")}</h3>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            {t("settings.systemToolsDesc")}
-          </p>
-        </div>
+    <div className="space-y-7">
+      <div className="flex items-start justify-between gap-4 px-1">
+        <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
+          {t("settings.systemToolsDesc")}
+        </p>
         {overriddenCount > 0 ? (
-          <span className="ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium leading-none text-primary">
+          <Badge variant="muted" size="compact" className="h-5 shrink-0 px-2 tabular-nums">
             {t("settings.toolPermissionsOverridden").replace("{count}", String(overriddenCount))}
-          </span>
+          </Badge>
         ) : null}
       </div>
 
-      <div className="space-y-4">
-        {groups.map(({ category, entries }) => (
-          <div key={category.id} className="space-y-1.5">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-              {t(category.labelKey)}
-            </div>
-            <div className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-background/60">
-              {entries.map((entry) => {
-                const policy = effectivePolicy(entry);
-                return (
-                  <div key={entry.id}>
-                    <div className="flex items-center gap-3 px-3 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                          <span className="text-sm font-medium">
-                            {t(`settings.builtinTool.${entry.id}.name`)}
-                          </span>
-                          <code className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground">
-                            {entry.toolName}
-                          </code>
-                          {entry.isReadOnly ? (
-                            <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] leading-none text-emerald-500">
-                              {t("settings.toolDetailReadOnly")}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-0.5 truncate text-xs leading-relaxed text-muted-foreground">
-                          {t(`settings.builtinTool.${entry.id}.desc`)}
-                        </div>
-                      </div>
-                      {entry.isReadOnly ? (
-                        <span className="shrink-0 text-[11px] text-muted-foreground/60">
-                          {t("settings.toolPolicy.allow")}
-                        </span>
-                      ) : (
-                        <ToolPolicyToggle
-                          value={policy}
-                          ariaLabel={entry.toolName}
-                          onChange={(next) => setPolicy(entry, next)}
-                        />
-                      )}
-                    </div>
-                    {entry.id === "browser" ? (
-                      <BrowserModeRow
-                        mode={settings.system.browserAutomationMode}
-                        onChange={(next) =>
-                          setSettings((prev) => updateSystem(prev, { browserAutomationMode: next }))
-                        }
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-48 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            variant="plain"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label={t("settings.systemToolsSearch")}
+            placeholder={t("settings.systemToolsSearch")}
+            className="h-9 pl-9"
+          />
+        </div>
+        <SettingsToggleGroup
+          value={[filter]}
+          aria-label={t("settings.systemToolsFilter")}
+          onValueChange={(values) => {
+            if (values[0]) setFilter(values[0]);
+          }}
+        >
+          <SettingsToggleGroupItem value="all">
+            {t("settings.systemToolsAll")}
+          </SettingsToggleGroupItem>
+          <SettingsToggleGroupItem value="configurable">
+            {t("settings.systemToolsConfigurable")}
+          </SettingsToggleGroupItem>
+        </SettingsToggleGroup>
       </div>
+
+      {groups.length === 0 ? (
+        <div className="rounded-xl bg-settings-tile px-4 py-10 text-center">
+          <p className="text-sm text-muted-foreground">{t("settings.systemToolsEmpty")}</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-3"
+            onClick={() => {
+              setSearch("");
+              setFilter("all");
+            }}
+          >
+            {t("settings.systemToolsClear")}
+          </Button>
+        </div>
+      ) : null}
+
+      {groups.map(({ category, entries }) => (
+        <SettingsSection
+          key={category.id}
+          title={t(category.labelKey)}
+          actions={
+            <span className="text-xs tabular-nums text-muted-foreground">{entries.length}</span>
+          }
+        >
+          <div className="overflow-hidden rounded-xl bg-settings-tile">
+            {entries.map((entry) => {
+              const policy = effectivePolicy(entry);
+              return (
+                <div key={entry.id} className="border-b border-foreground/5 last:border-b-0">
+                  <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 px-4 py-3">
+                    <div className="min-w-48 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-medium">
+                          {t(`settings.builtinTool.${entry.id}.name`)}
+                        </span>
+                        <code className="font-mono text-tiny text-muted-foreground">
+                          {entry.toolName}
+                        </code>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {t(`settings.builtinTool.${entry.id}.desc`)}
+                      </div>
+                    </div>
+                    {entry.isReadOnly ? (
+                      <span className="shrink-0 rounded-md bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+                        {t("settings.systemToolsAlwaysAllowed")}
+                      </span>
+                    ) : (
+                      <ToolPolicyToggle
+                        value={policy}
+                        ariaLabel={entry.toolName}
+                        onChange={(next) => setPolicy(entry, next)}
+                      />
+                    )}
+                  </div>
+                  {entry.id === "browser" ? (
+                    <BrowserModeRow
+                      mode={settings.system.browserAutomationMode}
+                      onChange={(next) =>
+                        setSettings((prev) => updateSystem(prev, { browserAutomationMode: next }))
+                      }
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </SettingsSection>
+      ))}
     </div>
   );
 }

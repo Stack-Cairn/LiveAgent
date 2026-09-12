@@ -1,3 +1,5 @@
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 // Context menu for the right-dock file tree panel.
 //
 // Shared implementation owned by @liveagent/ui. Host-specific icons, settings
@@ -6,7 +8,6 @@
 
 import {
   Copy,
-  Edit3,
   ExternalLink,
   Eye,
   EyeOff,
@@ -15,14 +16,15 @@ import {
   FolderOpen,
   Plus,
   RefreshCw,
+  SquarePen,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -33,32 +35,11 @@ import {
 } from "../../workspace-editor/workspaceImagePreview";
 import { FILE_TREE_HAS_OS_INTEGRATION, type FileTreeKind } from "./model";
 
-const COPY_FEEDBACK_MS = 1200;
-
 const MENU_ITEM_CLASS =
   "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45";
 
 const MENU_ITEM_DESTRUCTIVE_CLASS =
   "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-45";
-
-// Legacy fallback for environments where the async clipboard API is missing
-// or rejects (insecure context, denied permission).
-function fallbackCopyToClipboard(text: string): boolean {
-  try {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    const copied = document.execCommand("copy");
-    textarea.remove();
-    return copied;
-  } catch {
-    return false;
-  }
-}
 
 export type FileTreeContextMenuProps = {
   // Anchor relative to the panel (containerRef) coordinate space.
@@ -108,8 +89,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
   const { t } = useLocale();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<number | null>(null);
+  const { copied, showCopied } = useCopyFeedback(false, COPY_FEEDBACK_DURATION.short);
 
   const hasPathAction = Boolean(path);
 
@@ -133,13 +113,6 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
     });
   }, [anchor.x, anchor.y, containerRef, position]);
 
-  useEffect(
-    () => () => {
-      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
-    },
-    [],
-  );
-
   const handleCopy = useCallback(
     async (event: ReactMouseEvent) => {
       // Keep the menu open so the "copied" feedback is actually visible (the
@@ -147,38 +120,26 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
       event.stopPropagation();
       const pathToCopy = displayPath ?? path;
       if (!pathToCopy) return;
-      let copiedOk = false;
-      try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(pathToCopy);
-          copiedOk = true;
-        }
-      } catch {
-        copiedOk = false;
-      }
-      if (!copiedOk) copiedOk = fallbackCopyToClipboard(pathToCopy);
+      const copiedOk = await copyTextToClipboard(pathToCopy);
       if (!copiedOk) {
         onActionError(t("projectTools.fileTree.copyFailed"));
         onClose();
         return;
       }
-      setCopied(true);
-      // The pending reset is always cancelled before a new one is armed so
-      // rapid copies cannot leave a stale timer clearing fresh feedback.
-      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = window.setTimeout(() => {
-        setCopied(false);
-        copyTimerRef.current = null;
-      }, COPY_FEEDBACK_MS);
+      showCopied(true);
     },
-    [displayPath, onActionError, onClose, path, t],
+    [displayPath, onActionError, onClose, path, t, showCopied],
   );
 
   return (
     <div
       ref={menuRef}
       role="menu"
-      className="editor-context-menu layer-popover absolute min-w-52 select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
+      className={cn(
+        "origin-top-left layer-popover absolute min-w-52 select-none overflow-hidden",
+        "rounded-xl border border-border/60 bg-popover/80 p-1",
+        "text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]",
+      )}
       style={{
         left: (position ?? anchor).x,
         top: (position ?? anchor).y,
@@ -202,9 +163,9 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
             }}
           >
             {isWorkspacePreviewPath(path) ? (
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="size-3.5" />
             ) : (
-              <FilePenLine className="h-3.5 w-3.5" />
+              <FilePenLine className="size-3.5" />
             )}
             {t(
               isWorkspacePreviewPath(path)
@@ -223,7 +184,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
                 onClose();
               }}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="size-3.5" />
               {t("projectTools.fileTree.openExternal")}
             </button>
           ) : null}
@@ -240,7 +201,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Plus className="h-3.5 w-3.5" />
+        <Plus className="size-3.5" />
         {t("projectTools.fileTree.newFile")}
       </button>
       <button
@@ -253,7 +214,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Folder className="h-3.5 w-3.5" />
+        <Folder className="size-3.5" />
         {t("projectTools.fileTree.newFolder")}
       </button>
       <button
@@ -266,7 +227,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Edit3 className="h-3.5 w-3.5" />
+        <SquarePen className="size-3.5" />
         {t("projectTools.fileTree.rename")}
       </button>
       <button
@@ -279,7 +240,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="size-3.5" />
         {t("projectTools.fileTree.delete")}
       </button>
       <div className="mx-1 my-1 h-px bg-border/60" />
@@ -293,7 +254,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        {showHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+        {showHidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         {t(
           showHidden
             ? "projectTools.fileTree.hideHiddenFiles"
@@ -307,7 +268,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
         disabled={!hasPathAction}
         onClick={(event) => void handleCopy(event)}
       >
-        <Copy className="h-3.5 w-3.5" />
+        <Copy className="size-3.5" />
         {copied ? t("projectTools.fileTree.copiedPath") : t("projectTools.fileTree.copyPath")}
       </button>
       {FILE_TREE_HAS_OS_INTEGRATION ? (
@@ -321,7 +282,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
             onClose();
           }}
         >
-          <FolderOpen className="h-3.5 w-3.5" />
+          <FolderOpen className="size-3.5" />
           {t("projectTools.fileTree.openContainingDirectory")}
         </button>
       ) : null}
@@ -335,9 +296,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <span className="flex h-3.5 w-3.5 items-center justify-center text-[calc(11px*var(--zone-font-scale,1))] font-semibold">
-          @
-        </span>
+        <span className="flex size-3.5 items-center justify-center text-xs font-semibold">@</span>
         {t("projectTools.fileTree.insertReference")}
       </button>
       <div className="mx-1 my-1 h-px bg-border/60" />
@@ -350,7 +309,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <RefreshCw className="h-3.5 w-3.5" />
+        <RefreshCw className="size-3.5" />
         {t("projectTools.fileTree.refresh")}
       </button>
     </div>

@@ -3,13 +3,14 @@ import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
-import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { type ToastTone, toast } from "@liveagent/ui/components/ui/toast-manager";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import {
   type ConversationOpenState,
@@ -56,6 +57,12 @@ import {
   workspaceProjectPathKey,
 } from "@/lib/settings";
 import { createIdleSidebarBackend, createWebSidebarBackend } from "@/lib/sidebar/webSidebarBackend";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_MAIN_BACKDROP_CLASS,
+  GATEWAY_MAIN_SHELL_CLASS,
+  GATEWAY_SHELL_CLASS,
+} from "@/lib/webStyleClasses";
 import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
@@ -168,17 +175,7 @@ function useGatewayAppController() {
     },
     [],
   );
-  // Top-right toast stack for upload/attachment feedback — mirrors the GUI's
-  // NotifyToast usage so upload failures never render as conversation output.
-  const [notifyItems, setNotifyItems] = useState<NotifyItem[]>([]);
-  const notifyIdCounter = useRef(0);
-  const addNotify = useCallback((type: NotifyItem["type"], message: string) => {
-    const id = `notify-${++notifyIdCounter.current}`;
-    setNotifyItems((prev) => [...prev, { id, type, message }]);
-  }, []);
-  const dismissNotify = useCallback((id: string) => {
-    setNotifyItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const addNotify = useCallback((type: ToastTone, message: string) => toast[type](message), []);
   // Sidebar errors raised outside the sidebar store (project removal flow).
   const [sidebarActionError, setSidebarActionError] = useState<string | null>(null);
   const [queuedChatTurns, setQueuedChatTurns] = useState<ChatQueueItemSummary[]>([]);
@@ -1391,7 +1388,7 @@ function useGatewayAppController() {
       resetSettingsOverlay();
       setActiveView("chat");
       setRightDockOpen(false);
-      setNotifyItems([]);
+      toast.dismiss();
       resetProjectToolsRuntimeRef.current();
       workbenchClearRef.current();
       resetToFreshHomeConversation();
@@ -1629,7 +1626,6 @@ function useGatewayAppController() {
     handleWorkspaceEditorHide,
     handleWorkspaceFilePreviewClosed,
     hideWorkspaceSshTerminalOverlay,
-    isSuggestionTyping,
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
     projectTerminalSessions,
@@ -1921,10 +1917,16 @@ function useGatewayAppController() {
   if (!settingsSyncReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
-        <div className="gateway-shell">
-          <main className="gateway-main-shell">
-            <div className="gateway-main-backdrop" />
-            <div className="gateway-chat-frame flex items-center justify-center">
+        <div className={GATEWAY_SHELL_CLASS}>
+          <main className={GATEWAY_MAIN_SHELL_CLASS}>
+            <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
+            <div
+              className={cn(
+                GATEWAY_CHAT_FRAME_CLASS,
+                "relative flex h-full min-h-0 min-w-0 flex-1 flex-col",
+                "items-center justify-center max-820:h-full",
+              )}
+            >
               <SettingsSyncLoading locale={settings.locale} />
             </div>
           </main>
@@ -1983,7 +1985,6 @@ function useGatewayAppController() {
     currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
-    dismissNotify,
     displayedConversationBusyRef,
     displayedConversationId,
     displayedConversationWorkdir,
@@ -2093,7 +2094,6 @@ function useGatewayAppController() {
     isConversationBusy,
     isFileDropActive,
     isImportingPastedTextRef,
-    isSuggestionTyping,
     isUploadingFiles,
     uploadingConversationId,
     loadComposerHistoryPrompts,
@@ -2108,7 +2108,6 @@ function useGatewayAppController() {
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
-    notifyItems,
     openSettings,
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,

@@ -48,6 +48,7 @@ import {
   zoomImageViewerAtPoint,
 } from "@liveagent/ui/components/workspace-editor/workspaceImageViewer";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard as copySharedTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 import { renderAsync } from "docx-preview";
@@ -525,7 +526,9 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
   return (
     <div
       className={cn(
-        "workspace-file-preview-overlay absolute inset-0 flex min-h-0 min-w-0 transform-gpu flex-col overflow-hidden border-r border-border bg-background transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+        "workspace-file-preview-overlay absolute inset-0 flex min-h-0 min-w-0 transform-gpu",
+        "flex-col overflow-hidden border-r border-border bg-background",
+        "transition-[opacity,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
         workspaceOverlayStackClassName,
         isVisible
           ? "pointer-events-auto translate-x-0 opacity-100 shadow-2xl"
@@ -533,19 +536,27 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
       )}
     >
       <WorkspaceOverlayTitleBar />
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-muted/45 px-3">
-        <PreviewIcon className="h-4 w-4 shrink-0 text-primary" />
+      <div
+        className={cn(
+          "flex h-11 shrink-0 items-center gap-2",
+          "border-b border-border bg-muted/45 px-3",
+        )}
+      >
+        <PreviewIcon className="size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold leading-tight">
             {t("workspaceFilePreview.title")}
           </div>
-          <div className="truncate text-[11px] text-muted-foreground">{activePath}</div>
+          <div className="truncate text-xs text-muted-foreground">{activePath}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {canOpenEditor && activePreviewRequest ? (
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className={cn(
+                "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                "hover:bg-muted hover:text-foreground",
+              )}
               title={t("workspaceFilePreview.edit")}
               aria-label={t("workspaceFilePreview.edit")}
               onClick={() =>
@@ -555,45 +566,59 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
                 })
               }
             >
-              <FilePenLine className="h-4 w-4" />
+              <FilePenLine className="size-4" />
             </button>
           ) : null}
           {showHeaderOpenExternal ? (
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className={cn(
+                "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                "hover:bg-muted hover:text-foreground",
+              )}
               title={t("workspaceFilePreview.openExternal")}
               aria-label={t("workspaceFilePreview.openExternal")}
               onClick={() => void openExternal()}
             >
-              <ExternalLink className="h-4 w-4" />
+              <ExternalLink className="size-4" />
             </button>
           ) : null}
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+              "hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45",
+            )}
             title={t("workspaceFilePreview.reload")}
             aria-label={t("workspaceFilePreview.reload")}
             disabled={!activePreviewRequest || loading}
             onClick={() => activePreviewRequest && void loadPreview(activePreviewRequest, 0)}
           >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
           </button>
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+              "hover:bg-muted hover:text-foreground",
+            )}
             title={t("workspaceFilePreview.close")}
             aria-label={t("workspaceFilePreview.close")}
             onClick={onRequestClose}
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         </div>
       </div>
 
       {error || renderError || spreadsheet?.error ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300",
+          )}
+        >
+          <AlertTriangle className="size-4 shrink-0" />
           <div className="min-w-0 flex-1 truncate">
             {error ?? renderError ?? spreadsheet?.error}
           </div>
@@ -620,17 +645,27 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
           />
         ) : loading ? (
           <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
-            <FileText className="h-7 w-7" />
+          <div
+            className={cn(
+              "flex h-full flex-col items-center justify-center gap-3",
+              "text-center text-sm text-muted-foreground",
+            )}
+          >
+            <FileText className="size-7" />
             <span>{t("workspaceFilePreview.empty")}</span>
           </div>
         )}
       </div>
 
-      <div className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/35 px-3 text-[11px] text-muted-foreground">
+      <div
+        className={cn(
+          "flex h-8 shrink-0 items-center justify-between gap-3",
+          "border-t border-border bg-muted/35 px-3 text-xs text-muted-foreground",
+        )}
+      >
         <span className="min-w-0 truncate">{activePath}</span>
         {preview ? (
           <span className="shrink-0">
@@ -722,7 +757,7 @@ function PreviewBody(props: {
   if (preview.kind === "pdf") {
     return (
       <iframe
-        className="h-full w-full border-0 bg-background"
+        className="size-full border-0 bg-background"
         src={preview.blobUrl}
         title={basename(preview.path)}
       />
@@ -732,7 +767,7 @@ function PreviewBody(props: {
   if (preview.kind === "html") {
     return (
       <iframe
-        className="h-full w-full border-0 bg-background"
+        className="size-full border-0 bg-background"
         sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-popups"
         src={preview.blobUrl}
         title={basename(preview.path)}
@@ -766,7 +801,12 @@ function PreviewBody(props: {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
         {spreadsheet && spreadsheet.sheetNames.length > 1 ? (
-          <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-muted/35 px-2">
+          <div
+            className={cn(
+              "flex h-10 shrink-0 items-center gap-1 overflow-x-auto",
+              "border-b border-border bg-muted/35 px-2",
+            )}
+          >
             {spreadsheet.sheetNames.map((sheetName) => (
               <button
                 key={sheetName}
@@ -813,7 +853,7 @@ function PreviewBody(props: {
           )}
         </div>
         {spreadsheet?.truncatedRows || spreadsheet?.truncatedColumns ? (
-          <div className="shrink-0 border-t border-border bg-muted/35 px-3 py-1.5 text-[11px] text-muted-foreground">
+          <div className="shrink-0 border-t border-border bg-muted/35 px-3 py-1.5 text-xs text-muted-foreground">
             {t("workspaceFilePreview.truncated")}
           </div>
         ) : null}
@@ -863,7 +903,10 @@ function ImagePreviewToolButton(props: {
   return (
     <button
       type="button"
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+      className={cn(
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+        "hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+      )}
       title={label}
       aria-label={label}
       aria-pressed={pressed}
@@ -900,20 +943,9 @@ async function savePreviewImage(preview: LoadedPreview) {
 }
 
 async function copyTextToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+  if (!(await copySharedTextToClipboard(text))) {
+    throw new Error("Text clipboard is unavailable");
   }
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  if (!copied) throw new Error("Text clipboard is unavailable");
 }
 
 function WorkspaceImagePreviewBody(props: {
@@ -1157,23 +1189,28 @@ function WorkspaceImagePreviewBody(props: {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-muted/25">
-      <div className="flex h-10 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-border bg-background/90 px-2">
+      <div
+        className={cn(
+          "flex h-10 shrink-0 items-center justify-between gap-2 overflow-x-auto",
+          "border-b border-border bg-background/90 px-2",
+        )}
+      >
         <div className="flex min-w-0 items-center gap-1">
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.previousImage")}
             disabled={!canOpenPrevious || isSwitchingImage}
             onClick={() => openImageAt(activeImageIndex - 1)}
           >
-            <ChevronRight className="h-4 w-4 rotate-180" />
+            <ChevronRight className="size-4 rotate-180" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.nextImage")}
             disabled={!canOpenNext || isSwitchingImage}
             onClick={() => openImageAt(activeImageIndex + 1)}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="size-4" />
           </ImagePreviewToolButton>
-          <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">{counter}</span>
+          <span className="ml-1 shrink-0 text-xs text-muted-foreground">{counter}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <ImagePreviewToolButton
@@ -1181,9 +1218,9 @@ function WorkspaceImagePreviewBody(props: {
             disabled={!canZoomOut}
             onClick={() => zoomByStep(-1)}
           >
-            <Minus className="h-4 w-4" />
+            <Minus className="size-4" />
           </ImagePreviewToolButton>
-          <span className="w-11 text-center text-[11px] tabular-nums text-muted-foreground">
+          <span className="w-11 text-center text-xs tabular-nums text-muted-foreground">
             {Math.round(viewerState.scale * 100)}%
           </span>
           <ImagePreviewToolButton
@@ -1191,58 +1228,58 @@ function WorkspaceImagePreviewBody(props: {
             disabled={!canZoomIn}
             onClick={() => zoomByStep(1)}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.rotateLeft")}
             onClick={() => rotateImage(-1)}
           >
-            <RotateCwSquare className="h-4 w-4 -scale-x-100" />
+            <RotateCwSquare className="size-4 -scale-x-100" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.rotateRight")}
             onClick={() => rotateImage(1)}
           >
-            <RotateCwSquare className="h-4 w-4" />
+            <RotateCwSquare className="size-4" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.resetImage")}
             onClick={() => setViewerState(resetImageViewerState())}
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="size-4" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.downloadImage")}
             onClick={() => void handleSaveImage()}
           >
-            <Download className="h-4 w-4" />
+            <Download className="size-4" />
           </ImagePreviewToolButton>
           {canOpenInSystemViewer ? (
             <ImagePreviewToolButton
               label={t("workspaceFilePreview.openInSystemImageViewer")}
               onClick={onOpenInSystemViewer}
             >
-              <ExternalLink className="h-4 w-4" />
+              <ExternalLink className="size-4" />
             </ImagePreviewToolButton>
           ) : null}
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.copyImage")}
             onClick={() => void handleCopyImage()}
           >
-            <Copy className="h-4 w-4" />
+            <Copy className="size-4" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.toggleImageInfo")}
             pressed={showInfo}
             onClick={() => setShowInfo((current) => !current)}
           >
-            <Info className="h-4 w-4" />
+            <Info className="size-4" />
           </ImagePreviewToolButton>
           <ImagePreviewToolButton
             label={t("workspaceFilePreview.fullscreen")}
             onClick={() => void handleFullscreen()}
           >
-            <Maximize2 className="h-4 w-4" />
+            <Maximize2 className="size-4" />
           </ImagePreviewToolButton>
         </div>
       </div>
@@ -1253,7 +1290,8 @@ function WorkspaceImagePreviewBody(props: {
         // biome-ignore lint/a11y/noNoninteractiveTabindex: The application-role viewport takes focus so its copy/reset shortcuts stay scoped to it instead of a window listener.
         tabIndex={0}
         className={cn(
-          "relative min-h-0 flex-1 touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+          "relative min-h-0 flex-1 touch-none select-none overflow-hidden",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
           isDragging ? "cursor-grabbing" : canPan ? "cursor-grab" : "cursor-default",
         )}
         onKeyDown={(event) => {
@@ -1329,14 +1367,22 @@ function WorkspaceImagePreviewBody(props: {
         }}
       >
         {isSwitchingImage ? (
-          <div className="pointer-events-none absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background/85 text-muted-foreground shadow-sm backdrop-blur">
-            <Loader2 className="h-4 w-4 animate-spin" />
+          <div
+            className={cn(
+              "pointer-events-none absolute right-3 top-3 z-10 inline-flex size-8 items-center",
+              "justify-center rounded-md border border-border bg-background/85 text-muted-foreground shadow-sm backdrop-blur",
+            )}
+          >
+            <Loader2 className="size-4 animate-spin" />
           </div>
         ) : null}
         <div
-          className="absolute inset-0 flex items-center justify-center transition-[opacity,transform,filter] duration-200 ease-out motion-reduce:transition-none"
+          className={cn(
+            "absolute inset-0 flex items-center justify-center",
+            "transition-[opacity,transform,filter] duration-200 ease-out motion-reduce:transition-none",
+          )}
           style={{
-            filter: isEntering ? "blur(1px)" : "blur(0px)",
+            filter: isEntering ? "blur(var(--spacing-1px))" : "blur(0px)",
             opacity: isEntering ? 0 : 1,
             transform: isEntering
               ? `translateX(${enterTranslateX}px) scale(${enterScale})`
@@ -1354,11 +1400,11 @@ function WorkspaceImagePreviewBody(props: {
             }}
           >
             <div
-              className="h-full w-full"
+              className="size-full"
               style={{ transform: `rotate(${viewerState.rotation}deg)`, transformOrigin: "center" }}
             >
               <img
-                className="h-full w-full select-none object-contain"
+                className="size-full select-none object-contain"
                 src={preview.blobUrl}
                 alt={basename(preview.path)}
                 draggable={false}
@@ -1375,18 +1421,25 @@ function WorkspaceImagePreviewBody(props: {
         {showInfo ? (
           <aside
             aria-label={t("workspaceFilePreview.imageInfo")}
-            className="absolute right-3 top-3 z-10 w-64 border border-border bg-popover/95 p-3 text-xs text-popover-foreground shadow-xl backdrop-blur"
+            className={cn(
+              "absolute right-3 top-3 z-10 w-64",
+              "border border-border bg-popover/95 p-3",
+              "text-xs text-popover-foreground shadow-xl backdrop-blur",
+            )}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="text-sm font-semibold">{t("workspaceFilePreview.imageInfo")}</div>
               <button
                 type="button"
-                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                className={cn(
+                  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                  "hover:bg-muted hover:text-foreground",
+                )}
                 title={t("workspaceFilePreview.close")}
                 aria-label={t("workspaceFilePreview.close")}
                 onClick={() => setShowInfo(false)}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="size-3.5" />
               </button>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-muted-foreground">
@@ -1410,7 +1463,11 @@ function WorkspaceImagePreviewBody(props: {
               <div
                 ref={contextMenuRef}
                 role="menu"
-                className="layer-popover fixed min-w-48 rounded-lg border border-border bg-popover p-1 text-xs text-popover-foreground shadow-2xl"
+                className={cn(
+                  "layer-popover fixed min-w-48",
+                  "rounded-lg border border-border bg-popover p-1",
+                  "text-xs text-popover-foreground shadow-2xl",
+                )}
                 style={{
                   left: (contextMenuPosition ?? contextMenu).x,
                   top: (contextMenuPosition ?? contextMenu).y,
@@ -1432,7 +1489,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
+                  <RefreshCw className="size-3.5" />
                   {t("workspaceFilePreview.resetImage")}
                 </button>
                 <button
@@ -1445,7 +1502,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <RotateCwSquare className="h-3.5 w-3.5 -scale-x-100" />
+                  <RotateCwSquare className="size-3.5 -scale-x-100" />
                   {t("workspaceFilePreview.rotateLeft")}
                 </button>
                 <button
@@ -1458,7 +1515,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <RotateCwSquare className="h-3.5 w-3.5" />
+                  <RotateCwSquare className="size-3.5" />
                   {t("workspaceFilePreview.rotateRight")}
                 </button>
                 <button
@@ -1471,7 +1528,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <Download className="h-3.5 w-3.5" />
+                  <Download className="size-3.5" />
                   {t("workspaceFilePreview.downloadImage")}
                 </button>
                 {canOpenInSystemViewer ? (
@@ -1485,7 +1542,7 @@ function WorkspaceImagePreviewBody(props: {
                       setContextMenuPosition(null);
                     }}
                   >
-                    <ExternalLink className="h-3.5 w-3.5" />
+                    <ExternalLink className="size-3.5" />
                     {t("workspaceFilePreview.openInSystemImageViewer")}
                   </button>
                 ) : null}
@@ -1499,7 +1556,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="size-3.5" />
                   {t("workspaceFilePreview.copyImage")}
                 </button>
                 <button
@@ -1512,7 +1569,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="size-3.5" />
                   {t("workspaceFilePreview.copyImageAbsolutePath")}
                 </button>
                 <button
@@ -1525,7 +1582,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="size-3.5" />
                   {t("workspaceFilePreview.copyImageRelativePath")}
                 </button>
                 <button
@@ -1538,7 +1595,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <Info className="h-3.5 w-3.5" />
+                  <Info className="size-3.5" />
                   {t("workspaceFilePreview.imageInfo")}
                 </button>
                 <button
@@ -1551,7 +1608,7 @@ function WorkspaceImagePreviewBody(props: {
                     setContextMenuPosition(null);
                   }}
                 >
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <Maximize2 className="size-3.5" />
                   {t("workspaceFilePreview.fullscreen")}
                 </button>
               </div>,

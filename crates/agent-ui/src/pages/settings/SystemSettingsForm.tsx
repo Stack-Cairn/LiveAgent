@@ -19,35 +19,40 @@ import {
   updateSystem,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import { Settings2 } from "@liveagent/ui/components/IconSet";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import {
-  ChevronRight,
-  Cpu,
-  MessageSquare,
-  MonitorSmartphone,
-  Moon,
-  Settings2,
-  Sun,
-  Wrench,
-} from "@liveagent/ui/components/IconSet";
+  SettingsCombobox,
+  type SettingsComboboxOption,
+} from "@liveagent/ui/components/settings/SettingsCombobox";
+import {
+  SettingsSelectContent,
+  SettingsSelectTrigger,
+} from "@liveagent/ui/components/settings/SettingsSelect";
+import {
+  SettingsToggleGroup,
+  SettingsToggleGroupItem,
+} from "@liveagent/ui/components/settings/SettingsToggleGroup";
+import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
-import { Label } from "@liveagent/ui/components/ui/label";
-import { NumberInput } from "@liveagent/ui/components/ui/number-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@liveagent/ui/components/ui/select";
+import { Select, SelectItem, SelectValue } from "@liveagent/ui/components/ui/select";
 import { type Locale, SUPPORTED_LOCALES, useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   AgentActivationSwitch,
-  SettingsChoiceRow,
   SettingsGroup,
   SettingsRow,
 } from "@liveagent/ui/pages/settings/shared";
-import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { SidebarShortcutsSection } from "./SidebarShortcutsSection";
 
@@ -59,34 +64,6 @@ const FONT_FAMILY_FIELDS: ReadonlyArray<{ key: FontFamilySettingKey; labelKey: s
   { key: "chatFontFamily", labelKey: "settings.chatFontFamily" },
   { key: "codeFontFamily", labelKey: "settings.codeFontFamily" },
 ];
-
-type SettingsSelectTriggerProps = ComponentProps<typeof SelectTrigger>;
-
-function SettingsSelectTrigger({ className = "", ...props }: SettingsSelectTriggerProps) {
-  return (
-    <SelectTrigger
-      className={cn(
-        "h-8 w-fit max-w-[260px] gap-1.5 whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0 text-[13px] font-normal leading-none shadow-[0_1px_2px_hsl(var(--foreground)/0.035)] transition-colors hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:opacity-40",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-type SettingsSelectContentProps = ComponentProps<typeof SelectContent>;
-
-function SettingsSelectContent({ className = "", ...props }: SettingsSelectContentProps) {
-  return (
-    <SelectContent
-      className={cn(
-        "rounded-xl border-border/70 shadow-[0_10px_30px_hsl(var(--foreground)/0.1)] [&_[role=option]]:min-h-8 [&_[role=option]]:rounded-lg [&_[role=option]]:text-[13px]",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
 
 type ProxySettingsRowProps = {
   title: string;
@@ -106,13 +83,22 @@ function ProxySettingsRow({
   onToggleDetails,
 }: ProxySettingsRowProps) {
   return (
-    <div className="relative flex min-h-[76px] flex-col gap-3 px-5 py-4 after:pointer-events-none after:absolute after:bottom-0 after:left-5 after:right-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden sm:flex-row sm:items-center">
+    <div
+      className={cn(
+        "flex min-h-18 flex-col gap-3 rounded-xl bg-settings-tile px-4 py-3.5",
+        "sm:flex-row sm:items-center",
+      )}
+    >
       <button
         type="button"
         aria-expanded={expanded}
+        aria-haspopup="dialog"
         aria-controls="system-proxy-details"
         onClick={onToggleDetails}
-        className="group flex min-w-0 flex-1 items-center justify-between gap-4 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-foreground/10"
+        className={cn(
+          "group flex min-w-0 flex-1 items-center justify-between gap-4",
+          "rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-foreground/10",
+        )}
       >
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium text-foreground">{title}</span>
@@ -120,47 +106,19 @@ function ProxySettingsRow({
             {description}
           </span>
         </span>
-        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-background px-3 py-2 text-xs font-medium text-foreground/80 shadow-xs transition-colors group-hover:bg-muted/45">
-          <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5",
+            "rounded-lg bg-background px-3 py-2",
+            "text-xs font-medium text-foreground/80 transition-colors duration-150 group-hover:bg-settings-tile-hover",
+          )}
+        >
+          <Settings2 className="size-3.5 text-muted-foreground" />
           <span>{actionLabel}</span>
-          <ChevronRight
-            className={cn(
-              "h-3.5 w-3.5 text-muted-foreground transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
         </span>
       </button>
-      <div className="flex shrink-0 items-center sm:border-l sm:border-border/60 sm:pl-4">
-        {switchControl}
-      </div>
+      <div className="flex shrink-0 items-center sm:pl-2">{switchControl}</div>
     </div>
-  );
-}
-
-type SegmentedButtonProps = {
-  selected: boolean;
-  label: string;
-  icon?: ReactNode;
-  onClick: () => void;
-};
-
-function SegmentedButton({ selected, label, icon, onClick }: SegmentedButtonProps) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs transition-all",
-        selected
-          ? "bg-background font-medium text-foreground shadow-sm ring-1 ring-border/70"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
   );
 }
 
@@ -169,19 +127,36 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
   const { t } = useLocale();
 
   const executionMode = settings.system.executionMode;
-  const isClassicAgentMode = executionMode === "tools";
-  const isAgentDevMode = executionMode === "agent-dev";
+
+  const executionModeOptions: Array<{
+    value: ExecutionMode;
+    label: string;
+    description: string;
+  }> = [
+    {
+      value: "text",
+      label: t("settings.chatMode"),
+      description: t("settings.chatModeDesc"),
+    },
+    {
+      value: "tools",
+      label: t("settings.agentMode"),
+      description: t("settings.agentModeDesc"),
+    },
+    {
+      value: "agent-dev",
+      label: t("settings.agentDevMode"),
+      description: t("settings.agentDevModeDesc"),
+    },
+  ];
+  const activeExecutionMode =
+    executionModeOptions.find((option) => option.value === executionMode) ??
+    executionModeOptions[0];
 
   function getThemeLabel(theme: Theme) {
     if (theme === "light") return t("settings.light");
     if (theme === "dark") return t("settings.dark");
     return t("settings.auto");
-  }
-
-  function renderThemeIcon(theme: Theme) {
-    if (theme === "light") return <Sun className="h-3.5 w-3.5 opacity-60" />;
-    if (theme === "dark") return <Moon className="h-3.5 w-3.5 opacity-60" />;
-    return <MonitorSmartphone className="h-3.5 w-3.5 opacity-60" />;
   }
 
   const fontScale = settings.customSettings.fontScale;
@@ -208,6 +183,23 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
   const fontFamilyOptions = useMemo(
     () => buildFontFamilySelectOptions(localFontFamilies),
     [localFontFamilies],
+  );
+  const fontFamilyComboboxOptions = useMemo<SettingsComboboxOption[]>(
+    () => [
+      {
+        value: FONT_FAMILY_DEFAULT_SELECT_VALUE,
+        label: t("settings.fontFamilyDefault"),
+      },
+      {
+        value: FONT_FAMILY_CUSTOM_SELECT_VALUE,
+        label: t("settings.fontFamilyCustom"),
+      },
+      ...fontFamilyOptions.map((option) => ({
+        ...option,
+        style: { fontFamily: option.value },
+      })),
+    ],
+    [fontFamilyOptions, t],
   );
 
   useEffect(() => {
@@ -314,8 +306,18 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
     effectiveProxyPort <= 65535;
   const systemProxyInvalid = systemProxy.enabled && !proxyConfigValid;
   // 配置无效且当前未启用时禁止开启开关（护栏 A）；已启用时始终允许关闭。
-  const proxyToggleDisabled = !systemProxy.enabled && !proxyConfigValid;
+  const proxyNeedsConfiguration = !systemProxy.enabled && !proxyConfigValid;
   const [proxyDetailsOpen, setProxyDetailsOpen] = useState(false);
+
+  function handleProxyDialogOpenChange(open: boolean) {
+    if (!open) {
+      commitProxyHostDraft();
+      commitProxyPortDraft();
+      commitProxyUsernameDraft();
+      commitProxyPasswordDraft();
+    }
+    setProxyDetailsOpen(open);
+  }
 
   function patchSystemProxy(patch: Partial<SystemProxyConfig>) {
     setSettings((prev) =>
@@ -355,88 +357,81 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
   }
 
   return (
-    <div className="settings-system-section space-y-9 pb-10">
+    <div className="settings-system-section space-y-8 pb-10">
       <SettingsGroup title={t("settings.executionMode")}>
-        <fieldset aria-label={t("settings.executionMode")} className="m-0 min-w-0 border-0 p-0">
-          <SettingsChoiceRow
-            icon={<MessageSquare className="h-4.5 w-4.5" />}
-            title={t("settings.chatMode")}
-            description={t("settings.chatModeDesc")}
-            selected={executionMode === "text"}
-            onClick={() =>
-              setSettings((prev) => updateSystem(prev, { executionMode: "text" as ExecutionMode }))
-            }
-          />
-          <SettingsChoiceRow
-            icon={<Wrench className="h-4.5 w-4.5" />}
-            title={t("settings.agentMode")}
-            description={t("settings.agentModeDesc")}
-            selected={isClassicAgentMode}
-            onClick={() =>
-              setSettings((prev) => updateSystem(prev, { executionMode: "tools" as ExecutionMode }))
-            }
-          />
-          <SettingsChoiceRow
-            icon={<Cpu className="h-4.5 w-4.5" />}
-            title={t("settings.agentDevMode")}
-            description={t("settings.agentDevModeDesc")}
-            selected={isAgentDevMode}
-            onClick={() =>
-              setSettings((prev) =>
-                updateSystem(prev, { executionMode: "agent-dev" as ExecutionMode }),
-              )
-            }
-          />
-        </fieldset>
+        <SettingsRow
+          title={t("settings.defaultExecutionMode")}
+          description={activeExecutionMode.description}
+          control={
+            <Select
+              value={executionMode}
+              onValueChange={(value) =>
+                setSettings((prev) => updateSystem(prev, { executionMode: value as ExecutionMode }))
+              }
+            >
+              <SettingsSelectTrigger className="min-w-36 justify-between">
+                <SelectValue>{activeExecutionMode.label}</SelectValue>
+              </SettingsSelectTrigger>
+              <SettingsSelectContent>
+                {executionModeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SettingsSelectContent>
+            </Select>
+          }
+        />
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.groupGeneral")}>
-        <div>
-          <SettingsRow
-            title={t("settings.appearance")}
-            description={t("settings.appearanceDesc")}
-            control={
-              <div className="flex items-center gap-0.5 rounded-xl bg-muted/55 p-1">
-                {THEME_OPTIONS.map((theme) => (
-                  <SegmentedButton
-                    key={theme}
-                    selected={settings.theme === theme}
-                    label={getThemeLabel(theme)}
-                    icon={renderThemeIcon(theme)}
-                    onClick={() => setSettings((prev) => ({ ...prev, theme }))}
-                  />
-                ))}
-              </div>
-            }
-          />
+        <SettingsRow
+          title={t("settings.appearance")}
+          description={t("settings.appearanceDesc")}
+          control={
+            <SettingsToggleGroup
+              value={[settings.theme]}
+              aria-label={t("settings.appearance")}
+              onValueChange={(values) => {
+                const theme = THEME_OPTIONS.find((option) => option === values[0]);
+                if (theme) setSettings((prev) => ({ ...prev, theme }));
+              }}
+            >
+              {THEME_OPTIONS.map((theme) => (
+                <SettingsToggleGroupItem key={theme} value={theme}>
+                  {getThemeLabel(theme)}
+                </SettingsToggleGroupItem>
+              ))}
+            </SettingsToggleGroup>
+          }
+        />
 
-          <SettingsRow
-            title={t("settings.language")}
-            control={
-              <Select
-                value={settings.locale}
-                onValueChange={(locale) =>
-                  setSettings((prev) => ({ ...prev, locale: locale as Locale }))
-                }
-              >
-                <SettingsSelectTrigger>
-                  <SelectValue>
-                    {settings.locale === "zh-CN" ? "🇨🇳  简体中文" : "🇺🇸  English"}
-                  </SelectValue>
-                </SettingsSelectTrigger>
-                <SettingsSelectContent>
-                  {SUPPORTED_LOCALES.map((locale) => (
-                    <SelectItem key={locale} value={locale}>
-                      {locale === "zh-CN"
-                        ? `🇨🇳  ${t("settings.chinese")}`
-                        : `🇺🇸  ${t("settings.english")}`}
-                    </SelectItem>
-                  ))}
-                </SettingsSelectContent>
-              </Select>
-            }
-          />
-        </div>
+        <SettingsRow
+          title={t("settings.language")}
+          control={
+            <Select
+              value={settings.locale}
+              onValueChange={(locale) =>
+                setSettings((prev) => ({ ...prev, locale: locale as Locale }))
+              }
+            >
+              <SettingsSelectTrigger>
+                <SelectValue>
+                  {settings.locale === "zh-CN" ? "🇨🇳  简体中文" : "🇺🇸  English"}
+                </SelectValue>
+              </SettingsSelectTrigger>
+              <SettingsSelectContent>
+                {SUPPORTED_LOCALES.map((locale) => (
+                  <SelectItem key={locale} value={locale}>
+                    {locale === "zh-CN"
+                      ? `🇨🇳  ${t("settings.chinese")}`
+                      : `🇺🇸  ${t("settings.english")}`}
+                  </SelectItem>
+                ))}
+              </SettingsSelectContent>
+            </Select>
+          }
+        />
       </SettingsGroup>
 
       <SidebarShortcutsSection settings={settings} setSettings={setSettings} />
@@ -452,277 +447,256 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                   ? t("settings.systemProxyInvalid")
                   : t("settings.systemProxyDisabled")
             }
-            actionLabel={
-              proxyDetailsOpen ? t("settings.systemProxyDone") : t("settings.systemProxySettings")
-            }
+            actionLabel={t("settings.systemProxySettings")}
             expanded={proxyDetailsOpen}
             onToggleDetails={() => setProxyDetailsOpen((open) => !open)}
             switchControl={
               <AgentActivationSwitch
                 checked={systemProxy.enabled}
-                title={t("settings.systemProxyEnable")}
-                disabled={proxyToggleDisabled}
-                onToggle={() => patchSystemProxy({ enabled: !systemProxy.enabled })}
+                title={t(
+                  proxyNeedsConfiguration
+                    ? "settings.systemProxySettings"
+                    : "settings.systemProxyEnable",
+                )}
+                onToggle={() => {
+                  if (proxyNeedsConfiguration) {
+                    setProxyDetailsOpen(true);
+                    return;
+                  }
+                  patchSystemProxy({ enabled: !systemProxy.enabled });
+                }}
               />
             }
           />
 
-          {proxyDetailsOpen ? (
-            <div
+          <Dialog open={proxyDetailsOpen} onOpenChange={handleProxyDialogOpenChange}>
+            <DialogContent
               id="system-proxy-details"
-              className="animate-in fade-in slide-in-from-top-1 bg-muted/10 px-5 py-4 duration-150"
+              className="flex max-h-[calc(100dvh-2rem)] max-w-lg flex-col"
+              showCloseButton
             >
-              <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-                {t("settings.systemProxyDesc")}
-              </p>
-              {systemProxyInvalid || proxyToggleDisabled ? (
-                <p
-                  className={cn(
-                    "mb-4 text-xs leading-relaxed",
-                    systemProxyInvalid ? "text-destructive" : "text-muted-foreground",
-                  )}
-                >
-                  {systemProxyInvalid
-                    ? t("settings.systemProxyInvalid")
-                    : t("settings.systemProxyEnableHint")}
-                </p>
-              ) : null}
+              <DialogHeader>
+                <DialogTitle>{t("settings.systemProxySettings")}</DialogTitle>
+                <DialogDescription>{t("settings.systemProxyDialogDesc")}</DialogDescription>
+              </DialogHeader>
+              <DialogBody>
+                {systemProxyInvalid || proxyNeedsConfiguration ? (
+                  <p
+                    className={cn(
+                      "mb-4 text-xs leading-relaxed",
+                      systemProxyInvalid ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    {systemProxyInvalid
+                      ? t("settings.systemProxyInvalid")
+                      : t("settings.systemProxyEnableHint")}
+                  </p>
+                ) : null}
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_minmax(0,1fr)_7rem] sm:items-start">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    {t("settings.systemProxyType")}
-                  </Label>
-                  <Select
-                    value={systemProxy.type}
-                    onValueChange={(value) => patchSystemProxy({ type: value as SystemProxyType })}
-                  >
-                    <SettingsSelectTrigger className="rounded-lg">
-                      <SelectValue>{systemProxy.type === "socks5" ? "SOCKS5" : "HTTP"}</SelectValue>
-                    </SettingsSelectTrigger>
-                    <SettingsSelectContent>
-                      <SelectItem value="http">HTTP</SelectItem>
-                      <SelectItem value="socks5">SOCKS5</SelectItem>
-                    </SettingsSelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-host"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("settings.systemProxyHost")}
-                  </Label>
-                  <Input
-                    id="system-proxy-host"
-                    className="rounded-lg"
-                    value={proxyHostDraft ?? systemProxy.host}
-                    placeholder="127.0.0.1"
-                    onChange={(event) => setProxyHostDraft(event.currentTarget.value)}
-                    onBlur={commitProxyHostDraft}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-port"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("settings.systemProxyPort")}
-                  </Label>
-                  <NumberInput
-                    id="system-proxy-port"
-                    className="rounded-lg"
-                    min={1}
-                    max={65535}
-                    step={1}
-                    snapOnStep
-                    value={
-                      (
-                        proxyPortDraft ?? (systemProxy.port > 0 ? String(systemProxy.port) : "")
-                      ).trim()
-                        ? Number(
-                            proxyPortDraft ??
-                              (systemProxy.port > 0 ? String(systemProxy.port) : ""),
-                          )
-                        : null
-                    }
-                    placeholder={systemProxy.type === "socks5" ? "1080" : "7890"}
-                    incrementLabel={`${t("settings.systemProxyPort")} +`}
-                    decrementLabel={`${t("settings.systemProxyPort")} -`}
-                    onValueChange={(value) =>
-                      setProxyPortDraft(value === null ? "" : String(value))
-                    }
-                    onValueCommitted={(value) =>
-                      commitProxyPortDraft(value === null ? "" : String(value))
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-username"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("settings.systemProxyUsername")}
-                  </Label>
-                  <Input
-                    id="system-proxy-username"
-                    className="rounded-lg"
-                    value={proxyUsernameDraft ?? systemProxy.username}
-                    onChange={(event) => setProxyUsernameDraft(event.currentTarget.value)}
-                    onBlur={commitProxyUsernameDraft}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="system-proxy-password"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("settings.systemProxyPassword")}
-                  </Label>
-                  <Input
-                    id="system-proxy-password"
-                    className="rounded-lg"
-                    type="password"
-                    value={proxyPasswordDraft ?? systemProxy.password}
-                    onChange={(event) => setProxyPasswordDraft(event.currentTarget.value)}
-                    onBlur={commitProxyPasswordDraft}
-                  />
-                  {systemProxy.passwordConfigured &&
-                  !(proxyPasswordDraft ?? systemProxy.password).trim() ? (
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span>{t("settings.systemProxyPasswordConfigured")}</span>
-                      <button
-                        type="button"
-                        className="underline-offset-2 hover:text-foreground hover:underline"
-                        onClick={() => {
-                          setProxyPasswordDraft(null);
-                          patchSystemProxy({ password: "", passwordConfigured: false });
-                        }}
+                <div className="space-y-4">
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="system-proxy-type" size="compact" className="block">
+                      {t("settings.systemProxyType")}
+                    </FormFieldLabel>
+                    <Select
+                      value={systemProxy.type}
+                      onValueChange={(value) =>
+                        patchSystemProxy({ type: value as SystemProxyType })
+                      }
+                    >
+                      <SettingsSelectTrigger
+                        id="system-proxy-type"
+                        className="flex h-9 w-full justify-between rounded-lg bg-settings-tile-hover px-3 shadow-none"
                       >
-                        {t("settings.systemProxyPasswordClear")}
-                      </button>
-                    </div>
-                  ) : null}
+                        <SelectValue>
+                          {systemProxy.type === "socks5" ? "SOCKS5" : "HTTP"}
+                        </SelectValue>
+                      </SettingsSelectTrigger>
+                      <SettingsSelectContent>
+                        <SelectItem value="http">HTTP</SelectItem>
+                        <SelectItem value="socks5">SOCKS5</SelectItem>
+                      </SettingsSelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="system-proxy-host" size="compact">
+                      {t("settings.systemProxyHost")}
+                    </FormFieldLabel>
+                    <Input
+                      variant="plain"
+                      id="system-proxy-host"
+                      className="rounded-lg"
+                      value={proxyHostDraft ?? systemProxy.host}
+                      placeholder="127.0.0.1"
+                      onChange={(event) => setProxyHostDraft(event.currentTarget.value)}
+                      onBlur={commitProxyHostDraft}
+                    />
+                  </FormField>
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="system-proxy-port" size="compact">
+                      {t("settings.systemProxyPort")}
+                    </FormFieldLabel>
+                    <Input
+                      variant="plain"
+                      id="system-proxy-port"
+                      className="rounded-lg"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={65535}
+                      step={1}
+                      value={
+                        proxyPortDraft ?? (systemProxy.port > 0 ? String(systemProxy.port) : "")
+                      }
+                      placeholder={systemProxy.type === "socks5" ? "1080" : "7890"}
+                      onChange={(event) => setProxyPortDraft(event.currentTarget.value)}
+                      onBlur={() => commitProxyPortDraft()}
+                    />
+                  </FormField>
                 </div>
-              </div>
-            </div>
-          ) : null}
+
+                <div className="mt-4 space-y-4">
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="system-proxy-username" size="compact">
+                      {t("settings.systemProxyUsername")}
+                    </FormFieldLabel>
+                    <Input
+                      variant="plain"
+                      id="system-proxy-username"
+                      className="rounded-lg"
+                      value={proxyUsernameDraft ?? systemProxy.username}
+                      onChange={(event) => setProxyUsernameDraft(event.currentTarget.value)}
+                      onBlur={commitProxyUsernameDraft}
+                    />
+                  </FormField>
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="system-proxy-password" size="compact">
+                      {t("settings.systemProxyPassword")}
+                    </FormFieldLabel>
+                    <Input
+                      variant="plain"
+                      id="system-proxy-password"
+                      className="rounded-lg"
+                      type="password"
+                      value={proxyPasswordDraft ?? systemProxy.password}
+                      onChange={(event) => setProxyPasswordDraft(event.currentTarget.value)}
+                      onBlur={commitProxyPasswordDraft}
+                    />
+                    {systemProxy.passwordConfigured &&
+                    !(proxyPasswordDraft ?? systemProxy.password).trim() ? (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{t("settings.systemProxyPasswordConfigured")}</span>
+                        <button
+                          type="button"
+                          className="underline-offset-2 hover:text-foreground hover:underline"
+                          onClick={() => {
+                            setProxyPasswordDraft(null);
+                            patchSystemProxy({ password: "", passwordConfigured: false });
+                          }}
+                        >
+                          {t("settings.systemProxyPasswordClear")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </FormField>
+                </div>
+                <details className="mt-4 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer rounded py-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {t("settings.systemProxyScope")}
+                  </summary>
+                  <p className="mt-2 leading-relaxed">{t("settings.systemProxyDesc")}</p>
+                </details>
+              </DialogBody>
+              <DialogFooter>
+                <Button onClick={() => handleProxyDialogOpenChange(false)}>
+                  {t("settings.systemProxyDone")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </SettingsGroup>
 
       <SystemSettingsExtensions settings={settings} setSettings={setSettings} />
 
       <SettingsGroup title={t("settings.fontFamily")}>
-        <div>
-          {FONT_FAMILY_FIELDS.map(({ key, labelKey }) => {
-            const currentValue = settings.customSettings[key];
-            const selectValue = toFontFamilySelectValue(
-              currentValue,
-              fontFamilyOptions,
-              customFontModes[key] === true,
-            );
-            const showCustomInput = selectValue === FONT_FAMILY_CUSTOM_SELECT_VALUE;
-            const customDraft = customFontDrafts[key] ?? currentValue;
-            return (
-              <SettingsRow
-                key={key}
-                title={t(labelKey)}
-                control={
-                  <div className="flex w-full min-w-0 flex-col items-start gap-2 sm:w-auto sm:items-end">
-                    <Select
-                      value={selectValue}
-                      onValueChange={(value) => handleFontFamilySelect(key, value)}
-                    >
-                      <SettingsSelectTrigger id={`${key}-font-family`}>
-                        <SelectValue placeholder={t("settings.fontFamilyDefault")}>
-                          {(value) => {
-                            if (value === FONT_FAMILY_DEFAULT_SELECT_VALUE) {
-                              return t("settings.fontFamilyDefault");
-                            }
-                            if (value === FONT_FAMILY_CUSTOM_SELECT_VALUE) {
-                              return t("settings.fontFamilyCustom");
-                            }
-                            const match = fontFamilyOptions.find(
-                              (option) => option.value === value,
-                            );
-                            return match?.label ?? String(value ?? "");
-                          }}
-                        </SelectValue>
-                      </SettingsSelectTrigger>
-                      <SettingsSelectContent className="max-h-72">
-                        <SelectItem value={FONT_FAMILY_DEFAULT_SELECT_VALUE}>
-                          {t("settings.fontFamilyDefault")}
-                        </SelectItem>
-                        <SelectItem value={FONT_FAMILY_CUSTOM_SELECT_VALUE}>
-                          {t("settings.fontFamilyCustom")}
-                        </SelectItem>
-                        {fontFamilyOptions.map((option) => (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            style={{ fontFamily: option.value }}
-                          >
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SettingsSelectContent>
-                    </Select>
-                    {showCustomInput ? (
-                      <Input
-                        id={`${key}-custom-input`}
-                        className="w-full min-w-0 rounded-xl sm:w-[240px]"
-                        value={customDraft}
-                        list="font-family-suggestions"
-                        spellCheck={false}
-                        autoComplete="off"
-                        placeholder={t("settings.fontFamilyPlaceholder")}
-                        onChange={(event) => {
-                          const value = event.currentTarget.value;
-                          setCustomFontDrafts((current) => ({
-                            ...current,
-                            [key]: value,
-                          }));
-                        }}
-                        onBlur={() => commitCustomFontFamily(key)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.currentTarget.blur();
-                          }
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                }
-              />
-            );
-          })}
-        </div>
-      </SettingsGroup>
-
-      <SettingsGroup title={t("settings.fontSize")}>
-        <div>
-          {fontScaleZones.map((zone) => (
+        {FONT_FAMILY_FIELDS.map(({ key, labelKey }) => {
+          const currentValue = settings.customSettings[key];
+          const selectValue = toFontFamilySelectValue(
+            currentValue,
+            fontFamilyOptions,
+            customFontModes[key] === true,
+          );
+          const showCustomInput = selectValue === FONT_FAMILY_CUSTOM_SELECT_VALUE;
+          const customDraft = customFontDrafts[key] ?? currentValue;
+          return (
             <SettingsRow
-              key={zone.key}
-              title={zone.label}
+              key={key}
+              title={t(labelKey)}
               control={
-                <div className="flex items-center gap-0.5 rounded-xl bg-muted/55 p-1">
-                  {FONT_SCALE_OPTIONS.map((value) => (
-                    <SegmentedButton
-                      key={value}
-                      selected={fontScale[zone.key] === value}
-                      label={getFontScaleLabel(value)}
-                      onClick={() => setZoneFontScale(zone.key, value)}
+                <div className="flex w-full min-w-0 flex-col items-start gap-2 sm:w-auto sm:items-end">
+                  <SettingsCombobox
+                    value={selectValue}
+                    options={fontFamilyComboboxOptions}
+                    ariaLabel={t(labelKey)}
+                    searchPlaceholder={t("settings.fontFamilySearchPlaceholder")}
+                    emptyLabel={t("settings.fontFamilyNoResults")}
+                    onValueChange={(value) => handleFontFamilySelect(key, value)}
+                  />
+                  {showCustomInput ? (
+                    <Input
+                      id={`${key}-custom-input`}
+                      className="w-full min-w-0 rounded-xl sm:w-240px"
+                      value={customDraft}
+                      list="font-family-suggestions"
+                      spellCheck={false}
+                      autoComplete="off"
+                      placeholder={t("settings.fontFamilyPlaceholder")}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setCustomFontDrafts((current) => ({
+                          ...current,
+                          [key]: value,
+                        }));
+                      }}
+                      onBlur={() => commitCustomFontFamily(key)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.currentTarget.blur();
+                        }
+                      }}
                     />
-                  ))}
+                  ) : null}
                 </div>
               }
             />
-          ))}
-        </div>
+          );
+        })}
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.fontSize")}>
+        {fontScaleZones.map((zone) => (
+          <SettingsRow
+            key={zone.key}
+            title={zone.label}
+            control={
+              <SettingsToggleGroup
+                value={[String(fontScale[zone.key])]}
+                aria-label={zone.label}
+                onValueChange={(values) => {
+                  const nextValue = values[0];
+                  if (nextValue) setZoneFontScale(zone.key, Number(nextValue));
+                }}
+              >
+                {FONT_SCALE_OPTIONS.map((value) => (
+                  <SettingsToggleGroupItem key={value} value={String(value)}>
+                    {getFontScaleLabel(value)}
+                  </SettingsToggleGroupItem>
+                ))}
+              </SettingsToggleGroup>
+            }
+          />
+        ))}
       </SettingsGroup>
 
       <datalist id="font-family-suggestions">

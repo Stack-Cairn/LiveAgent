@@ -1,7 +1,9 @@
+import { resolveStyleValues } from "../../../agent-ui/test-support/style-values.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const implementations = [
   {
@@ -13,7 +15,6 @@ const implementations = [
       "InstalledSkillPreviewDrawer.tsx",
       "SkillsImportView.tsx",
       "SkillsStoreView.tsx",
-      "useFlipGrid.ts",
     ].map(
       (file) => new URL(`../../../agent-ui/src/pages/skills-hub/${file}`, import.meta.url),
     ),
@@ -98,102 +99,29 @@ for (const { label, loader, sources } of implementations) {
     assert.equal(sorting.isInstalledSkillSort(null), false);
   });
 
-  test(`${label} wires visual order, selection order, persistence, and reduced-motion FLIP`, () => {
-    const source = sources.map((file) => readFileSync(file, "utf8")).join("\n");
+  test(`${label} uses Motion layout for installed-skill reordering`, () => {
+    const source = normalizeClassGroups(
+      resolveStyleValues(sources.map((file) => readFileSync(file, "utf8")).join("\n")),
+    );
 
-    assert.match(source, /skillsHub\.installedSort/);
+    assert.equal(sorting.INSTALLED_SORT_STORAGE_KEY, "skillsHub.installedSort");
     assert.match(source, /sortInstalledSkillItems\(filtered, installedSort, selected/);
     assert.match(source, /sortedFiltered\.map/);
     assert.match(source, /sortedFiltered[\s\S]*handleBulkInstalledCardClick/);
-    assert.match(source, /ref=\{installedGridRef\}/);
-    assert.equal(source.match(/data-flip-key=\{key\}/g)?.length, 2);
-    assert.match(source, /prefers-reduced-motion: reduce/);
     assert.match(source, /<Select[\s\S]*value=\{installedSort\}/);
     assert.match(source, /<SelectItem[\s\S]*value=\{option\.value\}/);
-    assert.match(source, /followElement\?\.scrollIntoView\(\{/);
-    assert.match(source, /block: "nearest"/);
-    assert.match(source, /behavior: reducedMotion \? "auto" : "smooth"/);
-    assert.match(source, /left: rect\.left - gridRect\.left/);
-    assert.match(source, /top: rect\.top - gridRect\.top/);
-    assert.match(source, /const previousOrderRef = useRef<string\[\]>\(\[\]\)/);
-    assert.match(source, /const orderChanged =/);
-    assert.match(source, /!orderChanged/);
-    assert.match(
-      source,
-      /requestInstalledSkillFlip\("single", \[name\], on \? \[name\] : \[\]\)/,
-    );
-    assert.match(
-      source,
-      /requestInstalledSkillFlip\("batch", changedNames, target \? changedNames : \[\]\)/,
-    );
-    assert.match(source, /const followKeys = followNames\.map/);
-    assert.match(source, /requestInstalledFlip\(mode, keys, followKeys\)/);
-    assert.match(
-      source,
-      /const followNames = changedNames\.filter\([\s\S]*restoreSet\.has\(name\) && !current\.has\(name\)/,
-    );
-    assert.match(source, /requestInstalledSkillFlip\("batch", changedNames, followNames\)/);
     assert.match(source, /overflow-y-auto[^"]*\[overflow-anchor:none\]/);
-    assert.match(source, /requestInstalledFlip\("wave", \[\], followKey \? \[followKey\] : \[\]\)/);
-    assert.match(source, /const FLIP_HERO_DURATION_MS = 380/);
-    assert.match(source, /const FLIP_BATCH_HERO_DELAY_MS = 90/);
-    assert.match(source, /const FLIP_BATCH_STAGGER_LIMIT = 8/);
-    assert.match(source, /cubic-bezier\(0\.34, 1\.3, 0\.64, 1\)/);
-    assert.match(source, /const FLIP_WAVE_DURATION_MS = 280/);
-    assert.match(source, /const FLIP_WAVE_DELAY_MS = 30/);
-    assert.match(source, /const FLIP_WAVE_MAX_DELAY_MS = 400/);
-    assert.match(source, /if \(mode === "batch"\)/);
-    assert.match(source, /const heroPhaseDuration =/);
-    assert.match(source, /phaseTimerRef\.current = window\.setTimeout/);
-    assert.match(source, /window\.clearTimeout\(phaseTimerRef\.current\)/);
-    assert.match(source, /startWave\(\)/);
-    assert.match(source, /element\.style\.willChange = "translate"/);
-    assert.match(source, /element\.style\.willChange = ""/);
-    assert.match(source, /element\.style\.zIndex = "30"/);
-    assert.match(source, /element\.style\.zIndex = ""/);
-    assert.match(source, /clearAnimation\(\);[\s\S]*const grid = gridRef\.current/);
-    assert.match(source, /element\.style\.translate/);
-    assert.match(
-      source,
-      /<SelectTrigger[\s\S]*h-8 w-auto max-w-\[11rem\][^"]*bg-transparent/,
-    );
-    assert.match(source, /<Input[\s\S]*h-11 rounded-full[^"]*bg-background/);
-    assert.match(source, /from "@liveagent\/ui\/components\/ui\/select"/);
-    assert.match(
-      source,
-      /hub-panel-enter flex min-h-11 items-center justify-between gap-3 max-sm:flex-col/,
-    );
-    assert.match(
-      source,
-      /max-w-full[^"]*overflow-x-auto[^"]*\[scrollbar-width:none\] \[&::-webkit-scrollbar\]:hidden/,
-    );
-    assert.match(source, /max-sm:max-w-\[8rem\]/);
-    assert.match(source, /hub-panel-enter relative mb-5/);
-    assert.equal(source.match(/2xl:grid-cols-5/g)?.length, 5);
-    assert.match(source, /pb-\[calc\(10rem\+env\(safe-area-inset-bottom\)\)\] sm:pb-24/);
-    assert.equal(
-      source.match(/max-sm:bottom-\[calc\(1rem\+env\(safe-area-inset-bottom\)\)\]/g)?.length,
-      2,
-    );
-    assert.match(source, /max-sm:bottom-\[calc\(0\.25rem\+env\(safe-area-inset-bottom\)\)\]/);
-    assert.equal(source.match(/<SheetPopup/g)?.length, 2);
-    assert.equal(source.match(/variant="inset"/g)?.length, 2);
-    assert.equal(source.match(/<SheetPanel/g)?.length, 2);
-    assert.match(source, /from "@liveagent\/ui\/components\/ui\/sheet"/);
-    assert.doesNotMatch(source, /createPortal/);
-    assert.equal(
-      source.match(/hub-panel-enter pointer-events-auto[^"]*bg-background\/95/g)?.length,
-      3,
-    );
-    assert.match(
-      source,
-      /notify-toast-enter[^"]*border-amber-500\/30[^"]*bg-background/,
-    );
-    assert.doesNotMatch(source, /<select[^>]*backdrop-blur/);
-    assert.doesNotMatch(source, /<input[^>]*backdrop-blur/);
-    assert.doesNotMatch(source, /hub-skill-card[^"]*backdrop-blur/);
-    assert.doesNotMatch(source, /skill-card-enter group flex h-full[^"]*backdrop-blur/);
-    assert.doesNotMatch(source, /hub-panel-enter pointer-events-auto[^"]*backdrop-blur/);
+    assert.match(source, /<LazyMotion features=\{domAnimation\}>/);
+    assert.match(source, /<LayoutGroup id=\{`\$\{toastScope\}-installed-skills`\}>/);
+    assert.match(source, /<m\.div/);
+    assert.match(source, /layout=\{prefersReducedMotion \? false : "position"\}/);
+    assert.match(source, /type: "spring"/);
+    assert.match(source, /stiffness: 420/);
+    assert.match(source, /damping: 36/);
+    assert.doesNotMatch(source, /data-flip-key/);
+    assert.doesNotMatch(source, /querySelectorAll<HTMLElement>\("\[data-flip-key\]"\)/);
+    assert.doesNotMatch(source, /element\.style\.(translate|transition|willChange|zIndex)/);
+    assert.doesNotMatch(source, /animate-hub-panel-enter/);
     assert.doesNotMatch(source, /notify-toast-enter[^"]*backdrop-blur/);
     assert.doesNotMatch(source, /fixed inset-0 z-50 flex justify-end/);
   });

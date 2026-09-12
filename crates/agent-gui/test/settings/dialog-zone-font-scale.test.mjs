@@ -25,7 +25,7 @@ test("dialogs publish their font-scale zone and portaled popups pick it up", () 
     assert.ok(positioners.length > 0, `${file} has a popover positioner`);
     assert.equal(zoned.length, positioners.length, `${file}: every positioner carries the zone`);
   }
-  const css = read("../../../agent-ui/src/styles/common-components.css");
+  const css = read("../../../agent-ui/src/styles/base.css");
   assert.match(css, /\.zone-font-scale,\n\s*\.layer-popover \{/);
 });
 

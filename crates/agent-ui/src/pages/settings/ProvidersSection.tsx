@@ -23,22 +23,40 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
   Activity,
   ChevronDown,
-  Pencil,
   Plus,
   RefreshCw,
   Settings,
   Shield,
+  SquarePen,
   Trash2,
   WandSparkles,
   Waypoints,
   X,
 } from "@liveagent/ui/components/IconSet";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
+import {
+  SettingsToggleGroup,
+  SettingsToggleGroupItem,
+} from "@liveagent/ui/components/settings/SettingsToggleGroup";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
-import { SegmentedSlider } from "@liveagent/ui/components/ui/segmented-slider";
-import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@liveagent/ui/components/ui/select";
 import { Switch } from "@liveagent/ui/components/ui/switch";
-import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
+import { VerticalReorderList } from "@liveagent/ui/components/ui/VerticalReorderList";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
@@ -46,10 +64,9 @@ import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ProviderModal } from "./ProviderModal";
 import {
-  DrawerFieldLabel,
   DrawerGroupLabel,
   DrawerSectionHeader,
   getProviderLabel,
@@ -84,8 +101,11 @@ function FailoverNumberField(props: {
   }
 
   return (
-    <div className="space-y-1.5">
-      <DrawerFieldLabel label={label} hint={hint} />
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0 space-y-1">
+        <div className="text-sm font-medium">{label}</div>
+        <p className="text-xs leading-5 text-muted-foreground">{hint}</p>
+      </div>
       <NumberInput
         aria-label={ariaLabel}
         incrementLabel={`${ariaLabel} +`}
@@ -97,8 +117,9 @@ function FailoverNumberField(props: {
         value={draft}
         onValueChange={setDraft}
         onValueCommitted={commitDraft}
-        className="h-8 rounded-lg"
-        inputClassName="px-2 py-1 text-[12.5px]"
+        rootClassName="w-28 shrink-0"
+        className="h-9 rounded-lg border-0 bg-settings-tile-hover shadow-none"
+        inputClassName="px-2 py-1 text-xs"
       />
     </div>
   );
@@ -117,6 +138,13 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
     () => settings.customProviders.filter((provider) => provider.type === providerType),
     [settings.customProviders, providerType],
   );
+  const providerById = useMemo(() => {
+    const index = new Map<string, CustomProvider>();
+    for (const provider of settings.customProviders) {
+      if (!index.has(provider.id)) index.set(provider.id, provider);
+    }
+    return index;
+  }, [settings.customProviders]);
 
   const queueValues = useMemo(() => new Set(failover.queue), [failover.queue]);
   const addableProviders = useMemo(
@@ -136,10 +164,10 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   const unavailableQueuedProviderCount = useMemo(
     () =>
       failover.queue.filter((providerId) => {
-        const provider = settings.customProviders.find((item) => item.id === providerId);
+        const provider = providerById.get(providerId);
         return provider ? !hasProviderFailoverConfiguration(provider) : false;
       }).length,
-    [failover.queue, settings.customProviders],
+    [failover.queue, providerById],
   );
   const addableProviderOptions = useMemo<ModelPickerOption[]>(
     () =>
@@ -161,12 +189,12 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   }
 
   function queueEntryLabel(providerId: string) {
-    const provider = settings.customProviders.find((item) => item.id === providerId);
+    const provider = providerById.get(providerId);
     return provider?.name ?? providerId;
   }
 
   function queueEntryDetail(providerId: string) {
-    const provider = settings.customProviders.find((item) => item.id === providerId);
+    const provider = providerById.get(providerId);
     return provider?.baseUrl ?? "";
   }
 
@@ -179,30 +207,19 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
     patchFailover({ queue: failover.queue.filter((_, i) => i !== index) });
   }
 
-  // Queue priority is reordered by dragging (or arrow keys on the focused
-  // handle) instead of per-row up/down buttons.
-  const {
-    draggingItemId: draggingQueueId,
-    getItemProps: getQueueReorderProps,
-    renderDragHandle: renderQueueDragHandle,
-    scrollContainerRef: queueListRef,
-  } = useVerticalListReorder({
-    itemIds: failover.queue,
-    canReorder: true,
-    reorderLabel: t("settings.reorderProvider"),
-    reorderHint: t("settings.reorderVerticalHint"),
-    disabledHint: t("settings.reorderNeedsTwoItems"),
-    onReorder: (nextIds) => patchFailover({ queue: nextIds }),
-  });
-
   return (
-    <section className="py-5">
+    <section className="rounded-xl bg-settings-tile p-4">
       <DrawerSectionHeader
-        icon={<Shield className="h-3.5 w-3.5" />}
+        icon={<Shield className="size-3.5" />}
         title={t("settings.failoverTitle")}
         hint={t("settings.failoverToggleHint").replaceAll("{vendor}", vendorLabel)}
         badge={
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground/[0.05] px-2 py-0.5 text-[10.5px] font-medium text-foreground/60">
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground/[0.05] px-2 py-0.5",
+              "text-tiny font-medium text-foreground/60",
+            )}
+          >
             <ProviderBrandIcon type={providerType} />
             {vendorLabel}
           </span>
@@ -217,10 +234,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
       />
 
       {/* 开关直接控制配置区的展开/收起：关闭时抽屉只留一行分区头。 */}
-      <div
-        className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
-        style={{ gridTemplateRows: failover.enabled ? "1fr" : "0fr" }}
-      >
+      <div className="grid" style={{ gridTemplateRows: failover.enabled ? "1fr" : "0fr" }}>
         <div
           className="min-h-0 overflow-hidden"
           inert={!failover.enabled}
@@ -233,48 +247,65 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 hint={t("settings.failoverQueueHint").replaceAll("{vendor}", vendorLabel)}
               />
               {failover.queue.length > 0 ? (
-                <div ref={queueListRef} className="space-y-1.5">
-                  {failover.queue.map((entry, index) => (
+                <VerticalReorderList
+                  itemIds={failover.queue}
+                  canReorder
+                  reorderLabel={t("settings.reorderProvider")}
+                  reorderHint={t("settings.reorderVerticalHint")}
+                  disabledHint={t("settings.reorderNeedsTwoItems")}
+                  itemLabel={queueEntryLabel}
+                  onReorder={(nextIds) => patchFailover({ queue: nextIds })}
+                  className="space-y-1.5"
+                >
+                  {(entry, index, { dragging, dragHandle }) => (
                     <div
-                      key={entry}
-                      {...getQueueReorderProps(entry)}
                       className={cn(
-                        "flex items-center gap-1.5 rounded-lg border border-foreground/[0.06] bg-background/60 py-1.5 pl-1 pr-1.5 transition-colors",
-                        draggingQueueId === entry
+                        "flex items-center gap-1.5",
+                        "rounded-lg bg-background/60",
+                        "py-1.5 pl-1 pr-1.5 transition-colors",
+                        dragging
                           ? "border-foreground/[0.14] bg-accent shadow-lg"
                           : "hover:border-foreground/[0.12]",
                       )}
                     >
-                      {renderQueueDragHandle(entry, queueEntryLabel(entry))}
-                      <span className="flex h-5 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] font-mono text-[10px] font-semibold text-foreground/55">
+                      {dragHandle}
+                      <span
+                        className={cn(
+                          "flex h-5 w-6 shrink-0 items-center justify-center",
+                          "rounded-md bg-foreground/[0.05] font-mono text-tiny font-semibold text-foreground/55",
+                        )}
+                      >
                         P{index + 1}
                       </span>
                       <span className="min-w-0 flex-1 leading-tight">
-                        <span className="block truncate text-[12.5px] font-medium text-foreground/90">
+                        <span className="block truncate text-xs font-medium text-foreground/90">
                           {queueEntryLabel(entry)}
                         </span>
                         {queueEntryDetail(entry) ? (
-                          <span className="block truncate text-[10.5px] text-muted-foreground/70">
+                          <span className="block truncate text-tiny text-muted-foreground/70">
                             {queueEntryDetail(entry)}
                           </span>
                         ) : null}
                       </span>
                       <button
                         type="button"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        className={cn(
+                          "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-colors",
+                          "hover:bg-destructive/10 hover:text-destructive",
+                        )}
                         onClick={() => removeQueueEntry(index)}
                         title={t("settings.failoverQueueRemove")}
                         aria-label={`${t("settings.failoverQueueRemove")} ${queueEntryLabel(entry)}`}
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <X className="size-3.5" />
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </VerticalReorderList>
               ) : (
-                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                <SettingsNotice variant="warning">
                   {t("settings.failoverQueueEmpty")}
-                </div>
+                </SettingsNotice>
               )}
               {failover.queue.length < MODEL_FAILOVER_QUEUE_LIMIT && addableProviders.length > 0 ? (
                 <ModelPicker
@@ -286,11 +317,11 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                   collapsibleGroups={false}
                   searchPlaceholder={t("settings.failoverQueueSearch")}
                   emptyLabel={t("settings.failoverQueueNoMatch")}
-                  triggerClassName="h-8 rounded-lg border-dashed border-foreground/[0.13] bg-transparent py-0 text-xs text-muted-foreground shadow-none transition-colors hover:border-foreground/[0.24] hover:bg-foreground/[0.02]"
+                  variant="plain"
                 />
               ) : null}
               {unavailableProviderCount > 0 ? (
-                <p className="text-[10.5px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-tiny leading-relaxed text-amber-700/90 dark:text-amber-300/90">
                   {t("settings.failoverQueueUnavailableCandidates").replace(
                     "{count}",
                     String(unavailableProviderCount),
@@ -298,7 +329,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 </p>
               ) : null}
               {unavailableQueuedProviderCount > 0 ? (
-                <p className="text-[10.5px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-tiny leading-relaxed text-amber-700/90 dark:text-amber-300/90">
                   {t("settings.failoverQueueUnavailableExisting").replace(
                     "{count}",
                     String(unavailableQueuedProviderCount),
@@ -309,7 +340,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
 
             <div className="space-y-2">
               <DrawerGroupLabel label={t("settings.failoverParamsTitle")} />
-              <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-4">
                 <FailoverNumberField
                   label={t("settings.failoverMaxSwitchesShort")}
                   ariaLabel={t("settings.failoverMaxSwitches")}
@@ -371,8 +402,11 @@ function CustomSettingsModelField(props: {
       : modelOptions;
 
   return (
-    <div className="space-y-1.5">
-      <DrawerFieldLabel label={label} hint={hint} />
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <div className="text-sm font-medium">{label}</div>
+        <p className="text-xs leading-5 text-muted-foreground">{hint}</p>
+      </div>
       <ModelPicker
         options={options}
         value={selectedValue}
@@ -380,17 +414,19 @@ function CustomSettingsModelField(props: {
         placeholder={followCurrentLabel}
         noneLabel={followCurrentLabel}
         ariaLabel={label}
-        triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+        variant="plain"
+        collapsibleGroups={false}
       />
     </div>
   );
 }
 
-function CustomSettingsDrawer(
+function ProviderSettingsDialog(
   props: SettingsSectionProps & { providerType: ProviderId; onClose: () => void },
 ) {
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
+  const [selectedProtocol, setSelectedProtocol] = useState(providerType);
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
   // 上下文占用展示三档的动态描述：只解释当前选中档，取代原先罗列三档的长段落。
   const contextDisplayModeDesc = {
@@ -412,38 +448,23 @@ function CustomSettingsDrawer(
   }
 
   return (
-    <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        variant="inset"
-        className="settings-provider-custom-sheet max-w-none border-border bg-background sm:max-w-[440px]"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="flex h-[min(850px,90dvh)] max-w-5xl flex-col"
+        layout="fullscreen-mobile"
+        showCloseButton
         closeLabel={t("settings.closeCustomSettings")}
-        showCloseButton={false}
       >
-        <div className="settings-provider-custom-sheet-header relative flex items-center gap-3 px-6 pb-4 pt-[22px]">
-          <SheetTitle className="min-w-0 flex-1 text-[17px] leading-tight tracking-tight text-foreground/95">
-            {t("settings.customSettings")}
-          </SheetTitle>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.12] hover:text-foreground"
-            title={t("settings.closeCustomSettings")}
-            aria-label={t("settings.closeCustomSettings")}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div
-          aria-hidden="true"
-          className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
-        />
-
-        <div className="settings-provider-custom-sheet-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-          <div className="divide-y divide-foreground/[0.06]">
-            <section className="py-5 first:pt-4">
+        <DialogHeader>
+          <DialogTitle>{t("settings.customSettings")}</DialogTitle>
+          <p className="text-xs text-muted-foreground">{t("settings.providerSettingsAutosave")}</p>
+        </DialogHeader>
+        <DialogBody className="grid grid-cols-2 gap-5 overflow-hidden max-[720px]:block max-[720px]:overflow-y-auto">
+          <div className="min-h-0 space-y-3 overflow-y-auto pr-1 max-[720px]:overflow-visible">
+            <h2 className="text-sm font-semibold">{t("settings.providerGlobalPreferences")}</h2>
+            <section className="rounded-xl bg-settings-tile p-4">
               <DrawerSectionHeader
-                icon={<WandSparkles className="h-3.5 w-3.5" />}
+                icon={<WandSparkles className="size-3.5" />}
                 title={t("settings.customSettingsModelsTitle")}
               />
               <div className="mt-3.5 space-y-3">
@@ -464,18 +485,18 @@ function CustomSettingsDrawer(
                   onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
                 />
                 {modelOptions.length === 0 ? (
-                  <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                  <SettingsNotice variant="warning">
                     {t("settings.customSettingsModelEmpty")}
-                  </div>
+                  </SettingsNotice>
                 ) : null}
               </div>
             </section>
             {/* 澄清提示词（composer clarify）：总开关直接控制两端输入框魔杖按钮
                 的显隐；展开区选澄清对话用的模型，未选跟随当前对话模型（与
                 commitMessageModel 同一回退契约）。开关-展开模式同 failover。 */}
-            <section className="py-5">
+            <section className="rounded-xl bg-settings-tile p-4">
               <DrawerSectionHeader
-                icon={<WandSparkles className="h-3.5 w-3.5" />}
+                icon={<WandSparkles className="size-3.5" />}
                 title={t("settings.promptClarifyTitle")}
                 hint={t("settings.promptClarifyToggleHint")}
                 action={
@@ -491,7 +512,7 @@ function CustomSettingsDrawer(
                 }
               />
               <div
-                className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+                className="grid"
                 style={{
                   gridTemplateRows: settings.customSettings.promptClarifyEnabled ? "1fr" : "0fr",
                 }}
@@ -514,54 +535,87 @@ function CustomSettingsDrawer(
                 </div>
               </div>
             </section>
-            {/* Composer 上下文占用展示样式（三档滑块，docs/design/composer-context-stats-bar.md §4.7）：
-                从左到右 状态栏 / 都显示 / 用量环，对应 statsBar / both / ring。
-                通用说明收进分区头的提示气泡，滑块下方只保留当前档位的一行动态描述。 */}
-            <section className="py-5">
+
+            <section className="rounded-xl bg-settings-tile p-4">
               <DrawerSectionHeader
-                icon={<Activity className="h-3.5 w-3.5" />}
+                icon={<Activity className="size-3.5" />}
                 title={t("settings.composerContextDisplay")}
                 hint={t("settings.composerContextDisplayHint")}
               />
               <div className="mt-3.5 space-y-2">
-                <SegmentedSlider
+                <SettingsToggleGroup
+                  value={[settings.customSettings.composerContextDisplay]}
+                  onValueChange={(values) => {
+                    const mode = values[0];
+                    if (mode === "statsBar" || mode === "both" || mode === "ring")
+                      setSettings((prev) =>
+                        updateCustomSettings(prev, { composerContextDisplay: mode }),
+                      );
+                  }}
                   aria-label={t("settings.composerContextDisplay")}
-                  className="w-full"
-                  value={settings.customSettings.composerContextDisplay}
-                  options={[
-                    { value: "statsBar", label: t("settings.composerContextDisplayStatsBar") },
-                    { value: "both", label: t("settings.composerContextDisplayBoth") },
-                    { value: "ring", label: t("settings.composerContextDisplayRing") },
-                  ]}
-                  onValueChange={(mode) =>
-                    setSettings((prev) =>
-                      updateCustomSettings(prev, { composerContextDisplay: mode }),
-                    )
-                  }
-                />
-                <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+                >
+                  <SettingsToggleGroupItem value="statsBar">
+                    {t("settings.composerContextDisplayStatsBar")}
+                  </SettingsToggleGroupItem>
+                  <SettingsToggleGroupItem value="both">
+                    {t("settings.composerContextDisplayBoth")}
+                  </SettingsToggleGroupItem>
+                  <SettingsToggleGroupItem value="ring">
+                    {t("settings.composerContextDisplayRing")}
+                  </SettingsToggleGroupItem>
+                </SettingsToggleGroup>
+                <p className="text-xs leading-relaxed text-muted-foreground/70">
                   {contextDisplayModeDesc[settings.customSettings.composerContextDisplay]}
                 </p>
               </div>
             </section>
-            <FailoverSettingsCard
-              settings={settings}
-              setSettings={setSettings}
-              providerType={providerType}
-            />
             <RetryErrorSection settings={settings} setSettings={setSettings} />
           </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+          <div className="min-h-0 space-y-3 overflow-y-auto pr-1 max-[720px]:mt-6 max-[720px]:overflow-visible">
+            <h2 className="text-sm font-semibold">{t("settings.providerProtocolPreferences")}</h2>
+            <Select
+              value={selectedProtocol}
+              onValueChange={(value) => {
+                const next = PROVIDER_TABS.find((type) => type === value);
+                if (next) setSelectedProtocol(next);
+              }}
+            >
+              <SelectTrigger variant="plain" aria-label={t("settings.providerServiceType")}>
+                <SelectValue>{getProviderLabel(selectedProtocol)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDER_TABS.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {getProviderLabel(type)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FailoverSettingsCard
+              key={selectedProtocol}
+              settings={settings}
+              setSettings={setSettings}
+              providerType={selectedProtocol}
+            />
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("settings.close")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-const PROVIDER_ACTION_CLASS =
-  "settings-provider-action h-full min-w-0 gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium shadow-none";
+const PROVIDER_ACTION_CLASS = cn(
+  "settings-provider-action inline-flex h-9 shrink-0 items-center justify-center gap-1.5",
+  "rounded-lg bg-settings-tile px-3 text-xs font-medium text-foreground shadow-none",
+  "hover:bg-settings-tile-hover focus-visible:ring-2 focus-visible:ring-ring",
+);
 
 function ProviderActionGroup(props: {
-  activeTab: ProviderId;
   settings: SettingsSectionProps["settings"];
   setSettings: SettingsSectionProps["setSettings"];
   customSettingsOpen: boolean;
@@ -569,28 +623,33 @@ function ProviderActionGroup(props: {
   onOpenCustomSettings: () => void;
 }) {
   const { t } = useLocale();
-  const { activeTab, settings, setSettings, customSettingsOpen, onAdd, onOpenCustomSettings } =
-    props;
+  const { settings, setSettings, customSettingsOpen, onAdd, onOpenCustomSettings } = props;
 
   return (
     <fieldset
-      className="settings-provider-action-group min-w-0 border-0 p-0"
+      className={cn(
+        "inline-flex min-w-0 shrink-0 flex-wrap items-center gap-2",
+        "border-0 p-0",
+        "max-640:w-full max-640:[&>.settings-provider-action]:flex-1",
+      )}
       aria-label={t("settings.providerActionGroup")}
     >
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        className={cn(PROVIDER_ACTION_CLASS, "settings-provider-action--primary")}
+        className={cn(
+          PROVIDER_ACTION_CLASS,
+          "bg-primary text-primary-foreground shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--primary)/0.28)] has-hover:hover:bg-primary/90 has-hover:hover:text-primary-foreground",
+        )}
         onClick={onAdd}
         title={t("settings.addProvider")}
         aria-label={t("settings.addProvider")}
       >
-        <Plus className="h-3.5 w-3.5" />
-        <span className="settings-provider-action-label">{t("settings.addProviderShort")}</span>
+        <Plus className="size-3.5" />
+        <span className="max-[860px]:hidden max-640:inline">{t("settings.addProviderShort")}</span>
       </Button>
       <ProviderSettingsExtension
-        activeTab={activeTab}
         settings={settings}
         setSettings={setSettings}
         triggerClassName={PROVIDER_ACTION_CLASS}
@@ -601,14 +660,15 @@ function ProviderActionGroup(props: {
         size="sm"
         className={cn(
           PROVIDER_ACTION_CLASS,
-          customSettingsOpen && "settings-provider-action-active",
+          customSettingsOpen &&
+            "bg-background text-foreground shadow-[0_var(--spacing-1px)_var(--spacing-2px)_hsl(var(--foreground)/0.06)]",
         )}
         onClick={onOpenCustomSettings}
         title={t("settings.openCustomSettings")}
         aria-label={t("settings.openCustomSettings")}
       >
-        <Settings className="h-3.5 w-3.5" />
-        <span className="settings-provider-action-label">
+        <Settings className="size-3.5" />
+        <span className="max-[860px]:hidden max-640:inline">
           {t("settings.providerActionSettings")}
         </span>
       </Button>
@@ -624,7 +684,6 @@ function ProviderCardRow(props: {
   usageExpanded: boolean;
   onToggleUsageExpanded: () => void;
   dragging: boolean;
-  reorderProps: { "data-vertical-reorder-id": string; style?: CSSProperties };
   dragHandle: ReactNode;
   onEdit: () => void;
   onDelete: () => void;
@@ -639,7 +698,6 @@ function ProviderCardRow(props: {
     usageExpanded,
     onToggleUsageExpanded,
     dragging,
-    reorderProps,
     dragHandle,
     onEdit,
     onDelete,
@@ -651,25 +709,34 @@ function ProviderCardRow(props: {
 
   return (
     <div
-      {...reorderProps}
       className={cn(
-        "settings-card-row settings-provider-card-row group flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/30",
-        dragging && "bg-accent shadow-lg",
+        "settings-card-row group flex items-center gap-3",
+        "rounded-xl bg-settings-tile px-4 py-3 transition-colors",
+        "hover:bg-settings-tile-hover",
+        "web:max-520:grid web:max-520:grid-cols-settings-provider-card-row",
+        "web:max-520:items-center! web:max-520:flex-nowrap!",
+        dragging && "bg-settings-active",
       )}
     >
       {dragHandle}
       <div className="flex w-5 shrink-0 items-center justify-center text-lg text-foreground">
         <ProviderBrandIcon type={type} />
       </div>
-      <div className="settings-provider-card-main min-w-0 flex-1">
+      <div className="min-w-0 flex-1 web:max-520:min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium">{provider.name}</span>
+          <button
+            type="button"
+            className="truncate text-left text-sm font-medium hover:underline"
+            onClick={onEdit}
+          >
+            {provider.name}
+          </button>
           {provider.useSystemProxy ? (
             <span
               className="shrink-0 text-blue-500 dark:text-blue-400"
               title={t("settings.providerUseSystemProxy")}
             >
-              <Waypoints className="h-3 w-3" />
+              <Waypoints className="size-3" />
             </span>
           ) : null}
         </div>
@@ -686,7 +753,7 @@ function ProviderCardRow(props: {
                 骨架等高占位,结果到达后原位替换,卡片高度全程稳定。 */}
             <div className="flex min-h-4 min-w-0 items-center">
               {firstUsagePlan ? (
-                <span className="settings-usage-reveal flex min-w-0">
+                <span className="flex min-w-0">
                   <UsagePlanLine plan={firstUsagePlan} />
                 </span>
               ) : usageDisplay.loading ? (
@@ -695,12 +762,7 @@ function ProviderCardRow(props: {
                   className="h-2 w-32 max-w-full animate-pulse rounded-full bg-foreground/[0.08] motion-reduce:animate-none"
                 />
               ) : (
-                <span
-                  className={cn(
-                    "settings-usage-reveal truncate",
-                    usageDisplay.error && "text-destructive",
-                  )}
-                >
+                <span className={cn("truncate", usageDisplay.error && "text-destructive")}>
                   {usageDisplay.error ?? t("settings.providerUsageNoData")}
                 </span>
               )}
@@ -733,7 +795,7 @@ function ProviderCardRow(props: {
                   className="h-2 w-16 animate-pulse rounded-full bg-foreground/[0.06] motion-reduce:animate-none"
                 />
               ) : (
-                <span className="settings-usage-reveal flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                   {extraUsagePlans.length > 0 ? (
                     <button
                       type="button"
@@ -749,7 +811,7 @@ function ProviderCardRow(props: {
                           )}
                       <ChevronDown
                         className={cn(
-                          "h-3 w-3 transition-transform duration-200 motion-reduce:transition-none",
+                          "size-3 transition-transform duration-200 motion-reduce:transition-none",
                           usageExpanded && "rotate-180",
                         )}
                       />
@@ -772,40 +834,40 @@ function ProviderCardRow(props: {
           </div>
         ) : null}
       </div>
-      <div className="settings-card-actions settings-hover-actions flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+      <div className="settings-card-actions flex items-center gap-1">
         <ProviderCopyConfigButton provider={provider} />
         {usageDisplay.show ? (
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            size="icon-xs"
+            className="text-muted-foreground hover:text-foreground"
             disabled={usageDisplay.refreshDisabled}
             onClick={onRefreshUsage}
             title={t("settings.providerUsageRefresh")}
             aria-label={t("settings.providerUsageRefresh")}
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+            <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
           </Button>
         ) : null}
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          size="icon-xs"
+          className="text-muted-foreground hover:text-foreground"
           onClick={onEdit}
           title={t("settings.edit")}
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <SquarePen className="size-3.5" />
         </Button>
         <ConfirmDeletePopover name={provider.name} onConfirm={onDelete}>
           {(open) => (
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              size="icon-xs"
+              className="text-muted-foreground hover:text-destructive"
               onClick={open}
               title={t("settings.delete")}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="size-3.5" />
             </Button>
           )}
         </ConfirmDeletePopover>
@@ -815,12 +877,12 @@ function ProviderCardRow(props: {
 }
 
 function ProviderList(props: {
-  type: ProviderId;
+  type: ProviderId | "all";
   providers: CustomProvider[];
   onAdd: () => void;
   onEdit: (provider: CustomProvider) => void;
   onDelete: (id: string) => void;
-  onReorder: (type: ProviderId, nextIds: string[]) => void;
+  onReorder: (type: ProviderId | "all", nextIds: string[]) => void;
   usageByProvider: ProviderUsageState;
   refreshingProviderIds: ReadonlySet<string>;
   onRefreshUsage: (providerId: string) => void;
@@ -837,7 +899,14 @@ function ProviderList(props: {
     refreshingProviderIds,
     onRefreshUsage,
   } = props;
-  const filtered = providers.filter((provider) => provider.type === type);
+  const filtered = useMemo(
+    () => (type === "all" ? providers : providers.filter((provider) => provider.type === type)),
+    [providers, type],
+  );
+  const providerById = useMemo(
+    () => new Map(filtered.map((provider) => [provider.id, provider])),
+    [filtered],
+  );
   // 30s ticker 驱动"N 分钟前"相对时间;多套餐行的展开态是纯本地 UI 状态。
   const usageNow = useUsageNowTicker(
     filtered.some((provider) => provider.usageQuery?.enabled) ||
@@ -855,51 +924,50 @@ function ProviderList(props: {
       return next;
     });
   }
-  const {
-    draggingItemId: draggingProviderId,
-    getItemProps: getProviderReorderProps,
-    renderDragHandle: renderProviderDragHandle,
-    scrollContainerRef: providerScrollContainerRef,
-  } = useVerticalListReorder({
-    itemIds: filtered.map((provider) => provider.id),
-    canReorder: true,
-    reorderLabel: t("settings.reorderProvider"),
-    reorderHint: t("settings.reorderVerticalHint"),
-    disabledHint: t("settings.reorderNeedsTwoItems"),
-    onReorder: (nextIds) => onReorder(type, nextIds),
-  });
-
   return (
-    <div className="settings-provider-list flex h-full min-h-0 flex-col gap-4">
-      <div
-        ref={providerScrollContainerRef}
-        className="settings-provider-list-scroll min-h-0 flex-1 overflow-y-auto pr-1"
-      >
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1 web:max-820:pr-0 web:max-820:overscroll-y-contain web:max-820:[-webkit-overflow-scrolling:touch]">
         {filtered.length === 0 ? (
-          <div className="settings-provider-empty flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center",
+              "rounded-xl bg-settings-tile py-12 text-center",
+              "web:max-820:min-h-settings-provider-empty-min-h web:max-820:px-16px web:max-820:py-28px web:max-520:min-h-settings-provider-empty-min-h-2 web:max-520:px-12px web:max-520:py-22px",
+            )}
+          >
             <div className="mb-3 flex items-center justify-center text-3xl text-foreground">
-              <ProviderBrandIcon type={type} />
+              <Plus className="size-5" />
             </div>
             <p className="text-sm font-medium">{t("settings.noProvidersHint")}</p>
             <Button
               variant="outline"
               size="sm"
-              className="settings-provider-empty-add mt-4 gap-1.5"
+              className="mt-4 gap-1.5 web:max-820:w-settings-provider-empty-add-w web:max-820:min-h-40px web:max-520:w-full"
               onClick={onAdd}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="size-3.5" />
               {t("settings.addProvider")}
             </Button>
           </div>
         ) : (
-          <div className="space-y-2 pb-1">
-            {filtered.map((provider) => {
+          <VerticalReorderList
+            itemIds={filtered.map((provider) => provider.id)}
+            canReorder
+            reorderLabel={t("settings.reorderProvider")}
+            reorderHint={t("settings.reorderVerticalHint")}
+            disabledHint={t("settings.reorderNeedsTwoItems")}
+            itemLabel={(providerId) => providerById.get(providerId)?.name ?? providerId}
+            onReorder={(nextIds) => onReorder(type, nextIds)}
+            className="space-y-2 pb-1"
+          >
+            {(providerId, _index, { dragging, dragHandle }) => {
+              const provider = providerById.get(providerId);
+              if (!provider) return null;
               const refreshing = refreshingProviderIds.has(provider.id);
               return (
                 <ProviderCardRow
-                  key={provider.id}
                   provider={provider}
-                  type={type}
+                  type={provider.type}
                   usageDisplay={getProviderUsageCardDisplay(
                     provider,
                     usageByProvider[provider.id],
@@ -909,16 +977,15 @@ function ProviderList(props: {
                   refreshing={refreshing}
                   usageExpanded={expandedUsageProviderIds.has(provider.id)}
                   onToggleUsageExpanded={() => toggleUsageExpanded(provider.id)}
-                  dragging={draggingProviderId === provider.id}
-                  reorderProps={getProviderReorderProps(provider.id)}
-                  dragHandle={renderProviderDragHandle(provider.id, provider.name)}
+                  dragging={dragging}
+                  dragHandle={dragHandle}
                   onEdit={() => onEdit(provider)}
                   onDelete={() => onDelete(provider.id)}
                   onRefreshUsage={() => onRefreshUsage(provider.id)}
                 />
               );
-            })}
-          </div>
+            }}
+          </VerticalReorderList>
         )}
       </div>
     </div>
@@ -931,10 +998,12 @@ export function ProvidersSection(
     onInitialProviderHandled?: () => void;
   },
 ) {
+  const { t } = useLocale();
   const { settings, setSettings, initialProviderId, onInitialProviderHandled } = props;
 
   const [activeTab, setActiveTab] = useState<ProviderId>("claude_code");
   const [modalOpen, setModalOpen] = useState(false);
+  const [servicePickerOpen, setServicePickerOpen] = useState(false);
   const [customSettingsOpen, setCustomSettingsOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<CustomProvider | null>(null);
   const { usageByProvider, refreshingProviderIds, refreshProvider } = useProviderUsage(
@@ -956,7 +1025,7 @@ export function ProvidersSection(
 
   function openAdd() {
     setEditingProvider(null);
-    setModalOpen(true);
+    setServicePickerOpen(true);
   }
 
   function openEdit(provider: CustomProvider) {
@@ -970,6 +1039,7 @@ export function ProvidersSection(
   }
 
   function handleSave(data: Omit<CustomProvider, "id">) {
+    setActiveTab(data.type);
     setSettings((prev) => {
       if (editingProvider) {
         const updated = prev.customProviders.map((provider) =>
@@ -995,9 +1065,11 @@ export function ProvidersSection(
     );
   }
 
-  function handleProviderReorder(type: ProviderId, nextIds: string[]) {
+  function handleProviderReorder(type: ProviderId | "all", nextIds: string[]) {
     setSettings((prev) => {
-      const providersOfType = prev.customProviders.filter((provider) => provider.type === type);
+      const providersOfType = prev.customProviders.filter(
+        (provider) => type === "all" || provider.type === type,
+      );
       const reordered = itemsByIdOrder(providersOfType, nextIds);
       const included = new Set(reordered.map((provider) => provider.id));
       for (const provider of providersOfType) {
@@ -1007,61 +1079,21 @@ export function ProvidersSection(
       return updateCustomProviders(
         prev,
         prev.customProviders.map((provider) =>
-          provider.type === type ? (reordered[index++] ?? provider) : provider,
+          type === "all" || provider.type === type ? (reordered[index++] ?? provider) : provider,
         ),
       );
     });
   }
 
-  const activeTabIndex = Math.max(0, PROVIDER_TABS.indexOf(activeTab));
-  // 每个厂商 Tab 内联展示已配置数量，替代原先列表上方单独的计数行。
-  const providerCountByType = useMemo(() => {
-    const counts = Object.fromEntries(PROVIDER_TABS.map((tab) => [tab, 0])) as Record<
-      ProviderId,
-      number
-    >;
-    for (const provider of settings.customProviders) {
-      if (counts[provider.type] !== undefined) counts[provider.type] += 1;
-    }
-    return counts;
-  }, [settings.customProviders]);
-
   return (
     <>
-      <div className="settings-provider-section flex min-h-0 flex-1 flex-col">
-        <div className="settings-provider-tabs-wrap mb-4 flex shrink-0 items-center justify-between gap-3">
-          <div className="settings-provider-tabs inline-flex h-9 min-w-0 items-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground">
-            {PROVIDER_TABS.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  "settings-provider-tab inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
-                  activeTab === tab
-                    ? "bg-background text-foreground shadow"
-                    : "hover:text-foreground/80",
-                )}
-              >
-                <ProviderBrandIcon type={tab} />
-                {getProviderLabel(tab)}
-                {providerCountByType[tab] > 0 ? (
-                  <span
-                    className={cn(
-                      "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none tabular-nums transition-colors",
-                      activeTab === tab
-                        ? "bg-foreground/[0.08] text-foreground/70"
-                        : "bg-foreground/[0.06] text-muted-foreground/80",
-                    )}
-                  >
-                    {providerCountByType[tab]}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <div className="flex shrink-0 items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">
+            {t("settings.providerServices")}{" "}
+            <span className="ml-1 text-muted-foreground">{settings.customProviders.length}</span>
+          </h3>
           <ProviderActionGroup
-            activeTab={activeTab}
             settings={settings}
             setSettings={setSettings}
             customSettingsOpen={customSettingsOpen}
@@ -1069,36 +1101,53 @@ export function ProvidersSection(
             onOpenCustomSettings={() => setCustomSettingsOpen(true)}
           />
         </div>
-
-        <div className="settings-provider-panels min-h-0 flex-1 overflow-hidden">
-          <div
-            className="flex h-full transition-transform duration-300 ease-in-out"
-            style={{ transform: `translateX(-${activeTabIndex * 100}%)` }}
-          >
-            {PROVIDER_TABS.map((tab) => (
-              <div
-                key={tab}
-                className="w-full shrink-0 overflow-hidden"
-                aria-hidden={activeTab !== tab}
-                inert={activeTab !== tab}
-              >
-                <ProviderList
-                  type={tab}
-                  providers={settings.customProviders}
-                  onAdd={openAdd}
-                  onEdit={openEdit}
-                  onDelete={handleDelete}
-                  onReorder={handleProviderReorder}
-                  usageByProvider={usageByProvider}
-                  refreshingProviderIds={refreshingProviderIds}
-                  onRefreshUsage={(providerId) => void refreshProvider(providerId)}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        <ProviderList
+          type="all"
+          providers={settings.customProviders}
+          onAdd={openAdd}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+          onReorder={handleProviderReorder}
+          usageByProvider={usageByProvider}
+          refreshingProviderIds={refreshingProviderIds}
+          onRefreshUsage={(providerId) => void refreshProvider(providerId)}
+        />
       </div>
 
+      {servicePickerOpen && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setServicePickerOpen(false);
+          }}
+        >
+          <DialogContent className="max-w-md" showCloseButton closeLabel={t("settings.close")}>
+            <DialogHeader>
+              <DialogTitle>{t("settings.providerChooseService")}</DialogTitle>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.providerChooseServiceHint")}
+              </p>
+            </DialogHeader>
+            <DialogBody className="space-y-2">
+              {PROVIDER_TABS.map((type) => (
+                <Button
+                  key={type}
+                  variant="ghost"
+                  className="h-12 w-full justify-start gap-3 bg-settings-tile px-4 hover:bg-settings-tile-hover"
+                  onClick={() => {
+                    setActiveTab(type);
+                    setServicePickerOpen(false);
+                    setModalOpen(true);
+                  }}
+                >
+                  <ProviderBrandIcon type={type} />
+                  {getProviderLabel(type)} {t("settings.compatible")}
+                </Button>
+              ))}
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      )}
       {modalOpen ? (
         <ProviderModal
           providerType={activeTab}
@@ -1108,7 +1157,7 @@ export function ProvidersSection(
         />
       ) : null}
       {customSettingsOpen ? (
-        <CustomSettingsDrawer
+        <ProviderSettingsDialog
           settings={settings}
           setSettings={setSettings}
           providerType={activeTab}

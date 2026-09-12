@@ -16,8 +16,12 @@ const { SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE } = loader.loadModule(
   "@liveagent/ui/lib/chat-scroll/scrollFollowCore.ts",
 );
 const width = loader.loadModule("@liveagent/ui/lib/transcript-width/transcriptWidthModel.ts");
-const transcriptStylesSource = readFileSync(
-  new URL("../src/styles/base-chat.css", import.meta.url),
+const transcriptStyleSource = readFileSync(
+  new URL("../src/lib/webStyleClasses.ts", import.meta.url),
+  "utf8",
+);
+const composerSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
   "utf8",
 );
 const transcriptWidthControlsSource = readFileSync(
@@ -49,18 +53,11 @@ test("unmeasured layouts produce a blank key so nothing is cached", () => {
 });
 
 test("gateway transcript and composer columns both drop the retired avatar rail", () => {
-  // 两条规则现在读同一个变量（#762 起输入框也跟随可调的正文宽），但 grid
-  // 模板无法复用，所以退役头像列的 40px 补偿仍需两处各写一次；只改一处会
-  // 让输入框比它要对齐的正文列宽 40px。分别按规则块断言，确保两处都在。
-  const column = String.raw`minmax\(\s*0,\s*min\(calc\(var\(--chat-transcript-content-width,\s*768px\)\s*-\s*40px\),\s*100%\)\s*\)`;
-  for (const rule of [".gateway-transcript-shell", ".gateway-composer-layer"]) {
-    const block = transcriptStylesSource.match(
-      new RegExp(`\\${rule} \\{[\\s\\S]*?\\n\\}`),
-    );
-    assert.ok(block, `${rule} 规则存在`);
-    assert.match(block[0], new RegExp(column));
-  }
-  assert.doesNotMatch(transcriptStylesSource, /--gateway-transcript-column-width/);
+  // Both consumers must retain the same retired-avatar compensation, even when grouped.
+  const column = /grid-cols-\[[^"\n]*--chat-transcript-content-width[^"\n]*var\(--spacing-40px\)/;
+  assert.match(transcriptStyleSource, column);
+  assert.match(composerSource, column);
+  assert.doesNotMatch(`${transcriptStyleSource}\n${composerSource}`, /--gateway-transcript-column-width/);
 });
 
 test("keyboard width controls do not detach transcript scroll follow", () => {

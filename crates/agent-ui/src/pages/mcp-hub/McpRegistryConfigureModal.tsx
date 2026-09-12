@@ -1,5 +1,8 @@
 import type { McpServerConfig } from "@liveagent/app/lib/settings/index";
 import { AlertTriangle, Plus, Sparkles } from "@liveagent/ui/components/IconSet";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
+import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";
+import { SettingsPanel } from "@liveagent/ui/components/settings/SettingsPanel";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -11,7 +14,6 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
-import { Label } from "@liveagent/ui/components/ui/label";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
@@ -30,6 +32,7 @@ import {
   type McpRegistryInstallDraft,
   mcpRegistryConfigInputKey,
 } from "@liveagent/ui/lib/mcpRegistry/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type FormEvent, useEffect, useState } from "react";
 
 function configureDraftForCard(card: McpRegistryCard) {
@@ -301,14 +304,19 @@ export function McpRegistryConfigureModal(props: {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex max-h-[92dvh] max-w-3xl flex-col p-0"
+        className="flex h-[min(48rem,calc(100dvh-2rem))] max-w-xl flex-col p-0"
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="flex-row items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs">
-              <Sparkles className="h-5 w-5" />
+            <div
+              className={cn(
+                "flex size-10 items-center justify-center",
+                "rounded-xl border border-border/70 bg-muted/50 text-foreground shadow-xs",
+              )}
+            >
+              <Sparkles className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
               <DialogTitle>{t("mcpHub.storeConfigureTitle")}</DialogTitle>
@@ -320,25 +328,23 @@ export function McpRegistryConfigureModal(props: {
 
           <DialogBody>
             <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5 sm:col-span-1">
-                  <Label htmlFor="mcp-store-config-id" className="text-xs text-muted-foreground">
+              <div className="grid gap-3">
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="mcp-store-config-id" size="compact">
                     {t("mcpHub.serverName")}
-                  </Label>
+                  </FormFieldLabel>
                   <Input
+                    variant="plain"
                     id="mcp-store-config-id"
                     value={draft.id}
                     placeholder={t("mcpHub.serverNamePlaceholder")}
                     onChange={(event) => updateDraft({ id: event.currentTarget.value })}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="mcp-store-config-transport"
-                    className="text-xs text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="mcp-store-config-transport" size="compact">
                     {t("mcpHub.transport")}
-                  </Label>
+                  </FormFieldLabel>
                   <Select
                     value={draft.transport}
                     onValueChange={(value) => {
@@ -347,7 +353,10 @@ export function McpRegistryConfigureModal(props: {
                       updateDraft({ transport });
                     }}
                   >
-                    <SelectTrigger id="mcp-store-config-transport">
+                    <SelectTrigger
+                      className="w-full border-0 bg-settings-tile-hover shadow-none"
+                      id="mcp-store-config-transport"
+                    >
                       <SelectValue placeholder={t("mcpHub.selectTransport")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -356,14 +365,11 @@ export function McpRegistryConfigureModal(props: {
                       <SelectItem value="sse">{t("mcpHub.sse")}</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="mcp-store-config-timeout"
-                    className="text-xs text-muted-foreground"
-                  >
+                </FormField>
+                <FormField density="compact">
+                  <FormFieldLabel htmlFor="mcp-store-config-timeout" size="compact">
                     {t("mcpHub.timeout")}
-                  </Label>
+                  </FormFieldLabel>
                   <NumberInput
                     id="mcp-store-config-timeout"
                     min={1}
@@ -377,78 +383,74 @@ export function McpRegistryConfigureModal(props: {
                       updateDraft({ timeoutMs: value === null ? "" : String(value) })
                     }
                   />
-                </div>
+                </FormField>
               </div>
 
               {isStdio ? (
-                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="mcp-store-config-command"
-                        className="text-xs text-muted-foreground"
-                      >
+                <SettingsPanel variant="configuration">
+                  <div className="grid gap-3">
+                    <FormField density="compact">
+                      <FormFieldLabel htmlFor="mcp-store-config-command" size="compact">
                         {t("mcpHub.command")}
-                      </Label>
+                      </FormFieldLabel>
                       <Input
+                        variant="plain"
                         id="mcp-store-config-command"
                         value={draft.command}
                         placeholder="npx"
-                        className="font-mono text-[12.5px]"
+                        className="font-mono text-xs"
                         onChange={(event) => updateDraft({ command: event.currentTarget.value })}
                       />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="mcp-store-config-cwd"
-                        className="text-xs text-muted-foreground"
-                      >
+                    </FormField>
+                    <FormField density="compact">
+                      <FormFieldLabel htmlFor="mcp-store-config-cwd" size="compact">
                         {t("mcpHub.cwd")}
-                      </Label>
+                      </FormFieldLabel>
                       <Input
+                        variant="plain"
                         id="mcp-store-config-cwd"
                         value={draft.cwd}
                         placeholder={t("mcpHub.cwdDefault")}
-                        className="font-mono text-[12.5px]"
+                        className="font-mono text-xs"
                         onChange={(event) => updateDraft({ cwd: event.currentTarget.value })}
                       />
-                    </div>
+                    </FormField>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="mcp-store-config-args"
-                      className="text-xs text-muted-foreground"
-                    >
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-args" size="compact">
                       {t("mcpHub.args")}
-                    </Label>
+                    </FormFieldLabel>
                     <Textarea
+                      variant="plain"
                       id="mcp-store-config-args"
                       value={draft.argsText}
                       placeholder={"-y\n@modelcontextprotocol/server-time"}
-                      className="min-h-[92px] font-mono text-[12.5px]"
+                      className="min-h-92px font-mono text-xs"
                       onChange={(event) => updateDraft({ argsText: event.currentTarget.value })}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mcp-store-config-env" className="text-xs text-muted-foreground">
+                  </FormField>
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-env" size="compact">
                       {t("mcpHub.env")}
-                    </Label>
+                    </FormFieldLabel>
                     <Textarea
+                      variant="plain"
                       id="mcp-store-config-env"
                       value={draft.envText}
                       placeholder={"BRAVE_API_KEY=...\nHTTP_PROXY=..."}
-                      className="min-h-[92px] font-mono text-[12.5px]"
+                      className="min-h-92px font-mono text-xs"
                       onChange={(event) => updateDraft({ envText: event.currentTarget.value })}
                     />
-                  </div>
-                </div>
+                  </FormField>
+                </SettingsPanel>
               ) : (
-                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mcp-store-config-url" className="text-xs text-muted-foreground">
+                <SettingsPanel variant="configuration">
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-url" size="compact">
                       {draft.transport === "http" ? t("mcpHub.urlHttp") : t("mcpHub.urlSse")}
-                    </Label>
+                    </FormFieldLabel>
                     <Input
+                      variant="plain"
                       id="mcp-store-config-url"
                       value={draft.url}
                       placeholder={
@@ -456,43 +458,39 @@ export function McpRegistryConfigureModal(props: {
                           ? "http://127.0.0.1:3000/mcp"
                           : "http://127.0.0.1:3000/sse"
                       }
-                      className="font-mono text-[12.5px]"
+                      className="font-mono text-xs"
                       onChange={(event) => updateDraft({ url: event.currentTarget.value })}
                     />
-                  </div>
+                  </FormField>
                   {isSse ? (
-                    <div className="space-y-1.5">
-                      <Label
-                        htmlFor="mcp-store-config-message-url"
-                        className="text-xs text-muted-foreground"
-                      >
+                    <FormField density="compact">
+                      <FormFieldLabel htmlFor="mcp-store-config-message-url" size="compact">
                         {t("mcpHub.messageUrl")}
-                      </Label>
+                      </FormFieldLabel>
                       <Input
+                        variant="plain"
                         id="mcp-store-config-message-url"
                         value={draft.messageUrl}
                         placeholder="http://127.0.0.1:3000/message"
-                        className="font-mono text-[12.5px]"
+                        className="font-mono text-xs"
                         onChange={(event) => updateDraft({ messageUrl: event.currentTarget.value })}
                       />
-                    </div>
+                    </FormField>
                   ) : null}
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="mcp-store-config-headers"
-                      className="text-xs text-muted-foreground"
-                    >
+                  <FormField density="compact">
+                    <FormFieldLabel htmlFor="mcp-store-config-headers" size="compact">
                       {t("mcpHub.headers")}
-                    </Label>
+                    </FormFieldLabel>
                     <Textarea
+                      variant="plain"
                       id="mcp-store-config-headers"
                       value={draft.headersText}
                       placeholder={"Authorization=Bearer ...\nX-API-Key=..."}
-                      className="min-h-[92px] font-mono text-[12.5px]"
+                      className="min-h-92px font-mono text-xs"
                       onChange={(event) => updateDraft({ headersText: event.currentTarget.value })}
                     />
-                  </div>
-                </div>
+                  </FormField>
+                </SettingsPanel>
               )}
 
               {requiredConfig.length > 0 ? (
@@ -505,18 +503,16 @@ export function McpRegistryConfigureModal(props: {
                       {t("mcpHub.storeConfigureRequiredDesc")}
                     </p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3">
                     {requiredConfig.map((input) => {
                       const key = mcpRegistryConfigInputKey(input);
                       return (
-                        <div key={key} className="space-y-1.5">
-                          <Label
-                            htmlFor={`mcp-store-config-${key}`}
-                            className="text-xs text-muted-foreground"
-                          >
+                        <FormField key={key} density="compact">
+                          <FormFieldLabel htmlFor={`mcp-store-config-${key}`} size="compact">
                             {input.label ?? input.name}
-                          </Label>
+                          </FormFieldLabel>
                           <Input
+                            variant="plain"
                             id={`mcp-store-config-${key}`}
                             type={input.secret ? "password" : "text"}
                             value={draft.configValues[key] ?? ""}
@@ -525,13 +521,13 @@ export function McpRegistryConfigureModal(props: {
                               updateConfigValue(input, event.currentTarget.value)
                             }
                           />
-                          <div className="flex items-start gap-1.5 text-[10.5px] text-muted-foreground">
+                          <div className="flex items-start gap-1.5 text-tiny text-muted-foreground">
                             <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground/75">
                               {configTargetLabel(input, t)}
                             </span>
                             {input.description ? <span>{input.description}</span> : null}
                           </div>
-                        </div>
+                        </FormField>
                       );
                     })}
                   </div>
@@ -539,20 +535,20 @@ export function McpRegistryConfigureModal(props: {
               ) : null}
 
               {formError ? (
-                <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <SettingsNotice variant="validation">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <span>{formError}</span>
-                </div>
+                </SettingsNotice>
               ) : null}
             </div>
           </DialogBody>
 
           <DialogFooter className="flex-row flex-wrap">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button size="sm" type="button" variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>
-            <Button type="submit" className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" />
+            <Button size="sm" type="submit" className="gap-1.5">
+              <Plus className="size-3.5" />
               {t("mcpHub.storeConfigureSubmit")}
             </Button>
           </DialogFooter>

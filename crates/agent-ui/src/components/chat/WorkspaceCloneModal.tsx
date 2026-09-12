@@ -1,5 +1,5 @@
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
-import { FolderOpen, GitBranch, Loader2 } from "@liveagent/ui/components/IconSet";
+import { ArrowLeft, FolderOpen, GitBranch, Loader2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -7,6 +7,7 @@ import {
   DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type RemoteBranches = {
@@ -60,6 +62,7 @@ export function WorkspaceCloneModal({
 }: WorkspaceCloneModalProps) {
   const { t } = useLocale();
   const { pickDirectory, directoryPickerElement } = useDirectoryPicker();
+  const [step, setStep] = useState<"choose" | "clone">("choose");
   const [remoteUrl, setRemoteUrl] = useState("");
   const [parent, setParent] = useState(initialParent);
   const [name, setName] = useState("");
@@ -155,163 +158,195 @@ export function WorkspaceCloneModal({
       }}
     >
       <DialogContent
-        className="flex max-h-[90dvh] max-w-xl flex-col p-0"
+        className="flex max-h-90dvh max-w-xl flex-col p-0"
         closeDisabled={cloning}
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-3 px-6 py-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground shadow-xs">
-            <GitBranch className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <DialogTitle className="text-base leading-normal">
-              {t("chat.workspaceCreate")}
+        <DialogHeader className="flex-row items-start gap-3">
+          {step === "clone" ? (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              disabled={cloning}
+              aria-label={t("chat.workspaceCreate")}
+              onClick={() => setStep("choose")}
+            >
+              <ArrowLeft className="size-4" />
+            </Button>
+          ) : null}
+          <div className="min-w-0">
+            <DialogTitle>
+              {t(step === "choose" ? "chat.workspaceCreate" : "chat.workspaceCloneRepository")}
             </DialogTitle>
-            <DialogDescription className="mt-0.5 text-xs leading-relaxed">
-              {t("chat.workspaceCreateDescription")}
+            <DialogDescription>
+              {t(
+                step === "choose"
+                  ? "chat.workspaceCreateDescription"
+                  : "chat.workspaceCloneDescription",
+              )}
             </DialogDescription>
           </div>
         </DialogHeader>
-
-        <DialogBody className="space-y-5 px-6 py-5">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto w-full justify-start gap-3 rounded-2xl p-4 text-left"
-            onClick={() => {
-              onOpenFolder();
-              onClose();
-            }}
-          >
-            <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
-            <span>
-              <span className="block font-medium">{t("chat.workspaceOpenFolder")}</span>
-              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                {t("chat.workspaceOpenFolderDescription")}
-              </span>
-            </span>
-          </Button>
-
-          <div className="relative py-1 text-center text-xs text-muted-foreground before:absolute before:inset-x-0 before:top-1/2 before:border-t before:border-border/60">
-            <span className="relative bg-background px-3">{t("chat.workspaceOr")}</span>
-          </div>
-
-          <section className="rounded-2xl border border-border/60 bg-muted/20 p-4">
-            <div className="mb-4 flex items-start gap-3">
-              <GitBranch className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-              <div>
-                <h3 className="text-sm font-semibold">{t("chat.workspaceCloneRepository")}</h3>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  {t("chat.workspaceCloneDescription")}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="workspace-clone-url">{t("chat.workspaceCloneUrl")}</Label>
-                <Input
-                  id="workspace-clone-url"
-                  value={remoteUrl}
-                  onChange={(event) => {
-                    const nextUrl = event.currentTarget.value;
-                    setRemoteUrl(nextUrl);
-                    setBranches([]);
-                    setBranch("");
-                    setBranchesLoading(Boolean(nextUrl.trim()));
-                    setError("");
-                    if (nameIsAutomatic) setName(workspaceNameFromRemoteUrl(nextUrl));
-                  }}
-                  placeholder={t("chat.workspaceCloneUrlPlaceholder")}
-                  autoComplete="off"
-                  autoFocus
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="space-y-1.5">
-                  <Label htmlFor="workspace-clone-parent">{t("chat.workspaceCloneParent")}</Label>
-                  <Input
-                    id="workspace-clone-parent"
-                    value={parent}
-                    readOnly
-                    placeholder={t("chat.workspaceCloneParentPlaceholder")}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="self-end"
-                  onClick={() => void chooseParent()}
-                >
-                  {t("chat.workspaceCloneChooseParent")}
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="workspace-clone-name">{t("chat.workspaceCloneName")}</Label>
-                  <Input
-                    id="workspace-clone-name"
-                    className="h-10"
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.currentTarget.value);
-                      setNameIsAutomatic(false);
-                    }}
-                    placeholder={t("chat.workspaceCloneNamePlaceholder")}
-                    autoComplete="off"
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      void cloneRepository();
-                    }}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="workspace-clone-branch">{t("chat.workspaceCloneBranch")}</Label>
-                  <Select
-                    value={branch || null}
-                    onValueChange={setBranch}
-                    disabled={!branches.length || branchesLoading}
-                  >
-                    <SelectTrigger id="workspace-clone-branch" className="h-10">
-                      <SelectValue
-                        placeholder={
-                          branchesLoading
-                            ? t("chat.workspaceCloneBranchesLoading")
-                            : t("chat.workspaceCloneBranchPlaceholder")
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60 w-72 max-w-[calc(100vw-2rem)]">
-                      {branches.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-            {!cloningEnabled && cloneDisabledMessage ? (
-              <p className="mt-3 text-xs text-muted-foreground">{cloneDisabledMessage}</p>
-            ) : null}
-            {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
-            <DialogActions className="mt-4">
-              <Button variant="outline" onClick={onClose} disabled={cloning}>
-                {t("settings.cancel")}
-              </Button>
-              <Button onClick={() => void cloneRepository()} disabled={!canSubmit}>
-                {cloning ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <GitBranch className="h-4 w-4" />
+        <DialogBody>
+          {step === "choose" ? (
+            <div className="space-y-2">
+              <Button
+                variant="ghost"
+                className={cn(
+                  "h-auto w-full justify-start gap-3 rounded-xl p-4 text-left whitespace-normal",
+                  "bg-settings-tile hover:bg-settings-tile-hover",
                 )}
+                onClick={() => {
+                  onOpenFolder();
+                  onClose();
+                }}
+              >
+                <FolderOpen className="size-5 shrink-0 text-muted-foreground" />
+                <span>
+                  <span className="block text-sm font-medium">{t("chat.workspaceOpenFolder")}</span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {t("chat.workspaceOpenFolderDescription")}
+                  </span>
+                </span>
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={!cloningEnabled}
+                className={cn(
+                  "h-auto w-full justify-start gap-3 rounded-xl p-4 text-left whitespace-normal",
+                  "bg-settings-tile hover:bg-settings-tile-hover",
+                )}
+                onClick={() => setStep("clone")}
+              >
+                <GitBranch className="size-5 shrink-0 text-muted-foreground" />
+                <span>
+                  <span className="block text-sm font-medium">
+                    {t("chat.workspaceCloneRepository")}
+                  </span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {!cloningEnabled && cloneDisabledMessage
+                      ? cloneDisabledMessage
+                      : t("chat.workspaceCloneDescription")}
+                  </span>
+                </span>
+              </Button>
+            </div>
+          ) : (
+            <fieldset disabled={cloning} className="min-w-0 space-y-4">
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="workspace-clone-url">{t("chat.workspaceCloneUrl")}</Label>
+                  <Input
+                    variant="plain"
+                    id="workspace-clone-url"
+                    value={remoteUrl}
+                    onChange={(event) => {
+                      const nextUrl = event.currentTarget.value;
+                      setRemoteUrl(nextUrl);
+                      setBranches([]);
+                      setBranch("");
+                      setBranchesLoading(Boolean(nextUrl.trim()));
+                      setError("");
+                      if (nameIsAutomatic) setName(workspaceNameFromRemoteUrl(nextUrl));
+                    }}
+                    placeholder={t("chat.workspaceCloneUrlPlaceholder")}
+                    autoComplete="off"
+                    autoFocus
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="workspace-clone-parent">{t("chat.workspaceCloneParent")}</Label>
+                    <Input
+                      variant="plain"
+                      id="workspace-clone-parent"
+                      value={parent}
+                      readOnly
+                      placeholder={t("chat.workspaceCloneParentPlaceholder")}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    onClick={() => void chooseParent()}
+                  >
+                    {t("chat.workspaceCloneChooseParent")}
+                  </Button>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="workspace-clone-name">{t("chat.workspaceCloneName")}</Label>
+                    <Input
+                      variant="plain"
+                      id="workspace-clone-name"
+                      className="h-9"
+                      value={name}
+                      onChange={(event) => {
+                        setName(event.currentTarget.value);
+                        setNameIsAutomatic(false);
+                      }}
+                      placeholder={t("chat.workspaceCloneNamePlaceholder")}
+                      autoComplete="off"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void cloneRepository();
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="workspace-clone-branch">{t("chat.workspaceCloneBranch")}</Label>
+                    <Select
+                      value={branch || null}
+                      onValueChange={setBranch}
+                      disabled={!branches.length || branchesLoading}
+                    >
+                      <SelectTrigger
+                        id="workspace-clone-branch"
+                        className="h-9 w-full border-0 bg-settings-tile-hover shadow-none"
+                      >
+                        <SelectValue
+                          placeholder={
+                            branchesLoading
+                              ? t("chat.workspaceCloneBranchesLoading")
+                              : t("chat.workspaceCloneBranchPlaceholder")
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 w-72 max-w-viewport-inset-2rem">
+                        {branches.map((value) => (
+                          <SelectItem key={value} value={value}>
+                            {value}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              {!cloningEnabled && cloneDisabledMessage ? (
+                <p className="mt-3 text-xs text-muted-foreground">{cloneDisabledMessage}</p>
+              ) : null}
+              {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
+            </fieldset>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <DialogActions>
+            <Button size="sm" variant="outline" onClick={onClose} disabled={cloning}>
+              {t("settings.cancel")}
+            </Button>
+            {step === "clone" ? (
+              <Button size="sm" onClick={() => void cloneRepository()} disabled={!canSubmit}>
+                {cloning ? <Loader2 className="size-4 animate-spin" /> : null}
                 {cloning ? t("chat.workspaceCloning") : t("chat.workspaceCloneSubmit")}
               </Button>
-            </DialogActions>
-          </section>
-        </DialogBody>
+            ) : null}
+          </DialogActions>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

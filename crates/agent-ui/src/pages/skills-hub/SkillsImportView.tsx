@@ -1,16 +1,17 @@
 import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
+import { LoadingSurface } from "@liveagent/ui/components/hub/HubLoading";
 import {
   AlertTriangle,
   Check,
   Download,
   Loader2,
   RefreshCw,
-  X,
 } from "@liveagent/ui/components/IconSet";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Checkbox } from "@liveagent/ui/components/ui/checkbox";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";
+import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -29,11 +30,6 @@ export function SkillsImportView(props: {
   installedNames: ReadonlySet<string>;
   importProgress: { done: number; total: number } | null;
   importingExternalBaseDir: string | null;
-  importErrors: Array<{ baseDir: string; name: string; message: string }>;
-  importedCount: number | null;
-  importToast: string | null;
-  onDismissImportToast: () => void;
-  onDismissImportResult: () => void;
   bulkMode: boolean;
   onToggle: (baseDir: string) => void;
   onBatchToggle: (baseDirs: string[], on: boolean) => void;
@@ -50,11 +46,6 @@ export function SkillsImportView(props: {
     installedNames,
     importProgress,
     importingExternalBaseDir,
-    importErrors,
-    importedCount,
-    importToast,
-    onDismissImportToast,
-    onDismissImportResult,
     bulkMode,
     onToggle,
     onBatchToggle,
@@ -153,84 +144,17 @@ export function SkillsImportView(props: {
 
   return (
     <div className="relative h-full min-h-0">
-      {importToast || importErrors.length > 0 || (importedCount !== null && importedCount > 0) ? (
-        <div className="pointer-events-none absolute inset-x-2 top-2 z-40 flex justify-end">
-          {importToast ? (
-            <div
-              role="status"
-              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
-            >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <p className="min-w-0 flex-1 leading-relaxed text-foreground">{importToast}</p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismissImportToast}
-                className="mt-0.5 h-6 w-6 shrink-0"
-                aria-label={t("settings.close")}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ) : importErrors.length > 0 ? (
-            <div
-              role="alert"
-              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-destructive/30 bg-background px-3 py-2.5 text-sm shadow-xl"
-            >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-destructive">{t("settings.skillsImportFailed")}</p>
-                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto pr-1 text-xs leading-relaxed text-muted-foreground">
-                  {importErrors.map((failure) => (
-                    <p key={failure.baseDir} className="break-words">
-                      {failure.name}: {failure.message}
-                    </p>
-                  ))}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismissImportResult}
-                className="mt-0.5 h-6 w-6 shrink-0"
-                aria-label={t("settings.close")}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ) : (
-            <div
-              role="status"
-              className="notify-toast-enter pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-background px-3 py-2.5 text-sm shadow-xl"
-            >
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--chat-success))]" />
-              <p className="min-w-0 flex-1 leading-relaxed text-foreground">
-                {t("settings.skillsImportDone")} ({importedCount})
-              </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismissImportResult}
-                className="mt-0.5 h-6 w-6 shrink-0"
-                aria-label={t("settings.close")}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          )}
-        </div>
-      ) : null}
       <div
         className={cn(
           "h-full min-h-0 overflow-y-auto px-1.5 pb-4 pt-1.5",
-          bulkMode ? "pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-20" : null,
+          bulkMode ? "pb-safe-bottom-5rem sm:pb-20" : null,
         )}
       >
         <div className="flex flex-col gap-3">
           {error ? (
-            <GlassPanel tone="error" className="hub-panel-enter">
+            <GlassPanel tone="error">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                <AlertTriangle className="size-4 shrink-0 text-destructive" />
                 <span className="text-xs text-destructive">
                   {t("settings.skillsImportScanFailed")}: {error}
                 </span>
@@ -238,7 +162,12 @@ export function SkillsImportView(props: {
             </GlassPanel>
           ) : null}
 
-          <div className="hub-panel-enter sticky top-0 z-30 -mx-0.5 flex flex-wrap items-center justify-between gap-3 bg-background/95 px-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+          <div
+            className={cn(
+              "sticky top-0 z-30 -mx-0.5 flex flex-wrap items-center justify-between",
+              "gap-3 bg-background/95 px-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/90",
+            )}
+          >
             <SkillsImportSourceTabs
               scans={filteredScans}
               value={activeTool}
@@ -253,17 +182,17 @@ export function SkillsImportView(props: {
               <Button
                 variant="outline"
                 size="sm"
-                className="min-w-[6.75rem] justify-center gap-1.5"
+                className="min-w-27 justify-center gap-1.5"
                 disabled={loading || importing || initializing}
                 aria-busy={loading}
                 onClick={() => void handleRescan()}
               >
                 {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : rescanComplete ? (
-                  <Check className="h-3.5 w-3.5 text-[hsl(var(--chat-success))]" />
+                  <Check className="size-3.5 text-[hsl(var(--chat-success))]" />
                 ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
+                  <RefreshCw className="size-3.5" />
                 )}
                 <span aria-live="polite">
                   {loading
@@ -281,9 +210,9 @@ export function SkillsImportView(props: {
                   onClick={() => onImport()}
                 >
                   {importing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <Download className="h-3.5 w-3.5" />
+                    <Download className="size-3.5" />
                   )}
                   {importing && importProgress
                     ? `${t("settings.skillsImportProgress")} ${importProgress.done + 1}/${importProgress.total}`
@@ -295,31 +224,31 @@ export function SkillsImportView(props: {
 
           {initializing ? (
             <div
-              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+              className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4"
               role="status"
               aria-live="polite"
               aria-busy="true"
             >
               {[1, 2, 3, 4].map((item) => (
-                <div key={item} className="hub-frost-skeleton min-h-48 p-3.5">
+                <LoadingSurface variant="skeleton" key={item} className="min-h-48 p-3.5">
                   <div className="flex h-full flex-col gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="skills-skeleton-shimmer h-5 w-5 shrink-0 rounded" />
-                      <div className="skills-skeleton-shimmer h-3.5 w-28 rounded" />
+                      <Skeleton className="size-5 shrink-0 rounded" />
+                      <Skeleton className="h-3.5 w-28 rounded" />
                     </div>
                     <div className="space-y-2">
-                      <div className="skills-skeleton-shimmer h-3 w-full rounded" />
-                      <div className="skills-skeleton-shimmer h-3 w-4/5 rounded" />
+                      <Skeleton className="h-3 w-full rounded" />
+                      <Skeleton className="h-3 w-4/5 rounded" />
                     </div>
-                    <div className="skills-skeleton-shimmer mt-auto h-8 w-20 rounded-md" />
+                    <Skeleton className="mt-auto h-8 w-20 rounded-md" />
                   </div>
-                </div>
+                </LoadingSurface>
               ))}
               <span className="sr-only">{t("settings.skillsImportScanning")}</span>
             </div>
           ) : activeScan ? (
-            <div key={activeScan.tool} className="hub-panel-enter flex flex-col gap-3">
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+            <div key={activeScan.tool} className="flex flex-col gap-3">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <span className="font-mono">{activeScan.rootDir}</span>
                 {activeScan.tool === "codebuddy" && activeScan.exists ? (
                   <>
@@ -378,7 +307,7 @@ export function SkillsImportView(props: {
                         : t("settings.skillsImportSelectAll")}
                     </Button>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
                     {activeScan.skills.map((skill) => {
                       const alreadyInstalled = installedNames.has(skill.name);
                       const checked = !alreadyInstalled && selected.has(skill.baseDir);
@@ -429,12 +358,12 @@ export function SkillsImportView(props: {
                             event.currentTarget.click();
                           }}
                           className={cn(
-                            "group flex min-h-48 w-full flex-col rounded-xl border border-foreground/15 bg-card p-3.5 text-left shadow-sm transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                            alreadyInstalled
-                              ? "border-emerald-600/25"
-                              : checked
-                                ? "border-foreground bg-muted/30 shadow-sm"
-                                : "hover:border-foreground/30 hover:bg-muted/20",
+                            "group flex min-h-48 w-full flex-col",
+                            "rounded-xl p-5 text-left transition-colors",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                            checked
+                              ? "bg-settings-active"
+                              : "bg-settings-tile hover:bg-settings-tile-hover",
                             importing && !alreadyInstalled ? "opacity-60" : null,
                           )}
                         >
@@ -448,14 +377,17 @@ export function SkillsImportView(props: {
                                 onCheckedChange={() => onToggle(skill.baseDir)}
                               />
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
                                   <SearchHighlight
                                     text={skill.name}
                                     query={query}
-                                    className="truncate text-[13px] font-semibold leading-tight text-foreground"
+                                    className="line-clamp-2 text-sm font-semibold leading-5 text-foreground"
                                   />
                                   {alreadyInstalled ? (
-                                    <Badge variant="success" className="h-5 px-1.5 text-[10px]">
+                                    <Badge
+                                      variant="secondary"
+                                      className="h-5 border-0 bg-transparent px-0 text-xs text-muted-foreground"
+                                    >
                                       {t("settings.skillsImportInstalledBadge")}
                                     </Badge>
                                   ) : null}
@@ -463,7 +395,7 @@ export function SkillsImportView(props: {
                               </div>
                             </div>
                             <p
-                              className="line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground"
+                              className="line-clamp-2 min-h-10 text-sm leading-5 text-foreground/80"
                               title={skill.description}
                             >
                               <SearchHighlight
@@ -473,16 +405,20 @@ export function SkillsImportView(props: {
                             </p>
                             <div className="mt-auto space-y-2.5">
                               <span
-                                className="block truncate px-0.5 text-[10.5px] text-muted-foreground"
+                                className="block truncate text-xs text-muted-foreground"
                                 title={skill.baseDir}
                               >
                                 <SearchHighlight text={skill.baseDir} query={query} />
                               </span>
                               <Button
                                 type="button"
-                                variant={alreadyInstalled ? "outline" : "default"}
+                                variant="ghost"
                                 size="sm"
-                                className="h-9 w-full gap-1.5 rounded-xl"
+                                className={cn(
+                                  "ml-auto flex gap-1.5 rounded-lg bg-background text-foreground hover:bg-settings-active",
+                                  alreadyInstalled &&
+                                    "bg-transparent text-muted-foreground disabled:opacity-100",
+                                )}
                                 disabled={locked}
                                 aria-busy={installing}
                                 onClick={(event) => {
@@ -491,11 +427,11 @@ export function SkillsImportView(props: {
                                 }}
                               >
                                 {installing ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <Loader2 className="size-3.5 animate-spin" />
                                 ) : alreadyInstalled ? (
-                                  <Check className="h-3.5 w-3.5" />
+                                  <Check className="size-3.5" />
                                 ) : (
-                                  <Download className="h-3.5 w-3.5" />
+                                  <Download className="size-3.5" />
                                 )}
                                 {installing
                                   ? t("settings.skillsImportProgress")
@@ -517,10 +453,17 @@ export function SkillsImportView(props: {
       </div>
 
       {bulkMode ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-1 z-40 flex justify-center px-2 max-sm:bottom-[calc(0.25rem+env(safe-area-inset-bottom))]">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-1 z-40 flex justify-center px-2",
+            "max-sm:bottom-safe-bottom-offset-compact",
+          )}
+        >
           <div
             className={cn(
-              "hub-panel-enter pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/95 text-[12.5px] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
+              "pointer-events-auto flex max-w-full flex-wrap items-center gap-2",
+              "rounded-full border border-border/50 bg-background/95 text-xs shadow-ui-skillshubpage-51",
+              "max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
               importableSelectedCount > 0 || importing ? "py-2 pl-4 pr-2" : "px-4 py-2.5",
             )}
           >
@@ -543,7 +486,7 @@ export function SkillsImportView(props: {
                 >
                   {importing && importProgress ? (
                     <>
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="mr-1.5 size-3.5 animate-spin" />
                       {`${t("settings.skillsImportProgress")} ${importProgress.done + 1}/${importProgress.total}`}
                     </>
                   ) : (

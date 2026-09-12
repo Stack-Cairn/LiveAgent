@@ -492,8 +492,13 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
         subtitle: t("projectTools.fileTree.deleteConfirmDescription"),
         description: (
           <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive">
-              <Trash2 className="h-4 w-4" />
+            <div
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center",
+                "rounded-xl border border-destructive/25 bg-destructive/10 text-destructive",
+              )}
+            >
+              <Trash2 className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-foreground">
@@ -561,9 +566,14 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
 
   if (!initialized) {
     return (
-      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted/80">
-          <FolderOpen className="h-6 w-6 text-muted-foreground" />
+      <div
+        className={cn(
+          "flex h-full min-h-0 flex-col items-center justify-center gap-4 px-6",
+          "text-center",
+        )}
+      >
+        <div className="flex size-12 items-center justify-center rounded-xl bg-muted/80">
+          <FolderOpen className="size-6 text-muted-foreground" />
         </div>
         <div className="flex flex-col gap-1">
           <div className="text-sm font-medium text-foreground">{t("projectTools.newFileTree")}</div>
@@ -590,25 +600,25 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
     <div ref={panelRef} className="relative flex h-full min-h-0 select-none flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder={t("projectTools.fileTree.searchPlaceholder")}
-            className="h-8 pl-7 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
+            className="h-8 pl-7 text-xs placeholder:text-xs"
           />
         </div>
         <Button
           variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-lg"
+          size="icon-sm"
+          className="rounded-lg"
           title={t("projectTools.fileTree.refresh")}
           onClick={() => {
             void onRefreshExternalRoots?.();
             refreshVisible();
           }}
         >
-          <RefreshCw className="h-4 w-4" />
+          <RefreshCw className="size-4" />
         </Button>
       </div>
 
@@ -631,31 +641,31 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
               }
             }}
             placeholder={actionPlaceholder}
-            className="h-8 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
+            className="h-8 text-xs placeholder:text-xs"
           />
           <Button
-            size="icon"
+            size="icon-sm"
             variant="ghost"
-            className="h-8 w-8 rounded-lg"
+            className="rounded-lg"
             disabled={busyAction}
             onClick={() => void finishAction()}
           >
             {busyAction ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Check className="h-4 w-4" />
+              <Check className="size-4" />
             )}
           </Button>
           <Button
-            size="icon"
+            size="icon-sm"
             variant="ghost"
-            className="h-8 w-8 rounded-lg"
+            className="rounded-lg"
             onClick={() => {
               setPendingAction(null);
               setPendingTargetPath(null);
             }}
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </Button>
         </div>
       ) : null}
@@ -667,10 +677,15 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
       ) : null}
 
       {query.trim() ? (
-        <div className="project-file-tree-panel-scroll max-h-40 shrink-0 overflow-auto border-b border-border/60 px-2 py-2">
+        <div
+          className={cn(
+            "project-file-tree-panel-scroll max-h-40 shrink-0 overflow-auto border-b border-border/60 p-2",
+            "web:pb-[max(var(--spacing-16px),env(safe-area-inset-bottom))] web:[scroll-padding-bottom:max(var(--spacing-16px),env(safe-area-inset-bottom))]",
+          )}
+        >
           {search.loading ? (
             <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" />
               {t("projectTools.fileTree.searching")}
             </div>
           ) : search.error ? (
@@ -688,7 +703,8 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
                   type="button"
                   draggable
                   className={cn(
-                    "flex w-full select-none items-center gap-1.5 rounded-md px-2 text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground",
+                    "flex w-full select-none items-center gap-1.5 rounded-md px-2",
+                    "text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground",
                     entry.hidden && "opacity-60 hover:opacity-80",
                   )}
                   style={{ minHeight: FILE_TREE_ROW_HEIGHT }}
@@ -699,14 +715,14 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
                   }
                   onDragEnd={finishWorkspacePathDrag}
                 >
-                  <TypeIcon className="h-3.5 w-3.5 shrink-0" />
+                  <TypeIcon className="size-3.5 shrink-0" />
                   <span className="min-w-0 truncate">{entry.path}</span>
                 </button>
               );
             })
           )}
           {search.truncated ? (
-            <div className="px-2 pt-1 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+            <div className="px-2 pt-1 text-xs text-muted-foreground">
               {t("projectTools.fileTree.resultsTruncated")}
             </div>
           ) : null}
@@ -716,7 +732,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
       <div
         role="tree"
         ref={scrollRef}
-        className="project-file-tree-panel-scroll min-h-0 flex-1 select-none overflow-auto px-2 py-2"
+        className="project-file-tree-panel-scroll min-h-0 flex-1 select-none overflow-auto p-2 web:pb-[max(var(--spacing-16px),env(safe-area-inset-bottom))] web:[scroll-padding-bottom:max(var(--spacing-16px),env(safe-area-inset-bottom))]"
         onContextMenu={(event) => openContextMenu(event, selectedPath || ROOT_PATH)}
       >
         <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>
