@@ -13,6 +13,7 @@
 - [ui-style-variables.md](ui-style-variables.md)
 - [ui-toast.md](ui-toast.md)
 - [ui-tsx-split-audit.md](ui-tsx-split-audit.md)
+- [pr-description.md](pr-description.md)
 
 ## 合并前清理
 
