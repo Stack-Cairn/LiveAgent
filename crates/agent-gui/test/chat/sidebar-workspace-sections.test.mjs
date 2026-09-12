@@ -99,7 +99,7 @@ const baseProps = {
   hasMore: false, isLoadingMore: false, isOpen: true, showProjects: true, canShareConversations: true,
   sharedConversationCount: 1, renamingId: null, renameDraft: "", activeProjectId: "b",
   projects: [{ id: "a", name: "Pinned workspace", path: "/repo/a", isPinned: true }, { id: "b", name: "Workspace B", path: "/repo/b" }],
-  workspaceHistory: new Map([["/repo/b", { limit: 10, loaded: true, excludedIds: new Set() }]]),
+  workspaceHistory: new Map([["/repo/b", { limit: 10, loaded: true }]]),
   onCancelRename() {},
   onRecentCollapsedChange() { assert.fail("workspace bulk selection must not save recent-list preferences"); },
 };

@@ -34,7 +34,6 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
-import { normalizeArchivedSidebarConversations } from "../sidebar/preferences";
 import { normalizeModelFailoverSettings } from "./modelFailover";
 import {
   normalizeChatTranscriptSettings,
@@ -1429,7 +1428,6 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
       ...new Set(normalizeStringArray(obj.workspaceProjectOrder).map(workspaceProjectPathKey)),
     ],
     sidebarPinnedOrder: [...new Set(normalizeStringArray(obj.sidebarPinnedOrder))],
-    archivedConversations: normalizeArchivedSidebarConversations(obj.archivedConversations),
     activeWorkspaceProjectId:
       typeof obj.activeWorkspaceProjectId === "string" && obj.activeWorkspaceProjectId.trim()
         ? obj.activeWorkspaceProjectId.trim()
@@ -1667,7 +1665,6 @@ export function getDefaultSettings(): AppSettings {
       archivedWorkspaceProjectPaths: [],
       workspaceProjectOrder: [],
       sidebarPinnedOrder: [],
-      archivedConversations: [],
       workspaceResourceSettings: {},
       systemProxy: getDefaultSystemProxyConfig(),
     },

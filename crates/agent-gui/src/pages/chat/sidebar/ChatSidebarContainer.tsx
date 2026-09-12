@@ -12,10 +12,7 @@ import {
 } from "@liveagent/ui/components/chat/ChatHistorySidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SidebarBatchDeleteOptions } from "@liveagent/ui/lib/sidebar/batchDelete";
-import {
-  deleteSidebarConversation,
-  deleteSidebarConversations,
-} from "@liveagent/ui/lib/sidebar/batchDelete";
+import { deleteSidebarConversations } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarContainerState } from "@liveagent/ui/lib/sidebar/useSidebarContainerState";
@@ -119,8 +116,6 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     projects,
     onConversationDeleted,
     onConversationCwdChanged,
-    archivedConversations,
-    onSetConversationArchived,
   } = props;
   const { t } = useLocale();
 
@@ -206,22 +201,16 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     [onConversationCwdChanged, store],
   );
 
-  const removeConversation = useCallback(
-    (id: string) =>
-      deleteSidebarConversation(id, { store, archivedConversations, onSetConversationArchived }),
-    [store, archivedConversations, onSetConversationArchived],
-  );
-
   const handleDeleteConversation = useCallback(
     (id: string) => {
       store.clearMutationError(id);
-      void removeConversation(id).then((removed) => {
+      void store.remove(id).then((removed) => {
         if (removed) {
           onConversationDeleted(id);
         }
       });
     },
-    [onConversationDeleted, store, removeConversation],
+    [onConversationDeleted, store],
   );
 
   const handleDeleteConversations = useCallback(
@@ -230,7 +219,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
         ids,
         async (id) => {
           store.clearMutationError(id);
-          return removeConversation(id);
+          return store.remove(id);
         },
         options,
       );
@@ -239,7 +228,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       }
       return result;
     },
-    [onConversationDeleted, store, removeConversation],
+    [onConversationDeleted, store],
   );
 
   const handleLoadMore = useCallback(() => {

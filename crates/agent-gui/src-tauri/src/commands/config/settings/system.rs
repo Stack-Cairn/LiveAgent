@@ -654,7 +654,6 @@ fn save_system_with_default_workdir(
         [
             SYSTEM_WORKSPACE_PROJECT_ORDER_KEY,
             SYSTEM_SIDEBAR_PINNED_ORDER_KEY,
-            SYSTEM_ARCHIVED_CONVERSATIONS_KEY,
         ]
         .into_iter()
         .filter(|key| system.contains_key(*key)),

@@ -162,8 +162,6 @@ function HistoryListLoadingSkeleton() {
 export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHistorySidebarProps) {
   const {
     items,
-    archivedConversations = [],
-    onSetConversationArchived,
     onReorderProjects,
     pinnedOrder,
     onReorderPinned,
@@ -271,10 +269,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null);
   const [isMobileMenuLayout, setIsMobileMenuLayout] = useState(isMobileSidebarLayout);
-  const archivedIds = useMemo(
-    () => new Set(archivedConversations.map((item) => item.id)),
-    [archivedConversations],
-  );
   const sidebarSelectedProjectRef = useRef<string | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<ReadonlySet<string>>(
     () => new Set(activeProjectId ? [activeProjectId] : []),
@@ -293,17 +287,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     for (const project of projects) {
       if (project.isPinned ? pinnedCollapsed : projectsCollapsed) continue;
       const history = workspaceHistory?.get(workspaceProjectPathKey(project.path));
-      const archiveChanged =
-        history &&
-        (history.excludedIds.size !== archivedIds.size ||
-          Array.from(archivedIds).some((id) => !history.excludedIds.has(id)));
-      if (expandedProjectIds.has(project.id) && (!history || archiveChanged)) {
-        void onLoadWorkspaceHistory?.(project.path, false, archivedIds);
+      if (expandedProjectIds.has(project.id) && !history) {
+        void onLoadWorkspaceHistory?.(project.path, false);
       }
     }
   }, [
     expandedProjectIds,
-    archivedIds,
     isOpen,
     onLoadWorkspaceHistory,
     projects,
@@ -322,11 +311,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     });
   };
 
-  const [archivedConversationsOpen, setArchivedConversationsOpen] = useState(false);
-  const unarchivedItems = useMemo(
-    () => items.filter((item) => !archivedIds.has(item.id)),
-    [archivedIds, items],
-  );
   const itemById = useMemo(() => {
     const index = new Map<string, SidebarConversation>();
     for (const item of items) {
@@ -336,38 +320,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     }
     return index;
   }, [items]);
-  const pinnedConversations = useMemo(
-    () => unarchivedItems.filter((item) => item.isPinned),
-    [unarchivedItems],
-  );
-  const archivedItems = useMemo(
-    () =>
-      archivedConversations.map(
-        (entry): SidebarConversation =>
-          itemById.get(entry.id) ?? {
-            ...entry,
-            providerId: "",
-            model: "",
-            createdAt: 0,
-            updatedAt: 0,
-          },
-      ),
-    [archivedConversations, itemById],
-  );
-  const handleSetConversationArchived = useStableEvent(
-    (item: SidebarConversation, archived: boolean) => {
-      if (
-        sectionsDisabled ||
-        busyConversationIds.has(item.id) ||
-        runningConversationIds.has(item.id) ||
-        item.isPending
-      )
-        return;
-      setOpenMenuId(null);
-      onSetConversationArchived?.(item, archived);
-    },
-  );
-
+  const pinnedConversations = useMemo(() => items.filter((item) => item.isPinned), [items]);
   const currentConversationWorkdir = useMemo(
     () => itemById.get(currentConversationId)?.cwd,
     [currentConversationId, itemById],
@@ -444,7 +397,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const hiddenProjectCount = slicedSections.hiddenProjectCount;
   const projectConversations = useMemo(() => {
     const result = new Map<string, SidebarConversation[]>();
-    for (const item of unarchivedItems) {
+    for (const item of items) {
       if (item.isPinned) continue;
       const key = workspaceProjectPathKey(item.cwd ?? "");
       const group = result.get(key) ?? [];
@@ -452,7 +405,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       result.set(key, group);
     }
     return result;
-  }, [unarchivedItems]);
+  }, [items]);
   const visibleProjectConversations = useCallback(
     (project: WorkspaceProject) => {
       const key = workspaceProjectPathKey(project.path);
@@ -477,7 +430,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     [activeProjectId, revealingSearch],
   );
   const visibleItems = useMemo(() => {
-    if (!showProjects) return unarchivedItems;
+    if (!showProjects) return items;
     const visibleProjects = [
       ...(projectsCollapsed
         ? []
@@ -505,7 +458,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     ];
   }, [
     expandedProjectIds,
-    unarchivedItems,
+    items,
     pinnedEntries,
     projectsCollapsed,
     pinnedCollapsed,
@@ -1006,18 +959,15 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   // Divider slot between the pinned block and the rest: index of the first
   // unpinned row, only when at least one pinned row sits above it.
   const firstUnpinnedHistoryIndex = useMemo(() => {
-    if (unarchivedItems[0]?.isPinned !== true) {
+    if (items[0]?.isPinned !== true) {
       return -1;
     }
-    const index = unarchivedItems.findIndex((item) => item.isPinned !== true);
+    const index = items.findIndex((item) => item.isPinned !== true);
     return index > 0 ? index : -1;
-  }, [unarchivedItems]);
-  const getHistoryItemKey = useCallback(
-    (index: number) => unarchivedItems[index]?.id ?? index,
-    [unarchivedItems],
-  );
+  }, [items]);
+  const getHistoryItemKey = useCallback((index: number) => items[index]?.id ?? index, [items]);
   const historyVirtualizer = useVirtualizer({
-    count: showProjects ? 0 : unarchivedItems.length,
+    count: showProjects ? 0 : items.length,
     getScrollElement: () => historyScrollRef.current,
     estimateSize: () => HISTORY_ROW_ESTIMATED_HEIGHT + HISTORY_ROW_GAP,
     getItemKey: getHistoryItemKey,
@@ -1061,7 +1011,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       if (!row) return;
       row.scrollIntoView({ block: "nearest" });
     } else {
-      const index = unarchivedItems.findIndex((item) => item.id === revealedSearchConversationId);
+      const index = items.findIndex((item) => item.id === revealedSearchConversationId);
       if (index < 0) return;
       historyVirtualizer.scrollToIndex(index, { align: "auto" });
     }
@@ -1070,7 +1020,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     currentConversationId,
     historyVirtualizer,
     isOpen,
-    unarchivedItems,
+    items,
     showProjects,
     projects,
     activeProjectId,
@@ -1137,16 +1087,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const showWorkspaceFolderDrop = workspaceFolderDropActive && !reorder.draggingKey;
 
   const renderHistoryRow = useCallback(
-    (item: SidebarConversation, showIcon = false, archived = false) => (
+    (item: SidebarConversation, showIcon = false) => (
       <HistoryRow
         showIcon={showIcon}
-        reorderKey={
-          showIcon && showProjects && !archived ? sidebarConversationOrderKey(item.id) : undefined
-        }
+        reorderKey={showIcon && showProjects ? sidebarConversationOrderKey(item.id) : undefined}
         onReorderPointerDown={
-          showIcon && showProjects && !archived && onReorderPinned
-            ? reorder.onPointerDown
-            : undefined
+          showIcon && showProjects && onReorderPinned ? reorder.onPointerDown : undefined
         }
         dropPosition={
           reorder.dropTarget?.key === sidebarConversationOrderKey(item.id)
@@ -1154,8 +1100,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             : undefined
         }
         isDragging={reorder.draggingKey === sidebarConversationOrderKey(item.id)}
-        isArchived={archived}
-        onSetArchived={onSetConversationArchived ? handleSetConversationArchived : undefined}
         key={item.id}
         item={item}
         isActive={currentConversationId === item.id}
@@ -1202,8 +1146,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       reorder.dropTarget,
       reorder.draggingKey,
       currentConversationId,
-      handleSetConversationArchived,
-      onSetConversationArchived,
       handleCancelRename,
       handleCommitRename,
       handleDeleteConversation,
@@ -1269,7 +1211,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           <button
             type="button"
             disabled={sectionsDisabled || state?.loading}
-            onClick={() => void onLoadWorkspaceHistory?.(project.path, !state?.error, archivedIds)}
+            onClick={() => void onLoadWorkspaceHistory?.(project.path, !state?.error)}
             className={cn(
               "flex h-30px w-full items-center rounded-md px-2",
               "text-left text-sm font-normal leading-5 text-foreground/60",
@@ -1287,9 +1229,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     );
   };
 
-  const hasVisibleActiveConversation =
-    visibleItems.some((item) => item.id === currentConversationId) ||
-    (archivedConversationsOpen && archivedItems.some((item) => item.id === currentConversationId));
+  const hasVisibleActiveConversation = visibleItems.some(
+    (item) => item.id === currentConversationId,
+  );
   const renderWorkspaceProject = (
     project: WorkspaceProject,
     indented = false,
@@ -1348,29 +1290,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       </Fragment>
     );
   };
-  const renderArchivedConversations = () =>
-    archivedItems.length > 0 ? (
-      <div className="py-2">
-        <button
-          type="button"
-          onClick={() => setArchivedConversationsOpen((open) => !open)}
-          aria-expanded={archivedConversationsOpen}
-          className={cn(
-            "flex w-full items-center gap-1 rounded-md px-2 py-1",
-            "text-xs font-medium text-muted-foreground",
-            "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-        >
-          <ChevronRight
-            className={cn("size-3 transition-transform", archivedConversationsOpen && "rotate-90")}
-          />
-          {t("chat.archivedConversations").replace("{count}", String(archivedItems.length))}
-        </button>
-        {archivedConversationsOpen &&
-          archivedItems.map((item) => renderHistoryRow(item, false, true))}
-      </div>
-    ) : null;
-
   return (
     <aside
       aria-hidden={!isOpen}
@@ -1768,7 +1687,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           : null}
                       </div>
                     ) : null}
-                    {renderArchivedConversations()}
                   </div>
                 </div>
               </section>
@@ -2027,7 +1945,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   style={{ height: historyVirtualizer.getTotalSize() }}
                 >
                   {virtualHistoryRows.map((virtualRow) => {
-                    const item = unarchivedItems[virtualRow.index];
+                    const item = items[virtualRow.index];
                     if (!item) return null;
 
                     return (
@@ -2058,7 +1976,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   </p>
                 </div>
               ) : null}
-              {renderArchivedConversations()}
               {items.length > 0 && (hasMore || isLoadingMore) ? (
                 <button
                   type="button"

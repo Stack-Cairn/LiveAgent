@@ -28,6 +28,7 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useAutomation } from "@liveagent/ui/lib/automation/index";
 import type { GatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
+import { cachedDateTimeFormat, cachedNumberFormat } from "@liveagent/ui/lib/shared/intlFormatters";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -209,7 +210,7 @@ function formatClock(ms: number) {
   if (!ms) {
     return "--:--:--";
   }
-  return new Intl.DateTimeFormat("zh-CN", {
+  return cachedDateTimeFormat("zh-CN", "status-dashboard-clock", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -218,9 +219,10 @@ function formatClock(ms: number) {
 }
 
 function compactNumber(value: number) {
-  return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(
-    Math.max(0, value),
-  );
+  return cachedNumberFormat("zh-CN", "status-dashboard-compact", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Math.max(0, value));
 }
 
 function percentage(value: number) {

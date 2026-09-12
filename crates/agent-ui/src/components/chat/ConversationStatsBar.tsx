@@ -1,4 +1,5 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { useDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useState } from "react";
 import { canManualCompact, contextUsageRatio } from "../../lib/chat/contextUsage";
@@ -28,12 +29,16 @@ type StatGroup = {
 
 /** 运行中每秒重渲染一次，把 *RunningSinceAt 折算进显示值；空闲时零定时器。 */
 function useRunningHeartbeat(running: boolean): number {
+  const hidden = useDocumentHidden();
   const [, setBeat] = useState(0);
   useEffect(() => {
-    if (!running) return;
+    // 窗口不可见时不起心跳：这些帧用户看不到，代价却是每秒重渲染一次统计条
+    // （连带重建其中的 formatter、以及在长会话里重排可见行邻域）。重新可见时
+    // hidden 翻转会重启 effect，读数立刻回到当前值。
+    if (!running || hidden) return;
     const timer = setInterval(() => setBeat((beat) => beat + 1), HEARTBEAT_MS);
     return () => clearInterval(timer);
-  }, [running]);
+  }, [hidden, running]);
   return Date.now();
 }
 

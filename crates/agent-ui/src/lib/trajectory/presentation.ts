@@ -5,6 +5,7 @@
  * 记录翻译成 i18n key 与格式化数值，真正的取词留给组件。
  */
 
+import { cachedDateTimeFormat, cachedNumberFormat } from "../shared/intlFormatters";
 import type {
   TrajectoryHeaderChange,
   TrajectoryLedger,
@@ -81,9 +82,9 @@ export function formatTrajectoryDuration(milliseconds: number | null, locale: st
   if (milliseconds === null || !Number.isFinite(milliseconds)) return "—";
   const rounded = Math.max(0, milliseconds);
   if (rounded < 1000) {
-    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(rounded)} ms`;
+    return `${cachedNumberFormat(locale, "integer-0", { maximumFractionDigits: 0 }).format(rounded)} ms`;
   }
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(rounded / 1000)} s`;
+  return `${cachedNumberFormat(locale, "decimal-2", { maximumFractionDigits: 2 }).format(rounded / 1000)} s`;
 }
 
 export function formatTrajectorySeconds(seconds: number | null, locale: string): string {
@@ -92,17 +93,17 @@ export function formatTrajectorySeconds(seconds: number | null, locale: string):
 
 export function formatTrajectoryCount(value: number | undefined, locale: string): string {
   if (value === undefined || !Number.isFinite(value)) return "—";
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+  return cachedNumberFormat(locale, "integer-0", { maximumFractionDigits: 0 }).format(value);
 }
 
 export function formatTrajectoryClock(timestamp: number | null, locale: string): string {
   if (timestamp === null || !Number.isFinite(timestamp)) return "—";
-  return new Date(timestamp).toLocaleTimeString(locale, {
+  return cachedDateTimeFormat(locale, "clock-ms", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     fractionalSecondDigits: 3,
-  });
+  }).format(new Date(timestamp));
 }
 
 /** 解码吞吐；缺少任一时序事实时返回 null 而不是估算。 */

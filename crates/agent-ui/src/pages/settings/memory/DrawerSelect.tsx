@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 
 export type DrawerSelectOption = {
   value: string;
@@ -22,7 +23,7 @@ export function DrawerSelect(props: {
   className?: string;
 }) {
   const { value, onValueChange, options, ariaLabel, placeholder, disabled, className } = props;
-  const triggerClass = [
+  const triggerClass = cn(
     "group/drawer-select inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm leading-none text-foreground/90 shadow-xs",
     "outline-none transition-colors duration-150",
     "hover:bg-accent/40",
@@ -31,9 +32,7 @@ export function DrawerSelect(props: {
     "focus-visible:outline-none focus-visible:ring-0",
     "disabled:cursor-not-allowed disabled:opacity-50",
     className,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  );
 
   return (
     <Select items={options} value={value} onValueChange={onValueChange} disabled={disabled}>

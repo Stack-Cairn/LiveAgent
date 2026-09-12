@@ -32,7 +32,13 @@ const DEFAULT_WAIT_MS: u64 = 30_000;
 const MAX_WAIT_MS: u64 = 300_000;
 const WAIT_POLL_MS: u64 = 50;
 /// Rate limit for pid-probing restored entries (no Child handle to poll).
-const RESTORED_PROBE_INTERVAL_MS: u128 = 2000;
+///
+/// 每次探测都是一次 `fork/exec`（`ps -p <pid> -o etime=`），而这条 tick 是
+/// 常驻的：只要 journal 里还有上一轮遗留的 isolated 进程，就会一直每 2s 起一个
+/// 子进程。遗留进程的存活粒度不需要秒级——15s 足以在面板上及时反映它退出，
+/// 而空闲时少起 7 倍的短命进程（实测报告里主进程无操作也持续占用 CPU 的一条
+/// 来源）。
+const RESTORED_PROBE_INTERVAL_MS: u128 = 15_000;
 /// `ps -o etime` has second granularity; a restored pid whose probed start
 /// time drifts beyond this from the journaled one is a reused pid, not ours.
 const START_TIME_TOLERANCE_MS: i64 = 60_000;

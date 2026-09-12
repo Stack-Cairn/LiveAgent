@@ -24,6 +24,7 @@ import { RadioGroup, RadioGroupItem } from "@liveagent/ui/components/ui/radio-gr
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
+import { cachedDateTimeFormat } from "@liveagent/ui/lib/shared/intlFormatters";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
@@ -68,7 +69,7 @@ function formatConversationTime(timestamp: number | undefined, locale: string, f
   if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp <= 0) {
     return fallback;
   }
-  return new Intl.DateTimeFormat(locale, {
+  return cachedDateTimeFormat(locale, "shared-history-time", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",

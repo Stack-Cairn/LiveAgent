@@ -11,7 +11,7 @@ test("drawer selects show translated labels before opening and update with the l
   const host = document.body.appendChild(document.createElement("div"));
   const root = env.createRoot(host);
   const render = (value, label, disabled = false) => env.act(async () => root.render(env.React.createElement(DrawerSelect, {
-    value, options: [{ value, label }], ariaLabel: "setting", disabled, onValueChange() {},
+    key: value, value, options: [{ value, label }], ariaLabel: "setting", disabled, onValueChange() {},
   })));
   try {
     for (const [value, label] of [["none", "不自动执行"], ["all", "全部（全局 + 所有项目）"], ["conservative", "保守模式"]]) {

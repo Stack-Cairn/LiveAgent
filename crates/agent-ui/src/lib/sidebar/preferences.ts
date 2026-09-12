@@ -1,38 +1,6 @@
-import type { AppSettings, WorkspaceProject } from "../settings/types";
+import type { WorkspaceProject } from "../settings/types";
 import { workspaceProjectPathKey } from "../settings/workspaceProjects";
 import type { SidebarConversation } from "./types";
-
-export type ArchivedSidebarConversation = Pick<SidebarConversation, "id" | "title" | "cwd">;
-
-export function normalizeArchivedSidebarConversations(
-  input: unknown,
-): ArchivedSidebarConversation[] {
-  if (!Array.isArray(input)) return [];
-  const entries = new Map<string, ArchivedSidebarConversation>();
-  for (const item of input) {
-    if (!item || typeof item !== "object" || typeof item.id !== "string" || !item.id.trim())
-      continue;
-    entries.set(item.id.trim(), {
-      id: item.id.trim(),
-      title:
-        typeof item.title === "string" && item.title.trim() ? item.title.trim() : item.id.trim(),
-      cwd: typeof item.cwd === "string" ? item.cwd.trim() : undefined,
-    });
-  }
-  return Array.from(entries.values());
-}
-
-export function setSidebarConversationArchived(
-  settings: AppSettings,
-  item: ArchivedSidebarConversation,
-  archived: boolean,
-): AppSettings {
-  const entries = (settings.system.archivedConversations ?? []).filter(
-    (entry) => entry.id !== item.id,
-  );
-  if (archived) entries.push({ id: item.id, title: item.title, cwd: item.cwd });
-  return { ...settings, system: { ...settings.system, archivedConversations: entries } };
-}
 
 // Reordering never changes a project's pinned status or group membership.
 export function reorderSidebarProjects(

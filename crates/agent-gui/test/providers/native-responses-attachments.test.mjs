@@ -80,6 +80,127 @@ test("OpenAI Responses native attachment adapter adds input_image and input_file
   assert.equal(result.input[0].content[2].file_data, "data:application/pdf;base64,cGRm");
 });
 
+test("DeepSeek Responses native attachment adapter inlines images only", async () => {
+  // DeepSeek 的 Responses wire 与 OpenAI 同形，官方《图像理解》指南明确
+  // input_image 只允许出现在 user 消息里，file / input_file 只用于图片（没有
+  // 承诺 PDF 的 document 结构），所以图片内联、PDF 一律退回 Read。
+  const calls = [];
+  const loader = createLoader(async (command, args) => {
+    calls.push({ command, args });
+    if (args.kind === "image") {
+      return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
+    }
+    return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
+    {
+      relativePath: "uploads/1/screenshot.png",
+      absolutePath: "/workspace/uploads/1/screenshot.png",
+      fileName: "screenshot.png",
+      kind: "image",
+      sizeBytes: 5,
+    },
+    {
+      relativePath: "uploads/1/report.pdf",
+      absolutePath: "/workspace/uploads/1/report.pdf",
+      fileName: "report.pdf",
+      kind: "pdf",
+      sizeBytes: 3,
+    },
+  ]);
+
+  const payload = {
+    input: [
+      {
+        role: "user",
+        content: [{ type: "input_text", text: message.content }],
+      },
+    ],
+  };
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToResponsesPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "deepseek-responses", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: "https://api.deepseek.com",
+    });
+
+  assert.equal(calls.length, 1, "the pdf must stay on the Read path");
+  assert.equal(calls[0].args.kind, "image");
+  assert.equal(result.input[0].content[0].type, "input_text");
+  assert.match(result.input[0].content[0].text, /included in this DeepSeek Responses request/);
+  assert.match(result.input[0].content[0].text, /screenshot\.png \(image, 5 B\); inlined/);
+  assert.doesNotMatch(result.input[0].content[0].text, /report\.pdf \(pdf, 3 B\); inlined/);
+  assert.deepEqual(
+    result.input[0].content.slice(1).map((part) => part.type),
+    ["input_image"],
+  );
+  assert.equal(result.input[0].content[1].image_url, "data:image/png;base64,aW1hZ2U=");
+  assert.equal(result.input[0].content[1].detail, "auto");
+});
+
+test("DeepSeek Responses native attachment adapter skips images for text-only models", async () => {
+  const calls = [];
+  const loader = createLoader(async (command, args) => {
+    calls.push({ command, args });
+    return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
+  });
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect this", [
+    {
+      relativePath: "uploads/1/screenshot.png",
+      absolutePath: "/workspace/uploads/1/screenshot.png",
+      fileName: "screenshot.png",
+      kind: "image",
+      sizeBytes: 5,
+    },
+  ]);
+  const payload = {
+    input: [{ role: "user", content: [{ type: "input_text", text: message.content }] }],
+  };
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToResponsesPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "deepseek-responses", input: ["text"] },
+      workdir: "/workspace",
+      baseUrl: "https://api.deepseek.com",
+    });
+
+  assert.equal(calls.length, 0, "a text-only model must not read image bytes");
+  assert.equal(result, payload, "an unchanged payload keeps identity");
+});
+
+test("DeepSeek Responses native attachments hook is installed only for the deepseek provider", () => {
+  const nativeAttachments = createLoader(async () => ({})).loadModule(
+    "src/lib/providers/nativeResponsesAttachments.ts",
+  );
+  const params = {
+    context: { messages: [] },
+    model: { api: "deepseek-responses", input: ["text", "image"] },
+    workdir: "/workspace",
+    baseUrl: "https://api.deepseek.com",
+  };
+
+  const installed = nativeAttachments.attachOpenAIResponsesNativeAttachments(
+    {},
+    { ...params, providerId: "deepseek" },
+  );
+  assert.equal(typeof installed.onPayload, "function");
+
+  const skipped = nativeAttachments.attachOpenAIResponsesNativeAttachments(
+    {},
+    { ...params, providerId: "claude_code" },
+  );
+  assert.equal(skipped.onPayload, undefined);
+});
+
 test("OpenAI Chat Completions native attachment adapter adds image_url blocks", async () => {
   const calls = [];
   const loader = createLoader(async (command, args) => {

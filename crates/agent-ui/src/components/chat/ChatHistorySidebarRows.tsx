@@ -75,6 +75,9 @@ type PendingWorkspaceProjectAction = {
   mode: "remove" | "deleteWorktree";
 };
 
+const CONVERSATION_MENU_ITEM_CLASS = "gap-2 text-xs";
+const CONVERSATION_MENU_ICON_CLASS = "size-3.5 shrink-0";
+
 const MOBILE_MENU_LONG_PRESS_MS = 520;
 const MOBILE_MENU_MOVE_TOLERANCE_PX = 10;
 
@@ -106,8 +109,6 @@ type HistoryRowProps = {
   dropPosition?: "before" | "after";
 
   showIcon?: boolean;
-  isArchived?: boolean;
-  onSetArchived?: (item: SidebarConversation, archived: boolean) => void;
   item: SidebarConversation;
   isActive: boolean;
   isBusy: boolean;
@@ -179,8 +180,6 @@ function areHistoryRowPropsEqual(previous: HistoryRowProps, next: HistoryRowProp
     previous.onReorderPointerDown === next.onReorderPointerDown &&
     previous.isDragging === next.isDragging &&
     previous.dropPosition === next.dropPosition &&
-    previous.isArchived === next.isArchived &&
-    previous.onSetArchived === next.onSetArchived &&
     previous.isActive === next.isActive &&
     previous.isBusy === next.isBusy &&
     previous.isRunning === next.isRunning &&
@@ -738,7 +737,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
           {/* biome-ignore lint/complexity/noUselessFragments: DropdownMenu keeps trigger and popup siblings under one provider child */}
           <>
             <div className="relative min-w-0">
-              {!isSelectionMode ? (
+              {isMobileMenuLayout && !isSelectionMode ? (
                 <DropdownMenuTrigger
                   render={
                     <button
@@ -887,32 +886,23 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                         <Pin className="size-3.5" />
                       )}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={PROJECT_ICON_BUTTON_CLASS}
-                      title={t(
-                        props.isArchived ? "chat.conversationRestore" : "chat.conversationArchive",
-                      )}
-                      aria-label={t(
-                        props.isArchived ? "chat.conversationRestore" : "chat.conversationArchive",
-                      )}
-                      disabled={
-                        isInteractionDisabled ||
-                        isBusy ||
-                        isRunning ||
-                        item.isPending ||
-                        !props.onSetArchived
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className={PROJECT_ICON_BUTTON_CLASS}
+                          disabled={isInteractionDisabled || isBusy}
+                          title={t("chat.conversationMore")}
+                          aria-label={t("chat.conversationMore")}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                        />
                       }
-                      onClick={() => props.onSetArchived?.(item, !props.isArchived)}
                     >
-                      {props.isArchived ? (
-                        <ArchiveRestore className="size-3.5" />
-                      ) : (
-                        <Archive className="size-3.5" />
-                      )}
-                    </Button>
+                      <MoreHorizontal className="size-3.5" />
+                    </DropdownMenuTrigger>
                   </>
                 ) : null}
               </div>
@@ -937,50 +927,40 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={handleTogglePinned}
-                    className="gap-2"
+                    className={CONVERSATION_MENU_ITEM_CLASS}
                   >
-                    {item.isPinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+                    {item.isPinned ? (
+                      <PinOff className={CONVERSATION_MENU_ICON_CLASS} />
+                    ) : (
+                      <Pin className={CONVERSATION_MENU_ICON_CLASS} />
+                    )}
                     {item.isPinned ? t("chat.conversationUnpin") : t("chat.conversationPin")}
                   </DropdownMenuItem>
                 ) : null}
-                {props.onSetArchived && (
-                  <DropdownMenuItem
-                    disabled={isInteractionDisabled || isBusy || isRunning || item.isPending}
-                    onSelect={() => props.onSetArchived?.(item, !props.isArchived)}
-                    className="gap-2"
-                  >
-                    {props.isArchived ? (
-                      <ArchiveRestore className="size-3.5" />
-                    ) : (
-                      <Archive className="size-3.5" />
-                    )}
-                    {t(props.isArchived ? "chat.conversationRestore" : "chat.conversationArchive")}
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem
                   disabled={isInteractionDisabled || isRunning || isBusy}
                   onSelect={handleEnterSelectionMode}
-                  className="gap-2"
+                  className={CONVERSATION_MENU_ITEM_CLASS}
                 >
-                  <ListChecks className="size-3.5" />
+                  <ListChecks className={CONVERSATION_MENU_ICON_CLASS} />
                   {t("chat.conversationBulkSelect")}
                 </DropdownMenuItem>
                 {onOpenInWorkbenchSplit && !item.isPending ? (
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onOpenInWorkbenchSplit(item)}
-                    className="gap-2"
+                    className={CONVERSATION_MENU_ITEM_CLASS}
                   >
-                    <Columns2 className="size-3.5" />
+                    <Columns2 className={CONVERSATION_MENU_ICON_CLASS} />
                     {t("workbench.openInSplit")}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem
                   disabled={isInteractionDisabled}
                   onSelect={handleStartRenamingFromMenu}
-                  className="gap-2"
+                  className={CONVERSATION_MENU_ITEM_CLASS}
                 >
-                  <Edit3 className="size-3.5" />
+                  <Edit3 className={CONVERSATION_MENU_ICON_CLASS} />
                   {t("chat.conversationRename")}
                 </DropdownMenuItem>
                 <DropdownMenuSub>
@@ -988,9 +968,9 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     disabled={
                       isInteractionDisabled || isRunning || isBusy || moveWorkspaces.length === 0
                     }
-                    className="gap-2"
+                    className={CONVERSATION_MENU_ITEM_CLASS}
                   >
-                    <Folder className="size-3.5" />
+                    <Folder className={CONVERSATION_MENU_ICON_CLASS} />
                     {t("chat.conversationMoveToWorkspace")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className={cn(SIDEBAR_CONTEXT_MENU_CLASS, "max-h-72")}>
@@ -1004,9 +984,9 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                           workspace.path === item.cwd
                         }
                         onSelect={() => handleMoveToWorkspace(workspace.path)}
-                        className="gap-2"
+                        className={CONVERSATION_MENU_ITEM_CLASS}
                       >
-                        <FolderClosed className="size-3.5 shrink-0" />
+                        <FolderClosed className={CONVERSATION_MENU_ICON_CLASS} />
                         <span className="truncate">{workspace.path}</span>
                       </DropdownMenuItem>
                     ))}
@@ -1016,18 +996,21 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={handleShare}
-                    className="gap-2"
+                    className={CONVERSATION_MENU_ITEM_CLASS}
                   >
-                    <Share2 className="size-3.5" />
+                    <Share2 className={CONVERSATION_MENU_ICON_CLASS} />
                     {t("chat.conversationShare")}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem
                   disabled={isInteractionDisabled || isDeleteDisabled}
                   onSelect={handleRequestDelete}
-                  className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  className={cn(
+                    CONVERSATION_MENU_ITEM_CLASS,
+                    "text-destructive focus:bg-destructive/10 focus:text-destructive",
+                  )}
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 className={CONVERSATION_MENU_ICON_CLASS} />
                   {t("chat.conversationDelete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
