@@ -50,7 +50,6 @@ import {
   type ConversationOpenState,
   createConversationOpenController,
 } from "@liveagent/ui/lib/sidebar/openController";
-import { setSidebarConversationArchived } from "@liveagent/ui/lib/sidebar/preferences";
 import { conversationMatchesScope } from "@liveagent/ui/lib/sidebar/scope";
 import {
   selectConversations,
@@ -3931,10 +3930,6 @@ export function ChatPage(props: ChatPageProps) {
             ...previous,
             system: { ...previous.system, workspaceProjectOrder },
           }))
-        }
-        archivedConversations={settings.system.archivedConversations}
-        onSetConversationArchived={(item, archived) =>
-          setSettings((previous) => setSidebarConversationArchived(previous, item, archived))
         }
         store={sidebarStore}
         approvalStore={conversationRuntimeRegistry.approvals}

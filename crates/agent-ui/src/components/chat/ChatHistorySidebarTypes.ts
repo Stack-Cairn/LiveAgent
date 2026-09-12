@@ -7,7 +7,6 @@ import type {
 import type { ReactNode } from "react";
 import type { SidebarShortcutId, SidebarShortcuts } from "../../lib/settings/sidebarShortcuts";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
-import type { ArchivedSidebarConversation } from "../../lib/sidebar/preferences";
 import type { WorkspaceHistoryState } from "../../lib/sidebar/store";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
@@ -33,14 +32,8 @@ export type ChatHistorySidebarProps = {
   pinnedOrder?: readonly string[];
   onReorderPinned?: (orderedKeys: string[]) => void;
   onReorderProjects?: (orderedPaths: string[]) => void;
-  archivedConversations?: readonly ArchivedSidebarConversation[];
-  onSetConversationArchived?: (item: ArchivedSidebarConversation, archived: boolean) => void;
   workspaceHistory?: ReadonlyMap<string, WorkspaceHistoryState>;
-  onLoadWorkspaceHistory?: (
-    cwd: string,
-    more?: boolean,
-    excludedIds?: ReadonlySet<string>,
-  ) => Promise<void>;
+  onLoadWorkspaceHistory?: (cwd: string, more?: boolean) => Promise<void>;
   items: readonly SidebarConversation[];
   currentConversationId: string;
   // Per-row in-flight mutations: only that row's menu/inputs disable.
@@ -171,8 +164,6 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
   | "onReorderPinned"
   | "projectOrder"
   | "onReorderProjects"
-  | "archivedConversations"
-  | "onSetConversationArchived"
   | "showProjects"
   | "workspaceProjectGroups"
   | "activeProjectId"
@@ -206,8 +197,6 @@ type OptionalWorkspaceSourceKey =
   | "onReorderPinned"
   | "projectOrder"
   | "onReorderProjects"
-  | "archivedConversations"
-  | "onSetConversationArchived"
   | "workspaceProjectGroups"
   | "workspaceFolderDropActive"
   | "workspaceFolderDropHandlers"
@@ -354,8 +343,6 @@ export function buildChatHistorySidebarWorkspaceProps(
     onReorderPinned: source.onReorderPinned,
     projectOrder: source.projectOrder,
     onReorderProjects: source.onReorderProjects,
-    archivedConversations: source.archivedConversations,
-    onSetConversationArchived: source.onSetConversationArchived,
     showProjects: source.showProjects,
     projects,
     workspaceProjectGroups: source.workspaceProjectGroups,

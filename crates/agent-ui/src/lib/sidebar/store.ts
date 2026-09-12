@@ -46,7 +46,6 @@ export type WorkspaceHistoryState = {
   limit: number;
   requestedLimit: number;
   hasMore: boolean;
-  excludedIds: ReadonlySet<string>;
   totalCount: number;
   loading: boolean;
   loaded: boolean;
@@ -90,11 +89,7 @@ export type SidebarStore = {
   setScope(scope: SidebarScope): void;
   refresh(options?: { reason?: SidebarRefreshReason }): Promise<void>;
   loadMore(): Promise<void>;
-  loadWorkspaceHistory(
-    cwd: string,
-    more?: boolean,
-    excludedIds?: ReadonlySet<string>,
-  ): Promise<void>;
+  loadWorkspaceHistory(cwd: string, more?: boolean): Promise<void>;
   refreshWorkdirs(reason: SidebarWorkdirsRefreshReason): Promise<void>;
   rename(id: string, title: string): Promise<boolean>;
   setPinned(id: string, isPinned: boolean): Promise<boolean>;
@@ -201,11 +196,7 @@ export function createSidebarStore(
   let workspaceGeneration = 0;
   let workspaceDeleteVersion = 0;
   const workspaceDeletedIds = new Map<string, number>();
-  const loadWorkspaceHistory = async (
-    cwd: string,
-    more = false,
-    excludedIds: ReadonlySet<string> = new Set(),
-  ) => {
+  const loadWorkspaceHistory = async (cwd: string, more = false) => {
     const key = workspaceProjectPathKey(cwd);
     if (!key) return;
     const previous = snapshot.workspaceHistory.get(key);
@@ -222,7 +213,6 @@ export function createSidebarStore(
       limit: previous?.limit ?? limit,
       requestedLimit: limit,
       hasMore: previous?.hasMore ?? false,
-      excludedIds,
       totalCount: previous?.totalCount ?? 0,
       loaded: previous?.loaded ?? false,
       loading: true,
@@ -243,16 +233,14 @@ export function createSidebarStore(
     try {
       // The gateway caps individual requests at 200. Read additional pages
       // for larger expanded lists instead of getting stuck at that cap.
-      const excludedCount = Array.from(byId.values()).filter(
-        (item) =>
-          workspaceProjectPathKey(item.cwd ?? "") === key &&
-          (item.isPinned || excludedIds.has(item.id)),
+      const pinnedCount = Array.from(byId.values()).filter(
+        (item) => workspaceProjectPathKey(item.cwd ?? "") === key && item.isPinned,
       ).length;
-      const batchSize = Math.min(limit + excludedCount, 200);
+      const batchSize = Math.min(limit + pinnedCount, 200);
       const page = await backend.listConversations(1, batchSize, { kind: "workdir", cwd });
       let pageNumber = 1;
       while (
-        page.items.filter((item) => !item.isPinned && !excludedIds.has(item.id)).length < limit &&
+        page.items.filter((item) => !item.isPinned).length < limit &&
         page.items.length < page.totalCount
       ) {
         if (generation !== workspaceGeneration) return;
@@ -295,7 +283,6 @@ export function createSidebarStore(
           cwd,
           limit,
           requestedLimit: limit,
-          excludedIds,
           hasMore: page.items.length < page.totalCount,
           totalCount: page.totalCount,
           loaded: true,
@@ -366,7 +353,7 @@ export function createSidebarStore(
   const refreshWorkspaceHistory = () => {
     void refreshPinnedHistory();
     for (const state of snapshot.workspaceHistory.values())
-      void loadWorkspaceHistory(state.cwd, false, state.excludedIds);
+      void loadWorkspaceHistory(state.cwd, false);
   };
 
   const activePositionLockIds = () => {

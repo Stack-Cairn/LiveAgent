@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import {
   memo,
   type MouseEvent as ReactMouseEvent,
@@ -494,7 +495,11 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
 
   useEffect(() => {
     if (!active || !hasRunning) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    // 与面板的 30s reconcile 同一口径：窗口不可见时这一秒一跳只是白烧 CPU。
+    const timer = window.setInterval(() => {
+      if (isDocumentHidden()) return;
+      setNow(Date.now());
+    }, 1000);
     setNow(Date.now());
     return () => window.clearInterval(timer);
   }, [active, hasRunning]);

@@ -75,8 +75,8 @@ type GeminiNativeAttachmentCandidate = {
  * 原生内联策略（按附件 kind 分层，五家 provider 统一）：
  *
  * - image：各家都是标准 block（input_image / image_url / image / inlineData），
- *   兼容中转也认，零往返成本，保留原生内联。codex / gemini 分支沿用原有的
- *   model.input 含 "image" 门控；anthropic 分支按 modelFactory 的约定不读
+ *   兼容中转也认，零往返成本，保留原生内联。codex / deepseek / gemini 分支沿用
+ *   原有的 model.input 含 "image" 门控；anthropic 分支按 modelFactory 的约定不读
  *   model.input（见 buildAnthropicNativeAttachmentContentPart）。
  * - pdf：document / input_file / inlineData 都是各家专有结构，第三方
  *   Anthropic/OpenAI/Gemini 兼容中转普遍不认（Kimi Coding、z.ai 等直接 400
@@ -96,6 +96,11 @@ function buildNativeUploadInstruction(requestLabel: string, inputLabel: string) 
 }
 
 const NATIVE_UPLOAD_INSTRUCTION = buildNativeUploadInstruction("OpenAI Responses", "input");
+
+const DEEPSEEK_NATIVE_UPLOAD_INSTRUCTION = buildNativeUploadInstruction(
+  "DeepSeek Responses",
+  "input",
+);
 
 const OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION = buildNativeUploadInstruction(
   "OpenAI Chat Completions",
@@ -165,6 +170,9 @@ function supportsNativePdfInline(model: Model<Api>, baseUrl: string | undefined)
       return hostname === "api.anthropic.com";
     case "google-generative-ai":
       return hostname === "generativelanguage.googleapis.com";
+    // deepseek-responses 有意落在这里：官方《图像理解》指南只把 file / input_file
+    // 用于图片（file_id 指向 Files API 上传的图），没有承诺 PDF 的 document 结构，
+    // 所以 DeepSeek 的 PDF 一律退回 Read 抽文本。
     default:
       return false;
   }
@@ -192,12 +200,19 @@ function normalizeMimeType(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-function isOpenAIResponsesModel(model: Model<Api>) {
-  return model.api === "openai-responses";
-}
-
 function isOpenAICompletionsModel(model: Model<Api>) {
   return model.api === "openai-completions";
+}
+
+// DeepSeek 的 Responses 端点与 OpenAI 同形：{ input_image } 内容块、图片只允许出现
+// 在 user 消息（官方《图像理解》指南）。这里刻意不 import deepSeekNative 的
+// DEEPSEEK_RESPONSES_API：本模块由 node 测试用 esbuild loader 直接加载，引
+// deepSeekNative 会把 pi-ai 的 openai-responses 子路径一并拖进来，逼所有附件测试
+// 都补 mock。字面量的一致性由 providers/deepseek-native 测试锁住。
+const DEEPSEEK_RESPONSES_API_ID = "deepseek-responses";
+
+function isResponsesApiModel(model: Model<Api>) {
+  return model.api === "openai-responses" || model.api === DEEPSEEK_RESPONSES_API_ID;
 }
 
 function isAnthropicMessagesModel(model: Model<Api>) {
@@ -381,11 +396,15 @@ function normalizeUserContent(content: unknown): unknown[] {
   return [];
 }
 
-function applyNativeUploadInstruction(content: unknown[], inlinedFiles: PendingUploadedFile[]) {
+function applyNativeUploadInstruction(
+  content: unknown[],
+  inlinedFiles: PendingUploadedFile[],
+  nativeInstruction: string = NATIVE_UPLOAD_INSTRUCTION,
+) {
   return applyTypedNativeUploadInstruction({
     content,
     type: "input_text",
-    nativeInstruction: NATIVE_UPLOAD_INSTRUCTION,
+    nativeInstruction,
     inlinedFiles,
   });
 }
@@ -717,7 +736,7 @@ async function applyNativeAttachmentsToResponsesPayload(params: {
 }) {
   const payload = params.payload;
   if (!isRecord(payload) || !Array.isArray(payload.input)) return payload;
-  if (!params.workdir.trim() || !isOpenAIResponsesModel(params.model)) return payload;
+  if (!params.workdir.trim() || !isResponsesApiModel(params.model)) return payload;
 
   const attachmentBatches = getUserMessageNativeAttachmentBatches(params.context);
   if (!attachmentBatches.some((files) => files.length > 0)) return payload;
@@ -755,6 +774,9 @@ async function applyNativeAttachmentsToResponsesPayload(params: {
         ...applyNativeUploadInstruction(
           normalizeUserContent(item.content),
           nativeContent.inlinedFiles,
+          params.model.api === DEEPSEEK_RESPONSES_API_ID
+            ? DEEPSEEK_NATIVE_UPLOAD_INSTRUCTION
+            : NATIVE_UPLOAD_INSTRUCTION,
         ),
         ...nativeContent.parts,
       ],
@@ -960,9 +982,11 @@ export function attachOpenAIResponsesNativeAttachments<
   },
 ): TOptions {
   if (
-    (params.providerId !== "codex" && params.providerId !== "xai") ||
+    (params.providerId !== "codex" &&
+      params.providerId !== "xai" &&
+      params.providerId !== "deepseek") ||
     !params.context ||
-    !isOpenAIResponsesModel(params.model) ||
+    !isResponsesApiModel(params.model) ||
     !params.workdir?.trim()
   ) {
     return options;
@@ -1120,6 +1144,7 @@ export function attachGeminiGenerativeAINativeAttachments<
 
 export const __nativeResponsesAttachmentsTest = {
   NATIVE_UPLOAD_INSTRUCTION,
+  DEEPSEEK_NATIVE_UPLOAD_INSTRUCTION,
   OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION,
   ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION,
   GEMINI_NATIVE_UPLOAD_INSTRUCTION,

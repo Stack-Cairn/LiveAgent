@@ -24,6 +24,7 @@ import type {
   OrganizerSafeDecision,
 } from "../../../lib/memory/organizer/runRecord";
 import { REJECTION_BUCKET_KEYS, type RejectionBucketKey } from "../../../lib/memory/schema";
+import { cachedDateTimeFormat } from "../../../lib/shared/intlFormatters";
 
 export type MemoryTab = "global" | "project" | "journal";
 
@@ -68,7 +69,9 @@ export function formatTime(value: number) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString();
+  // 默认 locale 的时间戳（`toLocaleString()` 每次调用都会新建一个
+  // DateTimeFormat，即一次 ICU 初始化）；面板里每行都会调一次。
+  return cachedDateTimeFormat(undefined, "memory-panel-time").format(date);
 }
 
 function dailyTitle(entry: { slug: string; dateLocal?: string | null }) {

@@ -12,10 +12,7 @@ import {
 } from "@liveagent/ui/components/chat/ChatHistorySidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SidebarBatchDeleteOptions } from "@liveagent/ui/lib/sidebar/batchDelete";
-import {
-  deleteSidebarConversation,
-  deleteSidebarConversations,
-} from "@liveagent/ui/lib/sidebar/batchDelete";
+import { deleteSidebarConversations } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { SidebarSnapshot, SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { TransientSidebarRunningConversation } from "@liveagent/ui/lib/sidebar/transientActivity";
 import { mergeTransientSidebarRunningActivity } from "@liveagent/ui/lib/sidebar/transientActivity";
@@ -235,7 +232,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       props.onLocalDraftDeleted(id);
       return;
     }
-    void deleteSidebarConversation(id, props);
+    void store.remove(id);
   });
 
   const handleDeleteConversations = useStableCallback(
@@ -253,7 +250,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
             props.onLocalDraftDeleted(id);
             return true;
           }
-          return deleteSidebarConversation(id, props);
+          return store.remove(id);
         },
         options,
       );

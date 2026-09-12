@@ -30,7 +30,15 @@ const REDACTED_USAGE_QUERY_SECRET_DISPLAY = "••••••••";
 export type ModelInputModalitiesMode = "auto" | "text" | "text-image";
 
 export function providerSupportsModelInputModalitiesOverride(providerId: ProviderId): boolean {
-  return providerId === "codex" || providerId === "xai" || providerId === "gemini";
+  return (
+    providerId === "codex" ||
+    providerId === "xai" ||
+    providerId === "gemini" ||
+    // deepseek：Responses wire 已接受 input_image（官方《图像理解》指南），模型
+    // 能力默认按 id 推断（flash 家族吃图、Pro 纯文本），中转端点不吃图时用覆盖
+    // 改回 ["text"]。
+    providerId === "deepseek"
+  );
 }
 
 export function getModelInputModalitiesMode(model: ProviderModelConfig): ModelInputModalitiesMode {

@@ -158,12 +158,11 @@ test("reconnect supersedes a pending project request and preserves the raw works
   assert.ok(calls.every(({ scope }) => scope.cwd === cwd));
 });
 
-test("pinned and archived rows do not consume a project's visible page", async (t) => {
+test("pinned rows do not consume a project's visible page", async (t) => {
   const { store, rows } = setup(); t.after(() => store.stop());
   for (let i = 0; i < 9; i++) rows.set(String(i), { ...rows.get(String(i)), isPinned: true });
-  const excluded = new Set(["9", "10", "11", "12"]);
-  await store.loadWorkspaceHistory("/alpha", false, excluded);
-  const visible = [...store.getSnapshot().byId.values()].filter((item) => !item.isPinned && !excluded.has(item.id));
+  await store.loadWorkspaceHistory("/alpha");
+  const visible = [...store.getSnapshot().byId.values()].filter((item) => !item.isPinned);
   assert.ok(visible.length >= 10);
   assert.equal(store.getSnapshot().workspaceHistory.get("/alpha").limit, 10);
 });
