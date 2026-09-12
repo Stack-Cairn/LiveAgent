@@ -93,6 +93,10 @@ test("layout validation reports a terminal cwd outside its project", () => {
 test("startup paints theme and shell before progressively hydrating pane contents", () => {
   const htmlSource = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
   const appSource = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const appBootSource = readFileSync(
+    new URL("../../src/components/app/AppBootShell.tsx", import.meta.url),
+    "utf8",
+  );
   const appStyles = readStyleSource(new URL("../../src/index.css", import.meta.url));
   const paneLoadingSource = readFileSync(
     new URL("../../src/components/app/PaneLoadingSkeleton.tsx", import.meta.url),
@@ -163,6 +167,17 @@ test("startup paints theme and shell before progressively hydrating pane content
   assert.ok(staticShell >= 0 && staticShell < appScript);
   assert.ok(frontendReady >= 0 && frontendReady < appScript);
   assert.match(htmlSource, /--liveagent-boot-background/);
+  assert.match(
+    htmlSource,
+    /class="app-boot-icon" src="\/src-tauri\/icons\/icon-simple\.png"/,
+  );
+  assert.match(htmlSource, /class="app-boot-progress"/);
+  assert.match(htmlSource, /@keyframes app-boot-progress/);
+  assert.doesNotMatch(htmlSource, /boot-sidebar|boot-pane-body|boot-bubble/);
+  assert.match(appBootSource, /import iconSimpleUrl from .*icon-simple\.png/);
+  assert.match(appBootSource, /className="app-boot-icon" src=\{iconSimpleUrl\}/);
+  assert.match(appBootSource, /className="app-boot-progress"/);
+  assert.doesNotMatch(appBootSource, /PaneLoadingSkeleton/);
   assert.match(
     htmlSource,
     /requestAnimationFrame\(\(\) => \{\s*window\.requestAnimationFrame\(\(\) => \{/,

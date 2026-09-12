@@ -1,11 +1,15 @@
-import { LogOut, Minimize2 } from "@liveagent/ui/components/IconSet";
+import {
+  SettingsSelectContent,
+  SettingsSelectTrigger,
+} from "@liveagent/ui/components/settings/SettingsSelect";
+import { Select, SelectItem, SelectValue } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   AgentActivationSwitch,
-  SettingsChoiceRow,
   SettingsGroup,
   SettingsRow,
 } from "@liveagent/ui/pages/settings/shared";
+import { invoke } from "@tauri-apps/api/core";
 import { useMemo } from "react";
 import { inferRuntimePlatform } from "../lib/runtimePlatform";
 import { CLOSE_WINDOW_BEHAVIOR_OPTIONS } from "../lib/settings";
@@ -17,9 +21,18 @@ export {
   FONT_FAMILY_CUSTOM_SELECT_VALUE,
   FONT_FAMILY_DEFAULT_SELECT_VALUE,
   fromFontFamilySelectValue,
-  listLocalFontFamilies,
   toFontFamilySelectValue,
 } from "@liveagent/ui/lib/shared/fontFamily";
+
+let fontFamiliesRequest: Promise<string[]> | undefined;
+
+export function listLocalFontFamilies(): Promise<string[]> {
+  fontFamiliesRequest ??= invoke<string[]>("system_list_font_families").catch(() => {
+    fontFamiliesRequest = undefined;
+    return [];
+  });
+  return fontFamiliesRequest;
+}
 
 export function SystemSettingsExtensions(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
@@ -30,35 +43,42 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
   return (
     <>
       <SettingsGroup title={t("settings.closeWindowBehavior")}>
-        <fieldset
-          aria-label={t("settings.closeWindowBehavior")}
-          className="m-0 min-w-0 border-0 p-0"
-        >
-          {CLOSE_WINDOW_BEHAVIOR_OPTIONS.map((behavior) => {
-            const selected = settings.closeWindowBehavior === behavior;
-            const isMinimize = behavior === "minimize";
-            return (
-              <SettingsChoiceRow
-                key={behavior}
-                icon={
-                  isMinimize ? <Minimize2 className="size-4.5" /> : <LogOut className="size-4.5" />
-                }
-                title={
-                  isMinimize ? t("settings.closeWindowMinimize") : t("settings.closeWindowExit")
-                }
-                description={
-                  isMinimize
-                    ? t("settings.closeWindowMinimizeDesc")
-                    : t("settings.closeWindowExitDesc")
-                }
-                selected={selected}
-                onClick={() =>
-                  setSettings((previous) => ({ ...previous, closeWindowBehavior: behavior }))
-                }
-              />
-            );
-          })}
-        </fieldset>
+        <SettingsRow
+          title={t("settings.defaultCloseWindowBehavior")}
+          description={
+            settings.closeWindowBehavior === "minimize"
+              ? t("settings.closeWindowMinimizeDesc")
+              : t("settings.closeWindowExitDesc")
+          }
+          control={
+            <Select
+              value={settings.closeWindowBehavior}
+              onValueChange={(value) =>
+                setSettings((previous) => ({
+                  ...previous,
+                  closeWindowBehavior: value as (typeof CLOSE_WINDOW_BEHAVIOR_OPTIONS)[number],
+                }))
+              }
+            >
+              <SettingsSelectTrigger className="min-w-32 justify-between">
+                <SelectValue>
+                  {settings.closeWindowBehavior === "minimize"
+                    ? t("settings.closeWindowMinimize")
+                    : t("settings.closeWindowExit")}
+                </SelectValue>
+              </SettingsSelectTrigger>
+              <SettingsSelectContent>
+                {CLOSE_WINDOW_BEHAVIOR_OPTIONS.map((behavior) => (
+                  <SelectItem key={behavior} value={behavior}>
+                    {behavior === "minimize"
+                      ? t("settings.closeWindowMinimize")
+                      : t("settings.closeWindowExit")}
+                  </SelectItem>
+                ))}
+              </SettingsSelectContent>
+            </Select>
+          }
+        />
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.trayTitle")}>

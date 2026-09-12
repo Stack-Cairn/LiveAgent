@@ -33,8 +33,8 @@ function ConfigurationCount(props: { count: number; label: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2",
-        "text-tiny text-muted-foreground ring-1 ring-border/60",
+        "inline-flex h-5 items-center gap-1 rounded-full bg-settings-active px-2",
+        "text-tiny text-muted-foreground",
       )}
     >
       <span className="font-semibold tabular-nums text-foreground">{props.count}</span>
@@ -216,7 +216,8 @@ export const McpServerCard = memo(function McpServerCard(props: {
     <article
       className={cn(
         "group @container flex min-h-16 w-full flex-wrap items-center gap-3",
-        "bg-card px-4 py-3 text-left transition-colors hover:bg-muted/30",
+        "rounded-xl bg-settings-tile px-4 py-3 text-left transition-colors",
+        "hover:bg-settings-tile-hover",
       )}
     >
       <ResourceActivationSwitch

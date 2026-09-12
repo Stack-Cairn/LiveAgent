@@ -49,7 +49,7 @@ test("model pickers use popover semantics instead of menu semantics", () => {
     assert.match(source, /<Popover open=\{isModelPickerOpen\}/);
     assert.match(source, /<PopoverContent/);
     assert.match(source, /aria-label=\{t\("chat\.selectModel"\)\}/);
-    assert.doesNotMatch(source, /DropdownMenu/);
+    assert.match(source, /<DropdownMenuRadioGroup\s+value=\{providerFilter\}/);
   }
 });
 
@@ -67,17 +67,12 @@ test("execution mode switchers expose a native radio group", () => {
   }
 });
 
-test("model selection closes the popover while group controls keep it open", () => {
+test("model selection uses an in-place page and closes on selection", () => {
   for (const source of pickerSources) {
-    assert.match(source, /onClick=\{\(\) => toggleGroup\(group\.id\)\}/);
-    assert.match(source, /const \[expandedGroupId, setExpandedGroupId\] = useState/);
-    assert.match(source, /return activeGroupId === id \? null : id/);
-    assert.doesNotMatch(source, /expandedGroups/);
+    assert.match(source, /showView\("model"\)/);
+    assert.match(source, /showView\("root"\)/);
+    assert.doesNotMatch(source, /expandedGroupId|toggleGroup/);
     assert.match(source, /aria-pressed=\{isSelected\}/);
-    assert.match(
-      source,
-      /<Popover open=\{isModelPickerOpen\} onOpenChange=\{setIsModelPickerOpen\}>/,
-    );
     assert.match(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
   }
 });
@@ -94,24 +89,10 @@ test("model pickers search models and providers", () => {
   }
 });
 
-test("provider groups keep a reachable edit affordance before the chevron", () => {
+test("provider groups keep a reachable edit affordance", () => {
   for (const source of pickerSources) {
-    assert.match(source, /\bPencil\b/);
     assert.match(source, /t\("settings\.editProvider"\)/);
-    assert.doesNotMatch(source, /title=\{`\$\{t\("settings\.editProvider"\)/);
-    assert.doesNotMatch(source, /title=\{\s*expanded \? t\("chat\.collapseProvider"\)/);
-    // 编辑入口常驻可点：此前 pointer-events-none + opacity-0 靠 group-hover
-    // 激活，触屏设备没有 hover，因此永远点不到。
-    assert.match(source, /flex w-7 shrink-0 cursor-pointer/);
-    assert.doesNotMatch(source, /pointer-events-none flex w-7/);
-    assert.doesNotMatch(source, /max-w-0|group-hover:max-w-7|group-focus-within:max-w-7/);
-    // 分组计数已移除；编辑入口仍需排在折叠按钮之前。锚点用折叠按钮独有的
-    // aria-label —— 触发器自身也有 <ChevronDown，按标签名会锚错位置。
-    assert.ok(source.indexOf("<Pencil") < source.indexOf("chat.collapseProvider"));
-    assert.match(
-      source,
-      /setIsModelPickerOpen\(false\);\s+onOpenSettings\("providers", group\.id\);/,
-    );
+    assert.match(source, /setIsModelPickerOpen\(false\);\s+onOpenSettings\("providers", group\.id\);/);
   }
 });
 
@@ -144,25 +125,16 @@ test("upload stays leftmost before model controls in the composer toolbar", () =
 
   for (const source of pickerSources) {
     assert.match(source, /aria-label=\{t\("chat\.runtime\.controls"\)\}/);
-    assert.match(source, /nativeWebSearchEnabled: !chatRuntimeControls\.nativeWebSearchEnabled/);
+    assert.match(source, /nativeWebSearchEnabled: checked/);
     assert.match(source, /thinkingEnabled: !chatRuntimeControls\.thinkingEnabled/);
-    assert.match(source, /thinkingEnabled: true, reasoning: level/);
+    assert.match(source, /thinkingEnabled: true,\s+reasoning: level/);
     assert.match(source, /thinkingEnabled: false/);
-    // 推理强度由「脑图标 + 带刻度滑块 + 数值胶囊」三重表示改为分段按钮：
-    // 原实现只有滑块可交互，胶囊却与旁边真正的按钮同款样式，必然被误点。
-    assert.match(source, /function ReasoningEffortSegments/);
-    assert.match(source, /role="radiogroup"/);
-    assert.doesNotMatch(source, /type="range"/);
-    // role="radio" 承诺了 radiogroup 的交互约定：整组一个 Tab 停靠点 +
-    // 方向键改选。原实现是 input[type=range]，两者由浏览器免费提供；
-    // 换成分段按钮后必须自己实现，否则 ARIA 角色与实际行为不符。
-    assert.match(source, /tabIndex=\{isSelected \|\| \(activeIndex < 0 && index === 0\) \? 0 : -1\}/);
-    assert.match(source, /event\.key === "ArrowRight" \|\| event\.key === "ArrowDown"/);
-    assert.match(source, /focus-visible:ring-2 focus-visible:ring-inset/);
-    // role="radio" 现在是分段控件的正确 ARIA 模式（配合 radiogroup），
-    // 不再是「误用原生控件」的信号；仍不应引入 select/switch。
+    assert.match(source, /showView\("reasoning"\)/);
+    assert.match(source, /type="radio"/);
+    assert.match(source, /checked=\{selectedEffort === level\}/);
+    assert.doesNotMatch(source, /ReasoningEffortSegments|ResizeObserver|setPointerCapture/);
     assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/select"/);
-    assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/switch"/);
+
   }
 });
 
@@ -208,4 +180,11 @@ test("composer dropdown portals stay above the composer surface", () => {
 test("DeepSeek provider icon uses the logo-only mark", () => {
   assert.match(iconSetSource, /~icons\/logos\/deepseek-icon/);
   assert.doesNotMatch(iconSetSource, /~icons\/logos\/deepseek["']/);
+});
+
+
+test("Chat mode keeps the safety control slot stable", () => {
+  assert.match(composerSource, /\{commandSafetyMode && onCommandSafetyModeChange \? \(/);
+  assert.match(composerSource, /disabled=\{controlsDisabled \|\| !isAgentMode\}/);
+  assert.doesNotMatch(composerSource, /\{isAgentMode && commandSafetyMode &&/);
 });

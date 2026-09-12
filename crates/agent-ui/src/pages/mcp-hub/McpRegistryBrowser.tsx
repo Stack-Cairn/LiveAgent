@@ -5,11 +5,6 @@ import {
 } from "@liveagent/app/lib/settings/index";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import {
-  FrostSpinner,
-  LoadingSurface,
-  LoadingTrack,
-} from "@liveagent/ui/components/hub/HubLoading";
-import {
   AlertTriangle,
   Check,
   ExternalLink,
@@ -40,7 +35,6 @@ import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   createUniqueMcpServerId,
-  MCP_REGISTRY_SOURCE_OPTIONS,
   type McpRegistryCard,
   type McpRegistryConfigInput,
   type McpRegistrySource,
@@ -55,9 +49,16 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { McpRegistryConfigureModal } from "./McpRegistryConfigureModal";
 import { McpRegistryToolbar } from "./McpRegistryToolbar";
+import {
+  loadRegistryCache,
+  REGISTRY_CACHE_TTL,
+  readRegistryCache,
+  registryCacheKey,
+} from "./registryStoreCache";
 
 export const MCP_STORE_PAGE_LIMIT = 24;
-const STORE_SKELETON_IDS = Array.from({ length: 8 }, (_, index) => `skeleton-${index + 1}`);
+let lastRegistrySource: McpRegistrySource = "official";
+const STORE_SKELETON_IDS = Array.from({ length: 6 }, (_, index) => `skeleton-${index + 1}`);
 
 type McpRegistryBrowserProps = {
   settings: AppSettings;
@@ -108,16 +109,6 @@ function groupMcpRegistryCards(cards: McpRegistryCard[]) {
   }
 
   return groups;
-}
-
-function appendUniqueRegistryCards(current: McpRegistryCard[], incoming: McpRegistryCard[]) {
-  const seen = new Set(current.map((card) => card.id));
-  const uniqueIncoming = incoming.filter((card) => {
-    if (seen.has(card.id)) return false;
-    seen.add(card.id);
-    return true;
-  });
-  return [...current, ...uniqueIncoming];
 }
 
 function installLabelKey(card: McpRegistryCard) {
@@ -299,7 +290,7 @@ function RegistryCard(props: {
       <div className={cn("flex min-w-0 items-start gap-3", headerPadding)}>
         <div
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-xl border transition-all",
+            "flex size-10 shrink-0 items-center justify-center rounded-xl border transition-colors",
             done
               ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
               : "border-border/70 bg-muted text-muted-foreground group-hover:text-foreground",
@@ -769,11 +760,12 @@ function McpPreviewField(props: { label: string; value?: string | null; mono?: b
 export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
   const { settings, setSettings, query } = props;
   const { t } = useLocale();
-  const [source, setSource] = useState<McpRegistrySource>("official");
-  const [submittedQuery, setSubmittedQuery] = useState("");
-  const [items, setItems] = useState<McpRegistryCard[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | undefined>();
-  const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState<McpRegistrySource>(lastRegistrySource);
+  const initialCache = readRegistryCache(registryCacheKey(source, query));
+  const [submittedQuery, setSubmittedQuery] = useState(query.trim());
+  const [items, setItems] = useState<McpRegistryCard[]>(() => initialCache?.items ?? []);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(() => initialCache?.nextCursor);
+  const [loading, setLoading] = useState(!initialCache);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
@@ -787,7 +779,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRequestRef = useRef(false);
   const searchGenerationRef = useRef(0);
-  const submittedQueryRef = useRef("");
+  const submittedQueryRef = useRef(query.trim());
   const previousSourceRef = useRef(source);
   const groupedItems = useMemo(
     () =>
@@ -869,25 +861,16 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
       }
       setError(null);
       try {
-        const result = await searchMcpRegistry({
-          source,
-          query: requestQuery,
-          cursor,
-          limit: MCP_STORE_PAGE_LIMIT,
-        });
-        if (generation !== searchGenerationRef.current) return;
-        setItems((prev) =>
-          mode === "append" ? appendUniqueRegistryCards(prev, result.items) : result.items,
+        const result = await loadRegistryCache(registryCacheKey(source, requestQuery), cursor, () =>
+          searchMcpRegistry({ source, query: requestQuery, cursor, limit: MCP_STORE_PAGE_LIMIT }),
         );
-        setNextCursor(result.nextCursor === cursor ? undefined : result.nextCursor);
+        if (generation !== searchGenerationRef.current) return;
+        setItems(result.items);
+        setNextCursor(result.nextCursor);
       } catch (err) {
         if (generation !== searchGenerationRef.current) return;
         const message = err instanceof Error ? err.message : String(err);
         setError(message || t("mcpHub.storeLoadFailed"));
-        if (mode === "replace") {
-          setItems([]);
-          setNextCursor(undefined);
-        }
       } finally {
         if (mode === "append") loadMoreRequestRef.current = false;
         if (generation === searchGenerationRef.current) {
@@ -904,19 +887,26 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
     searchGenerationRef.current += 1;
     loadMoreRequestRef.current = false;
     setLoadingMore(false);
-    setNextCursor(undefined);
     const sourceChanged = previousSourceRef.current !== source;
     previousSourceRef.current = source;
-    if (sourceChanged) {
-      setItems([]);
-      setError(null);
-      setPreviewCard(null);
-    }
+    lastRegistrySource = source;
+    const cached = readRegistryCache(registryCacheKey(source, query));
+    setItems(cached?.items ?? []);
+    setNextCursor(cached?.nextCursor);
+    setError(null);
+    setPreviewCard(null);
+    submittedQueryRef.current = query.trim();
+    setSubmittedQuery(query.trim());
+    setLoading(!cached);
+    if (cached && Date.now() - cached.updatedAt < REGISTRY_CACHE_TTL) return;
     const timer = window.setTimeout(
       () => void runSearch("replace", query),
       sourceChanged || !query.trim() ? 0 : 260,
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      searchGenerationRef.current += 1;
+    };
   }, [query, source]);
 
   useEffect(() => {
@@ -986,9 +976,6 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
     }
   }
 
-  const currentSourceLabel =
-    MCP_REGISTRY_SOURCE_OPTIONS.find((option) => option.value === source)?.label ?? source;
-
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <McpRegistryToolbar
@@ -1015,24 +1002,16 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
         <div className="flex flex-col gap-4">
           {loading && items.length === 0 ? (
             <>
-              <LoadingSurface variant="hero" key={source} className="px-4 py-3.5">
-                <div className="flex items-center gap-3.5">
-                  <FrostSpinner />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium tracking-tight text-foreground">
-                      {t("mcpHub.storeLoadingTitle")}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {t("mcpHub.storeLoadingDesc").replace("{source}", currentSourceLabel)}
-                    </div>
-                  </div>
-                </div>
-                <LoadingTrack className="mt-3.5" />
-              </LoadingSurface>
-
+              <span role="status" className="sr-only">
+                {t("mcpHub.storeLoadingTitle")}
+              </span>
               <div key={`${source}-skeleton`} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {STORE_SKELETON_IDS.map((skeletonId) => (
-                  <LoadingSurface variant="skeleton" key={skeletonId} className="h-228px p-3.5">
+                  <div
+                    key={skeletonId}
+                    className="h-56 rounded-xl bg-settings-tile p-4"
+                    aria-hidden="true"
+                  >
                     <div className="flex items-center gap-3">
                       <Skeleton className="size-10 shrink-0 rounded-xl" />
                       <div className="flex-1 space-y-2">
@@ -1045,7 +1024,7 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
                       <Skeleton className="h-3 w-3/4 rounded" />
                     </div>
                     <Skeleton className="mt-4 h-8 w-full rounded-lg" />
-                  </LoadingSurface>
+                  </div>
                 ))}
               </div>
             </>

@@ -6,7 +6,6 @@ import {
   ChevronDown,
   Clock3,
   Copy,
-  Edit3,
   ExternalLink,
   Folder,
   Globe,
@@ -14,6 +13,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  SquarePen,
   Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
@@ -598,7 +598,7 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
                 title={!enabled ? disabledMessage : t("projectTools.tunnelEdit")}
                 aria-label={t("projectTools.tunnelEdit")}
               >
-                <Edit3 className="size-3.5" />
+                <SquarePen className="size-3.5" />
               </Button>
               <Button
                 type="button"

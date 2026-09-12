@@ -4,7 +4,7 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
-import { BookOpen, Check, Loader2 } from "@liveagent/ui/components/IconSet";
+import { Check, Loader2 } from "@liveagent/ui/components/IconSet";
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
@@ -33,8 +33,16 @@ export function ProjectPromptSettingsPanel(props: {
   onProjectPromptChange: (value: string) => void;
   onStrategyChange: (value: ProjectPromptStrategy) => void;
   className?: string;
+  plain?: boolean;
 }) {
-  const { projectPrompt, strategy, onProjectPromptChange, onStrategyChange, className } = props;
+  const {
+    projectPrompt,
+    strategy,
+    onProjectPromptChange,
+    onStrategyChange,
+    className,
+    plain = false,
+  } = props;
   const { t } = useLocale();
 
   return (
@@ -72,6 +80,7 @@ export function ProjectPromptSettingsPanel(props: {
       </div>
 
       <Textarea
+        variant={plain ? "plain" : "default"}
         value={projectPrompt}
         placeholder={t("chat.projectPromptPlaceholder")}
         aria-label={t("chat.projectPromptTitle")}
@@ -130,21 +139,13 @@ export function ProjectPromptEditorModal(props: {
   return (
     <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
       <DialogContent
-        className="flex max-h-90dvh max-w-3xl flex-col p-0"
+        className="flex h-[min(44rem,calc(100dvh-2rem))] max-w-2xl flex-col p-0"
         closeDisabled={saving}
         closeLabel={t("window.close")}
         layout="fullscreen-mobile"
         showCloseButton
       >
-        <DialogHeader className="flex-row items-center gap-3.5">
-          <div
-            className={cn(
-              "flex size-11 shrink-0 items-center justify-center",
-              "rounded-2xl border border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300",
-            )}
-          >
-            <BookOpen className="size-5" />
-          </div>
+        <DialogHeader>
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate">{t("chat.projectPromptTitle")}</DialogTitle>
             <p className="mt-0.5 truncate text-xs text-muted-foreground" title={project.path}>
@@ -155,6 +156,7 @@ export function ProjectPromptEditorModal(props: {
 
         <DialogBody className="flex flex-col p-0">
           <ProjectPromptSettingsPanel
+            plain
             projectPrompt={projectPrompt}
             strategy={strategy}
             onProjectPromptChange={setProjectPrompt}
@@ -167,10 +169,10 @@ export function ProjectPromptEditorModal(props: {
 
         <DialogFooter>
           <DialogActions>
-            <Button variant="outline" onClick={onClose} disabled={saving}>
+            <Button size="sm" variant="outline" onClick={onClose} disabled={saving}>
               {t("chat.cancel")}
             </Button>
-            <Button onClick={() => void handleSave()} disabled={saving}>
+            <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
               {t("workspaceEditor.save")}
             </Button>

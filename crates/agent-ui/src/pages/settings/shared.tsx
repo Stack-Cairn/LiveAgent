@@ -1,5 +1,8 @@
-import { CheckCircle2 } from "@liveagent/ui/components/IconSet";
-import { SettingsSurface } from "@liveagent/ui/components/settings/SettingsSurface";
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsSection,
+} from "@liveagent/ui/components/settings/SettingsLayout";
 import type { ReactNode } from "react";
 import { Switch } from "../../components/ui/switch";
 import { cn } from "../../lib/shared/utils";
@@ -11,80 +14,13 @@ export {
 
 export function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="space-y-2.5">
-      <h2 className="px-1 text-base font-semibold tracking-tight text-foreground">{title}</h2>
-      <SettingsSurface>{children}</SettingsSurface>
-    </section>
+    <SettingsSection title={title}>
+      <SettingsCard>{children}</SettingsCard>
+    </SettingsSection>
   );
 }
 
-export function SettingsRow(props: { title: string; description?: string; control: ReactNode }) {
-  const { title, description, control } = props;
-
-  return (
-    <div
-      className={cn(
-        "relative flex min-h-72px flex-col gap-3 px-5 py-4",
-        "after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
-        "sm:flex-row sm:items-center sm:justify-between",
-      )}
-    >
-      <div className="min-w-0 flex-1 pr-2">
-        <div className="text-sm font-medium text-foreground">{title}</div>
-        {description ? (
-          <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
-      </div>
-      <div className="flex w-full items-center sm:w-auto sm:shrink-0 sm:justify-end">{control}</div>
-    </div>
-  );
-}
-
-export function SettingsChoiceRow(props: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const { icon, title, description, selected, onClick } = props;
-
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "group relative flex w-full items-center gap-3 px-5 py-4",
-        "text-left transition-colors",
-        "after:pointer-events-none after:absolute after:bottom-0 after:inset-x-5 after:h-px after:bg-border/60 after:content-[''] last:after:hidden",
-        "hover:bg-muted/20",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-5 shrink-0 items-center justify-center transition-colors",
-          selected
-            ? "text-foreground/70"
-            : "text-muted-foreground/45 group-hover:text-foreground/60",
-        )}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-foreground">{title}</span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-          {description}
-        </span>
-      </span>
-      <span className="ml-2 flex size-5 shrink-0 items-center justify-center">
-        {selected ? <CheckCircle2 className="size-4.5 text-foreground/80" /> : null}
-      </span>
-    </button>
-  );
-}
+export { SettingsRow };
 
 export function PromptTag({ label, muted = false }: { label: string; muted?: boolean }) {
   return (

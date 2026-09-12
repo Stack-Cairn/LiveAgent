@@ -154,6 +154,7 @@ export function McpHubPage(props: McpHubPageProps) {
 
               <div className="flex min-h-11 items-center justify-between gap-3 max-sm:items-stretch">
                 <ResourceTabsList
+                  variant="segmented"
                   value={view}
                   items={[
                     {

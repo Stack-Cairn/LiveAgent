@@ -121,7 +121,7 @@ export const AlertDialogHeader = React.forwardRef<
     ref={ref}
     data-slot="alert-dialog-header"
     className={cn(
-      "relative flex shrink-0 flex-col min-h-13 gap-1.5 border-b border-border/60",
+      "relative flex shrink-0 flex-col min-h-13 gap-1.5",
       "px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-2",
       className,
     )}
@@ -152,7 +152,7 @@ export const AlertDialogFooter = React.forwardRef<
     data-slot="alert-dialog-footer"
     className={cn(
       "flex shrink-0 flex-row items-center justify-end min-h-13 gap-2",
-      "border-t border-border/60 px-4 py-3",
+      "px-4 py-3",
       "max-[820px]:flex-col-reverse max-[820px]:items-stretch max-[820px]:px-3.5 max-[820px]:py-3",
       className,
     )}

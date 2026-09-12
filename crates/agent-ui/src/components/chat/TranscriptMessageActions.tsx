@@ -3,8 +3,8 @@ import {
   Copy,
   GitBranch,
   Loader2,
-  Pencil,
   RefreshCw,
+  SquarePen,
   Undo2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "../../i18n/index";
@@ -109,7 +109,7 @@ export function TranscriptUserMessageActions(
               disabled={editDisabled}
               onClick={onEdit}
             >
-              <Pencil className="size-3.5" />
+              <SquarePen className="size-3.5" />
             </button>
             {rewind ? (
               <button

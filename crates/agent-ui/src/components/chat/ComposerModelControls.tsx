@@ -12,18 +12,24 @@ import {
   ArrowDownAZ,
   Check,
   ChevronDown,
-  Globe,
-  GlobeOff,
+  ChevronRight,
   Layers,
   Lightbulb,
   LightbulbOff,
-  Pencil,
   Search,
-  Sparkle,
+  SquarePen,
 } from "@liveagent/ui/components/IconSet";
 import { ProviderBrandIcon } from "@liveagent/ui/components/ProviderBrandIcon";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@liveagent/ui/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@liveagent/ui/components/ui/popover";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   COMPOSER_CONTROL_CHEVRON_CLASS,
@@ -40,7 +46,7 @@ import {
 } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { memo, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
   off: "settings.reasoning.off",
@@ -86,172 +92,12 @@ function RuntimeToggleChip(props: {
         "focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
         pressed
           ? pressedClassName
-          : "bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+          : "bg-muted/60 text-muted-foreground hover:bg-settings-active/60/80 hover:text-foreground",
       )}
     >
       {icon}
       <span className="truncate">{label}</span>
     </button>
-  );
-}
-
-// The visible range thumb is 16px wide, so the custom track is inset by 8px.
-// Keeping the track and thumb on the same geometry avoids browser-specific
-// range alignment drift while preserving native keyboard and pointer behavior.
-// 推理强度：分段按钮。此前是「脑图标 + 带刻度滑块 + 数值胶囊」——同一个值
-// 的三重渲染，其中只有滑块可交互，胶囊却长得和旁边真正的按钮一样，必然被
-// 误点；且滑块要拖动才能改，看不出总共几档。分段按钮一眼看全、一击直达，
-// 也顺带消除了 indexOf 夹取导致的拇指/数值不同步。
-function ReasoningEffortSegments(props: {
-  choices: ReasoningLevel[];
-  value: ReasoningLevel;
-  disabled?: boolean;
-  label: string;
-  formatLevel: (level: ReasoningLevel) => string;
-  formatLevelCompact: (level: ReasoningLevel) => string;
-  onSelect: (level: ReasoningLevel) => void;
-}) {
-  const {
-    choices,
-    value,
-    disabled = false,
-    label,
-    formatLevel,
-    formatLevelCompact,
-    onSelect,
-  } = props;
-  const trackRef = useRef<HTMLDivElement>(null);
-  // 选中指示器单独成层并用 CSS 过渡移动：若把底色挂在各按钮上，切换只能是
-  // 跳变。位置按真实 DOM 量取，因为各段宽度随标签长短而不同。
-  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
-
-  const activeIndex = choices.indexOf(value);
-
-  useLayoutEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const measure = () => {
-      const segments = track.querySelectorAll<HTMLElement>("[data-effort-segment]");
-      const active = activeIndex >= 0 ? segments[activeIndex] : undefined;
-      setIndicator(active ? { left: active.offsetLeft, width: active.offsetWidth } : null);
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    // 字体加载、弹层宽度变化都会改变分段尺寸，指示器要跟着重新量。
-    const observer = new ResizeObserver(measure);
-    observer.observe(track);
-    return () => observer.disconnect();
-  }, [activeIndex]);
-
-  // 命中测试按真实 DOM 矩形做，而不是按 index 均分百分比：各段宽度随标签
-  // 长短而不同（flex 项的 min-width:auto 不会让它们收缩到比文字更窄）。
-  const selectAtClientX = (clientX: number) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const segments = Array.from(track.querySelectorAll<HTMLElement>("[data-effort-segment]"));
-    if (segments.length === 0) return;
-    // 取中心点最近的一段，而不是「命中矩形」：容器有 gap-0.5，段与段之间
-    // 存在 2px 缝隙，按命中判定会全部落空；再按左右钳到端点的话，点在任意
-    // 内部缝隙上都会被判成「在轨道右侧」而跳到最高档。按距离取最近段同时
-    // 覆盖了滑出轨道两端的情况。
-    let hit = 0;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    segments.forEach((segment, index) => {
-      const rect = segment.getBoundingClientRect();
-      const distance = Math.abs(clientX - (rect.left + rect.width / 2));
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        hit = index;
-      }
-    });
-    const next = choices[hit];
-    if (next && next !== value) onSelect(next);
-  };
-
-  return (
-    <div
-      ref={trackRef}
-      role="radiogroup"
-      aria-label={label}
-      onPointerDown={(event) => {
-        if (disabled || event.button !== 0) return;
-        // 捕获指针：拖动过程中即使滑出轨道也继续收到 move 事件。
-        event.currentTarget.setPointerCapture(event.pointerId);
-        selectAtClientX(event.clientX);
-      }}
-      onPointerMove={(event) => {
-        if (disabled) return;
-        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-        selectAtClientX(event.clientX);
-      }}
-      onPointerUp={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }
-      }}
-      className={cn(
-        "relative flex h-7 min-w-0 flex-1 touch-none select-none items-stretch",
-        "gap-0.5 rounded-lg bg-muted/60 p-0.5",
-        disabled && "opacity-50",
-      )}
-    >
-      {indicator ? (
-        <span
-          aria-hidden="true"
-          style={{ left: indicator.left, width: indicator.width }}
-          className={cn(
-            "pointer-events-none absolute inset-y-0.5 rounded-md bg-sky-500/15",
-            "transition-[left,width] duration-200 ease-out motion-reduce:transition-none",
-          )}
-        />
-      ) : null}
-      {choices.map((level, index) => {
-        const isSelected = level === value;
-        return (
-          // biome-ignore lint/a11y/useSemanticElements: Segmented buttons need button semantics for the shared focus/disabled styling; native radios cannot carry it.
-          <button
-            key={level}
-            data-effort-segment=""
-            data-active={isSelected ? "true" : undefined}
-            type="button"
-            role="radio"
-            aria-checked={isSelected}
-            disabled={disabled}
-            // radiogroup 的漫游焦点：整组只占一个 Tab 停靠点，落在当前选中项上。
-            tabIndex={isSelected || (activeIndex < 0 && index === 0) ? 0 : -1}
-            title={`${label}: ${formatLevel(level)}`}
-            onClick={() => onSelect(level)}
-            onKeyDown={(event) => {
-              // radiogroup 约定用方向键改选。原实现是 input[type=range]，
-              // 方向键本就可用；换成分段按钮后必须自己实现，否则 role="radio"
-              // 承诺的交互与实际不符。
-              const step =
-                event.key === "ArrowRight" || event.key === "ArrowDown"
-                  ? 1
-                  : event.key === "ArrowLeft" || event.key === "ArrowUp"
-                    ? -1
-                    : 0;
-              if (step === 0) return;
-              event.preventDefault();
-              const from = activeIndex < 0 ? 0 : activeIndex;
-              const next = choices[Math.min(choices.length - 1, Math.max(0, from + step))];
-              if (next && next !== value) onSelect(next);
-            }}
-            className={cn(
-              "relative z-10 flex flex-1 items-center justify-center whitespace-nowrap rounded-md",
-              "px-1.5 text-xs font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
-              isSelected
-                ? "text-sky-700 dark:text-sky-300"
-                : "text-muted-foreground hover:text-foreground",
-              disabled ? "cursor-not-allowed" : "cursor-pointer",
-            )}
-          >
-            {formatLevelCompact(level)}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -292,7 +138,8 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   const { t } = useLocale();
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
-  const [expandedGroupId, setExpandedGroupId] = useState<string | null | undefined>(undefined);
+  const [providerFilter, setProviderFilter] = useState("");
+  const [view, setView] = useState<"root" | "model" | "reasoning">("root");
   const [providerSortMode, setProviderSortMode] = useState<ProviderSortMode>(() =>
     readStoredProviderSortMode(),
   );
@@ -315,7 +162,8 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   useEffect(() => {
     if (!isModelPickerOpen) return;
     setModelSearch("");
-    setExpandedGroupId(undefined);
+    setView("root");
+    setProviderFilter("");
   }, [isModelPickerOpen]);
 
   useEffect(() => {
@@ -342,8 +190,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   const normalizedSearch = modelSearch.trim().toLowerCase();
   const groups = sortModelOptionGroups(groupModelOptionsByProvider(modelOptions), providerSortMode);
   const selectedOption = modelOptions.find((option) => option.value === selectedValue);
-  const selectedGroupId = selectedOption?.providerId;
-  const triggerLabel = selectedOption?.model ?? currentModelLabel;
+  const triggerLabel = selectedOption?.label ?? currentModelLabel;
   const isAgent = isAgentExecutionMode(executionMode);
   const isDev = isAgentDevMode(executionMode);
   const thinkingSupported = reasoningOptions.length > 0 || thinkingAlwaysOn;
@@ -360,19 +207,15 @@ export const ComposerModelControls = memo(function ComposerModelControls(
       : ["off", ...reasoningOptions.filter((level) => level !== "off")]
     : [];
   const selectedEffort: ReasoningLevel = thinkingOn ? selectedReasoning : "off";
-  // 搜索期间所有分组强制展开：此时折叠切换必须一并禁用，否则点击会静默
-  // 改写 expandedGroupId（画面无变化），且 aria-expanded 会与实际不符。
-  const groupToggleLocked = normalizedSearch.length > 0;
-  const isGroupExpanded = (id: string) => {
-    if (groupToggleLocked) return true;
-    const activeGroupId = expandedGroupId === undefined ? selectedGroupId : expandedGroupId;
-    return activeGroupId === id;
+  const showView = (next: "root" | "model" | "reasoning") => {
+    setView(next);
+    setModelSearch("");
   };
-  const toggleGroup = (id: string) =>
-    setExpandedGroupId((previous) => {
-      const activeGroupId = previous === undefined ? selectedGroupId : previous;
-      return activeGroupId === id ? null : id;
-    });
+  useEffect(() => {
+    if (!isModelPickerOpen) return;
+    const selector = view === "root" ? "button" : "[data-model-back]";
+    popoverContentRef.current?.querySelector<HTMLButtonElement>(selector)?.focus();
+  }, [view, isModelPickerOpen]);
   const resolveModelPickerInitialFocus = (openType: string) => {
     // Touch / coarse-pointer must not land on the search field: that opens the IME.
     // Focus the popup itself, matching Base UI's default touch behavior.
@@ -384,7 +227,7 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     if (openedByTouch || coarsePointer) {
       return popoverContentRef.current ?? false;
     }
-    return searchInputRef.current;
+    return popoverContentRef.current;
   };
 
   return (
@@ -403,9 +246,12 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         {selectedOption ? (
           <ProviderBrandIcon type={selectedOption.providerType} className="opacity-90" />
         ) : (
-          <Sparkle className="size-4 shrink-0 text-violet-500 dark:text-violet-400" />
+          <Layers className="size-4 shrink-0" />
         )}
-        <span className={COMPOSER_CONTROL_LABEL_CLASS}>{triggerLabel}</span>
+        <span className={COMPOSER_CONTROL_LABEL_CLASS}>
+          {triggerLabel}
+          {thinkingOn ? ` · ${t(REASONING_COMPACT_I18N_KEYS[selectedEffort])}` : ""}
+        </span>
         <ChevronDown
           className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, isModelPickerOpen && "rotate-180")}
         />
@@ -414,28 +260,68 @@ export const ComposerModelControls = memo(function ComposerModelControls(
       <PopoverContent
         ref={popoverContentRef}
         side="top"
-        align="start"
-        alignOffset={-48}
+        align="end"
         sideOffset={8}
         collisionPadding={8}
         initialFocus={resolveModelPickerInitialFocus}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            if (event.target instanceof HTMLInputElement && event.target.type === "radio") return;
+            const items = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                view === "model" ? "button[data-model-option]" : "button:not(:disabled)",
+              ),
+            );
+            const index = items.indexOf(document.activeElement as HTMLButtonElement);
+            const next =
+              items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+            if (next) {
+              event.preventDefault();
+              next.focus();
+            }
+          }
+          if (event.key !== "Escape") event.stopPropagation();
+        }}
         aria-label={t("chat.selectModel")}
         className={cn(
-          "flex max-h-popover-26rem w-popover-25rem flex-col overflow-hidden",
-          "rounded-xl border border-border/60 bg-popover p-0 text-xs shadow-lg",
-          "web:font-app web:text-sm web:leading-1p3",
+          "flex max-h-[min(360px,75dvh)] w-[300px] max-w-[calc(100vw-16px)] flex-col overflow-hidden",
+          "rounded-2xl border border-border/40 bg-popover p-1.5 text-xs leading-5 shadow-lg",
+          "web:font-app web:text-xs web:leading-5",
         )}
       >
-        <div className="flex min-h-0 flex-1 flex-col">
-          {/* 头部只留「执行模式」+ 搜索两行。原本还有「选择模型」标题与
-              provider·model 副标题：模型名在触发器、副标题、列表勾选处重复
-              三次，且 11px 的标题比 12px 的模型行还小，标题反而是面板里最小
-              的粗体字。弹层自身的 aria-label 已覆盖无障碍命名。 */}
-          <div className="shrink-0 p-2">
-            <div className="flex items-center justify-between gap-2 pb-1.5">
-              <span className="min-w-0 shrink truncate pl-0.5 text-xs font-semibold text-foreground">
-                {t("chat.selectModel")}
+        {view === "root" ? (
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => showView("model")}
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-lg px-2.5",
+                "text-left hover:bg-settings-active/60 focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <span>{t("chat.selectModel")}</span>
+              <span className="ml-auto min-w-0 truncate text-muted-foreground">{triggerLabel}</span>
+              <ChevronRight className="size-3.5 shrink-0" />
+            </button>
+            <button
+              type="button"
+              onClick={() => showView("reasoning")}
+              disabled={!thinkingSupported}
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-lg px-2.5",
+                "text-left hover:bg-settings-active/60 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <span>{t("chat.runtime.reasoning")}</span>
+              <span className="ml-auto text-muted-foreground">
+                {thinkingSupported
+                  ? t(REASONING_I18N_KEYS[selectedEffort])
+                  : t("chat.runtime.thinkingUnavailable")}
               </span>
+              <ChevronRight className="size-3.5 shrink-0" />
+            </button>
+            <div className="flex h-9 items-center justify-between gap-2 border-t border-border/40 px-2.5">
+              <span className="text-xs text-muted-foreground">{t("settings.executionMode")}</span>
               <div
                 role="radiogroup"
                 aria-label={t("settings.executionMode")}
@@ -482,155 +368,146 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 </label>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div
-                className={cn(
-                  "flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg bg-muted/60",
-                  "px-2.5 transition-shadow focus-within:ring-2 focus-within:ring-ring/25",
-                )}
+            <fieldset aria-label={t("chat.runtime.controls")} className="border-0 px-2.5">
+              <label
+                htmlFor={`${executionModeRadioName}-web`}
+                className="flex h-8 cursor-pointer items-center justify-between gap-2"
               >
-                <Search className="size-3.5 shrink-0 text-muted-foreground/65" />
-                <input
-                  ref={searchInputRef}
-                  value={modelSearch}
-                  onChange={(event) => setModelSearch(event.target.value)}
-                  placeholder={t("chat.searchModel")}
-                  className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
-                  onKeyDown={(event) => {
-                    // Escape 必须冒泡给 Popover 关闭，方向键留给列表导航；
-                    // 其余按键才拦下，避免触发编辑器/全局快捷键。
-                    if (
-                      event.key === "Escape" ||
-                      event.key === "ArrowDown" ||
-                      event.key === "ArrowUp" ||
-                      event.key === "Enter"
-                    ) {
-                      return;
-                    }
-                    event.stopPropagation();
-                  }}
+                <span>{t("chat.runtime.webSearch")}</span>
+                <Switch
+                  id={`${executionModeRadioName}-web`}
+                  checked={chatRuntimeControls.nativeWebSearchEnabled}
+                  disabled={disabled}
+                  aria-label={t("chat.runtime.webSearch")}
+                  onCheckedChange={(checked) =>
+                    onChatRuntimeControlsChange({ nativeWebSearchEnabled: checked })
+                  }
                 />
-              </div>
-              <button
-                type="button"
-                onClick={toggleProviderSortMode}
-                title={sortToggleTitle}
-                aria-label={sortToggleTitle}
-                aria-pressed={sortByName}
-                className={cn(
-                  "flex size-7 shrink-0 cursor-pointer items-center justify-center",
-                  "rounded-lg bg-muted/60 text-muted-foreground transition-colors",
-                  "hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 aria-pressed:text-foreground",
-                )}
-              >
-                {sortByName ? (
-                  <ArrowDownAZ className="size-3.5" />
-                ) : (
-                  <Layers className="size-3.5" />
-                )}
-              </button>
-            </div>
+              </label>
+            </fieldset>
           </div>
-          {/* pt-0：sticky 分组表头贴 top-0，容器顶部若还有内边距，那条带子里的
-              内容会在表头停靠位置之上滚过并露出来。底部留白由 pb 负责。 */}
-          <div className="min-h-20 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2 pb-1 [scrollbar-gutter:stable]">
-            {(() => {
-              const filteredGroups = normalizedSearch
-                ? groups
-                    .map((group) => ({
-                      ...group,
-                      opts: group.opts.filter(
-                        (option) =>
-                          option.model.toLowerCase().includes(normalizedSearch) ||
-                          option.providerName.toLowerCase().includes(normalizedSearch),
-                      ),
-                    }))
-                    .filter((group) => group.opts.length > 0)
-                : groups;
-
-              if (filteredGroups.length === 0) {
-                return (
-                  <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                    {t("chat.noModelFound")}
-                  </div>
-                );
-              }
-
-              return filteredGroups.map((group) => {
-                const expanded = isGroupExpanded(group.id);
-                const isSelectedGroup = selectedGroupId === group.id;
-                return (
-                  <div key={group.id} className={cn("flex flex-col gap-0.5")}>
-                    <div
-                      className={cn(
-                        "group sticky top-0 z-10 flex h-8 shrink-0 items-stretch",
-                        "rounded-lg bg-popover transition-colors hover:bg-muted/55 focus-within:bg-muted/55",
-                        isSelectedGroup && "text-foreground",
-                      )}
+        ) : (
+          <div className="flex min-h-0 flex-col">
+            <button
+              type="button"
+              data-model-back
+              onClick={() => showView("root")}
+              className={cn(
+                "mb-1 flex h-8 items-center gap-2 rounded-lg px-2.5",
+                "text-left hover:bg-settings-active/60 focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <ChevronRight className="size-3.5 rotate-180" />
+              {t(view === "model" ? "chat.selectModel" : "chat.runtime.reasoning")}
+            </button>
+            {view === "model" ? (
+              <>
+                <div className="mb-2 flex items-center gap-2 px-1">
+                  <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-settings-tile-hover px-2.5">
+                    <Search className="size-3.5 shrink-0 text-muted-foreground" />
+                    <input
+                      ref={searchInputRef}
+                      value={modelSearch}
+                      onChange={(event) => setModelSearch(event.target.value)}
+                      placeholder={t("chat.searchModel")}
+                      aria-label={t("chat.searchModel")}
+                      className="min-w-0 w-full bg-transparent outline-none"
+                    />
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleProviderSortMode}
+                    title={sortToggleTitle}
+                    aria-label={sortToggleTitle}
+                    aria-pressed={sortByName}
+                  >
+                    {sortByName ? (
+                      <ArrowDownAZ className="size-3.5" />
+                    ) : (
+                      <Layers className="size-3.5" />
+                    )}
+                  </Button>
+                </div>
+                <div className="mb-1 shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          className="h-7 w-full justify-between bg-settings-tile-hover px-2 text-xs"
+                        />
+                      }
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleGroup(group.id)}
-                        disabled={groupToggleLocked}
-                        aria-expanded={expanded}
-                        className={cn(
-                          "flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l-lg",
-                          "px-2.5 py-0 text-left text-xs font-medium",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 web:font-app web:text-sm! web:leading-1p3!",
-                          isSelectedGroup
-                            ? "text-foreground"
-                            : "text-muted-foreground/85 dark:text-white/80",
-                        )}
+                      <span className="truncate">
+                        {groups.find((group) => group.id === providerFilter)?.name ??
+                          t("settings.modelAllProviders")}
+                      </span>
+                      <ChevronDown className="size-3 shrink-0" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="max-h-64 w-64 overflow-y-auto">
+                      <DropdownMenuRadioGroup
+                        value={providerFilter}
+                        onValueChange={setProviderFilter}
                       >
-                        <ProviderBrandIcon
-                          type={group.providerType}
-                          className="size-3.5 opacity-90"
-                        />
-                        <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsModelPickerOpen(false);
-                          onOpenSettings("providers", group.id);
-                        }}
-                        aria-label={`${t("settings.editProvider")}: ${group.name}`}
-                        className={cn(
-                          "flex w-7 shrink-0 cursor-pointer items-center justify-center",
-                          "rounded-md text-muted-foreground/50 opacity-100 transition-colors duration-150",
-                          "hover:bg-muted/65 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
-                        )}
-                      >
-                        <Pencil className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleGroup(group.id)}
-                        disabled={groupToggleLocked}
-                        aria-expanded={expanded}
-                        aria-label={`${
-                          expanded ? t("chat.collapseProvider") : t("chat.expandProvider")
-                        }: ${group.name}`}
-                        className={cn(
-                          "flex shrink-0 cursor-pointer items-center rounded-r-lg px-2 py-0 text-muted-foreground/75",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white/75",
-                        )}
-                      >
-                        <ChevronDown
-                          className={cn(
-                            "size-3.5 shrink-0 transition-transform duration-200",
-                            expanded && "rotate-180",
-                          )}
-                        />
-                      </button>
-                    </div>
-                    {expanded
-                      ? group.opts.map((option) => {
+                        <DropdownMenuRadioItem value="">
+                          {t("settings.modelAllProviders")}
+                        </DropdownMenuRadioItem>
+                        {groups.map((group) => (
+                          <DropdownMenuRadioItem key={group.id} value={group.id}>
+                            {group.name} ({group.opts.length})
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="min-h-0 overflow-y-auto overscroll-contain">
+                  {(() => {
+                    const filteredGroups = groups
+                      .filter(
+                        (group) =>
+                          normalizedSearch || !providerFilter || group.id === providerFilter,
+                      )
+                      .map((group) => ({
+                        ...group,
+                        opts: group.opts.filter(
+                          (option) =>
+                            option.model.toLowerCase().includes(normalizedSearch) ||
+                            option.label.toLowerCase().includes(normalizedSearch) ||
+                            option.providerName.toLowerCase().includes(normalizedSearch),
+                        ),
+                      }))
+                      .filter((group) => group.opts.length > 0);
+                    if (!filteredGroups.length)
+                      return (
+                        <p className="px-3 py-6 text-center text-muted-foreground">
+                          {t("chat.noModelFound")}
+                        </p>
+                      );
+                    return filteredGroups.map((group) => (
+                      <div key={group.id}>
+                        <div className="flex h-8 items-center justify-between px-2.5 text-xs text-muted-foreground">
+                          <span>{group.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`${t("settings.editProvider")}: ${group.name}`}
+                            onClick={() => {
+                              setIsModelPickerOpen(false);
+                              onOpenSettings("providers", group.id);
+                            }}
+                          >
+                            <SquarePen className="size-3" />
+                          </Button>
+                        </div>
+                        {group.opts.map((option) => {
                           const isSelected = option.value === selectedValue;
                           return (
                             <button
                               type="button"
                               key={option.value}
+                              data-model-option=""
                               aria-pressed={isSelected}
                               onClick={() => {
                                 const parsed = parseModelValue(option.value);
@@ -639,118 +516,107 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 setIsModelPickerOpen(false);
                               }}
                               className={cn(
-                                "flex h-7 w-full max-w-full shrink-0 cursor-pointer items-center justify-between",
-                                "gap-2 overflow-hidden rounded-lg",
-                                "py-0 pl-8 pr-2",
-                                "text-left text-xs font-normal leading-5 text-foreground transition-[background-color,box-shadow]",
-                                "hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 dark:text-white web:font-app",
-                                "web:text-sm! web:leading-1p3!",
-                                isSelected &&
-                                  "bg-muted/70 font-medium hover:bg-muted/70 focus-visible:bg-muted/70",
+                                "flex h-7 w-full items-center justify-between gap-2 rounded-lg px-2.5",
+                                "text-left hover:bg-settings-active/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                                isSelected && "bg-settings-active/60",
                               )}
                             >
-                              <span className="flex min-w-0 items-center gap-2">
-                                {/* 12px：比分组表头的 14px 小一档，避免子行图标
-                                    压过父行（改前是 16px，层级是倒的）。 */}
-                                <ProviderBrandIcon
-                                  type={option.providerType}
-                                  className={cn(
-                                    "size-3 shrink-0",
-                                    isSelected ? "opacity-80" : "opacity-45",
-                                  )}
-                                />
-                                <span className="min-w-0 truncate">{option.model}</span>
+                              <span className="min-w-0 flex-1 truncate" title={option.model}>
+                                {option.label}
                               </span>
-                              {isSelected ? (
-                                <Check
-                                  className="size-3.5 shrink-0 text-foreground"
-                                  strokeWidth={2.5}
-                                />
-                              ) : null}
+                              <span className="flex shrink-0 items-center gap-1 text-tiny text-muted-foreground">
+                                {option.reasoning && (
+                                  <span className="rounded bg-settings-tile-hover px-1">
+                                    {t("settings.modelBadgeReasoning")}
+                                  </span>
+                                )}
+                                {option.vision && (
+                                  <span className="rounded bg-settings-tile-hover px-1">
+                                    {t("settings.modelBadgeVision")}
+                                  </span>
+                                )}
+                                {option.contextWindow && (
+                                  <span>
+                                    {new Intl.NumberFormat("en", {
+                                      notation: "compact",
+                                      maximumFractionDigits: 1,
+                                    }).format(option.contextWindow)}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="size-3.5 shrink-0">
+                                {isSelected && <Check className="size-3.5" />}
+                              </span>
                             </button>
                           );
-                        })
-                      : null}
+                        })}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-1 overflow-y-auto">
+                <p className="px-3 pb-2 text-xs text-muted-foreground">{triggerLabel}</p>
+                {showEffortBar ? (
+                  <div role="radiogroup" aria-label={t("chat.runtime.reasoning")}>
+                    {effortChoices.map((level) => (
+                      <label
+                        key={level}
+                        className={cn(
+                          "flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5",
+                          "hover:bg-settings-active/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                          selectedEffort === level && "bg-settings-active/60",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name={`${executionModeRadioName}-reasoning`}
+                          value={level}
+                          checked={selectedEffort === level}
+                          className="sr-only"
+                          onChange={() => {
+                            if (level === "off")
+                              onChatRuntimeControlsChange({ thinkingEnabled: false });
+                            else
+                              onChatRuntimeControlsChange({
+                                thinkingEnabled: true,
+                                reasoning: level,
+                              });
+                          }}
+                        />
+                        {t(REASONING_I18N_KEYS[level])}
+                        {selectedEffort === level && <Check className="size-3.5" />}
+                      </label>
+                    ))}
                   </div>
-                );
-              });
-            })()}
-          </div>
-        </div>
-        <fieldset
-          aria-label={t("chat.runtime.controls")}
-          className="flex shrink-0 items-center gap-2 border-t border-border/45 px-2 py-1.5"
-        >
-          <RuntimeToggleChip
-            pressed={chatRuntimeControls.nativeWebSearchEnabled}
-            disabled={disabled}
-            label={t("chat.runtime.webSearch")}
-            ariaLabel={
-              chatRuntimeControls.nativeWebSearchEnabled
-                ? t("chat.runtime.webSearchOn")
-                : t("chat.runtime.webSearchOff")
-            }
-            pressedClassName="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
-            icon={
-              chatRuntimeControls.nativeWebSearchEnabled ? (
-                <Globe className="size-3.5 shrink-0" />
-              ) : (
-                <GlobeOff className="size-3.5 shrink-0" />
-              )
-            }
-            onClick={() =>
-              onChatRuntimeControlsChange({
-                nativeWebSearchEnabled: !chatRuntimeControls.nativeWebSearchEnabled,
-              })
-            }
-          />
-
-          <div aria-hidden="true" className="h-4 w-px shrink-0 bg-border/70" />
-
-          {showEffortBar ? (
-            <ReasoningEffortSegments
-              choices={effortChoices}
-              value={selectedEffort}
-              disabled={disabled}
-              label={t("chat.runtime.reasoning")}
-              formatLevel={(level) => t(REASONING_I18N_KEYS[level])}
-              formatLevelCompact={(level) => t(REASONING_COMPACT_I18N_KEYS[level])}
-              onSelect={(level) => {
-                if (level === "off") {
-                  onChatRuntimeControlsChange({ thinkingEnabled: false });
-                  return;
-                }
-                onChatRuntimeControlsChange({ thinkingEnabled: true, reasoning: level });
-              }}
-            />
-          ) : (
-            <RuntimeToggleChip
-              pressed={thinkingOn}
-              disabled={disabled || !thinkingSupported || thinkingAlwaysOn}
-              label={t("chat.runtime.thinking")}
-              ariaLabel={
-                !thinkingSupported
-                  ? t("chat.runtime.thinkingUnavailable")
-                  : thinkingOn
-                    ? t("chat.runtime.thinkingOn")
-                    : t("chat.runtime.thinkingOff")
-              }
-              pressedClassName="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
-              icon={
-                thinkingOn ? (
-                  <Lightbulb className="size-3.5 shrink-0" />
                 ) : (
-                  <LightbulbOff className="size-3.5 shrink-0" />
-                )
-              }
-              onClick={() =>
-                onChatRuntimeControlsChange({
-                  thinkingEnabled: !chatRuntimeControls.thinkingEnabled,
-                })
-              }
-            />
-          )}
-        </fieldset>
+                  <RuntimeToggleChip
+                    pressed={thinkingOn}
+                    disabled={disabled || !thinkingSupported || thinkingAlwaysOn}
+                    label={t("chat.runtime.thinking")}
+                    ariaLabel={
+                      thinkingOn ? t("chat.runtime.thinkingOn") : t("chat.runtime.thinkingOff")
+                    }
+                    pressedClassName="bg-muted text-foreground"
+                    icon={
+                      thinkingOn ? (
+                        <Lightbulb className="size-3.5" />
+                      ) : (
+                        <LightbulbOff className="size-3.5" />
+                      )
+                    }
+                    onClick={() =>
+                      onChatRuntimeControlsChange({
+                        thinkingEnabled: !chatRuntimeControls.thinkingEnabled,
+                      })
+                    }
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

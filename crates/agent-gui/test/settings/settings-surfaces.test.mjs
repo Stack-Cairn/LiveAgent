@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
-test("settings surfaces preserve native nodes, props, refs and existing class sets", async () => {
+test("settings surfaces preserve native nodes, props, refs and shared class sets", async () => {
   const env = await createDomTestEnv();
   const { React, act, createRoot } = env;
   const { SettingsPanel, SettingsHint } = env.loadModule("@liveagent/ui/components/settings/SettingsPanel.tsx");
@@ -26,7 +26,7 @@ test("settings surfaces preserve native nodes, props, refs and existing class se
   for (const [kind, color] of [["command", "blue"], ["http", "emerald"], ["prompt", "violet"]]) {
     for (const selected of [false, true]) {
       cases.push([ChoiceCard, {kind, selected}, "button",
-        "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all " +
+        "group relative flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-[border-color,background-color] duration-150 " +
         (selected ? `border-${color}-500/50 bg-${color}-500/5` : "border-border/60 bg-background hover:border-border hover:bg-muted/20")]);
     }
   }

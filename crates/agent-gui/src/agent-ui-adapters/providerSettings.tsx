@@ -1,11 +1,4 @@
-import {
-  CheckCircle2,
-  ChevronDown,
-  Download,
-  Key,
-  Loader2,
-  RefreshCw,
-} from "@liveagent/ui/components/IconSet";
+import { CheckCircle2, Download, Key, Loader2, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
 import {
@@ -18,14 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@liveagent/ui/components/ui/dropdown-menu";
+
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -242,7 +228,6 @@ function isLikelyCherryChatModel(modelId: string) {
 }
 
 function CcsImportModal(props: {
-  activeTab: ProviderId;
   items: CcsProviderImportItem[];
   existingProviders: CustomProvider[];
   importing: boolean;
@@ -250,12 +235,12 @@ function CcsImportModal(props: {
   onImport: (items: CcsProviderImportItem[]) => void;
   onClose: () => void;
 }) {
-  const { activeTab, items, existingProviders, importing, result, onImport, onClose } = props;
+  const { items, existingProviders, importing, result, onImport, onClose } = props;
   const existing = useMemo(
     () => new Set(existingProviders.map(ccsImportIdentity)),
     [existingProviders],
   );
-  const rows = items.filter((item) => item.providerType === activeTab);
+  const rows = items;
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const selectedItems = rows.filter((item) => selected.has(ccsItemKey(item)));
 
@@ -282,7 +267,7 @@ function CcsImportModal(props: {
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-sm leading-normal">从 CC Switch 导入</DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">
-              导入当前供应商类型的配置，并在后台获取模型列表
+              选择要导入的配置，并在后台获取模型列表
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -325,7 +310,7 @@ function CcsImportModal(props: {
             })
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              当前类型未发现可导入配置
+              未发现可导入配置
             </div>
           )}
         </DialogBody>
@@ -383,12 +368,11 @@ export function ProviderCopyConfigButton(props: {
 }
 
 export function ProviderSettingsExtension(props: {
-  activeTab: ProviderId;
   settings: AppSettings;
   setSettings: SetSettingsFn;
   triggerClassName?: string;
 }) {
-  const { activeTab, settings, setSettings, triggerClassName } = props;
+  const { settings, setSettings, triggerClassName } = props;
   const { t } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -601,79 +585,77 @@ export function ProviderSettingsExtension(props: {
       .finally(() => setScanning(false));
   }
 
-  const ccsCount =
-    ccsResponse?.providers.filter((item) => item.providerType === activeTab).length ?? 0;
-  const cherryCount =
-    cherryResponse?.providers.filter((item) => item.providerType === activeTab && item.importable)
-      .length ?? 0;
+  const ccsCount = ccsResponse?.providers.length ?? 0;
+  const cherryCount = cherryResponse?.providers.filter((item) => item.importable).length ?? 0;
 
   return (
     <>
-      <span className="settings-provider-action-slot flex min-w-0 self-stretch [&_.settings-provider-action]:flex-1">
-        <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn("settings-provider-action", triggerClassName)}
-                title={message ?? t("settings.importProvidersHint")}
-                aria-label={t("settings.importProvidersHint")}
-              />
-            }
-          >
-            {scanning ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Download className="size-3.5" />
-            )}
-            <span className="max-[860px]:hidden max-640:inline">
-              {t("settings.importProviders")}
-            </span>
-            <ChevronDown
-              className={cn("size-3.5 shrink-0 transition-transform", menuOpen && "rotate-180")}
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>桌面配置同步</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => void scan()} disabled={scanning} className="gap-2">
-              <RefreshCw className={cn("size-4", scanning && "animate-spin")} />
-              重新扫描本地配置
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={triggerClassName}
+        onClick={() => handleMenuOpenChange(true)}
+        aria-label={t("settings.importProviders")}
+      >
+        <Download className="size-3.5" />
+        {t("settings.importProviders")}
+      </Button>
+      <Dialog open={menuOpen} onOpenChange={handleMenuOpenChange}>
+        <DialogContent className="max-w-md" showCloseButton closeLabel={t("settings.close")}>
+          <DialogHeader>
+            <DialogTitle>{t("settings.importProviders")}</DialogTitle>
+            <DialogDescription>选择配置来源，再选择要导入的供应商。</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <Button
+              variant="ghost"
               disabled={scanning || ccsCount === 0}
-              onSelect={() => setCcsModalOpen(true)}
-              className="gap-3 py-2.5"
+              onClick={() => {
+                setMenuOpen(false);
+                setCcsModalOpen(true);
+              }}
+              className="h-auto w-full justify-start gap-3 rounded-xl bg-settings-tile p-4 text-left"
             >
-              {sourceLogo("ccswitch", "size-8")}
+              {sourceLogo("ccswitch", "size-9")}
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">CC Switch</span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  当前类型发现 {ccsCount} 项配置
-                </span>
+                <span className="block text-xs text-muted-foreground">发现 {ccsCount} 项配置</span>
               </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
+            </Button>
+            <Button
+              variant="ghost"
               disabled={scanning || cherryCount === 0}
-              onSelect={() => setCherryModalOpen(true)}
-              className="gap-3 py-2.5"
+              onClick={() => {
+                setMenuOpen(false);
+                setCherryModalOpen(true);
+              }}
+              className="h-auto w-full justify-start gap-3 rounded-xl bg-settings-tile p-4 text-left"
             >
-              {sourceLogo("cherry", "size-8")}
+              {sourceLogo("cherry", "size-9")}
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">Cherry Studio</span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  当前类型发现 {cherryCount} 项可同步配置
+                <span className="block text-xs text-muted-foreground">
+                  发现 {cherryCount} 项可同步配置
                 </span>
               </span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </span>
+            </Button>
+            {message && (
+              <p role="status" className="text-xs text-muted-foreground">
+                {message}
+              </p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => void scan()} disabled={scanning}>
+              <RefreshCw className={cn("size-4", scanning && "animate-spin")} />
+              {scanning ? "正在扫描…" : "重新扫描本地配置"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {ccsModalOpen ? (
         <CcsImportModal
-          activeTab={activeTab}
           items={ccsResponse?.providers ?? []}
           existingProviders={settings.customProviders}
           importing={importing}
@@ -684,7 +666,9 @@ export function ProviderSettingsExtension(props: {
       ) : null}
       {cherryModalOpen && cherryResponse ? (
         <CherryStudioImportModal
-          initialType={activeTab}
+          initialType={
+            cherryResponse.providers.find((item) => item.importable)?.providerType ?? "claude_code"
+          }
           response={cherryResponse}
           importing={importing}
           scanning={scanning}

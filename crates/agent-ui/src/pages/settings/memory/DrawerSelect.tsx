@@ -21,6 +21,7 @@ export function DrawerSelect(props: {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  variant?: "default" | "plain";
 }) {
   const { value, onValueChange, options, ariaLabel, placeholder, disabled, className } = props;
   const triggerClass = cn(
@@ -31,6 +32,12 @@ export function DrawerSelect(props: {
     "data-[placeholder]:text-muted-foreground",
     "focus-visible:outline-none focus-visible:ring-0",
     "disabled:cursor-not-allowed disabled:opacity-50",
+    props.variant === "plain" &&
+      cn(
+        "border-0 bg-settings-tile-hover shadow-none",
+        "hover:bg-settings-active data-[open]:bg-background",
+        "focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring/25",
+      ),
     className,
   );
 

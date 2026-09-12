@@ -315,7 +315,7 @@ export function WorkspaceProjectSettingsModal(props: {
       }}
     >
       <DialogContent
-        className="flex h-dialog-650px max-w-940px flex-col p-0"
+        className="flex h-[min(40rem,calc(100dvh-2rem))] max-w-4xl flex-col overflow-hidden p-0"
         closeDisabled={saving}
         closeLabel={t("window.close")}
         layout="fullscreen-mobile"
@@ -335,11 +335,11 @@ export function WorkspaceProjectSettingsModal(props: {
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="flex overflow-hidden p-0 max-[720px]:flex-col">
+        <DialogBody className="flex gap-2 overflow-hidden px-4 py-0 max-[720px]:flex-col">
           <nav
             className={cn(
-              "flex w-188px shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5",
-              "max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2",
+              "flex w-48 shrink-0 flex-col gap-1 rounded-xl bg-settings-rail p-2.5",
+              "max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:px-2.5 max-[720px]:py-2",
             )}
             aria-label={t("chat.workspaceSettingsNavigation")}
           >
@@ -348,12 +348,12 @@ export function WorkspaceProjectSettingsModal(props: {
                 key={id}
                 type="button"
                 className={cn(
-                  "flex h-8 items-center gap-2 rounded-lg px-3",
-                  "text-left text-sm font-medium transition-colors",
+                  "flex h-8 cursor-pointer items-center gap-2 rounded-lg px-3",
+                  "text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   "max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs",
                   activePanel === id
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    ? "bg-settings-active text-foreground"
+                    : "text-foreground/70 hover:bg-settings-tile-hover hover:text-foreground",
                 )}
                 onClick={() => setActivePanel(id)}
                 aria-current={activePanel === id ? "page" : undefined}
@@ -434,6 +434,7 @@ export function WorkspaceProjectSettingsModal(props: {
 
             {activePanel === "prompt" ? (
               <ProjectPromptSettingsPanel
+                plain
                 projectPrompt={projectPrompt}
                 strategy={projectPromptStrategy}
                 onProjectPromptChange={setProjectPrompt}
@@ -443,7 +444,7 @@ export function WorkspaceProjectSettingsModal(props: {
           </main>
         </DialogBody>
 
-        <DialogFooter className="bg-muted/20 min-[821px]:justify-between">
+        <DialogFooter className="min-[821px]:justify-between">
           <div
             className={cn(
               "min-w-0 flex-1 truncate text-xs text-muted-foreground max-[520px]:hidden",
@@ -461,14 +462,14 @@ export function WorkspaceProjectSettingsModal(props: {
           <DialogActions>
             <DialogClose
               disabled={saving}
-              render={<Button type="button" variant="outline" className="h-8" />}
+              render={<Button type="button" variant="outline" size="sm" />}
             >
               {t("chat.cancel")}
             </DialogClose>
             <Button
               onClick={() => void handleSave()}
               disabled={saving || !dialogOpen || projectNameInvalid}
-              className="h-8"
+              size="sm"
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}
               {t("workspaceEditor.save")}

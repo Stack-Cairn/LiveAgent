@@ -141,3 +141,23 @@ export const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuIte
   ),
 );
 DropdownMenuItem.displayName = "DropdownMenuItem";
+
+export const DropdownMenuRadioGroup = Menu.RadioGroup;
+export const DropdownMenuRadioItem = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<typeof Menu.RadioItem>
+>(({ className, children, ...props }, ref) => (
+  <Menu.RadioItem
+    ref={ref}
+    className={cn(
+      "flex cursor-default items-center justify-between gap-3 rounded-md px-3 py-2",
+      "text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+    <Menu.RadioItemIndicator aria-hidden="true">✓</Menu.RadioItemIndicator>
+  </Menu.RadioItem>
+));
+DropdownMenuRadioItem.displayName = "DropdownMenuRadioItem";

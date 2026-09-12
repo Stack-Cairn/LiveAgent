@@ -443,6 +443,7 @@ export type ModelInputModalitiesOverride = ["text"] | ["text", "image"];
 
 export type ProviderModelConfig = {
   id: string;
+  displayName?: string;
   /** /models 元数据；缺失时保持旧设置格式兼容。 */
   ownedBy?: string;
   contextWindow: number;

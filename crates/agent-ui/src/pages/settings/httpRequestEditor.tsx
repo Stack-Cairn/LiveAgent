@@ -122,6 +122,8 @@ export function parseHttpRequestDrafts(
 }
 
 type HttpRequestListEditorProps = {
+  plain?: boolean;
+  alwaysExpanded?: boolean;
   requests: HttpRequestDraft[];
   expandedRequestId: string | null;
   onExpand: (id: string | null) => void;
@@ -132,6 +134,8 @@ type HttpRequestListEditorProps = {
 };
 
 export function HttpRequestListEditor({
+  plain = false,
+  alwaysExpanded = false,
   requests,
   expandedRequestId,
   onExpand,
@@ -149,23 +153,30 @@ export function HttpRequestListEditor({
     <div className="space-y-3">
       {requests.map((request, index) => {
         const bodyEnabled = canHttpMethodHaveBody(request.method);
-        const isExpanded = expandedRequestId === request.id;
+        const isExpanded = alwaysExpanded || expandedRequestId === request.id;
 
         return (
           <div
             key={request.id}
-            className="overflow-hidden rounded-xl border border-border/60 bg-background/80 transition-colors hover:border-border/80"
+            className={
+              plain
+                ? "rounded-xl bg-settings-tile"
+                : "overflow-hidden rounded-xl border border-border/60 bg-background/80 transition-colors hover:border-border/80"
+            }
           >
             <div
               className={cn(
                 "flex items-center gap-3 px-4 py-3",
+                plain && "flex-wrap [&_input]:order-last [&_input]:basis-full",
                 "web:max-820:flex-wrap web:max-820:items-stretch web:max-820:[&_>_input]:order-5 web:max-820:[&_>_input]:flex-[1_1_100%] web:max-820:[&_>_input]:min-w-0 web:max-820:[&_>_div:last-child]:ml-auto",
               )}
             >
               <div
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center",
-                  "rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400",
+                  plain
+                    ? "text-xs font-medium text-muted-foreground"
+                    : "rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400",
                 )}
               >
                 {index + 1}
@@ -194,6 +205,7 @@ export function HttpRequestListEditor({
               </Select>
 
               <Input
+                variant={plain ? "plain" : "default"}
                 value={request.url}
                 placeholder={urlPlaceholder}
                 className="h-8 flex-1 font-mono text-xs"
@@ -204,18 +216,23 @@ export function HttpRequestListEditor({
               />
 
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onExpand(isExpanded ? null : request.id)}
-                  className={cn(
-                    "flex size-7 items-center justify-center rounded-md transition-colors hover:bg-muted/50",
-                    isExpanded ? "text-primary" : "text-muted-foreground",
-                  )}
-                >
-                  <ChevronDown
-                    className={cn("size-3.5 transition-transform", isExpanded ? "" : "-rotate-90")}
-                  />
-                </button>
+                {!alwaysExpanded ? (
+                  <button
+                    type="button"
+                    onClick={() => onExpand(isExpanded ? null : request.id)}
+                    className={cn(
+                      "flex size-7 items-center justify-center rounded-md transition-colors hover:bg-muted/50",
+                      isExpanded ? "text-primary" : "text-muted-foreground",
+                    )}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "size-3.5 transition-transform",
+                        isExpanded ? "" : "-rotate-90",
+                      )}
+                    />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -238,10 +255,13 @@ export function HttpRequestListEditor({
 
             {isExpanded ? (
               <div className="border-t border-border/30 bg-muted/10 p-4">
-                <div className="settings-form-grid grid gap-4 sm:grid-cols-2">
+                <div
+                  className={plain ? "space-y-4" : "settings-form-grid grid gap-4 sm:grid-cols-2"}
+                >
                   <FormField density="compact">
                     <FormFieldLabel size="compact">Headers</FormFieldLabel>
                     <Textarea
+                      variant={plain ? "plain" : "default"}
                       value={request.headersText}
                       placeholder={'{\n  "Authorization": "Bearer ..."\n}'}
                       className="min-h-100px resize-y font-mono text-xs leading-relaxed"
@@ -255,6 +275,7 @@ export function HttpRequestListEditor({
                     <FormFieldLabel size="compact">Body</FormFieldLabel>
                     {bodyEnabled ? (
                       <Textarea
+                        variant={plain ? "plain" : "default"}
                         value={request.bodyText}
                         placeholder={'{\n  "message": "hello"\n}'}
                         className="min-h-100px resize-y font-mono text-xs leading-relaxed"

@@ -61,18 +61,6 @@ import {
 import { memo, useMemo } from "react";
 import { InstalledSkillCategoryChip } from "./SkillCategoryControls";
 
-const INSTALLED_SKILL_ICON_TONES = [
-  "border-sky-500/30 bg-sky-500/12 text-sky-700 dark:border-sky-400/30 dark:bg-sky-400/15 dark:text-sky-200",
-  "border-indigo-500/30 bg-indigo-500/12 text-indigo-700 dark:border-indigo-400/30 dark:bg-indigo-400/15 dark:text-indigo-200",
-  "border-violet-500/30 bg-violet-500/12 text-violet-700 dark:border-violet-400/30 dark:bg-violet-400/15 dark:text-violet-200",
-  "border-fuchsia-500/30 bg-fuchsia-500/12 text-fuchsia-700 dark:border-fuchsia-400/30 dark:bg-fuchsia-400/15 dark:text-fuchsia-200",
-  "border-rose-500/30 bg-rose-500/12 text-rose-700 dark:border-rose-400/30 dark:bg-rose-400/15 dark:text-rose-200",
-  "border-orange-500/30 bg-orange-500/12 text-orange-700 dark:border-orange-400/30 dark:bg-orange-400/15 dark:text-orange-200",
-  "border-amber-500/30 bg-amber-500/12 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/15 dark:text-amber-200",
-  "border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/15 dark:text-emerald-200",
-  "border-cyan-500/30 bg-cyan-500/12 text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-400/15 dark:text-cyan-200",
-] as const;
-
 const INSTALLED_SKILL_CARD_ICONS: Record<InstalledSkillCardIconName, typeof Activity> = {
   bookOpen: BookOpen,
   bot: Bot,
@@ -202,78 +190,28 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
   const CardIcon = alwaysEnabled
     ? SkillIcon
     : INSTALLED_SKILL_CARD_ICONS[cardIdentity?.iconName ?? "circleHelp"];
-  const iconTone = cardIdentity ? INSTALLED_SKILL_ICON_TONES[cardIdentity.colorIndex] : null;
   const metadataSource = getInstalledSkillCardSource(skill);
   const MetadataIcon =
     metadataSource === "built-in" ? Lock : metadataSource === "clawhub" ? Cloud : Folder;
   const metadataLabel = useMemo(() => formatInstalledSkillMetadata(skill, t), [skill, t]);
   const cardContent = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <div
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-xl border",
-            alwaysEnabled ? "border-border bg-muted text-foreground" : iconTone,
-          )}
-        >
-          <CardIcon className="size-5" />
-        </div>
-
-        <div
-          data-card-action-zone=""
-          role="toolbar"
-          aria-label={skill.name}
-          className="flex shrink-0 items-center gap-1"
-          onPointerDown={(event) => event.stopPropagation()}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          {bulkMode ? (
-            alwaysEnabled ? (
-              <Lock
-                className="size-4 text-muted-foreground"
-                aria-label={t("settings.skillsBulkAlwaysOnDisabled")}
-              />
-            ) : (
-              <Checkbox
-                checked={bulkSelected}
-                aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${skill.name}`}
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-                onCheckedChange={() => onToggleBulkSelection(skill.name)}
-              />
-            )
-          ) : alwaysEnabled ? null : (
-            <>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-                aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${skill.name}`}
-                title={t("settings.skillsHubBulkSelect")}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onEnterBulkMode(skill.name);
-                }}
-                onKeyDown={(event) => event.stopPropagation()}
-              >
-                <ListChecks className="size-3.5" />
-              </Button>
-              <ResourceActivationSwitch
-                checked={effectivelyEnabled}
-                disabled={!skillsEnabled}
-                compact
-                stopPropagation
-                label={`${t("skills.select")}: ${skill.name}`}
-                onCheckedChange={(nextChecked) => onToggle(skill.name, nextChecked)}
-              />
-            </>
-          )}
-        </div>
+      <div
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-lg",
+          "text-muted-foreground transition-colors group-hover:text-foreground/70",
+          !effectivelyEnabled && !alwaysEnabled && "opacity-70",
+        )}
+      >
+        <CardIcon className="size-4" />
       </div>
 
-      <div className="mt-3 min-w-0 flex-1">
+      <div
+        className={cn(
+          "min-w-0 flex-1 transition-opacity",
+          !effectivelyEnabled && !alwaysEnabled && "opacity-75",
+        )}
+      >
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <SearchHighlight
             text={skill.name}
@@ -292,80 +230,108 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
           ) : null}
         </div>
         {skill.description ? (
-          <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+          <p className="mt-1 line-clamp-1 text-xs leading-5 text-muted-foreground">
             <SearchHighlight text={skill.description} query={searchQuery} />
           </p>
         ) : null}
+        <div className="mt-1 flex min-w-0 items-center gap-2 text-tiny text-muted-foreground">
+          <InstalledSkillCategoryChip category={primaryCategory} onSelect={onSelectCategory} />
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <MetadataIcon className="size-3 shrink-0" />
+            <span className="truncate">{metadataLabel}</span>
+          </span>
+        </div>
       </div>
 
-      {!alwaysEnabled ? (
-        <div className="mt-3 flex min-w-0 items-center gap-2 border-t border-border pt-2">
-          <InstalledSkillCategoryChip category={primaryCategory} onSelect={onSelectCategory} />
-          <div className="ml-auto grid min-w-0 items-center justify-items-end">
-            <span
-              className={cn(
-                "pointer-events-none col-start-1 row-start-1 inline-flex min-w-0 items-center gap-1",
-                "text-tiny text-muted-foreground transition-opacity",
-                !bulkMode &&
-                  "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0",
-              )}
-            >
-              <MetadataIcon className="size-3 shrink-0" />
-              <span className="truncate">{metadataLabel}</span>
-            </span>
-            {!bulkMode ? (
-              <div
-                data-card-delete-zone=""
-                role="toolbar"
-                aria-label={`${t("settings.skillsHubDeleteSkill")}: ${skill.name}`}
+      <div
+        data-card-action-zone=""
+        role="toolbar"
+        aria-label={skill.name}
+        className="flex shrink-0 items-center gap-1"
+        onPointerDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        {bulkMode ? (
+          alwaysEnabled ? (
+            <Lock
+              className="size-4 text-muted-foreground"
+              aria-label={t("settings.skillsBulkAlwaysOnDisabled")}
+            />
+          ) : (
+            <Checkbox
+              checked={bulkSelected}
+              aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${skill.name}`}
+              onCheckedChange={() => onToggleBulkSelection(skill.name)}
+            />
+          )
+        ) : (
+          <>
+            {!alwaysEnabled ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
                 className={cn(
-                  "pointer-events-none relative z-10 col-start-1 row-start-1 flex opacity-0 transition-opacity",
-                  "group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
+                  "text-muted-foreground opacity-0 transition-opacity",
+                  "group-hover:opacity-100 focus-visible:opacity-100",
+                  "[@media(hover:none)]:opacity-100",
                 )}
-                onPointerDown={(event) => event.stopPropagation()}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
+                aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${skill.name}`}
+                title={t("settings.skillsHubBulkSelect")}
+                onClick={() => onEnterBulkMode(skill.name)}
               >
-                <ConfirmDeletePopover name={skill.name} onConfirm={() => onDelete(skill)}>
-                  {(open) => (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      disabled={deleteDisabled}
-                      aria-label={`${t("settings.skillsHubDeleteSkill")}: ${skill.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        open();
-                      }}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      title={t("settings.skillsHubDeleteSkill")}
-                    >
-                      {deleting ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-3.5" />
-                      )}
-                    </Button>
-                  )}
-                </ConfirmDeletePopover>
-              </div>
+                <ListChecks className="size-3.5" />
+              </Button>
             ) : null}
-          </div>
-        </div>
-      ) : null}
+            {!alwaysEnabled ? (
+              <ConfirmDeletePopover name={skill.name} onConfirm={() => onDelete(skill)}>
+                {(open) => (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className={cn(
+                      "text-muted-foreground opacity-0 transition-opacity",
+                      "group-hover:opacity-100 focus-visible:opacity-100",
+                      "hover:bg-destructive/10 hover:text-destructive",
+                      "[@media(hover:none)]:opacity-100",
+                    )}
+                    disabled={deleteDisabled}
+                    aria-label={`${t("settings.skillsHubDeleteSkill")}: ${skill.name}`}
+                    onClick={open}
+                    title={t("settings.skillsHubDeleteSkill")}
+                  >
+                    {deleting ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                  </Button>
+                )}
+              </ConfirmDeletePopover>
+            ) : null}
+            {!alwaysEnabled ? (
+              <ResourceActivationSwitch
+                checked={effectivelyEnabled}
+                disabled={!skillsEnabled}
+                compact
+                stopPropagation
+                label={`${t("skills.select")}: ${skill.name}`}
+                onCheckedChange={(nextChecked) => onToggle(skill.name, nextChecked)}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
     </>
   );
 
   const cardClassName = cn(
-    "group relative flex min-h-44 w-full flex-col rounded-xl border border-border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color]",
-    "[content-visibility:auto] [contain-intrinsic-size:auto_11rem]",
-    bulkSelected
-      ? "border-foreground bg-muted/30 shadow-sm"
-      : effectivelyEnabled
-        ? "border-emerald-600/25"
-        : cn("hover:border-foreground/20 hover:shadow-md", !skillsEnabled && "bg-muted/20"),
+    "group relative flex min-w-0 w-full items-center gap-3 rounded-xl",
+    "bg-settings-tile px-3.5 py-2.5 text-left transition-colors",
+    "hover:bg-settings-tile-hover",
+    "[content-visibility:auto] [contain-intrinsic-size:auto_4.5rem]",
+    bulkSelected && "bg-settings-active",
   );
 
   if (alwaysEnabled) {

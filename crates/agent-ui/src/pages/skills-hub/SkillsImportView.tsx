@@ -224,7 +224,7 @@ export function SkillsImportView(props: {
 
           {initializing ? (
             <div
-              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+              className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4"
               role="status"
               aria-live="polite"
               aria-busy="true"
@@ -307,7 +307,7 @@ export function SkillsImportView(props: {
                         : t("settings.skillsImportSelectAll")}
                     </Button>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
                     {activeScan.skills.map((skill) => {
                       const alreadyInstalled = installedNames.has(skill.name);
                       const checked = !alreadyInstalled && selected.has(skill.baseDir);
@@ -359,13 +359,11 @@ export function SkillsImportView(props: {
                           }}
                           className={cn(
                             "group flex min-h-48 w-full flex-col",
-                            "rounded-xl border border-foreground/15 bg-card p-3.5 text-left shadow-sm transition-[border-color,background-color,box-shadow]",
+                            "rounded-xl p-5 text-left transition-colors",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                            alreadyInstalled
-                              ? "border-emerald-600/25"
-                              : checked
-                                ? "border-foreground bg-muted/30 shadow-sm"
-                                : "hover:border-foreground/30 hover:bg-muted/20",
+                            checked
+                              ? "bg-settings-active"
+                              : "bg-settings-tile hover:bg-settings-tile-hover",
                             importing && !alreadyInstalled ? "opacity-60" : null,
                           )}
                         >
@@ -379,14 +377,17 @@ export function SkillsImportView(props: {
                                 onCheckedChange={() => onToggle(skill.baseDir)}
                               />
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
                                   <SearchHighlight
                                     text={skill.name}
                                     query={query}
-                                    className="truncate text-sm font-semibold leading-tight text-foreground"
+                                    className="line-clamp-2 text-sm font-semibold leading-5 text-foreground"
                                   />
                                   {alreadyInstalled ? (
-                                    <Badge variant="success" className="h-5 px-1.5 text-tiny">
+                                    <Badge
+                                      variant="secondary"
+                                      className="h-5 border-0 bg-transparent px-0 text-xs text-muted-foreground"
+                                    >
                                       {t("settings.skillsImportInstalledBadge")}
                                     </Badge>
                                   ) : null}
@@ -394,7 +395,7 @@ export function SkillsImportView(props: {
                               </div>
                             </div>
                             <p
-                              className="line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground"
+                              className="line-clamp-2 min-h-10 text-sm leading-5 text-foreground/80"
                               title={skill.description}
                             >
                               <SearchHighlight
@@ -404,16 +405,20 @@ export function SkillsImportView(props: {
                             </p>
                             <div className="mt-auto space-y-2.5">
                               <span
-                                className="block truncate px-0.5 text-tiny text-muted-foreground"
+                                className="block truncate text-xs text-muted-foreground"
                                 title={skill.baseDir}
                               >
                                 <SearchHighlight text={skill.baseDir} query={query} />
                               </span>
                               <Button
                                 type="button"
-                                variant={alreadyInstalled ? "outline" : "default"}
+                                variant="ghost"
                                 size="sm"
-                                className="h-9 w-full gap-1.5 rounded-xl"
+                                className={cn(
+                                  "ml-auto flex gap-1.5 rounded-lg bg-background text-foreground hover:bg-settings-active",
+                                  alreadyInstalled &&
+                                    "bg-transparent text-muted-foreground disabled:opacity-100",
+                                )}
                                 disabled={locked}
                                 aria-busy={installing}
                                 onClick={(event) => {

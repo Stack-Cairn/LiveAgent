@@ -39,13 +39,13 @@ test("installed bulk mode exits on empty selection, all-deselect, actions, and E
   assert.match(source, /if \(event\.key === "Escape"\) \{\s*exitBulkMode\(\);/);
 });
 
-test("Skill cards use one selected border and never move on hover", () => {
+test("Skill cards use one selected surface and never move on hover", () => {
   const installed = readSkillHubSource("InstalledSkillCard.tsx");
   const imported = readSkillHubSource("SkillsImportView.tsx");
   const store = readSkillHubSource("SkillsStoreView.tsx");
 
-  assert.match(installed, /bulkSelected\s*\? "border-foreground bg-muted\/30 shadow-sm"/);
-  assert.match(imported, /checked\s*\? "border-foreground bg-muted\/30 shadow-sm"/);
+  assert.match(installed, /bulkSelected && "bg-settings-active"/);
+  assert.match(imported, /checked\s*\? "bg-settings-active"/);
   assert.match(imported, /focus-visible:ring-offset-2/);
   assert.doesNotMatch(installed, /hover:-translate|hover:scale|ring-2 ring-ring\/40/);
   assert.doesNotMatch(imported, /focus:ring-2|ring-2 ring-ring\/40/);

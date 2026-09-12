@@ -1,4 +1,4 @@
-import { updateSkills } from "@liveagent/app/lib/settings/index";
+import { updateSkills, updateSystem } from "@liveagent/app/lib/settings/index";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { SKILLS_SCAN_DOTS_CLASS } from "@liveagent/ui/components/hub/hubMotionStyles";
 import {
@@ -27,6 +27,7 @@ import {
   type SkillSummary,
 } from "@liveagent/ui/lib/skills/index";
 import { useEffect, useRef, useState } from "react";
+import { AgentModeRequired } from "../../components/settings/AgentModeRequired";
 
 export function SkillsSettingsForm(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
@@ -90,6 +91,14 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
     setSettings((prev) => updateSkills(prev, { selected: Array.from(next) }));
   }
 
+  if (skillsLockedByChatMode) {
+    return (
+      <AgentModeRequired
+        onSwitch={() => setSettings((prev) => updateSystem(prev, { executionMode: "tools" }))}
+      />
+    );
+  }
+
   return (
     <div className="settings-skills-section space-y-5">
       <div className="settings-section-heading-row flex items-start justify-between gap-4">
@@ -146,7 +155,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
             variant="outline"
             size="sm"
             className={cn(
-              "gap-1.5 transition-all",
+              "gap-1.5 transition-colors",
               loading ? "border-primary/40 bg-primary/5 text-primary" : "",
             )}
             onClick={() => void refresh()}
@@ -313,7 +322,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                     ) : (
                       <div
                         className={cn(
-                          "flex size-5 shrink-0 items-center justify-center rounded-md border transition-all",
+                          "flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
                           checked
                             ? "border-primary bg-primary text-primary-foreground"
                             : "border-border bg-background group-hover:border-muted-foreground/40",
@@ -346,7 +355,7 @@ export function SkillsSettingsForm(props: SettingsSectionProps) {
                     onClick={() => toggleSkill(skill.name, !checked)}
                     className={cn(
                       "settings-card-row group flex w-full items-center gap-3 rounded-xl border",
-                      "p-3 text-left transition-all",
+                      "p-3 text-left transition-colors",
                       checked
                         ? "border-primary/40 bg-primary/5 shadow-xs"
                         : "border-border/60 bg-background hover:border-border hover:bg-accent/30",

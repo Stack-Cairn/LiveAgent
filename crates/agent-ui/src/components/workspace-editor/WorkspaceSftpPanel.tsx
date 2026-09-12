@@ -4,7 +4,6 @@ import {
   Copy,
   Download,
   Loader2,
-  Pencil,
   Plus,
   RefreshCw,
   SquarePen,
@@ -1404,7 +1403,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
             />
           ) : null}
           <MenuItem
-            icon={<Pencil className="size-3.5" />}
+            icon={<SquarePen className="size-3.5" />}
             label={t("workspaceSftp.rename")}
             disabled={
               !contextMenu.isEntry ||

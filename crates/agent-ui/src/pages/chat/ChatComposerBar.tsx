@@ -1926,10 +1926,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-              {isAgentMode && commandSafetyMode && onCommandSafetyModeChange ? (
+              {commandSafetyMode && onCommandSafetyModeChange ? (
                 <CommandSafetyModeSelector
                   value={commandSafetyMode}
-                  disabled={controlsDisabled}
+                  disabled={controlsDisabled || !isAgentMode}
                   onChange={onCommandSafetyModeChange}
                 />
               ) : null}

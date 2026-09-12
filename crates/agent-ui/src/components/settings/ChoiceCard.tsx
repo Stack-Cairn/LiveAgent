@@ -22,7 +22,7 @@ export function ChoiceCard({
       {...props}
       className={cn(
         "group relative flex items-start gap-3 rounded-xl border-2 p-4",
-        "text-left transition-all",
+        "text-left transition-[border-color,background-color] duration-150",
         kind &&
           (selected
             ? selectedClasses[kind]

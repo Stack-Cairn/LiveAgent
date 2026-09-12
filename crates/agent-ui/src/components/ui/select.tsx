@@ -47,8 +47,8 @@ SelectValue.displayName = "SelectValue";
 
 export const SelectTrigger = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & { variant?: "default" | "plain" }
+>(({ className, children, variant = "default", ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -56,6 +56,8 @@ export const SelectTrigger = React.forwardRef<
       "rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs",
       "placeholder:text-muted-foreground focus:border-input focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
       "disabled:cursor-not-allowed disabled:opacity-50",
+      variant === "plain" &&
+        "border-0 bg-settings-tile-hover shadow-none focus-visible:ring-2 focus-visible:ring-ring/25",
       className,
     )}
     {...props}

@@ -31,6 +31,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Backdrop
     ref={ref}
     data-slot="dialog-overlay"
+    forceRender
     className={cn(
       "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-150",
       "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
@@ -167,7 +168,7 @@ export const DialogHeader = React.forwardRef<HTMLDivElement, React.HTMLAttribute
       className={cn(
         // Headers hold a title plus at most one description line, so they take
         // one step less vertical padding than the body/footer.
-        "relative flex shrink-0 flex-col min-h-13 gap-1.5 border-b border-border/60",
+        "relative flex shrink-0 flex-col min-h-13 gap-1.5",
         "px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-2 group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:pt-safe-top-compact",
         className,
         "group-data-[has-close-button=true]/dialog:pr-14 group-data-[has-close-button=true]/dialog:max-[820px]:pr-12",
@@ -185,10 +186,7 @@ export const DialogSubheader = React.forwardRef<
   <div
     ref={ref}
     data-slot="dialog-subheader"
-    className={cn(
-      "shrink-0 border-b border-border/40 px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-3",
-      className,
-    )}
+    className={cn("shrink-0 px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-3", className)}
     {...props}
   />
 ));
@@ -234,7 +232,7 @@ export const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttribute
         // Footer matches the header's vertical padding: both are chrome around
         // the body, so they read tighter than the content they frame.
         "flex shrink-0 flex-row items-center justify-end min-h-13 gap-2",
-        "border-t border-border/60 px-4 py-3",
+        "px-4 py-3",
         "max-[820px]:flex-col-reverse max-[820px]:items-stretch max-[820px]:px-3.5 max-[820px]:py-3 group-data-[layout=bottom-sheet-mobile]/dialog:max-sm:pb-safe-bottom-compact group-data-[layout=fullscreen-mobile]/dialog:max-[720px]:pb-safe-bottom-compact",
         className,
       )}

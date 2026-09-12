@@ -1,18 +1,6 @@
-import { type KeyDecor, SHORTCUT_KEYBOARD_TONES, ShortcutKeyboard } from "./ShortcutKeyboard";
-import { type KeyboardLayoutId, LAYOUT_OPTIONS } from "./ShortcutKeyboardLayout";
-
-export type { KeyboardLayoutId } from "./ShortcutKeyboardLayout";
-
-import {
-  Keyboard,
-  MonitorSmartphone,
-  Pin,
-  Search,
-  Send,
-  SquarePen,
-  X,
-  Zap,
-} from "@liveagent/ui/components/IconSet";
+import { X } from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   readSendShortcut,
@@ -31,10 +19,8 @@ import {
   type GlobalShortcutFailure,
   globalShortcutDisplayToken,
   globalShortcutKeyDisplayLabel,
-  isShortcutModifierToken,
   modifierFromEventCode,
   readGlobalShortcutBindings,
-  SHORTCUT_MODIFIER_ORDER,
   type ShortcutModifier,
   type ShortcutScope,
   setShortcutsSuspended,
@@ -47,36 +33,18 @@ function displayToken(token: string): string {
   return globalShortcutDisplayToken(token, IS_MAC);
 }
 
-const MODIFIER_KEY_CODES: Record<ShortcutModifier, string[]> = {
-  Ctrl: ["ControlLeft", "ControlRight"],
-  Shift: ["ShiftLeft", "ShiftRight"],
-  Alt: ["AltLeft", "AltRight"],
-  Super: ["MetaLeft", "MetaRight"],
-};
-
 interface ShortcutDraft {
   mods: ShortcutModifier[];
   main: string | null;
 }
 
-interface BoundShortcutEntry {
-  action: GlobalShortcutAction;
-  label: string;
-  mods: ShortcutModifier[];
-  main: string;
-  colorIndex: number;
-  combo: string;
-}
+const SHORTCUT_KEY_BUTTON_CLASS = cn(
+  "flex min-h-8 w-48 shrink-0 flex-wrap items-center justify-end gap-1.5 rounded-lg bg-background px-2.5 py-1.5",
+  "cursor-pointer shadow-sm hover:bg-background/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25",
+);
 
-/* ============================== 组件 ============================== */
-
-const SHORTCUT_KEY_BUTTON_CLASS =
-  "flex shrink-0 items-center gap-1.5 rounded-md px-2 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
-/** 发送键和应用快捷键共用行结构，保持图标、文字、键帽与编辑状态一致。 */
 function ShortcutRow({
   id,
-  icon,
   label,
   description,
   editing = false,
@@ -84,7 +52,6 @@ function ShortcutRow({
   children,
 }: {
   id: string;
-  icon: ReactNode;
   label: string;
   description: string;
   editing?: boolean;
@@ -96,38 +63,21 @@ function ShortcutRow({
     <div
       data-ghk-row={id}
       className={cn(
-        "flex w-full items-center gap-1.5 rounded-xl border pr-2.5 transition-all",
-        editing
-          ? "border-primary/40 bg-muted/35"
-          : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35",
+        "flex min-h-14 w-full flex-wrap items-center gap-3 rounded-xl px-4 py-3",
+        editing ? "bg-settings-active" : "bg-settings-tile",
       )}
     >
       <Label
         type={onEdit ? "button" : undefined}
         onClick={onEdit}
+        title={description}
         className={cn(
-          "group flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5",
-          "py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-xl",
+          "min-w-32 flex-1 rounded-lg text-left text-sm font-medium",
+          onEdit &&
+            "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25",
         )}
       >
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-              editing
-                ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground group-hover:bg-accent/80",
-            )}
-          >
-            {icon}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-foreground">{label}</div>
-            <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              {description}
-            </div>
-          </div>
-        </div>
+        {label}
       </Label>
       {children}
     </div>
@@ -138,7 +88,9 @@ function ShortcutKeys({ tokens }: { tokens: string[] }) {
   return tokens.map((token, index) => (
     <span key={token} className="flex items-center gap-1.5">
       {index > 0 ? <span className="text-xs text-muted-foreground">+</span> : null}
-      <span className="ghk-kbd">{token}</span>
+      <kbd className="ghk-kbd rounded-md bg-settings-tile px-1.5 py-0.5 font-sans text-xs text-foreground">
+        {token}
+      </kbd>
     </span>
   ));
 }
@@ -201,56 +153,25 @@ function ShortcutChoiceSwitch({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      title={title}
-      onClick={() => onChange(!checked)}
-      onKeyDown={(event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        event.stopPropagation();
-        onChange(event.key === "ArrowRight");
-      }}
-      className={cn(
-        "flex h-8 shrink-0 items-center gap-2 rounded-full px-1 text-xs",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "min-w-2em whitespace-nowrap text-center transition-colors",
-          !checked ? "font-semibold text-foreground" : "text-muted-foreground",
-        )}
-      >
+    <div className="flex shrink-0 items-center gap-2 text-xs" title={title}>
+      <span className={checked ? "text-muted-foreground" : "font-medium text-foreground"}>
         {leftLabel}
       </span>
-      <span
-        aria-hidden="true"
-        className="relative h-6 w-10 rounded-full border border-border/60 bg-muted/60"
-      >
-        <span
-          className={cn(
-            "absolute left-3px top-3px size-4",
-            "rounded-full bg-primary shadow-sm",
-            "transition-transform duration-200 ease-out motion-reduce:transition-none",
-            checked ? "translate-x-4" : "translate-x-0",
-          )}
-        />
-      </span>
-      <span
-        aria-hidden="true"
-        className={cn(
-          "min-w-2em whitespace-nowrap text-center transition-colors",
-          checked ? "font-semibold text-foreground" : "text-muted-foreground",
-        )}
-      >
+      <Switch
+        checked={checked}
+        aria-label={label}
+        onCheckedChange={onChange}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onChange(event.key === "ArrowRight");
+        }}
+      />
+      <span className={checked ? "font-medium text-foreground" : "text-muted-foreground"}>
         {rightLabel}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -262,8 +183,6 @@ export function GlobalShortcutsSection() {
   const [sendShortcut, setSendShortcut] = useState(readSendShortcut);
   const [recording, setRecording] = useState<GlobalShortcutAction | null>(null);
   const [draft, setDraft] = useState<ShortcutDraft>({ mods: [], main: null });
-  const [pressedCodes, setPressedCodes] = useState<ReadonlySet<string>>(() => new Set());
-  const [layout, setLayout] = useState<KeyboardLayoutId>("87");
   const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const bindingsRef = useRef(bindings);
@@ -275,37 +194,31 @@ export function GlobalShortcutsSection() {
 
   const actionMeta: Array<{
     id: GlobalShortcutAction;
-    icon: ReactNode;
     label: string;
     desc: string;
   }> = [
     {
       id: "summon",
-      icon: <Zap className="size-4.5" />,
       label: t("settings.shortcutSummon"),
       desc: t("settings.shortcutSummonDesc"),
     },
     {
       id: "toggle",
-      icon: <MonitorSmartphone className="size-4.5" />,
       label: t("settings.shortcutToggle"),
       desc: t("settings.shortcutToggleDesc"),
     },
     {
       id: "newChat",
-      icon: <SquarePen className="size-4.5" />,
       label: t("settings.shortcutNewChat"),
       desc: t("settings.shortcutNewChatDesc"),
     },
     {
       id: "pin",
-      icon: <Pin className="size-4.5" />,
       label: t("settings.shortcutPin"),
       desc: t("settings.shortcutPinDesc"),
     },
     {
       id: "searchConversations",
-      icon: <Search className="size-4.5" />,
       label: t("settings.shortcutSearchConversations"),
       desc: t("settings.shortcutSearchConversationsDesc"),
     },
@@ -423,35 +336,6 @@ export function GlobalShortcutsSection() {
     [commit],
   );
 
-  // 始终监听物理按键，驱动键帽按下动画（不拦截默认行为）。
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      setPressedCodes((prev) => {
-        if (prev.has(event.code)) return prev;
-        const next = new Set(prev);
-        next.add(event.code);
-        return next;
-      });
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      setPressedCodes((prev) => {
-        if (!prev.has(event.code)) return prev;
-        const next = new Set(prev);
-        next.delete(event.code);
-        return next;
-      });
-    };
-    const onBlur = () => setPressedCodes(new Set());
-    window.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("keyup", onKeyUp, true);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("keyup", onKeyUp, true);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, []);
-
   // 应用快捷键在行内录制：Enter 确认，Esc 取消。
   useEffect(() => {
     if (!recording) return;
@@ -506,104 +390,15 @@ export function GlobalShortcutsSection() {
     [],
   );
 
-  // 录制中要在键盘上驻留高亮的键：draft 修饰键(左右两侧) + 主键。
-  const heldCodes = useMemo(() => {
-    const set = new Set<string>();
-    if (!recording) return set;
-    for (const mod of draft.mods) {
-      for (const code of MODIFIER_KEY_CODES[mod]) set.add(code);
-    }
-    if (draft.main) set.add(draft.main);
-    return set;
-  }, [recording, draft]);
-
   const draftTokens = useMemo(() => {
     const tokens = draft.mods.map((mod) => displayToken(mod));
     if (draft.main) tokens.push(globalShortcutKeyDisplayLabel(draft.main));
     return tokens;
   }, [draft]);
 
-  // ===== 快捷键占用地图（非录制状态下渲染在键盘上）=====
-  // 无修饰键按住时显示"裸键"快捷键（如 F10）；按住修饰键（如 Alt）则切到该层，
-  // 显示修饰键完全匹配的组合；其余组合在缺失的修饰键键帽上以彩点提示。
-  const actionLabelById: Record<GlobalShortcutAction, string> = {
-    summon: t("settings.shortcutSummon"),
-    toggle: t("settings.shortcutToggle"),
-    newChat: t("settings.shortcutNewChat"),
-    searchConversations: t("settings.shortcutSearchConversations"),
-    pin: t("settings.shortcutPin"),
-  };
-  const boundEntries: BoundShortcutEntry[] = [];
-  GLOBAL_SHORTCUT_ACTIONS.forEach((action, index) => {
-    const binding = bindings[action];
-    if (!binding?.enabled) return;
-    const tokens = binding.accelerator.split("+");
-    const main = tokens.find((token) => !isShortcutModifierToken(token));
-    if (!main) return;
-    boundEntries.push({
-      action,
-      label: actionLabelById[action],
-      mods: SHORTCUT_MODIFIER_ORDER.filter((mod) => tokens.includes(mod)),
-      main,
-      colorIndex: index % SHORTCUT_KEYBOARD_TONES.length,
-      combo: tokens.map((token) => displayToken(token)).join(" + "),
-    });
-  });
-
-  const heldMods = SHORTCUT_MODIFIER_ORDER.filter((mod) =>
-    MODIFIER_KEY_CODES[mod].some((code) => pressedCodes.has(code)),
-  );
-  const boundByMain = new Map<string, BoundShortcutEntry>();
-  const modHintDots = new Map<string, string[]>();
-  const modHintTitles = new Map<string, string[]>();
-  if (!recording) {
-    const heldKey = heldMods.join("+");
-    for (const entry of boundEntries) {
-      if (entry.mods.join("+") === heldKey) {
-        boundByMain.set(entry.main, entry);
-      } else if (heldMods.every((mod) => entry.mods.includes(mod))) {
-        for (const mod of entry.mods) {
-          if (heldMods.includes(mod)) continue;
-          const color = SHORTCUT_KEYBOARD_TONES[entry.colorIndex];
-          for (const code of MODIFIER_KEY_CODES[mod]) {
-            const dots = modHintDots.get(code) ?? [];
-            if (!dots.includes(color)) dots.push(color);
-            modHintDots.set(code, dots);
-            const titles = modHintTitles.get(code) ?? [];
-            titles.push(`${entry.combo} · ${entry.label}`);
-            modHintTitles.set(code, titles);
-          }
-        }
-      }
-    }
-  }
-
-  function decorForCode(code: string | null): KeyDecor | undefined {
-    if (!code || recording) return undefined;
-    const bound = boundByMain.get(code);
-    if (bound) {
-      return {
-        bound: {
-          colorClass: SHORTCUT_KEYBOARD_TONES[bound.colorIndex],
-          tag: bound.label,
-          title: `${bound.combo} · ${bound.label} (${t("settings.shortcutOccupied")})`,
-        },
-      };
-    }
-    const dots = modHintDots.get(code);
-    if (dots && dots.length > 0) {
-      return { hintDots: dots.slice(0, 3), hintTitle: modHintTitles.get(code)?.join("\n") };
-    }
-    return undefined;
-  }
-
   return (
     <div className="ghk-root space-y-6">
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Keyboard className="size-4 text-muted-foreground" />
-          {t("settings.globalShortcuts")}
-        </div>
+      <section className="space-y-3">
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t("settings.globalShortcutsDesc")}
         </p>
@@ -611,7 +406,6 @@ export function GlobalShortcutsSection() {
         <div className="space-y-2">
           <ShortcutRow
             id="sendMessage"
-            icon={<Send className="size-4.5" />}
             label={t("settings.shortcutSend")}
             description={t(
               sendShortcut === "enter"
@@ -643,7 +437,6 @@ export function GlobalShortcutsSection() {
                 }
               }}
             />
-            <span aria-hidden="true" className="w-66px shrink-0" />
           </ShortcutRow>
           {actionMeta.map((action) => {
             const isRecording = recording === action.id;
@@ -674,7 +467,6 @@ export function GlobalShortcutsSection() {
               <ShortcutRow
                 key={action.id}
                 id={action.id}
-                icon={action.icon}
                 label={action.label}
                 description={action.desc}
                 editing={isRecording}
@@ -699,24 +491,23 @@ export function GlobalShortcutsSection() {
                   onClick={toggleRecording}
                 />
                 {!isRecording && binding ? (
-                  <>
+                  <div className="flex shrink-0 items-center gap-2">
                     <AgentActivationSwitch
                       checked={binding.enabled}
                       title={t("settings.shortcutToggleOnOff")}
                       onToggle={() => toggleBinding(action.id)}
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       onClick={() => clearBinding(action.id)}
                       title={t("settings.shortcutClear")}
-                      className={cn(
-                        "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
-                        "hover:bg-muted hover:text-foreground",
-                      )}
+                      aria-label={`${action.label} · ${t("settings.shortcutClear")}`}
                     >
                       <X className="size-3.5" />
-                    </button>
-                  </>
+                    </Button>
+                  </div>
                 ) : null}
               </ShortcutRow>
             );
@@ -733,63 +524,6 @@ export function GlobalShortcutsSection() {
             {status.text}
           </div>
         ) : null}
-      </section>
-
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Keyboard className="size-4 text-muted-foreground" />
-            {t("settings.shortcutKeyboardTitle")}
-          </div>
-          <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
-            {LAYOUT_OPTIONS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setLayout(option)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-xs transition-all",
-                  layout === option
-                    ? "bg-background font-semibold text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t(`settings.shortcutLayout${option}`)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {!recording && boundEntries.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {boundEntries.map((entry) => (
-              <span
-                key={entry.action}
-                className={cn(
-                  "flex items-center gap-1.5",
-                  "rounded-lg border border-border/60 bg-background/80 px-2 py-1 text-xs",
-                )}
-              >
-                <span
-                  className={cn(
-                    "size-2 rounded-full bg-(--ghk-hl)",
-                    SHORTCUT_KEYBOARD_TONES[entry.colorIndex],
-                  )}
-                />
-                <span className="font-medium text-foreground">{entry.label}</span>
-                <span className="text-muted-foreground">{entry.combo}</span>
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        <ShortcutKeyboard
-          layout={layout}
-          recording={Boolean(recording)}
-          pressedCodes={pressedCodes}
-          heldCodes={heldCodes}
-          decorForCode={decorForCode}
-        />
       </section>
     </div>
   );

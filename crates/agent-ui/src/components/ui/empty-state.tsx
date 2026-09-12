@@ -8,11 +8,10 @@ const emptyStateVariants = cva("", {
     variant: {
       workspace:
         "flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground",
-      settings:
-        "flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border/60 bg-muted/20 py-14 text-center",
+      settings: "flex flex-col items-center gap-4 rounded-xl bg-settings-tile py-10 text-center",
     },
   },
-  compoundVariants: [{ variant: "settings", size: "compact", className: "gap-3 py-12" }],
+  compoundVariants: [{ variant: "settings", size: "compact", className: "gap-3 py-8" }],
   defaultVariants: { variant: "workspace", size: "default" },
 });
 

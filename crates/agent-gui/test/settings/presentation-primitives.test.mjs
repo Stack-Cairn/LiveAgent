@@ -171,17 +171,17 @@ test("compact settings empty states preserve consumer layout and leave other def
       assert.equal(node.hasAttribute("size"), false);
       assert.equal(node.hasAttribute("role"), false);
       assert.equal(node.textContent, "No items");
-      assert.ok(node.classList.contains("py-12"));
-      assert.equal(node.classList.contains("py-14"), false);
+      assert.ok(node.classList.contains("py-8"));
+      assert.equal(node.classList.contains("py-10"), false);
       assert.ok(node.classList.contains("gap-3"));
       assert.equal(node.classList.contains("flex"), !className);
     }
     await act(async () => root.render(React.createElement(EmptyState, { variant: "settings" })));
-    assert.ok(host.firstElementChild.classList.contains("py-14"));
+    assert.ok(host.firstElementChild.classList.contains("py-10"));
     assert.ok(host.firstElementChild.classList.contains("gap-4"));
     await act(async () => root.render(React.createElement(EmptyState, { variant: "workspace", size: "compact" })));
     assert.ok(host.firstElementChild.classList.contains("p-6"));
-    assert.equal(host.firstElementChild.classList.contains("py-12"), false);
+    assert.equal(host.firstElementChild.classList.contains("py-8"), false);
   } finally {
     await act(async () => root.unmount());
     env.cleanup();

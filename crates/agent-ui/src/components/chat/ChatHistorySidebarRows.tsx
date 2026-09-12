@@ -9,7 +9,6 @@ import {
   Check,
   ChevronRight,
   Columns2,
-  Edit3,
   Folder,
   FolderClosed,
   FolderOpen,
@@ -960,7 +959,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   onSelect={handleStartRenamingFromMenu}
                   className={CONVERSATION_MENU_ITEM_CLASS}
                 >
-                  <Edit3 className={CONVERSATION_MENU_ICON_CLASS} />
+                  <SquarePen className={CONVERSATION_MENU_ICON_CLASS} />
                   {t("chat.conversationRename")}
                 </DropdownMenuItem>
                 <DropdownMenuSub>
@@ -1171,7 +1170,7 @@ export function ProjectGroupHeader(props: {
             }}
             className="gap-2"
           >
-            <Edit3 className="size-3.5" />
+            <SquarePen className="size-3.5" />
             <span>{t("chat.workspaceGroupRename")}</span>
           </DropdownMenuItem>
           <DropdownMenuItem

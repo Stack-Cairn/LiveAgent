@@ -2,6 +2,7 @@ import {
   type AppSettings,
   removeWorkspaceResourceReferences,
   updateSkills,
+  updateSystem,
 } from "@liveagent/app/lib/settings";
 import { GlassPanel, HubHeader } from "@liveagent/ui/components/hub/HubChrome";
 import {
@@ -71,6 +72,7 @@ import {
 import { domAnimation, LayoutGroup, LazyMotion, useReducedMotion } from "motion/react";
 import * as m from "motion/react-m";
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
+import { AgentModeRequired } from "../../components/settings/AgentModeRequired";
 import { reconcileExternalToolScans } from "./externalSkillScanState";
 import { InstalledSkillCard } from "./InstalledSkillCard";
 import {
@@ -1351,6 +1353,23 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const skillsEnabled = settings.skills.enabled;
   const showInitialInstalledContentLoading =
     skills.length > 0 && !hasPresentedInstalledSkills && installedContentPending;
+  if (lockedByChatMode) {
+    return (
+      <div className="hub-page flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
+        <HubHeader
+          embedded={props.embedded}
+          title={t("settings.skillsHubTitle")}
+          subtitle={t("settings.skillsHubSubtitle")}
+          prominent
+        />
+        <div className={cn("pb-6", props.embedded ? "" : "px-6")}>
+          <AgentModeRequired
+            onSwitch={() => setSettings((prev) => updateSystem(prev, { executionMode: "tools" }))}
+          />
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
@@ -1476,6 +1495,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
               <div className="flex min-h-11 items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch max-sm:pb-2">
                 <ResourceTabsList
+                  variant="segmented"
                   value={view}
                   items={[
                     {
@@ -1664,7 +1684,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           {sortedFiltered.length > 0 ? (
                             <LazyMotion features={domAnimation}>
                               <LayoutGroup id={`${toastScope}-installed-skills`}>
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                                <div className="grid gap-1.5">
                                   {sortedFiltered.map(({ skill, categories }) => {
                                     const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);
                                     const key = `${skill.name}-${rootDir}`;
@@ -1680,7 +1700,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                                             mass: 0.7,
                                           },
                                         }}
-                                        className="h-full"
+                                        className="min-w-0"
                                       >
                                         <InstalledSkillCard
                                           skill={skill}

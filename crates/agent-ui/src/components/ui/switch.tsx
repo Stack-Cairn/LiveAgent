@@ -35,9 +35,7 @@ export const Switch = React.forwardRef<HTMLElement, SwitchProps>(
         size !== "lg" && "inline-flex cursor-pointer items-center",
         "focus-visible:outline-none focus-visible:ring-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[unchecked]:hover:bg-muted-foreground/30",
         SWITCH_SIZES[size].track,
-        tone === "success"
-          ? "data-[checked]:bg-emerald-500 focus-visible:ring-emerald-500/30"
-          : "data-[checked]:bg-sky-500 focus-visible:ring-sky-500/30",
+        "data-[checked]:bg-sky-500 focus-visible:ring-sky-500/30",
         size === "lg" && tone === "default" && "focus-visible:ring-sky-500/35",
         className,
       )}

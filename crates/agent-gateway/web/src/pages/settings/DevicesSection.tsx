@@ -5,10 +5,10 @@ import {
   Key,
   Loader2,
   MonitorSmartphone,
-  Pencil,
   Plus,
   RefreshCw,
   Save,
+  SquarePen,
   Trash2,
   Wifi,
   WifiOff,
@@ -461,6 +461,7 @@ function AddClientDialog({
                 {t("settings.devicesName")}
               </Label>
               <Input
+                variant="plain"
                 id="admin-agent-name-dialog"
                 autoFocus
                 placeholder={t("settings.devicesNamePlaceholder")}
@@ -475,6 +476,7 @@ function AddClientDialog({
                 <span className="ml-0.5 text-red-500">*</span>
               </Label>
               <Input
+                variant="plain"
                 id="admin-agent-id-dialog"
                 className="font-mono"
                 placeholder={t("settings.devicesAgentIdPlaceholder")}
@@ -549,6 +551,7 @@ function IssuedTokenDialog({
           </p>
           <div className="relative">
             <Input
+              variant="plain"
               readOnly
               value={issuedToken.token}
               className="pr-11 font-mono text-xs"
@@ -812,7 +815,7 @@ function DeviceRow(props: {
             disabled={deleting || updatingName}
             onClick={beginEditing}
           >
-            <Pencil className="size-3.5" />
+            <SquarePen className="size-3.5" />
             {t("settings.devicesEditName")}
           </Button>
           <ConfirmActionPopover

@@ -8,7 +8,6 @@ import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/share
 
 import {
   Copy,
-  Edit3,
   ExternalLink,
   Eye,
   EyeOff,
@@ -17,6 +16,7 @@ import {
   FolderOpen,
   Plus,
   RefreshCw,
+  SquarePen,
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -227,7 +227,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
           onClose();
         }}
       >
-        <Edit3 className="size-3.5" />
+        <SquarePen className="size-3.5" />
         {t("projectTools.fileTree.rename")}
       </button>
       <button

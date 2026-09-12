@@ -1,4 +1,4 @@
-// Memory settings drawer: organizer model/schedule/scope/mode, extraction
+// Memory settings dialog: organizer model/schedule/scope/mode, extraction
 // summary model, Run Now, quota-ladder banner and the wipe-all danger zone.
 //
 // Shared implementation owned by @liveagent/ui. Organizer wake-up capability
@@ -13,7 +13,7 @@ import {
   type MemoryOrganizerScope,
   updateMemorySettings,
 } from "@liveagent/app/lib/settings";
-import { AlertTriangle, History, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
+import { AlertTriangle, History, RefreshCw, Trash2 } from "@liveagent/ui/components/IconSet";
 import {
   AlertDialog,
   AlertDialogActions,
@@ -24,14 +24,17 @@ import {
   AlertDialogTitle,
 } from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Input } from "@liveagent/ui/components/ui/input";
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@liveagent/ui/components/ui/sheet";
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
+import { Input } from "@liveagent/ui/components/ui/input";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
@@ -63,6 +66,7 @@ function memoryModelValue(model: AppSettings["memory"]["organizerModel"]) {
 }
 
 export function MemorySettingsDrawer(props: {
+  storagePath?: string;
   modelOptions: MemoryModelOption[];
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
@@ -180,7 +184,7 @@ export function MemorySettingsDrawer(props: {
         placeholder={noneLabel}
         noneLabel={noneLabel}
         ariaLabel={ariaLabel}
-        variant="compact"
+        variant="plain"
       />
     );
   }
@@ -291,43 +295,18 @@ export function MemorySettingsDrawer(props: {
   }
 
   return (
-    <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        variant="inset"
-        className="max-w-none border-border bg-background sm:max-w-440px"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="flex h-[min(46rem,calc(100dvh-2rem))] max-w-xl flex-col p-0"
         closeLabel={t("settings.memorySettingsClose")}
-        showCloseButton={false}
+        layout="fullscreen-mobile"
+        showCloseButton
       >
-        <div className="relative flex items-start gap-3 px-6 pb-4 pt-22px">
-          <div className="min-w-0 flex-1">
-            <SheetTitle className="text-lg leading-tight tracking-tight text-foreground/95">
-              {t("settings.memorySettingsTitle")}
-            </SheetTitle>
-            <SheetDescription className="mt-1 text-xs leading-snug text-muted-foreground/80">
-              {t("settings.memorySettingsLocalOnly")}
-            </SheetDescription>
-          </div>
-          <SheetClose
-            render={
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="shrink-0 rounded-full bg-foreground/[0.05] text-muted-foreground/80 hover:bg-foreground/[0.1] hover:text-foreground"
-              />
-            }
-            title={t("settings.memorySettingsClose")}
-            aria-label={t("settings.memorySettingsClose")}
-          >
-            <X className="size-3.5" />
-          </SheetClose>
-        </div>
-
-        <div
-          aria-hidden="true"
-          className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
-        />
-
-        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        <DialogHeader>
+          <DialogTitle>{t("settings.memorySettingsTitle")}</DialogTitle>
+          <DialogDescription>{t("settings.memorySettingsLocalOnly")}</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
           <div className="divide-y divide-foreground/[0.08]">
             {quotaLadder.level !== "normal" &&
             quotaLadder.bannerKey &&
@@ -405,12 +384,13 @@ export function MemorySettingsDrawer(props: {
                 />
               </div>
               <div className="space-y-3">
-                <div className="grid grid-cols-memory-field gap-2.5">
+                <div className="grid gap-4">
                   <div className="space-y-1.5">
                     <span className="text-xs text-muted-foreground/90">
                       {t("settings.memoryOrganizerSchedule")}
                     </span>
                     <DrawerSelect
+                      variant="plain"
                       value={settings.memory.organizerSchedule.frequency}
                       disabled={!canEnableOrganizer}
                       onValueChange={(next) =>
@@ -430,6 +410,7 @@ export function MemorySettingsDrawer(props: {
                       {t("settings.memoryOrganizerTime")}
                     </span>
                     <Input
+                      variant="plain"
                       type="time"
                       aria-label={t("settings.memoryOrganizerTime")}
                       value={timeLocalDraft}
@@ -446,6 +427,7 @@ export function MemorySettingsDrawer(props: {
                       {t("settings.memoryOrganizerWeekday")}
                     </span>
                     <DrawerSelect
+                      variant="plain"
                       value={String(settings.memory.organizerSchedule.weekday ?? 1)}
                       disabled={organizerTimingDisabled}
                       onValueChange={(next) => updateOrganizerSchedule({ weekday: Number(next) })}
@@ -457,12 +439,13 @@ export function MemorySettingsDrawer(props: {
                     />
                   </div>
                 ) : null}
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid gap-4">
                   <div className="space-y-1.5">
                     <span className="text-xs text-muted-foreground/90">
                       {t("settings.memoryOrganizerScope")}
                     </span>
                     <DrawerSelect
+                      variant="plain"
                       value={settings.memory.organizerScope}
                       onValueChange={(next) => {
                         const organizerScope = next as MemoryOrganizerScope;
@@ -480,6 +463,7 @@ export function MemorySettingsDrawer(props: {
                       {t("settings.memoryOrganizerMode")}
                     </span>
                     <DrawerSelect
+                      variant="plain"
                       value={settings.memory.organizerMode}
                       onValueChange={(next) => {
                         const organizerMode = next as MemoryOrganizerMode;
@@ -501,7 +485,6 @@ export function MemorySettingsDrawer(props: {
                     )}
                   >
                     <span className="relative inline-flex size-1.5 shrink-0">
-                      <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/40" />
                       <span className="relative inline-block size-1.5 rounded-full bg-emerald-500" />
                     </span>
                     <span className="font-medium text-foreground/75">
@@ -537,7 +520,7 @@ export function MemorySettingsDrawer(props: {
                 <Button
                   type="button"
                   size="sm"
-                  className="flex-1 shadow-ui-memorysettingsdrawer-50"
+                  className="flex-1"
                   disabled={!settings.memory.organizerModel || organizerSubmitting}
                   onClick={handleRunNow}
                 >
@@ -549,6 +532,9 @@ export function MemorySettingsDrawer(props: {
               </div>
             </section>
 
+            <div className="py-4 break-all font-mono text-xs text-muted-foreground">
+              {props.storagePath}
+            </div>
             <section className="py-5 last:pb-0">
               <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-destructive/80">
                 <AlertTriangle className="size-3" />
@@ -571,8 +557,15 @@ export function MemorySettingsDrawer(props: {
               </div>
             </section>
           </div>
-        </div>
-      </SheetContent>
+        </DialogBody>
+        <DialogFooter>
+          <DialogActions>
+            <Button size="sm" onClick={onClose}>
+              {t("settings.close")}
+            </Button>
+          </DialogActions>
+        </DialogFooter>
+      </DialogContent>
       {historyOpen ? (
         <OrganizerHistoryModal
           t={t}
@@ -623,6 +616,6 @@ export function MemorySettingsDrawer(props: {
           </AlertDialogContent>
         </AlertDialog>
       ) : null}
-    </Sheet>
+    </Dialog>
   );
 }

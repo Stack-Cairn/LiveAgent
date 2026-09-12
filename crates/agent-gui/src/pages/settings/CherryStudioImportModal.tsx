@@ -10,6 +10,7 @@ import {
   Settings,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { Checkbox } from "@liveagent/ui/components/ui/checkbox";
 import {
   Dialog,
   DialogActions,
@@ -168,7 +169,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
   return (
     <Dialog open onOpenChange={(open) => !open && !importing && onClose()}>
       <DialogContent
-        className="flex h-dialog-35rem max-w-2xl flex-col p-0"
+        className="flex h-[min(38rem,calc(100dvh-2rem))] max-w-3xl flex-col overflow-hidden p-0"
         closeDisabled={importing}
         closeLabel="关闭"
         showCloseButton
@@ -177,7 +178,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-base leading-normal">从 Cherry Studio 同步</DialogTitle>
             <DialogDescription className="mt-1 text-xs">
-              仅同步 Base URL 和 API Key，模型由 LiveAgent 获取并激活；左侧切换供应商类型
+              选择要同步的供应商。同步地址与密钥后，自动获取模型。
             </DialogDescription>
           </div>
           <Button
@@ -194,12 +195,15 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
           </Button>
         </DialogHeader>
 
-        <DialogSubheader className="flex flex-wrap items-center justify-between gap-3 bg-muted/20 px-6 py-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+        <DialogSubheader className="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
+          <label
+            htmlFor="cherry-import-show-all"
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="cherry-import-show-all"
               checked={showAll}
-              onChange={(event) => setShowAll(event.currentTarget.checked)}
+              onCheckedChange={(checked) => setShowAll(checked === true)}
               disabled={importing}
             />
             显示禁用或不兼容配置
@@ -228,7 +232,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
           </div>
         </DialogSubheader>
 
-        <DialogBody className="flex overflow-hidden p-0">
+        <DialogBody className="flex gap-3 overflow-hidden px-6 py-2 max-[820px]:px-3.5">
           {groups.length === 0 ? (
             <div
               className={cn(
@@ -242,7 +246,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
             <>
               <div
                 className={cn(
-                  "flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r bg-muted/30",
+                  "flex w-40 shrink-0 flex-col gap-1 overflow-y-auto rounded-xl bg-settings-tile max-sm:w-28",
                   "p-2",
                 )}
               >
@@ -255,13 +259,14 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                     <button
                       key={group.type}
                       type="button"
+                      aria-pressed={active}
                       onClick={() => setActiveType(group.type)}
                       className={cn(
                         "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left",
-                        "transition-colors",
+                        "cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25",
                         active
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                          ? "bg-settings-active text-foreground"
+                          : "text-muted-foreground hover:bg-settings-tile-hover hover:text-foreground",
                       )}
                     >
                       <span className="flex w-5 shrink-0 items-center justify-center text-base">
@@ -276,7 +281,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                         </span>
                       </span>
                       {groupSelected > 0 ? (
-                        <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-tiny font-semibold text-primary">
+                        <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-tiny font-medium text-foreground">
                           {groupSelected}
                         </span>
                       ) : null}
@@ -285,7 +290,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                 })}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-1">
                 <div className="space-y-2">
                   {activeItems.map((item) => {
                     const checked = selected.has(itemKey(item));
@@ -295,14 +300,15 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                         key={itemKey(item)}
                         type="button"
                         className={cn(
-                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3",
-                          "text-left transition-colors",
+                          "flex w-full items-start gap-3 rounded-xl px-4 py-3",
+                          "text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25",
                           item.importable
                             ? checked
-                              ? "border-primary/45 bg-primary/[0.06]"
-                              : "hover:bg-accent/40"
+                              ? "cursor-pointer bg-settings-active"
+                              : "cursor-pointer bg-settings-tile hover:bg-settings-tile-hover"
                             : "cursor-not-allowed bg-muted/25 opacity-65",
                         )}
+                        aria-pressed={checked}
                         onClick={() => toggleItem(item)}
                         disabled={!item.importable || importing}
                       >
@@ -310,7 +316,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                           className={cn(
                             "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
                             checked && item.importable
-                              ? "border-primary bg-primary text-primary-foreground"
+                              ? "border-foreground bg-foreground text-background"
                               : "border-muted-foreground/40",
                           )}
                         >
@@ -323,7 +329,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                               {itemProtocolLabel(item)}
                             </span>
                             {existing ? (
-                              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-tiny text-blue-600 dark:text-blue-300">
+                              <span className="rounded bg-background px-1.5 py-0.5 text-tiny text-muted-foreground">
                                 将更新
                               </span>
                             ) : null}
@@ -366,11 +372,12 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
             已选择 {selectedItems.length} 个供应商配置
           </div>
           <DialogActions>
-            <Button variant="outline" onClick={onClose} disabled={importing}>
+            <Button size="sm" variant="outline" onClick={onClose} disabled={importing}>
               取消
             </Button>
             <Button
-              className="min-w-32 gap-2"
+              size="sm"
+              className="min-w-24 gap-2"
               onClick={() => onConfirm(selectedItems)}
               disabled={importing || selectedItems.length === 0}
             >
@@ -397,6 +404,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
             <DialogBody>
               <div className="flex items-center gap-2">
                 <Input
+                  variant="plain"
                   readOnly
                   value={resolvedDataPath}
                   placeholder={scanning ? "正在检测…" : "未检测到数据目录"}
@@ -406,7 +414,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  size="icon"
+                  size="icon-sm"
                   className="shrink-0"
                   disabled={scanning || importing}
                   onClick={onChooseDataDirectory}

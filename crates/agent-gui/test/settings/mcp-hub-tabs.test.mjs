@@ -102,8 +102,10 @@ test("MCP import tabs keep source icons and compact count badges", () => {
 });
 
 test("installed MCP resources use a compact settings list while Store keeps its card grid", () => {
-  assert.match(serversFormSource, /divide-y[^"\n]*overflow-hidden[^"\n]*rounded-xl[^"\n]*border/);
+  assert.match(serversFormSource, /<div className="space-y-1\.5">/);
+  assert.doesNotMatch(serversFormSource, /divide-y[^"\n]*border/);
   assert.match(serverCardSource, /min-h-16[^"\n]*items-center/);
+  assert.match(serverCardSource, /rounded-xl bg-settings-tile/);
   assert.match(serverCardSource, /ResourceActivationSwitch/);
   assert.match(serverCardSource, /ToolPolicyToggle/);
   assert.match(serverCardSource, /const argsCount = \(server\.args \?\? \[\]\)\.filter\(Boolean\)\.length/);
@@ -142,7 +144,7 @@ test("MCP Store automatically appends pages in multiples of four at the scroll b
   );
   assert.ok(pageLimit > 0);
   assert.equal(pageLimit % 4, 0);
-  assert.match(registryBrowserSource, /STORE_SKELETON_IDS = Array\.from\(\{ length: 8 \}/);
+  assert.match(registryBrowserSource, /STORE_SKELETON_IDS = Array\.from\(\{ length: 6 \}/);
   assert.match(registryBrowserSource, /new IntersectionObserver/);
   assert.match(registryBrowserSource, /root: scrollRootRef\.current|root,/);
   assert.match(registryBrowserSource, /rootMargin: "0px 0px 320px 0px"/);

@@ -27,20 +27,14 @@
       :root {
         color-scheme: light;
         --liveagent-boot-background: #ffffff;
-        --liveagent-boot-sidebar: #f8f8f9;
-        --liveagent-boot-border: rgba(24, 24, 27, 0.1);
-        --liveagent-boot-muted: rgba(24, 24, 27, 0.11);
-        --liveagent-boot-faint: rgba(24, 24, 27, 0.065);
-        --liveagent-boot-thread: rgba(24, 24, 27, 0.2);
+        --liveagent-boot-track: rgba(24, 24, 27, 0.09);
+        --liveagent-boot-bar: rgba(15, 78, 113, 0.68);
       }
       html.dark {
         color-scheme: dark;
         --liveagent-boot-background: #12141c;
-        --liveagent-boot-sidebar: #10121a;
-        --liveagent-boot-border: rgba(255, 255, 255, 0.09);
-        --liveagent-boot-muted: rgba(255, 255, 255, 0.12);
-        --liveagent-boot-faint: rgba(255, 255, 255, 0.07);
-        --liveagent-boot-thread: rgba(255, 255, 255, 0.22);
+        --liveagent-boot-track: rgba(255, 255, 255, 0.1);
+        --liveagent-boot-bar: rgba(142, 211, 235, 0.72);
       }
       html,
       body,
@@ -54,150 +48,56 @@
         overflow: hidden;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      .boot-shell {
+      .app-boot-screen {
         display: flex;
         width: 100%;
         height: 100%;
+        align-items: center;
+        justify-content: center;
         overflow: hidden;
         background: var(--liveagent-boot-background);
       }
-      .boot-sidebar {
-        box-sizing: border-box;
-        width: 272px;
-        flex: 0 0 272px;
-        padding: 16px 12px;
-        border-right: 1px solid var(--liveagent-boot-border);
-        background: var(--liveagent-boot-sidebar);
-      }
-      .boot-brand,
-      .boot-header-actions {
+      .app-boot-content {
         display: flex;
+        width: 160px;
+        flex-direction: column;
         align-items: center;
-        gap: 8px;
+        gap: 24px;
       }
-      .boot-brand {
-        margin: 0 8px 24px;
+      .app-boot-icon {
+        display: block;
+        width: 76px;
+        height: 76px;
+        filter: drop-shadow(0 10px 22px rgba(7, 45, 78, 0.14));
       }
-      .boot-logo {
-        width: 28px;
-        height: 28px;
-        border-radius: 8px;
-        background: var(--liveagent-boot-muted);
-      }
-      .boot-line,
-      .boot-nav-item,
-      .boot-bubble,
-      .boot-header-button {
-        background: var(--liveagent-boot-muted);
-      }
-      .boot-line {
-        height: 7px;
+      .app-boot-progress {
+        width: 128px;
+        height: 3px;
+        overflow: hidden;
         border-radius: 999px;
+        background: var(--liveagent-boot-track);
       }
-      .boot-nav {
-        display: grid;
-        gap: 12px;
-        padding: 0 8px;
-      }
-      .boot-nav-item {
-        height: 32px;
-        border-radius: 8px;
-        opacity: 0.55;
-      }
-      .boot-main {
-        display: flex;
-        min-width: 0;
-        flex: 1;
-        flex-direction: column;
-      }
-      .boot-header {
-        box-sizing: border-box;
-        display: flex;
-        height: 48px;
-        flex: 0 0 48px;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 16px;
-        border-bottom: 1px solid var(--liveagent-boot-border);
-      }
-      .boot-header-button {
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
-        opacity: 0.6;
-      }
-      .boot-canvas,
-      .boot-pane {
-        min-width: 0;
-        min-height: 0;
-      }
-      .boot-canvas {
-        flex: 1;
-        overflow: hidden;
-      }
-      .boot-pane {
-        position: relative;
-        width: 100%;
+      .app-boot-progress > span {
+        display: block;
+        width: 40%;
         height: 100%;
-        overflow: hidden;
-        background: var(--liveagent-boot-background);
+        border-radius: inherit;
+        background: var(--liveagent-boot-bar);
+        animation: app-boot-progress 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
       }
-      .boot-pane-header {
-        box-sizing: border-box;
-        display: flex;
-        height: 40px;
-        align-items: center;
-        gap: 8px;
-        padding: 0 16px;
-        border-bottom: 1px solid var(--liveagent-boot-border);
-      }
-      .boot-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--liveagent-boot-muted);
-      }
-      .boot-pane-body {
-        display: flex;
-        flex-direction: column;
-        gap: 18px;
-        padding: 28px 8%;
-      }
-      .boot-bubble {
-        width: 36%;
-        height: 40px;
-        margin-left: auto;
-        border-radius: 16px 16px 4px;
-        opacity: 0.55;
-      }
-      .boot-pane::after {
-        position: absolute;
-        inset-inline: 8%;
-        top: 0;
-        height: 1px;
-        content: "";
-        background: linear-gradient(90deg, transparent, var(--liveagent-boot-thread), transparent);
-        animation: boot-thread 1.8s ease-in-out infinite;
-      }
-      @keyframes boot-thread {
+      @keyframes app-boot-progress {
         0% {
-          opacity: 0;
-          transform: translateY(42px);
-        }
-        20%,
-        80% {
-          opacity: 1;
+          transform: translateX(-120%);
         }
         100% {
-          opacity: 0;
-          transform: translateY(min(48vh, 420px));
+          transform: translateX(320%);
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        .boot-pane::after {
+        .app-boot-progress > span {
           animation: none;
-          opacity: 0.35;
-          transform: translateY(42px);
+          width: 100%;
+          opacity: 0.55;
         }
       }
     </style>
@@ -207,43 +107,11 @@
 
   <body>
     <div id="root">
-      <div class="boot-shell" data-static-boot-shell="" role="status" aria-label="正在加载 LiveAgent">
-        <aside class="boot-sidebar" aria-hidden="true">
-          <div class="boot-brand">
-            <div class="boot-logo"></div>
-            <div class="boot-line" style="width: 80px"></div>
-          </div>
-          <div class="boot-nav">
-            <div class="boot-line" style="width: 64px"></div>
-            <div class="boot-nav-item"></div>
-            <div class="boot-nav-item"></div>
-            <div class="boot-nav-item"></div>
-          </div>
-        </aside>
-        <main class="boot-main">
-          <header class="boot-header" aria-hidden="true">
-            <div class="boot-line" style="width: 96px"></div>
-            <div class="boot-header-actions">
-              <div class="boot-header-button"></div>
-              <div class="boot-header-button"></div>
-            </div>
-          </header>
-          <div class="boot-canvas">
-            <div class="boot-pane" data-boot-pane="conversation">
-              <div class="boot-pane-header" aria-hidden="true">
-                <div class="boot-dot"></div>
-                <div class="boot-line" style="width: 80px"></div>
-              </div>
-              <div class="boot-pane-body" aria-hidden="true">
-                <div class="boot-line" style="width: 58%"></div>
-                <div class="boot-line" style="width: 42%; opacity: 0.65"></div>
-                <div class="boot-bubble"></div>
-                <div class="boot-line" style="width: 72%"></div>
-                <div class="boot-line" style="width: 54%; opacity: 0.65"></div>
-              </div>
-            </div>
-          </div>
-        </main>
+      <div class="app-boot-screen" data-static-boot-shell="" role="status" aria-label="正在加载 LiveAgent" aria-busy="true">
+        <div class="app-boot-content" aria-hidden="true">
+          <img class="app-boot-icon" src="/src-tauri/icons/icon-simple.png" alt="" />
+          <div class="app-boot-progress"><span></span></div>
+        </div>
       </div>
     </div>
     <script>

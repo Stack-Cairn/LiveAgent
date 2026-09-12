@@ -6,9 +6,9 @@ import {
   Check,
   CheckCircle2,
   Loader2,
-  Pencil,
   RefreshCw,
   Sparkles,
+  SquarePen,
   WandSparkles,
   X,
 } from "@liveagent/ui/components/IconSet";
@@ -270,7 +270,7 @@ function SettledRoundSummary({
                       "text-xs leading-1p4 text-foreground/80 dark:border-sky-300/30 dark:bg-sky-300/[0.08]",
                     )}
                   >
-                    <Pencil className="size-2.5 shrink-0 text-sky-600 dark:text-sky-300" />
+                    <SquarePen className="size-2.5 shrink-0 text-sky-600 dark:text-sky-300" />
                     <span className="min-w-0 break-words">{custom}</span>
                   </span>
                 ) : null}

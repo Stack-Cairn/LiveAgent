@@ -19,6 +19,7 @@ const tabsListVariants = cva(
       variant: {
         default: "",
         plain: "",
+        segmented: "h-9 gap-0.5 rounded-xl bg-settings-active p-1 ring-1 ring-foreground/5",
         filter:
           "flex h-auto max-w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
       },
@@ -42,7 +43,9 @@ TabsList.displayName = "TabsList";
 
 export const TabsTrigger = React.forwardRef<
   HTMLElement,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Tab> & { variant?: "default" | "plain" }
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Tab> & {
+    variant?: "default" | "plain" | "segmented";
+  }
 >(({ className, variant = "default", ...props }, ref) => (
   <TabsPrimitive.Tab
     ref={ref}
@@ -52,6 +55,12 @@ export const TabsTrigger = React.forwardRef<
         "inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-md px-3 py-1",
         "text-sm font-medium transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm",
+      ],
+      variant === "segmented" && [
+        "h-7 min-w-9 rounded-lg px-2.5 py-0 text-xs font-normal text-muted-foreground",
+        "hover:bg-background/55 hover:text-foreground",
+        "data-[active]:bg-background data-[active]:font-medium data-[active]:text-foreground",
+        "data-[active]:shadow-sm data-[active]:ring-1 data-[active]:ring-foreground/10",
       ],
       className,
     )}

@@ -119,8 +119,8 @@ export function WorkspaceResourceSettingsPanel(props: {
                 aria-checked={isActive}
                 onClick={() => onModeChange(value)}
                 className={cn(
-                  "flex flex-col gap-1 rounded-lg p-2.5 text-left transition-colors focus-visible:outline-hidden",
-                  isActive ? "bg-primary/[0.08]" : "bg-muted/40 hover:bg-muted/70",
+                  "flex flex-col gap-1 rounded-lg p-2.5 text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive ? "bg-settings-active" : "bg-settings-tile hover:bg-settings-tile-hover",
                 )}
               >
                 <span className="flex items-center gap-2">
@@ -144,12 +144,13 @@ export function WorkspaceResourceSettingsPanel(props: {
           <div className="relative w-60 max-w-full">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              variant="plain"
               type="search"
               value={query}
               onChange={(event) => onQueryChange(event.currentTarget.value)}
               placeholder={t("chat.workspaceResourcesSearch")}
               className={cn(
-                "h-8 rounded-lg border-border bg-background pl-9 pr-3 text-sm shadow-none",
+                "h-9 rounded-lg pl-9 pr-3 text-sm",
                 "placeholder:text-muted-foreground",
               )}
             />

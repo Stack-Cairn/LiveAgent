@@ -5,8 +5,8 @@ import {
   FolderTree,
   GitBranch,
   Loader2,
-  Pencil,
   Plus,
+  SquarePen,
   Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
@@ -136,6 +136,7 @@ export function GitInitModal(props: {
                 {t("git.branchSelector.initialBranch")}
               </Label>
               <Input
+                variant="plain"
                 id={branchId}
                 value={branch}
                 onChange={(event) => onBranchChange(event.target.value)}
@@ -151,6 +152,7 @@ export function GitInitModal(props: {
                   {t("git.branchSelector.userNameOptional")}
                 </Label>
                 <Input
+                  variant="plain"
                   id={userNameId}
                   value={userName}
                   onChange={(event) => onUserNameChange(event.target.value)}
@@ -163,6 +165,7 @@ export function GitInitModal(props: {
                   {t("git.branchSelector.userEmailOptional")}
                 </Label>
                 <Input
+                  variant="plain"
                   id={userEmailId}
                   value={userEmail}
                   onChange={(event) => onUserEmailChange(event.target.value)}
@@ -315,7 +318,7 @@ export function WorktreeCreateModal(props: {
                 onValueChange={onStartPointChange}
                 disabled={loading || startPointOptions.length === 0}
               >
-                <SelectTrigger type="button" className="h-9 text-xs">
+                <SelectTrigger variant="plain" type="button" className="h-9 text-xs">
                   <SelectValue placeholder="HEAD" />
                 </SelectTrigger>
                 <SelectContent className="max-h-60">
@@ -333,6 +336,7 @@ export function WorktreeCreateModal(props: {
                   {t("git.branchSelector.worktreeBranch")}
                 </Label>
                 <Input
+                  variant="plain"
                   id={branchInputId}
                   value={branch}
                   onChange={(event) => onBranchChange(event.target.value)}
@@ -350,6 +354,7 @@ export function WorktreeCreateModal(props: {
                   {t("git.branchSelector.worktreeDirectoryName")}
                 </Label>
                 <Input
+                  variant="plain"
                   id={directoryInputId}
                   value={directoryName}
                   onChange={(event) => onDirectoryNameChange(event.target.value)}
@@ -368,6 +373,7 @@ export function WorktreeCreateModal(props: {
               </Label>
               <div className="flex gap-2">
                 <Input
+                  variant="plain"
                   id={parentInputId}
                   value={parentDirectory}
                   readOnly
@@ -556,7 +562,7 @@ export function BranchActionsModal(props: {
                   onClick={onShowRename}
                   disabled={busy}
                 >
-                  <Pencil className="size-3.5" />
+                  <SquarePen className="size-3.5" />
                   <span>{t("git.branchSelector.renameBranch")}</span>
                 </button>
               ) : null}
@@ -637,6 +643,7 @@ export function BranchActionsModal(props: {
                   {formTitle}
                 </Label>
                 <Input
+                  variant="plain"
                   id={inputId}
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
@@ -677,7 +684,7 @@ export function BranchActionsModal(props: {
                   {busy ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : mode === "rename" ? (
-                    <Pencil className="size-3.5" />
+                    <SquarePen className="size-3.5" />
                   ) : (
                     <Plus className="size-3.5" />
                   )}

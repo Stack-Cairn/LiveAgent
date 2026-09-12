@@ -1,25 +1,27 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Download,
-  ExternalLink,
-  Info,
-  Loader2,
-  RefreshCw,
-  Shield,
-  Sparkles,
-} from "@liveagent/ui/components/IconSet";
+import { Download, ExternalLink, Loader2, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsSection,
+} from "@liveagent/ui/components/settings/SettingsLayout";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@liveagent/ui/components/ui/dialog";
+import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import {
-  type AppUpdateCheckResult,
-  type AppUpdateController,
-  shouldShowRestartRequiredNotice,
-} from "../../lib/appUpdates";
+import { useEffect, useId } from "react";
+import { type AppUpdateCheckResult, type AppUpdateController } from "../../lib/appUpdates";
 import { updateUpdateSettings } from "../../lib/settings";
 import { formatReleaseDate } from "./aboutDate";
 import type { SettingsSectionProps } from "./types";
@@ -63,27 +65,114 @@ function releaseNotesBody(result?: AppUpdateCheckResult) {
   return body;
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message.trim();
+  return String(error ?? "").trim();
+}
+
 export function AboutSection(props: AboutSectionProps) {
   const { settings, setSettings, appUpdate } = props;
   const { t } = useLocale();
+  const toastScope = useId();
   const includePrereleases = settings.updates.includePrereleases;
   const checkState = appUpdate.state;
 
+  useEffect(() => () => toast.dismiss(`${toastScope}-update`), [toastScope]);
+
+  function showUpdateError(title: string, error: unknown) {
+    const description = errorMessage(error);
+    toast.error(title, {
+      id: `${toastScope}-update`,
+      appearance: "notice",
+      ...(description && description !== title ? { description } : {}),
+    });
+  }
+
+  async function handleCheckUpdate() {
+    const toastId = `${toastScope}-update`;
+    toast.warning(t("settings.aboutChecking"), {
+      id: toastId,
+      appearance: "notice",
+      description: t("settings.aboutCheckingDesc"),
+    });
+
+    try {
+      const result = await appUpdate.runCheck();
+      if (!result) {
+        toast.dismiss(toastId);
+      } else if (!result.configured) {
+        toast.warning(t("settings.aboutUpdaterNotConfigured"), {
+          id: toastId,
+          appearance: "notice",
+          description: result.message || t("settings.aboutUpdaterNotConfiguredDesc"),
+        });
+      } else if (result.manualDownload) {
+        toast.warning(t("settings.aboutManualUpdate"), {
+          id: toastId,
+          appearance: "notice",
+          description: t("settings.aboutManualUpdateDesc"),
+        });
+      } else if (result.available) {
+        const version = result.version || result.releaseTag;
+        toast.success(t("settings.aboutUpdateAvailable"), {
+          id: toastId,
+          appearance: "notice",
+          description: version
+            ? `${t("settings.aboutUpdateAvailableDesc")} v${version}`
+            : t("settings.aboutUpdateAvailableDesc"),
+        });
+      } else {
+        toast.success(t("settings.aboutUpToDate"), {
+          id: toastId,
+          appearance: "notice",
+          description: t("settings.aboutUpToDateDesc"),
+        });
+      }
+    } catch (error) {
+      showUpdateError(t("settings.aboutUpdateCheckFailed"), error);
+    }
+  }
+
   async function handleInstallUpdate() {
-    await appUpdate.installOnly().catch(() => undefined);
+    const toastId = `${toastScope}-update`;
+    toast.warning(t("settings.aboutInstalling"), {
+      id: toastId,
+      appearance: "notice",
+      description: t("settings.aboutInstallingDesc"),
+    });
+    try {
+      const result = await appUpdate.installOnly();
+      if (!result) {
+        toast.dismiss(toastId);
+        return;
+      }
+      toast.success(t("settings.aboutInstalled"), {
+        id: toastId,
+        appearance: "notice",
+        description: t("settings.aboutInstalledDesc"),
+      });
+    } catch (error) {
+      showUpdateError(t("settings.aboutUpdateInstallFailed"), error);
+    }
   }
 
   async function handleRestartApp() {
     if (checkState.status !== "installed") return;
-    await appUpdate.restart().catch(() => undefined);
+    toast.warning(t("settings.aboutRestarting"), {
+      id: `${toastScope}-update`,
+      appearance: "notice",
+      description: t("settings.aboutRestartingDesc"),
+    });
+    await appUpdate
+      .restart()
+      .catch((error) => showUpdateError(t("settings.aboutRestartFailed"), error));
   }
 
   const latestResult = appUpdate.result;
   const latestReleaseNotes = releaseNotesBody(latestResult);
-  const channelLabel =
-    latestResult?.channel === "prerelease"
-      ? t("settings.aboutChannelPrerelease")
-      : t("settings.aboutChannelStable");
+  const channelLabel = includePrereleases
+    ? t("settings.aboutChannelPrerelease")
+    : t("settings.aboutChannelStable");
   const currentVersion = latestResult?.currentVersion || __LIVEAGENT_APP_VERSION__;
   const nextVersion = latestResult?.version || latestResult?.releaseTag || "";
   const releaseDate = formatReleaseDate(latestResult?.date);
@@ -91,197 +180,138 @@ export function AboutSection(props: AboutSectionProps) {
   const installing = checkState.status === "installing";
   const installed = checkState.status === "installed";
   const restarting = checkState.status === "restarting";
-  const restartRequiredNotice = shouldShowRestartRequiredNotice(checkState, appUpdate.notice);
   const canInstall = appUpdate.canInstall;
-  const statusTitle = restartRequiredNotice
-    ? t("settings.aboutRestartBeforeCheck")
-    : checkState.status === "error"
-      ? t("settings.aboutUpdateError")
-      : checking
-        ? t("settings.aboutChecking")
-        : installing
-          ? t("settings.aboutInstalling")
-          : restarting
-            ? t("settings.aboutRestarting")
-            : installed
-              ? t("settings.aboutInstalled")
-              : latestResult?.available
-                ? t("settings.aboutUpdateAvailable")
-                : latestResult?.manualDownload
-                  ? t("settings.aboutManualUpdate")
-                  : latestResult?.configured
-                    ? t("settings.aboutUpToDate")
-                    : t("settings.aboutUpdaterNotConfigured");
-  const statusDescription = restartRequiredNotice
-    ? t("settings.aboutRestartBeforeCheckDesc")
-    : checkState.status === "error"
-      ? appUpdate.message || t("settings.aboutUpdateError")
-      : checking
-        ? t("settings.aboutCheckingDesc")
-        : installing
-          ? t("settings.aboutInstallingDesc")
-          : restarting
-            ? t("settings.aboutRestartingDesc")
-            : installed
-              ? t("settings.aboutInstalledDesc")
-              : latestResult?.available
-                ? t("settings.aboutUpdateAvailableDesc")
-                : latestResult?.manualDownload
-                  ? t("settings.aboutManualUpdateDesc")
-                  : latestResult?.configured
-                    ? t("settings.aboutUpToDateDesc")
-                    : latestResult?.message || t("settings.aboutUpdaterNotConfiguredDesc");
+
+  const updateBusy = checking || installing || restarting;
+  const showInstallAction = installed || installing || restarting || canInstall;
+  const updateActionLabel = restarting
+    ? t("settings.aboutRestarting")
+    : installing
+      ? t("settings.aboutInstalling")
+      : installed
+        ? t("settings.aboutRestartApp")
+        : t("settings.aboutInstallUpdate");
+  const releaseMeta = [
+    nextVersion ? `${t("settings.aboutLatestVersion")} v${nextVersion}` : null,
+    releaseDate ? `${t("settings.aboutReleaseDate")} ${releaseDate}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Info className="size-5 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold">{t("settings.aboutTitle")}</h3>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-              {t("settings.aboutDescription")}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {latestResult?.releaseUrl ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void openUrl(latestResult.releaseUrl || "")}
-            >
-              <ExternalLink className="size-3.5" />
-              {t("settings.aboutOpenRelease")}
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void appUpdate.runCheck().catch(() => undefined)}
-            disabled={checking || installing || restarting}
-          >
-            {checking ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="size-3.5" />
-            )}
-            {t("settings.aboutCheckUpdate")}
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-gateway-settings">
-        <section className="space-y-4 rounded-2xl border border-border/60 bg-card p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t("settings.aboutCurrentVersion")}
+    <div className="space-y-8">
+      <SettingsSection>
+        <SettingsCard>
+          <SettingsRow
+            title={t("settings.aboutApplication")}
+            description={t("settings.aboutApplicationDesc")}
+            control={
+              <div className="text-right">
+                <div className="text-sm font-medium text-foreground">
+                  LiveAgent v{currentVersion}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{channelLabel}</div>
               </div>
-              <div className="mt-1 text-2xl font-semibold leading-none tabular-nums">
-                v{currentVersion}
-              </div>
-            </div>
-            <div
-              className={cn(
-                "inline-flex items-center gap-1.5",
-                "rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-xs font-medium",
-              )}
-            >
-              <Sparkles className="size-3.5 text-primary" />
-              {channelLabel}
-            </div>
-          </div>
+            }
+          />
 
-          <div className="rounded-xl border border-border/60 bg-background/70 p-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-                {checkState.status === "error" || restartRequiredNotice ? (
-                  <AlertTriangle className="size-4 text-amber-500" />
-                ) : restarting ? (
-                  <Loader2 className="size-4 animate-spin text-primary" />
-                ) : latestResult?.available || latestResult?.manualDownload ? (
-                  <Download className="size-4 text-primary" />
-                ) : checking ? (
-                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          <SettingsRow
+            title={t("settings.aboutSoftwareUpdate")}
+            description={t("settings.aboutSoftwareUpdateDesc")}
+            control={
+              <div className="grid min-w-64 grid-cols-2 gap-2">
+                {latestReleaseNotes ? (
+                  <Dialog>
+                    <DialogTrigger
+                      render={<Button className="w-full" variant="outline" size="sm" />}
+                    >
+                      {t("settings.aboutReleaseNotes")}
+                    </DialogTrigger>
+                    <DialogContent
+                      className="max-w-2xl"
+                      showCloseButton
+                      closeLabel={t("settings.cancel")}
+                    >
+                      <DialogHeader>
+                        <DialogTitle>{releaseTitle(latestResult)}</DialogTitle>
+                        {releaseMeta ? <DialogDescription>{releaseMeta}</DialogDescription> : null}
+                      </DialogHeader>
+                      <DialogBody className="max-h-[70vh]">
+                        <Markdown
+                          content={latestReleaseNotes}
+                          className="release-notes-markdown text-sm leading-relaxed text-muted-foreground"
+                        />
+                      </DialogBody>
+                      {latestResult?.releaseUrl ? (
+                        <DialogFooter>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void openUrl(latestResult.releaseUrl || "")}
+                          >
+                            <ExternalLink className="size-3.5" />
+                            {t("settings.aboutOpenRelease")}
+                          </Button>
+                        </DialogFooter>
+                      ) : null}
+                    </DialogContent>
+                  </Dialog>
                 ) : (
-                  <CheckCircle2 className="size-4 text-emerald-500" />
+                  <Button
+                    type="button"
+                    className="w-full"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void openUrl(latestResult?.releaseUrl || "")}
+                    disabled={!latestResult?.releaseUrl}
+                  >
+                    <ExternalLink className="size-3.5" />
+                    {t("settings.aboutReleaseNotes")}
+                  </Button>
                 )}
-              </div>
-              <div className="min-w-0 flex-1" role="status" aria-live="polite" aria-atomic="true">
-                <div className="text-sm font-semibold">{statusTitle}</div>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  {statusDescription}
-                </p>
-
-                {nextVersion ? (
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                    <div className="rounded-lg bg-muted/45 px-3 py-2">
-                      <div className="text-muted-foreground">
-                        {t("settings.aboutLatestVersion")}
-                      </div>
-                      <div className="mt-0.5 font-medium tabular-nums">v{nextVersion}</div>
-                    </div>
-                    <div className="rounded-lg bg-muted/45 px-3 py-2">
-                      <div className="text-muted-foreground">{t("settings.aboutReleaseDate")}</div>
-                      <div className="mt-0.5 truncate font-medium">{releaseDate || "N/A"}</div>
-                    </div>
-                  </div>
+                {!showInstallAction ? (
+                  <Button
+                    type="button"
+                    className="w-full"
+                    size="sm"
+                    onClick={() => void handleCheckUpdate()}
+                    disabled={updateBusy}
+                  >
+                    {checking ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
+                    {t("settings.aboutCheckUpdate")}
+                  </Button>
+                ) : null}
+                {showInstallAction ? (
+                  <Button
+                    type="button"
+                    className="w-full"
+                    size="sm"
+                    onClick={installed ? handleRestartApp : handleInstallUpdate}
+                    disabled={updateBusy}
+                  >
+                    {updateBusy ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : installed ? (
+                      <RefreshCw className="size-3.5" />
+                    ) : (
+                      <Download className="size-3.5" />
+                    )}
+                    {updateActionLabel}
+                  </Button>
                 ) : null}
               </div>
-            </div>
+            }
+          />
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                onClick={installed ? handleRestartApp : handleInstallUpdate}
-                disabled={(installed ? false : !canInstall) || installing || restarting}
-              >
-                {installing || restarting ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : installed ? (
-                  <RefreshCw className="size-4" />
-                ) : (
-                  <Download className="size-4" />
-                )}
-                {installed ? t("settings.aboutRestartApp") : t("settings.aboutInstallUpdate")}
-              </Button>
-              <div className="text-xs text-muted-foreground">
-                {latestResult?.repository || "Stack-Cairn/LiveAgent"}
-              </div>
-            </div>
-          </div>
-
-          {latestReleaseNotes ? (
-            <div className="space-y-2 rounded-xl border border-border/60 bg-background/70 p-4">
-              <div className="text-sm font-semibold">{releaseTitle(latestResult)}</div>
-              <div className="max-h-48 overflow-auto pr-2">
-                <Markdown
-                  content={latestReleaseNotes}
-                  className="release-notes-markdown text-xs leading-relaxed text-muted-foreground"
-                />
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <aside className="space-y-4">
-          <section className="rounded-2xl border border-border/60 bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Shield className="size-4 text-muted-foreground" />
-                  {t("settings.aboutPrereleaseTitle")}
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  {t("settings.aboutPrereleaseDesc")}
-                </p>
-              </div>
+          <SettingsRow
+            title={t("settings.aboutPrereleaseTitle")}
+            description={t("settings.aboutPrereleaseDesc")}
+            control={
               <AgentActivationSwitch
                 checked={includePrereleases}
                 title={t("settings.aboutPrereleaseToggle")}
@@ -293,20 +323,10 @@ export function AboutSection(props: AboutSectionProps) {
                   )
                 }
               />
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-            <div className="text-sm font-semibold">{t("settings.aboutNotesTitle")}</div>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {t("settings.aboutNotesBody")}
-            </p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {t("settings.aboutSecurityBody")}
-            </p>
-          </section>
-        </aside>
-      </div>
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
     </div>
   );
 }

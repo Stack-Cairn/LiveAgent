@@ -46,7 +46,7 @@ export function ResourceActivationSwitch(props: {
           "relative inline-flex shrink-0 items-center rounded-full ring-1 ring-border/40 transition-all",
           "disabled:cursor-not-allowed disabled:opacity-45",
           compact ? "h-5 w-9" : "h-6 w-11",
-          props.checked ? "bg-emerald-500 dark:bg-emerald-400" : "bg-muted-foreground/25",
+          props.checked ? "bg-sky-500 dark:bg-sky-400" : "bg-muted-foreground/25",
         )}
       >
         <SwitchThumb

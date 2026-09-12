@@ -52,23 +52,23 @@ const TYPE_CONFIG: Record<
   bash: {
     icon: Terminal,
     label: "settings.cronTypeBash",
-    accent: "text-blue-600 dark:text-blue-400",
-    accentBg: "bg-blue-500/10",
-    accentBorder: "border-blue-500/20",
+    accent: "text-muted-foreground",
+    accentBg: "bg-settings-tile",
+    accentBorder: "border-transparent",
   },
   http: {
     icon: Globe,
     label: "settings.cronTypeHttp",
-    accent: "text-emerald-600 dark:text-emerald-400",
-    accentBg: "bg-emerald-500/10",
-    accentBorder: "border-emerald-500/20",
+    accent: "text-muted-foreground",
+    accentBg: "bg-settings-tile",
+    accentBorder: "border-transparent",
   },
   prompt: {
     icon: MessageSquare,
     label: "settings.cronTypePrompt",
-    accent: "text-violet-600 dark:text-violet-400",
-    accentBg: "bg-violet-500/10",
-    accentBorder: "border-violet-500/20",
+    accent: "text-muted-foreground",
+    accentBg: "bg-settings-tile",
+    accentBorder: "border-transparent",
   },
 };
 
@@ -137,14 +137,6 @@ function LeftPanel({
     <>
       {/* ── Fixed hero header ── */}
       <div className="relative shrink-0 overflow-hidden">
-        <div className={cn("absolute inset-0", cfg.accentBg, "opacity-40")} />
-        <div
-          className={cn(
-            "absolute -right-10 -top-10 size-32 rounded-full bg-gradient-to-br from-white/10 to-transparent",
-            "blur-2xl",
-          )}
-        />
-
         <div className="relative px-5 pb-4 pt-5 max-[820px]:pr-14">
           {/* Type badge + run-now button on the hero's top row, kept out of
               the meta/content area so pill wrapping never moves the button */}

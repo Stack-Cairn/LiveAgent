@@ -1,5 +1,5 @@
 import type { ProviderId } from "@liveagent/app/lib/settings/index";
-import { Check, ChevronDown, Search, Sparkles } from "@liveagent/ui/components/IconSet";
+import { Check, ChevronDown, Search } from "@liveagent/ui/components/IconSet";
 import { ProviderBrandIcon } from "@liveagent/ui/components/ProviderBrandIcon";
 import {
   DropdownMenu,
@@ -10,11 +10,9 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-// Shared provider-grouped model picker used by the cron prompt-task form and
-// the memory settings drawer. The grouped-collapse behavior mirrors the main
-// page model menu while platform-specific data comes from host adapters.
+// Shared searchable model picker. Platform adapters provide model options.
 
 export type ModelPickerOption = {
   value: string;
@@ -49,6 +47,8 @@ function groupOptionsByProvider(options: ModelPickerOption[]): ModelGroup[] {
 }
 
 const TRIGGER_VARIANTS = {
+  plain:
+    "h-9 rounded-lg border-0 bg-settings-tile-hover text-sm shadow-none hover:bg-settings-active",
   default: "h-10 rounded-md border-input bg-background text-sm shadow-xs",
   compact: "h-9 rounded-md border-input bg-background text-sm shadow-xs hover:bg-accent/40",
   quiet:
@@ -59,13 +59,11 @@ const TRIGGER_VARIANTS = {
 
 function ModelOptionItem({
   selected,
-  icon,
   label,
   description,
   onSelect,
 }: {
   selected: boolean;
-  icon: ReactNode;
   label: string;
   description?: string;
   onSelect: () => void;
@@ -79,13 +77,14 @@ function ModelOptionItem({
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
-        <span className={cn("flex shrink-0 opacity-70", selected && "opacity-100")}>{icon}</span>
         <span className="min-w-0 truncate">{label}</span>
         {description ? (
           <span className="min-w-0 truncate text-muted-foreground">{description}</span>
         ) : null}
       </span>
-      {selected ? <Check className="size-4 shrink-0 text-primary" /> : null}
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        {selected ? <Check className="size-3.5" /> : null}
+      </span>
     </DropdownMenuItem>
   );
 }
@@ -113,7 +112,7 @@ export function ModelPicker({
   noneLabel?: string;
   ariaLabel?: string;
   variant?: keyof typeof TRIGGER_VARIANTS;
-  /** When false, render grouped options directly without a collapsible group header. */
+  /** Opt into collapsible provider groups for dense model lists. */
   collapsibleGroups?: boolean;
   /** Search input placeholder; defaults to the shared model-search translation. */
   searchPlaceholder?: string;
@@ -130,7 +129,6 @@ export function ModelPicker({
     if (isOpen) {
       setSearch("");
       setExpandedGroups({});
-      setTimeout(() => searchInputRef.current?.focus(), 0);
     }
   }, [isOpen]);
 
@@ -182,41 +180,24 @@ export function ModelPicker({
           )}
         >
           <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-            <span
-              className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
-                selectedOption
-                  ? "bg-violet-500/10 text-violet-500"
-                  : "bg-muted/60 text-muted-foreground",
-              )}
-            >
-              {selectedOption ? (
-                <ProviderBrandIcon type={selectedOption.providerType} className="size-3.5" />
-              ) : (
-                <Sparkles className="size-3.5" />
-              )}
-            </span>
             <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
               {selectedOption ? selectedOption.label : placeholder}
             </span>
           </span>
           <ChevronDown
-            className={cn(
-              "size-4 shrink-0 text-muted-foreground opacity-50 transition-transform duration-200 ease-out",
-              isOpen && "rotate-180",
-            )}
+            className={cn("size-3.5 shrink-0 text-muted-foreground", isOpen && "rotate-180")}
           />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
           collisionPadding={8}
-          className="w-(--anchor-width) overflow-hidden p-0"
+          className="w-(--anchor-width) min-w-64 max-w-[calc(100vw-32px)] overflow-hidden rounded-xl p-1 shadow-lg"
         >
           <div className="px-2 py-1.5">
             <div
               className={cn(
                 "flex items-center gap-1.5",
-                "rounded-md border border-border/50 bg-muted/40 px-2 py-1",
+                "h-8 rounded-lg bg-settings-tile-hover px-2.5",
               )}
             >
               <Search className="size-3.5 shrink-0 text-muted-foreground/70" />
@@ -230,12 +211,11 @@ export function ModelPicker({
               />
             </div>
           </div>
-          <div className="max-h-popover-14rem overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
+          <div className="max-h-80 overflow-y-auto overscroll-contain px-1 pb-1">
             {noneLabel && !normalizedSearch ? (
               <ModelOptionItem
                 selected={value === ""}
                 onSelect={() => onChange("")}
-                icon={<Sparkles className="size-4" />}
                 label={noneLabel}
               />
             ) : null}
@@ -279,14 +259,17 @@ export function ModelPicker({
                           )}
                         />
                       </DropdownMenuItem>
-                    ) : null}
+                    ) : (
+                      <div className="px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+                        {group.name}
+                      </div>
+                    )}
                     {!collapsibleGroups || expanded
                       ? group.opts.map((option) => (
                           <ModelOptionItem
                             key={option.value}
                             selected={option.value === value}
                             onSelect={() => onChange(option.value)}
-                            icon={<ProviderBrandIcon type={option.providerType} />}
                             label={option.label}
                             description={option.description}
                           />

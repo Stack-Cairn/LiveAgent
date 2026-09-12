@@ -179,24 +179,14 @@ export function DrawerFieldLabel(props: { label: string; hint?: string }) {
  * 视觉上作为"类别分隔"存在，避免与紧随其后的字段标签混为一谈。
  */
 export function DrawerGroupLabel(props: { label: string; hint?: string }) {
-  const { label, hint } = props;
   return (
-    <div className="flex items-center gap-2">
-      <span
-        className={cn(
-          "flex shrink-0 items-center gap-1 text-tiny font-semibold uppercase",
-          "leading-none tracking-0p08em text-muted-foreground/65",
-        )}
-      >
-        {label}
-        {hint ? <HintTip text={hint} label={label} /> : null}
-      </span>
-      <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-foreground/[0.07]" />
+    <div className="space-y-1">
+      <div className="text-xs font-medium text-foreground">{props.label}</div>
+      {props.hint && <p className="text-xs leading-5 text-muted-foreground">{props.hint}</p>}
     </div>
   );
 }
 
-/** 抽屉分区头：图标块 + 标题 + 说明气泡 + 右侧控件插槽。 */
 export function DrawerSectionHeader(props: {
   icon: ReactNode;
   title: string;
@@ -206,21 +196,16 @@ export function DrawerSectionHeader(props: {
 }) {
   const { icon, title, hint, badge, action } = props;
   return (
-    <div className="flex items-center gap-2.5">
-      <span
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center",
-          "rounded-lg border border-foreground/[0.05] bg-foreground/[0.04] text-foreground/70",
-        )}
-      >
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
         {icon}
       </span>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <h3 className="truncate text-sm font-semibold tracking-tight text-foreground/90">
-          {title}
-        </h3>
-        {hint ? <HintTip text={hint} label={title} /> : null}
-        {badge}
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {badge}
+        </div>
+        {hint && <p className="text-xs leading-5 text-muted-foreground">{hint}</p>}
       </div>
       {action}
     </div>

@@ -466,6 +466,13 @@
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
+    /* Settings surfaces use a neutral scale so hierarchy does not inherit the
+       blue cast of the general-purpose muted token. */
+    --settings-rail: 0 0% 95.7%;
+    --settings-tile: 0 0% 96.5%;
+    --settings-tile-hover: 0 0% 94%;
+    --settings-active: 0 0% 88.5%;
+
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
@@ -556,6 +563,11 @@
 
     --muted: 220 18% 17%;
     --muted-foreground: 215 18% 76%;
+
+    --settings-rail: 0 0% 0%;
+    --settings-tile: 224 18% 13%;
+    --settings-tile-hover: 224 16% 16%;
+    --settings-active: 0 0% 10%;
 
     --accent: 220 18% 17%;
     --accent-foreground: 210 30% 96%;

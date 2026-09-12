@@ -15,6 +15,10 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-settings-rail: hsl(var(--settings-rail));
+  --color-settings-tile: hsl(var(--settings-tile));
+  --color-settings-tile-hover: hsl(var(--settings-tile-hover));
+  --color-settings-active: hsl(var(--settings-active));
   --color-accent: hsl(var(--accent));
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-popover: hsl(var(--popover));

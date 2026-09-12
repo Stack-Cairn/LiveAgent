@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   COMPOSER_CONTROL_CHEVRON_CLASS,
@@ -40,6 +41,7 @@ import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/share
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import { useWorkspaceInvalidation } from "@liveagent/ui/lib/workspace-activity/useWorkspaceInvalidation";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   GitBranch as GitBranchInfo,
@@ -86,7 +88,6 @@ function worktreeDirectoryNameFromBranch(branch: string) {
 
 const GIT_BRANCH_SELECTOR_POLL_INTERVAL_MS = 3000;
 const REMOTE_BRANCH_DISPLAY_LIMIT = 40;
-const BRANCH_FILTER_THRESHOLD = 8;
 
 const HEADER_ICON_BUTTON_CLASS =
   "rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45";
@@ -158,6 +159,7 @@ export function GitBranchSelector(props: {
   const [draftBranch, setDraftBranch] = useState("");
   const [filter, setFilter] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [treeView, setTreeView] = useState(false);
   // Controlled so picking a repository can close only the submenu while the
   // root menu stays open for a manual branch pick on the new repository.
   const [repoMenuOpen, setRepoMenuOpen] = useState(false);
@@ -415,11 +417,23 @@ export function GitBranchSelector(props: {
   );
 
   const selectBranch = useCallback(
-    (branch: GitBranchInfo) => {
-      if (!gitClient) return;
-      void runBranchMutation(() => gitClient.switchBranch(workdir, branch.fullName, branch.kind));
+    async (branch: GitBranchInfo) => {
+      if (!gitClient || !canWrite || mutating || branch.current) return;
+      handleMenuOpenChange(false);
+      const confirmed = await confirm({
+        title: t("git.branchSelector.switchConfirmTitle").replace(
+          "{branch}",
+          () => branch.fullName,
+        ),
+        description: t("git.branchSelector.switchConfirmDescription"),
+        detail: workdir,
+        confirmLabel: t("git.branchSelector.switchConfirmAction"),
+        cancelLabel: t("chat.cancel"),
+      });
+      if (!confirmed) return;
+      await runBranchMutation(() => gitClient.switchBranch(workdir, branch.fullName, branch.kind));
     },
-    [gitClient, runBranchMutation, workdir],
+    [gitClient, canWrite, mutating, handleMenuOpenChange, confirm, t, runBranchMutation, workdir],
   );
 
   const createBranch = useCallback(() => {
@@ -918,7 +932,7 @@ export function GitBranchSelector(props: {
   const label = noRepo
     ? t("git.branchSelector.noRepoShort")
     : state.head || t("git.branchSelector.detached");
-  const showFilter = !noRepo && branches.length > BRANCH_FILTER_THRESHOLD;
+  const showFilter = !noRepo;
   const showSyncBadges = !noRepo && currentUpstream !== "";
 
   const renderBranchRow = (branch: GitBranchInfo, isCurrent: boolean, labelText: string) => (
@@ -938,7 +952,7 @@ export function GitBranchSelector(props: {
       className={cn(
         // active: gives touch long-press (contextmenu) visible pressed
         // feedback; on desktop it coincides with the hover highlight.
-        "group/branch gap-2 active:bg-accent active:text-accent-foreground",
+        "group/branch h-7 gap-2 py-0 text-xs active:bg-accent active:text-accent-foreground",
         (isCurrent || !canWrite) && "text-muted-foreground",
       )}
     >
@@ -973,6 +987,42 @@ export function GitBranchSelector(props: {
     </DropdownMenuItem>
   );
 
+  function renderBranchTree(items: GitBranchInfo[], remote: boolean, depth = 0): ReactNode {
+    const folders = new Map<string, GitBranchInfo[]>();
+    const leaves: GitBranchInfo[] = [];
+    for (const branch of items) {
+      const parts = (remote ? branch.fullName : branch.name).split("/");
+      if (parts.length <= depth + 1) leaves.push(branch);
+      else {
+        const name = parts[depth];
+        const group = folders.get(name) ?? [];
+        group.push(branch);
+        folders.set(name, group);
+      }
+    }
+    return (
+      <>
+        {leaves.map((branch) =>
+          renderBranchRow(
+            branch,
+            branch.current || (remote && branch.fullName === currentUpstream),
+            (remote ? branch.fullName : branch.name).split("/").at(-1) ?? branch.name,
+          ),
+        )}
+        {[...folders].map(([name, children]) => (
+          <details key={name} open={normalizedFilter ? true : undefined} className="group/folder">
+            <summary className="cursor-pointer rounded-md px-2 py-1 text-xs hover:bg-muted">
+              {name} <span className="text-muted-foreground">{children.length}</span>
+            </summary>
+            <div className="ml-3 border-l border-border/40 pl-1">
+              {renderBranchTree(children, remote, depth + 1)}
+            </div>
+          </details>
+        ))}
+      </>
+    );
+  }
+
   return (
     <>
       <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
@@ -999,7 +1049,10 @@ export function GitBranchSelector(props: {
           <ChevronDown className={cn(COMPOSER_CONTROL_CHEVRON_CLASS, menuOpen && "rotate-180")} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          className={cn("composer-branch-dropdown flex w-72", "flex-col overflow-hidden p-0")}
+          className={cn(
+            "composer-branch-dropdown flex w-72 max-h-[min(400px,75dvh)]",
+            "flex-col overflow-hidden p-0",
+          )}
           side="top"
           align="start"
         >
@@ -1010,39 +1063,47 @@ export function GitBranchSelector(props: {
             </div>
             {noRepo ? null : (
               <>
-                <button
-                  type="button"
-                  className={HEADER_ICON_BUTTON_CLASS}
-                  disabled={!canWrite || mutating}
-                  onClick={() => {
-                    if (gitClient) runRemoteAction("fetch", () => gitClient.fetch(workdir));
-                  }}
-                  title={!canWrite ? disabledMessage : t("git.branchSelector.fetch")}
-                  aria-label={t("git.branchSelector.fetch")}
-                >
-                  {remoteAction === "fetch" ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <CloudDownload className="size-3.5" />
-                  )}
-                </button>
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex" />}>
+                    <button
+                      type="button"
+                      className={HEADER_ICON_BUTTON_CLASS}
+                      disabled={!canWrite || mutating}
+                      onClick={() => {
+                        if (gitClient) runRemoteAction("fetch", () => gitClient.fetch(workdir));
+                      }}
+                      aria-label={t("git.branchSelector.fetch")}
+                    >
+                      {remoteAction === "fetch" ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <CloudDownload className="size-3.5" />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("git.branchSelector.fetch")}</TooltipContent>
+                </Tooltip>
                 <span className="relative inline-flex">
-                  <button
-                    type="button"
-                    className={HEADER_ICON_BUTTON_CLASS}
-                    disabled={!canWrite || mutating}
-                    onClick={() => {
-                      if (gitClient) runRemoteAction("pull", () => gitClient.pull(workdir));
-                    }}
-                    title={!canWrite ? disabledMessage : t("git.branchSelector.pull")}
-                    aria-label={t("git.branchSelector.pull")}
-                  >
-                    {remoteAction === "pull" ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Download className="size-3.5" />
-                    )}
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex" />}>
+                      <button
+                        type="button"
+                        className={HEADER_ICON_BUTTON_CLASS}
+                        disabled={!canWrite || mutating}
+                        onClick={() => {
+                          if (gitClient) runRemoteAction("pull", () => gitClient.pull(workdir));
+                        }}
+                        aria-label={t("git.branchSelector.pull")}
+                      >
+                        {remoteAction === "pull" ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Download className="size-3.5" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("git.branchSelector.pull")}</TooltipContent>
+                  </Tooltip>
                   {showSyncBadges && state.behind > 0 ? (
                     <span
                       className={cn(
@@ -1055,22 +1116,26 @@ export function GitBranchSelector(props: {
                   ) : null}
                 </span>
                 <span className="relative inline-flex">
-                  <button
-                    type="button"
-                    className={HEADER_ICON_BUTTON_CLASS}
-                    disabled={!canWrite || mutating}
-                    onClick={() => {
-                      if (gitClient) runRemoteAction("push", () => gitClient.push(workdir));
-                    }}
-                    title={!canWrite ? disabledMessage : t("git.branchSelector.push")}
-                    aria-label={t("git.branchSelector.push")}
-                  >
-                    {remoteAction === "push" ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Upload className="size-3.5" />
-                    )}
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex" />}>
+                      <button
+                        type="button"
+                        className={HEADER_ICON_BUTTON_CLASS}
+                        disabled={!canWrite || mutating}
+                        onClick={() => {
+                          if (gitClient) runRemoteAction("push", () => gitClient.push(workdir));
+                        }}
+                        aria-label={t("git.branchSelector.push")}
+                      >
+                        {remoteAction === "push" ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="size-3.5" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("git.branchSelector.push")}</TooltipContent>
+                  </Tooltip>
                   {showSyncBadges && state.ahead > 0 ? (
                     <span
                       className={cn(
@@ -1084,20 +1149,24 @@ export function GitBranchSelector(props: {
                 </span>
               </>
             )}
-            <button
-              type="button"
-              className={HEADER_ICON_BUTTON_CLASS}
-              onClick={() => {
-                // Manual refresh also re-scans for repositories so ones
-                // created mid-session show up.
-                void discoverRepositories();
-                void refresh();
-              }}
-              title={t("git.branchSelector.refresh")}
-              aria-label={t("git.branchSelector.refresh")}
-            >
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex" />}>
+                <button
+                  type="button"
+                  className={HEADER_ICON_BUTTON_CLASS}
+                  onClick={() => {
+                    // Manual refresh also re-scans for repositories so ones
+                    // created mid-session show up.
+                    void discoverRepositories();
+                    void refresh();
+                  }}
+                  aria-label={t("git.branchSelector.refresh")}
+                >
+                  <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{t("git.branchSelector.refresh")}</TooltipContent>
+            </Tooltip>
           </div>
           {repositories.length > 1 ? (
             <div className="shrink-0 border-b border-border/60 p-1">
@@ -1172,8 +1241,8 @@ export function GitBranchSelector(props: {
             </div>
           ) : null}
           {showFilter ? (
-            <div className="shrink-0 border-b border-border/60 px-2 py-1.5">
-              <div className="relative">
+            <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
+              <div className="relative min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={filter}
@@ -1188,10 +1257,31 @@ export function GitBranchSelector(props: {
                       setFilter("");
                     }
                   }}
+                  variant="plain"
                   placeholder={t("git.branchSelector.filterBranches")}
                   className="h-8 pl-7 text-xs"
                 />
               </div>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={t("git.branchSelector.treeView")}
+                      aria-pressed={treeView}
+                      onClick={() => setTreeView((value) => !value)}
+                      className={cn(
+                        HEADER_ICON_BUTTON_CLASS,
+                        "inline-flex size-8 shrink-0 items-center justify-center p-0",
+                        treeView && "bg-muted text-foreground",
+                      )}
+                    />
+                  }
+                >
+                  <FolderTree className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent>{t("git.branchSelector.treeView")}</TooltipContent>
+              </Tooltip>
             </div>
           ) : null}
           <div className="min-h-0 flex-1 overflow-y-auto p-1">
@@ -1226,19 +1316,27 @@ export function GitBranchSelector(props: {
                 {filteredLocalBranches.length > 0 ? (
                   <DropdownMenuLabel>{t("git.branchSelector.localBranches")}</DropdownMenuLabel>
                 ) : null}
-                {filteredLocalBranches.map((branch) =>
-                  renderBranchRow(branch, branch.current, branch.name),
-                )}
+                {treeView
+                  ? renderBranchTree(filteredLocalBranches, false)
+                  : filteredLocalBranches.map((branch) =>
+                      renderBranchRow(branch, branch.current, branch.name),
+                    )}
                 {filteredRemoteBranches.length > 0 ? (
                   <DropdownMenuLabel>{t("git.branchSelector.remoteBranches")}</DropdownMenuLabel>
                 ) : null}
-                {filteredRemoteBranches.slice(0, REMOTE_BRANCH_DISPLAY_LIMIT).map((branch) => {
-                  const isCurrentUpstream =
-                    branch.current ||
-                    (currentUpstream !== "" && branch.fullName === currentUpstream);
-                  return renderBranchRow(branch, isCurrentUpstream, branch.fullName);
-                })}
-                {filteredRemoteBranches.length > REMOTE_BRANCH_DISPLAY_LIMIT ? (
+                {treeView
+                  ? renderBranchTree(filteredRemoteBranches, true)
+                  : filteredRemoteBranches
+                      .slice(0, REMOTE_BRANCH_DISPLAY_LIMIT)
+                      .map((branch) =>
+                        renderBranchRow(
+                          branch,
+                          branch.current ||
+                            (currentUpstream !== "" && branch.fullName === currentUpstream),
+                          branch.fullName,
+                        ),
+                      )}
+                {!treeView && filteredRemoteBranches.length > REMOTE_BRANCH_DISPLAY_LIMIT ? (
                   <div className="px-2 py-1 text-xs text-muted-foreground">
                     {t("git.branchSelector.moreRemoteBranches").replace(
                       "{count}",

@@ -870,6 +870,13 @@ export function normalizeProviderModelConfig(
   const inputModalities = normalizeInputModalities(obj.inputModalities);
   return {
     id,
+    ...(typeof obj.displayName === "string"
+      ? { displayName: obj.displayName.trim() }
+      : typeof obj.display_name === "string"
+        ? { displayName: obj.display_name.trim() }
+        : typeof obj.name === "string" && obj.name !== id
+          ? { displayName: obj.name.trim() }
+          : {}),
     ...(ownedBy ? { ownedBy } : {}),
     contextWindow: limits.contextWindow,
     maxOutputToken: limits.maxOutputToken,

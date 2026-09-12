@@ -304,7 +304,7 @@ export function McpRegistryConfigureModal(props: {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex max-h-92dvh max-w-3xl flex-col p-0"
+        className="flex h-[min(48rem,calc(100dvh-2rem))] max-w-xl flex-col p-0"
         closeLabel={t("settings.cancel")}
         showCloseButton
       >
@@ -328,12 +328,13 @@ export function McpRegistryConfigureModal(props: {
 
           <DialogBody>
             <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <FormField density="compact" className="sm:col-span-1">
+              <div className="grid gap-3">
+                <FormField density="compact">
                   <FormFieldLabel htmlFor="mcp-store-config-id" size="compact">
                     {t("mcpHub.serverName")}
                   </FormFieldLabel>
                   <Input
+                    variant="plain"
                     id="mcp-store-config-id"
                     value={draft.id}
                     placeholder={t("mcpHub.serverNamePlaceholder")}
@@ -352,7 +353,10 @@ export function McpRegistryConfigureModal(props: {
                       updateDraft({ transport });
                     }}
                   >
-                    <SelectTrigger id="mcp-store-config-transport">
+                    <SelectTrigger
+                      className="w-full border-0 bg-settings-tile-hover shadow-none"
+                      id="mcp-store-config-transport"
+                    >
                       <SelectValue placeholder={t("mcpHub.selectTransport")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -384,12 +388,13 @@ export function McpRegistryConfigureModal(props: {
 
               {isStdio ? (
                 <SettingsPanel variant="configuration">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3">
                     <FormField density="compact">
                       <FormFieldLabel htmlFor="mcp-store-config-command" size="compact">
                         {t("mcpHub.command")}
                       </FormFieldLabel>
                       <Input
+                        variant="plain"
                         id="mcp-store-config-command"
                         value={draft.command}
                         placeholder="npx"
@@ -402,6 +407,7 @@ export function McpRegistryConfigureModal(props: {
                         {t("mcpHub.cwd")}
                       </FormFieldLabel>
                       <Input
+                        variant="plain"
                         id="mcp-store-config-cwd"
                         value={draft.cwd}
                         placeholder={t("mcpHub.cwdDefault")}
@@ -415,6 +421,7 @@ export function McpRegistryConfigureModal(props: {
                       {t("mcpHub.args")}
                     </FormFieldLabel>
                     <Textarea
+                      variant="plain"
                       id="mcp-store-config-args"
                       value={draft.argsText}
                       placeholder={"-y\n@modelcontextprotocol/server-time"}
@@ -427,6 +434,7 @@ export function McpRegistryConfigureModal(props: {
                       {t("mcpHub.env")}
                     </FormFieldLabel>
                     <Textarea
+                      variant="plain"
                       id="mcp-store-config-env"
                       value={draft.envText}
                       placeholder={"BRAVE_API_KEY=...\nHTTP_PROXY=..."}
@@ -442,6 +450,7 @@ export function McpRegistryConfigureModal(props: {
                       {draft.transport === "http" ? t("mcpHub.urlHttp") : t("mcpHub.urlSse")}
                     </FormFieldLabel>
                     <Input
+                      variant="plain"
                       id="mcp-store-config-url"
                       value={draft.url}
                       placeholder={
@@ -459,6 +468,7 @@ export function McpRegistryConfigureModal(props: {
                         {t("mcpHub.messageUrl")}
                       </FormFieldLabel>
                       <Input
+                        variant="plain"
                         id="mcp-store-config-message-url"
                         value={draft.messageUrl}
                         placeholder="http://127.0.0.1:3000/message"
@@ -472,6 +482,7 @@ export function McpRegistryConfigureModal(props: {
                       {t("mcpHub.headers")}
                     </FormFieldLabel>
                     <Textarea
+                      variant="plain"
                       id="mcp-store-config-headers"
                       value={draft.headersText}
                       placeholder={"Authorization=Bearer ...\nX-API-Key=..."}
@@ -492,7 +503,7 @@ export function McpRegistryConfigureModal(props: {
                       {t("mcpHub.storeConfigureRequiredDesc")}
                     </p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3">
                     {requiredConfig.map((input) => {
                       const key = mcpRegistryConfigInputKey(input);
                       return (
@@ -501,6 +512,7 @@ export function McpRegistryConfigureModal(props: {
                             {input.label ?? input.name}
                           </FormFieldLabel>
                           <Input
+                            variant="plain"
                             id={`mcp-store-config-${key}`}
                             type={input.secret ? "password" : "text"}
                             value={draft.configValues[key] ?? ""}
@@ -532,10 +544,10 @@ export function McpRegistryConfigureModal(props: {
           </DialogBody>
 
           <DialogFooter className="flex-row flex-wrap">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button size="sm" type="button" variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>
-            <Button type="submit" className="gap-1.5">
+            <Button size="sm" type="submit" className="gap-1.5">
               <Plus className="size-3.5" />
               {t("mcpHub.storeConfigureSubmit")}
             </Button>

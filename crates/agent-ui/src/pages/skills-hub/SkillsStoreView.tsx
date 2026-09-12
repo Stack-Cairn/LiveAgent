@@ -360,7 +360,7 @@ export function SkillsStoreView(props: {
           ) : null}
 
           {items.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
               {filteredItems.map(({ skill, categories }) => {
                 const { done, installing, pending, job, progress } = getInstallState(skill);
                 const link = buildClawHubSkillUrl(skill);
@@ -382,21 +382,16 @@ export function SkillsStoreView(props: {
                     }}
                     className={cn(
                       "flex h-full cursor-pointer flex-col",
-                      "rounded-2xl border bg-card p-3.5 text-left shadow-xs",
+                      "rounded-xl bg-settings-tile p-5 text-left transition-colors hover:bg-settings-tile-hover",
                       "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      done
-                        ? "border-emerald-500/40 dark:border-emerald-400/35"
-                        : "border-border/70",
                     )}
                   >
                     <div className="flex h-full flex-col gap-3">
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            "flex size-10 shrink-0 items-center justify-center rounded-xl border",
-                            done
-                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                              : "border-border/70 bg-muted/60 text-foreground/75",
+                            "flex size-10 shrink-0 items-center justify-center rounded-lg",
+                            "text-foreground/70",
                           )}
                         >
                           <PrimaryCategoryIcon className="size-5" />
@@ -406,7 +401,7 @@ export function SkillsStoreView(props: {
                             <SearchHighlight
                               text={skill.displayName}
                               query={query}
-                              className="truncate text-sm font-semibold leading-tight text-foreground"
+                              className="line-clamp-2 text-sm font-semibold leading-5 text-foreground"
                             />
                             {link ? (
                               <a
@@ -415,14 +410,14 @@ export function SkillsStoreView(props: {
                                 rel="noreferrer"
                                 onClick={(event) => event.stopPropagation()}
                                 onKeyDown={(event) => event.stopPropagation()}
-                                className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                                className="shrink-0 text-foreground/70 transition-colors hover:text-foreground"
                                 title={t("settings.skillsStoreOpenInClawHub")}
                               >
                                 <ExternalLink className="size-3.5" />
                               </a>
                             ) : null}
                           </div>
-                          <div className="mt-1 text-tiny font-medium uppercase tracking-wider text-muted-foreground">
+                          <div className="mt-1 text-xs text-muted-foreground">
                             v{skill.latestVersion ?? t("settings.skillsStoreVersionLatest")}
                           </div>
                         </div>
@@ -436,15 +431,15 @@ export function SkillsStoreView(props: {
                       />
 
                       {skill.summary ? (
-                        <p className="line-clamp-3 text-xs leading-1p45 text-muted-foreground">
+                        <p className="line-clamp-3 text-sm leading-5 text-foreground/80">
                           <SearchHighlight text={skill.summary} query={query} />
                         </p>
                       ) : null}
 
                       <div
                         className={cn(
-                          "flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/60 pt-2",
-                          "text-tiny text-muted-foreground",
+                          "flex flex-wrap items-center gap-x-2.5 gap-y-1 pt-2",
+                          "text-xs text-muted-foreground",
                         )}
                       >
                         <span
@@ -477,7 +472,7 @@ export function SkillsStoreView(props: {
 
                       {installing && !done ? (
                         <div className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-3 text-tiny text-muted-foreground">
+                          <div className="flex items-center justify-between gap-3 text-xs text-foreground/70">
                             <span>{installPhaseLabel(pending ? undefined : job, t)}</span>
                             {job && !pending ? (
                               <span className="flex items-center gap-1.5">
@@ -490,7 +485,7 @@ export function SkillsStoreView(props: {
                                     void cancelSkillInstallJob(job.jobId).catch(() => undefined);
                                   }}
                                   onKeyDown={(event) => event.stopPropagation()}
-                                  className="text-muted-foreground transition-colors hover:text-foreground"
+                                  className="text-foreground/70 transition-colors hover:text-foreground"
                                 >
                                   <X className="size-3" />
                                 </button>
@@ -518,12 +513,11 @@ export function SkillsStoreView(props: {
 
                       <Button
                         type="button"
-                        variant={done ? "outline" : "default"}
+                        variant="ghost"
                         size="sm"
                         className={cn(
-                          "mt-auto h-9 w-full gap-1.5 rounded-xl",
-                          done &&
-                            "border-border/55 bg-background/75 text-foreground/85 backdrop-blur-md",
+                          "mt-auto self-end gap-1.5 rounded-lg bg-background text-foreground hover:bg-settings-active",
+                          done && "bg-transparent text-muted-foreground disabled:opacity-100",
                         )}
                         disabled={done || installing}
                         aria-busy={installing}
@@ -555,7 +549,7 @@ export function SkillsStoreView(props: {
 
           {items.length > 0 && filteredItems.length === 0 && !loading && !loadingMore && !cursor ? (
             <GlassPanel tone="muted">
-              <p className="py-2 text-center text-sm text-muted-foreground">
+              <p className="py-2 text-center text-sm text-foreground/70">
                 {t("settings.skillsStoreEmptyTitle")}
               </p>
             </GlassPanel>
@@ -567,7 +561,7 @@ export function SkillsStoreView(props: {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5 rounded-full border-border/50 bg-background/70 backdrop-blur-md"
+                className="gap-1.5 rounded-full border-border/50 bg-background backdrop-blur-md"
                 disabled={loadingMore}
                 onClick={onLoadMore}
               >

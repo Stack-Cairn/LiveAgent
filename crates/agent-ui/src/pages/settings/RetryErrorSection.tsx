@@ -78,7 +78,7 @@ export function RetryErrorSection(props: SettingsSectionProps) {
   }
 
   return (
-    <section className="py-5 last:pb-0">
+    <section className="rounded-xl bg-settings-tile p-4">
       <DrawerSectionHeader
         icon={<RefreshCw className="size-3.5" />}
         title={t("settings.retryError")}
@@ -106,11 +106,11 @@ export function RetryErrorSection(props: SettingsSectionProps) {
                   aria-label={t(`settings.retryError.preset.${code}`)}
                   onClick={() => togglePresetCode(code, !enabled)}
                   className={cn(
-                    "flex h-8 items-center gap-1.5 rounded-lg border px-2 text-left",
+                    "flex min-h-9 items-center gap-2 rounded-lg px-3 text-left",
                     "transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     enabled
-                      ? "border-primary/25 bg-primary/[0.06] text-foreground"
-                      : "border-foreground/[0.07] text-muted-foreground/75 hover:border-foreground/[0.15] hover:text-foreground/80",
+                      ? "bg-settings-active text-foreground"
+                      : "bg-background/60 text-muted-foreground hover:bg-settings-tile-hover hover:text-foreground",
                   )}
                 >
                   <code
@@ -147,6 +147,8 @@ export function RetryErrorSection(props: SettingsSectionProps) {
           />
           <div className="flex items-center gap-1.5">
             <Input
+              variant="plain"
+              aria-label={t("settings.retryErrorCustomPatterns")}
               value={patternDraft}
               placeholder={t("settings.retryErrorCustomPatternPlaceholder")}
               onChange={(event) => setPatternDraft(event.target.value)}

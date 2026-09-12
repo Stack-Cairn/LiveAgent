@@ -72,7 +72,7 @@ test("adding large switches preserves the existing size and tone contracts", asy
       assert.equal(control.getAttribute("aria-checked"), "true");
     }
     await act(async () => root.render(React.createElement(Switch, { tone: "success", checked: true })));
-    assert.ok(host.querySelector('[role="switch"]').classList.contains('data-[checked]:bg-emerald-500'));
+    assert.ok(host.querySelector('[role="switch"]').classList.contains('data-[checked]:bg-sky-500'));
   } finally {
     await act(async () => root.unmount());
     host.remove();

@@ -125,7 +125,9 @@ test("STT connection test saves the current form and identifies the active runti
   );
 
   assert.match(section, /if \(!\(await save\(\)\)\) return;/);
-  assert.match(section, />语音输入<\/h3>/);
+  assert.match(section, /<SettingsSection\s+title="通用"/);
+  assert.match(section, /title="开启语音输入"/);
+  assert.doesNotMatch(section, />语音输入<\/h3>/);
   assert.doesNotMatch(section, /语音转文字/);
   assert.match(zhCNSettings, /"settings\.navStt": "语音输入"/);
   assert.doesNotMatch(zhCNSettings, /语音转文字/);
@@ -145,12 +147,10 @@ test("STT connection test saves the current form and identifies the active runti
     /fields: \["websocketUrl", "baiduAppId", "devPid", "baiduApiKey"\]/,
   );
   assert.match(section, /provider === "tencent_cloud" \? "AppId" : "App ID"/);
-  assert.match(section, /delete next\[definition\.id\]/);
   assert.doesNotMatch(section, /service\s*\.get\(\)/);
   assert.match(section, /const displayedStt = settings\.stt/);
   assert.match(section, /checked=\{displayedStt\.enabled\}/);
   assert.match(section, /stt: \{ \.\.\.previous\.stt, enabled, allowIncomplete: true \}/);
-  assert.match(section, /className="w-full min-w-0 space-y-5"/);
   assert.doesNotMatch(webSettingsSync, /receivedSyncedStt/);
   assert.match(webSettingsSync, /const stt = await webSttSettingsService\.get\(\)/);
   assert.match(
@@ -168,7 +168,6 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(desktopService, /settings_reveal_stt_secret/);
   assert.match(webService, /runtimeLabel: "WebUI（与桌面端同步，凭据由 Gateway 安全托管）"/);
   assert.match(webService, /secretRevealMode: "field-name"/);
-  assert.match(section, /WebUI 的查看按钮只显示字段名/);
   assert.match(section, /toggleSecretVisibility/);
   assert.match(section, /const SAVED_SECRET_MASK = "saved-secret-placeholder"/);
   assert.match(section, /selectedProvider: SttProviderId/);

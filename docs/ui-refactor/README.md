@@ -14,6 +14,7 @@
 - [ui-toast.md](ui-toast.md)
 - [ui-tsx-split-audit.md](ui-tsx-split-audit.md)
 - [pr-description.md](pr-description.md)
+- [settings-ui-phase-2-plan.md](settings-ui-phase-2-plan.md)
 
 ## 合并前清理
 

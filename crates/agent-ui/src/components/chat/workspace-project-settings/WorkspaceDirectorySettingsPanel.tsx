@@ -26,7 +26,7 @@ function RootAccessToggle(props: {
     <fieldset
       className={cn(
         "flex h-7 shrink-0 items-center gap-0.5",
-        "rounded-lg border border-border/60 bg-muted/40 p-0.5",
+        "rounded-lg bg-settings-active p-0.5",
       )}
     >
       <legend className="sr-only">{ariaLabel}</legend>
@@ -84,9 +84,9 @@ export function WorkspaceDirectorySettingsPanel(props: {
       <h3 className="text-sm font-semibold">{t("chat.workspaceSettingsDirectories")}</h3>
 
       {/* 主目录与附加目录合并为同一张列表卡片，形成统一的目录清单。 */}
-      <div className="overflow-hidden rounded-xl border border-border/60">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 rounded-xl bg-settings-tile px-4 py-3">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-foreground/70">
             <FolderTree className="size-3.5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -105,7 +105,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
         </div>
 
         {loading ? (
-          <div className="space-y-2 border-t border-border/50 px-4 py-3">
+          <div className="space-y-2 rounded-xl bg-settings-tile px-4 py-3">
             <span className="sr-only" role="status">
               {t("chat.workspaceSettingsDirectoriesLoading")}
             </span>
@@ -124,8 +124,8 @@ export function WorkspaceDirectorySettingsPanel(props: {
             <div
               key={root.id}
               className={cn(
-                "flex items-center gap-3 border-t border-border/50 px-4 py-2.5 transition-colors",
-                "hover:bg-muted/25 max-[560px]:flex-wrap",
+                "flex items-center gap-3 rounded-xl bg-settings-tile px-4 py-3 transition-colors",
+                "hover:bg-settings-tile-hover max-[560px]:flex-wrap",
               )}
             >
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
@@ -134,17 +134,14 @@ export function WorkspaceDirectorySettingsPanel(props: {
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <Input
+                    variant="plain"
                     value={root.alias}
                     onChange={(event) => onAliasChange(root.id, event.currentTarget.value)}
                     aria-label={t("chat.workspaceSettingsDirectoryAlias")}
                     maxLength={32}
                     pattern="[a-z][a-z0-9_-]{0,31}"
                     disabled={!loaded}
-                    className={cn(
-                      "h-6 min-w-0 max-w-180px border-transparent bg-transparent px-1",
-                      "text-sm font-medium shadow-none",
-                      "hover:border-border/60 focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-foreground/10",
-                    )}
+                    className={cn("h-8 min-w-0 max-w-180px", "text-sm font-medium shadow-none")}
                   />
                   {/* 正常状态不显示徽标，只有异常/待批准时提醒。 */}
                   {root.state !== "active" ? (
@@ -202,7 +199,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
             disabled={!loaded || loading}
             className={cn(
               "flex w-full items-center justify-center gap-1.5",
-              "border-t border-dashed border-border/60 px-4 py-2.5",
+              "cursor-pointer rounded-lg bg-settings-tile px-4 py-2.5",
               "text-xs font-medium text-muted-foreground transition-colors",
               "hover:bg-muted/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
             )}
@@ -214,7 +211,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
       </div>
 
       {!rootClient ? (
-        <div className="flex gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+        <div className="flex gap-3 rounded-xl bg-settings-tile p-4">
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <div>
             <div className="text-sm font-medium">
