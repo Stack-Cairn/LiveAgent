@@ -28,6 +28,7 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ConfirmActionPopover } from "@liveagent/ui/pages/settings/shared";
 import { useCallback, useEffect, useState } from "react";
@@ -515,8 +516,7 @@ function IssuedTokenDialog({
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
-    if (!navigator.clipboard?.writeText) return;
-    await navigator.clipboard.writeText(issuedToken.token);
+    if (!(await copyTextToClipboard(issuedToken.token))) return;
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }

@@ -3,19 +3,6 @@
 @theme inline {
   --animate-hub-loading-progress: hubLoadingProgress var(--ui-duration-1450ms) var(--ease-in-out)
     infinite;
-  --animate-status-board-reactor-ring-a: status-board-ring-spin var(--ui-duration-9000ms) linear
-    infinite;
-  --animate-status-board-reactor-ring-b: status-board-ring-spin var(--ui-duration-7000ms) linear
-    infinite reverse;
-  --animate-status-board-event-dot: status-board-pulse var(--ui-duration-1800ms) ease-in-out
-    infinite;
-  --animate-login-btn-loading: loginSpin var(--ui-duration-600ms) linear infinite;
-  --animate-chat-work-pixel: chat-work-pixel var(--ui-duration-650ms) ease-in-out
-    var(--chat-work-delay) infinite;
-  --animate-compaction-band-icon-active: compactionBandBreathe var(--ui-duration-1800ms) ease-in-out
-    infinite;
-  --animate-file-drop-overlay-zone: fileDropBorderPulse var(--ui-duration-2400ms) ease-in-out
-    infinite;
   --animate-compaction-band-progress: compactionBandSweep var(--ui-duration-1600ms)
     var(--ease-in-out) infinite;
   --animate-file-drop-overlay: fileDropOverlayIn var(--ui-duration-160ms) var(--ease-ui-enter);
@@ -34,27 +21,13 @@
 }
 @layer components {
   /* Compaction band — shared chrome for the live "compressing context"
-     status and the settled in-reply seam. The active band carries a sweeping
-     progress line along its bottom edge and a breathing icon tile; the
-     settled band is static so history stays calm. */
+     status and the settled in-reply seam. */
   @keyframes compactionBandSweep {
     0% {
       transform: translateX(-100%);
     }
     100% {
       transform: translateX(300%);
-    }
-  }
-
-  @keyframes compactionBandBreathe {
-    0%,
-    100% {
-      transform: scale(1);
-      opacity: var(--ui-opacity-0p85);
-    }
-    50% {
-      transform: scale(1.08);
-      opacity: 1;
     }
   }
 
@@ -89,16 +62,6 @@
       transform: translateY(0) scale(1);
     }
   }
-
-  @keyframes fileDropBorderPulse {
-    0%,
-    100% {
-      box-shadow: 0 0 0 0 hsl(var(--foreground) / 0);
-    }
-    50% {
-      box-shadow: 0 0 0 var(--spacing-3px) hsl(var(--foreground) / 0.04);
-    }
-  }
 }
 @keyframes tw-scroll-fade-in-top {
   from {
@@ -118,19 +81,6 @@
     --scroll-fade-b-size: 0px;
   }
 }
-@keyframes chat-work-pixel {
-  0%,
-  55%,
-  100% {
-    opacity: var(--ui-opacity-0p15);
-    transform: scale(0.8);
-  }
-
-  25% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 @layer base {
   /* Indeterminate sweep across the top edge of the commit composer card while
    * an AI commit-message generation request is in flight. */
@@ -143,17 +93,6 @@
     }
   }
 }
-/*
- * The history list already virtualizes once it grows large. Avoid
- * content-visibility on rows: after pin/unpin reorders the list, WKWebView can
- * keep the moved row in a skipped paint state and render only the white row
- * background, making the conversation title look blank.
- */
-@keyframes loginSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 @keyframes syncDotBounce {
   0%,
   80%,
@@ -164,51 +103,5 @@
   40% {
     transform: translateY(var(--spacing-minus-7px));
     opacity: 1;
-  }
-}
-@keyframes status-board-pulse {
-  0%,
-  100% {
-    opacity: var(--ui-opacity-0p54);
-    transform: scale(0.92);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.08);
-  }
-}
-@keyframes status-board-ring-spin {
-  from {
-    transform: rotate(0deg) scale(1);
-  }
-  to {
-    transform: rotate(360deg) scale(1.015);
-  }
-}
-@keyframes status-board-radar-sweep {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes status-board-node-pulse {
-  0%,
-  100% {
-    opacity: var(--ui-opacity-0p72);
-    filter: saturate(0.86);
-  }
-  50% {
-    opacity: 1;
-    filter: saturate(1.35);
-  }
-}
-@keyframes status-board-load-breathe {
-  from {
-    filter: brightness(0.82);
-  }
-  to {
-    filter: brightness(1.24);
   }
 }

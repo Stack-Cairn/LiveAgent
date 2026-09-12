@@ -28,7 +28,6 @@ export function CompactionBand(props: {
         className={cn(
           "compaction-band-icon flex size-5 shrink-0 items-center justify-center",
           "rounded-md bg-violet-500/[0.12] text-violet-600 dark:bg-violet-400/[0.14] dark:text-violet-300",
-          active && "animate-compaction-band-icon-active motion-reduce:animate-none",
         )}
       >
         {icon ?? <FoldVertical className="size-3" />}

@@ -12,7 +12,6 @@ import {
   type ProviderRetryPolicy,
 } from "@liveagent/app/lib/settings";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
-import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   applyCliIdentity,
@@ -52,7 +51,7 @@ import {
   requiresCustomUsageQueryConfirmation,
   serializeUsageQueryDraft,
 } from "@liveagent/ui/pages/settings/providerUtils";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProviderModalView } from "./ProviderModalView";
 import {
   customHeaderIssueMessage,
@@ -88,16 +87,9 @@ type ModelEditDraft = {
 
 type NewModelPhase = "visible" | "fading";
 
-type PendingModelLayout = {
-  topById: Map<string, number>;
-  scrollContainer: HTMLDivElement | null;
-  scrollTop: number | null;
-};
-
 const NEW_MODEL_SORT_DELAY_MS = 1_200;
 const NEW_MODEL_BADGE_DURATION_MS = 3_200;
 const NEW_MODEL_BADGE_FADE_MS = 500;
-const MODEL_FLIP_DURATION_MS = 420;
 
 const REDACTED_API_KEY_DISPLAY = "API Key";
 
@@ -237,8 +229,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const prevFetchKey = useRef("");
   const headerKeyRefs = useRef<Array<HTMLInputElement | null>>([]);
   const headerValueRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const modelListRef = useRef<HTMLDivElement | null>(null);
-  const pendingModelLayoutRef = useRef<PendingModelLayout | null>(null);
   const modelSortTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modelBadgeTimersRef = useRef(new Map<string, Array<ReturnType<typeof setTimeout>>>());
   const modelsRef = useRef(models);
@@ -401,22 +391,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     [],
   );
 
-  function captureModelLayout() {
-    const rows = modelListRef.current?.querySelectorAll<HTMLElement>("[data-model-row-id]");
-    const topById = new Map<string, number>();
-    for (const row of rows ?? []) {
-      for (const animation of row.getAnimations()) animation.cancel();
-      const id = row.dataset.modelRowId;
-      if (id) topById.set(id, row.getBoundingClientRect().top);
-    }
-    const scrollContainer = modelScrollContainerRef.current;
-    pendingModelLayoutRef.current = {
-      topById,
-      scrollContainer,
-      scrollTop: scrollContainer?.scrollTop ?? null,
-    };
-  }
-
   function markModelAsNew(modelId: string) {
     for (const timer of modelBadgeTimersRef.current.get(modelId) ?? []) clearTimeout(timer);
     setNewModelPhases((current) => {
@@ -449,7 +423,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       modelSortTimerRef.current = setTimeout(settleNewModels, 200);
       return;
     }
-    captureModelLayout();
     setModelDisplayOrder(
       createModelOrderSnapshot(modelsRef.current, modelOrderRef.current, activeModelsRef.current),
     );
@@ -468,7 +441,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       return;
     }
 
-    captureModelLayout();
     const nextIds = new Set(nextModels.map((model) => model.id));
     const newIdSet = new Set(newModelIds);
     setModels(nextModels);
@@ -791,29 +763,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     () => applyModelOrderSnapshot(models, modelDisplayOrder),
     [models, modelDisplayOrder],
   );
-  useLayoutEffect(() => {
-    // The rendered row order is the commit boundary for restoring scroll and running FLIP.
-    void orderedModels;
-    const pending = pendingModelLayoutRef.current;
-    if (!pending) return;
-    pendingModelLayoutRef.current = null;
-    if (pending.scrollTop !== null && pending.scrollContainer) {
-      pending.scrollContainer.scrollTop = pending.scrollTop;
-    }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const rows = modelListRef.current?.querySelectorAll<HTMLElement>("[data-model-row-id]");
-    for (const row of rows ?? []) {
-      const id = row.dataset.modelRowId;
-      const previousTop = id ? pending.topById.get(id) : undefined;
-      if (previousTop === undefined) continue;
-      const delta = previousTop - row.getBoundingClientRect().top;
-      if (Math.abs(delta) < 1) continue;
-      row.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }], {
-        duration: MODEL_FLIP_DURATION_MS,
-        easing: getComputedStyle(row).getPropertyValue("--ease-ui-curve-2").trim(),
-      });
-    }
-  }, [orderedModels]);
   const modelSearchQuery = modelSearch.trim().toLowerCase();
   const visibleModels = useMemo(
     () =>
@@ -851,20 +800,9 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setModelOrder(nextIds);
     setModelDisplayOrder(nextIds);
   }, []);
-  const {
-    draggingItemId: draggingModelId,
-    getItemProps: getModelReorderProps,
-    renderDragHandle: renderModelDragHandle,
-    scrollContainerRef: modelScrollContainerRef,
-  } = useVerticalListReorder({
-    itemIds: orderedModels.map((model) => model.id),
-    canReorder: !modelSearchQuery,
-    reorderLabel: t("settings.reorderModel"),
-    reorderHint: t("settings.reorderVerticalHint"),
-    disabledHint: modelReorderDisabledHint,
-    onReorder: handleModelReorder,
-  });
-  draggingModelIdRef.current = draggingModelId;
+  const handleModelDraggingChange = useCallback((itemId: string | null) => {
+    draggingModelIdRef.current = itemId;
+  }, []);
   const headerSuggestQuery = headerSuggest
     ? (customHeaders[headerSuggest.index]?.key ?? "").trim().toLowerCase()
     : "";
@@ -943,7 +881,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     cancelCustomHeaderImport,
     commitUsageTimeoutInput,
     customHeaders,
-    draggingModelId,
     editingModel,
     editingModelContextWindow,
     editingModelInputModalitiesMode,
@@ -951,9 +888,10 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     fetchError,
     fetchingModels,
     focusCustomHeader,
-    getModelReorderProps,
     handleAddModel,
     handleImportCustomHeaders,
+    handleModelDraggingChange,
+    handleModelReorder,
     handleRefresh,
     handleSave,
     handleTestUsageQuery,
@@ -973,8 +911,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     isFullUrl,
     isGatewayWebui,
     matchedBalanceProviders,
-    modelListRef,
-    modelScrollContainerRef,
+    modelReorderDisabledHint,
     modelSearch,
     modelSearchQuery,
     models,
@@ -992,7 +929,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     providerType,
     removeCustomHeader,
     removeModel,
-    renderModelDragHandle,
     requestClose,
     requestFormat,
     saveInlineModelSettings,

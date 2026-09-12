@@ -350,7 +350,7 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
         "uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px",
         "transition-[transform,border-color,background-color] duration-160ms ease-default",
         online
-          ? "border-success/25 bg-success/10 text-success [&>span]:animate-[status-board-pulse_var(--ui-duration-1500ms)_ease-in-out_infinite]"
+          ? "border-success/25 bg-success/10 text-success"
           : "border-destructive/25 bg-destructive/10 text-destructive",
       )}
     >
@@ -1204,8 +1204,8 @@ export function StatusDashboardPage() {
                     background: `conic-gradient(from -90deg, var(--color-status-integrity-start) 0deg, var(--color-status-integrity-end) ${integrityScore * 3.6}deg, var(--color-status-integrity-track) ${integrityScore * 3.6}deg 360deg)`,
                   }}
                 >
-                  <div className="absolute inset-minus-8px animate-status-board-reactor-ring-a rounded-[inherit] border border-[rgba(var(--status-cyan),0.24)]" />
-                  <div className="absolute inset-28px animate-status-board-reactor-ring-b rounded-[inherit] border border-status-violet/28!" />
+                  <div className="absolute inset-minus-8px rounded-[inherit] border border-[rgba(var(--status-cyan),0.24)]" />
+                  <div className="absolute inset-28px rounded-[inherit] border border-status-violet/28!" />
                   <div className="relative z-1 grid justify-items-center">
                     <strong className="text-5xl leading-0p92 tracking-minus-0p06em text-foreground [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
                       {integrityScore}
@@ -1306,7 +1306,6 @@ export function StatusDashboardPage() {
                   aria-label="live signal radar"
                 >
                   <div className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-46px)_var(--spacing-46px)] opacity-(--ui-opacity-0p42) [mask-image:radial-gradient(circle,black_0_68%,transparent_69%)]" />
-                  <div className="absolute inset-0 animate-[status-board-radar-sweep_var(--ui-duration-3400ms)_linear_infinite] rounded-[inherit] bg-[conic-gradient(from_0deg,rgba(var(--status-cyan),0.45),rgba(var(--status-cyan),0.06)_42deg,transparent_72deg_360deg)] opacity-(--ui-opacity-0p82) mix-blend-screen" />
                   <div
                     className={cn(
                       "relative z-2 grid size-126px place-items-center",
@@ -1325,7 +1324,7 @@ export function StatusDashboardPage() {
                     <span
                       key={segment.label}
                       className={cn(
-                        "absolute z-3 size-10px animate-[status-board-node-pulse_var(--ui-duration-1800ms)_ease-in-out_infinite] rounded-full bg-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-20px)_rgba(var(--status-board-tone),0.82),0_0_var(--spacing-46px)_rgba(var(--status-board-tone),0.38)] [--status-board-tone:var(--status-cyan)]",
+                        "absolute z-3 size-10px rounded-full bg-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-20px)_rgba(var(--status-board-tone),0.82),0_0_var(--spacing-46px)_rgba(var(--status-board-tone),0.38)] [--status-board-tone:var(--status-cyan)]",
                         dashboardToneClass[segment.tone],
                       )}
                       style={{
@@ -1357,7 +1356,7 @@ export function StatusDashboardPage() {
                       </span>
                       <div className="h-10px overflow-hidden rounded-full border border-[rgba(var(--status-board-tone),0.14)] bg-white/5">
                         <i
-                          className="block h-full animate-[status-board-load-breathe_var(--ui-duration-1800ms)_ease-in-out_infinite_alternate] rounded-[inherit] bg-[linear-gradient(90deg,rgba(var(--status-board-tone),0.25),rgba(var(--status-board-tone),0.95))] shadow-[0_0_var(--spacing-16px)_rgba(var(--status-board-tone),0.44)]"
+                          className="block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgba(var(--status-board-tone),0.25),rgba(var(--status-board-tone),0.95))] shadow-[0_0_var(--spacing-16px)_rgba(var(--status-board-tone),0.44)]"
                           style={{ width: `${segment.width}%` }}
                         />
                       </div>
@@ -1394,7 +1393,7 @@ export function StatusDashboardPage() {
                         dashboardToneClass[event.tone],
                       )}
                     >
-                      <span className="size-8px mt-5px rounded-full bg-status-board-tone shadow-status-board-event-dot animate-status-board-event-dot" />
+                      <span className="mt-5px size-8px rounded-full bg-status-board-tone shadow-status-board-event-dot" />
                       <div>
                         <div className="flex items-center justify-between gap-12px">
                           <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
@@ -1454,7 +1453,7 @@ export function StatusDashboardPage() {
                         "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px px-9px py-8px [--status-board-tone:var(--status-violet)]",
                       )}
                     >
-                      <div className="mt-5px size-8px flex-none animate-status-board-event-dot rounded-full bg-status-board-tone shadow-status-board-event-dot" />
+                      <div className="mt-5px size-8px flex-none rounded-full bg-status-board-tone shadow-status-board-event-dot" />
                       <div>
                         <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
                           {truncateMiddle(item.title, 34)}

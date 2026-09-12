@@ -39,7 +39,7 @@ import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import { SegmentedSlider } from "@liveagent/ui/components/ui/segmented-slider";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { Switch } from "@liveagent/ui/components/ui/switch";
-import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
+import { VerticalReorderList } from "@liveagent/ui/components/ui/VerticalReorderList";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
@@ -47,7 +47,7 @@ import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ProviderModal } from "./ProviderModal";
 import {
   DrawerFieldLabel,
@@ -187,22 +187,6 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
     patchFailover({ queue: failover.queue.filter((_, i) => i !== index) });
   }
 
-  // Queue priority is reordered by dragging (or arrow keys on the focused
-  // handle) instead of per-row up/down buttons.
-  const {
-    draggingItemId: draggingQueueId,
-    getItemProps: getQueueReorderProps,
-    renderDragHandle: renderQueueDragHandle,
-    scrollContainerRef: queueListRef,
-  } = useVerticalListReorder({
-    itemIds: failover.queue,
-    canReorder: true,
-    reorderLabel: t("settings.reorderProvider"),
-    reorderHint: t("settings.reorderVerticalHint"),
-    disabledHint: t("settings.reorderNeedsTwoItems"),
-    onReorder: (nextIds) => patchFailover({ queue: nextIds }),
-  });
-
   return (
     <section className="py-5">
       <DrawerSectionHeader
@@ -246,21 +230,28 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 hint={t("settings.failoverQueueHint").replaceAll("{vendor}", vendorLabel)}
               />
               {failover.queue.length > 0 ? (
-                <div ref={queueListRef} className="space-y-1.5">
-                  {failover.queue.map((entry, index) => (
+                <VerticalReorderList
+                  itemIds={failover.queue}
+                  canReorder
+                  reorderLabel={t("settings.reorderProvider")}
+                  reorderHint={t("settings.reorderVerticalHint")}
+                  disabledHint={t("settings.reorderNeedsTwoItems")}
+                  itemLabel={queueEntryLabel}
+                  onReorder={(nextIds) => patchFailover({ queue: nextIds })}
+                  className="space-y-1.5"
+                >
+                  {(entry, index, { dragging, dragHandle }) => (
                     <div
-                      key={entry}
-                      {...getQueueReorderProps(entry)}
                       className={cn(
                         "flex items-center gap-1.5",
                         "rounded-lg border border-foreground/[0.06] bg-background/60",
                         "py-1.5 pl-1 pr-1.5 transition-colors",
-                        draggingQueueId === entry
+                        dragging
                           ? "border-foreground/[0.14] bg-accent shadow-lg"
                           : "hover:border-foreground/[0.12]",
                       )}
                     >
-                      {renderQueueDragHandle(entry, queueEntryLabel(entry))}
+                      {dragHandle}
                       <span
                         className={cn(
                           "flex h-5 w-6 shrink-0 items-center justify-center",
@@ -292,8 +283,8 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                         <X className="size-3.5" />
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </VerticalReorderList>
               ) : (
                 <SettingsNotice variant="warning">
                   {t("settings.failoverQueueEmpty")}
@@ -661,7 +652,6 @@ function ProviderCardRow(props: {
   usageExpanded: boolean;
   onToggleUsageExpanded: () => void;
   dragging: boolean;
-  reorderProps: { "data-vertical-reorder-id": string; style?: CSSProperties };
   dragHandle: ReactNode;
   onEdit: () => void;
   onDelete: () => void;
@@ -676,7 +666,6 @@ function ProviderCardRow(props: {
     usageExpanded,
     onToggleUsageExpanded,
     dragging,
-    reorderProps,
     dragHandle,
     onEdit,
     onDelete,
@@ -688,7 +677,6 @@ function ProviderCardRow(props: {
 
   return (
     <div
-      {...reorderProps}
       className={cn(
         "settings-card-row group flex items-center gap-3",
         "rounded-xl border bg-card px-4 py-3 transition-colors",
@@ -876,7 +864,14 @@ function ProviderList(props: {
     refreshingProviderIds,
     onRefreshUsage,
   } = props;
-  const filtered = providers.filter((provider) => provider.type === type);
+  const filtered = useMemo(
+    () => providers.filter((provider) => provider.type === type),
+    [providers, type],
+  );
+  const providerById = useMemo(
+    () => new Map(filtered.map((provider) => [provider.id, provider])),
+    [filtered],
+  );
   // 30s ticker 驱动"N 分钟前"相对时间;多套餐行的展开态是纯本地 UI 状态。
   const usageNow = useUsageNowTicker(
     filtered.some((provider) => provider.usageQuery?.enabled) ||
@@ -894,26 +889,9 @@ function ProviderList(props: {
       return next;
     });
   }
-  const {
-    draggingItemId: draggingProviderId,
-    getItemProps: getProviderReorderProps,
-    renderDragHandle: renderProviderDragHandle,
-    scrollContainerRef: providerScrollContainerRef,
-  } = useVerticalListReorder({
-    itemIds: filtered.map((provider) => provider.id),
-    canReorder: true,
-    reorderLabel: t("settings.reorderProvider"),
-    reorderHint: t("settings.reorderVerticalHint"),
-    disabledHint: t("settings.reorderNeedsTwoItems"),
-    onReorder: (nextIds) => onReorder(type, nextIds),
-  });
-
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 web:max-820:gap-10px">
-      <div
-        ref={providerScrollContainerRef}
-        className="min-h-0 flex-1 overflow-y-auto pr-1 web:max-820:pr-0 web:max-820:overscroll-y-contain web:max-820:[-webkit-overflow-scrolling:touch]"
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1 web:max-820:pr-0 web:max-820:overscroll-y-contain web:max-820:[-webkit-overflow-scrolling:touch]">
         {filtered.length === 0 ? (
           <div
             className={cn(
@@ -937,12 +915,22 @@ function ProviderList(props: {
             </Button>
           </div>
         ) : (
-          <div className="space-y-2 pb-1">
-            {filtered.map((provider) => {
+          <VerticalReorderList
+            itemIds={filtered.map((provider) => provider.id)}
+            canReorder
+            reorderLabel={t("settings.reorderProvider")}
+            reorderHint={t("settings.reorderVerticalHint")}
+            disabledHint={t("settings.reorderNeedsTwoItems")}
+            itemLabel={(providerId) => providerById.get(providerId)?.name ?? providerId}
+            onReorder={(nextIds) => onReorder(type, nextIds)}
+            className="space-y-2 pb-1"
+          >
+            {(providerId, _index, { dragging, dragHandle }) => {
+              const provider = providerById.get(providerId);
+              if (!provider) return null;
               const refreshing = refreshingProviderIds.has(provider.id);
               return (
                 <ProviderCardRow
-                  key={provider.id}
                   provider={provider}
                   type={type}
                   usageDisplay={getProviderUsageCardDisplay(
@@ -954,16 +942,15 @@ function ProviderList(props: {
                   refreshing={refreshing}
                   usageExpanded={expandedUsageProviderIds.has(provider.id)}
                   onToggleUsageExpanded={() => toggleUsageExpanded(provider.id)}
-                  dragging={draggingProviderId === provider.id}
-                  reorderProps={getProviderReorderProps(provider.id)}
-                  dragHandle={renderProviderDragHandle(provider.id, provider.name)}
+                  dragging={dragging}
+                  dragHandle={dragHandle}
                   onEdit={() => onEdit(provider)}
                   onDelete={() => onDelete(provider.id)}
                   onRefreshUsage={() => onRefreshUsage(provider.id)}
                 />
               );
-            })}
-          </div>
+            }}
+          </VerticalReorderList>
         )}
       </div>
     </div>

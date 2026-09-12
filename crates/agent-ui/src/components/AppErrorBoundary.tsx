@@ -1,4 +1,5 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "./ui/button";
@@ -65,7 +66,7 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryInnerProps, ErrorBoundar
           <Button
             variant="ghost"
             onClick={() => {
-              void navigator.clipboard.writeText(
+              void copyTextToClipboard(
                 `${error.stack ?? error.message}\n${this.state.componentStack}`,
               );
             }}

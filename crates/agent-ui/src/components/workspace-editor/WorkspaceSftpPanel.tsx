@@ -15,6 +15,7 @@ import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient, SftpEntry, SftpSide, SftpTransfer } from "@liveagent/ui/lib/sftp/types";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -633,10 +634,9 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
 
   const copyPath = useCallback(
     async (path: string) => {
-      try {
-        await navigator.clipboard.writeText(path);
+      if (await copyTextToClipboard(path)) {
         showCopyToast();
-      } catch {
+      } else {
         setCopyPathDialog(path);
       }
     },

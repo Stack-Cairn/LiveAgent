@@ -631,7 +631,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.noMatchingModels": "No matching models",
   "settings.reorderModel": "Reorder model",
   "settings.reorderProvider": "Reorder provider",
-  "settings.reorderVerticalHint": "Drag to reorder; touch and hold on mobile, or use Up/Down",
+  "settings.reorderVerticalHint": "Drag to reorder, or use Up/Down when focused",
   "settings.modelReorderDisabledSearch": "Reordering is unavailable while filtering",
   "settings.reorderNeedsTwoItems": "At least two items are required to reorder",
   "settings.enableAllModels": "Enable all models",

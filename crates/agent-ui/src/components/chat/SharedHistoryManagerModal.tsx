@@ -24,6 +24,7 @@ import { RadioGroup, RadioGroupItem } from "@liveagent/ui/components/ui/radio-gr
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cachedDateTimeFormat } from "@liveagent/ui/lib/shared/intlFormatters";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -245,15 +246,11 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
   const copyableCount = publicOrigin ? readyCount : 0;
 
   function handleCopy(conversationId: string, url: string) {
-    if (!url || !navigator.clipboard?.writeText) {
-      return;
-    }
-    void navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        showCopied(conversationId);
-      })
-      .catch(() => resetCopied());
+    if (!url) return;
+    void copyTextToClipboard(url).then((copied) => {
+      if (copied) showCopied(conversationId);
+      else resetCopied();
+    });
   }
 
   return (

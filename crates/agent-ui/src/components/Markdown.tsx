@@ -41,6 +41,7 @@ import {
   resolveCodeBlockRenderPolicy,
 } from "../lib/markdownCodeBlockPolicy";
 import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
+import { copyTextToClipboard } from "../lib/shared/clipboard";
 import { cn } from "../lib/shared/utils";
 import { MermaidFullscreenButton } from "./MarkdownMermaidFullscreen";
 import {
@@ -622,11 +623,7 @@ function ExternalLinkDialog({ onClose, onConfirm, url }: Omit<LinkSafetyModalPro
   const checkboxId = useId();
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch (error) {
-      console.error("Failed to copy external link", error);
-    }
+    if (!(await copyTextToClipboard(url))) console.error("Failed to copy external link");
   };
 
   const handleOpenLink = async () => {

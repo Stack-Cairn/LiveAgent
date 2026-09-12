@@ -79,7 +79,7 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
     >
       <div
         className={cn(
-          "animate-file-drop-overlay-zone motion-reduce:animate-none! absolute inset-3 sm:inset-4 rounded-2xl border border-dashed",
+          "absolute inset-3 rounded-2xl border border-dashed sm:inset-4",
           canDropUpload
             ? "border-foreground/20 bg-foreground/[0.015] dark:border-white/15 dark:bg-white/[0.015]"
             : "border-destructive/35 bg-destructive/[0.03]",

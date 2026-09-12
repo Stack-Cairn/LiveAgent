@@ -27,6 +27,7 @@ import {
   UserMessageContent,
 } from "@liveagent/ui/lib/chat/userMessageContent";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
 import {
@@ -338,7 +339,8 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
         timestamp={row.timestamp}
         copied={isCopied}
         onCopy={() => {
-          void navigator.clipboard.writeText(row.text).then(() => {
+          void copyTextToClipboard(row.text).then((copied) => {
+            if (!copied) return;
             setCopiedMessageId(row.key);
             window.setTimeout(() => {
               setCopiedMessageId((current) => (current === row.key ? null : current));
@@ -430,7 +432,8 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
       copied={isCopied}
       copyDisabled={!replyText}
       onCopy={() => {
-        void navigator.clipboard.writeText(replyText).then(() => {
+        void copyTextToClipboard(replyText).then((copied) => {
+          if (!copied) return;
           setCopiedMessageId(row.key);
           window.setTimeout(() => {
             setCopiedMessageId((current) => (current === row.key ? null : current));

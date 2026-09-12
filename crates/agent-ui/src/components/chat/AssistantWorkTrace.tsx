@@ -2,7 +2,7 @@ import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
 import { useAttentionDisclosure } from "./useAttentionDisclosure";
 
@@ -18,16 +18,6 @@ const PIXEL_KEYS = [
   "bottom-end",
 ] as const;
 
-const PIXEL_DELAYS = Array.from({ length: 9 }, (_, index) => {
-  const row = Math.floor(index / 3);
-  const column = index % 3;
-  return (column + Math.abs(row - 1)) * 90;
-});
-
-type LoadingPixelStyle = CSSProperties & {
-  "--chat-work-delay": `${number}ms`;
-};
-
 function WorkPixelGrid({ active }: { active: boolean }) {
   return (
     // 3×4px + 2×1.5px = 15px，比下方活动行的 12px 图标列宽：居中溢出到图标列
@@ -38,15 +28,11 @@ function WorkPixelGrid({ active }: { active: boolean }) {
       data-chat-work-grid=""
     >
       <span className="grid shrink-0 grid-cols-activity-dots gap-1p5px">
-        {PIXEL_DELAYS.map((delay, index) => (
+        {PIXEL_KEYS.map((key) => (
           <span
-            key={PIXEL_KEYS[index]}
-            className={cn(
-              "size-1 bg-foreground opacity-15 animate-chat-work-pixel",
-              "[&[data-paused]]:opacity-45 data-paused:transform-none data-paused:animate-none motion-reduce:opacity-15 motion-reduce:transform-none motion-reduce:animate-none",
-            )}
+            key={key}
+            className={cn("size-1 bg-foreground opacity-15", "data-paused:opacity-45")}
             data-paused={active ? undefined : ""}
-            style={{ "--chat-work-delay": `${delay}ms` } as LoadingPixelStyle}
           />
         ))}
       </span>

@@ -19,6 +19,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@liveagent/ui/components/ui/radio-group";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -163,17 +164,11 @@ export function HistoryShareModal({
   }
 
   function handleCopy() {
-    if (!shareUrl || !navigator.clipboard?.writeText) {
-      return;
-    }
-    void navigator.clipboard
-      .writeText(shareUrl)
-      .then(() => {
-        showCopied(true);
-      })
-      .catch(() => {
-        resetCopied();
-      });
+    if (!shareUrl) return;
+    void copyTextToClipboard(shareUrl).then((copied) => {
+      if (copied) showCopied(true);
+      else resetCopied();
+    });
   }
 
   return (

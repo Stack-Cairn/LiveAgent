@@ -251,7 +251,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               )}
             >
               {isSubmitting ? (
-                <span className="inline-block size-18px animate-login-btn-loading rounded-full border-2 border-solid border-primary-foreground/30 border-t-primary-foreground" />
+                <span className="inline-block size-18px animate-spin rounded-full border-2 border-solid border-primary-foreground/30 border-t-primary-foreground motion-reduce:animate-none" />
               ) : (
                 <>
                   进入 Gateway

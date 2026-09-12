@@ -64,6 +64,7 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
+import { VerticalReorderList } from "@liveagent/ui/components/ui/VerticalReorderList";
 import {
   type CatalogInputModality,
   resolveModelInputModalities,
@@ -120,7 +121,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     cancelCustomHeaderImport,
     commitUsageTimeoutInput,
     customHeaders,
-    draggingModelId,
     editingModel,
     editingModelContextWindow,
     editingModelInputModalitiesMode,
@@ -128,9 +128,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     fetchError,
     fetchingModels,
     focusCustomHeader,
-    getModelReorderProps,
     handleAddModel,
     handleImportCustomHeaders,
+    handleModelDraggingChange,
+    handleModelReorder,
     handleRefresh,
     handleSave,
     handleTestUsageQuery,
@@ -150,8 +151,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     isFullUrl,
     isGatewayWebui,
     matchedBalanceProviders,
-    modelListRef,
-    modelScrollContainerRef,
+    modelReorderDisabledHint,
     modelSearch,
     modelSearchQuery,
     models,
@@ -169,7 +169,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     providerType,
     removeCustomHeader,
     removeModel,
-    renderModelDragHandle,
     requestClose,
     requestFormat,
     saveInlineModelSettings,
@@ -221,6 +220,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     visibleActiveCount,
     visibleModels,
   } = viewModel;
+  const visibleModelById = new Map(visibleModels.map((model) => [model.id, model]));
   return (
     <Dialog
       open={dialogOpen}
@@ -329,7 +329,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
           </nav>
 
           <DialogBody
-            ref={modelScrollContainerRef}
             className="min-w-0 [overflow-anchor:none]"
             onScroll={() => setHeaderSuggest(null)}
           >
@@ -577,17 +576,28 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     </div>
                   ) : null}
 
-                  <div ref={modelListRef} className="divide-y">
-                    {visibleModels.length === 0 ? (
-                      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-                        {models.length > 0 && modelSearchQuery
-                          ? t("settings.noMatchingModels")
-                          : baseUrl.trim() && apiKeyForRequest
-                            ? t("settings.fetchFailed")
-                            : t("settings.fetchHint")}
-                      </div>
-                    ) : (
-                      visibleModels.map((model) => {
+                  {visibleModels.length === 0 ? (
+                    <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+                      {models.length > 0 && modelSearchQuery
+                        ? t("settings.noMatchingModels")
+                        : baseUrl.trim() && apiKeyForRequest
+                          ? t("settings.fetchFailed")
+                          : t("settings.fetchHint")}
+                    </div>
+                  ) : (
+                    <VerticalReorderList
+                      itemIds={visibleModels.map((model) => model.id)}
+                      canReorder={!modelSearchQuery}
+                      reorderLabel={t("settings.reorderModel")}
+                      reorderHint={t("settings.reorderVerticalHint")}
+                      disabledHint={modelReorderDisabledHint}
+                      onReorder={handleModelReorder}
+                      onDraggingChange={handleModelDraggingChange}
+                      className="divide-y"
+                    >
+                      {(modelId, _index, { dragging, dragHandle }) => {
+                        const model = visibleModelById.get(modelId);
+                        if (!model) return null;
                         const isEditingModel = editingModel?.model.id === model.id;
                         const newModelPhase = newModelPhases.get(model.id);
                         // 用户覆盖（仅表达 text/image 门控、仅部分供应商生效）优先于
@@ -600,19 +610,16 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         );
                         return (
                           <div
-                            key={model.id}
-                            {...getModelReorderProps(model.id)}
-                            data-model-row-id={model.id}
                             className={cn(
                               "settings-model-row group transition-colors duration-500 hover:bg-accent/30",
-                              draggingModelId === model.id && "bg-accent shadow-lg",
+                              dragging && "bg-accent shadow-lg",
                               newModelPhase === "visible" && "bg-primary/10 hover:bg-primary/15",
                               newModelPhase === "fading" && "bg-primary/[0.04]",
                             )}
                           >
                             <div className="flex items-center gap-2 px-3 py-2 max-[720px]:grid max-[720px]:grid-cols-ssh-entry">
                               <div className="flex shrink-0 items-center gap-1">
-                                {renderModelDragHandle(model.id, model.id)}
+                                {dragHandle}
                                 <DialogSwitch
                                   checked={activeModels.has(model.id)}
                                   onCheckedChange={() => toggleModel(model.id)}
@@ -881,9 +888,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             ) : null}
                           </div>
                         );
-                      })
-                    )}
-                  </div>
+                      }}
+                    </VerticalReorderList>
+                  )}
                 </div>
               </section>
             ) : activePanel === "request" ? (

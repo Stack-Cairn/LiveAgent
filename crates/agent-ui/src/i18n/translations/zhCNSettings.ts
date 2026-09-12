@@ -605,7 +605,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.noMatchingModels": "没有匹配的模型",
   "settings.reorderModel": "调整模型排序",
   "settings.reorderProvider": "调整供应商排序",
-  "settings.reorderVerticalHint": "拖动排序；手机端长按后拖动，或聚焦后按上下方向键移动",
+  "settings.reorderVerticalHint": "拖动排序，或聚焦后按上下方向键移动",
   "settings.modelReorderDisabledSearch": "搜索过滤时不能拖拽排序",
   "settings.reorderNeedsTwoItems": "至少需要两项才能排序",
   "settings.enableAllModels": "启用全部模型",

@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import {
@@ -142,9 +143,9 @@ function BackgroundTaskLogDialog(props: {
   }, []);
 
   const copyToClipboard = useCallback((text: string) => {
-    navigator.clipboard
-      .writeText(text)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    void copyTextToClipboard(text).then((copied) => {
+      if (!copied) setError("Clipboard is unavailable");
+    });
   }, []);
 
   const handleCopySelection = useCallback(() => {
@@ -361,7 +362,9 @@ function BackgroundTaskRow(props: {
 
   const handleCopy = useCallback(() => {
     void runAction(async () => {
-      await navigator.clipboard.writeText(processCopyText(process));
+      if (!(await copyTextToClipboard(processCopyText(process)))) {
+        throw new Error("Clipboard is unavailable");
+      }
       showCopied(true);
     });
   }, [process, runAction, showCopied]);
