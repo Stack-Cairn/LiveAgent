@@ -90,6 +90,7 @@ import {
   type DragEvent as ReactDragEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -281,6 +282,8 @@ function prefersReducedMotion() {
 
 export type ChatComposerBarProps = {
   surface: "desktop" | "web";
+  /** Web surface that owns the measured composer-height CSS variable. */
+  overlayHeightOwnerRef?: RefObject<HTMLElement | null>;
   conversationId: string;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   isSending: boolean;
@@ -401,6 +404,7 @@ export type ChatComposerBarProps = {
 export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposerBarProps) {
   const {
     surface,
+    overlayHeightOwnerRef,
     conversationId,
     composerRef,
     isSending,
@@ -1189,8 +1193,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       };
     }
 
-    const chatFrame = composerLayer.closest(".gateway-chat-frame");
-    if (!(chatFrame instanceof HTMLElement)) return;
+    const chatFrame = overlayHeightOwnerRef?.current;
+    if (!chatFrame) return;
 
     const updateComposerOverlayHeight = () => {
       // 展开态占满聊天区，保留最近一次常规高度，避免底部预留跟着跳动；
@@ -1230,6 +1234,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onCenterOffsetChange,
     surface,
     taskProgressBarElement,
+    overlayHeightOwnerRef,
   ]);
 
   return (

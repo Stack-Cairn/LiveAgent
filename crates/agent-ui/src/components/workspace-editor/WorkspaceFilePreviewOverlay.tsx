@@ -48,6 +48,7 @@ import {
   zoomImageViewerAtPoint,
 } from "@liveagent/ui/components/workspace-editor/workspaceImageViewer";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard as copySharedTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 import { renderAsync } from "docx-preview";
@@ -942,20 +943,9 @@ async function savePreviewImage(preview: LoadedPreview) {
 }
 
 async function copyTextToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+  if (!(await copySharedTextToClipboard(text))) {
+    throw new Error("Text clipboard is unavailable");
   }
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  if (!copied) throw new Error("Text clipboard is unavailable");
 }
 
 function WorkspaceImagePreviewBody(props: {

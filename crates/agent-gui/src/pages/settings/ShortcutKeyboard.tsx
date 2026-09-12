@@ -1,5 +1,5 @@
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type CSSProperties, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import {
   BLOCK_GAP,
   BOARD_PAD,
@@ -101,11 +101,12 @@ export function ShortcutKeyboard({
   heldCodes: ReadonlySet<string>;
   decorForCode: (code: string | null) => KeyDecor | undefined;
 }) {
-  // 键盘随容器宽度等比缩放；缩放与容器高度直接写 DOM，
-  // 以便在同一次布局中量取变换后的实际视高（transform 不影响布局盒）。
+  // ResizeObserver only measures here. React remains the owner of every
+  // rendered style, including the transformed visual height.
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
   const naturalWidth = NATURAL_WIDTH[layout];
+  const [scaleLayout, setScaleLayout] = useState({ scale: 1, naturalHeight: 0 });
 
   useLayoutEffect(() => {
     const outer = outerRef.current;
@@ -115,12 +116,12 @@ export function ShortcutKeyboard({
       const width = outer.clientWidth;
       if (width <= 0) return;
       const nextScale = Math.min(1, width / naturalWidth);
-      scaler.style.width = `${naturalWidth}px`;
-      scaler.style.transform = `scale(${nextScale})`;
-      scaler.style.transformOrigin = "top center";
-      scaler.style.marginLeft = `calc(50% - ${naturalWidth / 2}px)`;
-      // 底部预留投影空间，避免 overflow-hidden 裁掉键盘厚度阴影。
-      outer.style.height = `${scaler.getBoundingClientRect().height + 44}px`;
+      const naturalHeight = scaler.offsetHeight;
+      setScaleLayout((current) =>
+        current.scale === nextScale && current.naturalHeight === naturalHeight
+          ? current
+          : { scale: nextScale, naturalHeight },
+      );
     };
     update();
     const observer = new ResizeObserver(update);
@@ -215,9 +216,26 @@ export function ShortcutKeyboard({
     <div
       ref={outerRef}
       className="ghk-root overflow-hidden pt-2"
-      style={{ "--ghk-key-unit": `${KEY_UNIT}px` } as CSSProperties}
+      style={
+        {
+          "--ghk-key-unit": `${KEY_UNIT}px`,
+          // Keep room for the keyboard's projected depth and shadow.
+          height:
+            scaleLayout.naturalHeight > 0
+              ? scaleLayout.naturalHeight * scaleLayout.scale + 44
+              : undefined,
+        } as CSSProperties
+      }
     >
-      <div ref={scalerRef}>
+      <div
+        ref={scalerRef}
+        style={{
+          width: naturalWidth,
+          transform: `scale(${scaleLayout.scale})`,
+          transformOrigin: "top center",
+          marginLeft: `calc(50% - ${naturalWidth / 2}px)`,
+        }}
+      >
         <div className="ghk-stage">
           <div
             className={cn("ghk-board inline-flex", recording && "ghk-rec")}

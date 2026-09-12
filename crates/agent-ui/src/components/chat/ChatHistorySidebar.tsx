@@ -1318,8 +1318,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             "text-sm text-popover-foreground shadow-lg backdrop-blur-sm",
           )}
           style={{
-            transform:
-              "translate3d(var(--sidebar-drag-x, var(--spacing-minus-9999px)), var(--sidebar-drag-y, var(--spacing-minus-9999px)), 0)",
+            transform: "translate3d(var(--sidebar-drag-x), var(--sidebar-drag-y), 0)",
           }}
         >
           {draggedPinnedEntry?.kind === "conversation" ? (

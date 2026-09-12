@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { acquireGlobalPointerStyle } from "../../lib/shared/globalPointerStyle";
 import { cn } from "../../lib/shared/utils";
 import {
   applyTabDragInsertIndex,
@@ -47,7 +48,7 @@ type TabDragState = {
   baseOrder: string[];
   insertIndex: number;
   draggedOffset: number;
-  previousUserSelect: string;
+  releaseGlobalStyle: (() => void) | null;
 };
 
 type TabDragVisual = {
@@ -212,8 +213,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
         drag.gap = measured.gap;
         drag.startScrollLeft = container.scrollLeft;
         drag.hasMoved = true;
-        drag.previousUserSelect = document.body.style.userSelect;
-        document.body.style.userSelect = "none";
+        drag.releaseGlobalStyle = acquireGlobalPointerStyle({ userSelect: "none" });
         setDraggingTabId(drag.draggedId);
       }
 
@@ -277,7 +277,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
       removeWindowDragListeners();
       if (!drag.hasMoved) return;
 
-      document.body.style.userSelect = drag.previousUserSelect;
+      drag.releaseGlobalStyle?.();
       setDraggingTabId("");
       setDragVisual(null);
       suppressNextTabClick(SUPPRESS_ANY_TAB_CLICK);
@@ -325,7 +325,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
         baseOrder: orderedTabIds,
         insertIndex: -1,
         draggedOffset: 0,
-        previousUserSelect: "",
+        releaseGlobalStyle: null,
       };
       addWindowDragListeners();
     },
@@ -336,9 +336,7 @@ export function useRightDockTabReorder(options: UseRightDockTabReorderOptions) {
     return () => {
       const drag = dragRef.current;
       dragRef.current = null;
-      if (drag?.hasMoved) {
-        document.body.style.userSelect = drag.previousUserSelect;
-      }
+      drag?.releaseGlobalStyle?.();
       window.clearTimeout(suppressResetTimeoutRef.current);
       stopDragFrameLoop();
       removeWindowDragListeners();

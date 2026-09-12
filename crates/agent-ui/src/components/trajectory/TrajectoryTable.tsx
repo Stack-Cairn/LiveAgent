@@ -34,6 +34,7 @@ export function TrajectoryTable(props: {
 }) {
   const { t } = useLocale();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const selectedRowRef = useRef<HTMLDivElement | null>(null);
 
   const items = useMemo(
     () =>
@@ -119,9 +120,7 @@ export function TrajectoryTable(props: {
       virtualizer.scrollToIndex(position, { align: "auto" });
       return;
     }
-    scrollRef.current
-      ?.querySelector(`[data-trajectory-index="${selectedIndex}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+    selectedRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex, virtualizer]);
 
   if (items.length === 0) {
@@ -182,7 +181,18 @@ export function TrajectoryTable(props: {
           })}
         </div>
       ) : (
-        items.map((item) => <div key={item.key}>{renderItem(item)}</div>)
+        items.map((item) => (
+          <div
+            key={item.key}
+            ref={
+              item.kind === "record" && item.record.index === props.selectedIndex
+                ? selectedRowRef
+                : undefined
+            }
+          >
+            {renderItem(item)}
+          </div>
+        ))
       )}
     </div>
   );

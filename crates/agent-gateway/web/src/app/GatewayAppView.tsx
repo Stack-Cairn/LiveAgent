@@ -128,6 +128,7 @@ import { GatewayTerminalPaneHost } from "./workbench/GatewayTerminalPaneHost";
 import { sessionWorkbench } from "./workbench/sessionWorkbench";
 
 export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }) {
+  const chatFrameRef = useRef<HTMLDivElement | null>(null);
   useWindowFileDropGuard();
   const {
     activeFloorKey,
@@ -735,7 +736,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     (clientX: number, clientY: number) => {
       if (!sessionWorkbench.enabled) return;
       const geometry = workbenchController.geometryRef.current;
-      const canvasElement = document.querySelector("[data-workbench-canvas]");
+      const canvasElement = workbenchController.canvasRef.current;
       if (!geometry || !canvasElement) return;
       const canvasRect = canvasElement.getBoundingClientRect();
       const target = hitTestWorkbenchDrop(
@@ -1039,6 +1040,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     const { workbench, dragState } = workbenchController;
     return (
       <WorkbenchCanvas
+        canvasRef={workbenchController.canvasRef}
         layout={workbench.layout}
         labels={{
           paneRegion: (pane) => {
@@ -1234,8 +1236,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
         style={{
           left: 0,
           top: 0,
-          transform:
-            "translate3d(var(--workbench-drag-ghost-x, var(--spacing-minus-9999px)), var(--workbench-drag-ghost-y, var(--spacing-minus-9999px)), 0)",
+          transform: "translate3d(var(--workbench-drag-ghost-x), var(--workbench-drag-ghost-y), 0)",
           willChange: "transform",
         }}
       >
@@ -1468,6 +1469,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 initialSkillsRootDir={skillsRootDir}
                 className="contents"
                 chat={{
+                  containerRef: chatFrameRef,
                   containerProps: {
                     className: `${GATEWAY_CHAT_FRAME_CLASS} zone-font-scale`,
                     style: {
@@ -1654,6 +1656,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                           ) : null}
                           <ChatComposerBar
                             surface="web"
+                            overlayHeightOwnerRef={chatFrameRef}
                             runClarifyTurn={
                               settings.customSettings.promptClarifyEnabled
                                 ? runClarifyTurn

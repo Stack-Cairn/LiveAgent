@@ -70,7 +70,6 @@ import {
 } from "./model";
 import { GitBranchFromCommitModal } from "./Toolbar";
 import type { GitReviewData } from "./useGitReviewData";
-import { GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS, useOverlayScrollbar } from "./useOverlayScrollbar";
 
 const historyRowClass =
   "git-review-history-row flex h-22px w-full min-w-0 select-none items-center bg-transparent px-1.5 text-left text-xs transition-colors [&:hover:not([data-selected=true]):not([data-context-open=true])]:bg-muted/38 data-[selected=true]:bg-accent/80 data-[selected=true]:text-accent-foreground data-[context-open=true]:bg-primary/10 data-[context-open=true]:text-foreground data-[context-open=true]:shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--primary)/0.35)]";
@@ -584,7 +583,6 @@ export function GitReviewHistoryView(props: {
   const [branchFromCommit, setBranchFromCommit] = useState<GitBranchFromCommitState | null>(null);
   const [branchFromCommitName, setBranchFromCommitName] = useState("");
   const [branchFromCommitError, setBranchFromCommitError] = useState("");
-  const handleOverlayScroll = useOverlayScrollbar();
   const historyListRef = useRef<HTMLDivElement | null>(null);
   const listPaneRef = useRef<HTMLElement | null>(null);
   const detailPaneRef = useRef<HTMLElement | null>(null);
@@ -728,10 +726,9 @@ export function GitReviewHistoryView(props: {
 
   const handleHistoryListScroll = useCallback(
     (event: ReactUIEvent<HTMLElement>) => {
-      handleOverlayScroll(event);
       maybeLoadMoreHistory(event.currentTarget, listPaneVisible);
     },
-    [handleOverlayScroll, listPaneVisible, maybeLoadMoreHistory],
+    [listPaneVisible, maybeLoadMoreHistory],
   );
 
   useEffect(() => {
@@ -983,7 +980,7 @@ export function GitReviewHistoryView(props: {
           </div>
           <div
             ref={historyListRef}
-            className={cn(GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS, "min-h-0 flex-1 overflow-auto")}
+            className="min-h-0 flex-1 overflow-auto"
             onScroll={handleHistoryListScroll}
           >
             {historyLoading && historyCommits.length === 0 ? (

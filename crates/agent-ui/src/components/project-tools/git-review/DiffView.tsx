@@ -35,12 +35,6 @@ import {
   parseDiffStat,
   writeTextToClipboard,
 } from "./model";
-import {
-  GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-  isScrollableOverflowValue,
-  syncGitReviewAutoscrollScrollbar,
-  useOverlayScrollbar,
-} from "./useOverlayScrollbar";
 
 const RAW_DIFF_PREVIEW_CHAR_LIMIT = 60 * 1024;
 
@@ -48,6 +42,10 @@ const DIFF_SELECTION_AUTOSCROLL_EDGE_PX = 40;
 const DIFF_SELECTION_AUTOSCROLL_MAX_STEP_PX = 22;
 const DIFF_HORIZONTAL_SCROLLBAR_MIN_THUMB_PX = 32;
 const PROJECT_TOOLS_RESIZE_END_EVENT = "liveagent:project-tools-resize-end";
+
+function isScrollableOverflowValue(value: string) {
+  return /(auto|scroll|overlay)/.test(value);
+}
 
 function diffSelectionAutoScrollDelta(
   pointer: number,
@@ -217,7 +215,6 @@ function useIsDark() {
 const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isDark: boolean }) {
   const { item, isDark } = props;
   const { t } = useLocale();
-  const handleOverlayScroll = useOverlayScrollbar();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Lazy parse/highlight: a chunk only builds its DiffFile once it scrolls
   // near the viewport, so a multi-file commit diff no longer freezes the main
@@ -305,13 +302,7 @@ const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isD
           diffViewFontSize={12}
         />
       ) : (
-        <pre
-          className={cn(
-            GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-            "git-review-diff-selectable-content max-h-104 select-text overflow-auto p-3 text-xs leading-relaxed text-muted-foreground",
-          )}
-          onScroll={handleOverlayScroll}
-        >
+        <pre className="git-review-diff-selectable-content max-h-104 select-text overflow-auto p-3 text-xs leading-relaxed text-muted-foreground">
           {rawPreview}
         </pre>
       )}
@@ -322,7 +313,6 @@ const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isD
 function DiffStatView(props: { stat: string }) {
   const { stat } = props;
   const { t } = useLocale();
-  const handleOverlayScroll = useOverlayScrollbar();
   const parsed = useMemo(() => parseDiffStat(stat), [stat]);
   if (!stat.trim()) return null;
 
@@ -332,11 +322,9 @@ function DiffStatView(props: { stat: string }) {
     return (
       <pre
         className={cn(
-          GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
           "max-h-24 overflow-auto border-b border-border/70 bg-muted/25 px-3 py-2",
           "text-xs leading-relaxed text-muted-foreground",
         )}
-        onScroll={handleOverlayScroll}
       >
         {stat}
       </pre>
@@ -346,10 +334,7 @@ function DiffStatView(props: { stat: string }) {
   return (
     <div className="border-b border-border/70 bg-muted/10 px-3 py-2">
       {parsed.files.length > 0 ? (
-        <div
-          className={cn(GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS, "max-h-40 overflow-auto space-y-1")}
-          onScroll={handleOverlayScroll}
-        >
+        <div className="max-h-40 space-y-1 overflow-auto">
           {parsed.files.map((file) => (
             <div
               key={file.key}
@@ -416,11 +401,9 @@ function DiffStatView(props: { stat: string }) {
       {parsed.fallbackLines.length > 0 ? (
         <pre
           className={cn(
-            GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
             "mt-2 max-h-20 overflow-auto rounded-md bg-muted/35 px-2 py-1.5",
             "text-tiny leading-relaxed text-muted-foreground",
           )}
-          onScroll={handleOverlayScroll}
         >
           {parsed.fallbackLines.join("\n")}
         </pre>
@@ -439,7 +422,6 @@ export function DiffContent(props: {
   const { diff, title, error, loading = false, showStat = true } = props;
   const { locale, t } = useLocale();
   const isDark = useIsDark();
-  const handleOverlayScroll = useOverlayScrollbar();
   const rootRef = useRef<HTMLElement | null>(null);
   const scrollViewportRef = useRef<HTMLElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -725,14 +707,12 @@ export function DiffContent(props: {
         scrollDiffSelectionViewportForPointer(viewport, pointer.x, pointer.y, "vertical")
       ) {
         verticalScrolled = true;
-        syncGitReviewAutoscrollScrollbar(viewport);
       }
       if (
         !horizontalScrolled &&
         scrollDiffSelectionViewportForPointer(viewport, pointer.x, pointer.y, "horizontal")
       ) {
         horizontalScrolled = true;
-        syncGitReviewAutoscrollScrollbar(viewport);
       }
       if (verticalScrolled && horizontalScrolled) break;
     }
@@ -933,11 +913,7 @@ export function DiffContent(props: {
           ref={(node) => {
             scrollViewportRef.current = node;
           }}
-          className={cn(
-            GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-            "git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto",
-          )}
-          onScroll={handleOverlayScroll}
+          className="git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto"
         >
           {patchChunks.map((item) => (
             <DiffChunkView key={item.key} item={item} isDark={isDark} />
@@ -951,11 +927,9 @@ export function DiffContent(props: {
             scrollViewportRef.current = node;
           }}
           className={cn(
-            GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
             "git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto p-3",
             "text-xs leading-relaxed text-muted-foreground",
           )}
-          onScroll={handleOverlayScroll}
         >
           {diff.patch}
         </pre>

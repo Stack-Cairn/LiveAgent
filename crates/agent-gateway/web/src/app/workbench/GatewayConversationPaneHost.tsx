@@ -247,6 +247,7 @@ export type GatewayConversationPaneHostProps = {
 };
 
 export function GatewayConversationPaneHost(props: GatewayConversationPaneHostProps) {
+  const chatFrameRef = useRef<HTMLDivElement | null>(null);
   const {
     paneId,
     conversationId,
@@ -793,9 +794,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     />
   );
 
-  // 嵌套一层 .gateway-chat-frame:ChatComposerBar(surface="web")把输入框
-  // 高度写到最近的 chat-frame CSS 变量上,这里让变量按 Pane 独立作用,多个
-  // 输入框互不干扰;DOM 结构与桌面端 ConversationSurface 一致。
+  // Each pane explicitly owns its composer-height variable, so concurrent
+  // panes never discover or update one another through a DOM ancestor query.
   return (
     <div
       data-workbench-pane-id={paneId}
@@ -815,6 +815,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         </div>
       ) : null}
       <div
+        ref={chatFrameRef}
         className={cn(
           GATEWAY_CHAT_FRAME_CLASS,
           "relative flex size-full h-full min-h-0 min-w-0 flex-1",
@@ -892,6 +893,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           )}
           <ChatComposerBar
             surface="web"
+            overlayHeightOwnerRef={chatFrameRef}
             runClarifyTurn={
               context.settings.customSettings.promptClarifyEnabled ? runClarifyTurn : undefined
             }

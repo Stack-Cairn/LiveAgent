@@ -9,7 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-
+import { acquireGlobalPointerStyle } from "../../../lib/shared/globalPointerStyle";
 import { cn } from "../../../lib/shared/utils";
 import {
   clampWidthToStage,
@@ -211,15 +211,15 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
       const dragMaxWidth = measureStageMaxWidth(host);
       const startX = event.clientX;
       const startWidth = clampWidthToStage(width, dragMaxWidth);
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
+      const releaseGlobalStyle = acquireGlobalPointerStyle({
+        cursor: "col-resize",
+        userSelect: "none",
+      });
       pendingWidthRef.current = startWidth;
       resizingRef.current = true;
       setMaxWidth(dragMaxWidth);
       setResizingWidth(startWidth);
       applyWidth(host, startWidth);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
 
       const scheduleWidth = (nextWidth: number) => {
         pendingWidthRef.current = clampWidthToStage(nextWidth, dragMaxWidth);
@@ -241,8 +241,7 @@ export function TranscriptWidthControls(props: TranscriptWidthControlsProps) {
           cancelAnimationFrame(resizeFrameRef.current);
           resizeFrameRef.current = null;
         }
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
+        releaseGlobalStyle();
         resizingRef.current = false;
         cleanupRef.current = null;
         endResizeRef.current = null;

@@ -13,11 +13,11 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { useAutosizeTextarea } from "../../../lib/shared/useAutosizeTextarea";
 import { cn } from "../../../lib/shared/utils";
 import { Button } from "../../ui/button";
 import { Textarea } from "../../ui/textarea";
@@ -65,20 +65,10 @@ export function GitCommitComposer(props: {
   // overwrote non-empty user input; programmatic value swaps do not land in
   // the browser undo stack, so Ctrl+Z cannot restore it.
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
+  useAutosizeTextarea(textareaRef, commitMessage);
 
   useEffect(() => {
     messageValueRef.current = commitMessage;
-  }, [commitMessage]);
-
-  // Autosize: grow with content from one line up, clamped by max-height in
-  // CSS (which also caps the composer on short mobile viewports). WebKit has
-  // no `field-sizing: content` yet, so the measurement runs in JS.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the message value changes.
-  useLayoutEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "0";
-    el.style.height = `${el.scrollHeight}px`;
   }, [commitMessage]);
 
   const operationBusy = busy !== "";

@@ -54,6 +54,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n";
+import { copyTextToClipboard as copySharedTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   memo,
@@ -113,21 +114,9 @@ function imageViewerAnchor(
 }
 
 async function copyTextToClipboard(value: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
+  if (!(await copySharedTextToClipboard(value))) {
+    throw new Error("Text clipboard is unavailable");
   }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  if (!copied) throw new Error("Text clipboard is unavailable");
 }
 
 async function saveImagePreviewSlide(

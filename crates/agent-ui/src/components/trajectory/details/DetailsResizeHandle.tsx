@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useLocale } from "../../../i18n/index";
+import { acquireGlobalPointerStyle } from "../../../lib/shared/globalPointerStyle";
 import { cn } from "../../../lib/shared/utils";
 import {
   clampTrajectoryDetailsWidth,
@@ -33,7 +34,7 @@ export function DetailsResizeHandle(props: {
   const [dragging, setDragging] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
   const dragRef = useRef<DragState | null>(null);
-  const previousBodyStyleRef = useRef<{ cursor: string; userSelect: string } | null>(null);
+  const releaseGlobalStyleRef = useRef<(() => void) | null>(null);
   const widthRef = useRef(props.width);
   widthRef.current = props.width;
   const onWidthChangeRef = useRef(props.onWidthChange);
@@ -55,24 +56,16 @@ export function DetailsResizeHandle(props: {
     const drag = dragRef.current;
     if (drag === null || (pointerId !== undefined && drag.pointerId !== pointerId)) return;
     dragRef.current = null;
-    const previousBodyStyle = previousBodyStyleRef.current;
-    if (previousBodyStyle !== null) {
-      document.body.style.cursor = previousBodyStyle.cursor;
-      document.body.style.userSelect = previousBodyStyle.userSelect;
-      previousBodyStyleRef.current = null;
-    }
+    releaseGlobalStyleRef.current?.();
+    releaseGlobalStyleRef.current = null;
     setDragging(false);
   }, []);
 
   useEffect(
     () => () => {
       dragRef.current = null;
-      const previousBodyStyle = previousBodyStyleRef.current;
-      if (previousBodyStyle !== null) {
-        document.body.style.cursor = previousBodyStyle.cursor;
-        document.body.style.userSelect = previousBodyStyle.userSelect;
-        previousBodyStyleRef.current = null;
-      }
+      releaseGlobalStyleRef.current?.();
+      releaseGlobalStyleRef.current = null;
     },
     [],
   );
@@ -107,12 +100,10 @@ export function DetailsResizeHandle(props: {
         startX: event.clientX,
         containerWidth,
       };
-      previousBodyStyleRef.current = {
-        cursor: document.body.style.cursor,
-        userSelect: document.body.style.userSelect,
-      };
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
+      releaseGlobalStyleRef.current = acquireGlobalPointerStyle({
+        cursor: "col-resize",
+        userSelect: "none",
+      });
       setDragging(true);
     },
     [measureContainerWidth, props.width],

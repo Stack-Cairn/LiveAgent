@@ -27,6 +27,7 @@ import {
   type WorkspacePathDragPayload,
   workspacePathDragMatchesProject,
 } from "../../lib/chat/workspacePathDrag";
+import { copyTextToClipboard } from "../../lib/shared/clipboard";
 import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
 import { cn } from "../../lib/shared/utils";
 import { readTerminalAppearance, readTerminalTheme } from "../../lib/terminal/theme";
@@ -62,33 +63,10 @@ function terminalContainerHasSize(container: HTMLElement) {
   return rect.width > 0 && rect.height > 0;
 }
 
-// execCommand("copy") 兜底：textarea.select() 会抢走焦点，复制完把焦点还给
-// 原元素（终端），避免用户复制一次后键盘输入丢失。
-function fallbackCopyTextToClipboard(text: string) {
-  const active = document.activeElement;
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "var(--spacing-minus-9999px)";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
-  if (active instanceof HTMLElement) active.focus();
-}
-
-// 非安全上下文（http 直连 gateway web）里 navigator.clipboard 整个不存在，
-// 所以「API 缺失」和「writeText 被拒绝」都必须落到 execCommand 兜底——
-// 只把兜底挂在 catch 上会让最需要它的环境静默失败。
 function writeTextToClipboard(text: string) {
   if (!text) return;
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => fallbackCopyTextToClipboard(text));
-    return;
-  }
-  fallbackCopyTextToClipboard(text);
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  void copyTextToClipboard(text, { restoreFocus: active });
 }
 
 export function XTermViewport({

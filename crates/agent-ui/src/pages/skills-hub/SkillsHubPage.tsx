@@ -62,10 +62,14 @@ import {
   startSkillInstallJob,
 } from "@liveagent/ui/lib/skills/index";
 import {
+  INSTALLED_SORT_STORAGE_KEY,
   type InstalledSkillSort,
   isInstalledSkillSort,
+  readInstalledSortPreference,
   sortInstalledSkillItems,
 } from "@liveagent/ui/lib/skills/installedSort";
+import { domAnimation, LayoutGroup, LazyMotion, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { reconcileExternalToolScans } from "./externalSkillScanState";
 import { InstalledSkillCard } from "./InstalledSkillCard";
@@ -96,12 +100,6 @@ import {
   loadSkillStoreCatalog,
   readSkillStoreCatalog,
 } from "./skillStoreCache";
-import {
-  type FlipMode,
-  INSTALLED_SORT_STORAGE_KEY,
-  readInstalledSortPreference,
-  useFlipGrid,
-} from "./useFlipGrid";
 
 type SkillsHubView = "installed" | "store" | "import";
 
@@ -150,18 +148,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   );
   const [rootDir, setRootDir] = useState(initialRootDir ?? initialDiscovery?.rootDir ?? "");
   const [hasPresentedInstalledSkills, setHasPresentedInstalledSkills] = useState(false);
-  const {
-    captureVisibleKey: captureInstalledFlipKey,
-    gridRef: installedGridRef,
-    requestFlip: requestInstalledFlip,
-  } = useFlipGrid();
+  const prefersReducedMotion = useReducedMotion();
   const [loading, setLoading] = useState(
     !lockedByChatMode && initialSkills === undefined && initialDiscovery === null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
   const toastScope = useId();
-  const selectedSkillsRef = useRef(settings.skills.selected);
-  selectedSkillsRef.current = settings.skills.selected;
   useEffect(
     () => () => {
       for (const kind of ["scan", "import", "undo"]) toast.dismiss(`${toastScope}-${kind}`);
@@ -389,14 +381,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     }
   }, [installedSort]);
   const installedSkillNames = useMemo(() => new Set(skills.map((skill) => skill.name)), [skills]);
-  const requestInstalledSkillFlip = useCallback(
-    (mode: FlipMode, names: readonly string[], followNames: readonly string[] = names) => {
-      const keys = names.map((name) => `${name}-${rootDir}`);
-      const followKeys = followNames.map((name) => `${name}-${rootDir}`);
-      requestInstalledFlip(mode, keys, followKeys);
-    },
-    [requestInstalledFlip, rootDir],
-  );
 
   // 过滤走 deferred 值：技能多时每击键的 filter→classify→sort 链在低优先级
   // 渲染中执行，输入框本身保持即时响应（输入框与空态提示仍绑同步 filter）。
@@ -1021,7 +1005,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     const next = new Set(settings.skills.selected);
     if (on) next.add(name);
     else next.delete(name);
-    requestInstalledSkillFlip("single", [name], on ? [name] : []);
     setSettings((prev) => updateSkills(prev, { selected: Array.from(next) }));
   }
 
@@ -1122,7 +1105,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       const changed = changedNames.length;
       if (changed === 0) return;
 
-      requestInstalledSkillFlip("batch", changedNames, target ? changedNames : []);
       dismissBulkUndo();
       toast.success(t("settings.skillsBulkUpdated").replace("{count}", String(changed)), {
         id: `${toastScope}-undo`,
@@ -1132,16 +1114,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         action: {
           label: t("settings.skillsBulkUndo"),
           onClick: () => {
-            const current = new Set(selectedSkillsRef.current);
-            const restoreSet = new Set(before);
-            const changedNames = [...new Set([...current, ...restoreSet])].filter(
-              (name) =>
-                !isAlwaysEnabledSkillName(name) && current.has(name) !== restoreSet.has(name),
-            );
-            const followNames = changedNames.filter(
-              (name) => restoreSet.has(name) && !current.has(name),
-            );
-            requestInstalledSkillFlip("batch", changedNames, followNames);
             setSettings((prev) => updateSkills(prev, { selected: before }));
           },
         },
@@ -1163,7 +1135,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       bulkSelection,
       dismissBulkUndo,
       exitBulkMode,
-      requestInstalledSkillFlip,
       setSettings,
       settings.skills.selected,
       t,
@@ -1562,8 +1533,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         value={installedSort}
                         onValueChange={(value) => {
                           if (!isInstalledSkillSort(value) || value === installedSort) return;
-                          const followKey = captureInstalledFlipKey();
-                          requestInstalledFlip("wave", [], followKey ? [followKey] : []);
                           setInstalledSort(value);
                         }}
                       >
@@ -1693,38 +1662,51 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                           ) : null}
 
                           {sortedFiltered.length > 0 ? (
-                            <div
-                              ref={installedGridRef}
-                              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-                            >
-                              {sortedFiltered.map(({ skill, categories }) => {
-                                const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);
-                                const key = `${skill.name}-${rootDir}`;
-                                return (
-                                  <InstalledSkillCard
-                                    key={key}
-                                    flipKey={key}
-                                    skill={skill}
-                                    primaryCategory={categories[0] ?? "other"}
-                                    alwaysEnabled={alwaysEnabled}
-                                    checked={alwaysEnabled || selected.has(skill.name)}
-                                    skillsEnabled={skillsEnabled}
-                                    bulkMode={bulkMode}
-                                    bulkSelected={bulkSelection.has(skill.name)}
-                                    deleting={deletingSkillName === skill.name}
-                                    deleteDisabled={deletingSkillName !== null}
-                                    searchQuery={deferredFilter}
-                                    onToggle={handleCardToggle}
-                                    onEnterBulkMode={enterBulkMode}
-                                    onToggleBulkSelection={toggleBulkSelectionName}
-                                    onBulkCardClick={handleCardBulkClick}
-                                    onOpenPreview={handleCardOpenPreview}
-                                    onDelete={handleCardDelete}
-                                    onSelectCategory={setInstalledCategory}
-                                  />
-                                );
-                              })}
-                            </div>
+                            <LazyMotion features={domAnimation}>
+                              <LayoutGroup id={`${toastScope}-installed-skills`}>
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                                  {sortedFiltered.map(({ skill, categories }) => {
+                                    const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);
+                                    const key = `${skill.name}-${rootDir}`;
+                                    return (
+                                      <m.div
+                                        key={key}
+                                        layout={prefersReducedMotion ? false : "position"}
+                                        transition={{
+                                          layout: {
+                                            type: "spring",
+                                            stiffness: 420,
+                                            damping: 36,
+                                            mass: 0.7,
+                                          },
+                                        }}
+                                        className="h-full"
+                                      >
+                                        <InstalledSkillCard
+                                          skill={skill}
+                                          primaryCategory={categories[0] ?? "other"}
+                                          alwaysEnabled={alwaysEnabled}
+                                          checked={alwaysEnabled || selected.has(skill.name)}
+                                          skillsEnabled={skillsEnabled}
+                                          bulkMode={bulkMode}
+                                          bulkSelected={bulkSelection.has(skill.name)}
+                                          deleting={deletingSkillName === skill.name}
+                                          deleteDisabled={deletingSkillName !== null}
+                                          searchQuery={deferredFilter}
+                                          onToggle={handleCardToggle}
+                                          onEnterBulkMode={enterBulkMode}
+                                          onToggleBulkSelection={toggleBulkSelectionName}
+                                          onBulkCardClick={handleCardBulkClick}
+                                          onOpenPreview={handleCardOpenPreview}
+                                          onDelete={handleCardDelete}
+                                          onSelectCategory={setInstalledCategory}
+                                        />
+                                      </m.div>
+                                    );
+                                  })}
+                                </div>
+                              </LayoutGroup>
+                            </LazyMotion>
                           ) : null}
 
                           {(filter.trim() || installedCategory !== "all") &&

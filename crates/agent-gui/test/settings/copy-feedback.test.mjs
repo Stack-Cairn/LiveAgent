@@ -49,6 +49,40 @@ test("clipboard fallback handles rejection and always removes its temporary text
   } finally { env.cleanup(); }
 });
 
+test("global pointer styles compose overlapping owners and restore the original body style", async () => {
+  const env = await createDomTestEnv();
+  const { acquireGlobalPointerStyle } = env.loadModule(
+    "@liveagent/ui/lib/shared/globalPointerStyle.ts",
+  );
+  document.body.style.cursor = "default";
+  document.body.style.userSelect = "text";
+  try {
+    const releaseResize = acquireGlobalPointerStyle({
+      cursor: "col-resize",
+      userSelect: "none",
+    });
+    const releaseReorder = acquireGlobalPointerStyle({ cursor: "grabbing" });
+    assert.equal(document.body.style.cursor, "grabbing");
+    assert.equal(document.body.style.userSelect, "none");
+
+    releaseResize();
+    assert.equal(document.body.style.cursor, "grabbing");
+    assert.equal(document.body.style.userSelect, "text");
+
+    releaseReorder();
+    releaseReorder();
+    assert.equal(document.body.style.cursor, "default");
+    assert.equal(document.body.style.userSelect, "text");
+
+    acquireGlobalPointerStyle({ cursor: "grabbing", userSelect: "none" });
+    window.dispatchEvent(new Event("blur"));
+    assert.equal(document.body.style.cursor, "default");
+    assert.equal(document.body.style.userSelect, "text");
+  } finally {
+    env.cleanup();
+  }
+});
+
 test("copy feedback restarts its deadline, keeps the latest identity and cancels on reset/unmount", async () => {
   const env = await createDomTestEnv();
   const { React, act, createRoot } = env;

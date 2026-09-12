@@ -57,7 +57,6 @@ import {
 } from "./model";
 import { GitDiscardConfirmModal } from "./Toolbar";
 import type { GitReviewData } from "./useGitReviewData";
-import { GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS, useOverlayScrollbar } from "./useOverlayScrollbar";
 
 const INITIAL_CHANGE_ENTRY_RENDER_COUNT = 160;
 const CHANGE_ENTRY_RENDER_BATCH_SIZE = 160;
@@ -110,7 +109,6 @@ export function GitReviewStatusView(props: {
   const onRevealInFileTree = context.fileTree.onRevealInFileTree;
   const { t } = useLocale();
 
-  const handleOverlayScroll = useOverlayScrollbar();
   const [changeContextMenu, setChangeContextMenu] = useState<ChangeContextMenuState | null>(null);
   const [changesMenu, setChangesMenu] = useState<ChangesMenuState | null>(null);
   const [discardConfirm, setDiscardConfirm] = useState<GitDiscardConfirmState | null>(null);
@@ -580,13 +578,7 @@ export function GitReviewStatusView(props: {
             !useSplitReviewLayout && "flex-1",
           )}
         >
-          <div
-            className={cn(
-              GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-              "isolate min-h-0 flex-1 overflow-auto [overscroll-behavior:contain]",
-            )}
-            onScroll={handleOverlayScroll}
-          >
+          <div className="isolate min-h-0 flex-1 overflow-auto [overscroll-behavior:contain]">
             {entries.length === 0 ? (
               <div className="px-3 py-6 text-xs text-muted-foreground">
                 {t("projectTools.gitReview.noLocalChanges")}

@@ -94,6 +94,7 @@ test("Workbench pointer drag prioritizes the Composer and never leaks into a spl
     const geometryRef = React.useRef(GEOMETRY);
     const drag = useWorkbenchDragSession({
       enabled: true,
+      canvasRef: { current: canvas },
       layoutRef,
       geometryRef,
       onCommit: (commit) => commits.push(commit),

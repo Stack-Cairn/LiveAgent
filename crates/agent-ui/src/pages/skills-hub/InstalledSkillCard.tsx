@@ -151,7 +151,6 @@ function formatInstalledSkillMetadata(skill: SkillSummary, t: (key: string) => s
 
 type InstalledSkillCardProps = {
   skill: SkillSummary;
-  flipKey: string;
   primaryCategory: ClawHubCategorySlug;
   alwaysEnabled: boolean;
   checked: boolean;
@@ -177,7 +176,6 @@ type InstalledSkillCardProps = {
 export const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkillCardProps) {
   const {
     skill,
-    flipKey,
     primaryCategory,
     alwaysEnabled,
     checked,
@@ -209,7 +207,6 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
   const MetadataIcon =
     metadataSource === "built-in" ? Lock : metadataSource === "clawhub" ? Cloud : Folder;
   const metadataLabel = useMemo(() => formatInstalledSkillMetadata(skill, t), [skill, t]);
-  const key = flipKey;
   const cardContent = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -374,7 +371,6 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
   if (alwaysEnabled) {
     return (
       <Button
-        data-flip-key={key}
         variant="ghost"
         aria-label={`${t("settings.skillsInstalledPreviewOpen")}: ${skill.name}`}
         onClick={() => {
@@ -390,7 +386,6 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
   return (
     // biome-ignore lint/a11y/useSemanticElements: The card contains nested controls and cannot be a native button.
     <div
-      data-flip-key={key}
       role="button"
       tabIndex={0}
       aria-label={`${t("settings.skillsInstalledPreviewOpen")}: ${skill.name}`}

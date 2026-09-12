@@ -5,18 +5,11 @@ import {
   splitUserAttachmentsForDisplay,
 } from "../../lib/chat/uploadedFiles";
 import type { UploadedImagePreviewLoader } from "../../lib/chat/uploadedImagePreview";
+import { useAutosizeTextarea } from "../../lib/shared/useAutosizeTextarea";
 import { cn } from "../../lib/shared/utils";
 import { UserAttachmentCards } from "./UserAttachmentCards";
 
 const MIN_EDIT_BUBBLE_HEIGHT_PX = 72;
-
-function resizeEditableTextarea(textarea: HTMLTextAreaElement | null) {
-  if (!textarea) {
-    return;
-  }
-  textarea.style.height = "0px";
-  textarea.style.height = `${Math.max(textarea.scrollHeight, MIN_EDIT_BUBBLE_HEIGHT_PX)}px`;
-}
 
 export type EditableUserMessageBubbleProps = {
   initialText: string;
@@ -54,6 +47,12 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
   const [draftText, setDraftText] = useState(initialText);
   const [draftAttachments, setDraftAttachments] = useState(attachments);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutosizeTextarea(
+    textareaRef,
+    draftText,
+    textareaSizing === "content",
+    MIN_EDIT_BUBBLE_HEIGHT_PX,
+  );
 
   useLayoutEffect(() => {
     if (preserveViewportScrollOnFocus) {
@@ -63,12 +62,9 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
     if (!textarea) {
       return;
     }
-    if (textareaSizing === "content") {
-      resizeEditableTextarea(textarea);
-    }
     textarea.focus();
     textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-  }, [preserveViewportScrollOnFocus, textareaSizing]);
+  }, [preserveViewportScrollOnFocus]);
 
   useEffect(() => {
     if (!preserveViewportScrollOnFocus) {
@@ -98,13 +94,6 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
   useEffect(() => {
     setDraftAttachments(attachments);
   }, [attachments]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: draft text intentionally invalidates the DOM measurement
-  useLayoutEffect(() => {
-    if (textareaSizing === "content") {
-      resizeEditableTextarea(textareaRef.current);
-    }
-  }, [draftText, textareaSizing]);
 
   const visibleAttachments = useMemo(
     () => splitUserAttachmentsForDisplay(draftAttachments, draftText).visibleFiles,

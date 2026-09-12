@@ -19,6 +19,7 @@ import {
   type ReorderSlot,
   reorderIdsByKeyboard,
 } from "../../lib/reorder/reorderModel";
+import { acquireGlobalPointerStyle } from "../../lib/shared/globalPointerStyle";
 import { cn } from "../../lib/shared/utils";
 
 const DRAG_START_DISTANCE_PX = 5;
@@ -40,7 +41,7 @@ type DragState = {
   baseOrder: string[];
   insertIndex: number;
   draggedOffset: number;
-  previousUserSelect: string;
+  releaseGlobalStyle: (() => void) | null;
 };
 
 type DragVisual = {
@@ -133,8 +134,7 @@ export function useVerticalListReorder(options: UseVerticalListReorderOptions) {
     drag.gap = measured.gap;
     drag.startScrollTop = container.scrollTop;
     drag.active = true;
-    drag.previousUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
+    drag.releaseGlobalStyle = acquireGlobalPointerStyle({ userSelect: "none" });
     setDraggingItemId(drag.draggedId);
     return true;
   }, []);
@@ -247,7 +247,7 @@ export function useVerticalListReorder(options: UseVerticalListReorderOptions) {
       removeWindowListeners();
       if (!drag.active) return;
 
-      document.body.style.userSelect = drag.previousUserSelect;
+      drag.releaseGlobalStyle?.();
       setDraggingItemId("");
       setDragVisual(null);
       suppressClickRef.current = true;
@@ -286,7 +286,7 @@ export function useVerticalListReorder(options: UseVerticalListReorderOptions) {
         baseOrder: itemIds,
         insertIndex: itemIds.indexOf(itemId),
         draggedOffset: 0,
-        previousUserSelect: "",
+        releaseGlobalStyle: null,
       };
       addWindowListeners();
       if (event.pointerType === "touch") {
@@ -304,7 +304,7 @@ export function useVerticalListReorder(options: UseVerticalListReorderOptions) {
     return () => {
       const drag = dragRef.current;
       dragRef.current = null;
-      if (drag?.active) document.body.style.userSelect = drag.previousUserSelect;
+      drag?.releaseGlobalStyle?.();
       clearLongPress();
       stopFrameLoop();
       removeWindowListeners();

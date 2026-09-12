@@ -2388,6 +2388,7 @@ export function ChatPage(props: ChatPageProps) {
     projectPathKey: `conversation:${initialConversationRef.current.conversationId}`,
   });
   const workbenchGeometryRef = useRef<WorkbenchGeometry | null>(null);
+  const workbenchCanvasRef = useRef<HTMLDivElement | null>(null);
   const handleWorkbenchGeometryChange = useCallback((geometry: WorkbenchGeometry) => {
     workbenchGeometryRef.current = geometry;
   }, []);
@@ -2713,6 +2714,7 @@ export function ChatPage(props: ChatPageProps) {
     dragGhostRef: workbenchDragGhostRef,
   } = useWorkbenchDragSession({
     enabled: sessionWorkbench.enabled,
+    canvasRef: workbenchCanvasRef,
     layoutRef: workbench.layoutRef,
     geometryRef: workbenchGeometryRef,
     onCommit: handleWorkbenchDropCommit,
@@ -3089,7 +3091,7 @@ export function ChatPage(props: ChatPageProps) {
       return;
     }
     const geometry = workbenchGeometryRef.current;
-    const canvasElement = document.querySelector("[data-workbench-canvas]");
+    const canvasElement = workbenchCanvasRef.current;
     if (!geometry || !canvasElement) return;
     const canvasRect = canvasElement.getBoundingClientRect();
     const target = hitTestWorkbenchDrop(
@@ -3764,6 +3766,7 @@ export function ChatPage(props: ChatPageProps) {
   const chatContent = sessionWorkbench.enabled ? (
     <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
       <WorkbenchCanvas
+        canvasRef={workbenchCanvasRef}
         layout={workbench.layout}
         labels={{
           paneRegion: (pane) => workbenchPaneRegionLabel(pane),
@@ -3898,8 +3901,7 @@ export function ChatPage(props: ChatPageProps) {
         style={{
           left: 0,
           top: 0,
-          transform:
-            "translate3d(var(--workbench-drag-ghost-x, var(--spacing-minus-9999px)), var(--workbench-drag-ghost-y, var(--spacing-minus-9999px)), 0)",
+          transform: "translate3d(var(--workbench-drag-ghost-x), var(--workbench-drag-ghost-y), 0)",
           willChange: "transform",
         }}
       >

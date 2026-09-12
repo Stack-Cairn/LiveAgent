@@ -80,7 +80,7 @@ export function FloorNavRail(props: {
   const [touchPanelOpen, setTouchPanelOpen] = useState(false);
   const [hoveredMarkerKey, setHoveredMarkerKey] = useState<string | null>(null);
   const collapseTimerRef = useRef<number | null>(null);
-  const panelScrollRef = useRef<HTMLDivElement | null>(null);
+  const activePanelRowRef = useRef<HTMLDivElement | null>(null);
   // nav 元素走 callback ref → state（与 ChatTranscript 绑定 scrollViewport 同一
   // 模式）：楼层 <2 时 rail 渲染为 null，nav 在组件已挂载后才出现/消失，一次性
   // 挂载 effect 会错过它——按元素身份重跑，观察器才始终挂在活着的节点上。
@@ -142,9 +142,7 @@ export function FloorNavRail(props: {
   // 展开时把当前楼层滚到面板中间，楼层很多时不必从头找。
   useLayoutEffect(() => {
     if (!touchPanelOpen) return;
-    panelScrollRef.current
-      ?.querySelector('[data-floor-active="true"]')
-      ?.scrollIntoView({ block: "center" });
+    activePanelRowRef.current?.scrollIntoView({ block: "center" });
   }, [touchPanelOpen]);
 
   // 触屏自动隐藏仅在提供了滚动视口时启用。
@@ -273,6 +271,7 @@ export function FloorNavRail(props: {
     return (
       <div
         key={isPinnedCopy ? `pinned-${floor.rowKey}` : floor.rowKey}
+        ref={isActive && !isPinnedCopy ? activePanelRowRef : undefined}
         // 收藏区的副本不带定位锚点，展开自动居中永远对准主列表里的当前行。
         data-floor-active={(isActive && !isPinnedCopy) || undefined}
         className={cn(
@@ -352,7 +351,7 @@ export function FloorNavRail(props: {
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
         >
-          <div ref={panelScrollRef} className="min-h-0 overflow-y-auto p-1.5">
+          <div className="min-h-0 overflow-y-auto p-1.5">
             {bookmarkedFloors.length > 0 ? (
               <div className="mb-1.5 rounded-lg bg-amber-500/[0.07] p-1 ring-1 ring-amber-500/20">
                 <div

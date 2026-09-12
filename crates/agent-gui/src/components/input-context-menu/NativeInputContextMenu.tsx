@@ -1,6 +1,7 @@
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
 import { MotionPopover } from "@liveagent/ui/components/MotionPopover";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -39,28 +40,7 @@ const MENU_ITEM_CLASS = cn(
 
 function writeTextToClipboard(text: string) {
   if (!text) return;
-
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => {
-      fallbackWriteTextToClipboard(text);
-    });
-    return;
-  }
-
-  fallbackWriteTextToClipboard(text);
-}
-
-function fallbackWriteTextToClipboard(text: string) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
+  void copyTextToClipboard(text);
 }
 
 // Writes through the prototype value setter so React's per-node value tracker
