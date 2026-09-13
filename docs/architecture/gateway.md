@@ -12,6 +12,36 @@ Gateway 是远程访问中继，不是 Agent 执行环境。它同时面对桌�
 | WebUI -> Gateway | WebSocket `/ws/v2`（Protobuf 帧） | 浏览器端发起 chat（command/subscribe）、直通 history/settings/skills/memory/cron 等请求，并订阅 `chat_event` 与同步广播。 |
 | WebUI -> Gateway | HTTP `/api/*` | 状态检查、文件上传、公网分享页、图片代理、静态资源。 |
 
+## HTTP 隧道的公开地址与资源路径
+
+HTTP 隧道通过 `/t/<slug>/` 进入 Gateway，再沿 Agent 链路转发到桌面端配置的
+`targetUrl`。Gateway 返回的 `publicPath` 只包含路径，不猜测 Docker 发布端口或反代域名。
+Desktop 从 Remote 设置的 `gatewayUrl` **和** `gatewayPort` 统一生成公开基址；独立端口
+覆盖 URL 中的端口，与桌面端 WebSocket 连接规则一致。面板展示、复制、打开以及
+TunnelManager 工具输出使用同一基址。Gateway WebUI 则使用浏览器的 `window.location.origin`。
+例如 Gateway 宿主机端口为 `3000`、目标服务端口为 `3099` 时，公开链接是
+`http://127.0.0.1:3000/t/<slug>/`，本地目标是 `http://127.0.0.1:3099/`。
+
+Gateway 改写 HTML/CSS 和响应头中的资源路径，并在应用脚本前注入
+`internal/server/tunnel_runtime.js`。运行时处理 fetch/XHR/WebSocket/EventSource，
+以及动态 `script.src`、`link.href`、`setAttribute`/`setAttributeNS` 和节点插入。
+资源地址必须在原生 DOM 操作之前改写，异步 MutationObserver 无法阻止首次错误请求。
+外部来源、相对资源地址、已带隧道前缀的地址保持原样。
+
+此兼容层不等同于完整应用的 `basePath` 支持：原生 ES module 根路径导入、Worker、
+客户端路由及动态 HTML 字符串等机制仍需应用自行适配。绿色链路/中继/本地服务状态
+只证明对应连接或 HTTP 探测成功，不能替代实际浏览器中的资源加载和交互验证。
+
+回归检查包括 `go test ./internal/server ./test/tunnel`（在 Gateway 目录执行）、
+`node --test crates/agent-gateway/test/webui/tunnel-runtime.test.mjs` 及
+`node --test crates/agent-gui/test/settings/gateway-public-url.test.mjs crates/agent-gui/test/tools/tunnel-manager-tools.test.mjs`
+（后两条在仓库根目录执行）。
+
+下图为最小复现页面的真实浏览器对照：端口行执行公开基址生成逻辑，动态脚本行使用
+原版和修复后的运行时请求同一 HTTP 服务；不是产品界面截图。
+
+![隧道公开地址与动态脚本的修复前后对照](../images/tunnel-url-and-runtime-regression.png)
+
 ## 入口与服务启动
 
 | 文件 | 作用 |
