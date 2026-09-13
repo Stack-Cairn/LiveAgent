@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -17,6 +18,12 @@ import (
 )
 
 const tunnelRewriteBodyMaxBytes = 4 * 1024 * 1024
+
+// Keep the runtime as executable JavaScript so its DOM behavior can be tested
+// directly. The very same bytes are used for HTML injection and CSP hashing.
+//
+//go:embed tunnel_runtime.js
+var tunnelRuntimeScript string
 
 type tunnelResponseRewriteKind int
 
@@ -220,20 +227,7 @@ func tunnelShimScriptBody(rw tunnelRewrite) string {
 	if err != nil {
 		return ""
 	}
-	return `(function(config){` +
-		`if(window.__LIVEAGENT_TUNNEL__&&window.__LIVEAGENT_TUNNEL__.installed)return;` +
-		`var base=String(config.basePath||"").replace(/\/+$/,"");` +
-		`window.__LIVEAGENT_TUNNEL__={basePath:base,installed:true};` +
-		`function rw(input){if(input==null||!base)return input;var raw=input instanceof URL?input.href:String(input);var u;try{u=new URL(raw,location.href)}catch(_){return input}` +
-		`if(u.host!==location.host||!/^(http:|https:|ws:|wss:)$/i.test(u.protocol))return input;` +
-		`if(u.pathname===base||u.pathname.indexOf(base+"/")===0)return u.href;` +
-		`u.pathname=base+(u.pathname==="/"?"/":u.pathname);return u.href}` +
-		`function rwWs(input){var out=rw(input);try{var u=new URL(String(out),location.href);if(u.protocol==="http:")u.protocol="ws:";if(u.protocol==="https:")u.protocol="wss:";return u.href}catch(_){return out}}` +
-		`if(window.WebSocket){var NativeWebSocket=window.WebSocket;window.WebSocket=function(url,protocols){return new NativeWebSocket(rwWs(url),protocols)};window.WebSocket.prototype=NativeWebSocket.prototype;["CONNECTING","OPEN","CLOSING","CLOSED"].forEach(function(k){window.WebSocket[k]=NativeWebSocket[k]})}` +
-		`if(window.EventSource){var NativeEventSource=window.EventSource;window.EventSource=function(url,options){return new NativeEventSource(rw(url),options)};window.EventSource.prototype=NativeEventSource.prototype}` +
-		`if(window.fetch){var nativeFetch=window.fetch.bind(window);window.fetch=function(input,init){if(input instanceof Request)return nativeFetch(new Request(rw(input.url),input),init);return nativeFetch(rw(input),init)}}` +
-		`if(window.XMLHttpRequest){var open=window.XMLHttpRequest.prototype.open;window.XMLHttpRequest.prototype.open=function(method,url){arguments[1]=rw(url);return open.apply(this,arguments)}}` +
-		`})(` + string(config) + `);`
+	return strings.TrimSpace(tunnelRuntimeScript) + `(` + string(config) + `);`
 }
 
 func rewriteTunnelCSSURLToken(token string, rw tunnelRewrite) (string, bool) {

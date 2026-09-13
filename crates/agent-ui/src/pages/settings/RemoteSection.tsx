@@ -26,6 +26,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   normalizeIntegerDraftInput,
@@ -205,20 +206,7 @@ function usePositiveIntegerDraft(
 }
 
 function buildGatewayEndpointPreview(settings: AppSettings["remote"]) {
-  const gatewayUrl = settings.gatewayUrl.trim();
-  if (!gatewayUrl) return "";
-
-  try {
-    const url = new URL(gatewayUrl);
-    const port = String(settings.gatewayPort || 443);
-    url.port = port;
-    url.pathname = "";
-    url.search = "";
-    url.hash = "";
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return `${gatewayUrl}:${settings.gatewayPort || 443}`;
-  }
+  return buildGatewayPublicBaseUrl(settings.gatewayUrl, settings.gatewayPort);
 }
 
 function formatTimestamp(value?: number | null) {

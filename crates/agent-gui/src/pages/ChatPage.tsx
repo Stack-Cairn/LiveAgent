@@ -42,6 +42,7 @@ import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
+import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
 import type {
   ConversationOpenOptions,
   ConversationOpenRequest,
@@ -3679,7 +3680,10 @@ export function ChatPage(props: ChatPageProps) {
         gitWriteEnabled: true,
         tunnelEnabled,
         tunnelDisabledMessage,
-        tunnelPublicBaseUrl: settings.remote.gatewayUrl.trim(),
+        tunnelPublicBaseUrl: buildGatewayPublicBaseUrl(
+          settings.remote.gatewayUrl,
+          settings.remote.gatewayPort,
+        ),
       },
       workspaceProjectRootClient: desktopWorkspaceProjectRootClient,
       workspaceRootRevision,
@@ -3744,6 +3748,7 @@ export function ChatPage(props: ChatPageProps) {
       setSettings,
       setTerminalSessions,
       settings.customSettings,
+      settings.remote.gatewayPort,
       settings.remote.gatewayUrl,
       settings.ssh,
       tauriTunnelClient,
@@ -4169,7 +4174,10 @@ export function ChatPage(props: ChatPageProps) {
         tunnelClient={isAgentMode ? tauriTunnelClient : null}
         tunnelEnabled={tunnelEnabled}
         tunnelDisabledMessage={tunnelDisabledMessage}
-        tunnelPublicBaseUrl={settings.remote.gatewayUrl.trim()}
+        tunnelPublicBaseUrl={buildGatewayPublicBaseUrl(
+          settings.remote.gatewayUrl,
+          settings.remote.gatewayPort,
+        )}
         workspaceActivityClient={tauriWorkspaceActivityClient}
         onWidthChange={handleRightDockWidthChange}
         onProjectStateChange={handleRightDockProjectStateChange}

@@ -13,6 +13,7 @@ import {
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { appendManagedSkillSelections } from "@liveagent/ui/lib/chat/useComposerActions";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import {
   buildSkillsSystemPrompt,
@@ -1723,7 +1724,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
               );
             },
             remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
-            tunnelPublicBaseUrl: settings.remote.gatewayUrl.trim(),
+            tunnelPublicBaseUrl: buildGatewayPublicBaseUrl(
+              settings.remote.gatewayUrl,
+              settings.remote.gatewayPort,
+            ),
             sshHosts: settings.ssh.hosts,
             associatedSshHostIds: effectiveAssociatedSshHostIds,
             sshManagerRemoteAllowed:

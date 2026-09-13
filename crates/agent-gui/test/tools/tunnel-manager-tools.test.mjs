@@ -77,6 +77,27 @@ test("TunnelManager is injected only when Remote Web Tunnels are enabled", async
   assert.equal(cronRegistry.hasTool("TunnelManager"), false);
 });
 
+test("TunnelManager public links use the configured gateway port, not the local target port", async () => {
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        invoke: async () => createSnapshot([createTunnel({ targetUrl: "http://127.0.0.1:3099" })]),
+      },
+    },
+  });
+  const { buildGatewayPublicBaseUrl } = loader.loadModule("@liveagent/ui/lib/shared/gatewayPublicUrl.ts");
+  const { createTunnelManagerTools } = loader.loadModule("src/lib/tools/tunnelManagerTools.ts");
+  const bundle = createTunnelManagerTools({
+    enabled: true,
+    runtimeScope: "chat",
+    publicBaseUrl: buildGatewayPublicBaseUrl("http://127.0.0.1", 3000),
+  });
+  const result = await bundle.executeToolCall(createToolCall({ action: "list" }));
+  assert.equal(result.isError, false);
+  assert.match(result.content[0].text, /public: http:\/\/127\.0\.0\.1:3000\/t\/abc123\//);
+  assert.match(result.content[0].text, /target: http:\/\/127\.0\.0\.1:3099/);
+});
+
 test("TunnelManager list/create/close/check call gateway tunnel commands", async () => {
   const invocations = [];
   const tunnels = [createTunnel()];

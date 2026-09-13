@@ -221,9 +221,9 @@ func TestRewriteTunnelHTMLBodyInjectsRuntimeShimBeforeFirstScript(t *testing.T) 
 		t.Fatalf("runtime shim was not injected before app script:\n%s", output)
 	}
 	assertContains(t, output, `"basePath":"/t/test-slug"`)
-	assertContains(t, output, `window.WebSocket=function`)
-	assertContains(t, output, `window.fetch=function`)
-	assertContains(t, output, `window.EventSource=function`)
+	assertContains(t, output, `window.WebSocket = function`)
+	assertContains(t, output, `window.fetch = function`)
+	assertContains(t, output, `window.EventSource = function`)
 	assertContains(t, output, `XMLHttpRequest.prototype.open`)
 }
 
