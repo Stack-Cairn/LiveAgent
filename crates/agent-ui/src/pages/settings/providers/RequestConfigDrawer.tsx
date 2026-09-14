@@ -8,7 +8,6 @@ import {
   PROVIDER_CHAT_PROTOCOLS,
   PROVIDER_WIRE_DIALECT_LABELS,
   type ProviderChatProtocol,
-  type ProviderEndpointQuirks,
   type ProviderWireDialect,
   resolveProviderDialect,
 } from "@liveagent/app/lib/settings";
@@ -70,14 +69,20 @@ import {
   writeEndpoint,
 } from "./providerSettingsModel";
 
-const QUIRK_KEYS: readonly (keyof ProviderEndpointQuirks)[] = [
+type BooleanQuirkKey =
+  | "supportsUsageInStreaming"
+  | "supportsDeveloperRole"
+  | "supportsReasoningEffort"
+  | "supportsStore";
+
+const QUIRK_KEYS: readonly BooleanQuirkKey[] = [
   "supportsUsageInStreaming",
   "supportsDeveloperRole",
   "supportsReasoningEffort",
   "supportsStore",
 ];
 
-const QUIRK_LABELS: Record<keyof ProviderEndpointQuirks, string> = {
+const QUIRK_LABELS: Record<BooleanQuirkKey, string> = {
   supportsUsageInStreaming: "stream_options",
   supportsDeveloperRole: "developer role",
   supportsReasoningEffort: "reasoning_effort",

@@ -6,7 +6,7 @@
     "useIgnoreFile": false
   },
   "files": {
-    "includes": ["src/**", "!!**/node_modules", "!src/lib/models/catalog.generated.ts"]
+    "includes": ["src/**", "!!**/node_modules", "!src/lib/models/catalog.generated.ts", "!src/lib/providers/registry/presets.generated.ts"]
   },
   "formatter": {
     "enabled": true,
