@@ -22,9 +22,21 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
+import {
+  findProviderPreset,
+  type ProviderChatProtocol,
+  type ProviderPreset,
+  presetIdForLegacyType,
+} from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
-import type { CodexRequestFormat, ProviderId } from "../../lib/settings";
+import type {
+  CodexRequestFormat,
+  CustomProvider,
+  ProviderCredential,
+  ProviderEndpointConfig,
+  ProviderId,
+} from "../../lib/settings";
 
 export type CherryProviderImportItem = {
   sourceId: string;
@@ -34,6 +46,8 @@ export type CherryProviderImportItem = {
   name: string;
   baseUrl: string;
   apiKey: string;
+  /** 源侧全部可迁移 Key（首把即 apiKey）；旧后端不带此字段。 */
+  apiKeys?: string[];
   apiKeyCount: number;
   requestFormat: CodexRequestFormat;
   enabled: boolean;
@@ -42,6 +56,177 @@ export type CherryProviderImportItem = {
   warning: string;
   excludedModelCount: number;
 };
+
+/** Cherry 源 provider id（`sourceId` 的 `::` 前缀）。 */
+function cherrySourceProviderId(item: CherryProviderImportItem) {
+  return item.sourceId.split("::", 1)[0] ?? "";
+}
+
+/** 条目走的接口：由 Rust 侧按模型分组后给出的 providerType + requestFormat 推得。 */
+export function cherryItemChatProtocol(item: CherryProviderImportItem): ProviderChatProtocol {
+  if (item.providerType === "claude_code") return "anthropic-messages";
+  if (item.providerType === "gemini") return "google-generative-ai";
+  if (item.providerType === "xai") return "openai-responses";
+  if (item.providerType === "deepseek") return "openai-completions";
+  return item.requestFormat === "openai-responses" ? "openai-responses" : "openai-completions";
+}
+
+/**
+ * Cherry provider id 与预设注册表 id 不一致的别名；候选按顺序试，优先取
+ * 默认地址与条目 Base URL 同源的那个（区分国际站与国内站）。
+ */
+const CHERRY_PRESET_ALIASES: Record<string, readonly string[]> = {
+  silicon: ["siliconflow-cn", "siliconflow"],
+  siliconflow: ["siliconflow-cn", "siliconflow"],
+  dashscope: ["dashscope-cn", "dashscope"],
+  moonshot: ["moonshot-cn", "moonshot"],
+  minimax: ["minimax-cn", "minimax"],
+  grok: ["xai"],
+  doubao: ["volcengine"],
+};
+
+function urlOrigin(value: string): string | undefined {
+  try {
+    return new URL(value.trim()).origin.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function cherryPresetFor(item: CherryProviderImportItem): ProviderPreset | undefined {
+  const sourceId = cherrySourceProviderId(item).trim().toLowerCase();
+  const candidates = (CHERRY_PRESET_ALIASES[sourceId] ?? [sourceId])
+    .map((id) => findProviderPreset(id))
+    .filter((preset): preset is ProviderPreset => Boolean(preset));
+  if (candidates.length === 0) {
+    return findProviderPreset(presetIdForLegacyType(item.providerType));
+  }
+  const origin = urlOrigin(item.baseUrl);
+  return (
+    candidates.find(
+      (preset) => origin && preset.defaultOrigin && urlOrigin(preset.defaultOrigin) === origin,
+    ) ?? candidates[0]
+  );
+}
+
+/**
+ * 同一 Cherry provider 按接口拆成的兄弟条目 → 该供应商的多端点配置。每个条目
+ * 仍各自导入为一个供应商（既有行为不变），这里只是把同源的其他接口地址一并
+ * 记进 `endpointConfigs`，供路由按模型接口选地址。
+ */
+function cherryEndpointConfigs(
+  item: CherryProviderImportItem,
+  allItems: CherryProviderImportItem[],
+  existing?: CustomProvider,
+): CustomProvider["endpointConfigs"] {
+  const sourceId = cherrySourceProviderId(item);
+  const configs: NonNullable<CustomProvider["endpointConfigs"]> = {
+    ...(existing?.endpointConfigs ?? {}),
+  };
+  const siblings = allItems.filter(
+    (candidate) =>
+      candidate.importable &&
+      candidate.baseUrl.trim() &&
+      cherrySourceProviderId(candidate) === sourceId,
+  );
+  for (const candidate of [item, ...siblings]) {
+    const protocol = cherryItemChatProtocol(candidate);
+    const baseUrl = candidate.baseUrl.trim();
+    if (!baseUrl) continue;
+    const current = configs[protocol];
+    // 用户手改过的端点（source: user）不被导入覆盖。
+    if (current?.source === "user") continue;
+    const next: ProviderEndpointConfig = {
+      ...(current ?? {}),
+      baseUrl,
+      enabled: true,
+      source: "auto",
+    };
+    configs[protocol] = next;
+  }
+  return Object.keys(configs).length > 0 ? configs : undefined;
+}
+
+function cherryImportKeys(item: CherryProviderImportItem): string[] {
+  const keys = (item.apiKeys?.length ? item.apiKeys : [item.apiKey])
+    .map((key) => key.trim())
+    .filter(Boolean);
+  return [...new Set(keys)];
+}
+
+/**
+ * 多 Key → 凭据列表。首把是默认凭据（与 `apiKey` 一致），其余按顺序作为备用；
+ * 已有供应商保留原凭据，只追加尚未出现的 Key。只有一把 Key 且无既有凭据时返回
+ * undefined，交给归一化生成默认凭据。
+ */
+function cherryCredentials(
+  item: CherryProviderImportItem,
+  primaryApiKey: string,
+  existing?: CustomProvider,
+): ProviderCredential[] | undefined {
+  const imported = cherryImportKeys(item);
+  const base: ProviderCredential[] = existing?.credentials?.length
+    ? existing.credentials.map((credential) => ({ ...credential }))
+    : primaryApiKey || imported.length > 1
+      ? [
+          {
+            id: "default",
+            label: "",
+            apiKey: primaryApiKey,
+            apiKeyConfigured: primaryApiKey.length > 0,
+            enabled: true,
+          },
+        ]
+      : [];
+  if (base.length === 0) return undefined;
+  const known = new Set(base.map((credential) => credential.apiKey.trim()).filter(Boolean));
+  const usedIds = new Set(base.map((credential) => credential.id));
+  let ordinal = 1;
+  for (const key of imported) {
+    if (known.has(key)) continue;
+    ordinal += 1;
+    let id = `cherry-key-${ordinal}`;
+    while (usedIds.has(id)) id = `cherry-key-${++ordinal}`;
+    usedIds.add(id);
+    known.add(key);
+    base.push({
+      id,
+      label: `Cherry Studio Key ${ordinal}`,
+      apiKey: key,
+      apiKeyConfigured: true,
+      enabled: true,
+    });
+  }
+  if (base.length === 1 && !existing?.credentials?.length) return undefined;
+  return base;
+}
+
+/**
+ * Cherry 条目映射到供应商注册表结构的那部分字段：预设、分类、默认接口、方言、
+ * 多端点与多 Key。旧字段（type / baseUrl / apiKey / requestFormat）仍由调用方填。
+ */
+export function cherryProviderRegistryFields(
+  item: CherryProviderImportItem,
+  allItems: CherryProviderImportItem[],
+  primaryApiKey: string,
+  existing?: CustomProvider,
+): Pick<
+  CustomProvider,
+  "presetId" | "category" | "defaultChatProtocol" | "dialect" | "endpointConfigs" | "credentials"
+> {
+  const preset = cherryPresetFor(item);
+  const endpointConfigs = cherryEndpointConfigs(item, allItems, existing);
+  const credentials = cherryCredentials(item, primaryApiKey, existing);
+  const dialect = existing?.dialect ?? preset?.dialect;
+  return {
+    presetId: preset?.id ?? presetIdForLegacyType(item.providerType),
+    ...(preset?.category ? { category: preset.category } : {}),
+    defaultChatProtocol: cherryItemChatProtocol(item),
+    ...(dialect ? { dialect } : {}),
+    ...(endpointConfigs ? { endpointConfigs } : {}),
+    ...(credentials ? { credentials } : {}),
+  };
+}
 
 export type CherryProvidersResponse = {
   status: string;

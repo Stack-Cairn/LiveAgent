@@ -4,8 +4,12 @@ import type {
   ChatRuntimeControls,
   CodexRequestFormat,
   PromptCacheHintMode,
+  ProviderCategory,
+  ProviderChatProtocol,
+  ProviderEndpointConfig,
   ProviderId,
   ProviderModelConfig,
+  ProviderWireDialect,
   ReasoningLevel,
 } from "@/lib/settings";
 
@@ -47,9 +51,22 @@ export type GatewayProviderSummary = {
   id: string;
   name: string;
   type: ProviderId;
+  presetId?: string;
+  category?: ProviderCategory;
+  enabled?: boolean;
+  dialect?: ProviderWireDialect;
+  defaultChatProtocol?: ProviderChatProtocol;
   models: ProviderModelConfig[];
+  modelOrder?: string[];
   activeModels: string[];
   requestFormat?: CodexRequestFormat;
+  /** 桌面端摘要只带路由相关的公开字段：enabled / dialect / quirks / source。 */
+  endpointConfigs?: Partial<
+    Record<
+      ProviderChatProtocol,
+      Pick<ProviderEndpointConfig, "enabled" | "dialect" | "quirks" | "source">
+    >
+  >;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
   promptCacheHintMode?: PromptCacheHintMode;

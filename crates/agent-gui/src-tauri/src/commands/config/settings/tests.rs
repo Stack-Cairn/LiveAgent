@@ -368,6 +368,264 @@ mod tests {
     }
 
     #[test]
+    fn gateway_settings_snapshot_redacts_provider_credential_keys() {
+        let mut conn = open_memory_db();
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A",
+                "apiKey": "sk-primary",
+                "credentials": [
+                    {
+                        "id": "default",
+                        "label": "主 Key",
+                        "apiKey": "sk-primary",
+                        "enabled": true,
+                        "modelScope": { "mode": "manual", "models": ["claude-*"] },
+                        "lastModels": { "at": 1, "models": ["claude-sonnet"] }
+                    },
+                    { "id": "backup", "label": "备用", "apiKey": "", "apiKeyConfigured": true, "enabled": true },
+                    { "id": "empty", "label": "空", "apiKey": "", "enabled": false }
+                ]
+            }]),
+        )
+        .expect("save providers");
+
+        let snapshot =
+            load_gateway_settings_sync_snapshot(&conn).expect("load gateway settings snapshot");
+        let provider = &snapshot["customProviders"][0];
+        assert_eq!(provider["apiKey"], Value::Null);
+        assert_eq!(provider["apiKeyConfigured"], true);
+        let credentials = provider["credentials"].as_array().expect("credentials array");
+        assert_eq!(credentials.len(), 3);
+        for credential in credentials {
+            assert_eq!(credential["apiKey"], Value::Null, "凭据 Key 不得进入公开快照");
+        }
+        assert_eq!(credentials[0]["apiKeyConfigured"], true);
+        assert_eq!(credentials[1]["apiKeyConfigured"], true);
+        assert_eq!(credentials[2]["apiKeyConfigured"], false);
+        // 公开字段与观测值照常保留，接收端按 id 恢复 Key。
+        assert_eq!(credentials[0]["id"], "default");
+        assert_eq!(credentials[0]["label"], "主 Key");
+        assert_eq!(credentials[0]["modelScope"]["mode"], "manual");
+        assert_eq!(credentials[0]["lastModels"]["models"], json!(["claude-sonnet"]));
+        let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
+        assert!(!serialized.contains("sk-primary"));
+    }
+
+    #[test]
+    fn redact_provider_credentials_rejects_non_string_credential_key() {
+        let error = redact_provider_credentials(json!([{
+            "id": "provider-a",
+            "credentials": [{ "id": "default", "apiKey": 42 }]
+        }]))
+        .expect_err("non-string credential apiKey must be rejected");
+        assert!(error.contains("credentials[]"), "{error}");
+    }
+
+    #[test]
+    fn save_providers_restores_stored_keys_from_redacted_snapshot() {
+        let mut conn = open_memory_db();
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A",
+                "apiKey": "sk-primary",
+                "credentials": [
+                    { "id": "default", "label": "", "apiKey": "sk-primary", "enabled": true },
+                    { "id": "backup", "label": "备用", "apiKey": "sk-backup", "enabled": true },
+                    { "id": "gone", "label": "将被清除", "apiKey": "sk-gone", "enabled": true }
+                ]
+            }]),
+        )
+        .expect("seed providers");
+
+        // 模拟经公开快照脱敏后回流的形状：Key 为空、configured 为 true。
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A renamed",
+                "apiKeyConfigured": true,
+                "credentials": [
+                    { "id": "default", "label": "", "apiKeyConfigured": true, "enabled": true },
+                    { "id": "backup", "label": "备用", "apiKey": "", "apiKeyConfigured": true, "enabled": false },
+                    // configured=false 表示用户明确清空，不回填。
+                    { "id": "gone", "label": "将被清除", "apiKey": "", "apiKeyConfigured": false, "enabled": true },
+                    // 本机没有这把凭据的记录，也没有 Key 可回填。
+                    { "id": "fresh", "label": "新增", "apiKeyConfigured": true, "enabled": true },
+                    // 明文 Key 直接采用。
+                    { "id": "plain", "label": "明文", "apiKey": "sk-plain", "enabled": true }
+                ]
+            }]),
+        )
+        .expect("save redacted providers");
+
+        let providers = load_providers(&conn)
+            .expect("load providers")
+            .expect("providers present");
+        let provider = &providers[0];
+        assert_eq!(provider["name"], "A renamed");
+        assert_eq!(provider["apiKey"], "sk-primary");
+        let credentials = provider["credentials"].as_array().expect("credentials array");
+        assert_eq!(credentials[0]["apiKey"], "sk-primary");
+        assert_eq!(credentials[1]["apiKey"], "sk-backup");
+        assert_eq!(credentials[1]["enabled"], false, "非秘密字段以收到的为准");
+        assert_eq!(credentials[2]["apiKey"], "");
+        assert_eq!(credentials[3]["apiKey"], Value::Null);
+        assert_eq!(credentials[4]["apiKey"], "sk-plain");
+    }
+
+    #[test]
+    fn save_providers_backfills_primary_key_between_api_key_and_first_credential() {
+        let mut conn = open_memory_db();
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A",
+                "apiKey": "sk-primary",
+                "credentials": [{ "id": "default", "label": "", "apiKey": "sk-primary", "enabled": true }]
+            }]),
+        )
+        .expect("seed providers");
+
+        // 供应商默认 Key 已存、首把凭据换了 id 且被脱敏：退回供应商默认 Key。
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A",
+                "apiKeyConfigured": true,
+                "credentials": [{ "id": "renamed", "label": "", "apiKeyConfigured": true, "enabled": true }]
+            }]),
+        )
+        .expect("save with renamed credential");
+        let providers = load_providers(&conn).expect("load").expect("present");
+        assert_eq!(providers[0]["apiKey"], "sk-primary");
+        assert_eq!(providers[0]["credentials"][0]["apiKey"], "sk-primary");
+
+        // 默认 Key 被脱敏但首把凭据带明文：默认 Key 补齐为首把凭据的 Key。
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-b",
+                "name": "B",
+                "apiKey": "",
+                "apiKeyConfigured": true,
+                "credentials": [{ "id": "new", "label": "", "apiKey": "sk-new", "enabled": true }]
+            }]),
+        )
+        .expect("save with plain first credential");
+        let providers = load_providers(&conn).expect("load").expect("present");
+        assert_eq!(providers[0]["id"], "provider-b");
+        assert_eq!(providers[0]["credentials"][0]["apiKey"], "sk-new");
+        assert_eq!(providers[0]["apiKey"], "sk-new");
+    }
+
+    #[test]
+    fn save_providers_clears_keys_when_not_marked_configured() {
+        let mut conn = open_memory_db();
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A",
+                "apiKey": "sk-primary",
+                "credentials": [{ "id": "default", "label": "", "apiKey": "sk-primary", "enabled": true }]
+            }]),
+        )
+        .expect("seed providers");
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A",
+                "apiKey": "",
+                "apiKeyConfigured": false,
+                "credentials": [{ "id": "default", "label": "", "apiKey": "", "apiKeyConfigured": false, "enabled": true }]
+            }]),
+        )
+        .expect("clear providers");
+        let providers = load_providers(&conn).expect("load").expect("present");
+        assert_eq!(providers[0]["apiKey"], "");
+        assert_eq!(providers[0]["credentials"][0]["apiKey"], "");
+    }
+
+    #[test]
+    fn backup_snapshot_strips_provider_observations_but_keeps_config() {
+        let mut conn = open_memory_db();
+        save_providers(
+            &mut conn,
+            json!([{
+                "id": "provider-a",
+                "name": "A",
+                "apiKey": "sk-primary",
+                "presetId": "openai",
+                "credentials": [
+                    {
+                        "id": "default",
+                        "label": "",
+                        "apiKey": "sk-primary",
+                        "enabled": true,
+                        "modelScope": { "mode": "auto" },
+                        "lastModels": { "at": 1, "models": ["gpt-5"] }
+                    }
+                ],
+                "endpointConfigs": {
+                    "openai-responses": {
+                        "enabled": true,
+                        "baseUrl": "https://api.openai.com/v1",
+                        "dialect": "openai",
+                        "lastProbe": { "at": 1, "status": "ok", "latencyMs": 12 },
+                        "source": "auto"
+                    },
+                    "openai-completions": "malformed-entry"
+                }
+            }]),
+        )
+        .expect("seed providers");
+
+        let snapshot = collect_backup_snapshot(&conn).expect("collect snapshot");
+        let providers = snapshot.providers.expect("providers present");
+        let provider = &providers[0];
+        assert_eq!(provider["apiKey"], "sk-primary", "备份沿用 providers 域明文策略");
+        assert_eq!(provider["presetId"], "openai");
+        let credential = &provider["credentials"][0];
+        assert_eq!(credential["apiKey"], "sk-primary");
+        assert_eq!(credential["modelScope"]["mode"], "auto");
+        assert!(credential.get("lastModels").is_none(), "凭据观测值应剥离");
+        let endpoint = &provider["endpointConfigs"]["openai-responses"];
+        assert_eq!(endpoint["baseUrl"], "https://api.openai.com/v1");
+        assert_eq!(endpoint["dialect"], "openai");
+        assert_eq!(endpoint["source"], "auto");
+        assert!(endpoint.get("lastProbe").is_none(), "端点观测值应剥离");
+        assert_eq!(
+            provider["endpointConfigs"]["openai-completions"],
+            "malformed-entry",
+            "非对象条目原样透传，交给 TS 归一化丢弃"
+        );
+
+        // 落库数据本身不受影响：观测值仍在。
+        let stored = load_providers(&conn).expect("load").expect("present");
+        assert!(stored[0]["credentials"][0].get("lastModels").is_some());
+        assert!(stored[0]["endpointConfigs"]["openai-responses"]
+            .get("lastProbe")
+            .is_some());
+    }
+
+    #[test]
+    fn strip_provider_observations_tolerates_non_array_payload() {
+        assert_eq!(strip_provider_observations(json!(null)), json!(null));
+        assert_eq!(
+            strip_provider_observations(json!([1, { "id": "x" }])),
+            json!([1, { "id": "x" }])
+        );
+    }
+
+    #[test]
     fn gateway_settings_payload_removes_usage_query_secret_sidecar() {
         let redacted = redact_gateway_settings_sync_payload(json!({
             "providerUsageQuerySecretUpdates": {

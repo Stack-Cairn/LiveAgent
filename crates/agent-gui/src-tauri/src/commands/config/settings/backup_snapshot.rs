@@ -221,13 +221,48 @@ fn portable_system_subset(system: Option<Value>) -> Option<Value> {
 /// B 机器，形成循环。
 pub(crate) fn collect_backup_snapshot(conn: &Connection) -> Result<BackupSnapshot, String> {
     Ok(BackupSnapshot {
-        providers: load_providers(conn)?,
+        providers: load_providers(conn)?.map(strip_provider_observations),
         mcp: load_mcp(conn)?,
         system: portable_system_subset(load_system(conn)?),
         agents: load_agents(conn)?,
         model_failover: load_model_failover(conn)?,
         stt: load_stt_raw(conn)?,
     })
+}
+
+/// 备份导出时剥离供应商域的观测值：端点 `endpointConfigs[*].lastProbe` 与凭据
+/// `credentials[*].lastModels`（设计文档 5.5）。它们是本机探测结果而非配置，
+/// 另一台机器导入后也没有意义；导入侧缺失即可，TS 归一化允许缺省。
+/// 只剥离这两个键，其余字段（含 Key 明文）与 providers 域既有策略一致原样保留。
+pub(crate) fn strip_provider_observations(providers: Value) -> Value {
+    let Value::Array(providers) = providers else {
+        return providers;
+    };
+    Value::Array(
+        providers
+            .into_iter()
+            .map(|provider| {
+                let Value::Object(mut provider) = provider else {
+                    return provider;
+                };
+                if let Some(Value::Object(endpoints)) = provider.get_mut("endpointConfigs") {
+                    for endpoint in endpoints.values_mut() {
+                        if let Some(endpoint) = endpoint.as_object_mut() {
+                            endpoint.remove("lastProbe");
+                        }
+                    }
+                }
+                if let Some(Value::Array(credentials)) = provider.get_mut("credentials") {
+                    for credential in credentials.iter_mut() {
+                        if let Some(credential) = credential.as_object_mut() {
+                            credential.remove("lastModels");
+                        }
+                    }
+                }
+                Value::Object(provider)
+            })
+            .collect(),
+    )
 }
 
 /// 校验 manifest 的版本兼容性。高于当前支持的版本一律拒绝，
