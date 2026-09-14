@@ -7,7 +7,7 @@ function readShared(path) {
   return readFileSync(new URL(`../../../agent-ui/src/${path}`, import.meta.url), "utf8");
 }
 
-const providersSectionSource = readShared("pages/settings/ProvidersSection.tsx");
+const providersSectionSource = readShared("pages/settings/providers/ProviderFailoverSection.tsx");
 const modelPickerSource = readShared("pages/settings/modelPicker.tsx");
 const baseStylesSource = readShared("styles/base.css");
 

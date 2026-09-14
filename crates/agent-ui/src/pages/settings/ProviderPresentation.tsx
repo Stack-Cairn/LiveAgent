@@ -97,8 +97,6 @@ export function UsagePlanLine({ plan }: { plan: UsagePlanDisplay }) {
   );
 }
 
-export const PROVIDER_TABS: ProviderId[] = ["claude_code", "codex", "gemini", "xai", "deepseek"];
-
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",
   codex: "OpenAI",
@@ -210,41 +208,6 @@ export function DrawerSectionHeader(props: {
       </div>
       {action}
     </div>
-  );
-}
-
-export function DialogSwitch(props: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  ariaLabel: string;
-}) {
-  const { checked, onCheckedChange, ariaLabel } = props;
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      onClick={() => onCheckedChange(!checked)}
-    >
-      <span
-        className={cn(
-          "relative block h-4 w-7 rounded-full bg-muted-foreground/35 transition-colors",
-          checked && "bg-primary",
-        )}
-      >
-        {/* The thumb is placed with left-0.5 and then translated, so the travel
-            is trackWidth - thumbWidth - both insets (28 - 12 - 2 - 2), not the
-            single-inset figure the transform-only Switch primitive uses. */}
-        <span
-          className={cn(
-            "absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-background shadow-sm transition-transform",
-            checked && "translate-x-3",
-          )}
-        />
-      </span>
-    </button>
   );
 }
 

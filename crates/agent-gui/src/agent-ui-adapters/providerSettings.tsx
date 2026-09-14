@@ -385,12 +385,13 @@ export function ProviderCopyConfigButton(props: {
 }
 
 export function ProviderSettingsExtension(props: {
-  activeTab: ProviderId;
+  /** 当前选中供应商的旧类型；导入扫描按它分组。渠道目录没有选中实例时缺省 claude_code */
+  activeTab?: ProviderId;
   settings: AppSettings;
   setSettings: SetSettingsFn;
   triggerClassName?: string;
 }) {
-  const { activeTab, settings, setSettings, triggerClassName } = props;
+  const { activeTab = "claude_code", settings, setSettings, triggerClassName } = props;
   const { t } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scanning, setScanning] = useState(false);

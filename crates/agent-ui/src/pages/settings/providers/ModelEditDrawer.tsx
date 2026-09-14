@@ -1,0 +1,804 @@
+// 抽屉三"编辑模型"（设计文档 6 / 7）：ID、远端 ID、显示名、分组、能力芯片三态、
+// 输入模态、接口多选（只列已启用渠道，首项路由）、方言、凭据、限额、缓存提示、
+// 思考档位（目录只读）+ 默认档；底部展示 resolveProviderChatRoute 的解析结果。
+// 每个覆盖项显示来源（自动 / 用户）与还原。
+
+import {
+  type CapabilityState,
+  type ChatCapabilityName,
+  type CustomProvider,
+  getProviderModelDefaults,
+  PROMPT_CACHE_HINT_MODES,
+  PROVIDER_WIRE_DIALECT_LABELS,
+  type PromptCacheHintMode,
+  type ProviderChatProtocol,
+  type ProviderModelConfig,
+  type ProviderWireDialect,
+  type ReasoningLevel,
+  resolveProviderChatRoute,
+  resolveProviderDialect,
+} from "@liveagent/app/lib/settings";
+import { ArrowUp, ChevronDown, X } from "@liveagent/ui/components/IconSet";
+import { Label } from "@liveagent/ui/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@liveagent/ui/components/ui/select";
+import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { resolveModelInputModalities } from "@liveagent/ui/lib/models/modelCatalog";
+import {
+  resolveModelThinking,
+  THINKING_LEVEL_LADDER,
+} from "@liveagent/ui/lib/models/modelThinking";
+import {
+  buildProtocolAuthHeaders,
+  PROVIDER_PROTOCOL_DIALECTS,
+} from "@liveagent/ui/lib/providers/registry";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import {
+  applyModelInputModalitiesMode,
+  formatTokenCount,
+  getModelInputModalitiesMode,
+  providerSupportsModelInputModalitiesOverride,
+} from "@liveagent/ui/pages/settings/providerUtils";
+import { type ReactNode, useMemo } from "react";
+import { DrawerGroupLabel, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
+import { Chip, ChipButton, CommittedInput, protocolLabel, SourceTag } from "./providerChips";
+import {
+  credentialsCoveringModel,
+  modelGroupIsUser,
+  modelGroupKey,
+  providerCredentials,
+  providerEnabledProtocols,
+  updateProviderModel,
+} from "./providerSettingsModel";
+
+const CAPABILITIES: readonly ChatCapabilityName[] = [
+  "reasoning",
+  "tools",
+  "structuredOutput",
+  "nativeWebSearch",
+  "fileInput",
+  "imageUnderstanding",
+];
+
+function parsePositiveInteger(input: string): number | null {
+  const value = Number(input.trim());
+  if (!Number.isFinite(value)) return null;
+  const normalized = Math.floor(value);
+  return normalized > 0 ? normalized : null;
+}
+
+function Field(props: { label: string; source?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <Label className="text-[11px] text-muted-foreground">{props.label}</Label>
+        <span className="flex-1" />
+        {props.source}
+      </div>
+      {props.children}
+    </div>
+  );
+}
+
+export function ModelEditDrawer(props: {
+  provider: CustomProvider;
+  modelId: string;
+  onChange: (updater: (provider: CustomProvider) => CustomProvider) => void;
+  onClose: () => void;
+}) {
+  const { provider, modelId, onChange, onClose } = props;
+  const { t } = useLocale();
+  const model = provider.models.find((item) => item.id === modelId);
+  const route = useMemo(
+    () => (model ? resolveProviderChatRoute(provider, modelId) : undefined),
+    [provider, modelId, model],
+  );
+  const enabledProtocols = providerEnabledProtocols(provider);
+  const credentials = providerCredentials(provider);
+  const coveringCredentials = credentialsCoveringModel(provider, modelId);
+
+  function patch(updater: (current: ProviderModelConfig) => ProviderModelConfig) {
+    onChange((current) => updateProviderModel(current, modelId, updater));
+  }
+
+  function drop<K extends keyof ProviderModelConfig>(...keys: K[]) {
+    patch((current) => {
+      const next = { ...current };
+      for (const key of keys) delete next[key];
+      return next;
+    });
+  }
+
+  if (!model || !route) return null;
+
+  const adapterId = route.adapterProviderId;
+  const thinking = resolveModelThinking(adapterId, model.id);
+  const catalogModalities = resolveModelInputModalities(adapterId, model.id);
+  const canOverrideModalities = providerSupportsModelInputModalitiesOverride(adapterId);
+  const modalitiesMode = getModelInputModalitiesMode(model);
+  const protocolList = model.chatProtocols ?? [];
+  const inheritedDialect = resolveProviderDialect(provider, route.protocol, {
+    endpoint: provider.endpointConfigs?.[route.protocol],
+  });
+  const defaults = getProviderModelDefaults(adapterId, model.id, route.baseUrl);
+  const limitsSource =
+    model.limitsSource === "user"
+      ? "user"
+      : model.limitsSource === "catalog"
+        ? "catalog"
+        : model.limitsSource === "provider"
+          ? "auto"
+          : "heuristic";
+  const reasoningOptions: ReasoningLevel[] = [
+    ...(thinking.alwaysOn ? [] : (["off"] as const)),
+    ...thinking.levels,
+  ];
+  const credential = credentials.find((item) => item.id === route.credentialId);
+  const authHeaders = buildProtocolAuthHeaders(route.protocol, "••••••", route.auth);
+  const finalHeaders = [
+    ...Object.entries(authHeaders).map(([key, value]) => ({ key, value })),
+    ...route.headers,
+  ];
+
+  function capabilityDefault(name: ChatCapabilityName): CapabilityState {
+    if (name === "reasoning") return thinking.reasoning ? "supported" : "unsupported";
+    if (name === "imageUnderstanding") {
+      if (!catalogModalities) return "unknown";
+      return catalogModalities.includes("image") ? "supported" : "unsupported";
+    }
+    if (name === "fileInput") {
+      if (!catalogModalities) return "unknown";
+      return catalogModalities.includes("pdf") ? "supported" : "unsupported";
+    }
+    return "unknown";
+  }
+
+  function cycleCapability(name: ChatCapabilityName) {
+    patch((current) => {
+      const value = current.capabilities?.[name];
+      const next = { ...current.capabilities };
+      if (value === undefined) next[name] = "supported";
+      else if (value === "supported") next[name] = "unsupported";
+      else delete next[name];
+      return {
+        ...current,
+        ...(Object.keys(next).length > 0 ? { capabilities: next } : { capabilities: undefined }),
+      };
+    });
+  }
+
+  function setProtocols(list: ProviderChatProtocol[]) {
+    patch((current) => ({
+      ...current,
+      ...(list.length > 0
+        ? { chatProtocols: list, chatProtocol: list[0] }
+        : { chatProtocols: undefined, chatProtocol: undefined }),
+    }));
+  }
+
+  function moveProtocol(index: number, delta: number) {
+    const target = index + delta;
+    if (target < 0 || target >= protocolList.length) return;
+    const next = [...protocolList];
+    const [item] = next.splice(index, 1);
+    next.splice(target, 0, item);
+    setProtocols(next);
+  }
+
+  const protocolSourceLabel = t(`settings.modelRouteSource.${route.protocolSource}`);
+
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        variant="inset"
+        className="settings-provider-drawer max-w-none border-border bg-background sm:max-w-[600px]"
+        closeLabel={t("settings.close")}
+        showCloseButton={false}
+      >
+        <div className="settings-provider-drawer-header relative flex items-center gap-3 px-6 pb-4 pt-[22px]">
+          <SheetTitle className="min-w-0 flex-1 truncate text-[17px] leading-tight tracking-tight text-foreground/95">
+            {t("settings.modelEditTitle")} · {model.displayName || model.id}
+          </SheetTitle>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.12] hover:text-foreground"
+            title={t("settings.close")}
+            aria-label={t("settings.close")}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div
+          aria-hidden="true"
+          className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
+        />
+        <div className="settings-provider-drawer-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+          <div className="space-y-5">
+            <section className="space-y-3">
+              <DrawerGroupLabel label={t("settings.modelIdentity")} />
+              <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+                <Field label={t("settings.modelId")}>
+                  <div className="flex h-8 items-center rounded-lg border bg-muted/30 px-3 font-mono text-xs">
+                    {model.id}
+                  </div>
+                </Field>
+                <Field
+                  label={t("settings.modelWireId")}
+                  source={
+                    <SourceTag
+                      source={model.wireModelId ? "user" : "auto"}
+                      onReset={() => drop("wireModelId")}
+                    />
+                  }
+                >
+                  <CommittedInput
+                    value={model.wireModelId ?? ""}
+                    className="h-8 font-mono text-xs shadow-none"
+                    placeholder={t("settings.modelWireIdPlaceholder")}
+                    aria-label={t("settings.modelWireId")}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onCommit={(value) =>
+                      patch((current) => ({
+                        ...current,
+                        wireModelId:
+                          value.trim() && value.trim() !== current.id ? value.trim() : undefined,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label={t("settings.modelDisplayName")}>
+                  <CommittedInput
+                    value={model.displayName ?? ""}
+                    className="h-8 text-xs shadow-none"
+                    placeholder={model.id}
+                    aria-label={t("settings.modelDisplayName")}
+                    onCommit={(value) =>
+                      patch((current) => ({ ...current, displayName: value.trim() || undefined }))
+                    }
+                  />
+                </Field>
+                <Field
+                  label={t("settings.modelGroup")}
+                  source={
+                    <SourceTag
+                      source={modelGroupIsUser(model) ? "user" : "auto"}
+                      onReset={() => drop("group")}
+                    />
+                  }
+                >
+                  <CommittedInput
+                    value={modelGroupKey(model)}
+                    className="h-8 text-xs shadow-none"
+                    aria-label={t("settings.modelGroup")}
+                    onCommit={(value) =>
+                      patch((current) => ({ ...current, group: value.trim() || undefined }))
+                    }
+                  />
+                </Field>
+              </div>
+              <Field label={t("settings.modelType")}>
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip tone="on">{t("settings.modelTypeChat")}</Chip>
+                  {(["image", "embedding", "rerank"] as const).map((kind) => (
+                    <Chip key={kind} className="opacity-50">
+                      {t(`settings.modelType.${kind}`)}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+            </section>
+
+            <section className="space-y-3">
+              <DrawerGroupLabel
+                label={t("settings.modelCapabilities")}
+                hint={t("settings.modelCapabilitiesHint")}
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {CAPABILITIES.map((name) => {
+                  const override = model.capabilities?.[name];
+                  const fallback = capabilityDefault(name);
+                  const effective = override ?? fallback;
+                  return (
+                    <ChipButton
+                      key={name}
+                      tone={
+                        override === "supported"
+                          ? "on"
+                          : override === "unsupported"
+                            ? "bad"
+                            : effective === "supported"
+                              ? "ok"
+                              : "default"
+                      }
+                      strike={override === "unsupported"}
+                      onClick={() => cycleCapability(name)}
+                      title={
+                        override
+                          ? t("settings.providerSource.user")
+                          : effective === "unknown"
+                            ? t("settings.modelCapabilityUnknown")
+                            : t("settings.providerSource.catalog")
+                      }
+                    >
+                      {t(`settings.modelCapability.${name}`)}
+                      {override === undefined && effective === "unknown" ? " · ?" : ""}
+                    </ChipButton>
+                  );
+                })}
+                {model.capabilities ? (
+                  <ChipButton onClick={() => drop("capabilities")}>
+                    {t("settings.providerSourceReset")}
+                  </ChipButton>
+                ) : null}
+              </div>
+              <Field
+                label={t("settings.modelInputModalities")}
+                source={
+                  canOverrideModalities ? (
+                    <SourceTag
+                      source={modalitiesMode === "auto" ? "auto" : "user"}
+                      onReset={() =>
+                        patch((current) => applyModelInputModalitiesMode(current, "auto"))
+                      }
+                    />
+                  ) : null
+                }
+              >
+                {canOverrideModalities ? (
+                  <Select
+                    value={modalitiesMode}
+                    onValueChange={(value) => {
+                      if (value === "auto" || value === "text" || value === "text-image") {
+                        patch((current) => applyModelInputModalitiesMode(current, value));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs shadow-none">
+                      <SelectValue>
+                        {t(
+                          modalitiesMode === "auto"
+                            ? "settings.modelInputModalitiesAuto"
+                            : modalitiesMode === "text"
+                              ? "settings.modelInputModalitiesText"
+                              : "settings.modelInputModalitiesTextImage",
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{t("settings.modelInputModalitiesAuto")}</SelectItem>
+                      <SelectItem value="text">{t("settings.modelInputModalitiesText")}</SelectItem>
+                      <SelectItem value="text-image">
+                        {t("settings.modelInputModalitiesTextImage")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground/75">
+                    {catalogModalities
+                      ? catalogModalities.join(" · ")
+                      : t("settings.modelInputModalitiesUnavailable")}
+                  </p>
+                )}
+              </Field>
+            </section>
+
+            <section className="space-y-3">
+              <DrawerGroupLabel
+                label={t("settings.modelRouting")}
+                hint={t("settings.modelChatProtocolsHint")}
+              />
+              <Field
+                label={t("settings.modelChatProtocols")}
+                source={
+                  <SourceTag
+                    source={protocolList.length > 0 ? "user" : "auto"}
+                    onReset={() => setProtocols([])}
+                  />
+                }
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {protocolList.map((protocol, index) => (
+                    <span
+                      key={protocol}
+                      className="inline-flex h-6 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 pl-2.5 pr-1 text-[11px] font-medium text-primary"
+                    >
+                      {index + 1} · {protocolLabel(protocol)}
+                      <button
+                        type="button"
+                        className="rounded p-0.5 hover:bg-primary/15 disabled:opacity-30"
+                        disabled={index === 0}
+                        onClick={() => moveProtocol(index, -1)}
+                        title={t("settings.providerCredentialMoveUp")}
+                        aria-label={t("settings.providerCredentialMoveUp")}
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-0.5 hover:bg-primary/15 disabled:opacity-30"
+                        disabled={index === protocolList.length - 1}
+                        onClick={() => moveProtocol(index, 1)}
+                        title={t("settings.providerCredentialMoveDown")}
+                        aria-label={t("settings.providerCredentialMoveDown")}
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-0.5 hover:bg-primary/15"
+                        onClick={() =>
+                          setProtocols(protocolList.filter((item) => item !== protocol))
+                        }
+                        title={t("settings.delete")}
+                        aria-label={t("settings.delete")}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {enabledProtocols
+                    .filter((protocol) => !protocolList.includes(protocol))
+                    .map((protocol) => (
+                      <ChipButton
+                        key={protocol}
+                        onClick={() => setProtocols([...protocolList, protocol])}
+                      >
+                        ＋ {protocolLabel(protocol)}
+                      </ChipButton>
+                    ))}
+                </div>
+                {protocolList.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground/75">
+                    {t("settings.modelChatProtocolsAuto")
+                      .replace("{protocol}", protocolLabel(route.protocol))
+                      .replace("{source}", protocolSourceLabel)}
+                  </p>
+                ) : null}
+              </Field>
+              <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+                <Field
+                  label={t("settings.providerDialect")}
+                  source={
+                    <SourceTag
+                      source={model.dialect ? "user" : "auto"}
+                      onReset={() => drop("dialect")}
+                    />
+                  }
+                >
+                  <Select
+                    value={model.dialect ?? "inherit"}
+                    onValueChange={(value) =>
+                      patch((current) => ({
+                        ...current,
+                        dialect: value === "inherit" ? undefined : (value as ProviderWireDialect),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs shadow-none">
+                      <SelectValue>
+                        {model.dialect
+                          ? PROVIDER_WIRE_DIALECT_LABELS[model.dialect]
+                          : t("settings.providerDialectInherit").replace(
+                              "{dialect}",
+                              PROVIDER_WIRE_DIALECT_LABELS[inheritedDialect],
+                            )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">
+                        {t("settings.providerDialectInherit").replace(
+                          "{dialect}",
+                          PROVIDER_WIRE_DIALECT_LABELS[inheritedDialect],
+                        )}
+                      </SelectItem>
+                      {PROVIDER_PROTOCOL_DIALECTS[route.protocol].map((dialect) => (
+                        <SelectItem key={dialect} value={dialect}>
+                          {PROVIDER_WIRE_DIALECT_LABELS[dialect]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field
+                  label={t("settings.modelCredential")}
+                  source={
+                    <SourceTag
+                      source={model.credentialId ? "user" : "auto"}
+                      onReset={() => drop("credentialId")}
+                    />
+                  }
+                >
+                  <Select
+                    value={model.credentialId ?? "auto"}
+                    onValueChange={(value) =>
+                      patch((current) => ({
+                        ...current,
+                        credentialId: value === "auto" ? undefined : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs shadow-none">
+                      <SelectValue>
+                        {model.credentialId
+                          ? credentials.find((item) => item.id === model.credentialId)?.label ||
+                            t("settings.providerCredentialPrimary")
+                          : t("settings.modelCredentialAuto")}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{t("settings.modelCredentialAuto")}</SelectItem>
+                      {credentials.map((item, index) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.label ||
+                            (index === 0
+                              ? t("settings.providerCredentialPrimary")
+                              : `${t("settings.providerCredentialBackup")} ${index}`)}
+                          {coveringCredentials.some((covering) => covering.id === item.id)
+                            ? ""
+                            : `（${t("settings.modelCredentialOutOfScope")}）`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10.5px] text-muted-foreground/70">
+                    {t("settings.modelCredentialCovering")}
+                    {coveringCredentials.length > 0
+                      ? coveringCredentials
+                          .map((item) => item.label || t("settings.providerCredentialPrimary"))
+                          .join(" / ")
+                      : t("settings.modelCredentialNoneCovering")}
+                  </p>
+                </Field>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <DrawerGroupLabel
+                label={t("settings.modelLimits")}
+                hint={t("settings.modelLimitsHint")}
+              />
+              <div className="flex items-center gap-2">
+                <SourceTag
+                  source={limitsSource}
+                  onReset={() =>
+                    patch((current) => ({
+                      ...current,
+                      contextWindow: defaults.contextWindow,
+                      maxOutputToken: defaults.maxOutputToken,
+                      limitsSource: defaults.source,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3 max-[720px]:grid-cols-1">
+                <Field label={t("settings.contextWindow")}>
+                  <CommittedInput
+                    value={String(model.contextWindow)}
+                    inputMode="numeric"
+                    className="h-8 text-xs shadow-none"
+                    aria-label={t("settings.contextWindow")}
+                    onCommit={(value) => {
+                      const parsed = parsePositiveInteger(value);
+                      if (parsed === null) return;
+                      patch((current) => ({
+                        ...current,
+                        contextWindow: parsed,
+                        limitsSource: "user",
+                      }));
+                    }}
+                  />
+                </Field>
+                <Field label={t("settings.modelMaxInputTokens")}>
+                  <CommittedInput
+                    value={model.maxInputTokens ? String(model.maxInputTokens) : ""}
+                    inputMode="numeric"
+                    className="h-8 text-xs shadow-none"
+                    placeholder={t("settings.modelMaxInputTokensUnset")}
+                    aria-label={t("settings.modelMaxInputTokens")}
+                    onCommit={(value) => {
+                      const parsed = value.trim() ? parsePositiveInteger(value) : undefined;
+                      if (parsed === null) return;
+                      patch((current) => ({ ...current, maxInputTokens: parsed }));
+                    }}
+                  />
+                </Field>
+                <Field label={t("settings.maxOutputToken")}>
+                  <CommittedInput
+                    value={String(model.maxOutputToken)}
+                    inputMode="numeric"
+                    className="h-8 text-xs shadow-none"
+                    aria-label={t("settings.maxOutputToken")}
+                    onCommit={(value) => {
+                      const parsed = parsePositiveInteger(value);
+                      if (parsed === null) return;
+                      patch((current) => ({
+                        ...current,
+                        maxOutputToken: parsed,
+                        limitsSource: "user",
+                      }));
+                    }}
+                  />
+                </Field>
+              </div>
+              <p className="text-[10.5px] text-muted-foreground/70">
+                {formatTokenCount(model.contextWindow)} ctx ·{" "}
+                {formatTokenCount(model.maxOutputToken)} out
+              </p>
+              {adapterId === "codex" ? (
+                <Field
+                  label={t("settings.promptCacheHintModelOverride")}
+                  source={
+                    <SourceTag
+                      source={model.promptCacheHintMode ? "user" : "auto"}
+                      onReset={() => drop("promptCacheHintMode")}
+                    />
+                  }
+                >
+                  <Select
+                    value={model.promptCacheHintMode ?? "inherit"}
+                    onValueChange={(value) =>
+                      patch((current) => ({
+                        ...current,
+                        promptCacheHintMode:
+                          value === "inherit" ? undefined : (value as PromptCacheHintMode),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs shadow-none">
+                      <SelectValue>
+                        {t(
+                          model.promptCacheHintMode
+                            ? PROMPT_CACHE_HINT_LABEL_KEYS[model.promptCacheHintMode]
+                            : "settings.promptCacheHintMode.inherit",
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">
+                        {t("settings.promptCacheHintMode.inherit")}
+                      </SelectItem>
+                      {PROMPT_CACHE_HINT_MODES.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {t(PROMPT_CACHE_HINT_LABEL_KEYS[mode])}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
+            </section>
+
+            <section className="space-y-3">
+              <DrawerGroupLabel
+                label={t("settings.modelThinkingLevels")}
+                hint={t("settings.modelThinkingLevelsHint")}
+              />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SourceTag source={thinking.fromCatalog ? "catalog" : "heuristic"} />
+                {thinking.reasoning ? (
+                  <>
+                    <Chip tone={thinking.alwaysOn ? "warn" : "default"}>
+                      {thinking.alwaysOn
+                        ? t("settings.modelThinkingAlwaysOn")
+                        : t("settings.modelThinkingCanDisable")}
+                    </Chip>
+                    {THINKING_LEVEL_LADDER.map((level) => (
+                      <Chip
+                        key={level}
+                        tone={thinking.levels.includes(level) ? "on" : "default"}
+                        className={cn(!thinking.levels.includes(level) && "opacity-40")}
+                      >
+                        {t(`settings.reasoning.${level}`)}
+                      </Chip>
+                    ))}
+                  </>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground/75">
+                    {t("settings.modelThinkingNone")}
+                  </span>
+                )}
+              </div>
+              {thinking.reasoning ? (
+                <Field
+                  label={t("settings.modelReasoningDefault")}
+                  source={
+                    <SourceTag
+                      source={model.reasoning ? "user" : "auto"}
+                      onReset={() => drop("reasoning")}
+                    />
+                  }
+                >
+                  <Select
+                    value={model.reasoning ?? "inherit"}
+                    onValueChange={(value) =>
+                      patch((current) => ({
+                        ...current,
+                        reasoning: value === "inherit" ? undefined : (value as ReasoningLevel),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs shadow-none">
+                      <SelectValue>
+                        {model.reasoning
+                          ? t(`settings.reasoning.${model.reasoning}`)
+                          : t("settings.modelReasoningInherit").replace(
+                              "{level}",
+                              t(`settings.reasoning.${provider.reasoning}`),
+                            )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">
+                        {t("settings.modelReasoningInherit").replace(
+                          "{level}",
+                          t(`settings.reasoning.${provider.reasoning}`),
+                        )}
+                      </SelectItem>
+                      {reasoningOptions.map((level) => (
+                        <SelectItem key={level} value={level}>
+                          {t(`settings.reasoning.${level}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
+            </section>
+
+            <section className="space-y-2">
+              <DrawerGroupLabel
+                label={t("settings.modelRouteResult")}
+                hint={t("settings.modelRouteResultHint")}
+              />
+              <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border bg-muted/20 px-3 py-2.5 text-xs">
+                <span className="text-muted-foreground">{t("settings.modelRouteProtocol")}</span>
+                <span className="flex flex-wrap items-center gap-1.5 font-mono">
+                  {route.protocol}
+                  <SourceTag source={route.protocolSource === "model" ? "user" : "auto"} />
+                  <span className="font-sans text-[10.5px] text-muted-foreground">
+                    {protocolSourceLabel}
+                  </span>
+                </span>
+                <span className="text-muted-foreground">{t("settings.providerDialect")}</span>
+                <span className="font-mono">{route.dialect}</span>
+                <span className="text-muted-foreground">{t("settings.baseUrl")}</span>
+                <span className="break-all font-mono">{route.baseUrl || "—"}</span>
+                <span className="text-muted-foreground">{t("settings.modelWireId")}</span>
+                <span className="font-mono">{route.wireModelId}</span>
+                <span className="text-muted-foreground">{t("settings.modelCredential")}</span>
+                <span className="flex flex-wrap items-center gap-1.5 font-mono">
+                  {credential?.label || t("settings.providerCredentialPrimary")}
+                  <span className="font-sans text-[10.5px] text-muted-foreground">
+                    {t(`settings.modelRouteCredentialSource.${route.credentialSource}`)}
+                  </span>
+                </span>
+                <span className="text-muted-foreground">quirks</span>
+                <span className="break-all font-mono">
+                  {Object.keys(route.quirks).length > 0
+                    ? JSON.stringify(route.quirks)
+                    : t("settings.providerQuirkAuto")}
+                </span>
+                <span className="text-muted-foreground">{t("settings.modelRouteHeaders")}</span>
+                <span className="space-y-0.5 font-mono">
+                  {finalHeaders.map((header) => (
+                    <span key={header.key} className="block break-all">
+                      {header.key}: {header.value}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            </section>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}

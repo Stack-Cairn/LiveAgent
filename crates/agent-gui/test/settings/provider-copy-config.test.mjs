@@ -11,8 +11,8 @@ const importLoader = createTsModuleLoader({
 });
 const providerImports = importLoader.loadModule("src/agent-ui-adapters/providerSettings.tsx");
 
-const providersSectionSource = readFileSync(
-  new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
+const providerDetailSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/providers/ProviderDetail.tsx", import.meta.url),
   "utf8",
 );
 const guiAdapterSource = readFileSync(
@@ -54,12 +54,12 @@ test("desktop copy payload omits blank Base URL or API Key", () => {
   assert.equal(providerImports.formatProviderCopyConfig({ baseUrl: "  ", apiKey: "" }), "");
 });
 
-test("the shared provider card places the copy button immediately before refresh usage", () => {
+test("the shared provider detail header renders the copy button next to delete", () => {
   assert.match(
-    providersSectionSource,
-    /<ProviderCopyConfigButton provider=\{provider\} \/>\s*\{usageDisplay\.show \? \(/,
+    providerDetailSource,
+    /<ProviderCopyConfigButton provider=\{provider\} \/>\s*<ConfirmDeletePopover/,
   );
-  assert.match(providersSectionSource, /settings\.providerUsageRefresh/);
+  assert.match(providerDetailSource, /settings\.providerUsageRefresh/);
 });
 
 test("only the desktop adapter implements the copy button", () => {
