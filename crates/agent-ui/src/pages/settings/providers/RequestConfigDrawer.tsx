@@ -88,10 +88,9 @@ export function RequestConfigDrawer(props: {
   provider: CustomProvider;
   onChange: (updater: (provider: CustomProvider) => CustomProvider) => void;
   focus?: ProviderChatProtocol;
-  isGatewayWebui: boolean;
   onClose: () => void;
 }) {
-  const { provider, onChange, focus, isGatewayWebui, onClose } = props;
+  const { provider, onChange, focus, onClose } = props;
   const { t } = useLocale();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [probing, setProbing] = useState<ReadonlySet<ProviderChatProtocol>>(() => new Set());
@@ -591,11 +590,6 @@ export function RequestConfigDrawer(props: {
                   onChange((current) => ({ ...current, customHeaders: headers }))
                 }
               />
-              {isGatewayWebui ? null : (
-                <p className="text-[10.5px] leading-relaxed text-muted-foreground/70">
-                  {t("settings.providerHeadersMergeHint")}
-                </p>
-              )}
             </div>
           </div>
         </div>

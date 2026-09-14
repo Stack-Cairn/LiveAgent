@@ -66,39 +66,55 @@ export function ProviderProbeDialog(props: {
     () => new Set(),
   );
   const [rejectedGroups, setRejectedGroups] = useState<ReadonlySet<string>>(() => new Set());
-  const startedRef = useRef(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  // 探测只发起一次；效果重跑（StrictMode、request 变化）时只重新挂接结果。
+  const activeRef = useRef(false);
+  const probeRef = useRef<{
+    request: ProviderProbeRequest;
+    promise: Promise<ProviderProbeResult>;
+  } | null>(null);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    let cancelled = false;
-    void probeProvider({
-      candidates: request.candidates,
-      credentials: request.credentials,
-      useSystemProxy: request.useSystemProxy,
-      customHeaders: request.customHeaders,
-      providerId: request.providerId,
-      onProgress: (partial) => {
-        if (!cancelled) setProgress(partial);
-      },
-    }).then((result) => {
-      if (cancelled) return;
-      setProgress(result);
-      setDone(result);
-      setRejectedGroups(
-        new Set(
-          groupProbeModels(
-            collectModels(result, request.candidates, new Set(), new Set()),
-            availableProtocols(result, request.candidates, new Set(), new Set()),
-            request.preset,
-          )
-            .filter((group) => group.key === "other")
-            .map((group) => group.key),
-        ),
-      );
-    });
+    activeRef.current = true;
+    if (!probeRef.current || probeRef.current.request !== request) {
+      probeRef.current = {
+        request,
+        promise: probeProvider({
+          candidates: request.candidates,
+          credentials: request.credentials,
+          useSystemProxy: request.useSystemProxy,
+          customHeaders: request.customHeaders,
+          providerId: request.providerId,
+          onProgress: (partial) => {
+            if (activeRef.current) setProgress(partial);
+          },
+        }),
+      };
+    }
+    void probeRef.current.promise
+      .then((result) => {
+        if (!activeRef.current) return;
+        setProgress(result);
+        setDone(result);
+        setRejectedGroups(
+          new Set(
+            groupProbeModels(
+              collectModels(result, request.candidates, new Set(), new Set()),
+              availableProtocols(result, request.candidates, new Set(), new Set()),
+              request.preset,
+            )
+              .filter((group) => group.key === "other")
+              .map((group) => group.key),
+          ),
+        );
+      })
+      .catch((error: unknown) => {
+        if (!activeRef.current) return;
+        setFailure(error instanceof Error ? error.message : String(error));
+        setDone({ at: Date.now(), credentials: [] });
+      });
     return () => {
-      cancelled = true;
+      activeRef.current = false;
     };
   }, [request]);
 
@@ -260,6 +276,11 @@ export function ProviderProbeDialog(props: {
                 </div>
               );
             })}
+            {failure ? (
+              <p className="text-xs text-destructive" role="alert">
+                {failure}
+              </p>
+            ) : null}
           </section>
 
           {done ? (

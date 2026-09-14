@@ -464,6 +464,7 @@ export function ProvidersSection(
                 preset={selectedPreset}
                 onSetup={(input) => setupPreset(selectedPreset.id, input)}
                 onAddManually={() => setAddChannel({ presetId: selectedPreset.id })}
+                onBack={() => setMobileDetailOpen(false)}
               />
             ) : (
               <div className="rounded-xl border border-dashed px-4 py-12 text-center text-sm text-muted-foreground">
@@ -478,7 +479,6 @@ export function ProvidersSection(
         <RequestConfigDrawer
           provider={selectedProvider}
           focus={drawer.focus}
-          isGatewayWebui={isGatewayWebui}
           onChange={updateSelectedProvider}
           onClose={() => setDrawer(null)}
         />

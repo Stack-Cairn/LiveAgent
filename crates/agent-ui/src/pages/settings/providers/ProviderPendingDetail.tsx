@@ -2,7 +2,7 @@
 // Key（和地址）输入与"检测并启用"（设计文档 7 中栏第 1 条）。
 
 import { PROVIDER_CHAT_PROTOCOLS } from "@liveagent/app/lib/settings";
-import { ExternalLink } from "@liveagent/ui/components/IconSet";
+import { ArrowLeft, ExternalLink } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
@@ -25,8 +25,9 @@ export function ProviderPendingDetail(props: {
   preset: ProviderPreset;
   onSetup: (input: { origin: string; apiKey: string }) => void;
   onAddManually: () => void;
+  onBack: () => void;
 }) {
-  const { preset, onSetup, onAddManually } = props;
+  const { preset, onSetup, onAddManually, onBack } = props;
   const { t } = useLocale();
   const [origin, setOrigin] = useState(preset.defaultOrigin ?? "");
   const [apiKey, setApiKey] = useState("");
@@ -39,6 +40,17 @@ export function ProviderPendingDetail(props: {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="settings-provider-back hidden h-8 w-8 max-[720px]:inline-flex"
+          onClick={onBack}
+          title={t("settings.channelBackToList")}
+          aria-label={t("settings.channelBackToList")}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <ProviderAvatar preset={preset} name={preset.name} className="h-9 w-9 text-base" />
         <h2 className="text-base font-semibold tracking-tight">{preset.name}</h2>
         {preset.native ? <Chip tone="on">{t("settings.channelNative")}</Chip> : null}
