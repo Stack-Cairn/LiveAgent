@@ -892,7 +892,12 @@ function mergeSyncedCustomProviders(
               (!Object.hasOwn(item, "apiKeyConfigured") && local?.apiKeyConfigured === true),
           };
         })
-      : undefined;
+      : // 旧版 WebUI 只发 apiKey：保留本地凭据列表，首把与解析后的默认 Key 同步。
+        currentProvider?.credentials?.map((credential, index) =>
+          index === 0 && apiKey && credential.apiKey !== apiKey
+            ? { ...credential, apiKey, apiKeyConfigured: true }
+            : credential,
+        );
     const usageQuery = Object.hasOwn(source, "usageQuery")
       ? mergeSyncedUsageQuery(
           currentProvider?.usageQuery,
