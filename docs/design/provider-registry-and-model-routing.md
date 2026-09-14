@@ -44,7 +44,9 @@ type ProviderWireDialect =
 
 四个协议字面量与 pi-ai 的 `Model.api` 一致。协议决定请求体结构、流解析、端点路径和适配器实现；方言决定同一协议下的字段取舍、鉴权附加头、思考参数映射。`xai` 与 `deepseek` 只属于 Responses，`openai` 属于两类 OpenAI 接口，Anthropic 与 Gemini 目前只有 `generic`。
 
-方言解析顺序：模型 > 端点 > 供应商 > 预设 > 旧 `type` 推导（xai → xai，deepseek → deepseek，codex → openai）> 官方域名推导 > `generic`。
+方言解析顺序：模型 > 端点 > 供应商 > 预设 > 旧 `type` 推导（xai → xai，deepseek → deepseek，codex → openai）> 官方域名推导 > `generic`。其中预设或旧分组给出的 `openai` 只是"OpenAI 官方语义"的缺省：端点域名明确是 api.x.ai / api.deepseek.com 时以域名为准，保证旧的"OpenAI 分组直连 xAI"配置行为不变。
+
+网关实现偏差（quirks）同样有推导层：pi-ai 隔着本地反代只能看到 127.0.0.1，认不出 z.ai / OpenRouter / 通义 / Moonshot 等已知网关，路由按端点域名补上 `thinkingFormat`、`maxTokensField`、`supportsReasoningEffort` 等推导值；预设与用户声明的 quirks 覆盖推导值。
 
 接口家族用于故障转移分组：Anthropic、OpenAI（Completions 与 Responses）、Gemini。
 
@@ -615,3 +617,21 @@ WebUI 共用组件，秘密只显示 configured。窄屏退化为列表 → 详�
 6. **设置页拆分**：`ProviderModalView` 拆为详情、请求配置抽屉、编辑模型抽屉、密钥抽屉四个组件；旧对话框在新页面可用后删除。
 
 P2 与 P3 的任务清单在各自阶段开始前补充。
+
+## 附录 C：实施记录（2026-09-15）
+
+分支 `feat/provider-registry-routing`，按附录 B 的顺序落地，与设计的偏差如下：
+
+| 项 | 实施情况 |
+| --- | --- |
+| 注册表与预设 | `crates/agent-ui/src/lib/providers/registry/`；预设生成层由 `scripts/generate-provider-presets.mjs` 从 models.dev 派生（17 家、774 个目录模型），覆盖层手工维护；`pnpm generate:provider-presets[:check]` |
+| 协议枚举 | 四类字面量；`deepseek-responses` 在加载时改写为 Responses + deepseek 方言；适配器注册表内部仍用 `deepseek-responses` 作为 DeepSeek Responses 适配器的 api id，这是实现细节，不出现在设置层 |
+| 路由 | `resolveProviderChatRoute` 输出接口来源、家族、方言、远端 ID、凭据与来源、合并头、quirks、鉴权覆盖；运行时 `createProviderRuntimeConfig` 一次填充 |
+| 请求装配 | 协议头档 + 方言头档 + 用户头查表；`Model.provider` 填方言（generic → "custom"），quirks 映射到 pi-ai compat；删除了与 `detectCompat` 重复的域名判断，z.ai / OpenRouter / 通义等由路由层 quirks 推导补回 |
+| 故障转移 | 设置键按三家族，旧五组合并；计划构造按凭据层 → 端点层 → 供应商层展开，共用 `maxSwitches`；熔断 key 为 `provider::credential::protocol::model` |
+| 多 Key | 归一化保证 `apiKey === credentials[0].apiKey`；Gateway 同步与 Web 存储脱敏覆盖每把 Key，`providerId::credentialId` 作为额外 Key 的更新键；Rust 公开快照同样脱敏并按凭据 id 回填旧值 |
+| 探测 | `pages/settings/providerProbe.ts`：按候选接口 × 启用 Key 拉模型列表，200 / 404 / 401 / 其他分类；自动配置产出端点、默认接口、模型（分组、限额、预设规则）、每把 Key 的 `lastModels` |
+| 观测值 | 备份快照剥离 `lastProbe` / `lastModels`；Gateway 同步**不剥离**（WebUI 需要状态芯片，且回传缺失会抹掉桌面观测），与 5.5 的表述有出入，以此为准 |
+| 模型级默认档 | 实现为"覆盖会话里该供应商键的档位"并钳到该模型可用档位；会话关闭思考仍优先 |
+| 远端模型 ID | `Model.id = wireModelId`，本地 id 用于目录、熔断、展示；用户配置了 `wireModelId ≠ id` 时，消息元数据里的 model 是远端值 |
+| Cherry Studio 导入 | 映射到 `presetId` / `endpointConfigs` / `credentials`，行为不变 |
