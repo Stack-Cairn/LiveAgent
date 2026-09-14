@@ -3173,14 +3173,14 @@ const FAILOVER_SYNC_PROVIDERS = [
 
 test("model failover changes appear in the gateway settings update payload", () => {
   const previous = settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS });
-  const next = settings.updateModelFailover(previous, "claude_code", {
+  const next = settings.updateModelFailover(previous, "anthropic", {
     enabled: true,
     queue: ["provider-backup"],
   });
 
   const update = sync.buildGatewaySettingsSyncUpdatePayload(previous, next);
-  assert.deepEqual(update.modelFailover?.claude_code.queue, ["provider-backup"]);
-  assert.equal(update.modelFailover?.claude_code.enabled, true);
+  assert.deepEqual(update.modelFailover?.anthropic.queue, ["provider-backup"]);
+  assert.equal(update.modelFailover?.anthropic.enabled, true);
 
   // Untouched settings must not produce a modelFailover entry.
   const noChange = sync.buildGatewaySettingsSyncUpdatePayload(next, next);
@@ -3190,7 +3190,7 @@ test("model failover changes appear in the gateway settings update payload", () 
 test("model failover round-trips through gateway settings sync", () => {
   const source = settings.updateModelFailover(
     settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS }),
-    "claude_code",
+    "anthropic",
     {
       enabled: true,
       queue: ["provider-backup"],

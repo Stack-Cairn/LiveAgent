@@ -4,6 +4,7 @@ import {
   type CustomProvider,
   getDefaultUsageQueryConfig,
   getLegacyProviderChatProtocol,
+  getLegacyProviderDialect,
   getProviderChatProtocolAdapter,
   normalizeProviderModelConfigs,
   PROVIDER_CHAT_PROTOCOLS,
@@ -37,6 +38,7 @@ import {
   createModelOrderSnapshot,
   findNewModelIds,
 } from "@liveagent/ui/lib/providers/modelVendor";
+import { coerceDialectForProtocol } from "@liveagent/ui/lib/providers/registry";
 import {
   applyModelInputModalitiesMode,
   applyModelsActiveState,
@@ -563,9 +565,10 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const effectiveDefaultChatProtocol =
     defaultChatProtocol === "auto" ? automaticChatProtocol : defaultChatProtocol;
   function getModelAdapterProviderId(model: ProviderModelConfig): ProviderId {
+    const protocol = model.chatProtocol ?? effectiveDefaultChatProtocol;
     return getProviderChatProtocolAdapter(
-      model.chatProtocol ?? effectiveDefaultChatProtocol,
-      providerType,
+      protocol,
+      coerceDialectForProtocol(protocol, model.dialect ?? getLegacyProviderDialect(providerType)),
     );
   }
   const canOverrideModelInputModalities = editingModel

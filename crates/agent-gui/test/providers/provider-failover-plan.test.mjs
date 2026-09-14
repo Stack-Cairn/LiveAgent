@@ -55,7 +55,7 @@ function buildSettings(queue, overrides = {}) {
   return settings.normalizeSettings({
     customProviders: PROVIDERS,
     modelFailover: {
-      claude_code: {
+      anthropic: {
         enabled: true,
         queue,
         maxSwitches: 3,
@@ -140,7 +140,7 @@ test("failover config applied from gateway sync feeds the plan builder", () => {
   // WebUI edits the config and publishes it through the sync protocol...
   const webSide = settings.updateModelFailover(
     settings.normalizeSettings({ customProviders: PROVIDERS }),
-    "claude_code",
+    "anthropic",
     { enabled: true, queue: ["provider-a2"] },
   );
   const payload = sync.buildGatewaySettingsSyncPayload(webSide);

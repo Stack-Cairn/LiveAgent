@@ -17,6 +17,24 @@ import { prepareProxyRequest } from "../../lib/providers/proxy";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import { normalizeBaseUrl } from "../../lib/settings/normalize";
 
+/**
+ * 模型列表拉取失败。带上 HTTP 状态码，供探测按 404 / 401 / 其他分类
+ * （设计文档 5.2）；网关路径只有文案，状态码从文案里尽力提取。
+ */
+export class ProviderModelsFetchError extends Error {
+  readonly status: number | null;
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "ProviderModelsFetchError";
+    this.status = status;
+  }
+}
+
+export function extractHttpStatusFromMessage(message: string): number | null {
+  const match = message.match(/\b(?:HTTP\s*)?(40[0-9]|41[0-9]|42[0-9]|5[0-9]{2})\b/);
+  return match ? Number(match[1]) : null;
+}
+
 const GATEWAY_TOKEN_STORAGE_KEY = "liveagent.gateway.token";
 const CODEX_MODELS_SUFFIXES = ["/chat/completions", "/responses", "/response"];
 const GEMINI_GENERATE_SUFFIXES = [":streamGenerateContent", ":generateContent"];
@@ -530,7 +548,7 @@ async function fetchModelsThroughGateway(
       ? (data as Record<string, unknown>).error
       : null;
   if (typeof maybeError === "string" && maybeError.trim() !== "") {
-    throw new Error(maybeError);
+    throw new ProviderModelsFetchError(maybeError, extractHttpStatusFromMessage(maybeError));
   }
 
   return [];
@@ -791,5 +809,8 @@ export async function fetchModelsFromApi(
   if (emptyResult !== null) return emptyResult;
 
   const failure = pickProviderModelsFailure(failures);
-  throw new Error(failure?.message ?? "Failed to fetch model list");
+  throw new ProviderModelsFetchError(
+    failure?.message ?? "Failed to fetch model list",
+    failure?.status ?? null,
+  );
 }

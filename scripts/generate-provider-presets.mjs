@@ -1,0 +1,223 @@
+#!/usr/bin/env node
+// Generates crates/agent-ui/src/lib/providers/registry/presets.generated.ts from
+// https://models.dev/api.json. The generated file only carries facts models.dev
+// publishes (display name, docs URL, API base URL, wire family derived from the
+// `npm` adapter, model limits/modalities/capabilities). Everything models.dev
+// does not know — extra protocol endpoints, dialects, per-model protocol rules,
+// identity presets, local services — lives in presets.overlay.ts and is merged
+// at load time by presets.ts.
+//
+// Usage:
+//   node scripts/generate-provider-presets.mjs            # fetch models.dev
+//   node scripts/generate-provider-presets.mjs --source /path/to/api.json
+//   node scripts/generate-provider-presets.mjs --check    # fail if output differs
+
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const DEFAULT_SOURCE = "https://models.dev/api.json";
+const OUTPUT = resolve("crates/agent-ui/src/lib/providers/registry/presets.generated.ts");
+
+// models.dev provider id → our preset id. Order is the catalog display order.
+const CURATED = [
+  ["anthropic", "anthropic"],
+  ["openai", "openai"],
+  ["google", "gemini"],
+  ["xai", "xai"],
+  ["deepseek", "deepseek"],
+  ["zhipuai", "zhipu"],
+  ["minimax", "minimax"],
+  ["minimax-cn", "minimax-cn"],
+  ["moonshotai", "moonshot"],
+  ["moonshotai-cn", "moonshot-cn"],
+  ["alibaba", "dashscope"],
+  ["alibaba-cn", "dashscope-cn"],
+  ["volcengine", "volcengine"],
+  ["siliconflow", "siliconflow"],
+  ["siliconflow-cn", "siliconflow-cn"],
+  ["groq", "groq"],
+  ["openrouter", "openrouter"],
+  ["lmstudio", "lmstudio"],
+];
+
+// `npm` adapter package → the wire protocols that adapter speaks.
+const NPM_PROTOCOLS = {
+  "@ai-sdk/anthropic": ["anthropic-messages"],
+  "@ai-sdk/openai": ["openai-responses", "openai-completions"],
+  "@ai-sdk/google": ["google-generative-ai"],
+  "@ai-sdk/xai": ["openai-responses", "openai-completions"],
+  "@ai-sdk/openai-compatible": ["openai-completions"],
+  "@openrouter/ai-sdk-provider": ["openai-completions"],
+  "@ai-sdk/groq": ["openai-completions"],
+};
+
+// Official API roots for adapters whose models.dev entry has no `api` field.
+const DEFAULT_API = {
+  "@ai-sdk/anthropic": "https://api.anthropic.com/v1",
+  "@ai-sdk/openai": "https://api.openai.com/v1",
+  "@ai-sdk/google": "https://generativelanguage.googleapis.com/v1beta",
+  "@ai-sdk/xai": "https://api.x.ai/v1",
+};
+
+const MODALITIES = ["text", "image", "audio", "video", "pdf"];
+const MODEL_CAP = 400;
+
+function parseArgs(argv) {
+  const args = { source: DEFAULT_SOURCE, check: false };
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === "--source") args.source = argv[++i];
+    else if (argv[i] === "--check") args.check = true;
+  }
+  return args;
+}
+
+async function loadSource(source) {
+  if (/^https?:\/\//.test(source)) {
+    const response = await fetch(source, { signal: AbortSignal.timeout(60_000) });
+    if (!response.ok) throw new Error(`fetch failed: HTTP ${response.status}`);
+    return response.json();
+  }
+  return JSON.parse(readFileSync(resolve(source), "utf8"));
+}
+
+function normalizeModality(list) {
+  if (!Array.isArray(list)) return undefined;
+  const out = MODALITIES.filter((m) => list.includes(m));
+  return out.length ? out : undefined;
+}
+
+function toModel(raw) {
+  const limit = raw.limit ?? {};
+  const contextWindow = Number(limit.context);
+  const maxOutputToken = Number(limit.output);
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) return null;
+  return {
+    id: raw.id,
+    name: raw.name && raw.name !== raw.id ? raw.name : undefined,
+    family: raw.family || undefined,
+    contextWindow,
+    maxOutputToken: Number.isFinite(maxOutputToken) && maxOutputToken > 0 ? maxOutputToken : undefined,
+    inputModalities: normalizeModality(raw.modalities?.input),
+    reasoning: raw.reasoning === true ? true : undefined,
+    toolCall: raw.tool_call === true ? true : undefined,
+    attachment: raw.attachment === true ? true : undefined,
+    status: raw.status && raw.status !== "active" ? raw.status : undefined,
+  };
+}
+
+function toPreset(sourceId, presetId, raw) {
+  const protocols = NPM_PROTOCOLS[raw.npm];
+  if (!protocols) {
+    console.error(`skip ${sourceId}: unsupported adapter ${raw.npm}`);
+    return null;
+  }
+  const baseUrl = (raw.api || DEFAULT_API[raw.npm] || "").replace(/\/+$/, "");
+  if (!baseUrl) {
+    console.error(`skip ${sourceId}: no api base url`);
+    return null;
+  }
+  const models = Object.values(raw.models ?? {})
+    .map(toModel)
+    .filter(Boolean)
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .slice(0, MODEL_CAP);
+  return {
+    id: presetId,
+    sourceId,
+    name: raw.name || presetId,
+    doc: raw.doc || undefined,
+    envKeys: Array.isArray(raw.env) ? raw.env : [],
+    adapter: raw.npm,
+    protocols,
+    baseUrl,
+    models,
+  };
+}
+
+function render(presets, sourceUrl) {
+  const lines = [];
+  lines.push("// Generated by scripts/generate-provider-presets.mjs — DO NOT EDIT.");
+  lines.push(`// Source: ${sourceUrl}`);
+  lines.push(`// Snapshot: ${new Date().toISOString().slice(0, 10)}`);
+  lines.push("//");
+  lines.push("// Facts models.dev publishes per provider: name, docs URL, API root, wire");
+  lines.push("// adapter, and the model list with limits/modalities/capabilities. Endpoint");
+  lines.push("// variants, dialects, per-model protocol rules and local services live in");
+  lines.push("// presets.overlay.ts.");
+  lines.push('import type { ProviderChatProtocol } from "./protocols";');
+  lines.push("");
+  lines.push("export type GeneratedPresetModel = {");
+  lines.push("  id: string;");
+  lines.push("  name?: string;");
+  lines.push("  family?: string;");
+  lines.push("  contextWindow: number;");
+  lines.push("  maxOutputToken?: number;");
+  lines.push('  inputModalities?: readonly ("text" | "image" | "audio" | "video" | "pdf")[];');
+  lines.push("  reasoning?: true;");
+  lines.push("  toolCall?: true;");
+  lines.push("  attachment?: true;");
+  lines.push("  status?: string;");
+  lines.push("};");
+  lines.push("");
+  lines.push("export type GeneratedPreset = {");
+  lines.push("  id: string;");
+  lines.push("  sourceId: string;");
+  lines.push("  name: string;");
+  lines.push("  doc?: string;");
+  lines.push("  envKeys: readonly string[];");
+  lines.push("  adapter: string;");
+  lines.push("  protocols: readonly ProviderChatProtocol[];");
+  lines.push("  baseUrl: string;");
+  lines.push("  models: readonly GeneratedPresetModel[];");
+  lines.push("};");
+  lines.push("");
+  lines.push(`export const GENERATED_PRESETS_SNAPSHOT_DATE = "${new Date().toISOString().slice(0, 10)}";`);
+  lines.push("");
+  lines.push("export const GENERATED_PRESETS: readonly GeneratedPreset[] = [");
+  for (const preset of presets) {
+    const { models, ...rest } = preset;
+    lines.push(`  ${JSON.stringify({ ...rest, models: undefined }).replace(',"models":undefined', "").slice(0, -1)},`);
+    lines.push("  models: [");
+    for (const model of models) {
+      const compact = Object.fromEntries(Object.entries(model).filter(([, v]) => v !== undefined));
+      lines.push(`    ${JSON.stringify(compact)},`);
+    }
+    lines.push("  ]},");
+  }
+  lines.push("];");
+  lines.push("");
+  return lines.join("\n");
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const data = await loadSource(args.source);
+  const presets = [];
+  for (const [sourceId, presetId] of CURATED) {
+    const raw = data[sourceId];
+    if (!raw) {
+      console.error(`missing ${sourceId} in models.dev`);
+      continue;
+    }
+    const preset = toPreset(sourceId, presetId, raw);
+    if (preset) presets.push(preset);
+  }
+  const output = render(presets, args.source);
+  if (args.check) {
+    const current = readFileSync(OUTPUT, "utf8");
+    const strip = (s) => s.replace(/^\/\/ Snapshot: .*$/m, "").replace(/GENERATED_PRESETS_SNAPSHOT_DATE = "[^"]*"/, "");
+    if (strip(current) !== strip(output)) {
+      console.error("presets.generated.ts is out of date");
+      process.exit(1);
+    }
+    console.log("presets.generated.ts up to date");
+    return;
+  }
+  writeFileSync(OUTPUT, output);
+  console.log(`wrote ${OUTPUT}: ${presets.length} presets, ${presets.reduce((n, p) => n + p.models.length, 0)} models`);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

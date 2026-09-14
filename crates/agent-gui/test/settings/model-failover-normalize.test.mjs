@@ -71,14 +71,12 @@ const DEFAULT_VENDOR_FAILOVER = {
   cooldownSeconds: 60,
 };
 
-test("model failover defaults are off with an empty queue for every vendor", () => {
+test("model failover defaults are off with an empty queue for every family", () => {
   const normalized = settings.normalizeModelFailoverSettings({}, PROVIDERS);
   assert.deepEqual(normalized, {
-    claude_code: DEFAULT_VENDOR_FAILOVER,
-    codex: DEFAULT_VENDOR_FAILOVER,
+    anthropic: DEFAULT_VENDOR_FAILOVER,
+    openai: DEFAULT_VENDOR_FAILOVER,
     gemini: DEFAULT_VENDOR_FAILOVER,
-    xai: DEFAULT_VENDOR_FAILOVER,
-    deepseek: DEFAULT_VENDOR_FAILOVER,
   });
 });
 
@@ -114,10 +112,10 @@ test("failover credential readiness accepts GUI keys and WebUI redacted-key mark
   );
 });
 
-test("queue entries are validated against same-vendor providers, deduped, and capped", () => {
+test("queue entries are validated against same-family providers, deduped, and capped", () => {
   const normalized = settings.normalizeModelFailoverSettings(
     {
-      claude_code: {
+      anthropic: {
         enabled: true,
         queue: [
           "provider-a",
@@ -131,44 +129,61 @@ test("queue entries are validated against same-vendor providers, deduped, and ca
     },
     PROVIDERS,
   );
-  assert.equal(normalized.claude_code.enabled, true);
-  // The Codex provider must never appear in the Claude queue.
-  assert.deepEqual(normalized.claude_code.queue, ["provider-a", "provider-a2"]);
-  assert.deepEqual(normalized.codex, DEFAULT_VENDOR_FAILOVER);
+  assert.equal(normalized.anthropic.enabled, true);
+  // The OpenAI-family provider must never appear in the Anthropic queue.
+  assert.deepEqual(normalized.anthropic.queue, ["provider-a", "provider-a2"]);
+  assert.deepEqual(normalized.openai, DEFAULT_VENDOR_FAILOVER);
 });
 
-test("cross-vendor queue entries are always dropped", () => {
+test("cross-family queue entries are always dropped", () => {
   const normalized = settings.normalizeModelFailoverSettings(
     {
-      codex: {
+      openai: {
         enabled: true,
         queue: ["provider-a", "provider-b"],
       },
     },
     PROVIDERS,
   );
-  assert.deepEqual(normalized.codex.queue, ["provider-b"]);
+  assert.deepEqual(normalized.openai.queue, ["provider-b"]);
 });
 
-test("DeepSeek failover queues only accept DeepSeek providers", () => {
+test("DeepSeek and Codex providers share the OpenAI family queue", () => {
   const normalized = settings.normalizeModelFailoverSettings(
     {
-      deepseek: {
+      openai: {
         enabled: true,
-        queue: ["provider-a", "provider-d"],
+        queue: ["provider-a", "provider-d", "provider-b"],
       },
     },
     PROVIDERS,
   );
 
-  assert.equal(normalized.deepseek.enabled, true);
-  assert.deepEqual(normalized.deepseek.queue, ["provider-d"]);
+  assert.equal(normalized.openai.enabled, true);
+  assert.deepEqual(normalized.openai.queue, ["provider-d", "provider-b"]);
+});
+
+test("legacy per-vendor shapes merge into family queues in order", () => {
+  const normalized = settings.normalizeModelFailoverSettings(
+    {
+      codex: { enabled: true, queue: ["provider-b"], maxSwitches: 2 },
+      deepseek: { enabled: false, queue: ["provider-d"], maxSwitches: 7 },
+      claude_code: { enabled: true, queue: ["provider-a2"] },
+    },
+    PROVIDERS,
+  );
+  assert.deepEqual(normalized.openai.queue, ["provider-b", "provider-d"]);
+  assert.equal(normalized.openai.enabled, true);
+  // Knobs come from the first legacy group of the family.
+  assert.equal(normalized.openai.maxSwitches, 2);
+  assert.deepEqual(normalized.anthropic.queue, ["provider-a2"]);
+  assert.deepEqual(normalized.gemini, DEFAULT_VENDOR_FAILOVER);
 });
 
 test("legacy model-entry queues collapse to deduped provider ids", () => {
   const normalized = settings.normalizeModelFailoverSettings(
     {
-      claude_code: {
+      anthropic: {
         enabled: true,
         queue: [
           { customProviderId: "provider-a", model: "model-1" },
@@ -180,25 +195,25 @@ test("legacy model-entry queues collapse to deduped provider ids", () => {
     },
     PROVIDERS,
   );
-  assert.deepEqual(normalized.claude_code.queue, ["provider-a", "provider-a2"]);
+  assert.deepEqual(normalized.anthropic.queue, ["provider-a", "provider-a2"]);
 });
 
 test("breaker knobs are clamped into their documented ranges", () => {
   const normalized = settings.normalizeModelFailoverSettings(
-    { claude_code: { maxSwitches: 99, failureThreshold: 0, cooldownSeconds: "120" } },
+    { anthropic: { maxSwitches: 99, failureThreshold: 0, cooldownSeconds: "120" } },
     PROVIDERS,
   );
-  assert.equal(normalized.claude_code.maxSwitches, 10);
-  assert.equal(normalized.claude_code.failureThreshold, 1);
-  assert.equal(normalized.claude_code.cooldownSeconds, 120);
+  assert.equal(normalized.anthropic.maxSwitches, 10);
+  assert.equal(normalized.anthropic.failureThreshold, 1);
+  assert.equal(normalized.anthropic.cooldownSeconds, 120);
 
   const fallback = settings.normalizeModelFailoverSettings(
-    { claude_code: { maxSwitches: "abc", failureThreshold: Number.NaN, cooldownSeconds: null } },
+    { anthropic: { maxSwitches: "abc", failureThreshold: Number.NaN, cooldownSeconds: null } },
     PROVIDERS,
   );
-  assert.equal(fallback.claude_code.maxSwitches, 3);
-  assert.equal(fallback.claude_code.failureThreshold, 4);
-  assert.equal(fallback.claude_code.cooldownSeconds, 60);
+  assert.equal(fallback.anthropic.maxSwitches, 3);
+  assert.equal(fallback.anthropic.failureThreshold, 4);
+  assert.equal(fallback.anthropic.cooldownSeconds, 60);
 });
 
 test("legacy flat config migrates into per-vendor configs split by provider type", () => {
@@ -215,25 +230,25 @@ test("legacy flat config migrates into per-vendor configs split by provider type
     },
     PROVIDERS,
   );
-  // Each vendor keeps only its own providers from the legacy mixed queue.
-  assert.deepEqual(normalized.claude_code.queue, ["provider-a"]);
-  assert.deepEqual(normalized.codex.queue, ["provider-b"]);
-  assert.equal(normalized.claude_code.enabled, true);
-  assert.equal(normalized.codex.enabled, true);
-  // Vendors with nothing usable in the legacy queue end up disabled.
+  // Each family keeps only its own providers from the legacy mixed queue.
+  assert.deepEqual(normalized.anthropic.queue, ["provider-a"]);
+  assert.deepEqual(normalized.openai.queue, ["provider-b"]);
+  assert.equal(normalized.anthropic.enabled, true);
+  assert.equal(normalized.openai.enabled, true);
+  // Families with nothing usable in the legacy queue end up disabled.
   assert.equal(normalized.gemini.enabled, false);
   assert.deepEqual(normalized.gemini.queue, []);
-  // Breaker knobs replicate to every vendor.
-  assert.equal(normalized.claude_code.maxSwitches, 2);
-  assert.equal(normalized.codex.failureThreshold, 5);
-  assert.equal(normalized.xai.cooldownSeconds, 30);
+  // Breaker knobs replicate to every family.
+  assert.equal(normalized.anthropic.maxSwitches, 2);
+  assert.equal(normalized.openai.failureThreshold, 5);
+  assert.equal(normalized.gemini.cooldownSeconds, 30);
 });
 
 test("normalizeSettings carries modelFailover and drops stale queue entries", () => {
   const normalized = settings.normalizeSettings({
     customProviders: PROVIDERS,
     modelFailover: {
-      codex: {
+      openai: {
         enabled: true,
         queue: ["provider-b", "gone"],
         maxSwitches: 2,
@@ -242,27 +257,27 @@ test("normalizeSettings carries modelFailover and drops stale queue entries", ()
       },
     },
   });
-  assert.equal(normalized.modelFailover.codex.enabled, true);
-  assert.deepEqual(normalized.modelFailover.codex.queue, ["provider-b"]);
-  assert.equal(normalized.modelFailover.codex.maxSwitches, 2);
-  assert.equal(normalized.modelFailover.codex.failureThreshold, 5);
-  assert.equal(normalized.modelFailover.codex.cooldownSeconds, 30);
-  assert.deepEqual(normalized.modelFailover.claude_code, DEFAULT_VENDOR_FAILOVER);
+  assert.equal(normalized.modelFailover.openai.enabled, true);
+  assert.deepEqual(normalized.modelFailover.openai.queue, ["provider-b"]);
+  assert.equal(normalized.modelFailover.openai.maxSwitches, 2);
+  assert.equal(normalized.modelFailover.openai.failureThreshold, 5);
+  assert.equal(normalized.modelFailover.openai.cooldownSeconds, 30);
+  assert.deepEqual(normalized.modelFailover.anthropic, DEFAULT_VENDOR_FAILOVER);
 });
 
-test("updateModelFailover patches one vendor through full normalization", () => {
+test("updateModelFailover patches one family through full normalization", () => {
   const base = settings.normalizeSettings({ customProviders: PROVIDERS });
-  const updated = settings.updateModelFailover(base, "claude_code", {
+  const updated = settings.updateModelFailover(base, "anthropic", {
     enabled: true,
     queue: ["provider-a2"],
   });
-  assert.equal(updated.modelFailover.claude_code.enabled, true);
-  assert.deepEqual(updated.modelFailover.claude_code.queue, ["provider-a2"]);
+  assert.equal(updated.modelFailover.anthropic.enabled, true);
+  assert.deepEqual(updated.modelFailover.anthropic.queue, ["provider-a2"]);
   // Untouched knobs keep their previous values.
   assert.equal(
-    updated.modelFailover.claude_code.maxSwitches,
-    base.modelFailover.claude_code.maxSwitches,
+    updated.modelFailover.anthropic.maxSwitches,
+    base.modelFailover.anthropic.maxSwitches,
   );
-  // Other vendors are untouched.
-  assert.deepEqual(updated.modelFailover.codex, base.modelFailover.codex);
+  // Other families are untouched.
+  assert.deepEqual(updated.modelFailover.openai, base.modelFailover.openai);
 });

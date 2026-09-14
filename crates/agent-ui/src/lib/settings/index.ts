@@ -22,6 +22,18 @@ import {
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
 import {
+  coerceDialectForProtocol,
+  findProviderPreset,
+  inferDialectFromBaseUrl,
+  isProviderChatProtocol,
+  isProviderWireDialect,
+  legacyTypeForPreset,
+  matchPresetModelRule,
+  presetIdForLegacyType,
+  resolveModelFamily,
+  stripModelVendorPrefix,
+} from "@liveagent/ui/lib/providers/registry";
+import {
   normalizeApiKey,
   normalizeBaseUrl,
   normalizeModels,
@@ -64,6 +76,8 @@ import type {
   AgentPromptTemplate,
   AppSettings,
   BrowserAutomationMode,
+  CapabilityState,
+  ChatCapabilityName,
   ChatRuntimeControls,
   ChatRuntimeReasoningProviderKey,
   CloseWindowBehavior,
@@ -84,11 +98,22 @@ import type {
   ModelLimitsSource,
   ProjectPromptStrategy,
   PromptCacheHintMode,
+  ProviderCategory,
   ProviderChatProtocol,
+  ProviderCredential,
+  ProviderCredentialScope,
+  ProviderEndpointAuth,
+  ProviderEndpointConfig,
+  ProviderEndpointProbe,
+  ProviderEndpointQuirks,
   ProviderFailoverSettings,
   ProviderId,
   ProviderModelConfig,
+  ProviderProtocolFamily,
   ProviderRetryPolicy,
+  ProviderRouteCredentialSource,
+  ProviderRouteProtocolSource,
+  ProviderWireDialect,
   ReasoningLevel,
   RemoteSettings,
   ResolvedProviderChatRoute,
@@ -119,12 +144,14 @@ import type {
 } from "./types";
 import {
   BROWSER_AUTOMATION_MODES,
+  CHAT_CAPABILITY_NAMES,
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
   MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_CHAT_PROTOCOLS,
+  PROVIDER_PROTOCOL_FAMILY,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
   RIGHT_DOCK_TOOL_KINDS,
@@ -216,7 +243,22 @@ function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undef
 }
 
 export function normalizeProviderChatProtocol(input: unknown): ProviderChatProtocol | undefined {
-  return PROVIDER_CHAT_PROTOCOLS.find((protocol) => protocol === input);
+  return normalizeLegacyProtocolInput(input)?.protocol;
+}
+
+/**
+ * 接口取值归一化。开发分支曾用 "deepseek-responses" 表示"Responses + DeepSeek 方言"，
+ * 现在改写为四类接口之一并带出方言。
+ */
+export function normalizeLegacyProtocolInput(
+  input: unknown,
+): { protocol: ProviderChatProtocol; dialect?: ProviderWireDialect } | undefined {
+  if (input === "deepseek-responses") return { protocol: "openai-responses", dialect: "deepseek" };
+  return isProviderChatProtocol(input) ? { protocol: input } : undefined;
+}
+
+export function normalizeProviderWireDialect(input: unknown): ProviderWireDialect | undefined {
+  return isProviderWireDialect(input) ? input : undefined;
 }
 
 export function getLegacyProviderChatProtocol(
@@ -225,66 +267,284 @@ export function getLegacyProviderChatProtocol(
 ): ProviderChatProtocol {
   if (providerId === "claude_code") return "anthropic-messages";
   if (providerId === "gemini") return "google-generative-ai";
-  if (providerId === "deepseek") return "deepseek-responses";
+  if (providerId === "deepseek") return "openai-responses";
   if (providerId === "xai") return "openai-responses";
   return requestFormat === "openai-completions" ? "openai-completions" : "openai-responses";
 }
 
+/** 旧供应商类型隐含的方言（xAI / DeepSeek 原生渠道、Codex 分组的 OpenAI 官方语义）。 */
+export function getLegacyProviderDialect(providerId: ProviderId): ProviderWireDialect | undefined {
+  if (providerId === "xai") return "xai";
+  if (providerId === "deepseek") return "deepseek";
+  if (providerId === "codex") return "openai";
+  return undefined;
+}
+
+/**
+ * （协议, 方言）→ 旧适配器家族。过渡期运行时仍按 ProviderId 分支选择鉴权、payload
+ * 策略与模型工厂；新读取点应改读 protocol 与 dialect。
+ */
 export function getProviderChatProtocolAdapter(
   protocol: ProviderChatProtocol,
-  savedProviderId: ProviderId,
+  dialect: ProviderWireDialect,
 ): ProviderId {
   switch (protocol) {
     case "anthropic-messages":
       return "claude_code";
     case "google-generative-ai":
       return "gemini";
-    case "deepseek-responses":
-      return "deepseek";
+    case "openai-responses":
+      if (dialect === "xai") return "xai";
+      if (dialect === "deepseek") return "deepseek";
+      return "codex";
     case "openai-completions":
       return "codex";
-    case "openai-responses":
-      // Preserve xAI's Responses-specific payload/search behavior on its own
-      // provider tab; generic multiplexing gateways use the Codex adapter.
-      return savedProviderId === "xai" ? "xai" : "codex";
   }
 }
 
+type RouteProvider = Pick<CustomProvider, "type" | "baseUrl" | "isFullUrl"> &
+  Partial<
+    Pick<
+      CustomProvider,
+      | "presetId"
+      | "modelsUrl"
+      | "requestFormat"
+      | "models"
+      | "defaultChatProtocol"
+      | "dialect"
+      | "endpointConfigs"
+      | "customHeaders"
+      | "apiKey"
+      | "apiKeyConfigured"
+      | "credentials"
+    >
+  >;
+
+type ResolvedEndpoint = {
+  protocol: ProviderChatProtocol;
+  /** false = 主连接充当该协议的隐式端点 */
+  explicit: boolean;
+  config?: ProviderEndpointConfig;
+};
+
+function providerLegacyProtocol(provider: RouteProvider): ProviderChatProtocol {
+  return getLegacyProviderChatProtocol(provider.type, provider.requestFormat);
+}
+
 /**
- * Resolve the one route used by a model. Precedence is model override >
- * provider default > legacy provider type/requestFormat. Endpoint configs only
- * replace connection details; they never silently change the protocol.
+ * 某协议在该供应商上是否可用：显式端点未关闭；或没有显式端点但它是供应商默认/
+ * 旧推导协议（主连接充当隐式端点）。
+ */
+export function resolveProviderEndpoint(
+  provider: RouteProvider,
+  protocol: ProviderChatProtocol,
+): ResolvedEndpoint | undefined {
+  const config = provider.endpointConfigs?.[protocol];
+  if (config) {
+    return config.enabled === false ? undefined : { protocol, explicit: true, config };
+  }
+  const implicit = provider.defaultChatProtocol ?? providerLegacyProtocol(provider);
+  return protocol === implicit ? { protocol, explicit: false } : undefined;
+}
+
+/** 供应商已启用的接口（有序：默认接口在前，其余按四类固定顺序）。 */
+export function getProviderEnabledProtocols(provider: RouteProvider): ProviderChatProtocol[] {
+  const out: ProviderChatProtocol[] = [];
+  const preferred = provider.defaultChatProtocol ?? providerLegacyProtocol(provider);
+  for (const protocol of [preferred, ...PROVIDER_CHAT_PROTOCOLS]) {
+    if (out.includes(protocol)) continue;
+    if (resolveProviderEndpoint(provider, protocol)) out.push(protocol);
+  }
+  return out;
+}
+
+export type ProtocolDecision = {
+  protocol: ProviderChatProtocol;
+  source: ProviderRouteProtocolSource;
+};
+
+/**
+ * 接口的决定顺序（设计文档 4.2）：模型显式列表 > 预设按模型规则 > 模型家族偏好 ∩
+ * 已启用渠道 > 供应商默认接口 > 旧推导。每一步都跳过被关闭的渠道。
+ */
+export function resolveModelRouteProtocol(
+  provider: RouteProvider,
+  modelId: string,
+  model?: Pick<ProviderModelConfig, "chatProtocols" | "chatProtocol">,
+): ProtocolDecision {
+  const available = (protocol: ProviderChatProtocol | undefined) =>
+    protocol && resolveProviderEndpoint(provider, protocol) ? protocol : undefined;
+  const firstAvailable = (list: readonly ProviderChatProtocol[] | undefined) =>
+    list?.map((item) => available(item)).find((item) => item !== undefined);
+
+  const explicit = firstAvailable(model?.chatProtocols) ?? available(model?.chatProtocol);
+  if (explicit) return { protocol: explicit, source: "model" };
+
+  const preset = findProviderPreset(provider.presetId);
+  const rule = matchPresetModelRule(preset, modelId);
+  const fromPreset = firstAvailable(rule?.chatProtocols);
+  if (fromPreset) return { protocol: fromPreset, source: "preset" };
+
+  const fromFamily = firstAvailable(resolveModelFamily(modelId).prefer);
+  if (fromFamily) return { protocol: fromFamily, source: "family" };
+
+  const fromProvider = available(provider.defaultChatProtocol);
+  if (fromProvider) return { protocol: fromProvider, source: "provider" };
+
+  const legacy = providerLegacyProtocol(provider);
+  return { protocol: available(legacy) ?? legacy, source: "legacy" };
+}
+
+export function resolveProviderDialect(
+  provider: RouteProvider,
+  protocol: ProviderChatProtocol,
+  options?: {
+    model?: Pick<ProviderModelConfig, "dialect">;
+    endpoint?: Pick<ProviderEndpointConfig, "dialect" | "baseUrl">;
+  },
+): ProviderWireDialect {
+  const preset = findProviderPreset(provider.presetId);
+  const candidate =
+    options?.model?.dialect ??
+    options?.endpoint?.dialect ??
+    provider.dialect ??
+    preset?.dialect ??
+    getLegacyProviderDialect(provider.type) ??
+    inferDialectFromBaseUrl(protocol, options?.endpoint?.baseUrl || provider.baseUrl) ??
+    "generic";
+  return coerceDialectForProtocol(protocol, candidate);
+}
+
+const DEFAULT_CREDENTIAL_ID = "default";
+
+/** 凭据列表；旧存档只有 apiKey 时视为单把默认凭据。 */
+export function getProviderCredentials(
+  provider: Partial<Pick<CustomProvider, "apiKey" | "apiKeyConfigured" | "credentials">>,
+): ProviderCredential[] {
+  if (provider.credentials && provider.credentials.length > 0) return provider.credentials;
+  return [
+    {
+      id: DEFAULT_CREDENTIAL_ID,
+      label: "",
+      apiKey: provider.apiKey ?? "",
+      apiKeyConfigured: provider.apiKeyConfigured === true || Boolean(provider.apiKey),
+      enabled: true,
+    },
+  ];
+}
+
+function credentialScopeMatches(pattern: string, modelId: string): boolean {
+  const id = modelId.trim();
+  const stripped = stripModelVendorPrefix(id);
+  if (pattern.endsWith("*")) {
+    const prefix = pattern.slice(0, -1);
+    return id.startsWith(prefix) || stripped.startsWith(prefix);
+  }
+  return id === pattern || stripped === pattern;
+}
+
+/** 该 Key 的模型范围是否包含该模型（设计文档 5.6）。 */
+export function credentialCoversModel(credential: ProviderCredential, modelId: string): boolean {
+  const scope = credential.modelScope ?? { mode: "auto" };
+  if (scope.mode === "all") return true;
+  if (scope.mode === "manual") {
+    return scope.models.some((pattern) => credentialScopeMatches(pattern, modelId));
+  }
+  if (!credential.lastModels || credential.lastModels.models.length === 0) return true;
+  return credential.lastModels.models.some((entry) => credentialScopeMatches(entry, modelId));
+}
+
+export function selectProviderCredential(
+  provider: Partial<Pick<CustomProvider, "apiKey" | "apiKeyConfigured" | "credentials">>,
+  modelId: string,
+  preferred?: { credentialId?: string; source: ProviderRouteCredentialSource }[],
+): { credential: ProviderCredential; source: ProviderRouteCredentialSource } {
+  const all = getProviderCredentials(provider);
+  const enabled = all.filter((credential) => credential.enabled);
+  if (enabled.length === 0) return { credential: all[0], source: "fallback" };
+  for (const item of preferred ?? []) {
+    if (!item.credentialId) continue;
+    const hit = enabled.find((credential) => credential.id === item.credentialId);
+    if (hit && credentialCoversModel(hit, modelId)) return { credential: hit, source: item.source };
+  }
+  const inScope = enabled.find((credential) => credentialCoversModel(credential, modelId));
+  if (inScope) return { credential: inScope, source: "scope" };
+  return { credential: enabled[0], source: "fallback" };
+}
+
+function mergeHeaderLists(
+  ...layers: (readonly { key: string; value: string }[] | undefined)[]
+): { key: string; value: string }[] {
+  const out: { key: string; value: string }[] = [];
+  for (const layer of layers) {
+    for (const header of layer ?? []) {
+      const key = header.key.trim();
+      if (!key) continue;
+      const index = out.findIndex((item) => item.key.toLowerCase() === key.toLowerCase());
+      if (index >= 0) out.splice(index, 1);
+      out.push({ key, value: header.value });
+    }
+  }
+  return out;
+}
+
+/**
+ * 解析一个模型的唯一路由（设计文档 4.1）。纯函数：输出协议、方言、地址、远端模型 ID、
+ * 凭据与合并后的用户头；凭据值不进入结果，运行时按 credentialId 取值。
+ * 在 createProviderRuntimeConfig 构造运行时配置时调用一次；界面侧只读
+ * protocol / dialect / protocolSource。
  */
 export function resolveProviderChatRoute(
-  provider: Pick<
-    CustomProvider,
-    | "type"
-    | "baseUrl"
-    | "isFullUrl"
-    | "requestFormat"
-    | "models"
-    | "defaultChatProtocol"
-    | "endpointConfigs"
-  >,
+  provider: RouteProvider,
   modelId: string,
+  options?: { protocol?: ProviderChatProtocol; credentialId?: string },
 ): ResolvedProviderChatRoute {
   // Some gateway call sites can still receive a pre-normalization provider
   // snapshot (and older snapshots did not require `models`). Keep this
-  // resolver tolerant at that boundary; normalization will fill the array on
-  // the next settings round-trip.
-  const modelProtocol = provider.models?.find((model) => model.id === modelId)?.chatProtocol;
-  const legacyProtocol = getLegacyProviderChatProtocol(provider.type, provider.requestFormat);
-  const protocol = modelProtocol ?? provider.defaultChatProtocol ?? legacyProtocol;
-  const endpoint = provider.endpointConfigs?.[protocol];
+  // resolver tolerant at that boundary.
+  const model = provider.models?.find((item) => item.id === modelId);
+  const decision = options?.protocol
+    ? { protocol: options.protocol, source: "model" as const }
+    : resolveModelRouteProtocol(provider, modelId, model);
+  const protocol = decision.protocol;
+  const endpoint = resolveProviderEndpoint(provider, protocol);
+  const config = endpoint?.config;
+  const legacyProtocol = providerLegacyProtocol(provider);
+  const dialect = resolveProviderDialect(provider, protocol, { model, endpoint: config });
+  const preset = findProviderPreset(provider.presetId);
+  const presetEndpoint = preset?.endpoints[protocol];
+  const rule = matchPresetModelRule(preset, modelId);
+  const credential = selectProviderCredential(provider, modelId, [
+    { credentialId: options?.credentialId, source: "model" },
+    { credentialId: model?.credentialId, source: "model" },
+    { credentialId: config?.credentialId, source: "endpoint" },
+  ]);
   return {
     protocol,
-    adapterProviderId: getProviderChatProtocolAdapter(protocol, provider.type),
-    baseUrl: endpoint?.baseUrl || provider.baseUrl,
-    // Protocol-specific endpoint overrides are API roots. Full-URL mode remains
-    // a property of the legacy primary connection only.
-    isFullUrl: endpoint || protocol !== legacyProtocol ? false : provider.isFullUrl,
+    protocolSource: decision.source,
+    family: PROVIDER_PROTOCOL_FAMILY[protocol],
+    dialect,
+    adapterProviderId: getProviderChatProtocolAdapter(protocol, dialect),
+    baseUrl: config?.baseUrl || provider.baseUrl,
+    // 显式端点自带完整 URL 开关；主连接的完整 URL 模式只对旧推导协议生效。
+    isFullUrl: config
+      ? config.isFullUrl === true
+      : protocol === legacyProtocol && provider.isFullUrl,
+    ...(config?.modelsUrl
+      ? { modelsUrl: config.modelsUrl }
+      : !config && provider.modelsUrl
+        ? { modelsUrl: provider.modelsUrl }
+        : {}),
     ...(protocol === "openai-completions" || protocol === "openai-responses"
       ? { requestFormat: protocol }
+      : {}),
+    wireModelId: model?.wireModelId?.trim() || rule?.wireModelId || modelId,
+    credentialId: credential.credential.id,
+    credentialSource: credential.source,
+    headers: mergeHeaderLists(provider.customHeaders, config?.headers),
+    quirks: { ...presetEndpoint?.quirks, ...config?.quirks },
+    ...((config?.auth ?? presetEndpoint?.auth)
+      ? { auth: { ...presetEndpoint?.auth, ...config?.auth } }
       : {}),
   };
 }
@@ -944,11 +1204,25 @@ export function normalizeProviderModelConfig(
   const promptCacheHintMode =
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   const inputModalities = normalizeInputModalities(obj.inputModalities);
-  const chatProtocol = normalizeProviderChatProtocol(obj.chatProtocol);
+  const legacyProtocol = normalizeLegacyProtocolInput(obj.chatProtocol);
+  const chatProtocols = normalizeModelChatProtocols(obj.chatProtocols, legacyProtocol?.protocol);
+  const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyProtocol?.dialect;
+  const wireModelId = typeof obj.wireModelId === "string" ? obj.wireModelId.trim() : "";
+  const displayName = typeof obj.displayName === "string" ? obj.displayName.trim() : "";
+  const group = typeof obj.group === "string" ? obj.group.trim() : "";
+  const credentialId = typeof obj.credentialId === "string" ? obj.credentialId.trim() : "";
+  const maxInputTokens = normalizePositiveInteger(obj.maxInputTokens, 0);
+  const reasoning =
+    obj.reasoning === undefined ? undefined : normalizeReasoningLevel(obj.reasoning);
+  const capabilities = normalizeModelCapabilities(obj.capabilities);
   return {
     id,
+    ...(wireModelId && wireModelId !== id ? { wireModelId } : {}),
+    ...(displayName ? { displayName } : {}),
+    ...(group ? { group } : {}),
     ...(ownedBy ? { ownedBy } : {}),
     contextWindow: limits.contextWindow,
+    ...(maxInputTokens > 0 ? { maxInputTokens } : {}),
     maxOutputToken: limits.maxOutputToken,
     limitsSource,
     ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
@@ -956,8 +1230,46 @@ export function normalizeProviderModelConfig(
     // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
     // 重排顺序），合法覆盖永不被自动删除。
     ...(inputModalities ? { inputModalities } : {}),
-    ...(chatProtocol ? { chatProtocol } : {}),
+    ...(chatProtocols ? { chatProtocols, chatProtocol: chatProtocols[0] } : {}),
+    ...(dialect ? { dialect } : {}),
+    ...(credentialId ? { credentialId } : {}),
+    ...(reasoning ? { reasoning } : {}),
+    ...(typeof obj.nativeWebSearch === "boolean" ? { nativeWebSearch: obj.nativeWebSearch } : {}),
+    ...(capabilities ? { capabilities } : {}),
+    ...(obj.source === "user"
+      ? { source: "user" as const }
+      : obj.source === "auto"
+        ? { source: "auto" as const }
+        : {}),
   };
+}
+
+function normalizeModelChatProtocols(
+  input: unknown,
+  legacySingle: ProviderChatProtocol | undefined,
+): ProviderChatProtocol[] | undefined {
+  const out: ProviderChatProtocol[] = [];
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const legacy = normalizeLegacyProtocolInput(item);
+      if (legacy && !out.includes(legacy.protocol)) out.push(legacy.protocol);
+    }
+  }
+  if (out.length === 0 && legacySingle) out.push(legacySingle);
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeModelCapabilities(
+  input: unknown,
+): Partial<Record<ChatCapabilityName, CapabilityState>> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const out: Partial<Record<ChatCapabilityName, CapabilityState>> = {};
+  for (const name of CHAT_CAPABILITY_NAMES) {
+    const value = source[name];
+    if (value === "supported" || value === "unsupported" || value === "unknown") out[name] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**
@@ -1021,6 +1333,20 @@ export function findProviderModelConfig(
       provider.baseUrl,
     ),
   };
+}
+
+function isProviderId(input: unknown): input is ProviderId {
+  return (
+    input === "codex" ||
+    input === "claude_code" ||
+    input === "gemini" ||
+    input === "xai" ||
+    input === "deepseek"
+  );
+}
+
+function normalizeProviderCategory(input: unknown): ProviderCategory | undefined {
+  return input === "official" || input === "relay" || input === "self-hosted" ? input : undefined;
 }
 
 function normalizeProviderId(input: unknown): ProviderId {
@@ -1178,28 +1504,221 @@ export function normalizeProviderRetryPolicy(input: unknown): ProviderRetryPolic
   return undefined;
 }
 
+function normalizeEndpointHeaders(input: unknown): { key: string; value: string }[] | undefined {
+  const headers = normalizeCustomHeaders(input);
+  return headers.length > 0 ? headers : undefined;
+}
+
+function normalizeEndpointQuirks(input: unknown): ProviderEndpointQuirks | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const quirks: ProviderEndpointQuirks = {};
+  for (const key of [
+    "supportsUsageInStreaming",
+    "supportsDeveloperRole",
+    "supportsReasoningEffort",
+    "supportsStore",
+  ] as const) {
+    if (typeof source[key] === "boolean") quirks[key] = source[key] as boolean;
+  }
+  return Object.keys(quirks).length > 0 ? quirks : undefined;
+}
+
+function normalizeEndpointAuth(input: unknown): ProviderEndpointAuth | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const headerName = typeof source.headerName === "string" ? source.headerName.trim() : "";
+  const prefix = typeof source.prefix === "string" ? source.prefix : undefined;
+  if (!headerName && prefix === undefined) return undefined;
+  return { ...(headerName ? { headerName } : {}), ...(prefix !== undefined ? { prefix } : {}) };
+}
+
+function normalizeEndpointProbe(input: unknown): ProviderEndpointProbe | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const status = source.status;
+  if (
+    status !== "ok" &&
+    status !== "missing" &&
+    status !== "unauthorized" &&
+    status !== "unknown"
+  ) {
+    return undefined;
+  }
+  const at = typeof source.at === "number" && Number.isFinite(source.at) ? source.at : 0;
+  const latencyMs =
+    typeof source.latencyMs === "number" && Number.isFinite(source.latencyMs)
+      ? Math.max(0, Math.round(source.latencyMs))
+      : undefined;
+  const error =
+    typeof source.error === "string" && source.error.trim() ? source.error.trim() : undefined;
+  return {
+    at,
+    status,
+    ...(latencyMs !== undefined ? { latencyMs } : {}),
+    ...(error ? { error } : {}),
+  };
+}
+
+export function normalizeProviderEndpointConfig(
+  protocol: ProviderChatProtocol,
+  input: unknown,
+  credentialIds?: ReadonlySet<string>,
+): ProviderEndpointConfig | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const raw = input as Record<string, unknown>;
+  const baseUrl = normalizeBaseUrl(typeof raw.baseUrl === "string" ? raw.baseUrl : "");
+  if (!baseUrl) return undefined;
+  const dialect = normalizeProviderWireDialect(raw.dialect);
+  const modelsUrl = typeof raw.modelsUrl === "string" ? raw.modelsUrl.trim() : "";
+  const credentialId = typeof raw.credentialId === "string" ? raw.credentialId.trim() : "";
+  const quirks = normalizeEndpointQuirks(raw.quirks);
+  const auth = normalizeEndpointAuth(raw.auth);
+  const headers = normalizeEndpointHeaders(raw.headers);
+  const lastProbe = normalizeEndpointProbe(raw.lastProbe);
+  return {
+    ...(raw.enabled === false ? { enabled: false } : {}),
+    baseUrl,
+    ...(raw.isFullUrl === true ? { isFullUrl: true } : {}),
+    ...(modelsUrl ? { modelsUrl } : {}),
+    ...(dialect ? { dialect: coerceDialectForProtocol(protocol, dialect) } : {}),
+    ...(quirks ? { quirks } : {}),
+    ...(auth ? { auth } : {}),
+    ...(credentialId && (!credentialIds || credentialIds.has(credentialId))
+      ? { credentialId }
+      : {}),
+    ...(headers ? { headers } : {}),
+    ...(lastProbe ? { lastProbe } : {}),
+    ...(raw.source === "user"
+      ? { source: "user" as const }
+      : raw.source === "auto"
+        ? { source: "auto" as const }
+        : {}),
+  };
+}
+
 function normalizeProviderEndpointConfigs(
   input: unknown,
+  credentialIds?: ReadonlySet<string>,
 ): CustomProvider["endpointConfigs"] | undefined {
   if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
   const source = input as Record<string, unknown>;
   const configs: NonNullable<CustomProvider["endpointConfigs"]> = {};
-  for (const protocol of PROVIDER_CHAT_PROTOCOLS) {
-    const raw = source[protocol];
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const baseUrl = normalizeBaseUrl(
-      typeof (raw as Record<string, unknown>).baseUrl === "string"
-        ? ((raw as Record<string, unknown>).baseUrl as string)
-        : "",
-    );
-    if (baseUrl) configs[protocol] = { baseUrl };
+  for (const [key, raw] of Object.entries(source)) {
+    const legacy = normalizeLegacyProtocolInput(key);
+    if (!legacy) continue;
+    const config = normalizeProviderEndpointConfig(legacy.protocol, raw, credentialIds);
+    if (!config) continue;
+    if (legacy.dialect && !config.dialect) config.dialect = legacy.dialect;
+    // 旧键与新键同时存在时保留新键。
+    if (!configs[legacy.protocol] || key === legacy.protocol) configs[legacy.protocol] = config;
   }
   return Object.keys(configs).length > 0 ? configs : undefined;
 }
 
+const CREDENTIAL_MODELS_LIMIT = 1000;
+
+function normalizeCredentialScope(input: unknown): ProviderCredentialScope | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  if (source.mode === "all") return { mode: "all" };
+  if (source.mode === "auto") return { mode: "auto" };
+  if (source.mode === "manual") {
+    const models = normalizeStringArray(source.models)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return { mode: "manual", models: [...new Set(models)] };
+  }
+  return undefined;
+}
+
+export function normalizeProviderCredential(input: unknown): ProviderCredential | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const source = input as Record<string, unknown>;
+  const apiKey = normalizeApiKey(typeof source.apiKey === "string" ? source.apiKey : "");
+  const id = typeof source.id === "string" && source.id.trim() ? source.id.trim() : createUuid();
+  const modelScope = normalizeCredentialScope(source.modelScope);
+  const lastModelsRaw =
+    source.lastModels && typeof source.lastModels === "object" && !Array.isArray(source.lastModels)
+      ? (source.lastModels as Record<string, unknown>)
+      : undefined;
+  const lastModels = lastModelsRaw
+    ? {
+        at:
+          typeof lastModelsRaw.at === "number" && Number.isFinite(lastModelsRaw.at)
+            ? lastModelsRaw.at
+            : 0,
+        models: [
+          ...new Set(
+            normalizeStringArray(lastModelsRaw.models)
+              .map((item) => item.trim())
+              .filter(Boolean),
+          ),
+        ].slice(0, CREDENTIAL_MODELS_LIMIT),
+      }
+    : undefined;
+  return {
+    id,
+    label: typeof source.label === "string" ? source.label.trim() : "",
+    apiKey,
+    apiKeyConfigured: apiKey.length > 0 || source.apiKeyConfigured === true,
+    enabled: source.enabled !== false,
+    ...(modelScope ? { modelScope } : {}),
+    ...(lastModels ? { lastModels } : {}),
+  };
+}
+
+/**
+ * 凭据列表归一化：首把即旧字段 apiKey。旧存档只有 apiKey → 单把默认凭据；
+ * 新存档 credentials[0].apiKey 与 apiKey 双向同步，谁非空用谁。
+ */
+function normalizeProviderCredentials(
+  input: unknown,
+  apiKey: string,
+  apiKeyConfigured: boolean,
+): ProviderCredential[] {
+  const list: ProviderCredential[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const credential = normalizeProviderCredential(item);
+      if (!credential || seen.has(credential.id)) continue;
+      seen.add(credential.id);
+      list.push(credential);
+    }
+  }
+  if (list.length === 0) {
+    return [
+      {
+        id: DEFAULT_CREDENTIAL_ID,
+        label: "",
+        apiKey,
+        apiKeyConfigured: apiKeyConfigured || apiKey.length > 0,
+        enabled: true,
+      },
+    ];
+  }
+  const primary = list[0];
+  if (!primary.apiKey && apiKey) {
+    primary.apiKey = apiKey;
+    primary.apiKeyConfigured = true;
+  } else if (apiKeyConfigured && !primary.apiKey) {
+    primary.apiKeyConfigured = true;
+  }
+  return list;
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const type = normalizeProviderId(obj.type);
+  const legacyDefault = normalizeLegacyProtocolInput(obj.defaultChatProtocol);
+  const presetIdInput = typeof obj.presetId === "string" ? obj.presetId.trim() : "";
+  const presetFromInput = findProviderPreset(presetIdInput);
+  // 新建的非原生渠道实例可能没有 type：按默认接口家族回填，保证旧读取点行为不变。
+  const type = isProviderId(obj.type)
+    ? obj.type
+    : legacyDefault
+      ? legacyTypeForPreset(presetFromInput, legacyDefault.protocol)
+      : normalizeProviderId(obj.type);
   const isFullUrl = obj.isFullUrl === true;
   const codexRouting =
     type === "codex" || type === "xai"
@@ -1220,13 +1739,27 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       ? (normalizePromptCacheHintMode(obj.promptCacheHintMode) ??
         (obj.promptCachingEnabled === false ? "none" : "auto"))
       : undefined;
-  const defaultChatProtocol = normalizeProviderChatProtocol(obj.defaultChatProtocol);
-  const endpointConfigs = normalizeProviderEndpointConfigs(obj.endpointConfigs);
+  const defaultChatProtocol = legacyDefault?.protocol;
+  const credentials = normalizeProviderCredentials(
+    obj.credentials,
+    apiKey,
+    obj.apiKeyConfigured === true,
+  );
+  const credentialIds = new Set(credentials.map((credential) => credential.id));
+  const endpointConfigs = normalizeProviderEndpointConfigs(obj.endpointConfigs, credentialIds);
+  const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyDefault?.dialect;
+  const presetId = presetFromInput ? presetFromInput.id : presetIdForLegacyType(type);
+  const category =
+    normalizeProviderCategory(obj.category) ?? findProviderPreset(presetId)?.category;
+  const primaryKey = credentials[0]?.apiKey ?? apiKey;
 
   return {
     id,
     name: normalizeProviderName(id, obj.name),
     type,
+    presetId,
+    ...(category ? { category } : {}),
+    ...(obj.enabled === false ? { enabled: false } : {}),
     baseUrl: codexRouting
       ? codexRouting.baseUrl
       : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : ""),
@@ -1234,8 +1767,9 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ...(type !== "gemini" && typeof obj.modelsUrl === "string" && obj.modelsUrl.trim()
       ? { modelsUrl: obj.modelsUrl.trim() }
       : {}),
-    apiKey,
-    apiKeyConfigured: apiKey.length > 0 || obj.apiKeyConfigured === true,
+    apiKey: primaryKey,
+    apiKeyConfigured: primaryKey.length > 0 || credentials[0]?.apiKeyConfigured === true,
+    credentials,
     customHeaders: normalizeCustomHeaders(obj.customHeaders),
     models,
     ...(modelOrder ? { modelOrder } : {}),
@@ -1244,6 +1778,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ),
     requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
     ...(defaultChatProtocol ? { defaultChatProtocol } : {}),
+    ...(dialect ? { dialect } : {}),
     ...(endpointConfigs ? { endpointConfigs } : {}),
     reasoning: normalizeReasoningLevel(obj.reasoning),
     // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
@@ -2187,15 +2722,15 @@ export function resolvePromptClarifyModel(
 
 export function updateModelFailover(
   prev: AppSettings,
-  providerType: ProviderId,
+  family: ProviderProtocolFamily,
   patch: Partial<ProviderFailoverSettings>,
 ): AppSettings {
   return normalizeSettings({
     ...prev,
     modelFailover: {
       ...prev.modelFailover,
-      [providerType]: {
-        ...prev.modelFailover[providerType],
+      [family]: {
+        ...prev.modelFailover[family],
         ...patch,
       },
     },

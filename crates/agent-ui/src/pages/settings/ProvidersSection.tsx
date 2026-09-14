@@ -11,6 +11,7 @@ import {
 import {
   type CustomProvider,
   hasProviderFailoverConfiguration,
+  LEGACY_FAILOVER_TYPE_FAMILY,
   MODEL_FAILOVER_QUEUE_LIMIT,
   type ProviderFailoverSettings,
   type ProviderId,
@@ -107,7 +108,8 @@ function FailoverNumberField(props: {
 function FailoverSettingsCard(props: SettingsSectionProps & { providerType: ProviderId }) {
   const { settings, setSettings, providerType } = props;
   const { t } = useLocale();
-  const failover = settings.modelFailover[providerType];
+  const failoverFamily = LEGACY_FAILOVER_TYPE_FAMILY[providerType];
+  const failover = settings.modelFailover[failoverFamily];
   const vendorLabel = getProviderLabel(providerType);
   // Same-vendor guard: only providers of this tab's vendor type are offered,
   // so a Claude queue can never contain a Codex provider (and vice versa).
@@ -157,7 +159,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   );
 
   function patchFailover(patch: Partial<ProviderFailoverSettings>) {
-    setSettings((prev) => updateModelFailover(prev, providerType, patch));
+    setSettings((prev) => updateModelFailover(prev, failoverFamily, patch));
   }
 
   function queueEntryLabel(providerId: string) {

@@ -3,6 +3,7 @@ import type { ProviderRuntimeConfig } from "../../../lib/providers/runtime/types
 import {
   type AppSettings,
   type ChatRuntimeControls,
+  LEGACY_FAILOVER_TYPE_FAMILY,
   resolvePromptClarifyModel,
   type SelectedModel,
 } from "../../../lib/settings";
@@ -148,7 +149,8 @@ export function buildModelFailoverPlan(
   primary: EffectiveChatModelSelection,
   controlsInput?: ChatRuntimeControls,
 ): ModelFailoverPlan | undefined {
-  const failover = settings.modelFailover?.[primary.providerId];
+  // 过渡期：分组按接口家族；旧 ProviderId 经家族表映射（运行时改造阶段改读路由 family）。
+  const failover = settings.modelFailover?.[LEGACY_FAILOVER_TYPE_FAMILY[primary.providerId]];
   if (!failover?.enabled || failover.queue.length === 0) {
     return undefined;
   }
