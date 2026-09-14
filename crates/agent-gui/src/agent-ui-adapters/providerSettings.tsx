@@ -50,6 +50,7 @@ import {
   type CherryProviderImportItem,
   type CherryProvidersResponse,
   CherryStudioImportModal,
+  cherryProviderRegistryFields,
 } from "../pages/settings/CherryStudioImportModal";
 import type { SetSettingsFn } from "../pages/settings/types";
 
@@ -201,6 +202,7 @@ export function providerFromCherry(
     ...(existing?.modelsUrl ? { modelsUrl: existing.modelsUrl } : {}),
     apiKey,
     apiKeyConfigured: apiKey.trim().length > 0,
+    ...cherryProviderRegistryFields(item, allItems, apiKey, existing),
     models: existing?.models ?? [],
     activeModels: existing?.activeModels ?? [],
     requestFormat:

@@ -1847,7 +1847,13 @@ fn sanitize_provider_summary(provider: &Value) -> Result<Value, String> {
         "id",
         "name",
         "type",
+        "presetId",
+        "category",
+        "enabled",
+        "dialect",
+        "defaultChatProtocol",
         "models",
+        "modelOrder",
         "activeModels",
         "requestFormat",
         "reasoning",
@@ -1858,6 +1864,25 @@ fn sanitize_provider_summary(provider: &Value) -> Result<Value, String> {
         if let Some(value) = source.get(key) {
             payload.insert(key.to_string(), value.clone());
         }
+    }
+    // 渠道配置只带路由相关的公开字段：地址、请求头、观测值与凭据引用一律不进摘要，
+    // 凭据列表（含 Key）整体不进摘要。
+    if let Some(Value::Object(endpoints)) = source.get("endpointConfigs") {
+        let sanitized = endpoints
+            .iter()
+            .map(|(protocol, config)| {
+                let mut summary = serde_json::Map::new();
+                if let Some(config) = config.as_object() {
+                    for key in ["enabled", "dialect", "quirks", "source"] {
+                        if let Some(value) = config.get(key) {
+                            summary.insert(key.to_string(), value.clone());
+                        }
+                    }
+                }
+                (protocol.clone(), Value::Object(summary))
+            })
+            .collect::<serde_json::Map<_, _>>();
+        payload.insert("endpointConfigs".to_string(), Value::Object(sanitized));
     }
 
     Ok(Value::Object(payload))
@@ -1939,6 +1964,63 @@ mod tests {
         assert_eq!(result[0]["nativeWebSearchEnabled"], false);
         assert_eq!(result[0]["apiKey"], Value::Null);
         assert_eq!(result[0]["baseUrl"], Value::Null);
+    }
+
+    #[test]
+    fn provider_summaries_carry_registry_fields_without_credentials_or_endpoint_secrets() {
+        let result = sanitize_provider_summaries(Some(json!([
+            {
+                "id": "provider-a",
+                "name": "A",
+                "type": "codex",
+                "presetId": "openai",
+                "category": "official",
+                "enabled": false,
+                "dialect": "openai",
+                "defaultChatProtocol": "openai-responses",
+                "modelOrder": ["gpt-5"],
+                "credentials": [
+                    { "id": "default", "label": "主 Key", "apiKey": "secret-key", "enabled": true }
+                ],
+                "endpointConfigs": {
+                    "openai-responses": {
+                        "enabled": true,
+                        "baseUrl": "https://relay.example.com/v1",
+                        "dialect": "openai",
+                        "quirks": { "supportsStore": false },
+                        "auth": { "headerName": "X-Token" },
+                        "credentialId": "default",
+                        "headers": [{ "key": "X-Secret", "value": "leak" }],
+                        "lastProbe": { "at": 1, "status": "ok" },
+                        "source": "user"
+                    }
+                }
+            }
+        ])))
+        .expect("sanitize provider summaries");
+
+        assert_eq!(result[0]["presetId"], "openai");
+        assert_eq!(result[0]["category"], "official");
+        assert_eq!(result[0]["enabled"], false);
+        assert_eq!(result[0]["dialect"], "openai");
+        assert_eq!(result[0]["defaultChatProtocol"], "openai-responses");
+        assert_eq!(result[0]["modelOrder"], json!(["gpt-5"]));
+        assert_eq!(result[0]["credentials"], Value::Null);
+        assert_eq!(
+            result[0]["endpointConfigs"],
+            json!({
+                "openai-responses": {
+                    "enabled": true,
+                    "dialect": "openai",
+                    "quirks": { "supportsStore": false },
+                    "source": "user"
+                }
+            })
+        );
+        let serialized = serde_json::to_string(&result).expect("serialize");
+        assert!(!serialized.contains("secret-key"));
+        assert!(!serialized.contains("leak"));
+        assert!(!serialized.contains("relay.example.com"));
     }
 
     #[test]

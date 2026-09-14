@@ -8,6 +8,9 @@ pub struct CherryProviderImportItem {
     pub name: String,
     pub base_url: String,
     pub api_key: String,
+    /// 源侧全部可迁移 Key（去重、按原顺序）；首把即 `api_key`，其余供多 Key 凭据导入。
+    #[serde(default)]
+    pub api_keys: Vec<String>,
     pub api_key_count: usize,
     pub request_format: String,
     pub enabled: bool,
@@ -427,7 +430,7 @@ fn cherry_append_v1_provider(
     {
         "Cherry Studio 的自定义请求头不会同步".to_string()
     } else if api_keys.len() > 1 {
-        format!("检测到 {} 个 API Key，将使用第一个", api_keys.len())
+        format!("检测到 {} 个 API Key，首把作为默认凭据，其余导入为备用凭据", api_keys.len())
     } else {
         String::new()
     };
@@ -453,6 +456,7 @@ fn cherry_append_v1_provider(
             name: name.clone(),
             base_url: group.base_url,
             api_key: api_key.clone(),
+            api_keys: api_keys.clone(),
             api_key_count: api_keys.len(),
             request_format: group.protocol.request_format().to_string(),
             enabled,
@@ -603,7 +607,7 @@ fn cherry_read_v2(
         {
             "Cherry Studio 的自定义请求头不会同步".to_string()
         } else if api_keys.len() > 1 {
-            format!("检测到 {} 个启用 API Key，将使用第一个", api_keys.len())
+            format!("检测到 {} 个启用 API Key，首把作为默认凭据，其余导入为备用凭据", api_keys.len())
         } else {
             String::new()
         };
@@ -629,6 +633,7 @@ fn cherry_read_v2(
                 name: name.clone(),
                 base_url: group.base_url,
                 api_key: api_key.clone(),
+                api_keys: api_keys.clone(),
                 api_key_count: api_keys.len(),
                 request_format: group.protocol.request_format().to_string(),
                 enabled,
