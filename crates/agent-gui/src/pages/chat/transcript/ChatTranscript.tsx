@@ -93,7 +93,11 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     viewport: scrollViewport,
     listenerRoot: scrollViewport,
     trackKeys: true,
-    config: { reattachZonePx: BOTTOM_REATTACH_ZONE_PX },
+    // 回贴区为 0：只有真正到达底部（8px 容差内）才恢复跟随。192px 回贴区会在
+    // 滚轮下行进入该区间的那一 tick 直接 pin 到底，读者看到的是正文突然上跳；
+    // 到达底部后向下滚轮、手势落底、指针在底部释放仍会重新贴底。底部预留带
+    // 仍以 BOTTOM_REATTACH_ZONE_PX 为最小值（见 transcriptBottomReservePx）。
+    config: { reattachZonePx: 0 },
   });
 
   // Earlier-history paging lives in TranscriptList next to the virtualizer:

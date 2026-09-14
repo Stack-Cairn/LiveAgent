@@ -246,6 +246,11 @@ function useGatewayAppController() {
     viewport: transcriptViewport,
     listenerRoot: transcriptScrollAreaRoot,
     trackKeys: true,
+    // 回贴区为 0：只有真正到达底部（8px 容差内）才恢复跟随。默认的 192px
+    // 回贴区会在滚轮下行进入该区间的那一 tick 直接 pin 到底，读者看到的是
+    // 正文突然上跳一段（复现页实测单 tick 231px），即"磁吸"。到达底部后向下
+    // 滚轮、手势落底、指针在底部释放三种路径仍会重新贴底。
+    config: { reattachZonePx: 0 },
   });
   // 楼层导航：当前楼层由转写区上报，跳转经 navRef 直达虚拟列表；粘底跟随
   // 激活时程序化滚动会被立即拽回底部——跳转前先按「跳入历史」语义解除跟随。

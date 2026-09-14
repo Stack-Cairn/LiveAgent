@@ -1798,10 +1798,19 @@ export class Virtualizer<
     const delta = size - itemSize
 
     if (delta !== 0) {
+      // "At the end" is measured against the real scroll clamp
+      // (getDistanceFromEnd → DOM scrollHeight), the same coordinate the
+      // followOnAppend check in _willUpdate reads. The virtual list's own end
+      // can sit well above that clamp — this repo's transcripts render a
+      // fixed spacer below the sizer — and the virtual-distance check treated
+      // the whole band under it as "at end": a detached reader parked there
+      // was dragged along by every bottom-row growth (300px+ visible jumps
+      // when a question card or an approval chip arrived).
       const wasAtEnd =
         this.options.anchorTo === 'end' &&
         this.scrollState?.behavior !== 'smooth' &&
-        this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold
+        this.scrollElement !== null &&
+        this.getDistanceFromEnd() <= this.options.scrollEndThreshold
       const prevTotalSize = wasAtEnd ? this.getTotalSize() : 0
       const shouldAdjustScroll =
         this.scrollState?.behavior !== 'smooth' &&
@@ -2060,13 +2069,6 @@ export class Virtualizer<
         ? doc.scrollWidth - this.scrollElement.innerWidth
         : doc.scrollHeight - this.scrollElement.innerHeight
     }
-  }
-
-  private getVirtualDistanceFromEnd = () => {
-    return Math.max(
-      this.getTotalSize() - this.getSize() - this.getScrollOffset(),
-      0,
-    )
   }
 
   getDistanceFromEnd = () => {

@@ -98,6 +98,12 @@ export interface VirtualizerOptions<TScrollElement extends Element | Window, TIt
      * content. 0 disables.
      */
     directionalOverscanPx?: number;
+    /**
+     * Distance (px) from the real scroll clamp — DOM scrollHeight minus the
+     * viewport, not the virtual list's own end — within which the viewport
+     * counts as "at the end" for `anchorTo: 'end'` pinning and
+     * `followOnAppend`. Default 1.
+     */
     scrollEndThreshold?: number;
     isScrollingResetDelay?: number;
     useScrollendEvent?: boolean;
@@ -183,7 +189,6 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
     };
     getVirtualItemForOffset: (offset: number) => VirtualItem | undefined;
     private getMaxScrollOffset;
-    private getVirtualDistanceFromEnd;
     getDistanceFromEnd: () => number;
     isAtEnd: (threshold?: number) => boolean;
     /**
