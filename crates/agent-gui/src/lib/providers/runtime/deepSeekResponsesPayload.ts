@@ -1,5 +1,5 @@
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
-import type { ProviderId } from "../../settings";
+import type { ProviderChatProtocol, ProviderId, ProviderWireDialect } from "../../settings";
 import { DEEPSEEK_RESPONSES_API, type DeepSeekAssistantMessage } from "../deepSeekNative";
 import { isRecord } from "./common";
 import type { StreamOptionsEx } from "./types";
@@ -157,11 +157,19 @@ export function attachDeepSeekResponsesPayloadCompat(
   options: StreamOptionsEx,
   params: {
     providerId: ProviderId;
+    protocol?: ProviderChatProtocol;
+    dialect?: ProviderWireDialect;
     model?: Model<Api>;
     context?: Context;
   },
 ): StreamOptionsEx {
-  if (params.providerId !== "deepseek" || params.model?.api !== DEEPSEEK_RESPONSES_API) {
+  // 路由给出方言时以 (Responses, deepseek) 为准；旧调用方按 providerId 推导。
+  const isDeepSeekResponses =
+    params.dialect !== undefined
+      ? params.dialect === "deepseek" &&
+        (params.protocol ?? "openai-responses") === "openai-responses"
+      : params.providerId === "deepseek";
+  if (!isDeepSeekResponses || params.model?.api !== DEEPSEEK_RESPONSES_API) {
     return options;
   }
   const previousOnPayload = options.onPayload;

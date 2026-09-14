@@ -3,8 +3,18 @@ import type { ProviderRuntimeConfig } from "../../../lib/providers/runtime/types
 import {
   type AppSettings,
   type ChatRuntimeControls,
+  type CustomProvider,
+  credentialCoversModel,
+  DEFAULT_PROVIDER_FAILOVER_SETTINGS,
+  getProviderCredentials,
+  getProviderEnabledProtocols,
   LEGACY_FAILOVER_TYPE_FAMILY,
+  PROVIDER_CHAT_PROTOCOL_LABELS,
+  PROVIDER_PROTOCOL_FAMILY,
+  type ProviderChatProtocol,
+  type ProviderProtocolFamily,
   resolvePromptClarifyModel,
+  resolveProviderEndpoint,
   type SelectedModel,
 } from "../../../lib/settings";
 import type { EffectiveChatModelSelection } from "./modelSelection";
@@ -111,6 +121,8 @@ export function selectedModelsMatch(
   );
 }
 
+export type ModelFailoverLayer = "credential" | "endpoint" | "provider";
+
 export type ModelFailoverPlan = {
   config: {
     maxSwitches: number;
@@ -124,6 +136,8 @@ export type ModelFailoverPlan = {
     model: string;
     label: string;
     runtime: ProviderRuntimeConfig;
+    /** 候选来自哪一层（设计文档 8.2）；三层共用一份切换预算。 */
+    layer: ModelFailoverLayer;
   }[];
 };
 
@@ -131,50 +145,145 @@ export function failoverTargetLabel(providerName: string, model: string) {
   return `${providerName} · ${model}`;
 }
 
+function resolveFamily(
+  runtime: ProviderRuntimeConfig,
+  primary: EffectiveChatModelSelection,
+): ProviderProtocolFamily {
+  return (
+    runtime.family ??
+    PROVIDER_PROTOCOL_FAMILY[runtime.protocol ?? runtime.chatProtocol] ??
+    LEGACY_FAILOVER_TYPE_FAMILY[primary.providerId]
+  );
+}
+
+/**
+ * 端点层候选：模型 chatProtocols 里首项之后的同家族已启用渠道；未声明时取供应商
+ * 已启用的同家族其他渠道。当前路由所走的接口不重复列入。
+ */
+function resolveEndpointLayerProtocols(
+  provider: CustomProvider,
+  modelId: string,
+  family: ProviderProtocolFamily,
+  activeProtocol: ProviderChatProtocol,
+): ProviderChatProtocol[] {
+  const modelConfig = provider.models.find((item) => item.id === modelId);
+  const declared = modelConfig?.chatProtocols ?? [];
+  const source =
+    declared.length > 0
+      ? declared.filter((protocol) => resolveProviderEndpoint(provider, protocol) !== undefined)
+      : getProviderEnabledProtocols(provider);
+  const out: ProviderChatProtocol[] = [];
+  for (const protocol of source) {
+    if (protocol === activeProtocol || out.includes(protocol)) continue;
+    if (PROVIDER_PROTOCOL_FAMILY[protocol] !== family) continue;
+    out.push(protocol);
+  }
+  return out;
+}
+
 /**
  * Resolves settings.modelFailover into concrete fallback targets for one turn.
- * Failover is vendor-scoped (cc-switch style Claude→Claude / Codex→Codex):
- * the plan reads the provider queue configured for the active provider's
- * vendor type, and only same-vendor providers qualify as fallbacks — never
- * cross-vendor. Each fallback re-sends the conversation's *own model id* to
- * the queued provider (cc-switch semantics: switch provider, keep model);
- * queued providers that don't have that model active are skipped for this
- * turn. The active selection stays first (LiveAgent keeps the user's
- * per-conversation choice, unlike cc-switch's always-P1 routing); queue
- * entries that duplicate the active provider are dropped. Returns undefined
- * when failover is off for this vendor or nothing remains to fail over to.
+ *
+ * 分组按接口家族（Anthropic / OpenAI / Gemini），家族取自主选的路由结果；跨家族
+ * 绝不互为候选。候选按三层展开并共用一份 maxSwitches 预算（设计文档 8.2）：
+ *
+ * 1. 凭据层：同供应商下其它启用且范围覆盖该模型的 Key，各自独立熔断。
+ * 2. 端点层：同供应商内同家族的其它已启用渠道（模型 chatProtocols 首项之后，
+ *    未声明时取供应商已启用渠道）。
+ * 3. 供应商层：家族队列里的其它供应商，须启用同名模型且解析后同家族。只有这一层
+ *    受 `enabled` 开关控制；前两层随配置自动生效。
+ *
+ * Each fallback re-sends the conversation's *own model id* (cc-switch semantics:
+ * switch target, keep model). The active selection stays first; queue entries
+ * that duplicate the active provider are dropped. Returns undefined when nothing
+ * remains to fail over to.
  */
 export function buildModelFailoverPlan(
   settings: AppSettings,
   primary: EffectiveChatModelSelection,
   controlsInput?: ChatRuntimeControls,
 ): ModelFailoverPlan | undefined {
-  // 过渡期：分组按接口家族；旧 ProviderId 经家族表映射（运行时改造阶段改读路由 family）。
-  const failover = settings.modelFailover?.[LEGACY_FAILOVER_TYPE_FAMILY[primary.providerId]];
-  if (!failover?.enabled || failover.queue.length === 0) {
-    return undefined;
-  }
-
+  const primaryRuntime = createProviderRuntimeConfig(
+    primary.provider,
+    primary.model,
+    controlsInput,
+  );
+  const family = resolveFamily(primaryRuntime, primary);
+  const failover = settings.modelFailover?.[family] ?? DEFAULT_PROVIDER_FAILOVER_SETTINGS;
   const fallbacks: ModelFailoverPlan["fallbacks"] = [];
-  for (const providerId of failover.queue) {
-    if (providerId === primary.selectedModel.customProviderId) continue;
-    const provider = settings.customProviders.find((item) => item.id === providerId);
-    // The fallback must host the conversation's model: failover keeps the
-    // model id and only changes which provider serves it.
-    if (!provider?.activeModels.includes(primary.model)) continue;
-    // Same-vendor guard: normalization already filters cross-vendor queue
-    // entries, but re-check here so a stale persisted queue can never route
-    // a Claude request to a Codex provider (or vice versa).
-    if (provider.type !== primary.providerId) continue;
-    if (!provider.baseUrl.trim() || !provider.apiKey.trim()) continue;
+  const seen = new Set<string>();
+  const pushFallback = (
+    provider: CustomProvider,
+    runtime: ProviderRuntimeConfig,
+    layer: ModelFailoverLayer,
+    labelSuffix?: string,
+  ) => {
+    if (!runtime.baseUrl.trim() || !runtime.apiKey.trim()) return;
+    // 解析后仍须同家族：端点 / 队列条目可能指向别的接口家族。
+    if (resolveFamily(runtime, primary) !== family) return;
+    const identity = `${provider.id}::${runtime.credentialId ?? ""}::${runtime.protocol ?? ""}`;
+    if (seen.has(identity)) return;
+    seen.add(identity);
     fallbacks.push({
       selectedModel: { customProviderId: provider.id, model: primary.model },
       providerId: provider.type,
       model: primary.model,
-      label: failoverTargetLabel(provider.name, primary.model),
-      runtime: createProviderRuntimeConfig(provider, primary.model, controlsInput),
+      label: `${failoverTargetLabel(provider.name, primary.model)}${labelSuffix ?? ""}`,
+      runtime,
+      layer,
     });
+  };
+  seen.add(
+    `${primary.provider.id}::${primaryRuntime.credentialId ?? ""}::${primaryRuntime.protocol ?? ""}`,
+  );
+
+  // 1. 凭据层：按凭据列表顺序，跳过当前 Key、停用的 Key 与范围不含该模型的 Key。
+  getProviderCredentials(primary.provider).forEach((credential, index) => {
+    if (!credential.enabled || credential.id === primaryRuntime.credentialId) return;
+    if (!credential.apiKey.trim() || !credentialCoversModel(credential, primary.model)) return;
+    pushFallback(
+      primary.provider,
+      createProviderRuntimeConfig(primary.provider, primary.model, controlsInput, {
+        credentialId: credential.id,
+      }),
+      "credential",
+      ` · ${credential.label.trim() || `Key ${index + 1}`}`,
+    );
+  });
+
+  // 2. 端点层：同家族其它已启用渠道。
+  const activeProtocol = primaryRuntime.protocol ?? primaryRuntime.chatProtocol;
+  for (const protocol of resolveEndpointLayerProtocols(
+    primary.provider,
+    primary.model,
+    family,
+    activeProtocol,
+  )) {
+    pushFallback(
+      primary.provider,
+      createProviderRuntimeConfig(primary.provider, primary.model, controlsInput, { protocol }),
+      "endpoint",
+      ` · ${PROVIDER_CHAT_PROTOCOL_LABELS[protocol]}`,
+    );
   }
+
+  // 3. 供应商层：只有这一层受 enabled 控制。
+  if (failover.enabled) {
+    for (const providerId of failover.queue) {
+      if (providerId === primary.selectedModel.customProviderId) continue;
+      const provider = settings.customProviders.find((item) => item.id === providerId);
+      // The fallback must host the conversation's model: failover keeps the
+      // model id and only changes which provider serves it.
+      if (!provider || provider.enabled === false) continue;
+      if (!provider.activeModels.includes(primary.model)) continue;
+      pushFallback(
+        provider,
+        createProviderRuntimeConfig(provider, primary.model, controlsInput),
+        "provider",
+      );
+    }
+  }
+
   if (fallbacks.length === 0) {
     return undefined;
   }

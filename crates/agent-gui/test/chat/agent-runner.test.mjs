@@ -274,6 +274,10 @@ const llmMock = {
       maxTokens: 4096,
     };
   },
+  // 运行时改为按 runtime 路由构造模型；测试桩沿用旧推导（adapterProviderId 兜底）。
+  createModelFromRuntime(providerId, runtime, modelId, baseUrl) {
+    return llmMock.createModelFromConfig(runtime.adapterProviderId ?? providerId, modelId, baseUrl);
+  },
   finalizeProviderStreamOptions({ options }) {
     return options;
   },

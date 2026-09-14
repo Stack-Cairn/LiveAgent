@@ -11,14 +11,23 @@ import {
   mergeCustomHeaders,
 } from "@liveagent/ui/lib/providers/customHeaders";
 import { type PreparedProxyRequest, prepareProxyRequest } from "@liveagent/ui/lib/providers/proxy";
+import { buildProtocolAuthHeaders } from "@liveagent/ui/lib/providers/registry/protocols";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
-import type { CodexRequestFormat, ProviderId, ReasoningLevel } from "../../settings";
+import type {
+  CodexRequestFormat,
+  ProviderChatProtocol,
+  ProviderEndpointAuth,
+  ProviderId,
+  ProviderWireDialect,
+  ReasoningLevel,
+} from "../../settings";
 import {
   normalizeDeepSeekResponsesBaseUrl,
   normalizeDeepSeekResponsesEndpoint,
 } from "../deepSeekNative";
 import { normalizeSessionId } from "./common";
 import type { ProviderRuntimeConfig } from "./types";
+import { resolveLegacyWireRoute, resolveRuntimeWireRoute } from "./wireRoute";
 
 export { isValidCustomHeaderKey } from "@liveagent/ui/lib/providers/customHeaders";
 
@@ -30,47 +39,58 @@ export function buildAnthropicAuthHeaders(apiKey: string): Record<string, string
 }
 
 export function buildOpenAIAuthHeaders(apiKey: string): Record<string, string> {
-  return {
-    Authorization: `Bearer ${apiKey}`,
-  };
+  return buildProtocolAuthHeaders("openai-completions", apiKey);
 }
 
 export function buildGeminiAuthHeaders(apiKey: string): Record<string, string> {
-  return {
-    "x-goog-api-key": apiKey,
-  };
+  return buildProtocolAuthHeaders("google-generative-ai", apiKey);
 }
 
-function buildProviderAuthHeaders(providerId: ProviderId, apiKey: string): Record<string, string> {
-  if (providerId === "gemini") return buildGeminiAuthHeaders(apiKey);
-  if (providerId === "claude_code") return buildAnthropicAuthHeaders(apiKey);
-  return buildOpenAIAuthHeaders(apiKey);
-}
-
-export function buildProviderRequestHeaders(
-  providerId: ProviderId,
-  apiKey: string,
-  sessionId?: string,
-  requestFormat?: CodexRequestFormat,
+/**
+ * 后一层覆盖前一层，键按大小写不敏感去重，并以后一层的写法与位置为准——
+ * 这样协议头档里的 anthropic-version 会落到 SDK 指纹头档中它原本的位置，
+ * 最终头集与分层前的字面顺序一致。
+ */
+function overlayHeaderLayers(
+  ...layers: (Record<string, string> | undefined)[]
 ): Record<string, string> {
-  const authHeaders = buildProviderAuthHeaders(providerId, apiKey);
-  if (providerId === "claude_code") {
-    if (isAnthropicOAuthApiKey(apiKey)) return {};
+  const out: Record<string, string> = {};
+  for (const layer of layers) {
+    if (!layer) continue;
+    for (const [key, value] of Object.entries(layer)) {
+      const lower = key.toLowerCase();
+      for (const existing of Object.keys(out)) {
+        if (existing.toLowerCase() === lower) delete out[existing];
+      }
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * 方言头档（设计文档 4.3）：按 (protocol, dialect) 查表。
+ * - anthropic-messages：官方 SDK 指纹头 + 每会话 X-Claude-Code-Session-Id。
+ * - openai-responses + openai：Codex CLI 会话身份头（session-id / thread-id /
+ *   x-client-request-id，下划线旧名留给既有中转）。
+ * - Chat Completions 是无状态协议，任何方言都不附会话头；其余组合只带协议头档。
+ */
+function buildDialectRequestHeaders(
+  protocol: ProviderChatProtocol,
+  dialect: ProviderWireDialect,
+  sessionId?: string,
+): Record<string, string> | undefined {
+  if (protocol === "anthropic-messages") {
     const requestSessionId = normalizeSessionId(sessionId);
     return {
-      ...authHeaders,
       ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
       // 官方 CLI 每请求都带 X-Claude-Code-Session-Id（client.ts:108）。
       ...(requestSessionId ? { [CLAUDE_SESSION_ID_HEADER]: requestSessionId } : {}),
     };
   }
-  if (providerId === "codex") {
-    // 标准 Chat Completions 是无状态协议，只需 Authorization——
-    // 会话身份头是 Responses（Codex CLI）链路专属，不得泄漏进 completions。
-    if (requestFormat === "openai-completions") return authHeaders;
+  if (protocol === "openai-responses" && dialect === "openai") {
     const requestSessionId = normalizeSessionId(sessionId) ?? createUuid();
     return {
-      ...authHeaders,
       // 现行 Codex CLI（codex-api responses.rs）：session-id / thread-id /
       // x-client-request-id。下划线旧名留给既有中转与 LiveAgent 存量链路。
       [CODEX_OFFICIAL_SESSION_ID_HEADER]: requestSessionId,
@@ -80,8 +100,43 @@ export function buildProviderRequestHeaders(
       [CODEX_CONVERSATION_ID_HEADER]: requestSessionId,
     };
   }
-  // 其它 OpenAI 兼容端：仅 Bearer。
-  return authHeaders;
+  return undefined;
+}
+
+/**
+ * 内置头装配：协议头档（鉴权头，可被端点 auth 覆盖）< 方言头档。
+ * Anthropic OAuth Key 由本地反代自行注入 Bearer，这里保持不带任何头。
+ */
+export function buildProtocolRequestHeaders(params: {
+  protocol: ProviderChatProtocol;
+  dialect: ProviderWireDialect;
+  apiKey: string;
+  sessionId?: string;
+  auth?: ProviderEndpointAuth;
+}): Record<string, string> {
+  if (params.protocol === "anthropic-messages" && isAnthropicOAuthApiKey(params.apiKey)) {
+    return {};
+  }
+  return overlayHeaderLayers(
+    buildProtocolAuthHeaders(params.protocol, params.apiKey, params.auth),
+    buildDialectRequestHeaders(params.protocol, params.dialect, params.sessionId),
+  );
+}
+
+/** 旧签名：按 ProviderId + requestFormat 推导 (protocol, dialect) 后查表。 */
+export function buildProviderRequestHeaders(
+  providerId: ProviderId,
+  apiKey: string,
+  sessionId?: string,
+  requestFormat?: CodexRequestFormat,
+): Record<string, string> {
+  const wire = resolveLegacyWireRoute(providerId, requestFormat);
+  return buildProtocolRequestHeaders({
+    protocol: wire.protocol,
+    dialect: wire.dialect,
+    apiKey,
+    sessionId,
+  });
 }
 
 /**
@@ -93,9 +148,11 @@ export async function prepareProviderRequest(
   runtime: ProviderRuntimeConfig,
   options?: { sessionId?: string },
 ): Promise<PreparedProxyRequest> {
-  const transportProviderId = runtime.adapterProviderId ?? providerId;
+  const wire = resolveRuntimeWireRoute(providerId, runtime);
+  const transportProviderId = wire.adapterProviderId;
+  // DeepSeek Responses 方言：官方域名去 /v1、中转补 /v1，完整 URL 改写到 /responses。
   const upstreamBaseUrl =
-    transportProviderId === "deepseek"
+    wire.dialect === "deepseek" && wire.protocol === "openai-responses"
       ? runtime.isFullUrl
         ? normalizeDeepSeekResponsesEndpoint(runtime.baseUrl)
         : normalizeDeepSeekResponsesBaseUrl(runtime.baseUrl)
@@ -104,12 +161,13 @@ export async function prepareProviderRequest(
     transportProviderId,
     upstreamBaseUrl.trim(),
     mergeCustomHeaders(
-      buildProviderRequestHeaders(
-        transportProviderId,
-        runtime.apiKey,
-        options?.sessionId,
-        runtime.requestFormat,
-      ),
+      buildProtocolRequestHeaders({
+        protocol: wire.protocol,
+        dialect: wire.dialect,
+        apiKey: runtime.apiKey,
+        sessionId: options?.sessionId,
+        auth: runtime.authOverride,
+      }),
       runtime.customHeaders,
     ),
     {

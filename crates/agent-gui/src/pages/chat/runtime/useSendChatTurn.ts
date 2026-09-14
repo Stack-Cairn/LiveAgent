@@ -54,7 +54,7 @@ import {
 } from "../../../lib/chat/page/chatPageHelpers";
 import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
-import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
+import { createModelFromRuntime, createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import {
   type AppSettings,
   applyMcpOpsToAppSettings,
@@ -555,12 +555,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       t(`chat.memoryExtraction.${key}`)
         .replace("{accepted}", String(counts.accepted))
         .replace("{rejected}", String(counts.rejected));
-    const runtimeModel = createModelFromConfig(
-      providerConfig.adapterProviderId,
+    const runtimeModel = createModelFromRuntime(
+      providerId,
+      providerConfig,
       model,
       providerConfig.baseUrl.trim(),
-      providerConfig.requestFormat,
-      providerConfig.modelConfig,
     );
 
     const textOverride =

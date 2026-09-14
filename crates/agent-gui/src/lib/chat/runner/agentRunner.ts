@@ -25,7 +25,7 @@ import {
 } from "../../providers/hostedSearchEvents";
 import {
   buildProviderRequestMetadata,
-  createModelFromConfig,
+  createModelFromRuntime,
   createStreamingTextReconciler,
   describeProviderCacheShape,
   finalizeProviderStreamOptions,
@@ -59,6 +59,7 @@ import {
   captureTransportSnapshot,
   type TransportSnapshot,
 } from "../../providers/runtime/transportSnapshot";
+import { type RuntimeWireRoute, resolveRuntimeWireRoute } from "../../providers/runtime/wireRoute";
 import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
@@ -539,16 +540,17 @@ export async function runAssistantWithTools(params: {
       sessionId: params.sessionId,
     });
 
-    const model = createModelFromConfig(
-      params.runtime.adapterProviderId ?? params.providerId,
+    // 路由结果（协议、方言、适配器家族）随 runtime 而来；远端模型名进 Model.id，
+    // 本地模型 id 继续用于目录、熔断与状态展示。
+    const primaryWire = resolveRuntimeWireRoute(params.providerId, params.runtime);
+    const model = createModelFromRuntime(
+      params.providerId,
+      params.runtime,
       modelId,
       proxyRequest.baseUrl,
-      params.runtime.requestFormat,
-      params.runtime.modelConfig,
-      params.runtime.baseUrl.trim(),
     );
     const nativeWebSearchStatus = resolveProviderNativeWebSearchStatus({
-      providerId: params.runtime.adapterProviderId ?? params.providerId,
+      providerId: primaryWire.adapterProviderId,
       api: model.api,
       enabled: params.nativeWebSearch,
       baseUrl: params.runtime.baseUrl,
@@ -560,7 +562,7 @@ export async function runAssistantWithTools(params: {
     });
 
     const thinkingLevel = toAssistantThinkingLevel({
-      providerId: params.runtime.adapterProviderId ?? params.providerId,
+      providerId: primaryWire.adapterProviderId,
       reasoning: params.runtime.reasoning,
       api: model.api,
     });
@@ -577,9 +579,20 @@ export async function runAssistantWithTools(params: {
       providerId: ProviderId;
       modelId: string;
       runtime: ProviderRuntimeConfig;
+      wire: RuntimeWireRoute;
       proxyRequest: PreparedProxyRequest;
-      model: ReturnType<typeof createModelFromConfig>;
+      model: ReturnType<typeof createModelFromRuntime>;
     };
+
+    // 熔断 key 按 provider::credential::protocol::model 分表：凭据层与端点层候选
+    // 各自独立计数（手写 runtime 缺这些字段时退回旧的 provider::model）。
+    const failoverScope = (runtime: ProviderRuntimeConfig) => ({
+      credentialId: runtime.credentialId,
+      protocol: runtime.protocol ?? runtime.chatProtocol,
+    });
+    /** 路由结果只在工厂构造的 runtime 上存在；手写 runtime 让中间件退回旧推导。 */
+    const runtimeRouteParams = (runtime: ProviderRuntimeConfig, wire: RuntimeWireRoute) =>
+      runtime.dialect === undefined ? {} : { protocol: wire.protocol, dialect: wire.dialect };
 
     const failoverParams = params.failover;
     const primaryTarget: PreparedFailoverTarget = {
@@ -588,13 +601,15 @@ export async function runAssistantWithTools(params: {
         ? failoverBreakerKey(
             failoverParams.primary.selectedModel.customProviderId,
             failoverParams.primary.selectedModel.model,
+            failoverScope(params.runtime),
           )
-        : failoverBreakerKey(params.providerId, modelId),
+        : failoverBreakerKey(params.providerId, modelId, failoverScope(params.runtime)),
       label: failoverParams?.primary.label ?? `${params.providerId} · ${modelId}`,
       selectedModel: failoverParams?.primary.selectedModel,
       providerId: params.providerId,
       modelId,
       runtime: params.runtime,
+      wire: primaryWire,
       proxyRequest,
       model,
     };
@@ -618,20 +633,20 @@ export async function runAssistantWithTools(params: {
           key: failoverBreakerKey(
             fallback.selectedModel.customProviderId,
             fallback.selectedModel.model,
+            failoverScope(fallback.runtime),
           ),
           label: fallback.label,
           selectedModel: fallback.selectedModel,
           providerId: fallback.providerId,
           modelId: fallback.model,
           runtime: fallback.runtime,
+          wire: resolveRuntimeWireRoute(fallback.providerId, fallback.runtime),
           proxyRequest: fallbackProxyRequest,
-          model: createModelFromConfig(
-            fallback.runtime.adapterProviderId ?? fallback.providerId,
+          model: createModelFromRuntime(
+            fallback.providerId,
+            fallback.runtime,
             fallback.model,
             fallbackProxyRequest.baseUrl,
-            fallback.runtime.requestFormat,
-            fallback.runtime.modelConfig,
-            fallback.runtime.baseUrl.trim(),
           ),
         } satisfies PreparedFailoverTarget;
       })();
@@ -649,13 +664,11 @@ export async function runAssistantWithTools(params: {
     /** Cheap, IO-free model identity for failover bookkeeping/synthesis. */
     const fallbackTargetIdentity = (index: number) => {
       const fallback = failoverParams?.fallbacks[index - 1];
-      if (!fallback) return { api: model.api, provider: model.provider, id: modelId };
-      const identity = createModelFromConfig(
-        fallback.runtime.adapterProviderId ?? fallback.providerId,
+      if (!fallback) return { api: model.api, provider: model.provider, id: model.id };
+      const identity = createModelFromRuntime(
+        fallback.providerId,
+        fallback.runtime,
         fallback.model,
-        fallback.runtime.baseUrl.trim(),
-        fallback.runtime.requestFormat,
-        fallback.runtime.modelConfig,
         fallback.runtime.baseUrl.trim(),
       );
       return { api: identity.api, provider: identity.provider, id: identity.id };
@@ -1264,7 +1277,7 @@ export async function runAssistantWithTools(params: {
       const roundCacheRetention =
         options?.cacheRetention ??
         resolveProviderCacheRetention(
-          primaryRoundTarget.runtime.adapterProviderId ?? primaryRoundTarget.providerId,
+          primaryRoundTarget.wire.adapterProviderId,
           primaryRoundTarget.runtime.promptCachingEnabled,
           undefined,
           primaryRoundTarget.runtime.promptCacheRetention,
@@ -1274,7 +1287,8 @@ export async function runAssistantWithTools(params: {
         systemPrompt: effectiveContext.systemPrompt,
         tools: effectiveContext.tools,
         cacheControl: describeProviderCacheShape({
-          providerId: primaryRoundTarget.runtime.adapterProviderId ?? primaryRoundTarget.providerId,
+          providerId: primaryRoundTarget.wire.adapterProviderId,
+          ...runtimeRouteParams(primaryRoundTarget.runtime, primaryRoundTarget.wire),
           baseUrl: primaryRoundTarget.runtime.baseUrl,
           promptCacheHintMode:
             primaryRoundTarget.runtime.modelConfig?.promptCacheHintMode ??
@@ -1297,11 +1311,11 @@ export async function runAssistantWithTools(params: {
 
       const buildTargetRoundStream = (target: PreparedFailoverTarget) => {
         const targetModel = target.model;
-        const transportProviderId = target.runtime.adapterProviderId ?? target.providerId;
+        const transportProviderId = target.wire.adapterProviderId;
         const fallbackReasoning =
-          transportProviderId === "claude_code" ||
-          transportProviderId === "gemini" ||
-          transportProviderId === "deepseek" ||
+          target.wire.protocol === "anthropic-messages" ||
+          target.wire.protocol === "google-generative-ai" ||
+          (target.wire.protocol === "openai-responses" && target.wire.dialect === "deepseek") ||
           targetModel.api === "openai-responses" ||
           targetModel.api === "openai-completions"
             ? toSimpleStreamReasoning(target.runtime.reasoning)
@@ -1370,6 +1384,7 @@ export async function runAssistantWithTools(params: {
 
         streamOptions = finalizeProviderStreamOptions({
           providerId: transportProviderId,
+          ...runtimeRouteParams(target.runtime, target.wire),
           baseUrl: target.runtime.baseUrl,
           options: streamOptions,
           context: effectiveContext,
@@ -1482,6 +1497,7 @@ export async function runAssistantWithTools(params: {
               : failoverBreakerKey(
                   fallback?.selectedModel.customProviderId ?? "",
                   fallback?.selectedModel.model ?? "",
+                  fallback ? failoverScope(fallback.runtime) : undefined,
                 ),
           label: targetIndex === 0 ? primaryTarget.label : (fallback?.label ?? ""),
           model:

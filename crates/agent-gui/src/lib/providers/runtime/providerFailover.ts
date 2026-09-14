@@ -44,8 +44,20 @@ export const MODEL_FAILOVER_BREAKER_LIMITS = {
   cooldownSeconds: { min: 5, max: 3600, fallback: 60 },
 } as const;
 
-export function failoverBreakerKey(customProviderId: string, model: string) {
-  return `${customProviderId}::${model}`;
+/**
+ * 熔断 key。三层候选（设计文档 8.2）共用一张表：同一供应商下不同凭据 / 不同
+ * 接口各自独立计数，一把 Key 或一条渠道对某个模型失败不影响其它候选。
+ * 不带 scope 的旧调用保持 `provider::model`，以免破坏既有键。
+ */
+export function failoverBreakerKey(
+  customProviderId: string,
+  model: string,
+  scope?: { credentialId?: string; protocol?: string },
+): string {
+  const credentialId = scope?.credentialId?.trim() ?? "";
+  const protocol = scope?.protocol?.trim() ?? "";
+  if (!credentialId && !protocol) return `${customProviderId}::${model}`;
+  return `${customProviderId}::${credentialId}::${protocol}::${model}`;
 }
 
 type BreakerEntry = {
