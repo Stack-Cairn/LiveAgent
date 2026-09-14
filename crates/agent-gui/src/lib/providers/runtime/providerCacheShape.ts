@@ -6,7 +6,14 @@
  */
 import type { CacheRetention } from "@earendil-works/pi-ai";
 import type { PrefixShapeCacheControl } from "../../debug/prefixCacheShape";
-import type { CodexRequestFormat, PromptCacheHintMode, ProviderId } from "../../settings";
+import {
+  type CodexRequestFormat,
+  getProviderChatProtocolAdapter,
+  type PromptCacheHintMode,
+  type ProviderChatProtocol,
+  type ProviderId,
+  type ProviderWireDialect,
+} from "../../settings";
 import { describeAnthropicCacheShape } from "./anthropicCache";
 import { describeCodexCacheShape } from "./codexPromptCache";
 import type { StreamOptionsEx } from "./types";
@@ -28,6 +35,9 @@ function toCodexRequestFormat(modelApi: string | undefined): CodexRequestFormat 
 
 export function describeProviderCacheShape(params: {
   providerId: ProviderId;
+  /** 路由结果；给出时按 (protocol, dialect) 分发，providerId 只作兜底。 */
+  protocol?: ProviderChatProtocol;
+  dialect?: ProviderWireDialect;
   baseUrl: string;
   promptCacheHintMode?: PromptCacheHintMode;
   modelApi?: string;
@@ -35,15 +45,19 @@ export function describeProviderCacheShape(params: {
   cacheRetention?: CacheRetention;
   headers?: StreamOptionsEx["headers"];
 }): PrefixShapeCacheControl {
-  if (params.providerId === "deepseek") {
+  const family =
+    params.protocol && params.dialect
+      ? getProviderChatProtocolAdapter(params.protocol, params.dialect)
+      : params.providerId;
+  if (family === "deepseek") {
     return {
       cacheRetention: "automatic",
       breakpointStrategy: "deepseek-prefix",
     };
   }
-  if (params.providerId === "codex") {
+  if (family === "codex") {
     return describeCodexCacheShape(
-      params.providerId,
+      family,
       params.baseUrl,
       params.promptCacheHintMode,
       toCodexRequestFormat(params.modelApi),
@@ -52,5 +66,5 @@ export function describeProviderCacheShape(params: {
       params.headers,
     );
   }
-  return describeAnthropicCacheShape(params.providerId, params.baseUrl, params.cacheRetention);
+  return describeAnthropicCacheShape(family, params.baseUrl, params.cacheRetention);
 }

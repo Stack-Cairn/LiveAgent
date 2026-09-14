@@ -46,6 +46,12 @@ const loader = createTsModuleLoader({
         id: modelId,
         baseUrl,
       }),
+      createModelFromRuntime: (providerId, runtime, modelId, baseUrl) => ({
+        api: "anthropic-messages",
+        provider: runtime.adapterProviderId ?? providerId,
+        id: modelId,
+        baseUrl,
+      }),
     },
     [abs("src/lib/providers/runtime/payloadPipeline.ts")]: {
       finalizeProviderStreamOptions: ({ options }) => options,

@@ -1,5 +1,10 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
-import type { ProviderId } from "../../settings";
+import {
+  getProviderChatProtocolAdapter,
+  type ProviderChatProtocol,
+  type ProviderId,
+  type ProviderWireDialect,
+} from "../../settings";
 import {
   ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
   hasAnthropicWebSearchTool,
@@ -138,9 +143,16 @@ export function attachProviderNativeWebSearch(
   enabled?: boolean,
   params?: {
     baseUrl?: string;
+    /** 路由结果；给出时按 (protocol, dialect) 选注入形态，providerId 只作兜底。 */
+    protocol?: ProviderChatProtocol;
+    dialect?: ProviderWireDialect;
   },
 ): StreamOptionsEx {
   if (!enabled) return options;
+  const family =
+    params?.protocol && params.dialect
+      ? getProviderChatProtocolAdapter(params.protocol, params.dialect)
+      : providerId;
 
   const previousOnPayload = options.onPayload;
   return {
@@ -157,7 +169,7 @@ export function attachProviderNativeWebSearch(
 
       if (
         !isRecord(nextPayload) ||
-        !providerSupportsNativeWebSearch(providerId, model.api, {
+        !providerSupportsNativeWebSearch(family, model.api, {
           baseUrl: params?.baseUrl,
           modelId: model.id,
         })
@@ -165,7 +177,7 @@ export function attachProviderNativeWebSearch(
         return nextPayload;
       }
 
-      if (providerId === "codex" || providerId === "xai" || providerId === "deepseek") {
+      if (family === "codex" || family === "xai" || family === "deepseek") {
         if (model.api === "openai-completions") {
           return appendOpenAIChatCompletionsNativeWebSearch(nextPayload, {
             baseUrl: params?.baseUrl,
@@ -180,7 +192,7 @@ export function attachProviderNativeWebSearch(
         );
       }
 
-      if (providerId === "claude_code") {
+      if (family === "claude_code") {
         return appendUniqueTool(
           nextPayload,
           {
@@ -191,7 +203,7 @@ export function attachProviderNativeWebSearch(
         );
       }
 
-      if (providerId === "gemini") {
+      if (family === "gemini") {
         return appendGeminiGoogleSearchToolToPayload(nextPayload, {
           modelId: model.id,
           baseUrl: params?.baseUrl,

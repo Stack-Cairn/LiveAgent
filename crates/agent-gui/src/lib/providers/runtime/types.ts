@@ -5,9 +5,13 @@ import type {
   CustomProvider,
   PromptCacheHintMode,
   ProviderChatProtocol,
+  ProviderEndpointAuth,
+  ProviderEndpointQuirks,
   ProviderId,
   ProviderModelConfig,
+  ProviderProtocolFamily,
   ProviderRetryPolicy,
+  ProviderWireDialect,
   ReasoningLevel,
 } from "../../settings";
 import type { StreamRetryConfig } from "./streamRetry";
@@ -32,8 +36,29 @@ export type ProviderRuntimeConfig = {
   /** Saved provider category remains caller identity; this is the resolved transport adapter. */
   adapterProviderId: ProviderId;
   chatProtocol: ProviderChatProtocol;
+  // ---- 路由结果（设计文档 4.1）。以下字段由 resolveProviderChatRoute 一次算出；
+  // 手写的旧 runtime（测试、旧调用方）可能缺省，读取点经 resolveRuntimeWireRoute
+  // 按 adapterProviderId / requestFormat 旧推导补齐。
+  /** 与 chatProtocol 相同；新读取点用这个名字。 */
+  protocol?: ProviderChatProtocol;
+  dialect?: ProviderWireDialect;
+  /** 接口家族：故障转移分组依据。 */
+  family?: ProviderProtocolFamily;
+  /** 本地模型 ID（目录匹配、熔断 key、展示）。 */
+  modelId?: string;
+  /** 发给远端的模型名；缺省等于本地模型 ID。 */
+  wireModelId?: string;
+  /** 路由选中的凭据 ID；apiKey 即该凭据的值。 */
+  credentialId?: string;
   apiKey: string;
+  /** 供应商级与端点级用户头合并后的结果（路由输出）。 */
   customHeaders?: CustomProvider["customHeaders"];
+  /** 端点级用户头（已并入 customHeaders，单独保留供诊断）。 */
+  endpointHeaders?: CustomProvider["customHeaders"];
+  /** 端点 quirks；映射到 pi-ai Model.compat 同名键。 */
+  quirks?: ProviderEndpointQuirks;
+  /** 端点鉴权头覆盖；缺省由协议头档决定。 */
+  authOverride?: ProviderEndpointAuth;
   requestFormat?: CodexRequestFormat;
   reasoning?: ReasoningLevel;
   promptCachingEnabled?: boolean;

@@ -19,7 +19,7 @@ import { llm } from "../service/llmService";
 import { appendSystemPrompt, normalizeSessionId } from "./common";
 import { normalizeErrorMessage } from "./errors";
 import { createStreamingTextReconciler, sanitizeAssistantMessage } from "./messageUtils";
-import { createModelFromConfig } from "./modelFactory";
+import { createModelFromRuntime } from "./modelFactory";
 import { finalizeProviderStreamOptions } from "./payloadPipeline";
 import {
   failoverBreakerKey,
@@ -37,6 +37,18 @@ import { resolveStreamRetryConfig } from "./retryPolicy";
 import { buildTextModeToolResultsForAssistant } from "./textModeToolRecovery";
 import { captureTransportSnapshot, type TransportSnapshot } from "./transportSnapshot";
 import type { ProviderRuntimeConfig, StreamOptionsEx } from "./types";
+import { resolveRuntimeLocalModelId, resolveRuntimeWireRoute } from "./wireRoute";
+
+/** 路由结果只在工厂构造的 runtime 上存在；手写 runtime 让中间件退回旧推导。 */
+function runtimeRouteParams(runtime: ProviderRuntimeConfig, providerId: ProviderId) {
+  if (runtime.dialect === undefined) return {};
+  const wire = resolveRuntimeWireRoute(providerId, runtime);
+  return { protocol: wire.protocol, dialect: wire.dialect };
+}
+
+function failoverScope(runtime: ProviderRuntimeConfig) {
+  return { credentialId: runtime.credentialId, protocol: runtime.protocol ?? runtime.chatProtocol };
+}
 
 // 导出供 turn runner 估算 provider 边界追加段（用量环 fixed 校准），非请求路径。
 export function buildTextOnlySystemSuffix(allowJsonOutput = false) {
@@ -89,13 +101,24 @@ function buildTextOnlyStreamOptions(params: {
   ) => void;
   onRetryRecovered?: () => void;
 }): StreamOptionsEx {
-  const transportProviderId = params.runtime.adapterProviderId ?? params.providerId;
+  const wire = resolveRuntimeWireRoute(params.providerId, params.runtime);
+  const transportProviderId = wire.adapterProviderId;
   const sessionId = normalizeSessionId(params.sessionId);
+  const localModelId = resolveRuntimeLocalModelId(params.runtime, params.model.id);
   const nativeWebSearch =
     providerSupportsNativeWebSearch(transportProviderId, params.model.api, {
       baseUrl: params.runtime.baseUrl,
-      modelId: params.model.id,
+      modelId: localModelId,
     }) && params.nativeWebSearch;
+  const isDeepSeekResponses = wire.protocol === "openai-responses" && wire.dialect === "deepseek";
+  const reasoningApplies =
+    wire.protocol === "anthropic-messages"
+      ? params.model.api === "anthropic-messages"
+      : wire.protocol === "google-generative-ai"
+        ? params.model.api === "google-generative-ai"
+        : isDeepSeekResponses ||
+          params.model.api === "openai-responses" ||
+          params.model.api === "openai-completions";
   const usesOpenAIChatNativeWebSearch =
     nativeWebSearch && transportProviderId === "codex" && params.model.api === "openai-completions";
   const onRetryStatus = params.onRetryStatus;
@@ -111,18 +134,9 @@ function buildTextOnlyStreamOptions(params: {
       params.runtime.promptCacheRetention,
     ),
     metadata: buildProviderRequestMetadata(transportProviderId, sessionId),
-    reasoning:
-      ((transportProviderId === "codex" || transportProviderId === "xai") &&
-        (params.model.api === "openai-responses" || params.model.api === "openai-completions")) ||
-      (transportProviderId === "claude_code" && params.model.api === "anthropic-messages") ||
-      (transportProviderId === "gemini" && params.model.api === "google-generative-ai") ||
-      transportProviderId === "deepseek"
-        ? toSimpleStreamReasoning(params.runtime.reasoning)
-        : undefined,
+    reasoning: reasoningApplies ? toSimpleStreamReasoning(params.runtime.reasoning) : undefined,
     deepSeekThinking:
-      transportProviderId === "deepseek" && params.runtime.reasoning === "off"
-        ? "disabled"
-        : undefined,
+      isDeepSeekResponses && params.runtime.reasoning === "off" ? "disabled" : undefined,
     workdir: params.workdir,
     // Text-only mode cannot execute local tools. Provider-native web search is
     // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
@@ -140,6 +154,7 @@ function buildTextOnlyStreamOptions(params: {
   };
   return finalizeProviderStreamOptions({
     providerId: transportProviderId,
+    ...runtimeRouteParams(params.runtime, params.providerId),
     baseUrl: params.runtime.baseUrl,
     options,
     context: params.context,
@@ -231,23 +246,22 @@ export async function streamAssistantMessage(params: {
     sessionId: params.sessionId,
   });
 
-  const m = createModelFromConfig(
-    params.runtime.adapterProviderId ?? params.providerId,
+  const primaryWire = resolveRuntimeWireRoute(params.providerId, params.runtime);
+  const m = createModelFromRuntime(
+    params.providerId,
+    params.runtime,
     modelId,
     proxyRequest.baseUrl,
-    params.runtime.requestFormat,
-    params.runtime.modelConfig,
-    params.runtime.baseUrl.trim(),
   );
 
   const shouldProbeHostedSearch =
     Boolean(params.nativeWebSearch) &&
-    providerSupportsNativeWebSearch(params.runtime.adapterProviderId ?? params.providerId, m.api, {
+    providerSupportsNativeWebSearch(primaryWire.adapterProviderId, m.api, {
       baseUrl: params.runtime.baseUrl,
-      modelId: m.id,
+      modelId,
     });
   const hostedSearchProbeId = shouldProbeHostedSearch
-    ? createHostedSearchProbeId(params.runtime.adapterProviderId ?? params.providerId)
+    ? createHostedSearchProbeId(primaryWire.adapterProviderId)
     : undefined;
   const primaryFailoverLabel =
     params.failover?.primary.label ?? `${params.providerId} · ${modelId}`;
@@ -288,11 +302,12 @@ export async function streamAssistantMessage(params: {
     ? failoverBreakerKey(
         failover.primary.selectedModel.customProviderId,
         failover.primary.selectedModel.model,
+        failoverScope(params.runtime),
       )
-    : failoverBreakerKey(params.providerId, modelId);
+    : failoverBreakerKey(params.providerId, modelId, failoverScope(params.runtime));
 
   type PreparedTextFailoverTarget = {
-    model: ReturnType<typeof createModelFromConfig>;
+    model: ReturnType<typeof createModelFromRuntime>;
     options: StreamOptionsEx;
   };
   const preparedFallbackTargets = new Map<number, Promise<PreparedTextFailoverTarget>>();
@@ -309,13 +324,11 @@ export async function streamAssistantMessage(params: {
         fallback.runtime,
         { sessionId: params.sessionId },
       );
-      const fallbackModel = createModelFromConfig(
-        fallback.runtime.adapterProviderId ?? fallback.providerId,
+      const fallbackModel = createModelFromRuntime(
+        fallback.providerId,
+        fallback.runtime,
         fallback.model,
         fallbackProxyRequest.baseUrl,
-        fallback.runtime.requestFormat,
-        fallback.runtime.modelConfig,
-        fallback.runtime.baseUrl.trim(),
       );
       return {
         model: fallbackModel,
@@ -353,12 +366,10 @@ export async function streamAssistantMessage(params: {
   const fallbackTargetIdentity = (index: number) => {
     const fallback = failover?.fallbacks[index - 1];
     if (!fallback) return { api: m.api, provider: m.provider, id: m.id };
-    const identity = createModelFromConfig(
-      fallback.runtime.adapterProviderId ?? fallback.providerId,
+    const identity = createModelFromRuntime(
+      fallback.providerId,
+      fallback.runtime,
       fallback.model,
-      fallback.runtime.baseUrl.trim(),
-      fallback.runtime.requestFormat,
-      fallback.runtime.modelConfig,
       fallback.runtime.baseUrl.trim(),
     );
     return { api: identity.api, provider: identity.provider, id: identity.id };
@@ -406,6 +417,7 @@ export async function streamAssistantMessage(params: {
             : failoverBreakerKey(
                 fallback?.selectedModel.customProviderId ?? "",
                 fallback?.selectedModel.model ?? "",
+                fallback ? failoverScope(fallback.runtime) : undefined,
               ),
         label: targetIndex === 0 ? primaryFailoverLabel : (fallback?.label ?? ""),
         model:
@@ -492,14 +504,14 @@ export async function streamAssistantMessage(params: {
       orderedBlocks.push({ kind: "hostedSearch", item: hostedSearch });
     };
     const hostedSearchAggregator = createHostedSearchEventAggregator({
-      providerId: params.providerId,
+      providerId: primaryWire.adapterProviderId,
       onHostedSearch: (hostedSearch) => {
         upsertOrderedHostedSearch(hostedSearch);
         params.onHostedSearch?.(hostedSearch);
       },
     });
     const hostedSearchProbe = startHostedSearchFetchProbe({
-      providerId: params.providerId,
+      providerId: primaryWire.adapterProviderId,
       sessionId: normalizeSessionId(params.sessionId),
       requestId: hostedSearchProbeId,
       enabled: shouldProbeHostedSearch,
@@ -607,13 +619,11 @@ export async function completeAssistantMessage(params: {
     sessionId: params.sessionId,
   });
 
-  const m = createModelFromConfig(
-    params.runtime.adapterProviderId ?? params.providerId,
+  const m = createModelFromRuntime(
+    params.providerId,
+    params.runtime,
     modelId,
     proxyRequest.baseUrl,
-    params.runtime.requestFormat,
-    params.runtime.modelConfig,
-    params.runtime.baseUrl.trim(),
   );
 
   const callContext = buildTextOnlyCallContext(params.context, {
