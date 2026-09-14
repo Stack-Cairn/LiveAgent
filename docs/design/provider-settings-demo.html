@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>LiveAgent · 供应商配置 Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg:#0e1013;--panel:#15181d;--panel2:#1b1f26;--line:#262b33;--line2:#343a44;
+  --text:#e6e8eb;--muted:#9aa3ad;--dim:#6b7480;--accent:#7aa2f7;--accent-bg:#1c2740;
+  --ok:#3fb950;--ok-bg:#12261a;--warn:#e3b341;--warn-bg:#2b2410;--bad:#f0616a;--bad-bg:#2c1518;
+  --purple:#b48ead;--purple-bg:#26202b;--radius:8px;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif}
+button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(--line2);border-radius:var(--radius);padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:#0b0f18;border-color:var(--accent)}
+button.ghost{background:transparent;border-color:transparent;color:var(--accent);padding:4px 8px}
+button.sm{padding:3px 8px;font-size:12px}
+input,select{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line2);border-radius:var(--radius);padding:7px 10px;width:100%}
+input.mono{font-family:var(--mono);font-size:13px}
+.app{display:grid;grid-template-columns:200px 1fr;min-height:100vh}
+.nav{background:var(--panel);border-right:1px solid var(--line);padding:16px 12px}
+.nav h1{font-size:15px;font-weight:500;margin:4px 8px 16px}
+.nav .g{font-size:11px;color:var(--dim);margin:12px 8px 4px}
+.nav .i{padding:7px 10px;border-radius:var(--radius);color:var(--muted);font-size:13px}
+.nav .i.on{background:var(--panel2);color:var(--text)}
+.main{display:grid;grid-template-columns:260px 1fr;min-height:100vh;position:relative}
+.list{background:var(--panel);border-right:1px solid var(--line);padding:14px 12px;display:flex;flex-direction:column;gap:6px}
+.list .search{display:flex;gap:6px}
+.list .filters{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 6px}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);cursor:default;white-space:nowrap}
+.chip.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.chip.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.chip.purple{background:var(--purple-bg);color:var(--purple);border-color:transparent}
+.chip.click{cursor:pointer}
+.chip.strike{text-decoration:line-through;opacity:.6}
+.prow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);cursor:pointer;border:1px solid transparent}
+.prow:hover{background:var(--panel2)}
+.prow.on{background:var(--panel2);border-color:var(--line2)}
+.logo{width:26px;height:26px;border-radius:7px;background:var(--panel2);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--muted);flex:none}
+.prow .n{flex:1;min-width:0}
+.prow .n b{font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .n small{color:var(--dim);font-size:11px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line2)}
+.dot.on{background:var(--ok)}
+.detail{padding:22px 28px 60px;overflow:auto;max-width:980px}
+.hdr{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+@media (max-width:1100px){.app{grid-template-columns:1fr}.nav{display:none}}
+@media (max-width:900px){.main{grid-template-columns:220px 1fr}.drawer{width:100%}}
+.hdr h2{font-size:20px;font-weight:500;margin:0}
+.sec{margin:0 0 22px}
+.sec>.t{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:0 0 8px;flex-wrap:wrap}
+.sec>.t>*{white-space:nowrap}
+.sec>.t .sp{flex:1}
+.field{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;font-family:var(--mono);font-size:13px;min-height:40px}
+.field .sp{flex:1}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 10px}
+.grp{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:10px 4px 4px}
+.mrow{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
+.mrow:last-child{border-bottom:0}
+.mrow .id{font-family:var(--mono);min-width:180px}
+.mrow .ic{color:var(--dim);font-size:12px;display:inline-flex;gap:6px;flex:none;white-space:nowrap}
+.mrow .chip{flex:none}
+.mrow .sp{flex:1}
+.mrow.dis{opacity:.5}
+.toggle{width:34px;height:20px;border-radius:999px;background:var(--line2);position:relative;cursor:pointer;flex:none;border:0;padding:0}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.toggle.on{background:var(--ok)}
+.toggle.on::after{left:16px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px}
+.kv .k{color:var(--muted)}
+.kv .v{font-family:var(--mono);word-break:break-all}
+.drawer{position:absolute;top:0;right:0;bottom:0;width:560px;background:var(--panel);border-left:1px solid var(--line);box-shadow:-20px 0 40px rgba(0,0,0,.35);padding:18px 22px 40px;overflow:auto;display:none;z-index:5}
+.drawer.open{display:block}
+.drawer h3{font-size:17px;font-weight:500;margin:0 0 14px;display:flex;align-items:center}
+.drawer h3 .x{margin-left:auto;cursor:pointer;color:var(--muted);font-size:18px}
+.lab{font-size:12px;color:var(--muted);margin:12px 0 4px;display:flex;align-items:center;gap:6px}
+.lab .sp{flex:1}
+.src{font-size:10px;padding:1px 6px;border-radius:4px;background:var(--panel2);color:var(--dim);border:1px solid var(--line)}
+.src.auto{color:var(--accent);border-color:var(--accent-bg);background:var(--accent-bg)}
+.src.user{color:var(--warn);background:var(--warn-bg);border-color:transparent}
+.ep{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 10px;background:var(--panel2)}
+.ep.off{opacity:.6}
+.ep .h{display:flex;align-items:center;gap:8px;font-weight:500}
+.ep .h .sp{flex:1}
+.ep .body{margin-top:8px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.hint{font-size:12px;color:var(--dim);margin:4px 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:10}
+.overlay.open{display:flex}
+.modal{width:720px;max-height:88vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:20px 24px}
+.modal h3{margin:0 0 6px;font-size:17px;font-weight:500}
+.steps{display:flex;gap:6px;font-size:12px;color:var(--dim);margin:0 0 14px}
+.steps span.on{color:var(--accent)}
+.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.preset{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;cursor:pointer;background:var(--panel2)}
+.preset:hover,.preset.on{border-color:var(--accent)}
+.preset small{display:block;color:var(--dim);font-size:11px}
+.probe{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);margin:0 0 6px;font-size:13px}
+.probe .sp{flex:1}
+.summ{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 8px;background:var(--panel2)}
+.summ .h{display:flex;align-items:center;gap:8px}
+.summ .h .sp{flex:1}
+.foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.avatar{width:72px;height:72px;border-radius:50%;background:#3f8ea3;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;margin:4px auto 10px}
+.pathprev{font-family:var(--mono);font-size:12px;color:var(--dim);margin:4px 0 0}
+.pathprev b{color:var(--muted);font-weight:500}
+details.more{border-top:1px solid var(--line);margin-top:12px;padding-top:8px}
+details.more summary{cursor:pointer;color:var(--muted);font-size:13px;list-style:none;display:flex;align-items:center}
+details.more summary::after{content:"⌄";margin-left:auto}
+.req{color:var(--bad)}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th,.tbl td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);font-family:var(--mono)}
+.tbl th{font-family:inherit;color:var(--muted);font-weight:500}
+.tier{font-family:inherit;color:var(--muted)}
+.empty{color:var(--dim);font-size:13px;padding:14px;text-align:center;border:1px dashed var(--line);border-radius:var(--radius)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line2);padding:8px 14px;border-radius:999px;font-size:13px;display:none;z-index:20}
+.toast.show{display:block}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="nav">
+    <h1>设置</h1>
+    <div class="g">通用</div>
+    <div class="i">系统设置</div>
+    <div class="i on">供应商配置</div>
+    <div class="i">提示词模板</div>
+    <div class="g">智能</div>
+    <div class="i">记忆</div><div class="i">系统工具</div><div class="i">Computer Use</div>
+    <div class="g">自动化</div>
+    <div class="i">Hooks</div><div class="i">Cron</div>
+    <div class="g">其他</div>
+    <div class="i">备份与同步</div><div class="i">关于</div>
+  </aside>
+  <div class="main">
+    <aside class="list">
+      <div class="search"><input id="q" placeholder="搜索供应商…" oninput="renderList()"></div>
+      <button class="primary" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px" onclick="openAddChannel()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加渠道</button>
+      <div class="hint" style="margin:2px 2px 4px">渠道目录：已配置的在前，其余点开填 Key 即可启用</div>
+      <div id="plist" style="display:flex;flex-direction:column;gap:2px;flex:1"></div>
+      <div class="hint" style="text-align:center">未配置的渠道点开即可填 Key 启用</div>
+    </aside>
+    <section class="detail" id="detail"></section>
+    <div class="drawer" id="drawer"></div>
+  </div>
+</div>
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ───────────────── 注册表：四类接口、方言、预设、家族表 ─────────────────
+const PROTOCOLS=["anthropic-messages","openai-completions","openai-responses","google-generative-ai"];
+const PNAME={"anthropic-messages":"Anthropic Messages","openai-completions":"OpenAI Chat Completions","openai-responses":"OpenAI Responses","google-generative-ai":"Gemini generateContent"};
+const FAMILY={"anthropic-messages":"anthropic","openai-completions":"openai","openai-responses":"openai","google-generative-ai":"gemini"};
+const FAMNAME={anthropic:"Anthropic",openai:"OpenAI",gemini:"Gemini"};
+const DIALECTS=["generic","openai","xai","deepseek"];
+const AUTH_HEADER={"anthropic-messages":"x-api-key","openai-completions":"Authorization","openai-responses":"Authorization","google-generative-ai":"x-goog-api-key"};
+const MODELS_PATH={"anthropic-messages":"/models","openai-completions":"/models","openai-responses":"/models","google-generative-ai":"/models"};
+const PRESETS=[
+ {id:"anthropic",name:"Anthropic",native:true,category:"official",logo:"A",input:"key",defaultChatProtocol:"anthropic-messages",endpoints:{"anthropic-messages":{baseUrl:"https://api.anthropic.com/v1"}},identity:"claude-cli",site:"console.anthropic.com"},
+ {id:"openai",name:"OpenAI",native:true,category:"official",logo:"O",input:"key",dialect:"openai",defaultChatProtocol:"openai-responses",endpoints:{"openai-responses":{baseUrl:"https://api.openai.com/v1"},"openai-completions":{baseUrl:"https://api.openai.com/v1"}},identity:"codex-cli",site:"platform.openai.com"},
+ {id:"gemini",name:"Gemini",native:true,category:"official",logo:"G",input:"key",defaultChatProtocol:"google-generative-ai",endpoints:{"google-generative-ai":{baseUrl:"https://generativelanguage.googleapis.com/v1beta"}},site:"aistudio.google.com"},
+ {id:"xai",name:"xAI",native:true,category:"official",logo:"X",input:"key",dialect:"xai",defaultChatProtocol:"openai-responses",endpoints:{"openai-responses":{baseUrl:"https://api.x.ai/v1"},"openai-completions":{baseUrl:"https://api.x.ai/v1"}},identity:"grok-shell",site:"console.x.ai"},
+ {id:"deepseek",name:"DeepSeek",native:true,category:"official",logo:"D",input:"key",dialect:"deepseek",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://api.deepseek.com"},"openai-responses":{baseUrl:"https://api.deepseek.com"},"anthropic-messages":{baseUrl:"https://api.deepseek.com/anthropic",note:"仅 V4 系列可用"}},models:[{match:"deepseek-chat",chatProtocols:["openai-completions"]},{match:"deepseek-reasoner",chatProtocols:["openai-completions"]}],site:"platform.deepseek.com"},
+ {id:"zhipu",name:"智谱 GLM",category:"official",logo:"Z",input:"key",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://open.bigmodel.cn/api/paas/v4"},"anthropic-messages":{baseUrl:"https://open.bigmodel.cn/api/anthropic"}},site:"open.bigmodel.cn"},
+ {id:"minimax",name:"MiniMax",category:"official",logo:"M",input:"key",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://api.minimaxi.com/v1"},"anthropic-messages":{baseUrl:"https://api.minimaxi.com/anthropic"}},site:"platform.minimaxi.com"},
+ {id:"moonshot",name:"Moonshot Kimi",category:"official",logo:"K",input:"key",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://api.moonshot.cn/v1"},"anthropic-messages":{baseUrl:"https://api.moonshot.cn/anthropic"}},site:"platform.moonshot.cn"},
+ {id:"dashscope",name:"通义千问",category:"official",logo:"Q",input:"key",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://dashscope.aliyuncs.com/compatible-mode/v1"}},site:"bailian.console.aliyun.com"},
+ {id:"volcengine",name:"豆包 · 火山方舟",category:"official",logo:"V",input:"key",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://ark.cn-beijing.volces.com/api/v3"}},site:"console.volcengine.com"},
+ {id:"siliconflow",name:"硅基流动",category:"relay",logo:"S",input:"key",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://api.siliconflow.cn/v1"}},site:"cloud.siliconflow.cn"},
+ {id:"openrouter",name:"OpenRouter",category:"relay",logo:"R",input:"key",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"https://openrouter.ai/api/v1"},"anthropic-messages":{baseUrl:"https://openrouter.ai/api"},"openai-responses":{baseUrl:"https://openrouter.ai/api/v1",note:"待探测"}},site:"openrouter.ai"},
+ {id:"new-api",name:"New API / One API",category:"relay",logo:"⇄",input:"origin",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"{origin}/v1"},"openai-responses":{baseUrl:"{origin}/v1"},"anthropic-messages":{baseUrl:"{origin}"},"google-generative-ai":{baseUrl:"{origin}/v1beta"}},sub:"自部署网关，填 origin"},
+ {id:"ollama",name:"Ollama",category:"self-hosted",logo:"L",input:"origin",auth:"none",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"{origin}/v1",quirks:{supportsDeveloperRole:false,supportsReasoningEffort:false}}},sub:"本地，默认 http://localhost:11434",origin:"http://localhost:11434"},
+ {id:"lmstudio",name:"LM Studio",category:"self-hosted",logo:"L",input:"origin",auth:"none",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{baseUrl:"{origin}/v1",quirks:{supportsDeveloperRole:false,supportsReasoningEffort:false}}},sub:"本地，默认 http://localhost:1234",origin:"http://localhost:1234"},
+ {id:"custom",name:"自定义供应商",category:"self-hosted",logo:"?",input:"base",defaultChatProtocol:"openai-completions",endpoints:{},probeAll:true,hiddenInList:true},
+];
+const FAMILIES=[
+ {key:"claude",re:/^claude/i,prefer:["anthropic-messages","openai-completions"],dialect:"generic",caps:{reasoning:1,tools:1,imageUnderstanding:1}},
+ {key:"gemini",re:/^(gemini|gemma)/i,prefer:["google-generative-ai","openai-completions"],dialect:"generic",caps:{reasoning:1,tools:1,imageUnderstanding:1}},
+ {key:"gpt",re:/^(gpt|o[134]|codex|chatgpt)/i,prefer:["openai-responses","openai-completions"],dialect:"openai",caps:{reasoning:1,tools:1,imageUnderstanding:1,nativeWebSearch:1}},
+ {key:"grok",re:/^grok/i,prefer:["openai-responses","openai-completions"],dialect:"xai",caps:{reasoning:1,tools:1,nativeWebSearch:1}},
+ {key:"deepseek",re:/^deepseek/i,prefer:["openai-completions","openai-responses","anthropic-messages"],dialect:"deepseek",caps:{reasoning:1,tools:1}},
+ {key:"glm",re:/^(glm|chatglm)/i,prefer:["openai-completions"],dialect:"generic",caps:{tools:1}},
+ {key:"kimi",re:/^(kimi|moonshot)/i,prefer:["openai-completions"],dialect:"generic",caps:{tools:1,reasoning:1}},
+ {key:"qwen",re:/^(qwen|qwq)/i,prefer:["openai-completions"],dialect:"generic",caps:{tools:1}},
+];
+const CAPS=["reasoning","tools","structuredOutput","nativeWebSearch","fileInput","imageUnderstanding"];
+const CAPNAME={reasoning:"推理",tools:"工具",structuredOutput:"结构化输出",nativeWebSearch:"原生搜索",fileInput:"文件输入",imageUnderstanding:"视觉理解"};
+const MODS=["image","audio","video","file"];const MODNAME={image:"视觉",audio:"音频",video:"视频",file:"文件"};
+const CATALOG={"claude-sonnet-4":{ctx:200000,out:64000,thinking:{levels:["minimal","low","medium","high"],off:true}},"claude-opus-4":{ctx:200000,out:32000,thinking:{levels:["low","medium","high","xhigh","max"],off:true}},"gpt-5":{ctx:400000,out:128000,thinking:{levels:["minimal","low","medium","high","xhigh"],off:false}},"gpt-5-mini":{ctx:400000,out:128000,thinking:{levels:["minimal","low","medium","high"],off:false}},"o4-mini":{ctx:200000,out:100000,thinking:{levels:["low","medium","high"],off:false}},"deepseek-v4-pro":{ctx:1048576,out:393216,thinking:{levels:["low","high","max"],off:true}},"deepseek-v4-flash":{ctx:1048576,out:393216,thinking:{levels:["low","high"],off:true}},"deepseek-chat":{ctx:128000,out:8192,thinking:null},"grok-4":{ctx:256000,out:32000,thinking:{levels:["low","medium","high","xhigh"],off:false,alwaysOn:true}},"gemini-2.5-pro":{ctx:1048576,out:65536,thinking:{levels:["low","medium","high"],off:false}},"glm-5":{ctx:200000,out:16000,thinking:{levels:["low","high"],off:true}},"kimi-k3":{ctx:256000,out:32000,thinking:{levels:["medium","high"],off:true}}};
+const LADDER=["minimal","low","medium","high","xhigh","max"];
+function resolveThinking(mo){const c=CATALOG[mo.id];if(c&&"thinking" in c){if(!c.thinking)return{reasoning:false,levels:[],off:false,source:"catalog"};return{reasoning:true,levels:c.thinking.levels,off:c.thinking.off&&!c.thinking.alwaysOn,source:"catalog"};}
+  if(mo.manualThinking)return{reasoning:mo.manualThinking.levels.length>0,levels:mo.manualThinking.levels,off:true,source:"user"};
+  const f=family(mo.id);if(f.key==="claude")return{reasoning:true,levels:["low","medium","high","xhigh"],off:true,source:"heuristic"};if(f.caps.reasoning)return{reasoning:true,levels:["minimal","low","medium","high"],off:true,source:"heuristic"};return{reasoning:false,levels:[],off:false,source:"heuristic"};}
+function family(id){return FAMILIES.find(f=>f.re.test(id))||{key:"其他",prefer:["openai-completions"],dialect:"generic",caps:{tools:1}};}
+
+// ───────────────── 状态 ─────────────────
+let providers=[
+ mk({id:"p1",name:"Packy 中转",presetId:"new-api",category:"relay",enabled:true,credentials:[{id:"k1",label:"主账号",key:"sk-packy-aaaa1111",enabled:true,scope:{mode:"auto"},lastModels:["claude-sonnet-4","claude-opus-4","gpt-5","gpt-5-mini","glm-5","kimi-k3"]},{id:"k2",label:"备用账号",key:"sk-packy-bbbb2222",enabled:true,scope:{mode:"auto"},lastModels:["gpt-5","gpt-5-mini","deepseek-v4-pro","glm-5","kimi-k3"]}],defaultChatProtocol:"anthropic-messages",
+   endpoints:{"anthropic-messages":{enabled:true,baseUrl:"https://www.packyapi.com",probe:{status:"ok",ms:320},src:"auto"},"openai-responses":{enabled:true,baseUrl:"https://www.packyapi.com/openai/v1",credentialId:"k2",headers:[{k:"X-Relay-Tier",v:"pro"}],probe:{status:"ok",ms:210},src:"auto"},"openai-completions":{enabled:true,baseUrl:"https://www.packyapi.com/v1",probe:{status:"ok",ms:190},src:"auto"},"google-generative-ai":{enabled:false,baseUrl:"https://www.packyapi.com/v1beta",probe:{status:"missing"},src:"auto"}},
+   customHeaders:[{k:"User-Agent",v:"claude-cli/2.1.0 (external, cli)"}],
+   models:[m("claude-sonnet-4"),m("claude-opus-4"),m("gpt-5",{chatProtocols:["openai-responses","openai-completions"],wireModelId:"openai/gpt-5",src:"user"}),m("gpt-5-mini"),m("deepseek-v4-pro",{dialect:"deepseek",src:"user"}),m("glm-5"),m("kimi-k3")]}),
+ mk({id:"p2",name:"Anthropic",presetId:"anthropic",category:"official",enabled:true,credentials:[{id:"k1",label:"默认",key:"sk-ant-official",enabled:true}],defaultChatProtocol:"anthropic-messages",endpoints:{"anthropic-messages":{enabled:true,baseUrl:"https://api.anthropic.com/v1",probe:{status:"ok",ms:410},src:"auto"}},models:[m("claude-sonnet-4"),m("claude-opus-4")]}),
+ mk({id:"p3",name:"OpenAI",presetId:"openai",category:"official",enabled:false,credentials:[{id:"k1",label:"默认",key:"",enabled:true}],dialect:"openai",defaultChatProtocol:"openai-responses",endpoints:{"openai-responses":{enabled:true,baseUrl:"https://api.openai.com/v1",probe:{status:"unauthorized",error:"401 invalid api key"},src:"auto"},"openai-completions":{enabled:true,baseUrl:"https://api.openai.com/v1",probe:{status:"unauthorized"},src:"auto"}},models:[m("gpt-5"),m("o4-mini")]}),
+ mk({id:"p4",name:"DeepSeek",presetId:"deepseek",category:"official",enabled:true,credentials:[{id:"k1",label:"默认",key:"sk-deepseek-xxxx",enabled:true}],dialect:"deepseek",defaultChatProtocol:"openai-completions",endpoints:{"openai-completions":{enabled:true,baseUrl:"https://api.deepseek.com",probe:{status:"ok",ms:280},src:"auto"},"openai-responses":{enabled:true,baseUrl:"https://api.deepseek.com",probe:{status:"ok",ms:300},src:"auto"},"anthropic-messages":{enabled:true,baseUrl:"https://api.deepseek.com/anthropic",note:"仅 V4 系列可用",probe:{status:"ok",ms:330},src:"auto"}},models:[m("deepseek-v4-pro"),m("deepseek-v4-flash"),m("deepseek-chat",{chatProtocols:["openai-completions"],src:"preset"})]}),
+ mk({id:"p5",name:"xAI",presetId:"xai",category:"official",enabled:true,credentials:[{id:"k1",label:"默认",key:"xai-key",enabled:true}],dialect:"xai",defaultChatProtocol:"openai-responses",endpoints:{"openai-responses":{enabled:true,baseUrl:"https://api.x.ai/v1",probe:{status:"ok",ms:520},src:"auto"},"openai-completions":{enabled:true,baseUrl:"https://api.x.ai/v1",probe:{status:"ok",ms:500},src:"auto"}},models:[m("grok-4")]}),
+];
+let failover={anthropic:{enabled:true,queue:["p2","p1"],maxSwitches:3,failureThreshold:4,cooldownSeconds:60},openai:{enabled:true,queue:["p4","p1","p5"],maxSwitches:3,failureThreshold:4,cooldownSeconds:60},gemini:{enabled:false,queue:[],maxSwitches:3,failureThreshold:4,cooldownSeconds:60}};
+let sel="p1",drawerState=null;
+
+function mk(p){p.activeModels=p.activeModels||p.models.map(x=>x.id);p.reasoning=p.reasoning||"auto";p.cache=p.cache??true;p.search=p.search??false;p.retry=p.retry||"default";p.proxy=p.proxy||false;return p;}
+function m(id,extra){const f=family(id);const c=CATALOG[id]||{};const caps=Object.assign({},f.caps);if("thinking" in c)caps.reasoning=c.thinking?1:0;return Object.assign({id,group:f.key,contextWindow:c.ctx||128000,maxOutputToken:c.out||8192,limitsSource:c.ctx?"catalog":"heuristic",caps,mods:{image:!!f.caps.imageUnderstanding},src:"auto",enabled:true},extra||{});}
+const P=()=>providers.find(p=>p.id===sel);
+const preset=p=>PRESETS.find(x=>x.id===p.presetId)||PRESETS.find(x=>x.id==="custom");
+const enabledEps=p=>PROTOCOLS.filter(k=>p.endpoints[k]&&p.endpoints[k].enabled!==false);
+function scopeHas(c,mid){const sc=c.scope||{mode:"all"};if(sc.mode==="all")return true;if(sc.mode==="manual")return (sc.models||[]).some(x=>x.endsWith("*")?mid.startsWith(x.slice(0,-1)):x===mid);return !c.lastModels||c.lastModels.includes(mid);}
+const keysFor=(p,mid)=>p.credentials.filter(c=>c.enabled&&scopeHas(c,mid));
+function pickCred(p,preferredId,mid){const en=p.credentials.filter(c=>c.enabled);if(!en.length)return{cred:p.credentials[0],source:"fallback"};
+  const pref=preferredId&&en.find(c=>c.id===preferredId);if(pref&&(!mid||scopeHas(pref,mid)))return{cred:pref,source:"endpoint"};
+  const inScope=mid?en.find(c=>scopeHas(c,mid)):en[0];if(inScope)return{cred:inScope,source:"scope"};return{cred:en[0],source:"fallback"};}
+const cred=(p,id,mid)=>pickCred(p,id,mid).cred;
+function toast(t){const e=document.getElementById("toast");e.textContent=t;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),1800);}
+
+// ───────────────── 路由解析（纯函数） ─────────────────
+function presetRule(p,mid){const pr=preset(p);return (pr.models||[]).find(r=>r.match.endsWith("*")?mid.startsWith(r.match.slice(0,-1)):r.match===mid);}
+function resolveProtocol(p,mo){
+  const en=enabledEps(p);
+  const pick=(list,src)=>{const hit=(list||[]).find(x=>en.includes(x));return hit?{protocol:hit,source:src}:null;};
+  return pick(mo.chatProtocols,"model")||pick((presetRule(p,mo.id)||{}).chatProtocols,"preset")||pick(family(mo.id).prefer,"family")||(en.includes(p.defaultChatProtocol)?{protocol:p.defaultChatProtocol,source:"provider"}:en[0]?{protocol:en[0],source:"provider"}:{protocol:null,source:"none"});
+}
+function resolveDialect(p,mo,ep,protocol){
+  if(mo.dialect)return mo.dialect;if(ep&&ep.dialect)return ep.dialect;if(p.dialect)return p.dialect;const pr=preset(p);if(pr.dialect)return pr.dialect;
+  const host=(ep&&ep.baseUrl)||p.baseUrl||"";if(FAMILY[protocol]==="openai"){if(host.includes("api.x.ai"))return"xai";if(host.includes("api.deepseek.com"))return"deepseek";if(host.includes("api.openai.com"))return"openai";}
+  const fd=family(mo.id).dialect;return FAMILY[protocol]==="openai"&&fd!=="generic"&&p.category!=="official"?"generic":"generic";
+}
+function resolveRoute(p,mid,opt){opt=opt||{};const mo=p.models.find(x=>x.id===mid);if(!mo)return null;
+  const r=opt.protocol?{protocol:opt.protocol,source:"override"}:resolveProtocol(p,mo);if(!r.protocol)return{none:true};
+  const ep=p.endpoints[r.protocol];const d=resolveDialect(p,mo,ep,r.protocol);const pk=pickCred(p,opt.credentialId||mo.credentialId||ep.credentialId,mid);const c=pk.cred;
+  const headers={};const auth=(ep.auth&&ep.auth.headerName)||AUTH_HEADER[r.protocol];headers[auth]=auth==="Authorization"?"Bearer "+mask(c.key):mask(c.key);
+  if(r.protocol==="anthropic-messages")headers["anthropic-version"]="2023-06-01";
+  if(r.protocol==="openai-responses"&&d==="openai"){headers["session-id"]="<session>";headers["x-client-request-id"]="<session>";}
+  for(const h of (p.customHeaders||[]))headers[h.k]=h.v;for(const h of (ep.headers||[]))headers[h.k]=h.v;
+  return{protocol:r.protocol,source:r.source,family:FAMILY[r.protocol],dialect:d,baseUrl:ep.baseUrl,wireModelId:mo.wireModelId||mo.id,credentialId:c.id,credLabel:c.label,credentialSource:opt.credentialId?"override":pk.source,headers,quirks:ep.quirks||{}};
+}
+function mask(k){return k?k.slice(0,6)+"••••"+k.slice(-3):"(未配置)";}
+function candidates(p,mid){const pr=resolveRoute(p,mid);if(!pr||pr.none)return[];const out=[Object.assign({tier:"主选择",pname:p.name},pr)];
+  keysFor(p,mid).filter(c=>c.id!==pr.credentialId).forEach(c=>out.push(Object.assign({tier:"凭据层",pname:p.name},resolveRoute(p,mid,{credentialId:c.id}))));
+  const mo=p.models.find(x=>x.id===mid);const list=(mo.chatProtocols&&mo.chatProtocols.length?mo.chatProtocols:enabledEps(p)).filter(x=>x!==pr.protocol&&FAMILY[x]===pr.family&&enabledEps(p).includes(x));
+  list.forEach(pt=>out.push(Object.assign({tier:"端点层",pname:p.name},resolveRoute(p,mid,{protocol:pt}))));
+  const g=failover[pr.family];if(g&&g.enabled)g.queue.forEach(id=>{const q=providers.find(x=>x.id===id);if(!q||q.id===p.id||!q.enabled||!q.models.some(x=>x.id===mid&&q.activeModels.includes(mid)))return;const r=resolveRoute(q,mid);if(!r||r.none)return;out.push(Object.assign({tier:r.family===pr.family?"供应商层":"跳过·家族不同",pname:q.name},r));});
+  return out;
+}
+
+// ───────────────── 左栏 ─────────────────
+function renderList(){
+  const q=(document.getElementById("q").value||"").toLowerCase();
+  const configured=providers.map(p=>({kind:"provider",id:p.id,name:p.name,logo:preset(p).logo,sub:(PNAME[p.defaultChatProtocol]||"—")+(enabledEps(p).length>1?" · 多接口":""),enabled:p.enabled,sortKey:0}));
+  const pending=PRESETS.filter(pr=>!pr.hiddenInList&&!providers.some(p=>p.presetId===pr.id)).map(pr=>({kind:"preset",id:pr.id,name:pr.name,logo:pr.logo,sub:(pr.native?"原生 · ":"")+Object.keys(pr.endpoints).map(k=>PNAME[k].split(" ")[0]).join(" / ")+(pr.sub?" · "+pr.sub:""),enabled:false,pending:true,sortKey:pr.native?1:2}));
+  const rows=[...configured,...pending].filter(r=>!q||r.name.toLowerCase().includes(q));
+  document.getElementById("plist").innerHTML=rows.map(r=>{const on=(r.kind==="provider"&&sel===r.id)||(r.kind==="preset"&&sel==="preset:"+r.id);
+    return`<div class="prow ${on?'on':''}" style="${r.pending?'opacity:.72':''}" onclick="${r.kind==="provider"?`sel='${r.id}'`:`sel='preset:${r.id}'`};closeDrawer();renderAll()"><div class="logo">${r.logo}</div><div class="n"><b>${r.name}</b><small>${r.pending?"未配置 · ":""}${r.sub}</small></div><span class="dot ${r.enabled?'on':''}"></span></div>`;}).join("")||`<div class="empty">没有匹配的渠道</div>`;
+}
+
+// ───────────────── 中栏详情 ─────────────────
+function probeChip(ep){if(!ep||!ep.probe)return`<span class="chip">未检测</span>`;const s=ep.probe.status;return s==="ok"?`<span class="chip ok">可用 · ${ep.probe.ms}ms</span>`:s==="missing"?`<span class="chip">不存在</span>`:s==="unauthorized"?`<span class="chip bad">鉴权失败</span>`:`<span class="chip warn">未知</span>`;}
+function srcTag(s){return s==="user"?`<span class="src user">用户</span>`:s==="preset"?`<span class="src auto">预设</span>`:`<span class="src auto">自动</span>`;}
+function renderPending(pr){
+  const eps=Object.keys(pr.endpoints);
+  document.getElementById("detail").innerHTML=`
+  <div class="hdr"><div class="logo" style="width:34px;height:34px;font-size:15px">${pr.logo}</div><h2>${pr.name}</h2>${pr.native?`<span class="chip on">原生接口</span>`:""}<span class="chip">${{official:"官方",relay:"中转","self-hosted":"自建"}[pr.category]}</span><span style="flex:1"></span><span class="chip">未配置</span></div>
+  <div class="sec"><div class="t">该渠道提供的接口（来自预设注册表）</div>${eps.length?eps.map(k=>`<div class="field" style="margin-bottom:6px"><span class="chip ${k===pr.defaultChatProtocol?'on':''}">${PNAME[k]}${k===pr.defaultChatProtocol?" · 默认":""}</span><span>${pr.endpoints[k].baseUrl}</span><span class="sp"></span><span class="hint">${pr.endpoints[k].note||""}</span></div>`).join(""):`<div class="empty">不声明接口，配置时探测四类</div>`}
+    <div class="hint" style="margin-top:6px">鉴权：${pr.auth==="none"?"无需密钥":"API Key（"+AUTH_HEADER[pr.defaultChatProtocol]+"）"}${pr.dialect?" · 方言 "+pr.dialect:""}${pr.site?" · 取 Key："+pr.site:""}</div></div>
+  <div class="sec"><div class="t">${pr.input==="key"?"只需填写 API Key":"填写地址"+(pr.auth==="none"?"":"与 API Key")}</div><div class="card">
+    ${pr.input==="key"?"":`<div class="lab">${pr.input==="origin"?"服务地址（origin）":"Base URL"}</div><input class="mono" id="s-origin" value="${pr.origin||""}" placeholder="${pr.input==="origin"?"https://relay.example.com":"https://api.example.com/v1"}">`}
+    ${pr.auth==="none"?"":`<div class="lab">API Key</div><input class="mono" id="s-key" type="password" placeholder="sk-…">`}
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center"><button class="primary" onclick="setupFromDetail('${pr.id}')">检测并启用</button><span class="hint">只请求各接口的模型列表，不计费；完成后所有配置标为自动，可逐项调整。</span></div></div></div>`;
+}
+function setupFromDetail(id){const o=document.getElementById("s-origin");const k=document.getElementById("s-key");startSetup(id,o?o.value:"",k?k.value:"");}
+function startSetup(id,origin,key){wiz={step:2,preset:id,origin:origin||(PRESETS.find(x=>x.id===id).origin||""),key:key||"",results:null,accept:{}};renderWizard();document.getElementById("overlay").classList.add("open");if(origin!==undefined&&(key||PRESETS.find(x=>x.id===id).auth==="none")&&(origin||PRESETS.find(x=>x.id===id).input==="key"))wizProbe();}
+function renderDetail(){
+  if(sel&&sel.startsWith("preset:")){const pr=PRESETS.find(x=>x.id===sel.slice(7));if(pr){renderPending(pr);return;}}
+  const p=P();if(!p){document.getElementById("detail").innerHTML=`<div class="empty">选择一个渠道</div>`;return;}
+  const pr=preset(p);const en=enabledEps(p);const def=p.endpoints[p.defaultChatProtocol];
+  const groups={};p.models.forEach(mo=>{(groups[mo.group]=groups[mo.group]||[]).push(mo);});
+  const modelRows=Object.entries(groups).map(([g,list])=>`<div class="grp">${g} <span class="chip">${list.length}</span></div>`+list.map(mo=>{const r=resolveRoute(p,mo.id);const act=p.activeModels.includes(mo.id);
+    return`<div class="mrow ${act?'':'dis'}"><button class="toggle sm ${act?'on':''}" onclick="toggleModel('${mo.id}')" title="启用模型"></button><span class="id">${mo.id}</span><span class="ic">${mo.caps.imageUnderstanding?'👁':''}${resolveThinking(mo).reasoning?'💡':''}${mo.caps.tools?'🔧':''}${mo.caps.nativeWebSearch?'🔍':''}</span>
+    ${r&&!r.none?`<span class="chip ${r.source==="model"?'on':''}">${r.source==="model"?"":"自动 · "}${PNAME[r.protocol]}</span>`:`<span class="chip bad">无可用渠道</span>`}${r&&r.dialect&&r.dialect!=="generic"?`<span class="chip purple">${r.dialect}</span>`:""}${mo.wireModelId?`<span class="chip">远端 ${mo.wireModelId}</span>`:""}${(()=>{const en=p.credentials.filter(c=>c.enabled);const ks=keysFor(p,mo.id);if(en.length<2)return"";if(!ks.length)return`<span class="chip warn" title="未在任何 Key 的列表中，将用第一把 Key 尝试">Key：无匹配</span>`;if(ks.length===en.length)return"";return`<span class="chip warn">Key：${ks.map(c=>c.label).join(" / ")}</span>`;})()}<span class="sp"></span><button class="ghost sm" onclick="openModel('${mo.id}')">编辑</button><button class="ghost sm" onclick="removeModel('${mo.id}')" style="color:var(--dim)">移除</button></div>`;}).join("")).join("");
+  document.getElementById("detail").innerHTML=`
+  <div class="hdr"><div class="logo" style="width:34px;height:34px;font-size:15px">${pr.logo}</div><h2 contenteditable="true" onblur="P().name=this.textContent.trim();renderList()">${p.name}</h2><span class="chip">${pr.name}</span><span class="chip">${{official:"官方",relay:"中转","self-hosted":"自建"}[p.category]}</span><button class="ghost sm" onclick="startSetup('${p.presetId}')" title="同一渠道再加一个账号或地址">＋ 再加一个实例</button><span style="flex:1"></span><span style="font-size:12px;color:var(--muted)">启用</span><button class="toggle ${p.enabled?'on':''}" onclick="P().enabled=!P().enabled;renderAll()"></button></div>
+
+  <div class="sec"><div class="t">API 密钥 <span class="sp"></span><button class="ghost sm" onclick="openKeys()">管理密钥（${p.credentials.length}）</button></div>
+    <div class="field"><span>${p.credentials[0]&&p.credentials[0].key?"•".repeat(28):"<span style='color:var(--bad)'>未配置</span>"}</span><span class="sp"></span>${(()=>{const en=p.credentials.filter(c=>c.enabled);if(en.length<2)return`<span class="chip">${cred(p).label}</span>`;const same=en.every(c=>JSON.stringify((c.lastModels||[]).slice().sort())===JSON.stringify((en[0].lastModels||[]).slice().sort()));return same?`<span class="chip ok">${en.length} 把 Key · 模型范围相同，可互换</span>`:`<span class="chip warn">${en.length} 把 Key · 模型范围不同，按范围选 Key</span>`;})()}<button class="sm" onclick="runProbe()">检测</button></div></div>
+
+  <div class="sec"><div class="t">API 地址 <span class="chip">默认 · ${PNAME[p.defaultChatProtocol]||"—"}</span>${probeChip(def)}<span class="sp"></span><button class="ghost sm" onclick="runProbe()">检测并配置</button><button class="ghost sm" onclick="openRequest()">请求配置</button></div>
+    <div class="field"><span>${def?def.baseUrl:"—"}</span><span class="sp"></span>${def&&def.src?srcTag(def.src):""}</div>
+    <div class="chips" style="margin-top:8px">${PROTOCOLS.map(k=>{const ep=p.endpoints[k];if(!ep)return"";return`<span class="chip click ${ep.enabled!==false?'on':'strike'}" onclick="openRequest('${k}')">${PNAME[k]}${k===p.defaultChatProtocol?" · 默认":""}</span>`;}).join("")||`<span class="hint">尚未配置任何渠道，点"检测并配置"</span>`}</div></div>
+
+  <div class="sec"><div class="t">模型 <span class="chip">${p.activeModels.length} / ${p.models.length} 启用</span><span class="sp"></span><button class="ghost sm" onclick="runProbe(true)">获取模型列表</button><button class="ghost sm" onclick="addModelPrompt()">手动添加</button></div>
+    <div class="card" style="padding:4px 8px">${modelRows||`<div class="empty">还没有模型</div>`}</div></div>
+
+  <div class="sec"><div class="t">更多设置</div><div class="card"><div class="row3">
+    <div><div class="lab">推理档</div><select onchange="P().reasoning=this.value"><option ${p.reasoning==="auto"?"selected":""} value="auto">自动</option><option value="off">关闭</option><option value="high">high</option></select></div>
+    <div><div class="lab">流内重试</div><select><option>默认（5 次）</option><option>关闭</option><option>自定义</option></select></div>
+    <div><div class="lab">系统代理</div><div class="field" style="min-height:36px"><span>走系统代理</span><span class="sp"></span><button class="toggle ${p.proxy?'on':''}" onclick="P().proxy=!P().proxy;renderDetail()"></button></div></div></div>
+    <div class="row2" style="margin-top:8px"><div class="field" style="min-height:36px"><span>提示缓存</span><span class="sp"></span><button class="toggle ${p.cache?'on':''}" onclick="P().cache=!P().cache;renderDetail()"></button></div><div class="field" style="min-height:36px"><span>原生网络搜索</span><span class="sp"></span><button class="toggle ${p.search?'on':''}" onclick="P().search=!P().search;renderDetail()"></button></div></div></div></div>
+
+  <div class="sec"><div class="t">可用性 · 自动故障转移（按接口家族）</div>${renderFailover(p)}</div>
+
+  <div class="sec"><div class="t">用量查询</div><div class="card" style="color:var(--dim);font-size:13px">保持现有实现（脚本模式、独立 Key、超时）。</div></div>`;
+}
+function renderFailover(p){
+  const firstModel=p.models.find(x=>p.activeModels.includes(x.id));const cands=firstModel?candidates(p,firstModel.id):[];
+  return Object.entries(failover).map(([fam,g])=>{const inQ=g.queue.map(id=>providers.find(x=>x.id===id)).filter(Boolean);
+    return`<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="font-weight:500">${FAMNAME[fam]} 家族</b><span class="chip">${fam==="openai"?"Completions + Responses":PNAME[Object.keys(FAMILY).find(k=>FAMILY[k]===fam)]}</span><span style="flex:1"></span><span style="font-size:12px;color:var(--muted)">启用</span><button class="toggle ${g.enabled?'on':''}" onclick="failover['${fam}'].enabled=!failover['${fam}'].enabled;renderDetail()"></button></div>
+    <div class="lab">备用供应商队列（保留模型，只换供应商）</div><div class="chips">${inQ.map((q,i)=>`<span class="chip">${i+1}. ${q.name}</span>`).join("")||`<span class="hint">队列为空</span>`}<span class="chip click" onclick="addToQueue('${fam}')">＋ 添加</span></div>
+    <div class="row3" style="margin-top:8px"><div><div class="lab">最多切换</div><input value="${g.maxSwitches}" onchange="failover['${fam}'].maxSwitches=+this.value"></div><div><div class="lab">失败阈值</div><input value="${g.failureThreshold}" onchange="failover['${fam}'].failureThreshold=+this.value"></div><div><div class="lab">冷却秒数</div><input value="${g.cooldownSeconds}" onchange="failover['${fam}'].cooldownSeconds=+this.value"></div></div></div>`;}).join("")+
+  (firstModel?`<div class="card"><div class="lab">候选预览 · ${p.name} / ${firstModel.id}（三层共用切换预算）</div><table class="tbl"><tr><th>层</th><th>供应商</th><th>接口</th><th>方言</th><th>凭据</th><th>远端 ID</th></tr>${cands.map(c=>`<tr><td class="tier">${c.tier}</td><td>${c.pname}</td><td>${c.protocol}</td><td>${c.dialect}</td><td>${c.credLabel}</td><td>${c.wireModelId}</td></tr>`).join("")}</table></div>`:"");
+}
+function addToQueue(fam){const others=providers.filter(p=>p.id!==sel&&!failover[fam].queue.includes(p.id)&&enabledEps(p).some(k=>FAMILY[k]===fam));if(!others.length)return toast("没有可加入该家族的供应商");failover[fam].queue.push(others[0].id);renderDetail();toast("已加入 "+others[0].name);}
+function toggleModel(id){const p=P();const i=p.activeModels.indexOf(id);i>=0?p.activeModels.splice(i,1):p.activeModels.push(id);renderDetail();}
+function removeModel(id){const p=P();p.models=p.models.filter(x=>x.id!==id);p.activeModels=p.activeModels.filter(x=>x!==id);renderDetail();}
+function addModelPrompt(){const id=prompt("模型 ID");if(!id)return;const p=P();p.models.push(m(id,{src:"user"}));p.activeModels.push(id);renderDetail();}
+
+// ───────────────── 抽屉：请求配置 ─────────────────
+function openRequest(focus){drawerState={kind:"request",focus};renderDrawer();}
+function openKeys(){drawerState={kind:"keys"};renderDrawer();}
+function openModel(id){drawerState={kind:"model",id};renderDrawer();}
+function closeDrawer(){drawerState=null;document.getElementById("drawer").classList.remove("open");}
+function renderDrawer(){const d=document.getElementById("drawer");if(!drawerState){d.classList.remove("open");return;}d.classList.add("open");
+  d.innerHTML=drawerState.kind==="request"?renderRequestDrawer():drawerState.kind==="keys"?renderKeysDrawer():renderModelDrawer();}
+function renderRequestDrawer(){const p=P();const pr=preset(p);
+  const cards=PROTOCOLS.map(k=>{const ep=p.endpoints[k];const declared=pr.endpoints[k]||pr.probeAll;if(!ep)return"";const isDef=k===p.defaultChatProtocol;const on=ep.enabled!==false;
+    return`<div class="ep ${on?'':'off'}" id="ep-${k}"><div class="h"><button class="toggle ${on?'on':''}" onclick="toggleEp('${k}')"></button><span>${PNAME[k]}</span>${probeChip(ep)}${isDef?`<span class="chip on">默认</span>`:`<button class="ghost sm" onclick="setDefault('${k}')" ${on?"":"disabled"}>设为默认</button>`}<span class="sp"></span>${ep.src?srcTag(ep.src):""}<button class="ghost sm" onclick="removeEp('${k}')" style="color:var(--dim)">移除</button></div>
+    ${on?`<div class="body">
+      <div class="lab">Base URL <span class="sp"></span><span class="hint">${ep.note||""}</span></div><div style="display:flex;gap:6px"><input class="mono" value="${ep.baseUrl}" onchange="ep('${k}').baseUrl=this.value;ep('${k}').src='user';renderAll()"><button class="sm" onclick="probeOne('${k}')">重测</button></div>
+      <div class="row2"><div><div class="lab">完整 URL 模式</div><div class="field" style="min-height:36px"><span>${ep.isFullUrl?"是":"否"}</span><span class="sp"></span><button class="toggle ${ep.isFullUrl?'on':''}" onclick="ep('${k}').isFullUrl=!ep('${k}').isFullUrl;renderDrawer()"></button></div></div><div><div class="lab">模型列表地址</div><input class="mono" placeholder="留空自动推导 …${MODELS_PATH[k]}" value="${ep.modelsUrl||""}" onchange="ep('${k}').modelsUrl=this.value"></div></div>
+      <div class="row3"><div><div class="lab">方言</div><select onchange="ep('${k}').dialect=this.value||undefined;renderAll()"><option value="">继承（${resolveDialect(p,{id:"x"},ep,k)}）</option>${DIALECTS.map(x=>`<option ${ep.dialect===x?"selected":""}>${x}</option>`).join("")}</select></div><div><div class="lab">鉴权头</div><input class="mono" value="${(ep.auth&&ep.auth.headerName)||AUTH_HEADER[k]}" onchange="ep('${k}').auth={headerName:this.value};renderAll()"></div><div><div class="lab">凭据</div><select onchange="ep('${k}').credentialId=this.value||undefined;renderAll()"><option value="">默认（${p.credentials[0].label}）</option>${p.credentials.map(c=>`<option value="${c.id}" ${ep.credentialId===c.id?"selected":""}>${c.label}</option>`).join("")}</select></div></div>
+      <div class="lab">实现偏差（quirks）</div><div class="chips">${[["supportsUsageInStreaming","stream_options"],["supportsDeveloperRole","developer 角色"],["supportsReasoningEffort","reasoning_effort"],["supportsStore","store"]].map(([q,n])=>{const v=(ep.quirks||{})[q];return`<span class="chip click ${v===false?'bad':v===true?'on':''}" onclick="cycleQuirk('${k}','${q}')">${n}：${v===false?"关":v===true?"开":"自动"}</span>`;}).join("")}</div>
+      <div class="lab">端点请求头 <span class="sp"></span><button class="ghost sm" onclick="addHeader('${k}')">＋ 添加</button></div>${(ep.headers||[]).map((h,i)=>`<div class="row2" style="margin-bottom:6px"><input class="mono" value="${h.k}" onchange="ep('${k}').headers[${i}].k=this.value"><div style="display:flex;gap:6px"><input class="mono" value="${h.v}" onchange="ep('${k}').headers[${i}].v=this.value"><button class="sm" onclick="ep('${k}').headers.splice(${i},1);renderDrawer()">×</button></div></div>`).join("")||`<div class="hint">无</div>`}
+    </div>`:`<div class="hint" style="margin-top:6px">已停用。该渠道不参与路由、模型发现与故障转移。</div>`}</div>`;}).join("");
+  const missing=PROTOCOLS.filter(k=>!p.endpoints[k]&&(pr.endpoints[k]||pr.probeAll||true));
+  return`<h3>请求配置 · ${p.name}<span class="x" onclick="closeDrawer()">✕</span></h3>
+    <div class="lab">渠道（四类接口）<span class="sp"></span><span class="hint">默认渠道不能停用，先切换默认</span></div>${cards}
+    ${missing.length?`<div class="lab">添加端点</div><div class="chips">${missing.map(k=>`<span class="chip click" onclick="addEp('${k}')">＋ ${PNAME[k]}${pr.endpoints[k]?"（预设有地址）":""}</span>`).join("")}</div>`:""}
+    <div class="lab" style="margin-top:18px">供应商级请求头 <span class="sp"></span><button class="ghost sm" onclick="applyIdentity()">模拟 CLI（${{"claude-cli":"Claude CLI","codex-cli":"Codex CLI","grok-shell":"grok-shell"}[identityFor(p)]}）</button><button class="ghost sm" onclick="P().customHeaders.push({k:'',v:''});renderDrawer()">＋ 添加</button></div>
+    ${(p.customHeaders||[]).map((h,i)=>`<div class="row2" style="margin-bottom:6px"><input class="mono" value="${h.k}" onchange="P().customHeaders[${i}].k=this.value"><div style="display:flex;gap:6px"><input class="mono" value="${h.v}" onchange="P().customHeaders[${i}].v=this.value"><button class="sm" onclick="P().customHeaders.splice(${i},1);renderDrawer()">×</button></div></div>`).join("")||`<div class="hint">无</div>`}
+    <div class="hint" style="margin-top:10px">合并顺序：协议头档 &lt; 方言头档 &lt; 供应商头 &lt; 端点头 &lt; 每会话动态头；anthropic-beta、Content-Type 等保留键由发请求侧最终决定。</div>`;
+}
+function identityFor(p){const d=p.defaultChatProtocol;return d==="anthropic-messages"?"claude-cli":resolveDialect(p,{id:"x"},p.endpoints[d],d)==="xai"?"grok-shell":"codex-cli";}
+function applyIdentity(){const p=P();const id=identityFor(p);p.customHeaders=(p.customHeaders||[]).filter(h=>!/^(user-agent|x-app|x-stainless|originator|x-grok)/i.test(h.k));const ua={"claude-cli":"claude-cli/2.1.0 (external, cli)","codex-cli":"codex_cli_rs/0.60.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal","grok-shell":"grok-shell/1.4.0 (linux; x86_64)"}[id];p.customHeaders.unshift({k:"User-Agent",v:ua});if(id==="claude-cli")p.customHeaders.push({k:"x-app",v:"cli"},{k:"X-Stainless-Lang",v:"js"});renderAll();toast("已写入 "+id+" 身份头，旧身份已剥离");}
+const ep=k=>P().endpoints[k];
+function toggleEp(k){const p=P();const e=p.endpoints[k];if(e.enabled!==false&&k===p.defaultChatProtocol){const alt=enabledEps(p).find(x=>x!==k);if(!alt)return toast("这是唯一启用的渠道，不能停用");if(!confirm(`这是默认渠道。先把默认切换到「${PNAME[alt]}」再停用？`))return;p.defaultChatProtocol=alt;}e.enabled=e.enabled===false;renderAll();}
+function setDefault(k){P().defaultChatProtocol=k;renderAll();toast("默认渠道已切换");}
+function removeEp(k){const p=P();if(k===p.defaultChatProtocol)return toast("默认渠道不能移除");delete p.endpoints[k];renderAll();}
+function addEp(k){const p=P();const pr=preset(p);const tpl=(pr.endpoints[k]||{}).baseUrl;const origin=(p.endpoints[p.defaultChatProtocol]||{baseUrl:"https://example.com/v1"}).baseUrl.replace(/\/v1(beta)?$/,"");p.endpoints[k]={enabled:true,baseUrl:tpl?tpl.replace("{origin}",origin):origin+(k==="google-generative-ai"?"/v1beta":k==="anthropic-messages"?"":"/v1"),src:tpl?"preset":"user",quirks:(pr.endpoints[k]||{}).quirks};renderAll();probeOne(k);}
+function cycleQuirk(k,q){const e=ep(k);e.quirks=e.quirks||{};const v=e.quirks[q];e.quirks[q]=v===undefined?true:v===true?false:undefined;renderDrawer();}
+function addHeader(k){const e=ep(k);e.headers=e.headers||[];e.headers.push({k:"",v:""});renderDrawer();}
+function probeOne(k){const e=ep(k);e.probe={status:"pending"};renderAll();setTimeout(()=>{e.probe=simProbe(P(),k);renderAll();toast(PNAME[k]+"："+({ok:"可用",missing:"不存在",unauthorized:"鉴权失败",unknown:"未知"})[e.probe.status]);},600);}
+function simProbe(p,k){const key=cred(p).key;if(!key&&preset(p).auth!=="none")return{status:"unauthorized",error:"401 missing api key"};const pr=preset(p);if(pr.id==="custom"||pr.id==="new-api")return k==="google-generative-ai"?{status:"missing"}:{status:"ok",ms:150+Math.round(Math.random()*300)};if(!pr.endpoints[k])return{status:"missing"};return{status:"ok",ms:200+Math.round(Math.random()*350)};}
+function runProbe(onlyModels){const p=P();const pr=preset(p);const keys=pr.probeAll?PROTOCOLS:Object.keys(pr.endpoints).length?Object.keys(pr.endpoints):PROTOCOLS;keys.forEach(k=>{if(!p.endpoints[k]&&!onlyModels)p.endpoints[k]={enabled:true,baseUrl:(pr.endpoints[k]||{baseUrl:"{origin}/v1"}).baseUrl.replace("{origin}",(p.endpoints[p.defaultChatProtocol]||{baseUrl:"https://example.com/v1"}).baseUrl.replace(/\/v1(beta)?$/,"")),src:"auto"};if(p.endpoints[k])p.endpoints[k].probe={status:"pending"};});renderAll();
+  setTimeout(()=>{keys.forEach(k=>{const e=p.endpoints[k];if(!e)return;e.probe=simProbe(p,k);if(e.probe.status!=="ok"&&e.src==="auto"&&!onlyModels)e.enabled=false;});if(!enabledEps(p).includes(p.defaultChatProtocol)&&enabledEps(p)[0])p.defaultChatProtocol=enabledEps(p)[0];renderAll();toast(onlyModels?"模型列表已按已启用渠道刷新":"探测完成，不可用渠道已停用");},900);}
+
+// ───────────────── 抽屉：密钥 ─────────────────
+function renderKeysDrawer(){const p=P();const base=p.credentials[0];const allModels=p.models.map(x=>x.id);
+  const diff=c=>{if(c===base||!base)return"";const a=new Set(c.lastModels||[]),b=new Set(base.lastModels||[]);const more=[...a].filter(x=>!b.has(x)).length,less=[...b].filter(x=>!a.has(x)).length;return more||less?`<span class="chip warn">与主 Key：多 ${more} 个、少 ${less} 个</span>`:`<span class="chip ok">与主 Key 相同</span>`;};
+  return`<h3>管理密钥 · ${p.name}<span class="x" onclick="closeDrawer()">✕</span></h3><div class="hint">按顺序备用：鉴权、配额、账户类错误时在<b>能服务该模型的 Key</b> 之间换下一把（凭据层故障转移），失败的 Key 按模型单独熔断。首把即旧字段 apiKey。</div>
+  ${p.credentials.map((c,i)=>{const sc=c.scope||{mode:"all"};const seen=(c.lastModels||[]).length;return`<div class="ep"><div class="h"><button class="toggle ${c.enabled?'on':''}" onclick="P().credentials[${i}].enabled=!P().credentials[${i}].enabled;renderAll()"></button><input value="${c.label}" style="width:120px" onchange="P().credentials[${i}].label=this.value;renderAll()"><input class="mono" type="password" value="${c.key}" placeholder="sk-…" onchange="P().credentials[${i}].key=this.value;renderAll()"><span class="chip">${i===0?"默认":"备用 "+i}</span>${i>0?`<button class="sm" onclick="moveKey(${i},-1)">↑</button>`:""}${i<p.credentials.length-1?`<button class="sm" onclick="moveKey(${i},1)">↓</button>`:""}<button class="sm" onclick="P().credentials.splice(${i},1);renderAll()" ${p.credentials.length===1?"disabled":""}>×</button></div>
+    <div class="body"><div class="row2"><div><div class="lab">模型范围</div><select onchange="setScope(${i},this.value)"><option value="auto" ${sc.mode==="auto"?"selected":""}>自动 · 以该 Key 拉到的列表为准</option><option value="all" ${sc.mode==="all"?"selected":""}>全部 · 任何模型都可用</option><option value="manual" ${sc.mode==="manual"?"selected":""}>手选 / 前缀通配</option></select></div><div><div class="lab">上次拉取 <span class="sp"></span><button class="ghost sm" onclick="refreshKey(${i})">用此 Key 重新拉取</button></div><div class="field" style="min-height:36px;font-family:inherit">${c.lastModels?`看到 ${seen} 个模型`:"未拉取"} ${diff(c)}</div></div></div>
+    ${sc.mode==="manual"?`<div class="lab">可用模型（逗号分隔，支持 claude-* 通配）</div><input class="mono" value="${(sc.models||[]).join(", ")}" onchange="P().credentials[${i}].scope={mode:'manual',models:this.value.split(',').map(x=>x.trim()).filter(Boolean)};renderAll()">`:""}
+    ${sc.mode==="auto"&&c.lastModels?`<div class="chips" style="margin-top:6px">${allModels.map(mid=>`<span class="chip ${c.lastModels.includes(mid)?'on':''}" style="${c.lastModels.includes(mid)?'':'opacity:.45'}">${mid}</span>`).join("")}</div>`:""}
+    </div></div>`;}).join("")}
+  <button onclick="P().credentials.push({id:'k'+Date.now(),label:'备用账号',key:'',enabled:true,scope:{mode:'auto'}});renderAll()">＋ 添加备用 Key</button>
+  <div class="hint" style="margin-top:12px">模型目录是各 Key 各渠道列表的并集，每个模型只出现一次；"哪些 Key 能用它"由各 Key 的观测派生。公开快照与备份只带 configured 标记。</div>`;}
+function setScope(i,mode){const c=P().credentials[i];c.scope=mode==="manual"?{mode:"manual",models:c.lastModels?c.lastModels.slice(0,3):[]}:{mode};renderAll();}
+function refreshKey(i){const p=P();const c=p.credentials[i];toast("用 "+c.label+" 拉取模型列表…");setTimeout(()=>{const pool=p.models.map(x=>x.id);c.lastModels=i===0?pool:pool.filter((_,j)=>j%2===0||j>pool.length-3);renderAll();toast(c.label+" 看到 "+c.lastModels.length+" 个模型");},600);}
+function moveKey(i,d){const c=P().credentials;const t=c[i];c[i]=c[i+d];c[i+d]=t;renderAll();}
+
+// ───────────────── 抽屉：编辑模型 ─────────────────
+function renderModelDrawer(){const p=P();const mo=p.models.find(x=>x.id===drawerState.id);if(!mo)return"";const r=resolveRoute(p,mo.id);const en=enabledEps(p);const list=mo.chatProtocols||[];
+  const capChip=c=>{const v=mo.caps[c];const unsupported=(c==="fileInput"&&r&&r.protocol==="google-generative-ai")||(c==="imageUnderstanding"&&r&&r.dialect==="deepseek");return`<span class="chip click ${unsupported?'strike':v===1?'on':v===0?'bad':''}" title="${unsupported?'当前适配器不支持':''}" onclick="cycleCap('${c}')">${CAPNAME[c]}${v===undefined?"·未知":""}</span>`;};
+  return`<h3>编辑模型<span class="x" onclick="closeDrawer()">✕</span></h3>
+  <div class="row2"><div><div class="lab">模型 ID</div><div class="field">${mo.id}</div></div><div><div class="lab">远端模型 ID ${srcTag(mo.wireModelId?"user":"auto")}</div><input class="mono" value="${mo.wireModelId||""}" placeholder="缺省等于模型 ID" onchange="mo('${mo.id}').wireModelId=this.value||undefined;renderAll()"></div></div>
+  <div class="row2"><div><div class="lab">显示名称</div><input value="${mo.displayName||""}" placeholder="${mo.id}" onchange="mo('${mo.id}').displayName=this.value||undefined"></div><div><div class="lab">分组 ${srcTag(mo.groupSrc||"auto")}</div><input value="${mo.group}" onchange="mo('${mo.id}').group=this.value;mo('${mo.id}').groupSrc='user';renderAll()"></div></div>
+  <div class="lab">模型类型</div><div class="chips"><span class="chip on">文本</span><span class="chip" style="opacity:.5">图片（保留）</span><span class="chip" style="opacity:.5">嵌入（保留）</span><span class="chip" style="opacity:.5">重排（保留）</span></div>
+  <div class="lab">能力 <span class="hint">灰 = 目录值 · 实色 = 用户覆盖 · 划线 = 当前适配器不支持 · 点击循环</span></div><div class="chips">${CAPS.map(capChip).join("")}</div>
+  <div class="lab">输入模态</div><div class="chips">${MODS.map(x=>`<span class="chip click ${mo.mods[x]?'on':''}" onclick="mo('${mo.id}').mods.${x}=!mo('${mo.id}').mods.${x};renderDrawer()">${MODNAME[x]}</span>`).join("")}</div>
+  <div class="lab">接口（只列已启用渠道；首项路由，其余为端点层故障转移候选）${srcTag(list.length?"user":"auto")}</div>
+  <div class="chips">${list.map((k,i)=>`<span class="chip on">${i+1} · ${PNAME[k]} <span class="click" onclick="moveProto('${mo.id}',${i},-1)">↑</span> <span class="click" onclick="moveProto('${mo.id}',${i},1)">↓</span> <span class="click" onclick="mo('${mo.id}').chatProtocols.splice(${i},1);renderAll()">×</span></span>`).join("")}${en.filter(k=>!list.includes(k)).map(k=>`<span class="chip click" onclick="(mo('${mo.id}').chatProtocols=mo('${mo.id}').chatProtocols||[]).push('${k}');renderAll()">＋ ${PNAME[k]}</span>`).join("")}</div>
+  ${!list.length&&r&&!r.none?`<div class="hint">未显式指定，当前自动推断为 ${PNAME[r.protocol]}（来源：${({preset:"预设规则",family:"模型家族",provider:"供应商默认"})[r.source]||r.source}）</div>`:""}${list.length?`<button class="ghost sm" onclick="mo('${mo.id}').chatProtocols=undefined;renderAll()">还原为自动</button>`:""}
+  <div class="lab">凭据 ${srcTag(mo.credentialId?"user":"auto")} <span class="hint">能服务该模型的 Key：${keysFor(p,mo.id).map(c=>c.label).join(" / ")||"无（将用第一把尝试）"}</span></div><select onchange="mo('${mo.id}').credentialId=this.value||undefined;renderAll()"><option value="">自动（按范围与顺序）</option>${p.credentials.map(c=>`<option value="${c.id}" ${mo.credentialId===c.id?"selected":""}>${c.label}${scopeHas(c,mo.id)?"":"（范围外）"}</option>`).join("")}</select>
+  <div class="row2"><div><div class="lab">方言 ${srcTag(mo.dialect?"user":"auto")}</div><select onchange="mo('${mo.id}').dialect=this.value||undefined;renderAll()"><option value="">继承（${r&&!r.none?resolveDialect(p,Object.assign({},mo,{dialect:undefined}),p.endpoints[r.protocol],r.protocol):"—"}）</option>${DIALECTS.map(x=>`<option ${mo.dialect===x?"selected":""}>${x}</option>`).join("")}</select></div><div><div class="lab">默认思考档 ${srcTag(mo.reasoning?"user":"auto")}</div>${(()=>{const th=resolveThinking(mo);if(!th.reasoning)return`<div class="field" style="min-height:36px;font-family:inherit;color:var(--dim)">非思考模型</div>`;const opts=[...(th.off?["off"]:[]),...th.levels];const cur=mo.reasoning||p.reasoning||"auto";return`<select onchange="mo('${mo.id}').reasoning=this.value==='inherit'?undefined:this.value;renderAll()"><option value="inherit" ${mo.reasoning?"":"selected"}>继承供应商（${p.reasoning}${opts.includes(p.reasoning)||p.reasoning==="auto"?"":"→就近钳制"}）</option>${opts.map(l=>`<option value="${l}" ${mo.reasoning===l?"selected":""}>${l==="off"?"关闭":l}</option>`).join("")}</select>`;})()}</div></div>
+  <div class="lab">思考档位（来自模型目录，只读）<span class="sp"></span>${(()=>{const th=resolveThinking(mo);return th.source==="catalog"?`<span class="src auto">目录</span>`:th.source==="user"?`<span class="src user">手动指定</span>`:`<span class="src">目录未收录 · 家族兜底</span>`;})()}</div>
+  ${(()=>{const th=resolveThinking(mo);if(!th.reasoning)return`<div class="hint">目录标记为非思考模型，隐藏档位控件。</div>`;return`<div class="chips">${th.off?`<span class="chip">可关闭</span>`:`<span class="chip warn">始终开启</span>`}${LADDER.map(l=>`<span class="chip ${th.levels.includes(l)?'on':''}" style="${th.levels.includes(l)?'':'opacity:.35'}">${l}</span>`).join("")}</div>${th.source!=="catalog"?`<div class="hint" style="margin-top:4px">目录未收录该模型。<span class="chip click" onclick="manualThinking('${mo.id}')">手动指定档位</span> 指定后标为用户值，目录收录后会提示冲突。</div>`:`<div class="hint" style="margin-top:4px">每档在 wire 上怎么发（budget / effort / thinkingBudget / thinking.type）由协议与方言决定，不在这里配置。</div>`}`;})()}
+  <div class="row3"><div><div class="lab">上下文窗口 ${srcTag(mo.limitsSource==="catalog"?"auto":"auto")}</div><input value="${mo.contextWindow}" onchange="mo('${mo.id}').contextWindow=+this.value"></div><div><div class="lab">最大输入</div><input value="${mo.maxInputTokens||""}" placeholder="未设置"></div><div><div class="lab">最大输出</div><input value="${mo.maxOutputToken}" onchange="mo('${mo.id}').maxOutputToken=+this.value"></div></div>
+  <div class="hint">上下文预算 = min(最大输入, 上下文窗口 − 输出预留)；目录未命中时用按协议家族的启发式默认值（当前来源：${mo.limitsSource==="catalog"?"内置目录":"启发式"}）。</div>
+  <div class="lab" style="margin-top:16px">路由解析结果（纯函数输出，运行时只读这一份）</div>
+  ${r&&!r.none?`<div class="card" style="background:var(--panel2)"><div class="kv"><span class="k">接口</span><span class="v">${r.protocol} <span class="src auto">${({model:"模型显式",preset:"预设规则",family:"模型家族",provider:"供应商默认"})[r.source]||r.source}</span></span><span class="k">方言</span><span class="v">${r.dialect}</span><span class="k">Base URL</span><span class="v">${r.baseUrl}</span><span class="k">远端模型 ID</span><span class="v">${r.wireModelId}</span><span class="k">凭据</span><span class="v">${r.credLabel}（${r.credentialId}） <span class="src ${r.credentialSource==="fallback"?'user':'auto'}">${({endpoint:"端点指定",scope:"按范围与顺序",fallback:"范围外兜底",override:"模型指定"})[r.credentialSource]||r.credentialSource}</span></span><span class="k">quirks</span><span class="v">${Object.keys(r.quirks).length?JSON.stringify(r.quirks):"自动"}</span><span class="k">最终请求头</span><span class="v">${Object.entries(r.headers).map(([k,v])=>k+": "+v).join("<br>")}</span></div></div>`:`<div class="empty">无可用渠道：请在请求配置里启用至少一个该模型可走的接口</div>`}
+  <div class="lab">故障转移候选</div><table class="tbl"><tr><th>层</th><th>供应商</th><th>接口</th><th>方言</th><th>凭据</th></tr>${candidates(p,mo.id).map(c=>`<tr><td class="tier">${c.tier}</td><td>${c.pname}</td><td>${c.protocol}</td><td>${c.dialect}</td><td>${c.credLabel}</td></tr>`).join("")}</table>`;}
+const mo=id=>P().models.find(x=>x.id===id);
+function manualThinking(id){const v=prompt("可选档位，逗号分隔（minimal, low, medium, high, xhigh, max）；留空表示非思考模型","low, medium, high");if(v===null)return;mo(id).manualThinking={levels:v.split(",").map(x=>x.trim()).filter(x=>LADDER.includes(x))};mo(id).caps.reasoning=mo(id).manualThinking.levels.length?1:0;renderAll();}
+function cycleCap(c){const x=mo(drawerState.id);const v=x.caps[c];x.caps[c]=v===1?0:v===0?undefined:1;renderAll();}
+function moveProto(id,i,d){const l=mo(id).chatProtocols;if(i+d<0||i+d>=l.length)return;const t=l[i];l[i]=l[i+d];l[i+d]=t;renderAll();}
+
+// ───────────────── 向导：快速接入 ─────────────────
+let wiz=null;
+function openWizard(){wiz={step:1,preset:null,origin:"",key:"",results:null,accept:{}};renderWizard();document.getElementById("overlay").classList.add("open");}
+function closeWizard(){document.getElementById("overlay").classList.remove("open");wiz=null;}
+function renderWizard(){const m=document.getElementById("modal");const steps=["渠道","地址与密钥","探测接口","摘要采纳"];const head=`<h3>添加供应商</h3><div class="steps">${steps.map((s,i)=>`<span class="${wiz.step===i+1?'on':''}">${i+1} ${s}</span>${i<3?"<span>›</span>":""}`).join("")}</div>`;
+  if(wiz.step===1){m.innerHTML=head+`<div class="presets">${PRESETS.map(p=>`<div class="preset ${wiz.preset===p.id?'on':''}" onclick="wiz.preset='${p.id}';renderWizard()"><div class="logo">${p.logo}</div><div><b style="font-weight:500">${p.name}</b><small>${p.sub||{official:"官方",relay:"中转",'self-hosted':"自建"}[p.category]} · ${Object.keys(p.endpoints).length||"探测"} 个接口</small></div></div>`).join("")}</div><div class="foot"><button onclick="closeWizard()">取消</button><button class="primary" ${wiz.preset?"":"disabled"} onclick="wiz.step=2;renderWizard()">下一步</button></div>`;return;}
+  const pr=PRESETS.find(x=>x.id===wiz.preset);
+  if(wiz.step===2){m.innerHTML=head+`<div class="lab">预设</div><div class="field" style="font-family:inherit"><div class="logo">${pr.logo}</div>${pr.name}<span class="chip">${Object.keys(pr.endpoints).map(k=>PNAME[k]).join(" · ")||"探测四类接口"}</span></div>
+    ${pr.input==="key"?"":`<div class="lab">${pr.input==="origin"?"服务地址（origin，不含 /v1）":"Base URL"}</div><input class="mono" id="w-origin" placeholder="${pr.input==="origin"?"https://relay.example.com":"https://api.example.com/v1"}" value="${wiz.origin}">`}
+    ${pr.auth==="none"?`<div class="hint" style="margin-top:8px">本地服务不需要密钥。</div>`:`<div class="lab">API Key</div><input class="mono" id="w-key" type="password" placeholder="sk-…" value="${wiz.key}">`}
+    <div class="hint" style="margin-top:10px">接下来只会请求各接口的模型列表，不产生生成任务，不计费。</div>
+    <div class="foot"><button onclick="closeWizard()">取消</button><button class="primary" onclick="wizProbe()">检测并配置</button></div>`;return;}
+  if(wiz.step===3){m.innerHTML=head+`<div class="lab">探测 ${wiz.origin||pr.name}</div>${wiz.results.map(r=>`<div class="probe"><span>${PNAME[r.k]}</span><span class="hint">${r.url}</span><span class="sp"></span>${r.status==="pending"?`<span class="chip">检测中…</span>`:probeChip({probe:r})}</div>`).join("")}<div class="foot"><button onclick="wiz.step=2;renderWizard()">上一步</button><button class="primary" ${wiz.results.every(r=>r.status!=="pending")?"":"disabled"} onclick="wizSummary()">查看摘要</button></div>`;return;}
+  if(wiz.step===4){const ok=wiz.results.filter(r=>r.status==="ok");const groups={};wiz.models.forEach(id=>{(groups[family(id).key]=groups[family(id).key]||[]).push(id);});
+    m.innerHTML=head+`<div class="summ"><div class="h"><b style="font-weight:500">渠道</b><span class="chip">${ok.length} 个可用，默认 ${PNAME[wiz.defaultProto]}</span></div><div class="chips" style="margin-top:6px">${wiz.results.map(r=>`<span class="chip click ${r.status==="ok"&&wiz.accept[r.k]!==false?'on':r.status!=='ok'?'strike':''}" onclick="${r.status==="ok"?`wiz.accept['${r.k}']=wiz.accept['${r.k}']===false;renderWizard()`:""}">${PNAME[r.k]}${r.status!=="ok"?"（"+({missing:"不存在",unauthorized:"鉴权失败",unknown:"未知"})[r.status]+"）":""}</span>`).join("")}</div></div>
+    <div class="summ"><div class="h"><b style="font-weight:500">模型</b><span class="chip">${wiz.models.length} 个，按家族分组；默认只勾选能识别家族的分组</span></div>${Object.entries(groups).map(([g,ids])=>{const on=wiz.accept["g:"+g]??(g!=="其他");const proto=family(ids[0]).prefer.find(x=>ok.some(r=>r.k===x))||wiz.defaultProto;return`<div class="probe"><input type="checkbox" ${on?"checked":""} style="width:auto" onchange="wiz.accept['g:${g}']=this.checked"><span>${g}</span><span class="chip">${ids.length}</span><span class="hint">→ ${PNAME[proto]}${(()=>{const d=family(ids[0]).dialect;const eff=d==="openai"&&pr.category!=="official"?"generic":d;return eff!=="generic"?" · 方言 "+eff:"";})()}</span><span class="sp"></span><span class="hint">${ids.slice(0,3).join(", ")}${ids.length>3?" …":""}</span></div>`;}).join("")}</div>
+    <div class="hint">采纳后所有值标为"自动"，可在详情页逐项修改或还原。</div><div class="foot"><button onclick="wiz.step=3;renderWizard()">上一步</button><button class="primary" onclick="wizAccept()">采纳并创建</button></div>`;}
+}
+function wizProbe(){const pr=PRESETS.find(x=>x.id===wiz.preset);const o=document.getElementById("w-origin");const k=document.getElementById("w-key");if(o)wiz.origin=o.value.trim();if(k)wiz.key=k.value;
+  if(pr.input!=="key"&&!wiz.origin)return toast("请填写地址");if(pr.auth!=="none"&&!wiz.key)return toast("请填写 API Key");
+  const origin=wiz.origin.replace(/\/v1(beta)?\/?$/,"");const keys=pr.probeAll||!Object.keys(pr.endpoints).length?PROTOCOLS:Object.keys(pr.endpoints);
+  wiz.results=keys.map(k=>({k,url:((pr.endpoints[k]||{baseUrl:origin+(k==="google-generative-ai"?"/v1beta":k==="anthropic-messages"?"":"/v1")}).baseUrl).replace("{origin}",origin)+MODELS_PATH[k],status:"pending"}));wiz.step=3;renderWizard();
+  wiz.results.forEach((r,i)=>setTimeout(()=>{r.status=pr.id==="custom"||pr.id==="new-api"?(r.k==="google-generative-ai"?"missing":"ok"):(pr.endpoints[r.k]&&pr.endpoints[r.k].note==="待探测"?"unknown":"ok");if(r.status==="ok")r.ms=150+Math.round(Math.random()*400);renderWizard();},400+i*350));}
+function wizPool(){return {anthropic:["claude-sonnet-4","claude-opus-4"],openai:["gpt-5","gpt-5-mini","o4-mini"],gemini:["gemini-2.5-pro"],xai:["grok-4"],deepseek:["deepseek-v4-pro","deepseek-v4-flash","deepseek-chat"],zhipu:["glm-5","glm-5.2","glm-5.3"],minimax:["abab7-chat","minimax-m2"],moonshot:["kimi-k3","kimi-k2.7-code"],dashscope:["qwen3-max","qwen3-coder"],volcengine:["doubao-seed-2.0","doubao-pro-256k"],siliconflow:["deepseek-v4-flash","qwen3-235b","glm-5"],ollama:["llama3.1:8b","qwen3:32b"],lmstudio:["qwen3-32b"],openrouter:["anthropic/claude-sonnet-4","openai/gpt-5","deepseek/deepseek-v4-pro","qwen/qwen3-235b"],"new-api":["claude-sonnet-4","claude-opus-4","gpt-5","gpt-5-mini","deepseek-v4-pro","grok-4","glm-5","kimi-k3","qwen3-max","abab7-chat","hunyuan-t1","mistral-large"],local:["llama3.1:8b","qwen3:32b"],custom:["gpt-5","claude-sonnet-4","glm-5","my-finetune-01"]};}
+function wizSummary(){const pr=PRESETS.find(x=>x.id===wiz.preset);const ok=wiz.results.filter(r=>r.status==="ok").map(r=>r.k);wiz.defaultProto=ok.includes(pr.defaultChatProtocol)?pr.defaultChatProtocol:ok[0];const pool=wizPool();wiz.models=pool[pr.id]||pool.custom;wiz.step=4;renderWizard();}
+function wizAccept(){const pr=PRESETS.find(x=>x.id===wiz.preset);const origin=wiz.origin.replace(/\/v1(beta)?\/?$/,"");const id="p"+Date.now();const endpoints={};wiz.results.forEach(r=>{const url=r.url.replace(MODELS_PATH[r.k],"");endpoints[r.k]={enabled:r.status==="ok"&&wiz.accept[r.k]!==false,baseUrl:url,probe:{status:r.status,ms:r.ms},src:"auto",note:(pr.endpoints[r.k]||{}).note,quirks:(pr.endpoints[r.k]||{}).quirks};});
+  const models=wiz.models.filter(mid=>wiz.accept["g:"+family(mid).key]??(family(mid).key!=="其他")).map(mid=>{const rule=(pr.models||[]).find(x=>x.match===mid);return m(mid.replace(/^[a-z]+\//,""),Object.assign({wireModelId:mid.includes("/")?mid:undefined},rule?{chatProtocols:rule.chatProtocols,src:"preset"}:{}));});
+  const dup=providers.filter(x=>x.presetId===pr.id).length;const p=mk({id,name:pr.id==="custom"?(origin.replace(/^https?:\/\//,"")||"自定义供应商"):pr.name+(pr.input!=="key"?" · "+origin.replace(/^https?:\/\//,""):"")+(dup?" · "+(dup+1):""),presetId:pr.id,category:pr.category,enabled:true,credentials:[{id:"k1",label:"默认",key:wiz.key||"(无)",enabled:true,scope:{mode:"auto"},lastModels:models.map(x=>x.id)}],dialect:pr.dialect,defaultChatProtocol:wiz.defaultProto,endpoints,customHeaders:[],models});
+  providers.push(p);sel=id;closeWizard();renderAll();toast("已创建，所有值标为自动，可逐项调整");}
+
+
+// ───────────────── 对话框：添加渠道 ─────────────────
+const REQ_PATH={"openai-completions":"/chat/completions","anthropic-messages":"/v1/messages","openai-responses":"/responses","google-generative-ai":"/models/{model}:generateContent"};
+const PRIMARY_EPS=["openai-completions","anthropic-messages"],MORE_EPS=["openai-responses","google-generative-ai"];
+let ac=null;
+function openAddChannel(){ac={name:"",category:"relay",key:"",preset:"",eps:{},more:false,err:""};renderAddChannel();document.getElementById("overlay").classList.add("open");}
+function closeAddChannel(){document.getElementById("overlay").classList.remove("open");ac=null;}
+function acField(k){const v=ac.eps[k]||"";const prev=v?`<div class="pathprev">实际请求路径：<b>${v.replace(/\/+$/,"")}${REQ_PATH[k]}</b>${k==="anthropic-messages"&&/\/v1$/.test(v)?"（已含 /v1，将写为 …/v1/messages）":""}</div>`:`<div class="hint">填写 API 根地址后会显示实际请求路径</div>`;
+  return`<div class="lab" style="font-size:13px;color:var(--text)">${PNAME[k]}</div><input class="mono" placeholder="Base URL：https://example.com${k==="google-generative-ai"?"/v1beta":"/v1"}" value="${v}" oninput="ac.eps['${k}']=this.value.trim();ac.err='';renderAddChannel(true)">${prev}`;}
+function renderAddChannel(keepFocus){const m=document.getElementById("modal");const initial=(ac.name.trim()[0]||"P").toUpperCase();const active=document.activeElement;const focusIdx=active&&active.tagName==="INPUT"?[...m.querySelectorAll("input,select")].indexOf(active):-1;const caret=active&&active.selectionStart;
+  m.innerHTML=`<h3>添加渠道</h3><div class="hint" style="margin:-4px 0 10px">自定义中转、聚合网关或尚未内置的厂商。填地址与 Key 后自动探测四类接口并拉取模型。</div>
+  <div class="avatar">${initial}</div>
+  <div style="display:flex;gap:6px;justify-content:center;margin:0 0 10px"><button class="sm">图片上传</button><button class="sm">内置头像</button><button class="sm">重置头像</button></div>
+  <div class="row2"><div><div class="lab">渠道名称 <span class="req">*</span></div><input placeholder="例如 我的中转" value="${ac.name}" oninput="ac.name=this.value;ac.err='';renderAddChannel(true)"></div><div><div class="lab">类型</div><select onchange="ac.category=this.value"><option value="relay" ${ac.category==="relay"?"selected":""}>中转 / 聚合网关</option><option value="official" ${ac.category==="official"?"selected":""}>厂商官方</option><option value="self-hosted" ${ac.category==="self-hosted"?"selected":""}>自建 / 本地</option></select></div></div>
+  <div class="lab">API 密钥</div><input class="mono" type="password" placeholder="输入 API 密钥；本地服务可留空" value="${ac.key}" oninput="ac.key=this.value">
+  <div class="lab" style="margin-top:14px;font-size:13px;color:var(--text)">端点设置 <span class="hint">四类接口按需填写，留空的接口不创建</span></div>
+  ${PRIMARY_EPS.map(acField).join("")}
+  <details class="more" ${ac.more?"open":""} ontoggle="ac.more=this.open"><summary>更多设置（OpenAI Responses、Gemini）</summary>${MORE_EPS.map(acField).join("")}</details>
+  <div class="lab" style="margin-top:14px;font-size:13px;color:var(--text)">从预设创建（可选）</div><div class="hint">适用于 Coding Plan 接入、多账号管理或项目隔离；选择后填入该渠道的接口与地址，Base URL 和 Key 仍可单独改。</div>
+  <select onchange="acApplyPreset(this.value)"><option value="">从渠道预设创建…</option>${PRESETS.filter(x=>!x.hiddenInList).map(x=>`<option value="${x.id}" ${ac.preset===x.id?"selected":""}>${x.name}${x.native?"（原生）":""}</option>`).join("")}</select>
+  ${ac.err?`<div class="hint" style="color:var(--bad);margin-top:8px">${ac.err}</div>`:""}
+  <div class="foot"><button onclick="closeAddChannel()">取消</button><button class="primary" onclick="acSubmit()">添加并探测</button></div>`;
+  if(keepFocus&&focusIdx>=0){const el=m.querySelectorAll("input,select")[focusIdx];if(el){el.focus();if(typeof caret==="number"&&el.setSelectionRange)try{el.setSelectionRange(caret,caret);}catch(e){}}}}
+function acApplyPreset(id){ac.preset=id;const pr=PRESETS.find(x=>x.id===id);if(!pr)return renderAddChannel();const origin=pr.origin||"https://relay.example.com";ac.eps={};Object.keys(pr.endpoints).forEach(k=>ac.eps[k]=pr.endpoints[k].baseUrl.replace("{origin}",origin));ac.name=ac.name||pr.name+" · 新实例";ac.category=pr.category;ac.more=MORE_EPS.some(k=>ac.eps[k]);renderAddChannel();}
+function acSubmit(){if(!ac.name.trim()){ac.err="请填写渠道名称";return renderAddChannel();}const filled=PROTOCOLS.filter(k=>ac.eps[k]);if(!filled.length){ac.err="至少填写一个接口的 Base URL";return renderAddChannel();}
+  const pr=PRESETS.find(x=>x.id===ac.preset);const id="p"+Date.now();const endpoints={};filled.forEach(k=>{endpoints[k]={enabled:true,baseUrl:ac.eps[k],src:pr&&pr.endpoints[k]?"preset":"user",quirks:pr&&pr.endpoints[k]?pr.endpoints[k].quirks:undefined};});
+  const def=(pr&&filled.includes(pr.defaultChatProtocol))?pr.defaultChatProtocol:["openai-completions","openai-responses","anthropic-messages","google-generative-ai"].find(k=>filled.includes(k));
+  const p=mk({id,name:ac.name.trim(),presetId:pr?pr.id:"custom",category:ac.category,enabled:true,credentials:[{id:"k1",label:"默认",key:ac.key||"(无)",enabled:true,scope:{mode:"auto"}}],dialect:pr?pr.dialect:undefined,defaultChatProtocol:def,endpoints,customHeaders:[],models:[]});
+  providers.push(p);sel=id;closeAddChannel();renderAll();toast("渠道已添加，开始探测接口并拉取模型…");
+  setTimeout(()=>{filled.forEach(k=>{p.endpoints[k].probe=simProbe(p,k);});const pool=pr?(wizPool()[pr.id]||wizPool().custom):wizPool().custom;pool.forEach(mid=>{const rule=pr&&(pr.models||[]).find(x=>x.match===mid);p.models.push(m(mid.replace(/^[a-z]+\//,""),Object.assign({wireModelId:mid.includes("/")?mid:undefined},rule?{chatProtocols:rule.chatProtocols,src:"preset"}:{})));});p.activeModels=p.models.map(x=>x.id);p.credentials[0].lastModels=p.models.map(x=>x.id);renderAll();toast("探测完成：拉到 "+p.models.length+" 个模型，所有值标为自动");},900);}
+
+function renderAll(){renderList();renderDetail();if(drawerState)renderDrawer();}
+renderAll();
+</script>
+</body>
+</html>
