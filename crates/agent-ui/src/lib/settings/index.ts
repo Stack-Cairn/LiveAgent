@@ -25,6 +25,7 @@ import {
   coerceDialectForProtocol,
   findProviderPreset,
   inferDialectFromBaseUrl,
+  inferEndpointQuirksFromBaseUrl,
   isProviderChatProtocol,
   isProviderWireDialect,
   legacyTypeForPreset,
@@ -113,6 +114,7 @@ import type {
   ProviderRetryPolicy,
   ProviderRouteCredentialSource,
   ProviderRouteProtocolSource,
+  ProviderThinkingFormat,
   ProviderWireDialect,
   ReasoningLevel,
   RemoteSettings,
@@ -153,6 +155,7 @@ import {
   PROVIDER_CHAT_PROTOCOLS,
   PROVIDER_PROTOCOL_FAMILY,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
+  PROVIDER_THINKING_FORMATS,
   RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
   RIGHT_DOCK_TOOL_KINDS,
   USAGE_QUERY_TIMEOUT_DEFAULT_SECS,
@@ -404,13 +407,24 @@ export function resolveProviderDialect(
   },
 ): ProviderWireDialect {
   const preset = findProviderPreset(provider.presetId);
+  // Codex 分组的"OpenAI 官方语义"只是缺省：直连 api.x.ai / api.deepseek.com 的旧配置
+  // 仍按域名取 xai / deepseek 方言（与改造前 isXaiProviderTarget 的行为一致）。
+  const legacyDialect = getLegacyProviderDialect(provider.type);
+  const inferredDialect = inferDialectFromBaseUrl(
+    protocol,
+    options?.endpoint?.baseUrl || provider.baseUrl,
+  );
+  // "openai" 只表示 OpenAI 官方语义的缺省：预设或旧分组给出 openai 时，端点域名
+  // 若明确是 xAI / DeepSeek 官方，以域名为准。
+  const softOpenAI = (dialect: ProviderWireDialect | undefined) =>
+    dialect === "openai" ? (inferredDialect ?? dialect) : dialect;
   const candidate =
     options?.model?.dialect ??
     options?.endpoint?.dialect ??
     provider.dialect ??
-    preset?.dialect ??
-    getLegacyProviderDialect(provider.type) ??
-    inferDialectFromBaseUrl(protocol, options?.endpoint?.baseUrl || provider.baseUrl) ??
+    softOpenAI(preset?.dialect) ??
+    softOpenAI(legacyDialect) ??
+    inferredDialect ??
     "generic";
   return coerceDialectForProtocol(protocol, candidate);
 }
@@ -542,7 +556,11 @@ export function resolveProviderChatRoute(
     credentialId: credential.credential.id,
     credentialSource: credential.source,
     headers: mergeHeaderLists(provider.customHeaders, config?.headers),
-    quirks: { ...presetEndpoint?.quirks, ...config?.quirks },
+    quirks: {
+      ...inferEndpointQuirksFromBaseUrl(protocol, config?.baseUrl || provider.baseUrl),
+      ...presetEndpoint?.quirks,
+      ...config?.quirks,
+    },
     ...((config?.auth ?? presetEndpoint?.auth)
       ? { auth: { ...presetEndpoint?.auth, ...config?.auth } }
       : {}),
@@ -1520,6 +1538,15 @@ function normalizeEndpointQuirks(input: unknown): ProviderEndpointQuirks | undef
     "supportsStore",
   ] as const) {
     if (typeof source[key] === "boolean") quirks[key] = source[key] as boolean;
+  }
+  if (
+    typeof source.thinkingFormat === "string" &&
+    (PROVIDER_THINKING_FORMATS as readonly string[]).includes(source.thinkingFormat)
+  ) {
+    quirks.thinkingFormat = source.thinkingFormat as ProviderThinkingFormat;
+  }
+  if (source.maxTokensField === "max_tokens" || source.maxTokensField === "max_completion_tokens") {
+    quirks.maxTokensField = source.maxTokensField;
   }
   return Object.keys(quirks).length > 0 ? quirks : undefined;
 }

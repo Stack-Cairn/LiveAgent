@@ -42,7 +42,22 @@ export type ProviderEndpointQuirks = {
   supportsReasoningEffort?: boolean;
   /** = pi-ai compat.supportsStore */
   supportsStore?: boolean;
+  /** = pi-ai compat.thinkingFormat（Completions 思考参数写法） */
+  thinkingFormat?: ProviderThinkingFormat;
+  /** = pi-ai compat.maxTokensField */
+  maxTokensField?: "max_completion_tokens" | "max_tokens";
 };
+
+export const PROVIDER_THINKING_FORMATS = [
+  "openai",
+  "openrouter",
+  "deepseek",
+  "together",
+  "zai",
+  "qwen",
+] as const;
+
+export type ProviderThinkingFormat = (typeof PROVIDER_THINKING_FORMATS)[number];
 
 export type ProviderEndpointAuth = {
   /** 覆盖协议头档的鉴权头名；缺省由协议决定 */

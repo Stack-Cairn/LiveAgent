@@ -240,6 +240,8 @@ function quirksToCompat(
     compat.supportsReasoningEffort = quirks.supportsReasoningEffort;
   }
   if (quirks.supportsStore !== undefined) compat.supportsStore = quirks.supportsStore;
+  if (quirks.thinkingFormat !== undefined) compat.thinkingFormat = quirks.thinkingFormat;
+  if (quirks.maxTokensField !== undefined) compat.maxTokensField = quirks.maxTokensField;
   return compat;
 }
 

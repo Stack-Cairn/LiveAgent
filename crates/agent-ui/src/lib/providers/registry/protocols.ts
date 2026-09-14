@@ -178,3 +178,70 @@ export function mergeHeaderLayers(
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// 网关实现偏差推导（pi-ai 隔着本地反代看不到真实域名，这里按端点地址补上）
+// ---------------------------------------------------------------------------
+
+export type InferredEndpointQuirks = {
+  supportsUsageInStreaming?: boolean;
+  supportsDeveloperRole?: boolean;
+  supportsReasoningEffort?: boolean;
+  supportsStore?: boolean;
+  thinkingFormat?: "openai" | "openrouter" | "deepseek" | "together" | "zai" | "qwen";
+  maxTokensField?: "max_completion_tokens" | "max_tokens";
+};
+
+const KNOWN_HOST_QUIRKS: readonly [RegExp, InferredEndpointQuirks][] = [
+  [
+    /(^|\.)(api\.z\.ai|open\.bigmodel\.cn)$/i,
+    {
+      thinkingFormat: "zai",
+      supportsReasoningEffort: false,
+      supportsStore: false,
+      maxTokensField: "max_tokens",
+    },
+  ],
+  [/(^|\.)openrouter\.ai$/i, { thinkingFormat: "openrouter", supportsStore: false }],
+  [
+    /(^|\.)api\.together\.(ai|xyz)$/i,
+    {
+      thinkingFormat: "together",
+      supportsReasoningEffort: false,
+      supportsStore: false,
+      maxTokensField: "max_tokens",
+    },
+  ],
+  [/(^|\.)chutes\.ai$/i, { supportsStore: false, maxTokensField: "max_tokens" }],
+  [/(^|\.)dashscope(-intl)?\.aliyuncs\.com$/i, { thinkingFormat: "qwen", supportsStore: false }],
+  [
+    /(^|\.)api\.moonshot\.(cn|ai)$/i,
+    { supportsReasoningEffort: false, supportsStore: false, maxTokensField: "max_tokens" },
+  ],
+  [
+    /(^|\.)integrate\.api\.nvidia\.com$/i,
+    { supportsReasoningEffort: false, supportsStore: false, maxTokensField: "max_tokens" },
+  ],
+  [/(^|\.)cerebras\.ai$/i, { supportsStore: false }],
+];
+
+/**
+ * 按端点地址推导已知网关的 Completions 实现偏差。只对 openai-completions 生效；
+ * 用户或预设显式声明的 quirks 覆盖推导值。
+ */
+export function inferEndpointQuirksFromBaseUrl(
+  protocol: ProviderChatProtocol,
+  baseUrl: string | undefined,
+): InferredEndpointQuirks | undefined {
+  if (protocol !== "openai-completions" || !baseUrl) return undefined;
+  let host = "";
+  try {
+    host = new URL(baseUrl.trim()).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  for (const [pattern, quirks] of KNOWN_HOST_QUIRKS) {
+    if (pattern.test(host)) return { ...quirks };
+  }
+  return undefined;
+}

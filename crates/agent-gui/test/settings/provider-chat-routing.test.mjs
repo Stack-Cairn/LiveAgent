@@ -178,3 +178,38 @@ test("route resolution tolerates a legacy pre-normalization provider snapshot", 
   assert.equal(route.isFullUrl, false);
   assert.equal(route.credentialId, "default");
 });
+
+test("known gateway hosts infer completions quirks and legacy codex direct xAI keeps its dialect", () => {
+  const zai = settings.normalizeCustomProvider({
+    id: "zai",
+    type: "codex",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    requestFormat: "openai-completions",
+    models: ["glm-5"],
+  });
+  const route = settings.resolveProviderChatRoute(zai, "glm-5");
+  assert.equal(route.quirks.thinkingFormat, "zai");
+  assert.equal(route.quirks.supportsReasoningEffort, false);
+
+  const explicit = settings.normalizeCustomProvider({
+    id: "zai2",
+    type: "codex",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    requestFormat: "openai-completions",
+    endpointConfigs: {
+      "openai-completions": { baseUrl: "https://open.bigmodel.cn/api/paas/v4", quirks: { supportsReasoningEffort: true } },
+    },
+    models: ["glm-5"],
+  });
+  assert.equal(settings.resolveProviderChatRoute(explicit, "glm-5").quirks.supportsReasoningEffort, true);
+
+  const grokViaCodex = settings.normalizeCustomProvider({
+    id: "grok-codex",
+    type: "codex",
+    baseUrl: "https://api.x.ai/v1",
+    models: ["grok-4"],
+  });
+  const grokRoute = settings.resolveProviderChatRoute(grokViaCodex, "grok-4");
+  assert.equal(grokRoute.dialect, "xai");
+  assert.equal(grokRoute.adapterProviderId, "xai");
+});
