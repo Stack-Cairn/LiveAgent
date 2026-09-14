@@ -1768,7 +1768,6 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       ? (normalizePromptCacheHintMode(obj.promptCacheHintMode) ??
         (obj.promptCachingEnabled === false ? "none" : "auto"))
       : undefined;
-  const defaultChatProtocol = legacyDefault?.protocol;
   const credentials = normalizeProviderCredentials(
     obj.credentials,
     apiKey,
@@ -1776,6 +1775,15 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
   );
   const credentialIds = new Set(credentials.map((credential) => credential.id));
   const endpointConfigs = normalizeProviderEndpointConfigs(obj.endpointConfigs, credentialIds);
+  // 默认接口不能是被关闭的渠道：自动切到第一个已启用的显式端点（设计文档 5.4 / 9）。
+  const defaultChatProtocol = (() => {
+    const requested = legacyDefault?.protocol;
+    if (!requested || endpointConfigs?.[requested]?.enabled !== false) return requested;
+    const fallback = PROVIDER_CHAT_PROTOCOLS.find(
+      (protocol) => endpointConfigs?.[protocol] && endpointConfigs[protocol]?.enabled !== false,
+    );
+    return fallback ?? requested;
+  })();
   const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyDefault?.dialect;
   const primaryBaseUrl = codexRouting
     ? codexRouting.baseUrl

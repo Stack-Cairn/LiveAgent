@@ -229,3 +229,18 @@ test("known gateway hosts infer completions quirks and legacy codex direct xAI k
   assert.equal(grokRoute.dialect, "xai");
   assert.equal(grokRoute.adapterProviderId, "xai");
 });
+
+test("a disabled default endpoint falls back to the first enabled explicit endpoint", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    defaultChatProtocol: "openai-responses",
+    endpointConfigs: {
+      "openai-responses": { baseUrl: "https://relay.example/v1", enabled: false },
+      "anthropic-messages": { baseUrl: "https://relay.example" },
+    },
+    models: ["claude-sonnet-4"],
+  });
+  assert.equal(provider.defaultChatProtocol, "anthropic-messages");
+});

@@ -22,6 +22,8 @@ export type ModelOptionsSettings<TProviderType extends string = string> = {
     name: string;
     type: TProviderType;
     activeModels: readonly string[];
+    /** 可选：带 displayName 时选择器用它做标签 */
+    models?: readonly { id: string; displayName?: string }[];
   }[];
   selectedModel?: {
     customProviderId: string;
@@ -97,6 +99,11 @@ export function buildModelOptions<TProviderType extends string>(
 ): SharedModelOption<TProviderType>[] {
   const modelOptions: SharedModelOption<TProviderType>[] = [];
   for (const provider of settings.customProviders) {
+    const displayNames = new Map(
+      (provider.models ?? [])
+        .filter((item) => item.displayName?.trim())
+        .map((item) => [item.id, item.displayName?.trim() ?? ""]),
+    );
     for (const model of provider.activeModels) {
       modelOptions.push({
         providerType: provider.type,
@@ -104,7 +111,7 @@ export function buildModelOptions<TProviderType extends string>(
         providerName: provider.name,
         model,
         value: toModelValue(provider.id, model),
-        label: model,
+        label: displayNames.get(model) || model,
       });
     }
   }
