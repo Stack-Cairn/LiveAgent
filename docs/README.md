@@ -21,7 +21,6 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | [features/skills-and-mcp.md](features/skills-and-mcp.md) | Skills root/builtin/ClawHub 与 MCP Hub/registry/runtime | Skills/MCP 开发 |
 | [features/history-compaction.md](features/history-compaction.md) | V3 历史分段、FTS、分享、上下文压缩 checkpoint | 历史与上下文开发 |
 | [features/config-backup-sync.md](features/config-backup-sync.md) | 配置快照、本地导入导出、WebDAV 同步与自动上传 | 设置与同步开发 |
-| [design/independent-capability-switches.md](design/independent-capability-switches.md) | MCP、Skills、记忆、Cron、Hook 独立系统开关的需求、现状、启停边界与验收（待实现） | 设置、Agent 运行时与后台服务开发 |
 | [design/workbench-project-tool-panes.md](design/workbench-project-tool-panes.md) | 审查 / 内网穿透 / SSH / 后台任务脱离 Right Dock 成为可拖拽拼接的 Workbench Pane（桌面端与 Web 端共用实现） | Workbench 与项目工具开发 |
 | [design/provider-registry-and-model-routing.md](design/provider-registry-and-model-routing.md) | 供应商配置方案：预设注册表（每家供应商的接口定义）、四类接口与方言、多 Key、探测与自动配置、模型能力、三栏设置界面、故障转移 | 供应商设置与聊天运行时开发 |
 | [operations/development.md](operations/development.md) | 本地开发、构建、测试、端口、运行路径 | 日常开发 |

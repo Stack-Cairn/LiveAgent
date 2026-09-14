@@ -29,7 +29,7 @@
 | `claude_code` | Anthropic Messages 兼容 | thinking、cache control、toolChoice、Anthropic native web search。 |
 | `codex` | OpenAI Responses 或 Completions | Responses storage、hosted search probe、OpenAI tool/search 事件聚合。 |
 | `gemini` | Google Generative AI | Gemini thinking runtime、Gemini auth header、provider native search。 |
-| custom provider | 按 `ProviderId` 与 request format 映射 | baseUrl/apiKey/model config/reasoning/cache 等由 settings 决定。 |
+| custom provider | 按 `resolveProviderChatRoute` 解析出的四类接口（Messages / Completions / Responses / Gemini）与方言（generic / openai / xai / deepseek）映射 | 端点、凭据、远端模型 ID、请求头、quirks 由设置层的路由结果一次给出；设计见 `docs/design/provider-registry-and-model-routing.md`。 |
 
 ## 上下文构造
 
