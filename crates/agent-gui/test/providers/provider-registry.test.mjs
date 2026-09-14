@@ -229,3 +229,24 @@ test("probe errors classify by HTTP status", () => {
   assert.equal(utils.extractHttpStatusFromMessage("upstream said 404 not found"), 404);
   assert.equal(utils.extractHttpStatusFromMessage("timeout"), null);
 });
+
+test("legacy providers map to presets by host, relays fall back to custom", () => {
+  assert.equal(registry.presetIdForLegacyProvider("codex", "https://api.openai.com/v1"), "openai");
+  assert.equal(registry.presetIdForLegacyProvider("codex", "https://www.packyapi.com/v1"), "custom");
+  assert.equal(registry.presetIdForLegacyProvider("claude_code", "https://api.deepseek.com/anthropic"), "deepseek");
+  assert.equal(registry.presetIdForLegacyProvider("codex", "https://open.bigmodel.cn/api/paas/v4"), "zhipu");
+  assert.equal(registry.presetMatchesBaseUrl(registry.findProviderPreset("new-api"), "https://relay.x/v1"), true);
+  assert.equal(registry.presetMatchesBaseUrl(registry.findProviderPreset("openai"), "https://relay.x/v1"), false);
+
+  // 挂着官方预设的中转实例：候选接口从自己的地址派生，不碰官方地址。
+  const candidates = probe.buildEndpointCandidates({
+    preset: registry.findProviderPreset("openai"),
+    baseUrl: "https://www.packyapi.com/v1",
+  });
+  assert.ok(candidates.every((c) => c.baseUrl.includes("packyapi.com")));
+  const official = probe.buildEndpointCandidates({
+    preset: registry.findProviderPreset("openai"),
+    baseUrl: "https://api.openai.com/v1",
+  });
+  assert.ok(official.every((c) => c.baseUrl.startsWith("https://api.openai.com")));
+});

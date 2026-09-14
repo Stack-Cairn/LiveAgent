@@ -17,19 +17,37 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { CustomHeader } from "@liveagent/ui/lib/providers/customHeaders";
-import {
-  PROVIDER_PROTOCOL_MODELS_PATH,
-  type ProviderPreset,
-} from "@liveagent/ui/lib/providers/registry";
+import type { ProviderPreset } from "@liveagent/ui/lib/providers/registry";
 import {
   type AutoConfiguration,
   buildAutoConfiguration,
   type EndpointCandidate,
   groupProbeModels,
+  legacyTypeForProtocol,
   type ProviderProbeResult,
   probeProvider,
   summarizeEndpointStatus,
 } from "@liveagent/ui/pages/settings/providerProbe";
+import {
+  buildProviderModelsUrl,
+  normalizeProviderModelsBaseUrl,
+} from "@liveagent/ui/pages/settings/providerUtils";
+
+/** 与真实拉取一致的模型列表地址预览（去重 /v1、Gemini 用 v1beta）。 */
+function previewModelsUrl(candidate: EndpointCandidate): string {
+  if (candidate.modelsUrl) return candidate.modelsUrl;
+  const type = legacyTypeForProtocol(candidate.protocol);
+  try {
+    return buildProviderModelsUrl(
+      type,
+      normalizeProviderModelsBaseUrl(type, candidate.baseUrl, candidate.isFullUrl === true),
+      "official",
+    );
+  } catch {
+    return candidate.baseUrl;
+  }
+}
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChipButton, ProbeStatusChip, protocolLabel } from "./providerChips";
 import { probeSummaryFor } from "./providerSettingsModel";
@@ -266,8 +284,7 @@ export function ProviderProbeDialog(props: {
                     <span className="font-medium">{protocolLabel(candidate.protocol)}</span>
                   )}
                   <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-                    {candidate.baseUrl}
-                    {candidate.modelsUrl ? "" : PROVIDER_PROTOCOL_MODELS_PATH[candidate.protocol]}
+                    {previewModelsUrl(candidate)}
                   </span>
                   {candidate.note ? (
                     <span className="text-[10.5px] text-muted-foreground/70">{candidate.note}</span>

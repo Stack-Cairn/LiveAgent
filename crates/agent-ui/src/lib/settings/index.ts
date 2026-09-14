@@ -30,7 +30,8 @@ import {
   isProviderWireDialect,
   legacyTypeForPreset,
   matchPresetModelRule,
-  presetIdForLegacyType,
+  presetIdForLegacyProvider,
+  presetMatchesBaseUrl,
   resolveModelFamily,
   stripModelVendorPrefix,
 } from "@liveagent/ui/lib/providers/registry";
@@ -1776,7 +1777,15 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
   const credentialIds = new Set(credentials.map((credential) => credential.id));
   const endpointConfigs = normalizeProviderEndpointConfigs(obj.endpointConfigs, credentialIds);
   const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyDefault?.dialect;
-  const presetId = presetFromInput ? presetFromInput.id : presetIdForLegacyType(type);
+  const primaryBaseUrl = codexRouting
+    ? codexRouting.baseUrl
+    : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : "");
+  // 预设归属以地址为准：声明了绝对官方主机的预设，地址不在其主机内时降级为自定义，
+  // 避免把中转的 Key 发到官方地址。
+  const presetId =
+    presetFromInput && presetMatchesBaseUrl(presetFromInput, primaryBaseUrl)
+      ? presetFromInput.id
+      : presetIdForLegacyProvider(type, primaryBaseUrl);
   const category =
     normalizeProviderCategory(obj.category) ?? findProviderPreset(presetId)?.category;
   const primaryKey = credentials[0]?.apiKey ?? apiKey;

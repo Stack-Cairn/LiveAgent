@@ -24,6 +24,7 @@ import {
   PROVIDER_CHAT_PROTOCOLS,
   PROVIDER_PROTOCOL_FAMILY,
   type ProviderPreset,
+  presetMatchesBaseUrl,
   resolveModelFamily,
   resolveModelGroup,
 } from "../../lib/providers/registry";
@@ -107,7 +108,14 @@ export function buildEndpointCandidates(params: {
       continue;
     }
     const presetEndpoint = declared?.[protocol];
-    if (presetEndpoint) {
+    // 预设的绝对地址只在实例地址属于该预设官方主机时使用；中转/自建实例即使挂着
+    // 预设，也从自己的地址派生，避免把 Key 发到官方地址。
+    const presetApplies =
+      presetEndpoint &&
+      (presetEndpoint.baseUrl.includes("{origin}") ||
+        !(params.baseUrl || params.origin) ||
+        presetMatchesBaseUrl(preset, params.baseUrl ?? params.origin));
+    if (presetEndpoint && presetApplies) {
       const baseUrl = expandPresetBaseUrl(presetEndpoint.baseUrl, params.origin ?? params.baseUrl);
       if (!baseUrl) continue;
       out.push({
@@ -261,8 +269,9 @@ export function groupProbeModels(
     const protocol =
       rule?.chatProtocols?.find((item) => availableProtocols.includes(item)) ??
       family.prefer.find((item) => availableProtocols.includes(item));
+    // 家族方言只在官方渠道生效；中转/自建按路由实际解析（一般为 generic 或供应商默认）。
     const dialect: ProviderWireDialect =
-      family.dialect === "openai" && preset?.category !== "official" ? "generic" : family.dialect;
+      rule?.dialect ?? (preset?.category === "official" ? family.dialect : "generic");
     const group = groups.get(family.key) ?? { key: family.key, models: [], protocol, dialect };
     group.models.push(model);
     groups.set(family.key, group);

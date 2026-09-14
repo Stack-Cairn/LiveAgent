@@ -33,7 +33,23 @@ test("provider routing normalization keeps valid routes and drops unknown protoc
   // 新实例默认凭据与旧字段同步。
   assert.equal(provider.credentials.length, 1);
   assert.equal(provider.credentials[0].apiKey, provider.apiKey);
-  assert.equal(provider.presetId, "openai");
+  // 中转地址不属于任何官方主机 → 自定义渠道，而不是 OpenAI 官方预设。
+  assert.equal(provider.presetId, "custom");
+  const official = settings.normalizeCustomProvider({
+    id: "oa",
+    type: "codex",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-5"],
+  });
+  assert.equal(official.presetId, "openai");
+  const mislabeled = settings.normalizeCustomProvider({
+    id: "relay",
+    type: "codex",
+    presetId: "openai",
+    baseUrl: "https://www.packyapi.com/v1",
+    models: ["gpt-5"],
+  });
+  assert.equal(mislabeled.presetId, "custom");
 });
 
 test("legacy deepseek-responses protocol rewrites to Responses + deepseek dialect", () => {

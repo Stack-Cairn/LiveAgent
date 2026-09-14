@@ -136,6 +136,57 @@ export function presetIdForLegacyType(type: string): string {
   return LEGACY_TYPE_PRESET[type] ?? CUSTOM_PRESET_ID;
 }
 
+function hostOf(url: string | undefined): string {
+  if (!url) return "";
+  try {
+    return new URL(url.trim()).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/** 预设声明的绝对地址主机集合（{origin} 模板不算）。 */
+export function presetHosts(preset: Pick<ProviderPreset, "endpoints">): string[] {
+  const hosts = new Set<string>();
+  for (const endpoint of Object.values(preset.endpoints)) {
+    if (!endpoint || endpoint.baseUrl.includes("{origin}")) continue;
+    const host = hostOf(endpoint.baseUrl);
+    if (host) hosts.add(host);
+  }
+  return [...hosts];
+}
+
+/** 地址主机是否属于该预设声明的官方主机。没有绝对主机的预设（网关模板、自定义）返回 true。 */
+export function presetMatchesBaseUrl(
+  preset: Pick<ProviderPreset, "endpoints"> | undefined,
+  baseUrl: string | undefined,
+): boolean {
+  if (!preset) return false;
+  const hosts = presetHosts(preset);
+  if (hosts.length === 0) return true;
+  const host = hostOf(baseUrl);
+  return host.length > 0 && hosts.includes(host);
+}
+
+/** 按地址主机反查预设（原生渠道优先）。 */
+export function findPresetForBaseUrl(baseUrl: string | undefined): ProviderPreset | undefined {
+  const host = hostOf(baseUrl);
+  if (!host) return undefined;
+  const ordered = [...PROVIDER_PRESETS].sort((a, b) => Number(b.native) - Number(a.native));
+  return ordered.find((preset) => presetHosts(preset).includes(host));
+}
+
+/**
+ * 旧存档（只有 type 与 baseUrl）应归属的预设：地址命中某预设官方主机 → 该预设；
+ * 否则是中转或自建 → 自定义。这样中转实例不会被当成官方渠道去探测官方地址。
+ */
+export function presetIdForLegacyProvider(type: string, baseUrl: string | undefined): string {
+  const byHost = findPresetForBaseUrl(baseUrl);
+  if (byHost) return byHost.id;
+  const native = findProviderPreset(LEGACY_TYPE_PRESET[type]);
+  return native && presetMatchesBaseUrl(native, baseUrl) ? native.id : CUSTOM_PRESET_ID;
+}
+
 /**
  * 新实例按默认接口家族回填旧 `type`，保证 P1.5 完成前仍读 `type` 的代码行为不变。
  * 原生 xAI / DeepSeek 渠道保持各自的值。
