@@ -42,14 +42,15 @@ test("settings pages forward and consume provider deep links", () => {
   );
 });
 
-test("the shared providers section opens the requested provider editor once", () => {
+test("the shared providers section selects the requested provider once", () => {
   assert.match(providersSectionSource, /openedInitialProviderIdRef/);
   assert.match(
     providersSectionSource,
     /settings\.customProviders\.find\(\(item\) => item\.id === providerId\)/,
   );
-  assert.match(providersSectionSource, /setActiveTab\(provider\.type\)/);
-  assert.match(providersSectionSource, /setEditingProvider\(provider\)/);
-  assert.match(providersSectionSource, /setModalOpen\(true\)/);
+  // 三栏结构下深链接选中该实例并在窄屏进入详情层，不再打开对话框。
+  assert.match(providersSectionSource, /setSelection\(\{ kind: "provider", id: provider\.id \}\)/);
+  assert.match(providersSectionSource, /setMobileDetailOpen\(true\)/);
+  assert.doesNotMatch(providersSectionSource, /setModalOpen\(/);
   assert.match(providersSectionSource, /onInitialProviderHandled\?\.\(\)/);
 });

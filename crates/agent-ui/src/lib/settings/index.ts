@@ -179,6 +179,7 @@ export {
   hasProviderFailoverConfiguration,
   normalizeModelFailoverSettings,
   normalizeProviderFailoverSettings,
+  providerFailoverFamilies,
 } from "./modelFailover";
 export {
   normalizeChatTranscriptSettings,

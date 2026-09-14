@@ -4,6 +4,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const presentation = loader.loadModule("@liveagent/ui/pages/settings/ProviderPresentation.tsx");
+const registry = loader.loadModule("@liveagent/ui/lib/providers/registry/index.ts");
 const gatewayTypes = loader.loadModule("src/pages/chat/gateway/gatewayBridgeTypes.ts");
 const importLoader = createTsModuleLoader({
   mocks: {
@@ -13,14 +14,15 @@ const importLoader = createTsModuleLoader({
 });
 const providerImports = importLoader.loadModule("src/agent-ui-adapters/providerSettings.tsx");
 
-test("provider settings render DeepSeek as the fifth provider tab", () => {
-  assert.deepEqual(presentation.PROVIDER_TABS, [
-    "claude_code",
-    "codex",
-    "gemini",
-    "xai",
-    "deepseek",
-  ]);
+test("the channel catalog lists DeepSeek as the fifth native channel", () => {
+  assert.deepEqual(
+    registry
+      .listProviderPresets()
+      .filter((preset) => preset.native)
+      .map((preset) => preset.id),
+    ["anthropic", "openai", "gemini", "xai", "deepseek"],
+  );
+  assert.equal(registry.presetIdForLegacyType("deepseek"), "deepseek");
   assert.equal(presentation.getProviderLabel("deepseek"), "DeepSeek");
 });
 
