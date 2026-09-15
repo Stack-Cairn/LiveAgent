@@ -1643,6 +1643,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "How each level is sent on the wire (budget / effort / thinkingBudget / thinking.type) is decided by protocol and dialect, not here.",
   "settings.modelThinkingAlwaysOn": "Always on",
   "settings.modelThinkingCanDisable": "Can be disabled",
+  "settings.modelThinkingLevelUnavailable": "Not available for this model",
   "settings.modelThinkingNone": "The catalog marks this as a non-thinking model.",
   "settings.modelReasoningDefault": "Default thinking level",
   "settings.modelReasoningInherit": "Inherit provider ({level})",

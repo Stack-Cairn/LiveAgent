@@ -51,10 +51,12 @@ function previewModelsUrl(candidate: EndpointCandidate): string {
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Chip,
   ChipButton,
   dialectLabel,
   ProbeReason,
   ProbeStatusChip,
+  ProviderAvatar,
   protocolLabel,
 } from "./providerChips";
 import { probeSummaryFor } from "./providerSettingsModel";
@@ -248,7 +250,10 @@ export function ProviderProbeDialog(props: {
         showCloseButton
       >
         <DialogHeader>
-          <DialogTitle className="text-sm">{request.title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <ProviderAvatar preset={request.preset} className="h-6 w-6" />
+            {request.title}
+          </DialogTitle>
           <DialogDescription className="text-xs">
             {t("settings.providerProbeDescription")}
           </DialogDescription>
@@ -293,7 +298,7 @@ export function ProviderProbeDialog(props: {
                     {done ? (
                       <ChipButton
                         tone={accepted ? "on" : "default"}
-                        strike={unreachable || (!accepted && status !== "ok")}
+                        className={!accepted ? "opacity-60" : undefined}
                         active={accepted}
                         disabled={unreachable}
                         onClick={() => toggleProtocol(candidate.protocol)}
@@ -373,9 +378,7 @@ export function ProviderProbeDialog(props: {
                       <span className="font-medium">
                         {group.key === "other" ? t("settings.modelGroupOther") : group.key}
                       </span>
-                      <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
-                        {group.models.length}
-                      </span>
+                      <Chip className="tabular-nums">{group.models.length}</Chip>
                       {group.protocol ? (
                         <span className="text-[10.5px] text-muted-foreground">
                           → {protocolLabel(group.protocol)}

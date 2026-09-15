@@ -452,39 +452,35 @@ function openaiProvider(extra = {}) {
   });
 }
 
-test("capability chips take their state from the effective value and their tone from the source", () => {
+test("capability chips take their state from the effective value and only mark user overrides", () => {
+  // 三态用形状区分（实心点 / 空心圆 / 问号），来源只体现为"用户覆盖加描边"。
   assert.deepEqual(model.capabilityChipView({ state: "supported", source: "user" }), {
-    tone: "on",
-    strike: false,
+    state: "supported",
+    overridden: true,
     muted: false,
-    unknown: false,
   });
   assert.deepEqual(model.capabilityChipView({ state: "unsupported", source: "user" }), {
-    tone: "bad",
-    strike: true,
+    state: "unsupported",
+    overridden: true,
     muted: false,
-    unknown: false,
   });
   assert.deepEqual(model.capabilityChipView({ state: "supported", source: "catalog" }), {
-    tone: "ok",
-    strike: false,
+    state: "supported",
+    overridden: false,
     muted: false,
-    unknown: false,
   });
   assert.deepEqual(model.capabilityChipView({ state: "unsupported", source: "catalog" }), {
-    tone: "default",
-    strike: true,
+    state: "unsupported",
+    overridden: false,
     muted: false,
-    unknown: false,
   });
-  // 供应商规则 / 启发式：弱化显示；未知：加 "?"。
+  // 供应商规则 / 启发式：只在 tooltip 里说明来源；未知：问号图标。
   assert.equal(model.capabilityChipView({ state: "supported", source: "provider" }).muted, true);
   assert.equal(model.capabilityChipView({ state: "supported", source: "heuristic" }).muted, true);
   assert.deepEqual(model.capabilityChipView({ state: "unknown", source: "unknown" }), {
-    tone: "default",
-    strike: false,
+    state: "unknown",
+    overridden: false,
     muted: false,
-    unknown: true,
   });
 });
 
@@ -493,12 +489,12 @@ test("catalog hits render chips as catalog values instead of the old always-unkn
   const resolved = capabilities.resolveModelCapabilities(provider, "gpt-5.2");
   // 用户反馈"能力芯片默认都是关闭的"：目录命中的模型工具 / 结构化输出 / 视觉
   // 必须直接是目录值，而不是全部未知。
-  assert.equal(model.capabilityChipView(resolved.tools).tone, "ok");
-  assert.equal(model.capabilityChipView(resolved.structuredOutput).tone, "ok");
-  assert.equal(model.capabilityChipView(resolved.imageUnderstanding).tone, "ok");
+  assert.equal(model.capabilityChipView(resolved.tools).state, "supported");
+  assert.equal(model.capabilityChipView(resolved.structuredOutput).state, "supported");
+  assert.equal(model.capabilityChipView(resolved.imageUnderstanding).state, "supported");
   // 目录未收录：工具 / 结构化输出未知，推理按启发式弱化。
   const miss = capabilities.resolveModelCapabilities(provider, "my-finetune");
-  assert.equal(model.capabilityChipView(miss.tools).unknown, true);
+  assert.equal(model.capabilityChipView(miss.tools).state, "unknown");
   assert.equal(model.capabilityChipView(miss.reasoning).muted, true);
 });
 

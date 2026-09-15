@@ -459,34 +459,23 @@ export function setProviderModelActive(
 // ---------------------------------------------------------------------------
 
 export type CapabilityChipView = {
-  tone: "on" | "ok" | "bad" | "default";
-  strike: boolean;
-  /** 供应商规则 / 启发式得出的值：弱化显示 */
+  /** 三态：支持 = 实心绿点，不支持 = 空心圆 + 虚线边框，未知 = 问号图标 */
+  state: ResolvedCapability["state"];
+  /** 用户覆盖：芯片外加一圈细主色描边，不改底色 */
+  overridden: boolean;
+  /** 供应商规则 / 启发式得出的值（只影响 tooltip 里的来源说明） */
   muted: boolean;
-  unknown: boolean;
 };
 
 /**
- * 能力芯片的视觉：状态取有效值，色调按来源区分——用户覆盖高亮（支持 = 主色，
- * 不支持 = 红 + 划线），目录值 ok 色，供应商规则 / 启发式弱化，未知加 "?"。
+ * 能力芯片的视觉：状态取有效值、用形状区分（不再用颜色 / 删除线 / 文字问号），
+ * 来源只体现为"用户覆盖加描边"与 tooltip 文案。
  */
 export function capabilityChipView(resolved: ResolvedCapability): CapabilityChipView {
-  if (resolved.source === "user") {
-    return {
-      tone: resolved.state === "supported" ? "on" : "bad",
-      strike: resolved.state === "unsupported",
-      muted: false,
-      unknown: false,
-    };
-  }
-  if (resolved.state === "unknown") {
-    return { tone: "default", strike: false, muted: false, unknown: true };
-  }
   return {
-    tone: resolved.state === "supported" ? "ok" : "default",
-    strike: resolved.state === "unsupported",
+    state: resolved.state,
+    overridden: resolved.source === "user",
     muted: resolved.source === "heuristic" || resolved.source === "provider",
-    unknown: false,
   };
 }
 

@@ -548,9 +548,8 @@ export function RequestConfigDrawer(props: {
                                 return (
                                   <ChipButton
                                     key={key}
-                                    tone={
-                                      value === false ? "bad" : value === true ? "on" : "default"
-                                    }
+                                    tone={value === true ? "on" : "default"}
+                                    className={cn(value === false && "opacity-70")}
                                     onClick={() =>
                                       onChange((current) =>
                                         writeEndpoint(current, protocol, {

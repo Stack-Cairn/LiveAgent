@@ -1,5 +1,5 @@
 // "添加渠道"对话框（设计文档 7）：自定义中转、聚合网关或尚未内置的厂商。
-// 头像首字、名称、类型、API 密钥、四类接口的 Base URL（两类常显、两类折叠），
+// 渠道头像（预设 logo / 中性图标）、名称、API 密钥、四类接口的 Base URL（两类常显、两类折叠），
 // 填根地址后即时显示实际请求路径；"从预设创建（可选）"填入该渠道的接口与地址；
 // "再加一个实例"从来源实例预填名称、类型、端点地址与方言。
 
@@ -40,7 +40,7 @@ import {
 } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
-import { Chip, dialectLabel, protocolLabel, SecretInput } from "./providerChips";
+import { Chip, dialectLabel, ProviderAvatar, protocolLabel, SecretInput } from "./providerChips";
 import {
   createProviderFromEndpoints,
   instanceNameForCopy,
@@ -121,7 +121,6 @@ export function AddChannelDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const presets = listProviderPresets();
   const preset = findProviderPreset(presetId);
-  const initial = (name.trim()[0] ?? "P").toUpperCase();
 
   function applyPreset(id: string) {
     setPresetId(id);
@@ -216,12 +215,7 @@ export function AddChannelDialog(props: {
         </DialogHeader>
         <DialogBody className="space-y-4">
           <div className="flex justify-center">
-            <span
-              aria-hidden="true"
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 text-2xl font-semibold text-primary"
-            >
-              {initial}
-            </span>
+            <ProviderAvatar preset={preset} className="h-14 w-14" />
           </div>
           <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
             <div className="space-y-1.5">
@@ -260,7 +254,7 @@ export function AddChannelDialog(props: {
           {sourceProvider?.dialect ? (
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
               <span>{t("settings.providerDialect")}</span>
-              <Chip tone="purple">{dialectLabel(t, sourceProvider.dialect)}</Chip>
+              <Chip>{dialectLabel(t, sourceProvider.dialect)}</Chip>
             </div>
           ) : null}
 
@@ -303,16 +297,25 @@ export function AddChannelDialog(props: {
             <Select value={presetId} onValueChange={applyPreset}>
               <SelectTrigger className="h-8 w-full text-xs shadow-none">
                 <SelectValue>
-                  {preset
-                    ? `${preset.name}${preset.native ? `（${t("settings.channelNative")}）` : ""}`
-                    : t("settings.channelFromPresetPlaceholder")}
+                  {preset ? (
+                    <span className="flex items-center gap-2">
+                      <ProviderAvatar preset={preset} className="h-5 w-5" />
+                      {preset.name}
+                      {preset.native ? `（${t("settings.channelNative")}）` : ""}
+                    </span>
+                  ) : (
+                    t("settings.channelFromPresetPlaceholder")
+                  )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {presets.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name}
-                    {item.native ? `（${t("settings.channelNative")}）` : ""}
+                  <SelectItem key={item.id} value={item.id} className="text-xs">
+                    <span className="flex items-center gap-2">
+                      <ProviderAvatar preset={item} className="h-5 w-5" />
+                      {item.name}
+                      {item.native ? `（${t("settings.channelNative")}）` : ""}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

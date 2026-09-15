@@ -1,13 +1,20 @@
-// 供应商设置页共用的小件：状态芯片、来源标签、可点击芯片、预设头像与
+// 供应商设置页共用的小件：状态芯片、三态能力芯片、来源标签、可点击芯片、渠道头像与
 // "失焦提交"的输入框。视觉沿用设置页现有的 shadcn 风格。
+//
+// 语义色只有一套：default = 中性（信息 / 继承 / 自动），on = 主色（当前选中 / 默认项），
+// ok = 绿（可用 / 支持 / 已验证），warn = 琥珀（待处理：未知 / 未拉取 / 缺 Key），
+// bad = 红（鉴权失败 / 不支持 / 错误）。同一行只用一种强调色。
 
 import {
   PROVIDER_CHAT_PROTOCOL_LABELS,
   type ProviderChatProtocol,
   type ProviderEndpointProbe,
+  type ProviderId,
   type ProviderWireDialect,
 } from "@liveagent/app/lib/settings";
-import { Eye, EyeOff } from "@liveagent/ui/components/IconSet";
+import { CircleHelp, Eye, EyeOff, Server } from "@liveagent/ui/components/IconSet";
+import { ProviderBrandIcon } from "@liveagent/ui/components/ProviderBrandIcon";
+import { providerPresetLogo } from "@liveagent/ui/components/ProviderLogos";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -21,37 +28,33 @@ import {
   useRef,
   useState,
 } from "react";
-import { ProviderBrandIcon } from "../ProviderPresentation";
 
-export type ChipTone = "default" | "on" | "ok" | "warn" | "bad" | "purple";
+export type ChipTone = "default" | "on" | "ok" | "warn" | "bad";
 
 const CHIP_TONE_CLASS: Record<ChipTone, string> = {
-  default: "border-border/70 bg-muted/60 text-muted-foreground",
+  default: "border-border/70 bg-muted/50 text-muted-foreground",
   on: "border-primary/30 bg-primary/10 text-primary",
   ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   warn: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   bad: "border-destructive/30 bg-destructive/10 text-destructive",
-  purple: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300",
 };
+
+/** 所有芯片统一尺寸：22px 高、11px 字、rounded-md、左右 8px。 */
+const CHIP_BASE_CLASS =
+  "inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] font-medium leading-none";
+
+const CHIP_BUTTON_CLASS =
+  "transition-colors hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Chip(props: {
   tone?: ChipTone;
-  strike?: boolean;
   className?: string;
   title?: string;
   children: ReactNode;
 }) {
-  const { tone = "default", strike, className, title, children } = props;
+  const { tone = "default", className, title, children } = props;
   return (
-    <span
-      title={title}
-      className={cn(
-        "inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 text-[10.5px] font-medium leading-none",
-        CHIP_TONE_CLASS[tone],
-        strike && "line-through opacity-60",
-        className,
-      )}
-    >
+    <span title={title} className={cn(CHIP_BASE_CLASS, CHIP_TONE_CLASS[tone], className)}>
       {children}
     </span>
   );
@@ -59,7 +62,6 @@ export function Chip(props: {
 
 export function ChipButton(props: {
   tone?: ChipTone;
-  strike?: boolean;
   active?: boolean;
   disabled?: boolean;
   className?: string;
@@ -68,16 +70,7 @@ export function ChipButton(props: {
   onClick: () => void;
   children: ReactNode;
 }) {
-  const {
-    tone = "default",
-    strike,
-    active,
-    disabled,
-    className,
-    title,
-    ariaLabel,
-    onClick,
-  } = props;
+  const { tone = "default", active, disabled, className, title, ariaLabel, onClick } = props;
   return (
     <button
       type="button"
@@ -86,34 +79,101 @@ export function ChipButton(props: {
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={cn(
-        "inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-[11px] font-medium leading-none transition-colors hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50",
-        CHIP_TONE_CLASS[tone],
-        strike && "line-through opacity-60",
-        className,
-      )}
+      className={cn(CHIP_BASE_CLASS, CHIP_BUTTON_CLASS, CHIP_TONE_CLASS[tone], className)}
     >
       {props.children}
     </button>
   );
 }
 
+// ---------------------------------------------------------------------------
+// 三态芯片：支持 / 不支持 / 未知 用形状区分，不用删除线或文字问号
+// ---------------------------------------------------------------------------
+
+export type ChipState = "supported" | "unsupported" | "unknown";
+
+const STATE_CHIP_CLASS: Record<ChipState, string> = {
+  supported: "border-border/70 bg-muted/40 text-foreground/85",
+  unsupported: "border-dashed border-border/80 bg-transparent text-muted-foreground",
+  unknown: "border-border/70 bg-muted/40 text-muted-foreground",
+};
+
+function StateMark({ state }: { state: ChipState }) {
+  if (state === "supported") {
+    return <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />;
+  }
+  if (state === "unsupported") {
+    return (
+      <span
+        aria-hidden="true"
+        className="h-1.5 w-1.5 shrink-0 rounded-full border border-muted-foreground/60"
+      />
+    );
+  }
+  return <CircleHelp aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground/80" />;
+}
+
+function stateChipClass(state: ChipState, overridden: boolean | undefined, className?: string) {
+  // 用户覆盖只加一圈细主色描边，不改底色。
+  return cn(
+    CHIP_BASE_CLASS,
+    STATE_CHIP_CLASS[state],
+    overridden && "ring-1 ring-primary/50",
+    className,
+  );
+}
+
+export function StateChip(props: {
+  state: ChipState;
+  overridden?: boolean;
+  className?: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  const { state, overridden, className, title, children } = props;
+  return (
+    <span title={title} className={stateChipClass(state, overridden, className)}>
+      <StateMark state={state} />
+      {children}
+    </span>
+  );
+}
+
+export function StateChipButton(props: {
+  state: ChipState;
+  overridden?: boolean;
+  className?: string;
+  title?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const { state, overridden, className, title, onClick, children } = props;
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={cn(stateChipClass(state, overridden, className), CHIP_BUTTON_CLASS)}
+    >
+      <StateMark state={state} />
+      {children}
+    </button>
+  );
+}
+
 export type ValueSource = "auto" | "user" | "preset" | "catalog" | "heuristic";
 
+/** 来源标签：一律中性灰小字，只有"用户"用主色；不按字段各配一种颜色。 */
 export function SourceTag(props: { source: ValueSource; onReset?: () => void }) {
   const { source, onReset } = props;
   const { t } = useLocale();
   const label = t(`settings.providerSource.${source}`);
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1.5 text-[10.5px] leading-none">
       <span
         className={cn(
-          "inline-flex h-4 items-center rounded px-1.5 text-[10px] font-medium leading-none",
-          source === "user"
-            ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-            : source === "auto" || source === "preset" || source === "catalog"
-              ? "bg-primary/10 text-primary"
-              : "bg-muted text-muted-foreground",
+          "font-medium",
+          source === "user" ? "text-primary" : "text-muted-foreground/80",
         )}
       >
         {label}
@@ -121,7 +181,7 @@ export function SourceTag(props: { source: ValueSource; onReset?: () => void }) 
       {source === "user" && onReset ? (
         <button
           type="button"
-          className="text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           onClick={onReset}
         >
           {t("settings.providerSourceReset")}
@@ -163,6 +223,7 @@ export function ProbeStatusChip(props: {
       </Chip>
     );
   }
+  // 未知：琥珀，原因由 ProbeReason 展示在下一行。
   return (
     <Chip tone="warn" title={probe.error}>
       {t("settings.providerProbeStatus.unknown")}
@@ -210,39 +271,37 @@ export function protocolLabel(protocol: ProviderChatProtocol): string {
   return PROVIDER_CHAT_PROTOCOL_LABELS[protocol];
 }
 
-/** 预设头像：原生渠道用品牌图标，其余用名称首字。 */
-export function ProviderAvatar(props: {
-  preset: ProviderPreset | undefined;
-  name: string;
-  className?: string;
-}) {
-  const { preset, name, className } = props;
-  const nativeType = preset?.native
-    ? preset.id === "anthropic"
-      ? "claude_code"
-      : preset.id === "openai"
-        ? "codex"
-        : preset.id === "gemini"
-          ? "gemini"
-          : preset.id === "xai"
-            ? "xai"
-            : preset.id === "deepseek"
-              ? "deepseek"
-              : undefined
-    : undefined;
-  const initial = (name.trim()[0] ?? "?").toUpperCase();
+const NATIVE_BRAND_BY_PRESET: Record<string, ProviderId> = {
+  anthropic: "claude_code",
+  openai: "codex",
+  gemini: "gemini",
+  xai: "xai",
+  deepseek: "deepseek",
+};
+
+/**
+ * 渠道头像：原生渠道用 IconSet 品牌图标，收录的第三方渠道用 ProviderLogos，
+ * 自定义 / 未知预设用中性的 Server 图标（不再用名称首字）。容器统一浅底圆角，
+ * 尺寸由 className 给（列表行 h-7、详情头 h-10、对话框 h-14），图标按容器比例缩放。
+ */
+export function ProviderAvatar(props: { preset: ProviderPreset | undefined; className?: string }) {
+  const { preset, className } = props;
+  const nativeType = preset?.native ? NATIVE_BRAND_BY_PRESET[preset.id] : undefined;
+  const Logo = nativeType ? undefined : providerPresetLogo(preset?.id);
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg border border-foreground/[0.06] bg-foreground/[0.04] text-foreground",
+        "flex shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06] text-foreground",
         className,
       )}
     >
       {nativeType ? (
-        <ProviderBrandIcon type={nativeType} />
+        <ProviderBrandIcon type={nativeType} className="h-[56%] w-[56%]" />
+      ) : Logo ? (
+        <Logo className="h-[56%] w-[56%]" />
       ) : (
-        <span className="text-[0.85em] font-semibold text-foreground/80">{initial}</span>
+        <Server className="h-[50%] w-[50%] text-muted-foreground" />
       )}
     </span>
   );

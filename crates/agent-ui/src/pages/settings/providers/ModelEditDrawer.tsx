@@ -64,6 +64,7 @@ import {
   dialectLabel,
   protocolLabel,
   SourceTag,
+  StateChipButton,
 } from "./providerChips";
 import {
   capabilityChipView,
@@ -168,6 +169,7 @@ export function ModelEditDrawer(props: {
     ...thinking.levels,
   ];
   const credential = credentials.find((item) => item.id === route.credentialId);
+  const effectiveReasoning: ReasoningLevel = model.reasoning ?? provider.reasoning;
   // 与运行时同一份合并规则：鉴权头打底，用户头（供应商级 + 端点级，已按大小写去重）
   // 覆盖；键为空 / 不合法 / 保留键的行不进入预览。
   const finalHeaders = Object.entries(
@@ -319,19 +321,17 @@ export function ModelEditDrawer(props: {
                   const resolved = capabilities[name];
                   const view = capabilityChipView(resolved);
                   return (
-                    <ChipButton
+                    <StateChipButton
                       key={name}
-                      tone={view.tone}
-                      strike={view.strike}
-                      className={cn(view.muted && "opacity-70")}
+                      state={view.state}
+                      overridden={view.overridden}
                       onClick={() => cycleCapability(name)}
-                      title={`${t(`settings.modelCapabilitySource.${resolved.source}`)} · ${t(
-                        `settings.modelCapabilityState.${resolved.state}`,
+                      title={`${t(`settings.modelCapabilityState.${resolved.state}`)} · ${t(
+                        `settings.modelCapabilitySource.${resolved.source}`,
                       )}`}
                     >
                       {t(`settings.modelCapability.${name}`)}
-                      {view.unknown ? " · ?" : ""}
-                    </ChipButton>
+                    </StateChipButton>
                   );
                 })}
                 {model.capabilities ? (
@@ -690,20 +690,32 @@ export function ModelEditDrawer(props: {
                 <SourceTag source={thinking.fromCatalog ? "catalog" : "heuristic"} />
                 {thinking.reasoning ? (
                   <>
-                    <Chip tone={thinking.alwaysOn ? "warn" : "default"}>
+                    <Chip>
                       {thinking.alwaysOn
                         ? t("settings.modelThinkingAlwaysOn")
                         : t("settings.modelThinkingCanDisable")}
                     </Chip>
-                    {THINKING_LEVEL_LADDER.map((level) => (
-                      <Chip
-                        key={level}
-                        tone={thinking.levels.includes(level) ? "on" : "default"}
-                        className={cn(!thinking.levels.includes(level) && "opacity-40")}
-                      >
-                        {t(`settings.reasoning.${level}`)}
-                      </Chip>
-                    ))}
+                    {/* 可用档 = 描边芯片，当前默认档 = 主色，不可用档 = 只降透明度。 */}
+                    {THINKING_LEVEL_LADDER.map((level) => {
+                      const available = thinking.levels.includes(level);
+                      const isDefault = available && level === effectiveReasoning;
+                      return (
+                        <Chip
+                          key={level}
+                          tone={isDefault ? "on" : "default"}
+                          className={cn(!available && "opacity-40")}
+                          title={
+                            isDefault
+                              ? t("settings.modelReasoningDefault")
+                              : available
+                                ? undefined
+                                : t("settings.modelThinkingLevelUnavailable")
+                          }
+                        >
+                          {t(`settings.reasoning.${level}`)}
+                        </Chip>
+                      );
+                    })}
                   </>
                 ) : (
                   <span className="text-[11px] text-muted-foreground/75">

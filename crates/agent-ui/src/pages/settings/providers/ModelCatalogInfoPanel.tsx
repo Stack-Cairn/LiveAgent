@@ -16,11 +16,10 @@ import {
   type CatalogModality,
   MODEL_CATALOG_SNAPSHOT_DATE,
 } from "@liveagent/ui/lib/models/modelCatalog";
-import { cn } from "@liveagent/ui/lib/shared/utils";
 import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
 import type { ReactNode } from "react";
 import { DrawerGroupLabel } from "../ProviderPresentation";
-import { Chip } from "./providerChips";
+import { Chip, StateChip } from "./providerChips";
 
 const MODALITY_ICONS: Record<CatalogModality, IconComponent> = {
   text: MessageSquareText,
@@ -38,11 +37,14 @@ const CATALOG_FLAGS = [
   "interleaved",
 ] as const;
 
+/** 标签列与值列按 22px 芯片行高对齐：文本行同样撑到 22px，两列基线一致。 */
 function Row(props: { label: string; children: ReactNode }) {
   return (
     <>
-      <span className="text-muted-foreground">{props.label}</span>
-      <span className="flex min-w-0 flex-wrap items-center gap-1.5">{props.children}</span>
+      <span className="flex min-h-[22px] items-center text-muted-foreground">{props.label}</span>
+      <span className="flex min-h-[22px] min-w-0 flex-wrap items-center gap-1.5">
+        {props.children}
+      </span>
     </>
   );
 }
@@ -90,7 +92,7 @@ export function ModelCatalogInfoPanel(props: {
           {t("settings.modelCatalogMiss")}
         </p>
       ) : (
-        <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border bg-muted/20 px-3 py-2.5 text-xs">
+        <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-xl border bg-muted/20 px-3 py-2.5 text-xs">
           <Row label={t("settings.modelCatalogEntry")}>
             <span className="break-all font-mono">
               {info.catalogProviderId} / {info.entry.id}
@@ -147,19 +149,15 @@ export function ModelCatalogInfoPanel(props: {
             <ModalityChips modalities={["text", ...(info.entry.outputModalities ?? [])]} />
           </Row>
           <Row label={t("settings.modelCatalogFlags")}>
-            {CATALOG_FLAGS.map((flag) => {
-              const on = info.entry[flag] === true;
-              return (
-                <Chip
-                  key={flag}
-                  tone={on ? "ok" : "default"}
-                  strike={!on}
-                  className={cn(!on && "opacity-60")}
-                >
-                  {t(`settings.modelCatalogFlag.${flag}`)}
-                </Chip>
-              );
-            })}
+            {CATALOG_FLAGS.map((flag) => (
+              <StateChip
+                key={flag}
+                state={info.entry[flag] === true ? "supported" : "unsupported"}
+                title={t("settings.modelCapabilitySource.catalog")}
+              >
+                {t(`settings.modelCatalogFlag.${flag}`)}
+              </StateChip>
+            ))}
           </Row>
           <Row label={t("settings.modelLimits")}>
             <span className="tabular-nums">

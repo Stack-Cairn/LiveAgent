@@ -45,9 +45,9 @@ export function ProviderPendingDetail(props: {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <ProviderAvatar preset={preset} name={preset.name} className="h-9 w-9 text-base" />
+        <ProviderAvatar preset={preset} className="h-10 w-10" />
         <h2 className="text-base font-semibold tracking-tight">{preset.name}</h2>
-        {preset.native ? <Chip tone="on">{t("settings.channelNative")}</Chip> : null}
+        {preset.native ? <Chip>{t("settings.channelNative")}</Chip> : null}
         <span className="flex-1" />
         <Chip>{t("settings.channelPending")}</Chip>
       </div>

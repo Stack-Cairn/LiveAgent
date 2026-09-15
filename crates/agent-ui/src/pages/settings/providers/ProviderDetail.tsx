@@ -193,7 +193,7 @@ const ModelRow = memo(function ModelRow(props: {
           {model.limitsSource === "fallback" ? ` · ${t("settings.estimatedLimitsBadge")}` : ""}
         </span>
       </span>
-      <span className="flex shrink-0 items-center gap-1 text-muted-foreground/70">
+      <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
         {info.vision ? (
           <span
             role="img"
@@ -248,9 +248,7 @@ const ModelRow = memo(function ModelRow(props: {
       ) : (
         <Chip tone="bad">{t("settings.modelNoEndpoint")}</Chip>
       )}
-      {info.dialect !== "generic" ? (
-        <Chip tone="purple">{dialectLabel(t, info.dialect)}</Chip>
-      ) : null}
+      {info.dialect !== "generic" ? <Chip>{dialectLabel(t, info.dialect)}</Chip> : null}
       {model.wireModelId ? (
         <Chip className="font-mono">
           {t("settings.modelWireIdShort")} {model.wireModelId}
@@ -442,7 +440,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <ProviderAvatar preset={preset} name={provider.name} className="h-9 w-9 text-base" />
+        <ProviderAvatar preset={preset} className="h-10 w-10" />
         <CommittedInput
           value={provider.name}
           className="h-8 w-56 min-w-0 max-w-full border-transparent bg-transparent px-2 text-base font-semibold tracking-tight shadow-none hover:border-border focus-visible:border-border max-[760px]:w-auto max-[760px]:flex-1 max-[760px]:basis-40"
@@ -548,7 +546,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             }
           />
           {!keyConfigured && !preset.authOptional ? (
-            <Chip tone="bad">{t("settings.providerKeyMissing")}</Chip>
+            <Chip tone="warn">{t("settings.providerKeyMissing")}</Chip>
           ) : null}
           {enabledKeys.length >= 2 ? (
             credentialScopesMatch(provider) ? (
@@ -644,9 +642,13 @@ export function ProviderDetail(props: ProviderDetailProps) {
                   <ChipButton
                     key={protocol}
                     tone={isEnabled ? "on" : "default"}
-                    strike={!isEnabled}
+                    className={cn(!isEnabled && "opacity-60")}
                     onClick={() => onOpenDrawer({ kind: "request", focus: protocol })}
-                    title={t("settings.providerDialogRequest")}
+                    title={
+                      isEnabled
+                        ? t("settings.providerDialogRequest")
+                        : `${protocolLabel(protocol)} · ${t("settings.providerDisabled")}`
+                    }
                   >
                     {protocolLabel(protocol)}
                     {protocol === defaultProtocol

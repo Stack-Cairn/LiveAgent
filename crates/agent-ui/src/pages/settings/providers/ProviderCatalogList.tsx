@@ -136,7 +136,8 @@ export function ProviderCatalogList(props: {
                       .filter(Boolean)
                       .join(" · ");
               const enabled = row.kind === "provider" && row.provider.enabled !== false;
-              // 绿点 = 已启用且已配置 Key；空心点 = 已启用但没有 Key；灰点 = 已停用。
+              // 实心绿点 = 已启用且已配置 Key；琥珀空心圈 = 已启用但没有 Key；灰点 = 已停用；
+              // 未配置渠道不显示状态点。title / aria-label 与之一致。
               const keyReady = row.kind === "provider" && providerKeyReady(row.provider);
               const statusLabel = !enabled
                 ? t("settings.providerDisabled")
@@ -149,9 +150,8 @@ export function ProviderCatalogList(props: {
                     type="button"
                     aria-current={active ? "true" : undefined}
                     className={cn(
-                      "settings-provider-catalog-row flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-accent/40",
+                      "group settings-provider-catalog-row flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-accent/40",
                       active && "bg-accent/70 hover:bg-accent/70",
-                      row.kind === "preset" && "opacity-70 hover:opacity-100",
                     )}
                     onClick={() =>
                       onSelect(
@@ -161,8 +161,14 @@ export function ProviderCatalogList(props: {
                       )
                     }
                   >
-                    <ProviderAvatar preset={row.preset} name={name} className="h-7 w-7 text-sm" />
-                    <span className="min-w-0 flex-1 leading-tight">
+                    <ProviderAvatar preset={row.preset} className="h-7 w-7" />
+                    {/* 未配置渠道只弱化文字，logo 保持原色以便辨识。 */}
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 leading-tight",
+                        row.kind === "preset" && "opacity-70 group-hover:opacity-100",
+                      )}
+                    >
                       <span className="block truncate text-[12.5px] font-medium text-foreground/90">
                         {name}
                       </span>
@@ -181,7 +187,7 @@ export function ProviderCatalogList(props: {
                             ? "bg-muted-foreground/30"
                             : keyReady
                               ? "bg-emerald-500"
-                              : "border border-amber-500 bg-transparent",
+                              : "border-[1.5px] border-amber-500 bg-transparent",
                         )}
                       />
                     ) : null}

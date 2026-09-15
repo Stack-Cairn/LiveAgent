@@ -1561,6 +1561,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "每档在 wire 上怎么发（budget / effort / thinkingBudget / thinking.type）由协议与方言决定，不在这里配置。",
   "settings.modelThinkingAlwaysOn": "始终开启",
   "settings.modelThinkingCanDisable": "可关闭",
+  "settings.modelThinkingLevelUnavailable": "此模型不支持该档位",
   "settings.modelThinkingNone": "目录标记为非思考模型。",
   "settings.modelReasoningDefault": "默认思考档",
   "settings.modelReasoningInherit": "继承供应商（{level}）",
