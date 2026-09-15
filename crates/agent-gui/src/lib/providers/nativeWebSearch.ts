@@ -1,5 +1,7 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
+import { protocolSupportsNativeWebSearch } from "@liveagent/ui/lib/models/modelCapabilities";
+import { isProviderChatProtocol } from "@liveagent/ui/lib/providers/registry/protocols";
 import type { ProviderId } from "../settings";
 import { isRecord } from "./runtime/common";
 
@@ -200,6 +202,12 @@ export function buildProviderNativeWebFetchBridgeResult(params: {
   };
 }
 
+/**
+ * 接口家族级的原生搜索可用性：规则只有一份，在共享层的
+ * protocolSupportsNativeWebSearch（设置页能力芯片也读它）。这里只把 pi-ai 的
+ * api 名映射回接口：DeepSeek 自家 Responses 适配器（deepseek-responses）就是
+ * openai-responses 接口。
+ */
 export function providerSupportsNativeWebSearch(
   providerId: ProviderId,
   api: string | undefined,
@@ -208,34 +216,10 @@ export function providerSupportsNativeWebSearch(
     modelId?: string;
   },
 ) {
-  if (providerId === "codex" && api === "openai-completions") {
-    if (!options?.baseUrl?.trim()) return false;
-    if (isOfficialOpenAIBaseUrl(options.baseUrl)) {
-      return supportsOpenAIChatCompletionsNativeWebSearchModel(options.modelId);
-    }
-    return true;
-  }
-
-  return (
-    (providerId === "codex" && api === "openai-responses") ||
-    (providerId === "xai" && api === "openai-responses") ||
-    (providerId === "deepseek" && api === "deepseek-responses") ||
-    (providerId === "claude_code" && api === "anthropic-messages") ||
-    (providerId === "gemini" && api === "google-generative-ai")
-  );
-}
-
-function isOfficialOpenAIBaseUrl(baseUrl: string | undefined) {
-  if (!baseUrl?.trim()) return false;
-  try {
-    const url = new URL(baseUrl);
-    return url.hostname === "api.openai.com";
-  } catch {
-    return false;
-  }
-}
-
-function supportsOpenAIChatCompletionsNativeWebSearchModel(modelId: string | undefined) {
-  const normalized = modelId?.trim().toLowerCase() ?? "";
-  return normalized.includes("search-preview");
+  const protocol = api === "deepseek-responses" ? "openai-responses" : api;
+  if (!isProviderChatProtocol(protocol)) return false;
+  return protocolSupportsNativeWebSearch(providerId, protocol, {
+    baseUrl: options?.baseUrl?.trim() || undefined,
+    modelId: options?.modelId,
+  });
 }

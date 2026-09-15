@@ -16,6 +16,7 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
   ArrowLeft,
   ChevronDown,
+  FileText,
   Globe,
   ImageIcon,
   Lightbulb,
@@ -30,8 +31,6 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { resolveModelInputModalities } from "@liveagent/ui/lib/models/modelCatalog";
-import { resolveModelThinking } from "@liveagent/ui/lib/models/modelThinking";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
@@ -61,6 +60,7 @@ import {
   credentialsCoveringModel,
   enabledCredentials,
   groupProviderModels,
+  modelCapabilityFlags,
   type ProviderDrawerState,
   presetForProvider,
   primaryCredential,
@@ -100,6 +100,8 @@ export type ProviderDetailProps = SettingsSectionProps & {
 type ModelRowInfo = {
   active: boolean;
   vision: boolean;
+  /** 文件输入：目录 attachment 位或 pdf 模态 */
+  file: boolean;
   reasoning: boolean;
   tools: boolean;
   search: boolean;
@@ -117,9 +119,8 @@ function computeModelRowInfo(
   enabledKeyCount: number,
 ): ModelRowInfo {
   const route = resolveProviderChatRoute(provider, model.id);
-  const thinking = resolveModelThinking(route.adapterProviderId, model.id);
-  const modalities =
-    model.inputModalities ?? resolveModelInputModalities(route.adapterProviderId, model.id);
+  // 能力图标与编辑抽屉同源：有效能力（用户覆盖 > 目录 > 规则 / 启发式）+ 有效输入模态。
+  const flags = modelCapabilityFlags(provider, model.id, route);
   const coveringKeys = enabledKeyCount < 2 ? [] : credentialsCoveringModel(provider, model.id);
   const keyLabels =
     enabledKeyCount < 2 || coveringKeys.length === enabledKeyCount
@@ -127,15 +128,7 @@ function computeModelRowInfo(
       : coveringKeys.map((credential) => credential.label);
   return {
     active: provider.activeModels.includes(model.id),
-    vision:
-      model.capabilities?.imageUnderstanding === "supported" ||
-      (model.capabilities?.imageUnderstanding !== "unsupported" &&
-        modalities?.includes("image") === true),
-    reasoning:
-      model.capabilities?.reasoning === "supported" ||
-      (model.capabilities?.reasoning !== "unsupported" && thinking.reasoning),
-    tools: model.capabilities?.tools === "supported",
-    search: model.capabilities?.nativeWebSearch === "supported" || model.nativeWebSearch === true,
+    ...flags,
     protocol: route.protocol,
     protocolExplicit: route.protocolSource === "model",
     hasEndpoint: Boolean(readEndpoint(provider, route.protocol)),
@@ -209,6 +202,15 @@ const ModelRow = memo(function ModelRow(props: {
             aria-label={t("settings.modelCapability.imageUnderstanding")}
           >
             <ImageIcon className="h-3.5 w-3.5" />
+          </span>
+        ) : null}
+        {info.file ? (
+          <span
+            role="img"
+            title={t("settings.modelCapability.fileInput")}
+            aria-label={t("settings.modelCapability.fileInput")}
+          >
+            <FileText className="h-3.5 w-3.5" />
           </span>
         ) : null}
         {info.reasoning ? (

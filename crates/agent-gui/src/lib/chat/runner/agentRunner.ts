@@ -854,15 +854,29 @@ export async function runAssistantWithTools(params: {
     const shouldSilenceProviderNativeToolCall = (toolCall: ToolCall) =>
       shouldSilenceProviderNativeWebSearchToolCall(toolCall) ||
       shouldSilenceProviderNativeWebFetchToolCall(toolCall);
+    // 模型能力门控（设计文档 6.1）：tools 的有效状态为 unsupported（用户覆盖或
+    // 目录声明）时，本回合不下发任何工具定义——会话里的工具开关照旧，执行层
+    // 快照也照旧保留（历史里已有的调用仍能校验），只是请求不带 tools。
+    const toolsCapability = params.runtime.capabilities?.tools;
+    const toolsWithheld = toolsCapability?.state === "unsupported";
+    if (toolsWithheld && llmTools.length > 0) {
+      console.info(
+        `[agent-runner] tools withheld for ${params.providerId}:${params.model}: ` +
+          `capability tools=unsupported (source: ${toolsCapability.source}); ` +
+          `${llmTools.length} tool definition(s) not sent this run`,
+      );
+    }
     const filterRequestTools = (
       tools: Context["tools"] | undefined,
     ): Context["tools"] | undefined =>
-      tools?.filter(
-        (tool) =>
-          !hiddenProviderNativeWebSearchToolNames.has(tool.name) &&
-          !hiddenProviderNativeWebFetchToolNames.has(tool.name) &&
-          (params.requestToolFilter?.(tool.name) ?? true),
-      );
+      toolsWithheld
+        ? undefined
+        : tools?.filter(
+            (tool) =>
+              !hiddenProviderNativeWebSearchToolNames.has(tool.name) &&
+              !hiddenProviderNativeWebFetchToolNames.has(tool.name) &&
+              (params.requestToolFilter?.(tool.name) ?? true),
+          );
 
     const assistantVisibleAnswerText = (assistant: AssistantMessage) =>
       stripSeedToolCallMarkup(
@@ -904,7 +918,7 @@ export async function runAssistantWithTools(params: {
     };
     const toolsSuffix = buildToolsSuffix(
       params.workdir,
-      llmTools.map((tool) => tool.name),
+      toolsWithheld ? [] : llmTools.map((tool) => tool.name),
       params.runtimePlatform,
       params.additionalRoots,
     );

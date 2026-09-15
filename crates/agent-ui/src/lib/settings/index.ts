@@ -1130,7 +1130,7 @@ function getKnownModelLimits(
   providerId: ProviderId,
   modelId: string | undefined,
   baseUrl?: string,
-): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> | undefined {
+): Pick<ProviderModelConfig, "contextWindow" | "maxInputTokens" | "maxOutputToken"> | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
   // Anthropic 的有效窗口叠加了 1M beta/adaptive 世代的请求侧策略
@@ -1142,11 +1142,21 @@ function getKnownModelLimits(
   return resolveModelLimits(providerId, trimmedId);
 }
 
+export type ProviderModelDefaults = Pick<
+  ProviderModelConfig,
+  "contextWindow" | "maxInputTokens" | "maxOutputToken"
+> & { source: ModelLimitsSource };
+
+/**
+ * 模型限额初值：目录（供应商作用域 → 跨分区回查）→ 供应商兜底。目录命中时带
+ * 上目录发布的输入侧预算 maxInputTokens（models.dev limit.input / Codex 输入
+ * 预算）；目录未发布时不伪造。
+ */
 export function getProviderModelDefaults(
   providerId: ProviderId,
   modelId?: string,
   baseUrl?: string,
-): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> & { source: ModelLimitsSource } {
+): ProviderModelDefaults {
   const known = getKnownModelLimits(providerId, modelId, baseUrl);
   if (known) return { ...known, source: "catalog" };
 
@@ -1185,6 +1195,7 @@ export function createProviderModelConfig(
   return {
     id,
     contextWindow: defaults.contextWindow,
+    ...(defaults.maxInputTokens ? { maxInputTokens: defaults.maxInputTokens } : {}),
     maxOutputToken: defaults.maxOutputToken,
     limitsSource: defaults.source,
   };
@@ -1293,7 +1304,11 @@ export function normalizeProviderModelConfig(
   const displayName = typeof obj.displayName === "string" ? obj.displayName.trim() : "";
   const group = typeof obj.group === "string" ? obj.group.trim() : "";
   const credentialId = typeof obj.credentialId === "string" ? obj.credentialId.trim() : "";
-  const maxInputTokens = normalizePositiveInteger(obj.maxInputTokens, 0);
+  // 输入侧预算：落库值优先；限额来自目录时按目录补齐（目录更新自动传导），
+  // provider/user 来源不触碰，目录未发布则保持缺省。
+  const maxInputTokens =
+    normalizePositiveInteger(obj.maxInputTokens, 0) ||
+    (limitsSource === "catalog" ? (catalogDefaults.maxInputTokens ?? 0) : 0);
   const reasoning =
     obj.reasoning === undefined ? undefined : normalizeReasoningLevel(obj.reasoning);
   const capabilities = normalizeModelCapabilities(obj.capabilities);
@@ -1402,6 +1417,7 @@ export function findProviderModelConfig(
     return {
       id: normalizedId,
       contextWindow: defaults.contextWindow,
+      ...(defaults.maxInputTokens ? { maxInputTokens: defaults.maxInputTokens } : {}),
       maxOutputToken: defaults.maxOutputToken,
       limitsSource: defaults.source,
     };

@@ -1,6 +1,10 @@
 import type { Api, Model, OpenAICompletionsCompat } from "@earendil-works/pi-ai";
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import {
+  type ResolvedModelInputModalities,
+  resolveModelInputModalitiesResolved,
+} from "@liveagent/ui/lib/models/modelCapabilities";
+import {
   type ModelThinkingCapability,
   resolveModelThinking,
   type ThinkingLevelMap,
@@ -355,7 +359,40 @@ export type ModelFactoryRoute = {
   quirks?: ProviderEndpointQuirks;
   /** 旧适配器家族（目录与限额表按它分组）；缺省由 (protocol, dialect) 推导。 */
   adapterProviderId?: ProviderId;
+  /**
+   * 有效输入模态（runtime 已按真实供应商配置解析：用户覆盖 > 目录 > 反推）；
+   * 缺省时这里按适配器类型自行解析（旧调用方只有 ProviderId）。
+   */
+  inputModalities?: ResolvedModelInputModalities;
 };
+
+/**
+ * Model.input 的决定顺序：用户覆盖 > 目录 inputModalities > 各 provider 的内置
+ * 白名单推断。目录只给 text 的模型不发图（中转上照样按目录），目录给了 image 的
+ * 模型在中转上也能发图。返回 undefined 表示交给内置推断。
+ */
+function resolveCatalogInputOverride(
+  route: ModelFactoryRoute,
+  providerId: ProviderId,
+  upstreamBaseUrl: string,
+): ReturnType<typeof normalizeInputModalities> {
+  const override = normalizeInputModalities(route.modelConfig?.inputModalities);
+  if (override) return override;
+  const resolved =
+    route.inputModalities ??
+    resolveModelInputModalitiesResolved(
+      {
+        type: providerId,
+        baseUrl: upstreamBaseUrl,
+        isFullUrl: false,
+        ...(route.modelConfig ? { models: [route.modelConfig] } : {}),
+      },
+      route.modelId,
+      { adapterProviderId: providerId, protocol: route.protocol, baseUrl: upstreamBaseUrl },
+    );
+  if (resolved.source !== "catalog" && resolved.source !== "user") return undefined;
+  return normalizeInputModalities([...resolved.modalities]);
+}
 
 function buildDeepSeekResponsesModel(
   route: ModelFactoryRoute,
@@ -471,13 +508,12 @@ export function createModelFromRoute(route: ModelFactoryRoute): Model<Api> {
   // 思考能力（reasoning + 档位）唯一来源：生成目录（未命中走其兜底推断）。
   // pi-ai 目录命中时只取其 thinkingLevelMap 的 wire 改写值，可用性不听它的。
   const thinking = resolveModelThinking(providerId, modelId);
-  // 输入模态的用户显式覆盖（如给未被内置白名单识别的多模态模型开启图片
-  // 输入）；缺省走各 provider 的内置推断/已知模型目录。校验逻辑与设置加载
-  // 共用同一个 normalizer，不信任调用方的静态类型。
-  // 只在附件发送确实受 model.input 门控的分支生效（OpenAI 家族 / gemini /
-  // DeepSeek Responses）；anthropic 附件路径暂不读 model.input，那里不适用用户
-  // 覆盖，避免产生虚假能力声明。
-  const inputOverride = normalizeInputModalities(route.modelConfig?.inputModalities);
+  // 输入模态：用户显式覆盖 > 目录 inputModalities > 各 provider 的内置推断 /
+  // 已知模型目录。校验逻辑与设置加载共用同一个 normalizer，不信任调用方的静态
+  // 类型。只在附件发送确实受 model.input 门控的分支生效（OpenAI 家族 / gemini /
+  // DeepSeek Responses）；anthropic 附件路径暂不读 model.input，那里不适用覆盖，
+  // 避免产生虚假能力声明。
+  const inputOverride = resolveCatalogInputOverride(route, providerId, upstream);
 
   if (route.protocol === "openai-responses" && route.dialect === "deepseek") {
     return buildDeepSeekResponsesModel(route, wireModelId, {
@@ -598,6 +634,7 @@ export function createModelFromRuntime(
     modelConfig: runtime.modelConfig,
     quirks: runtime.quirks,
     adapterProviderId: wire.adapterProviderId,
+    ...(runtime.inputModalities ? { inputModalities: runtime.inputModalities } : {}),
   });
 }
 

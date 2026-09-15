@@ -1,4 +1,8 @@
 import type { SimpleStreamOptions } from "@earendil-works/pi-ai";
+import type {
+  ResolvedModelCapabilities,
+  ResolvedModelInputModalities,
+} from "@liveagent/ui/lib/models/modelCapabilities";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import type {
   CodexRequestFormat,
@@ -67,6 +71,13 @@ export type ProviderRuntimeConfig = {
   /** 供应商级流内重试策略；缺省 = 全局默认。failover 逐候选独立携带。 */
   retryPolicy?: ProviderRetryPolicy;
   modelConfig?: ProviderModelConfig;
+  /**
+   * 模型能力的有效状态与来源（用户覆盖 > 目录 > 供应商规则 / 启发式），与设置页
+   * 能力芯片同一份解析。runner 按 tools 门控是否下发工具定义。
+   */
+  capabilities?: ResolvedModelCapabilities;
+  /** 有效输入模态（用户覆盖 > 目录 > 能力反推 > 仅文本）；模型工厂据此决定 Model.input。 */
+  inputModalities?: ResolvedModelInputModalities;
 };
 
 export type ToolChoice =

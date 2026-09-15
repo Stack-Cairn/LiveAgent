@@ -232,3 +232,38 @@ test("gemini fetch-path normalization preserves the inputModalities override", (
   assert.equal(viaFetch.length, 1);
   assert.deepEqual(viaFetch[0].inputModalities, ["text", "image"]);
 });
+
+test("modelFactory: catalog input modalities beat the built-in whitelist on relays", () => {
+  // MiniMax-M3 不在 Completions 的内置图片白名单里，但目录标了 image：中转上照样发图。
+  const relay = createModelFromConfig(
+    "codex",
+    "MiniMax-M3",
+    "https://relay.example.com/v1",
+    "openai-completions",
+  );
+  assert.deepEqual(relay.input, ["text", "image"]);
+
+  // 反向：o3-mini 命中内置 "o3*" 图片启发式，但目录明确只有 text——目录优先。
+  const textOnly = createModelFromConfig(
+    "codex",
+    "o3-mini",
+    "https://relay.example.com/v1",
+    "openai-completions",
+  );
+  assert.deepEqual(textOnly.input, ["text"]);
+
+  // 用户覆盖仍最高：目录说 text 也能手动开图。
+  const forced = createModelFromConfig(
+    "codex",
+    "o3-mini",
+    "https://relay.example.com/v1",
+    "openai-completions",
+    {
+      id: "o3-mini",
+      contextWindow: 200000,
+      maxOutputToken: 32000,
+      inputModalities: ["text", "image"],
+    },
+  );
+  assert.deepEqual(forced.input, ["text", "image"]);
+});

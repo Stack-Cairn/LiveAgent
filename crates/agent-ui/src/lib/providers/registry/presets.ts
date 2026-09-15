@@ -1,13 +1,15 @@
 // 预设注册表：生成层（models.dev）与覆盖层合并后的只读数据，以及供设置页、
 // 探测与路由使用的查询函数（设计文档第 3 节）。
 
+import {
+  type CatalogModelEntry,
+  type CatalogProviderId,
+  findCatalogModelInSection,
+  MODEL_CATALOG,
+} from "../../models/modelCatalog";
 import { type ModelFamily, resolveModelFamily, stripModelVendorPrefix } from "./families";
 import { endpointHostKey } from "./hosts";
-import {
-  GENERATED_PRESETS,
-  type GeneratedPreset,
-  type GeneratedPresetModel,
-} from "./presets.generated";
+import { GENERATED_PRESETS, type GeneratedPreset } from "./presets.generated";
 import {
   PRESET_OVERLAYS,
   type PresetCategory,
@@ -39,8 +41,10 @@ export type ProviderPreset = {
   /** 该渠道提供的接口。键不存在 = 不提供，探测也不会去试；自定义渠道为空 */
   endpoints: Partial<Record<ProviderChatProtocol, PresetEndpoint>>;
   modelListSource: "api" | "catalog";
-  /** 目录模型（来自 models.dev），供无列表接口的渠道与限额初值使用 */
-  catalogModels: readonly GeneratedPresetModel[];
+  /** 该渠道对应的模型目录分区（MODEL_CATALOG 的键）；自定义渠道与本地服务无 */
+  catalogProviderId?: CatalogProviderId;
+  /** 目录模型（MODEL_CATALOG[catalogProviderId]），供无列表接口的渠道与限额初值使用 */
+  catalogModels: readonly CatalogModelEntry[];
   models: readonly PresetModelRule[];
   identity?: PresetIdentity;
   doc?: string;
@@ -88,7 +92,8 @@ function mergePreset(
     defaultChatProtocol,
     endpoints,
     modelListSource: overlay?.modelListSource ?? "api",
-    catalogModels: generated?.models ?? [],
+    catalogProviderId: generated?.sourceId,
+    catalogModels: generated ? MODEL_CATALOG[generated.sourceId] : [],
     models: overlay?.models ?? [],
     identity: overlay?.identity,
     doc: generated?.doc,
@@ -259,11 +264,19 @@ export function matchPresetModelRule(
   return preset.models.find((rule) => ruleMatches(rule, modelId));
 }
 
+/**
+ * 在预设自己的目录分区里查模型（与限额解析同一候选链：大小写、@版本、[1m]、
+ * 日期后缀、剥聚合商前缀）。跨分区回查由调用方决定（modelCapabilities /
+ * getProviderModelDefaults），这里只回答"该渠道的目录里有没有这个模型"。
+ */
 export function findPresetCatalogModel(
-  preset: Pick<ProviderPreset, "catalogModels"> | undefined,
+  preset: Pick<ProviderPreset, "catalogProviderId" | "catalogModels"> | undefined,
   modelId: string,
-): GeneratedPresetModel | undefined {
+): CatalogModelEntry | undefined {
   if (!preset) return undefined;
+  if (preset.catalogProviderId) {
+    return findCatalogModelInSection(preset.catalogProviderId, modelId)?.entry;
+  }
   const id = modelId.trim();
   const stripped = stripModelVendorPrefix(id);
   return preset.catalogModels.find((model) => model.id === id || model.id === stripped);

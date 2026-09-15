@@ -21,12 +21,18 @@ import {
   type ProviderEndpointProbe,
   type ProviderId,
   type ProviderModelConfig,
+  type ProviderModelDefaults,
   type ProviderProtocolFamily,
   type ResolvedProviderChatRoute,
   resolveProviderChatRoute,
   resolveProviderDialect,
   resolveProviderEndpoint,
 } from "@liveagent/app/lib/settings";
+import {
+  type ResolvedCapability,
+  resolveModelCapabilities,
+  resolveModelInputModalitiesResolved,
+} from "@liveagent/ui/lib/models/modelCapabilities";
 import type { CliIdentityProviderId } from "@liveagent/ui/lib/providers/customHeaders";
 import {
   CUSTOM_PRESET_ID,
@@ -446,6 +452,135 @@ export function setProviderModelActive(
       ? [...provider.activeModels, modelId]
       : provider.activeModels.filter((id) => id !== modelId),
   });
+}
+
+// ---------------------------------------------------------------------------
+// 能力芯片 / 限额来源 / 列表行图标（纯函数，界面只做渲染）
+// ---------------------------------------------------------------------------
+
+export type CapabilityChipView = {
+  tone: "on" | "ok" | "bad" | "default";
+  strike: boolean;
+  /** 供应商规则 / 启发式得出的值：弱化显示 */
+  muted: boolean;
+  unknown: boolean;
+};
+
+/**
+ * 能力芯片的视觉：状态取有效值，色调按来源区分——用户覆盖高亮（支持 = 主色，
+ * 不支持 = 红 + 划线），目录值 ok 色，供应商规则 / 启发式弱化，未知加 "?"。
+ */
+export function capabilityChipView(resolved: ResolvedCapability): CapabilityChipView {
+  if (resolved.source === "user") {
+    return {
+      tone: resolved.state === "supported" ? "on" : "bad",
+      strike: resolved.state === "unsupported",
+      muted: false,
+      unknown: false,
+    };
+  }
+  if (resolved.state === "unknown") {
+    return { tone: "default", strike: false, muted: false, unknown: true };
+  }
+  return {
+    tone: resolved.state === "supported" ? "ok" : "default",
+    strike: resolved.state === "unsupported",
+    muted: resolved.source === "heuristic" || resolved.source === "provider",
+    unknown: false,
+  };
+}
+
+export type ModelLimitField = "contextWindow" | "maxInputTokens" | "maxOutputToken";
+export type ModelLimitFieldSource = "user" | "catalog" | "auto" | "heuristic";
+
+const MODEL_LIMIT_FIELDS: readonly ModelLimitField[] = [
+  "contextWindow",
+  "maxInputTokens",
+  "maxOutputToken",
+];
+
+function limitsSourceTag(source: ProviderModelConfig["limitsSource"]): ModelLimitFieldSource {
+  return source === "catalog" ? "catalog" : source === "provider" ? "auto" : "heuristic";
+}
+
+/**
+ * 三个限额输入框各自的来源徽标：limitsSource 是模型级的一份标记，用户改过任一
+ * 项后整体变 user；这里按"值是否仍等于默认值"把它拆回逐字段——与默认值相同的
+ * 字段仍显示默认值来源（目录 / 供应商 / 兜底）。最大输入未设置且目录也没给时
+ * 不显示徽标。
+ */
+export function modelLimitFieldSources(
+  model: Pick<ProviderModelConfig, ModelLimitField | "limitsSource">,
+  defaults: ProviderModelDefaults,
+): Record<ModelLimitField, ModelLimitFieldSource | undefined> {
+  const base = limitsSourceTag(model.limitsSource);
+  const baseline = limitsSourceTag(defaults.source);
+  const fieldSource = (field: ModelLimitField): ModelLimitFieldSource | undefined => {
+    const value = model[field];
+    const fallback = defaults[field];
+    if (field === "maxInputTokens" && value === undefined && fallback === undefined) {
+      return undefined;
+    }
+    if (model.limitsSource === "user") return value === fallback ? baseline : "user";
+    return base;
+  };
+  return {
+    contextWindow: fieldSource("contextWindow"),
+    maxInputTokens: fieldSource("maxInputTokens"),
+    maxOutputToken: fieldSource("maxOutputToken"),
+  };
+}
+
+/** 单项还原为默认值；全部回到默认值后 limitsSource 也回到默认值来源。 */
+export function resetModelLimitField(
+  model: ProviderModelConfig,
+  defaults: ProviderModelDefaults,
+  field: ModelLimitField,
+): ProviderModelConfig {
+  const next: ProviderModelConfig = { ...model };
+  if (field === "maxInputTokens") {
+    if (defaults.maxInputTokens) next.maxInputTokens = defaults.maxInputTokens;
+    else delete next.maxInputTokens;
+  } else {
+    next[field] = defaults[field];
+  }
+  const allDefault = MODEL_LIMIT_FIELDS.every((key) => next[key] === defaults[key]);
+  next.limitsSource = allDefault ? defaults.source : "user";
+  return next;
+}
+
+export type ModelCapabilityFlags = {
+  vision: boolean;
+  file: boolean;
+  reasoning: boolean;
+  tools: boolean;
+  /** 只有用户显式打开才亮：供应商规则级的可用性在能力芯片里看 */
+  search: boolean;
+};
+
+/**
+ * 模型列表行的能力小图标：按有效能力与有效输入模态一次算好。图片 / 文件在
+ * 能力未被声明不支持时也看模态（目录只给模态不给 attachment 位的模型）。
+ */
+export function modelCapabilityFlags(
+  provider: CustomProvider,
+  modelId: string,
+  route: Pick<ResolvedProviderChatRoute, "adapterProviderId" | "protocol" | "baseUrl">,
+): ModelCapabilityFlags {
+  const capabilities = resolveModelCapabilities(provider, modelId, route);
+  const input = resolveModelInputModalitiesResolved(provider, modelId, route).modalities;
+  const allows = (capability: ResolvedCapability, modality: "image" | "pdf") =>
+    capability.state === "supported" ||
+    (capability.state !== "unsupported" && input.includes(modality));
+  return {
+    vision: allows(capabilities.imageUnderstanding, "image"),
+    file: allows(capabilities.fileInput, "pdf"),
+    reasoning: capabilities.reasoning.state === "supported",
+    tools: capabilities.tools.state === "supported",
+    search:
+      capabilities.nativeWebSearch.source === "user" &&
+      capabilities.nativeWebSearch.state === "supported",
+  };
 }
 
 export function adapterProviderIdForModel(provider: CustomProvider, modelId: string): ProviderId {

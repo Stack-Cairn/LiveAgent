@@ -13,11 +13,11 @@
 
 ## 模型目录同步
 
-`update-model-catalog.yml` 每天 03:17 UTC（北京时间 11:17）运行。任务直接运行 `node scripts/generate-model-catalog.mjs`，从 OpenAI Codex `models.json` 和 `models.dev/api.json` 生成 `crates/agent-ui/src/lib/models/catalog.generated.ts`。
+`update-model-catalog.yml` 每天 03:17 UTC（北京时间 11:17）运行。任务直接运行 `node scripts/generate-model-catalog.mjs`，从 OpenAI Codex `models.json` 和 `models.dev/api.json` 一次生成 `crates/agent-ui/src/lib/models/catalog.generated.ts`（模型目录）与 `crates/agent-ui/src/lib/providers/registry/presets.generated.ts`（预设的供应商事实）。
 
 - 上游没有实际数据变化时任务直接结束，不创建 PR；快照日期本身不触发更新。
 - 有变化时固定更新 `automation/model-catalog-refresh` 分支和同一个 PR，避免产生重复 PR。
-- PR 通过 `add-paths` 只提交模型目录生成文件；上游请求失败、数据截断或关键模型缺失时生成任务失败。
+- PR 通过 `add-paths` 只提交两份生成文件；上游请求失败、数据截断或关键模型缺失时生成任务失败。
 - PR 使用默认 `GITHUB_TOKEN` 创建，不会自动触发 `pull_request` CI 或 PR 治理工作流，由维护者审核后自行触发所需检查并合并。
 - 模型目录是编译期静态快照；已安装版本不会动态同步，合并后的数据只进入后续构建和 Release。
 

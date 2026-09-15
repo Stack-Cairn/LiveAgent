@@ -2758,6 +2758,48 @@ test("resolveToolChoice drives per-round tool_choice on the outbound request", a
   assert.deepEqual(observedStreamOptions[1].toolChoice, { type: "tool", name: "Read" });
 });
 
+test("tools capability unsupported withholds tool definitions for the run while the tool switch stays on", async () => {
+  resetFakeStreams(createTextAssistant("no tools here"));
+  const { params } = createBaseParams();
+  params.runtime = {
+    ...params.runtime,
+    capabilities: { tools: { state: "unsupported", source: "user" } },
+  };
+  const requestContexts = [];
+  params.onRequestStart = ({ context }) => requestContexts.push(context);
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(result.assistant.stopReason, "stop");
+  assert.equal(observedStreamContexts.length, 1);
+  assert.equal(observedStreamContexts[0].tools, undefined, "no tool definitions on the wire");
+  assert.equal(observedStreamOptions[0].toolChoice, undefined);
+  assert.equal(requestContexts[0].tools, undefined);
+  assert.equal(
+    observedStreamContexts[0].systemPrompt.includes("Read"),
+    false,
+    "tool rules suffix does not advertise tools that were not sent",
+  );
+});
+
+test("tools capability supported or unknown keeps the tool definitions", async () => {
+  for (const capabilities of [
+    undefined,
+    { tools: { state: "supported", source: "catalog" } },
+    { tools: { state: "unknown", source: "unknown" } },
+  ]) {
+    resetFakeStreams(createTextAssistant("done"));
+    const { params } = createBaseParams();
+    params.runtime = { ...params.runtime, ...(capabilities ? { capabilities } : {}) };
+    await runAssistantWithTools(params);
+    assert.deepEqual(
+      observedStreamContexts[0].tools.map((tool) => tool.name),
+      ["Read"],
+    );
+    assert.equal(observedStreamOptions[0].toolChoice, "auto");
+  }
+});
+
 test("without resolveToolChoice the runner keeps toolChoice auto", async () => {
   resetFakeStreams(createTextAssistant("done"));
   const { params } = createBaseParams();

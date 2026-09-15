@@ -1,11 +1,11 @@
-// 抽屉三"编辑模型"（设计文档 6 / 7）：ID、远端 ID、显示名、分组、能力芯片三态、
-// 输入模态、接口多选（只列已启用渠道，首项路由）、方言、凭据、限额、缓存提示、
+// 抽屉三"编辑模型"（设计文档 6 / 7）：ID、远端 ID、显示名、系列（分组）、目录信息
+// （只读，6.6）、能力芯片（有效状态 + 来源，6.1）、输入模态（有效值 + 来源）、接口
+// 多选（只列已启用渠道，首项路由）、方言、凭据、限额（逐字段来源）、缓存提示、
 // 思考档位（目录只读）+ 默认档；底部展示 resolveProviderChatRoute 的解析结果与
 // 三层故障转移候选（设计文档 6.4）。每个覆盖项显示来源（自动 / 用户）与还原。
 
 import {
   type AppSettings,
-  type CapabilityState,
   type ChatCapabilityName,
   type CustomProvider,
   getProviderModelDefaults,
@@ -30,7 +30,11 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { resolveModelInputModalities } from "@liveagent/ui/lib/models/modelCatalog";
+import {
+  resolveModelCapabilities,
+  resolveModelCatalogInfo,
+  resolveModelInputModalitiesResolved,
+} from "@liveagent/ui/lib/models/modelCapabilities";
 import {
   resolveModelThinking,
   THINKING_LEVEL_LADDER,
@@ -48,7 +52,8 @@ import {
   providerSupportsModelInputModalitiesOverride,
 } from "@liveagent/ui/pages/settings/providerUtils";
 import { type ReactNode, useMemo } from "react";
-import { DrawerGroupLabel, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
+import { DrawerGroupLabel, HintTip, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
+import { ModalityChips, ModelCatalogInfoPanel } from "./ModelCatalogInfoPanel";
 import {
   Chip,
   ChipButton,
@@ -58,12 +63,16 @@ import {
   SourceTag,
 } from "./providerChips";
 import {
+  capabilityChipView,
   credentialsCoveringModel,
+  type ModelLimitField,
   modelFailoverCandidates,
   modelGroupIsUser,
   modelGroupKey,
+  modelLimitFieldSources,
   providerCredentials,
   providerEnabledProtocols,
+  resetModelLimitField,
   updateProviderModel,
 } from "./providerSettingsModel";
 
@@ -83,11 +92,14 @@ function parsePositiveInteger(input: string): number | null {
   return normalized > 0 ? normalized : null;
 }
 
-function Field(props: { label: string; source?: ReactNode; children: ReactNode }) {
+function Field(props: { label: string; hint?: string; source?: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <Label className="text-[11px] text-muted-foreground">{props.label}</Label>
+        <Label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          {props.label}
+          {props.hint ? <HintTip text={props.hint} label={props.label} /> : null}
+        </Label>
         <span className="flex-1" />
         {props.source}
       </div>
@@ -134,7 +146,11 @@ export function ModelEditDrawer(props: {
 
   const adapterId = route.adapterProviderId;
   const thinking = resolveModelThinking(adapterId, model.id);
-  const catalogModalities = resolveModelInputModalities(adapterId, model.id);
+  // 能力 / 目录 / 输入模态都走 modelCapabilities 的单一解析入口（用户覆盖 >
+  // 目录 > 供应商规则 / 启发式），与运行时读到的是同一份结果。
+  const capabilities = resolveModelCapabilities(provider, model.id, route);
+  const catalogInfo = resolveModelCatalogInfo(provider, model.id);
+  const effectiveInput = resolveModelInputModalitiesResolved(provider, model.id, route);
   const canOverrideModalities = providerSupportsModelInputModalitiesOverride(adapterId);
   const modalitiesMode = getModelInputModalitiesMode(model);
   const protocolList = model.chatProtocols ?? [];
@@ -142,14 +158,7 @@ export function ModelEditDrawer(props: {
     endpoint: provider.endpointConfigs?.[route.protocol],
   });
   const defaults = getProviderModelDefaults(adapterId, model.id, route.baseUrl);
-  const limitsSource =
-    model.limitsSource === "user"
-      ? "user"
-      : model.limitsSource === "catalog"
-        ? "catalog"
-        : model.limitsSource === "provider"
-          ? "auto"
-          : "heuristic";
+  const limitSources = modelLimitFieldSources(model, defaults);
   const reasoningOptions: ReasoningLevel[] = [
     ...(thinking.alwaysOn ? [] : (["off"] as const)),
     ...thinking.levels,
@@ -164,19 +173,7 @@ export function ModelEditDrawer(props: {
     ),
   );
 
-  function capabilityDefault(name: ChatCapabilityName): CapabilityState {
-    if (name === "reasoning") return thinking.reasoning ? "supported" : "unsupported";
-    if (name === "imageUnderstanding") {
-      if (!catalogModalities) return "unknown";
-      return catalogModalities.includes("image") ? "supported" : "unsupported";
-    }
-    if (name === "fileInput") {
-      if (!catalogModalities) return "unknown";
-      return catalogModalities.includes("pdf") ? "supported" : "unsupported";
-    }
-    return "unknown";
-  }
-
+  // 点击循环：用户支持 → 用户不支持 → 清除覆盖（回到目录 / 规则值）。
   function cycleCapability(name: ChatCapabilityName) {
     patch((current) => {
       const value = current.capabilities?.[name];
@@ -210,6 +207,15 @@ export function ModelEditDrawer(props: {
   }
 
   const protocolSourceLabel = t(`settings.modelRouteSource.${route.protocolSource}`);
+  const limitSourceTag = (field: ModelLimitField) => {
+    const source = limitSources[field];
+    return source ? (
+      <SourceTag
+        source={source}
+        onReset={() => patch((current) => resetModelLimitField(current, defaults, field))}
+      />
+    ) : null;
+  };
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -285,6 +291,7 @@ export function ModelEditDrawer(props: {
                 </Field>
                 <Field
                   label={t("settings.modelGroup")}
+                  hint={t("settings.modelGroupHint")}
                   source={
                     <SourceTag
                       source={modelGroupIsUser(model) ? "user" : "auto"}
@@ -314,6 +321,8 @@ export function ModelEditDrawer(props: {
               </Field>
             </section>
 
+            <ModelCatalogInfoPanel info={catalogInfo} modelId={model.id} />
+
             <section className="space-y-3">
               <DrawerGroupLabel
                 label={t("settings.modelCapabilities")}
@@ -321,41 +330,27 @@ export function ModelEditDrawer(props: {
               />
               <div className="flex flex-wrap gap-1.5">
                 {CAPABILITIES.map((name) => {
-                  const override = model.capabilities?.[name];
-                  const fallback = capabilityDefault(name);
-                  const effective = override ?? fallback;
+                  const resolved = capabilities[name];
+                  const view = capabilityChipView(resolved);
                   return (
                     <ChipButton
                       key={name}
-                      tone={
-                        override === "supported"
-                          ? "on"
-                          : override === "unsupported"
-                            ? "bad"
-                            : effective === "supported"
-                              ? "ok"
-                              : "default"
-                      }
-                      strike={override === "unsupported"}
+                      tone={view.tone}
+                      strike={view.strike}
+                      className={cn(view.muted && "opacity-70")}
                       onClick={() => cycleCapability(name)}
-                      title={
-                        override
-                          ? t("settings.providerSource.user")
-                          : effective === "unknown"
-                            ? t("settings.modelCapabilityUnknown")
-                            : name === "reasoning" && !thinking.fromCatalog
-                              ? t("settings.providerSource.heuristic")
-                              : t("settings.providerSource.catalog")
-                      }
+                      title={`${t(`settings.modelCapabilitySource.${resolved.source}`)} · ${t(
+                        `settings.modelCapabilityState.${resolved.state}`,
+                      )}`}
                     >
                       {t(`settings.modelCapability.${name}`)}
-                      {override === undefined && effective === "unknown" ? " · ?" : ""}
+                      {view.unknown ? " · ?" : ""}
                     </ChipButton>
                   );
                 })}
                 {model.capabilities ? (
                   <ChipButton onClick={() => drop("capabilities")}>
-                    {t("settings.providerSourceReset")}
+                    {t("settings.modelCapabilitiesResetCatalog")}
                   </ChipButton>
                 ) : null}
               </div>
@@ -402,11 +397,14 @@ export function ModelEditDrawer(props: {
                   </Select>
                 ) : (
                   <p className="text-[11px] text-muted-foreground/75">
-                    {catalogModalities
-                      ? catalogModalities.join(" · ")
-                      : t("settings.modelInputModalitiesUnavailable")}
+                    {t("settings.modelInputModalitiesUnavailable")}
                   </p>
                 )}
+                <p className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-muted-foreground/70">
+                  {t("settings.modelInputModalitiesEffective")}
+                  <ModalityChips modalities={effectiveInput.modalities} />
+                  <span>· {t(`settings.modelCapabilitySource.${effectiveInput.source}`)}</span>
+                </p>
               </Field>
             </section>
 
@@ -585,22 +583,8 @@ export function ModelEditDrawer(props: {
                 label={t("settings.modelLimits")}
                 hint={t("settings.modelLimitsHint")}
               />
-              <div className="flex items-center gap-2">
-                <SourceTag
-                  source={limitsSource}
-                  onReset={() =>
-                    patch((current) => ({
-                      ...current,
-                      contextWindow: defaults.contextWindow,
-                      maxOutputToken: defaults.maxOutputToken,
-                      maxInputTokens: undefined,
-                      limitsSource: defaults.source,
-                    }))
-                  }
-                />
-              </div>
               <div className="grid grid-cols-3 gap-3 max-[720px]:grid-cols-1">
-                <Field label={t("settings.contextWindow")}>
+                <Field label={t("settings.contextWindow")} source={limitSourceTag("contextWindow")}>
                   <CommittedInput
                     value={String(model.contextWindow)}
                     inputMode="numeric"
@@ -617,7 +601,10 @@ export function ModelEditDrawer(props: {
                     }}
                   />
                 </Field>
-                <Field label={t("settings.modelMaxInputTokens")}>
+                <Field
+                  label={t("settings.modelMaxInputTokens")}
+                  source={limitSourceTag("maxInputTokens")}
+                >
                   <CommittedInput
                     value={model.maxInputTokens ? String(model.maxInputTokens) : ""}
                     inputMode="numeric"
@@ -635,7 +622,10 @@ export function ModelEditDrawer(props: {
                     }}
                   />
                 </Field>
-                <Field label={t("settings.maxOutputToken")}>
+                <Field
+                  label={t("settings.maxOutputToken")}
+                  source={limitSourceTag("maxOutputToken")}
+                >
                   <CommittedInput
                     value={String(model.maxOutputToken)}
                     inputMode="numeric"

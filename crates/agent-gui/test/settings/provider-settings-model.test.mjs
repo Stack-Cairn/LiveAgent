@@ -435,3 +435,188 @@ test("credential helpers count configured keys and compare scopes only when both
     { more: 0, less: 1 },
   );
 });
+
+// ---------------------------------------------------------------------------
+// 能力芯片来源 / 目录信息 / 限额来源 / 列表行图标（设计文档 6.1 / 6.6）
+// ---------------------------------------------------------------------------
+const capabilities = loader.loadModule("@liveagent/ui/lib/models/modelCapabilities.ts");
+
+function openaiProvider(extra = {}) {
+  return settings.normalizeCustomProvider({
+    id: "oa",
+    name: "OpenAI",
+    type: "codex",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "sk-test",
+    models: [{ id: "gpt-5.2" }, { id: "my-finetune" }],
+    activeModels: ["gpt-5.2", "my-finetune"],
+    ...extra,
+  });
+}
+
+test("capability chips take their state from the effective value and their tone from the source", () => {
+  assert.deepEqual(model.capabilityChipView({ state: "supported", source: "user" }), {
+    tone: "on",
+    strike: false,
+    muted: false,
+    unknown: false,
+  });
+  assert.deepEqual(model.capabilityChipView({ state: "unsupported", source: "user" }), {
+    tone: "bad",
+    strike: true,
+    muted: false,
+    unknown: false,
+  });
+  assert.deepEqual(model.capabilityChipView({ state: "supported", source: "catalog" }), {
+    tone: "ok",
+    strike: false,
+    muted: false,
+    unknown: false,
+  });
+  assert.deepEqual(model.capabilityChipView({ state: "unsupported", source: "catalog" }), {
+    tone: "default",
+    strike: true,
+    muted: false,
+    unknown: false,
+  });
+  // 供应商规则 / 启发式：弱化显示；未知：加 "?"。
+  assert.equal(model.capabilityChipView({ state: "supported", source: "provider" }).muted, true);
+  assert.equal(model.capabilityChipView({ state: "supported", source: "heuristic" }).muted, true);
+  assert.deepEqual(model.capabilityChipView({ state: "unknown", source: "unknown" }), {
+    tone: "default",
+    strike: false,
+    muted: false,
+    unknown: true,
+  });
+});
+
+test("catalog hits render chips as catalog values instead of the old always-unknown default", () => {
+  const provider = openaiProvider();
+  const resolved = capabilities.resolveModelCapabilities(provider, "gpt-5.2");
+  // 用户反馈"能力芯片默认都是关闭的"：目录命中的模型工具 / 结构化输出 / 视觉
+  // 必须直接是目录值，而不是全部未知。
+  assert.equal(model.capabilityChipView(resolved.tools).tone, "ok");
+  assert.equal(model.capabilityChipView(resolved.structuredOutput).tone, "ok");
+  assert.equal(model.capabilityChipView(resolved.imageUnderstanding).tone, "ok");
+  // 目录未收录：工具 / 结构化输出未知，推理按启发式弱化。
+  const miss = capabilities.resolveModelCapabilities(provider, "my-finetune");
+  assert.equal(model.capabilityChipView(miss.tools).unknown, true);
+  assert.equal(model.capabilityChipView(miss.reasoning).muted, true);
+});
+
+test("catalog info reports the section, entry and the normalized id it matched on", () => {
+  const provider = openaiProvider();
+  const hit = capabilities.resolveModelCatalogInfo(provider, "gpt-5.2");
+  assert.equal(hit.catalogProviderId, "openai");
+  assert.equal(hit.entry.id, "gpt-5.2");
+  assert.equal(hit.matchedId, "gpt-5.2");
+  assert.ok(hit.entry.contextWindow > 0);
+  assert.ok(Array.isArray(hit.entry.inputModalities));
+
+  // 中转装饰过的 id：面板要提示"按 xxx 匹配"。
+  const decorated = capabilities.resolveModelCatalogInfo(provider, "GPT-5.2@latest");
+  assert.equal(decorated.entry.id, "gpt-5.2");
+  assert.notEqual(decorated.matchedId, "GPT-5.2@latest");
+
+  assert.equal(capabilities.resolveModelCatalogInfo(provider, "my-finetune"), undefined);
+  assert.match(
+    loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts").MODEL_CATALOG_SNAPSHOT_DATE,
+    /^\d{4}-\d{2}-\d{2}$/,
+  );
+});
+
+test("limit fields carry per-field sources and reset individually", () => {
+  const defaults = {
+    contextWindow: 400_000,
+    maxInputTokens: 272_000,
+    maxOutputToken: 128_000,
+    source: "catalog",
+  };
+  const catalogModel = {
+    id: "gpt-5.2",
+    contextWindow: 400_000,
+    maxInputTokens: 272_000,
+    maxOutputToken: 128_000,
+    limitsSource: "catalog",
+  };
+  assert.deepEqual(model.modelLimitFieldSources(catalogModel, defaults), {
+    contextWindow: "catalog",
+    maxInputTokens: "catalog",
+    maxOutputToken: "catalog",
+  });
+  // 用户只改了输出上限：其它两项仍显示目录来源。
+  const edited = { ...catalogModel, maxOutputToken: 64_000, limitsSource: "user" };
+  assert.deepEqual(model.modelLimitFieldSources(edited, defaults), {
+    contextWindow: "catalog",
+    maxInputTokens: "catalog",
+    maxOutputToken: "user",
+  });
+  const restored = model.resetModelLimitField(edited, defaults, "maxOutputToken");
+  assert.equal(restored.maxOutputToken, 128_000);
+  assert.equal(restored.limitsSource, "catalog");
+  // 兜底限额且没有最大输入：该项不显示徽标。
+  const fallbackDefaults = { contextWindow: 128_000, maxOutputToken: 32_000, source: "fallback" };
+  assert.deepEqual(
+    model.modelLimitFieldSources(
+      { id: "x", contextWindow: 128_000, maxOutputToken: 32_000, limitsSource: "fallback" },
+      fallbackDefaults,
+    ),
+    { contextWindow: "heuristic", maxInputTokens: undefined, maxOutputToken: "heuristic" },
+  );
+  const withInput = model.resetModelLimitField(
+    { id: "x", contextWindow: 1, maxInputTokens: 5, maxOutputToken: 32_000, limitsSource: "user" },
+    fallbackDefaults,
+    "maxInputTokens",
+  );
+  assert.equal("maxInputTokens" in withInput, false);
+  assert.equal(withInput.limitsSource, "user", "context window still differs");
+});
+
+test("model row flags follow effective capabilities and input modalities", () => {
+  const provider = openaiProvider({
+    models: [
+      { id: "gpt-5.2" },
+      { id: "my-finetune" },
+      { id: "gpt-5.2-nano", capabilities: { imageUnderstanding: "unsupported", tools: "unsupported" } },
+      { id: "my-vl", inputModalities: ["text", "image"], nativeWebSearch: true },
+    ],
+  });
+  const route = settings.resolveProviderChatRoute(provider, "gpt-5.2");
+  const catalogFlags = model.modelCapabilityFlags(provider, "gpt-5.2", route);
+  assert.equal(catalogFlags.vision, true);
+  assert.equal(catalogFlags.tools, true, "catalog toolCall lights the wrench without a user override");
+  assert.equal(catalogFlags.search, false, "provider-rule search availability stays off the row");
+
+  // 目录未收录：图片 / 文件 / 工具 / 搜索都不亮；推理按 OpenAI 世代启发式，不在此锁定。
+  const miss = model.modelCapabilityFlags(provider, "my-finetune", route);
+  assert.deepEqual(
+    { vision: miss.vision, file: miss.file, tools: miss.tools, search: miss.search },
+    { vision: false, file: false, tools: false, search: false },
+  );
+
+  const overridden = model.modelCapabilityFlags(provider, "gpt-5.2-nano", route);
+  assert.equal(overridden.vision, false, "user unsupported beats catalog modalities");
+  assert.equal(overridden.tools, false);
+
+  const userModalities = model.modelCapabilityFlags(provider, "my-vl", route);
+  assert.equal(userModalities.vision, true, "user inputModalities override lights the image icon");
+  assert.equal(userModalities.search, true);
+
+  // 文件图标：目录 attachment 位或 pdf 模态。
+  const anthropic = settings.normalizeCustomProvider({
+    id: "an",
+    name: "Anthropic",
+    type: "claude_code",
+    baseUrl: "https://api.anthropic.com",
+    apiKey: "sk-ant",
+    models: [{ id: "claude-sonnet-4-6" }],
+    activeModels: ["claude-sonnet-4-6"],
+  });
+  const claude = model.modelCapabilityFlags(
+    anthropic,
+    "claude-sonnet-4-6",
+    settings.resolveProviderChatRoute(anthropic, "claude-sonnet-4-6"),
+  );
+  assert.equal(claude.file, true);
+  assert.equal(claude.vision, true);
+});

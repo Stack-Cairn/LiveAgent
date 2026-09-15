@@ -5,6 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const registry = loader.loadModule("@liveagent/ui/lib/providers/registry/index.ts");
 const probe = loader.loadModule("@liveagent/ui/pages/settings/providerProbe.ts");
+const catalogModule = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 
 test("registry exposes exactly four chat protocols with families and labels", () => {
   assert.deepEqual(registry.PROVIDER_CHAT_PROTOCOLS, [
@@ -127,6 +128,20 @@ test("presets merge models.dev facts with the overlay", () => {
     "https://api.deepseek.com/anthropic",
   );
   assert.ok(deepseek.catalogModels.length > 0);
+  // 渠道模型列表就是目录分区本身（单一目录），按预设分区查找走同一候选链。
+  assert.equal(deepseek.catalogProviderId, "deepseek");
+  assert.equal(deepseek.catalogModels, catalogModule.MODEL_CATALOG.deepseek);
+  assert.equal(registry.findPresetCatalogModel(deepseek, "DeepSeek-V4-Pro").id, "deepseek-v4-pro");
+  assert.equal(registry.findPresetCatalogModel(deepseek, "deepseek-chat"), undefined);
+  const gpt = registry.findPresetCatalogModel(registry.findProviderPreset("openai"), "gpt-5.2");
+  assert.equal(gpt.toolCall, true);
+  assert.equal(gpt.maxInputTokens, 272_000);
+  for (const presetId of ["moonshot-cn", "dashscope-cn", "siliconflow", "groq", "openrouter", "lmstudio"]) {
+    const preset = registry.findProviderPreset(presetId);
+    assert.ok(preset?.catalogModels.length > 0, `${presetId} lists its channel models`);
+  }
+  assert.equal(registry.findProviderPreset("custom").catalogProviderId, undefined);
+  assert.equal(registry.MODEL_CATALOG_SNAPSHOT_DATE, catalogModule.MODEL_CATALOG_SNAPSHOT_DATE);
   assert.deepEqual(registry.matchPresetModelRule(deepseek, "deepseek-chat").chatProtocols, [
     "openai-completions",
   ]);
@@ -422,4 +437,16 @@ test("probeEndpoint fetches in strict mode with the credential id and classifies
   // 200 但没有模型数组 → "未知"，不再被判"可用"。
   assert.equal(result.credentials[0].endpoints[0].status, "unknown");
   assert.equal(strictProbe.summarizeEndpointStatus(result, "openai-completions").status, "unknown");
+});
+
+test("groq has an overlay so it lands in the official channel catalog with a key page", () => {
+  const groq = registry.findProviderPreset("groq");
+  assert.ok(groq);
+  assert.equal(groq.name, "Groq");
+  assert.equal(groq.category, "official");
+  assert.equal(groq.input, "key");
+  assert.equal(groq.defaultChatProtocol, "openai-completions");
+  assert.equal(groq.apiKeyUrl, "https://console.groq.com/keys");
+  assert.ok(groq.order < 500, "ordered with the other vendors, not in the unranked tail");
+  assert.equal(groq.endpoints["openai-completions"].baseUrl, "https://api.groq.com/openai/v1");
 });

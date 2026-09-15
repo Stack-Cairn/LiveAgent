@@ -1,6 +1,7 @@
 // 预设覆盖层：models.dev 不知道的事实（设计文档 3.2 / 3.3）。
 //
-// 生成层（presets.generated.ts）给出名称、文档、API 根地址、适配器与模型目录；
+// 生成层（presets.generated.ts）给出名称、文档、API 根地址、适配器与目录分区 id
+// （模型列表在 lib/models/catalog.generated.ts 的 MODEL_CATALOG[sourceId]）；
 // 这里补充：额外协议端点、方言、按模型的接口规则、CLI 身份档、用户需要填什么、
 // 以及 models.dev 未收录的本地服务与通用网关。合并见 presets.ts。
 
@@ -128,6 +129,15 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     ],
     apiKeyUrl: "https://platform.deepseek.com/api_keys",
     order: 50,
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    category: "official",
+    input: "key",
+    defaultChatProtocol: "openai-completions",
+    apiKeyUrl: "https://console.groq.com/keys",
+    order: 115,
   },
   {
     id: "zhipu",

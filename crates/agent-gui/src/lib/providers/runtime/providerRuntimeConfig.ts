@@ -1,4 +1,8 @@
 import {
+  resolveModelCapabilities,
+  resolveModelInputModalitiesResolved,
+} from "@liveagent/ui/lib/models/modelCapabilities";
+import {
   clampThinkingLevelToList,
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
@@ -97,5 +101,7 @@ export function createProviderRuntimeConfig(
     useSystemProxy: provider.useSystemProxy,
     ...(provider.retryPolicy ? { retryPolicy: provider.retryPolicy } : {}),
     modelConfig,
+    capabilities: resolveModelCapabilities(provider, model, route),
+    inputModalities: resolveModelInputModalitiesResolved(provider, model, route),
   } as ProviderRuntimeConfig;
 }

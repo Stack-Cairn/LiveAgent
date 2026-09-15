@@ -114,3 +114,37 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
   );
   assert.equal(unsupported.reasoning, undefined);
 });
+
+test("createProviderRuntimeConfig resolves model capabilities and input modalities for the runtime", () => {
+  const provider = createProvider({
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    models: [
+      { id: "gpt-5.2", contextWindow: 400000, maxOutputToken: 128000 },
+      {
+        id: "no-tools",
+        contextWindow: 128000,
+        maxOutputToken: 32000,
+        capabilities: { tools: "unsupported" },
+        inputModalities: ["text", "image"],
+      },
+    ],
+    activeModels: ["gpt-5.2", "no-tools"],
+  });
+  const catalog = createProviderRuntimeConfig(
+    provider,
+    "gpt-5.2",
+    settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
+  );
+  assert.deepEqual(catalog.capabilities.tools, { state: "supported", source: "catalog" });
+  assert.equal(catalog.inputModalities.source, "catalog");
+  assert.ok(catalog.inputModalities.modalities.includes("image"));
+
+  const gated = createProviderRuntimeConfig(
+    provider,
+    "no-tools",
+    settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
+  );
+  assert.deepEqual(gated.capabilities.tools, { state: "unsupported", source: "user" });
+  assert.deepEqual(gated.inputModalities, { modalities: ["text", "image"], source: "user" });
+});

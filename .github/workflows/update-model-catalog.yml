@@ -16,6 +16,7 @@ concurrency:
 env:
   NODE_VERSION: 22.19.0
   MODEL_CATALOG_PATH: crates/agent-ui/src/lib/models/catalog.generated.ts
+  PROVIDER_PRESETS_PATH: crates/agent-ui/src/lib/providers/registry/presets.generated.ts
 
 jobs:
   refresh:
@@ -38,7 +39,9 @@ jobs:
           base: main
           branch: automation/model-catalog-refresh
           delete-branch: true
-          add-paths: ${{ env.MODEL_CATALOG_PATH }}
+          add-paths: |
+            ${{ env.MODEL_CATALOG_PATH }}
+            ${{ env.PROVIDER_PRESETS_PATH }}
           commit-message: "chore(models): refresh model catalog"
           title: "chore(models): refresh model catalog"
           labels: governance-exempt

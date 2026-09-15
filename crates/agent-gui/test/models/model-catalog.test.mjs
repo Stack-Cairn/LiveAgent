@@ -7,7 +7,8 @@ const catalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 
 // 与 scripts/generate-model-catalog.mjs 的 SECTIONS 同值（键、序、质量门）：
 // 上游被截断时刷新会硬错，这里锁住已入库快照的完整性。前四家是应用供应商
-// 类型的原生目录；其余为国内厂商分区，只经跨供应商回查消费。
+// 类型的原生目录；其余分区经预设 sourceId（渠道模型列表）与跨供应商回查消费。
+// 分区顺序即跨供应商回查的裁决序：官方在前，平台/聚合站在后。
 const MIN_MODELS_PER_PROVIDER = {
   anthropic: 8,
   google: 15,
@@ -15,18 +16,53 @@ const MIN_MODELS_PER_PROVIDER = {
   xai: 3,
   deepseek: 2,
   zhipuai: 10,
-  moonshotai: 8,
-  minimax: 5,
+  "moonshotai-cn": 2,
+  moonshotai: 2,
+  "minimax-cn": 3,
+  minimax: 3,
   stepfun: 4,
   xiaomi: 4,
   longcat: 1,
-  alibaba: 40,
+  volcengine: 6,
+  "alibaba-cn": 40,
+  alibaba: 20,
   tencent: 4,
+  "siliconflow-cn": 20,
+  siliconflow: 20,
+  groq: 8,
+  openrouter: 100,
+  lmstudio: 1,
 };
 const PROVIDERS = Object.keys(MIN_MODELS_PER_PROVIDER);
+const MODEL_CAP = 400;
 
-// 与生成脚本 INPUT_MODALITIES 同值：inputModalities 的合法值全集兼规范顺序。
+// 与生成脚本 MODALITIES 同值：模态字段的合法值全集兼规范顺序。
 const INPUT_MODALITIES = ["text", "image", "audio", "video", "pdf"];
+
+// 与生成脚本 ENTRY_FIELD_ORDER 同值：目录条目允许的全部字段（不含价格）。
+const ENTRY_FIELDS = new Set([
+  "id",
+  "name",
+  "family",
+  "contextWindow",
+  "maxInputTokens",
+  "maxOutputToken",
+  "inputModalities",
+  "outputModalities",
+  "thinking",
+  "toolCall",
+  "structuredOutput",
+  "attachment",
+  "temperature",
+  "knowledge",
+  "releaseDate",
+  "lastUpdated",
+  "status",
+  "openWeights",
+  "interleaved",
+]);
+const FLAG_FIELDS = ["toolCall", "structuredOutput", "attachment", "temperature", "openWeights", "interleaved"];
+const DATE_FIELDS = ["knowledge", "releaseDate", "lastUpdated"];
 
 test("generated catalog upholds the data invariants", () => {
   assert.deepEqual(
@@ -34,21 +70,23 @@ test("generated catalog upholds the data invariants", () => {
     PROVIDERS,
     "catalog sections must match the generator's SECTIONS (keys and order)",
   );
-  // 跨供应商回查（findCatalogModelAcrossProviders）与索引的小写别名依赖
-  // id 全目录按小写唯一，否则同名模型在不同分区下会产生歧义命中。
-  const allIds = PROVIDERS.flatMap((providerId) =>
-    catalog.MODEL_CATALOG[providerId].map((entry) => entry.id.toLowerCase()),
-  );
-  assert.equal(new Set(allIds).size, allIds.length, "ids must be lowercase-unique across sections");
   for (const providerId of PROVIDERS) {
     const entries = catalog.MODEL_CATALOG[providerId];
     assert.ok(
       entries.length >= MIN_MODELS_PER_PROVIDER[providerId],
       `${providerId}: expected >= ${MIN_MODELS_PER_PROVIDER[providerId]} models, got ${entries.length}`,
     );
+    assert.ok(entries.length <= MODEL_CAP, `${providerId}: section must respect MODEL_CAP`);
     const ids = entries.map((entry) => entry.id);
     assert.deepEqual(ids, [...ids].sort(), `${providerId}: ids must be sorted`);
-    assert.equal(new Set(ids).size, ids.length, `${providerId}: ids must be unique`);
+    // 分区索引的小写别名依赖 id 在分区内按小写唯一（同一 id 允许出现在多个
+    // 分区——CN/国际双渠道、聚合站转售——由分区顺序裁决）。
+    const lowerIds = ids.map((id) => id.toLowerCase());
+    assert.equal(
+      new Set(lowerIds).size,
+      lowerIds.length,
+      `${providerId}: ids must be lowercase-unique within the section`,
+    );
     for (const entry of entries) {
       const label = `${providerId}/${entry.id}`;
       assert.ok(Number.isInteger(entry.contextWindow) && entry.contextWindow > 0, label);
@@ -57,25 +95,82 @@ test("generated catalog upholds the data invariants", () => {
       assert.ok(entry.maxOutputToken < entry.contextWindow, `${label}: output must be < context`);
       const limits = { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
       assert.deepEqual(catalog.normalizeModelLimits(limits), limits, label);
-      // 计费功能已移除：目录条目只承载限额、输入模态与思考能力。
-      const expectedKeys = ["contextWindow", "id", "maxOutputToken"];
-      if (entry.inputModalities) expectedKeys.push("inputModalities");
-      if (entry.thinking) expectedKeys.push("thinking");
-      assert.deepEqual(Object.keys(entry).sort(), expectedKeys.sort(), label);
-      if (entry.inputModalities) {
-        assert.ok(entry.inputModalities.length > 0, `${label}: input modalities must be non-empty`);
+      if (entry.maxInputTokens !== undefined) {
+        assert.ok(
+          Number.isInteger(entry.maxInputTokens) &&
+            entry.maxInputTokens > 0 &&
+            entry.maxInputTokens <= entry.contextWindow,
+          `${label}: maxInputTokens must be a positive integer within the window`,
+        );
+      }
+      // 计费功能已移除：目录条目只承载限额、模态、思考能力与描述性事实。
+      for (const key of Object.keys(entry)) {
+        assert.ok(ENTRY_FIELDS.has(key), `${label}: unexpected field ${key}`);
+      }
+      // 布尔能力字段只在 true 时写出（models.dev 缺省即 false）。
+      for (const key of FLAG_FIELDS) {
+        if (key in entry) assert.equal(entry[key], true, `${label}: ${key} must be true when present`);
+      }
+      for (const key of DATE_FIELDS) {
+        if (key in entry) {
+          assert.match(entry[key], /^\d{4}(-\d{2}){1,2}$/, `${label}: ${key} must be YYYY-MM[-DD]`);
+        }
+      }
+      if (entry.name !== undefined) assert.notEqual(entry.name, entry.id, `${label}: name == id`);
+      if (entry.status !== undefined) {
+        assert.ok(["beta", "deprecated"].includes(entry.status), `${label}: status ${entry.status}`);
+      }
+      for (const field of ["inputModalities", "outputModalities"]) {
+        if (!entry[field]) continue;
+        assert.ok(entry[field].length > 0, `${label}: ${field} must be non-empty`);
         // 同一断言覆盖三个不变量：值都在合法全集内、无重复、按规范顺序排列。
         assert.deepEqual(
-          entry.inputModalities,
-          INPUT_MODALITIES.filter((modality) => entry.inputModalities.includes(modality)),
-          `${label}: input modalities must be known values in canonical order`,
+          entry[field],
+          INPUT_MODALITIES.filter((modality) => entry[field].includes(modality)),
+          `${label}: ${field} must be known values in canonical order`,
         );
+      }
+      if (entry.outputModalities) {
+        assert.notDeepEqual(entry.outputModalities, ["text"], `${label}: text-only output is implicit`);
       }
       if (entry.thinking) {
         assert.deepEqual(Object.keys(entry.thinking).sort(), ["levels", "off"], label);
       }
     }
   }
+});
+
+test("catalog carries the capability, limit and lifecycle facts models.dev publishes", () => {
+  const gpt52 = catalog.findCatalogModel("codex", "gpt-5.2");
+  assert.equal(gpt52.toolCall, true);
+  assert.equal(gpt52.structuredOutput, true);
+  assert.equal(gpt52.attachment, true);
+  assert.equal(gpt52.temperature, true);
+  assert.equal(gpt52.maxInputTokens, 272_000);
+  assert.equal(gpt52.name, "GPT-5.2");
+  assert.equal(gpt52.family, "gpt");
+  assert.match(gpt52.releaseDate, /^2025-12/);
+  assert.match(gpt52.knowledge, /^2025-/);
+  assert.deepEqual(catalog.catalogEntryLimits(gpt52), {
+    contextWindow: 400_000,
+    maxInputTokens: 272_000,
+    maxOutputToken: 128_000,
+  });
+  // limit.input 未发布时不伪造。
+  const sonnet = catalog.findCatalogModel("claude_code", "claude-sonnet-4-6");
+  assert.equal(sonnet.maxInputTokens, undefined);
+  assert.equal("maxInputTokens" in catalog.catalogEntryLimits(sonnet), false);
+  // 聚合站分区保留 vendor/model 形态的 id；命中结果带分区与命中形态。
+  const viaOpenRouter = catalog.findCatalogModelInSection("openrouter", "anthropic/claude-sonnet-4.5");
+  assert.equal(viaOpenRouter.catalogProviderId, "openrouter");
+  assert.equal(viaOpenRouter.matchedId, "anthropic/claude-sonnet-4.5");
+  // 跨分区回查：官方分区先于聚合站；剥聚合商前缀后命中官方条目。
+  const match = catalog.findCatalogModelMatchAcrossProviders("openrouter/anthropic/claude-sonnet-4-6");
+  assert.equal(match.catalogProviderId, "anthropic");
+  assert.equal(match.matchedId, "claude-sonnet-4-6");
+  // 双渠道同 id：CN 分区在前。
+  assert.equal(catalog.findCatalogModelMatchAcrossProviders("qwen-max").catalogProviderId, "alibaba-cn");
+  assert.equal(catalog.findCatalogModelInSection("alibaba", "qwen-max").catalogProviderId, "alibaba");
 });
 
 test("openai catalog prefers Codex metadata and keeps models.dev supplements", () => {

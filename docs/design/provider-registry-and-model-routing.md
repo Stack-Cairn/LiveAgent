@@ -446,7 +446,9 @@ type ChatCapabilityName =
 
 有效能力是三方交集：模型声明、所选接口适配器的实现范围、供应商级开关。适配器不支持的能力模型声明也无效，界面标"当前适配器不支持"；模型声明不支持的能力供应商开关不能打开；`unknown` 按能力处理，`tools` / `reasoning` / `promptCaching` 沿用启发式并标来源，`imageUnderstanding` / `fileInput` 未知时不自动开启附件。
 
-目前有消费者的能力：reasoning、nativeWebSearch、promptCaching、imageUnderstanding、fileInput。tools、parallelTools、structuredOutput 定义但界面不开放，等待按模型分支的读取点。
+能力的默认值来自模型目录（6.6）：`tools` ← tool_call，`structuredOutput` ← structured_output，`reasoning` ← 目录有思考描述，`fileInput` ← attachment 或输入模态含 pdf，`imageUnderstanding` ← 输入模态含 image。目录命中但字段缺省的按 unsupported 处理（models.dev 对这些布尔字段缺省即 false）；目录未命中的才是 unknown。界面每个芯片都带来源（用户 / 目录 / 供应商 / 启发式 / 未知），不再出现"目录已收录却全部显示未知"的情况。
+
+运行时消费：`tools` 为 unsupported 时不下发工具定义（纯文本回合）；`imageUnderstanding` / `fileInput` 参与输入模态推导；`reasoning` 决定思考档位是否可选；`nativeWebSearch` 与供应商开关求交。`parallelTools`、`promptCaching` 保留字段，无消费者，界面不开放。
 
 ### 6.2 逐字段来源
 
@@ -488,6 +490,33 @@ outputReserve = min(maxOutputToken, 用户请求的输出上限)
 | 厂商模型档位补充 | 预设注册表的 `PresetModelRule.thinking` | 随应用更新 |
 
 界面：编辑模型抽屉显示"思考档位（来自模型目录）"为只读芯片，标出当前默认档；目录未命中时显示"目录未收录，按家族兜底"，并给出手动指定入口。模型行的"推理"能力图标由目录的 `reasoning` 决定。
+
+### 6.6 模型元数据目录：唯一维护处与获取
+
+**唯一来源。** 模型级事实只有一份生成文件 `crates/agent-ui/src/lib/models/catalog.generated.ts`，由 `scripts/generate-model-catalog.mjs` 从 models.dev `api.json` 派生（OpenAI 段先叠 Codex `models.json`，规则不变）。预设注册表的生成层 `presets.generated.ts` 只保留渠道事实（名称、文档、环境变量、适配器、接口、地址），通过 `sourceId` 引用目录 section，不再复制模型列表。覆盖层 `presets.overlay.ts` 只放 models.dev 没有的东西：额外接口地址、方言、逐模型接口规则、身份预设。
+
+**目录条目字段。**
+
+| 字段 | 来源（models.dev） | 用途 |
+| --- | --- | --- |
+| `id` / `name` / `family` | id / name / family | 匹配、显示、系列分组的辅助信息 |
+| `contextWindow` / `maxInputTokens` / `maxOutputToken` | limit.context / limit.input / limit.output | 上下文预算（6.3）、探测采纳时的限额初值 |
+| `inputModalities` / `outputModalities` | modalities.input / output | 图片、PDF、音频、视频输入的默认判断；输出模态只展示 |
+| `thinking` | reasoning_options（effort 阶梯 / 开关 / 预算） | 思考档位（6.5） |
+| `toolCall` / `structuredOutput` / `attachment` / `temperature` | tool_call / structured_output / attachment / temperature | 能力默认值（6.1） |
+| `knowledge` / `releaseDate` / `lastUpdated` / `status` / `openWeights` / `interleaved` | 同名字段 | 目录信息面板：知识截止、发布与更新日期、beta / deprecated 标记 |
+
+不收录价格（项目已移除计费）。不收录"模型支持哪些接口"：models.dev 只描述供应商适配器，接口归属由渠道端点 + 预设逐模型规则 + 模型系列偏好决定（4.10），目录信息面板把这条推导链展示出来而不是另存一份。
+
+**获取与刷新。**
+
+- 本地：`pnpm generate:model-catalog` 一次拉取并写出两份生成文件；`pnpm generate:model-catalog:check` 在 CI 与提交前校验快照未被手改。
+- 自动：`.github/workflows/update-model-catalog.yml` 每日执行生成器并开 PR，两份文件一起提交，快照日期 `MODEL_CATALOG_SNAPSHOT_DATE` 同步。
+- 应用内不直接访问 models.dev。运行中拿到的供应商元数据（`/models` 返回的限额、模态）作为 `provider` 来源参与合并，不改写目录。
+
+**合并顺序与展示。** 每个模型字段按 6.2 的顺序合并：用户覆盖 > 目录 > 供应商元数据 > 启发式 > 未知。编辑模型抽屉新增"目录信息"面板：命中的目录 section 与条目 id（含去前缀匹配）、快照日期、系列、发布 / 更新 / 知识截止、状态、输入与输出模态、原始能力位、限额三项。能力芯片、模态选择、限额输入各自带来源徽标，"还原为目录值"一键清除用户覆盖。模型列表行按有效模态显示图片 / 文件图标。
+
+**术语。** "接口家族"（Anthropic / OpenAI / Gemini）只用于故障转移分组与路由；"模型系列"（claude / gpt / gemini / deepseek / glm …）只用于列表分组、默认接口偏好与原生搜索资格。界面文案分别使用这两个词，不再混用"家族"。
 
 ## 7. 设置界面
 
@@ -624,7 +653,7 @@ P2 与 P3 的任务清单在各自阶段开始前补充。
 
 | 项 | 实施情况 |
 | --- | --- |
-| 注册表与预设 | `crates/agent-ui/src/lib/providers/registry/`；预设生成层由 `scripts/generate-provider-presets.mjs` 从 models.dev 派生（17 家、774 个目录模型），覆盖层手工维护；`pnpm generate:provider-presets[:check]` |
+| 注册表与预设 | `crates/agent-ui/src/lib/providers/registry/`；预设生成层与模型目录由同一个 `scripts/generate-model-catalog.mjs` 从 models.dev 一次派生（`presets.generated.ts` 只含 18 家的供应商事实，渠道模型列表即 `MODEL_CATALOG[sourceId]`，22 个分区、785 个目录模型），覆盖层手工维护；`pnpm generate:model-catalog[:check]` |
 | 协议枚举 | 四类字面量；`deepseek-responses` 在加载时改写为 Responses + deepseek 方言；适配器注册表内部仍用 `deepseek-responses` 作为 DeepSeek Responses 适配器的 api id，这是实现细节，不出现在设置层 |
 | 路由 | `resolveProviderChatRoute` 输出接口来源、家族、方言、远端 ID、凭据与来源、合并头、quirks、鉴权覆盖；运行时 `createProviderRuntimeConfig` 一次填充 |
 | 请求装配 | 协议头档 + 方言头档 + 用户头查表；`Model.provider` 填方言（generic → "openai"，与 pi-ai 的同模型判定和 `detectCompat` 行为一致），quirks 映射到 pi-ai compat；删除了与 `detectCompat` 重复的域名判断，z.ai / OpenRouter / 通义等由路由层 quirks 推导补回 |
