@@ -13034,6 +13034,9 @@ type ProviderModelsRequest struct {
 	// 用户在供应商设置里显式配置的自定义请求头；未提供时沿用已保存配置。
 	// 鉴权头与 host/content-length 等仍由落地侧的保留头名单兜底，不可被覆盖。
 	CustomHeaders *ProviderCustomHeaders `protobuf:"bytes,8,opt,name=custom_headers,json=customHeaders,proto3" json:"custom_headers,omitempty"`
+	// WebUI 复用本地密钥时指定用 `credentials[]` 里哪把凭据（按 id）；为空或
+	// 找不到时退回供应商默认 Key。仅在 api_key 为空且 provider_id 非空时生效。
+	CredentialId  string `protobuf:"bytes,9,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13122,6 +13125,13 @@ func (x *ProviderModelsRequest) GetCustomHeaders() *ProviderCustomHeaders {
 		return x.CustomHeaders
 	}
 	return nil
+}
+
+func (x *ProviderModelsRequest) GetCredentialId() string {
+	if x != nil {
+		return x.CredentialId
+	}
+	return ""
 }
 
 type ProviderModelsResponse struct {
@@ -15832,7 +15842,7 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"]\n" +
 	"\x15ProviderCustomHeaders\x12D\n" +
-	"\aheaders\x18\x01 \x03(\v2*.liveagent.gateway.v2.ProviderCustomHeaderR\aheaders\"\xe3\x02\n" +
+	"\aheaders\x18\x01 \x03(\v2*.liveagent.gateway.v2.ProviderCustomHeaderR\aheaders\"\x88\x03\n" +
 	"\x15ProviderModelsRequest\x12#\n" +
 	"\rprovider_type\x18\x01 \x01(\tR\fproviderType\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12\x17\n" +
@@ -15843,7 +15853,8 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\vprovider_id\x18\x06 \x01(\tR\n" +
 	"providerId\x12#\n" +
 	"\vis_full_url\x18\a \x01(\bH\x00R\tisFullUrl\x88\x01\x01\x12R\n" +
-	"\x0ecustom_headers\x18\b \x01(\v2+.liveagent.gateway.v2.ProviderCustomHeadersR\rcustomHeadersB\x0e\n" +
+	"\x0ecustom_headers\x18\b \x01(\v2+.liveagent.gateway.v2.ProviderCustomHeadersR\rcustomHeaders\x12#\n" +
+	"\rcredential_id\x18\t \x01(\tR\fcredentialIdB\x0e\n" +
 	"\f_is_full_url\"9\n" +
 	"\x16ProviderModelsResponse\x12\x1f\n" +
 	"\vmodels_json\x18\x01 \x01(\tR\n" +

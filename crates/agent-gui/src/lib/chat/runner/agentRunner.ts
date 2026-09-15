@@ -585,10 +585,11 @@ export async function runAssistantWithTools(params: {
     };
 
     // 熔断 key 按 provider::credential::protocol::model 分表：凭据层与端点层候选
-    // 各自独立计数（手写 runtime 缺这些字段时退回旧的 provider::model）。
-    const failoverScope = (runtime: ProviderRuntimeConfig) => ({
+    // 各自独立计数。接口取路由视图（resolveRuntimeWireRoute），手写 runtime 缺
+    // protocol 时与 wire 层同一条回退链推导，不再各读各的。
+    const failoverScope = (runtime: ProviderRuntimeConfig, providerId: ProviderId) => ({
       credentialId: runtime.credentialId,
-      protocol: runtime.protocol ?? runtime.chatProtocol,
+      protocol: resolveRuntimeWireRoute(providerId, runtime).protocol,
     });
     /** 路由结果只在工厂构造的 runtime 上存在；手写 runtime 让中间件退回旧推导。 */
     const runtimeRouteParams = (runtime: ProviderRuntimeConfig, wire: RuntimeWireRoute) =>
@@ -601,9 +602,13 @@ export async function runAssistantWithTools(params: {
         ? failoverBreakerKey(
             failoverParams.primary.selectedModel.customProviderId,
             failoverParams.primary.selectedModel.model,
-            failoverScope(params.runtime),
+            failoverScope(params.runtime, params.providerId),
           )
-        : failoverBreakerKey(params.providerId, modelId, failoverScope(params.runtime)),
+        : failoverBreakerKey(
+            params.providerId,
+            modelId,
+            failoverScope(params.runtime, params.providerId),
+          ),
       label: failoverParams?.primary.label ?? `${params.providerId} · ${modelId}`,
       selectedModel: failoverParams?.primary.selectedModel,
       providerId: params.providerId,
@@ -633,7 +638,7 @@ export async function runAssistantWithTools(params: {
           key: failoverBreakerKey(
             fallback.selectedModel.customProviderId,
             fallback.selectedModel.model,
-            failoverScope(fallback.runtime),
+            failoverScope(fallback.runtime, fallback.providerId),
           ),
           label: fallback.label,
           selectedModel: fallback.selectedModel,
@@ -1497,7 +1502,7 @@ export async function runAssistantWithTools(params: {
               : failoverBreakerKey(
                   fallback?.selectedModel.customProviderId ?? "",
                   fallback?.selectedModel.model ?? "",
-                  fallback ? failoverScope(fallback.runtime) : undefined,
+                  fallback ? failoverScope(fallback.runtime, fallback.providerId) : undefined,
                 ),
           label: targetIndex === 0 ? primaryTarget.label : (fallback?.label ?? ""),
           model:

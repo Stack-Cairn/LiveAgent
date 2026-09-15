@@ -21,8 +21,8 @@ import {
   expandPresetBaseUrl,
   findPresetCatalogModel,
   matchPresetModelRule,
+  normalizeOrigin,
   PROVIDER_CHAT_PROTOCOLS,
-  PROVIDER_PROTOCOL_FAMILY,
   type ProviderPreset,
   presetMatchesBaseUrl,
   resolveModelFamily,
@@ -136,18 +136,20 @@ export function buildEndpointCandidates(params: {
   return out;
 }
 
-/** 自定义渠道：从一个根地址推出四类接口的常见地址形态。 */
+/**
+ * 自定义渠道：从一个根地址推出四类接口的常见地址形态。根地址与注册表的
+ * `normalizeOrigin` 同一口径（补 scheme、去 query 与尾部 v1 / v1beta）。
+ */
 export function customEndpointBaseUrl(protocol: ProviderChatProtocol, input: string): string {
-  const trimmed = input.trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-  const root = trimmed.replace(/\/(v1beta|v1)$/i, "");
+  const root = normalizeOrigin(input);
+  if (!root) return "";
   switch (protocol) {
     case "google-generative-ai":
       return `${root}/v1beta`;
     case "anthropic-messages":
       return root;
     default:
-      return /\/v1$/i.test(trimmed) ? trimmed : `${root}/v1`;
+      return `${root}/v1`;
   }
 }
 
@@ -165,6 +167,8 @@ export function classifyProbeError(error: unknown): {
 export async function probeEndpoint(params: {
   candidate: EndpointCandidate;
   apiKey: string;
+  /** WebUI 下 Key 已脱敏（apiKey 为空）：按 providerId + credentialId 用已落库的 Key */
+  credentialId?: string;
   useSystemProxy?: boolean;
   customHeaders?: readonly CustomHeader[];
   providerId?: string;
@@ -178,7 +182,10 @@ export async function probeEndpoint(params: {
       isFullUrl: candidate.isFullUrl,
       modelsUrl: candidate.modelsUrl,
       providerId: params.providerId,
+      credentialId: params.credentialId,
       customHeaders: params.customHeaders,
+      // 严格模式：200 但没有模型数组（例如 {"code":401}）归"未知"而不是"可用"。
+      strict: true,
     });
     return {
       protocol: candidate.protocol,
@@ -220,6 +227,7 @@ export async function probeProvider(params: {
         probeEndpoint({
           candidate,
           apiKey: credential.apiKey,
+          credentialId: credential.id,
           useSystemProxy: params.useSystemProxy,
           customHeaders: params.customHeaders,
           providerId: params.providerId,
@@ -292,7 +300,8 @@ export type AutoConfiguration = {
 
 /**
  * 把探测结果变成可采纳的草稿。规则见设计文档 5.3：
- * 1. 每个可用接口一条端点（enabled），不可用的接口不创建；
+ * 1. 每个可用接口一条端点（enabled），不可用的新接口不创建；已配置的端点保留，
+ *    只写入本次观测；
  * 2. 默认接口：预设声明的若可用则用，否则取可用接口里家族表最常见的一个；
  * 3. 模型：各 Key 各接口列表按 id 合并去重，group 按家族，限额取供应商声明 /
  *    预设目录 / 兜底；
@@ -317,8 +326,11 @@ export function buildAutoConfiguration(params: {
     const summary = summarizeEndpointStatus(probe, candidate.protocol);
     const forced = params.forcedProtocols?.has(candidate.protocol) === true;
     const rejected = params.rejectedProtocols?.has(candidate.protocol) === true;
-    if (summary.status === "missing" && !forced) continue;
-    if (summary.status !== "ok" && !forced) continue;
+    const existing = candidate.origin === "existing";
+    // 已配置的端点是用户的配置，不因一次探测失败而丢弃或停用，只更新观测；
+    // 新发现的接口只有探测通过（或用户强制启用）才创建。
+    if (!existing && summary.status !== "ok" && !forced) continue;
+    const usable = summary.status === "ok" || forced;
     endpointConfigs[candidate.protocol] = {
       ...(rejected ? { enabled: false } : {}),
       baseUrl: candidate.baseUrl,
@@ -333,9 +345,9 @@ export function buildAutoConfiguration(params: {
         ...(summary.latencyMs !== undefined ? { latencyMs: summary.latencyMs } : {}),
         ...(summary.error ? { error: summary.error } : {}),
       },
-      source: candidate.origin === "existing" ? "user" : "auto",
+      source: existing ? "user" : "auto",
     };
-    if (!rejected) available.push(candidate.protocol);
+    if (usable && !rejected) available.push(candidate.protocol);
   }
 
   const presetDefault = preset?.defaultChatProtocol;
@@ -407,7 +419,7 @@ function pickMostCommonProtocol(
 }
 
 /** 给发现的模型补分组、限额初值与预设规则，全部标 auto。 */
-export function decorateAutoModel(
+function decorateAutoModel(
   fetched: ProviderModelConfig,
   preset: ProviderPreset | undefined,
   defaultChatProtocol: ProviderChatProtocol,
@@ -442,9 +454,4 @@ export function decorateAutoModel(
     ...(rule?.dialect ? { dialect: rule.dialect } : {}),
     source: "auto",
   };
-}
-
-/** 当前可用接口所属家族（用于摘要与故障转移提示）。 */
-export function protocolsFamilies(protocols: readonly ProviderChatProtocol[]): string[] {
-  return [...new Set(protocols.map((protocol) => PROVIDER_PROTOCOL_FAMILY[protocol]))];
 }

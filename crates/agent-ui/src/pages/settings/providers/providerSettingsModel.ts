@@ -3,23 +3,29 @@
 // （设计文档 2.3 / 5.4 / 5.5 / 7）。
 
 import {
+  type AppSettings,
   type CustomProvider,
   credentialCoversModel,
   getDefaultUsageQueryConfig,
-  getLegacyProviderChatProtocol,
   getProviderChatProtocolAdapter,
   getProviderCredentials,
   getProviderEnabledProtocols,
+  getProviderImplicitChatProtocol,
+  hasProviderFailoverConfiguration,
   normalizeCustomProvider,
   PROVIDER_CHAT_PROTOCOLS,
+  PROVIDER_PROTOCOL_FAMILY,
   type ProviderChatProtocol,
   type ProviderCredential,
   type ProviderEndpointConfig,
   type ProviderEndpointProbe,
   type ProviderId,
   type ProviderModelConfig,
+  type ProviderProtocolFamily,
+  type ResolvedProviderChatRoute,
   resolveProviderChatRoute,
   resolveProviderDialect,
+  resolveProviderEndpoint,
 } from "@liveagent/app/lib/settings";
 import type { CliIdentityProviderId } from "@liveagent/ui/lib/providers/customHeaders";
 import {
@@ -65,13 +71,11 @@ export function presetForProvider(provider: Pick<CustomProvider, "presetId">): P
   return findProviderPreset(provider.presetId) ?? customPreset();
 }
 
+/** 默认接口 = 隐式接口（defaultChatProtocol ?? 旧类型推导），与路由层同一口径。 */
 export function providerDefaultProtocol(
   provider: Pick<CustomProvider, "type" | "defaultChatProtocol" | "requestFormat">,
 ): ProviderChatProtocol {
-  return (
-    provider.defaultChatProtocol ??
-    getLegacyProviderChatProtocol(provider.type, provider.requestFormat)
-  );
+  return getProviderImplicitChatProtocol(provider);
 }
 
 export type EndpointView = {
@@ -81,23 +85,18 @@ export type EndpointView = {
   config: ProviderEndpointConfig;
 };
 
-/** 读取某协议的端点：显式配置，或默认协议由主连接充当的隐式端点。 */
+/**
+ * 读取某协议的端点（含被停用的显式端点，供配置界面列出）：显式配置原样返回；
+ * 没有显式配置时只有隐式接口由主连接物化（source: user，与路由层
+ * resolveProviderEndpoint 同一份物化）。
+ */
 export function readEndpoint(
   provider: CustomProvider,
   protocol: ProviderChatProtocol,
 ): EndpointView | undefined {
   const explicit = provider.endpointConfigs?.[protocol];
   if (explicit) return { protocol, explicit: true, config: explicit };
-  if (protocol !== providerDefaultProtocol(provider)) return undefined;
-  return {
-    protocol,
-    explicit: false,
-    config: {
-      baseUrl: provider.baseUrl,
-      ...(provider.isFullUrl ? { isFullUrl: true } : {}),
-      ...(provider.modelsUrl ? { modelsUrl: provider.modelsUrl } : {}),
-    },
-  };
+  return resolveProviderEndpoint(provider, protocol);
 }
 
 /** 已配置的接口（默认接口在前，其余按四类固定顺序），含被停用的。 */
@@ -115,7 +114,11 @@ export function providerEnabledProtocols(provider: CustomProvider): ProviderChat
   return getProviderEnabledProtocols(provider);
 }
 
-/** 显式 + 隐式端点合成的一份 endpointConfigs，供探测候选与请求配置抽屉使用。 */
+/**
+ * 显式 + 隐式端点合成的一份 endpointConfigs，供探测候选与请求配置抽屉使用。
+ * 隐式端点（旧存档主连接）是用户手填的地址，物化后来源为 user，探测并入时不会
+ * 被当成自动值改写或停用。
+ */
 export function materializedEndpointConfigs(
   provider: CustomProvider,
 ): NonNullable<CustomProvider["endpointConfigs"]> {
@@ -142,7 +145,11 @@ export function finalizeProvider(provider: CustomProvider): CustomProvider {
   return normalizeCustomProvider(syncMainConnection(provider));
 }
 
-/** 写端点：隐式端点先物化；用户改动标 user；默认接口同步回主连接。 */
+/**
+ * 写端点：隐式端点先物化；用户改动标 user；默认接口同步回主连接。
+ * 地址被清空时不写入（保留旧值），避免输入框清空失焦后整条端点连同方言、鉴权、
+ * quirks 与请求头一起消失。
+ */
 export function writeEndpoint(
   provider: CustomProvider,
   protocol: ProviderChatProtocol,
@@ -156,6 +163,7 @@ export function writeEndpoint(
     typeof patch === "function"
       ? patch(current)
       : { ...current, ...patch, source: options?.source ?? ("user" as const) };
+  if (!next.baseUrl.trim() && current.baseUrl.trim()) return provider;
   return finalizeProvider({
     ...provider,
     endpointConfigs: { ...provider.endpointConfigs, [protocol]: next },
@@ -277,6 +285,21 @@ export function enabledCredentials(provider: CustomProvider): ProviderCredential
   return providerCredentials(provider).filter((credential) => credential.enabled);
 }
 
+export function credentialConfigured(credential: ProviderCredential): boolean {
+  return credential.apiKeyConfigured === true || credential.apiKey.trim().length > 0;
+}
+
+/** 已配置（有 Key 或 WebUI 的 configured 标记）的凭据。 */
+export function configuredCredentials(provider: CustomProvider): ProviderCredential[] {
+  return providerCredentials(provider).filter(credentialConfigured);
+}
+
+/** 实例是否有可用的 Key：至少一把启用且已配置；免鉴权预设视为已配置。 */
+export function providerKeyReady(provider: CustomProvider): boolean {
+  if (presetForProvider(provider).authOptional) return true;
+  return enabledCredentials(provider).some(credentialConfigured);
+}
+
 function sortedModelSet(credential: ProviderCredential): string {
   return [...(credential.lastModels?.models ?? [])].sort().join("\n");
 }
@@ -289,12 +312,14 @@ export function credentialScopesMatch(provider: CustomProvider): boolean {
   return enabled.every((credential) => sortedModelSet(credential) === first);
 }
 
+/** 与主 Key 的模型集合差异；任一方尚未拉取时返回 null（无从比较）。 */
 export function credentialModelDiff(
   credential: ProviderCredential,
   primary: ProviderCredential,
-): { more: number; less: number } {
-  const own = new Set(credential.lastModels?.models ?? []);
-  const base = new Set(primary.lastModels?.models ?? []);
+): { more: number; less: number } | null {
+  if (!credential.lastModels || !primary.lastModels) return null;
+  const own = new Set(credential.lastModels.models);
+  const base = new Set(primary.lastModels.models);
   let more = 0;
   let less = 0;
   for (const id of own) if (!base.has(id)) more += 1;
@@ -341,6 +366,28 @@ export function groupProviderModels(provider: CustomProvider): ProviderModelGrou
     groups.set(key, group);
   }
   return [...groups.values()];
+}
+
+/**
+ * 分组内拖拽排序：把该分组换成新顺序，再按当前显示顺序把各分组拼接成全局
+ * modelOrder（分组顺序不变）。
+ */
+export function reorderProviderModels(
+  provider: CustomProvider,
+  groupKey: string,
+  orderedIds: readonly string[],
+): CustomProvider {
+  const groups = groupProviderModels(provider);
+  const target = groups.find((group) => group.key === groupKey);
+  if (!target) return provider;
+  const current = target.models.map((model) => model.id);
+  const valid =
+    orderedIds.length === current.length && orderedIds.every((id) => current.includes(id));
+  if (!valid) return provider;
+  const modelOrder = groups.flatMap((group) =>
+    group.key === groupKey ? [...orderedIds] : group.models.map((model) => model.id),
+  );
+  return finalizeProvider({ ...provider, modelOrder });
 }
 
 export function updateProviderModel(
@@ -421,6 +468,64 @@ export function identityForProvider(provider: CustomProvider): CliIdentityProvid
 }
 
 // ---------------------------------------------------------------------------
+// 故障转移候选（设计文档 6.4 / 8.2，与运行时 buildModelFailoverPlan 同一判定）
+// ---------------------------------------------------------------------------
+
+export type ModelFailoverCandidates = {
+  family: ProviderProtocolFamily;
+  /** 供应商层是否启用（前两层随配置自动生效） */
+  providerLayerEnabled: boolean;
+  /** 凭据层：同供应商其它启用、已配置且范围覆盖该模型的 Key */
+  credentials: ProviderCredential[];
+  /** 端点层：chatProtocols 首项之后（未声明时取已启用渠道）的同家族已启用接口 */
+  endpoints: ProviderChatProtocol[];
+  /** 供应商层：家族队列里启用同名模型且解析后同家族的其它供应商 */
+  providers: CustomProvider[];
+};
+
+export function modelFailoverCandidates(
+  settings: AppSettings,
+  provider: CustomProvider,
+  modelId: string,
+  route: ResolvedProviderChatRoute,
+): ModelFailoverCandidates {
+  const family = route.family;
+  const credentials = providerCredentials(provider).filter(
+    (credential) =>
+      credential.enabled &&
+      credential.id !== route.credentialId &&
+      credentialConfigured(credential) &&
+      credentialCoversModel(credential, modelId),
+  );
+  const model = provider.models.find((item) => item.id === modelId);
+  const enabledProtocols = providerEnabledProtocols(provider);
+  const declared = model?.chatProtocols ?? [];
+  const pool =
+    declared.length > 0
+      ? declared.filter((protocol) => enabledProtocols.includes(protocol))
+      : enabledProtocols;
+  const endpoints: ProviderChatProtocol[] = [];
+  for (const protocol of pool) {
+    if (protocol === route.protocol || endpoints.includes(protocol)) continue;
+    if (PROVIDER_PROTOCOL_FAMILY[protocol] !== family) continue;
+    endpoints.push(protocol);
+  }
+  const failover = settings.modelFailover[family];
+  const providers = failover.enabled
+    ? failover.queue.flatMap((providerId) => {
+        if (providerId === provider.id) return [];
+        const candidate = settings.customProviders.find((item) => item.id === providerId);
+        if (!candidate || candidate.enabled === false) return [];
+        if (!candidate.activeModels.includes(modelId)) return [];
+        if (!hasProviderFailoverConfiguration(candidate)) return [];
+        if (resolveProviderChatRoute(candidate, modelId).family !== family) return [];
+        return [candidate];
+      })
+    : [];
+  return { family, providerLayerEnabled: failover.enabled, credentials, endpoints, providers };
+}
+
+// ---------------------------------------------------------------------------
 // 探测候选与自动配置的采纳
 // ---------------------------------------------------------------------------
 
@@ -485,7 +590,8 @@ export function probeSummaryFor(
 /**
  * 把探测与自动配置结果并入现有实例（设计文档 5.5）：
  * - 用户值（user 来源端点、手工模型、用户覆盖字段）不被覆盖；
- * - configure 模式下探测失败且为自动来源的端点停用；refresh 只记录观测；
+ * - 已配置端点只写入观测：探测失败不停用、不切默认；启停只由用户决定
+ *   （configure 采纳摘要页取消的接口为停用；refresh 不改启停）；
  * - 新模型追加并激活，已有模型保留全部字段；
  * - 每把 Key 的 lastModels 刷新。
  */
@@ -505,23 +611,18 @@ export function applyProbeToProvider(
     const lastProbe = probeSummaryFor(probe, protocol);
     const existing = endpointConfigs[protocol];
     const autoConfig = auto.endpointConfigs[protocol];
-    if (autoConfig) {
-      endpointConfigs[protocol] = {
-        ...existing,
-        ...autoConfig,
-        ...(existing?.headers ? { headers: existing.headers } : {}),
-        ...(existing?.credentialId ? { credentialId: existing.credentialId } : {}),
-        ...(existing?.enabled === false && mode === "refresh" ? { enabled: false } : {}),
-        source: existing?.source ?? autoConfig.source,
-        lastProbe,
-      };
+    if (!autoConfig) {
+      if (existing) endpointConfigs[protocol] = { ...existing, lastProbe };
       continue;
     }
-    if (!existing) continue;
-    const disable = mode === "configure" && existing.source !== "user" && lastProbe.status !== "ok";
+    const { enabled: autoEnabled, ...autoRest } = autoConfig;
     endpointConfigs[protocol] = {
       ...existing,
-      ...(disable ? { enabled: false } : {}),
+      ...autoRest,
+      ...(existing?.headers ? { headers: existing.headers } : {}),
+      ...(existing?.credentialId ? { credentialId: existing.credentialId } : {}),
+      ...(mode === "configure" && autoEnabled === false ? { enabled: false } : {}),
+      source: existing?.source ?? autoConfig.source,
       lastProbe,
     };
   }
@@ -631,15 +732,21 @@ export function createProviderFromAutoConfiguration(params: {
   });
 }
 
-/** "添加渠道"对话框：按用户填写的端点直接创建实例，模型待探测。 */
+/**
+ * "添加渠道"对话框：按用户填写的端点直接创建实例，模型待探测。
+ * `template` 是"再加一个实例"的来源实例：沿用其方言与各端点的方言 / 鉴权头 /
+ * quirks / 模型列表地址（同一网关的接口形态一致）。
+ */
 export function createProviderFromEndpoints(params: {
   name: string;
   preset: ProviderPreset | undefined;
   category: CustomProvider["category"];
   apiKey: string;
   endpoints: Partial<Record<ProviderChatProtocol, string>>;
+  template?: CustomProvider;
 }): CustomProvider {
-  const { preset } = params;
+  const { preset, template } = params;
+  const templateEndpoints = template ? materializedEndpointConfigs(template) : {};
   const filled = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => params.endpoints[protocol]?.trim());
   const order: ProviderChatProtocol[] = [
     "openai-completions",
@@ -654,15 +761,22 @@ export function createProviderFromEndpoints(params: {
   const endpointConfigs: NonNullable<CustomProvider["endpointConfigs"]> = {};
   for (const protocol of filled) {
     const presetEndpoint = preset?.endpoints[protocol];
+    const fromTemplate = templateEndpoints[protocol];
+    const dialect = fromTemplate?.dialect ?? presetEndpoint?.dialect;
+    const quirks = fromTemplate?.quirks ?? presetEndpoint?.quirks;
+    const auth = fromTemplate?.auth ?? presetEndpoint?.auth;
+    const modelsUrl = fromTemplate?.modelsUrl ?? presetEndpoint?.modelsUrl;
     endpointConfigs[protocol] = {
       baseUrl: params.endpoints[protocol]?.trim() ?? "",
-      ...(presetEndpoint?.dialect ? { dialect: presetEndpoint.dialect } : {}),
-      ...(presetEndpoint?.quirks ? { quirks: presetEndpoint.quirks } : {}),
-      ...(presetEndpoint?.auth ? { auth: presetEndpoint.auth } : {}),
-      ...(presetEndpoint?.modelsUrl ? { modelsUrl: presetEndpoint.modelsUrl } : {}),
-      source: presetEndpoint ? "auto" : "user",
+      ...(fromTemplate?.isFullUrl ? { isFullUrl: true } : {}),
+      ...(dialect ? { dialect } : {}),
+      ...(quirks ? { quirks } : {}),
+      ...(auth ? { auth } : {}),
+      ...(modelsUrl ? { modelsUrl } : {}),
+      source: fromTemplate ? "user" : presetEndpoint ? "auto" : "user",
     };
   }
+  const providerDialect = template?.dialect ?? preset?.dialect;
   const apiKey = params.apiKey.trim();
   return normalizeCustomProvider({
     id: createUuid(),
@@ -688,12 +802,23 @@ export function createProviderFromEndpoints(params: {
     models: [],
     activeModels: [],
     defaultChatProtocol,
-    ...(preset?.dialect ? { dialect: preset.dialect } : {}),
+    ...(providerDialect ? { dialect: providerDialect } : {}),
     endpointConfigs,
     reasoning: "off",
     promptCachingEnabled: true,
     nativeWebSearchEnabled: true,
-    useSystemProxy: false,
+    useSystemProxy: template?.useSystemProxy ?? false,
     usageQuery: getDefaultUsageQueryConfig(),
   });
+}
+
+/** "再加一个实例"的默认名：原名 + " · N"（已有同名时递增）。 */
+export function instanceNameForCopy(
+  source: CustomProvider,
+  providers: readonly CustomProvider[],
+): string {
+  const base = source.name.replace(/\s·\s\d+$/, "").trim() || source.name;
+  let index = 2;
+  while (providers.some((provider) => provider.name === `${base} · ${index}`)) index += 1;
+  return `${base} · ${index}`;
 }

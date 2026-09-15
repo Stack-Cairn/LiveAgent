@@ -1,6 +1,7 @@
 // "添加渠道"对话框（设计文档 7）：自定义中转、聚合网关或尚未内置的厂商。
 // 头像首字、名称、类型、API 密钥、四类接口的 Base URL（两类常显、两类折叠），
-// 填根地址后即时显示实际请求路径；"从预设创建（可选）"填入该渠道的接口与地址。
+// 填根地址后即时显示实际请求路径；"从预设创建（可选）"填入该渠道的接口与地址；
+// "再加一个实例"从来源实例预填名称、类型、端点地址与方言。
 
 import {
   type CustomProvider,
@@ -30,6 +31,7 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  CUSTOM_PRESET_ID,
   expandPresetBaseUrl,
   findProviderPreset,
   listProviderPresets,
@@ -38,8 +40,13 @@ import {
 } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
-import { protocolLabel, SecretInput } from "./providerChips";
-import { createProviderFromEndpoints, instanceNameForPreset } from "./providerSettingsModel";
+import { Chip, dialectLabel, protocolLabel, SecretInput } from "./providerChips";
+import {
+  createProviderFromEndpoints,
+  instanceNameForCopy,
+  instanceNameForPreset,
+  materializedEndpointConfigs,
+} from "./providerSettingsModel";
 
 const PRIMARY_PROTOCOLS: ProviderChatProtocol[] = ["openai-completions", "anthropic-messages"];
 const MORE_PROTOCOLS: ProviderChatProtocol[] = ["openai-responses", "google-generative-ai"];
@@ -58,6 +65,16 @@ function endpointsFromPreset(
   return out;
 }
 
+function endpointsFromProvider(
+  provider: CustomProvider,
+): Partial<Record<ProviderChatProtocol, string>> {
+  const out: Partial<Record<ProviderChatProtocol, string>> = {};
+  for (const [protocol, config] of Object.entries(materializedEndpointConfigs(provider))) {
+    if (config?.baseUrl) out[protocol as ProviderChatProtocol] = config.baseUrl;
+  }
+  return out;
+}
+
 function requestPathPreview(protocol: ProviderChatProtocol, baseUrl: string): string {
   const root = baseUrl.trim().replace(/\/+$/, "");
   if (protocol === "anthropic-messages" && /\/v1$/i.test(root)) return `${root}/messages`;
@@ -66,29 +83,46 @@ function requestPathPreview(protocol: ProviderChatProtocol, baseUrl: string): st
 
 export function AddChannelDialog(props: {
   providers: readonly CustomProvider[];
-  /** "再加一个实例"从预设进入 */
+  /** 从未配置渠道的"手动填写地址"进入：按预设预填 */
   initialPresetId?: string;
+  /** "再加一个实例"：按来源实例预填名称、类型、四个端点地址与方言 */
+  sourceProvider?: CustomProvider;
   onCreate: (provider: CustomProvider) => void;
   onClose: () => void;
 }) {
-  const { providers, initialPresetId, onCreate, onClose } = props;
+  const { providers, initialPresetId, sourceProvider, onCreate, onClose } = props;
   const { t } = useLocale();
-  const initialPreset = findProviderPreset(initialPresetId);
+  const initialPreset = findProviderPreset(sourceProvider?.presetId ?? initialPresetId);
   const [open, setOpen] = useState(true);
   const [name, setName] = useState(() =>
-    initialPreset ? instanceNameForPreset(initialPreset, providers) : "",
+    sourceProvider
+      ? instanceNameForCopy(sourceProvider, providers)
+      : initialPreset
+        ? instanceNameForPreset(initialPreset, providers)
+        : "",
   );
-  const [category, setCategory] = useState<Category>(initialPreset?.category ?? "relay");
+  const [category, setCategory] = useState<Category>(
+    sourceProvider?.category ?? initialPreset?.category ?? "relay",
+  );
   const [apiKey, setApiKey] = useState("");
-  const [presetId, setPresetId] = useState(initialPreset?.id ?? "");
+  const [presetId, setPresetId] = useState(
+    initialPreset && initialPreset.id !== CUSTOM_PRESET_ID ? initialPreset.id : "",
+  );
   const [endpoints, setEndpoints] = useState<Partial<Record<ProviderChatProtocol, string>>>(() =>
-    initialPreset ? endpointsFromPreset(initialPreset) : {},
+    sourceProvider
+      ? endpointsFromProvider(sourceProvider)
+      : initialPreset
+        ? endpointsFromPreset(initialPreset)
+        : {},
   );
-  const [moreOpen, setMoreOpen] = useState(() =>
-    initialPreset
-      ? MORE_PROTOCOLS.some((protocol) => endpointsFromPreset(initialPreset)[protocol])
-      : false,
-  );
+  const [moreOpen, setMoreOpen] = useState(() => {
+    const initial = sourceProvider
+      ? endpointsFromProvider(sourceProvider)
+      : initialPreset
+        ? endpointsFromPreset(initialPreset)
+        : {};
+    return MORE_PROTOCOLS.some((protocol) => initial[protocol]);
+  });
   const [error, setError] = useState<string | null>(null);
   const presets = listProviderPresets();
   const preset = findProviderPreset(presetId);
@@ -110,6 +144,11 @@ export function AddChannelDialog(props: {
       setError(t("settings.channelNameRequired"));
       return;
     }
+    // 只有"自建"（本地服务）允许不填 Key；中转 / 官方没有 Key 探测必然鉴权失败。
+    if (!apiKey.trim() && category !== "self-hosted") {
+      setError(t("settings.channelApiKeyRequired"));
+      return;
+    }
     const filled = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => endpoints[protocol]?.trim());
     if (filled.length === 0) {
       setError(t("settings.channelEndpointRequired"));
@@ -122,6 +161,7 @@ export function AddChannelDialog(props: {
         category,
         apiKey,
         endpoints,
+        template: sourceProvider,
       }),
     );
     setOpen(false);
@@ -232,6 +272,7 @@ export function AddChannelDialog(props: {
           <div className="space-y-1.5">
             <Label htmlFor="add-channel-key" className="text-xs text-muted-foreground">
               API Key
+              {category !== "self-hosted" ? <span className="text-destructive"> *</span> : null}
             </Label>
             <SecretInput
               id="add-channel-key"
@@ -240,9 +281,18 @@ export function AddChannelDialog(props: {
               redacted={false}
               placeholder={t("settings.channelApiKeyPlaceholder")}
               ariaLabel="API Key"
-              onCommit={setApiKey}
+              onCommit={(value) => {
+                setApiKey(value);
+                setError(null);
+              }}
             />
           </div>
+          {sourceProvider?.dialect ? (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span>{t("settings.providerDialect")}</span>
+              <Chip tone="purple">{dialectLabel(t, sourceProvider.dialect)}</Chip>
+            </div>
+          ) : null}
 
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-medium text-foreground/85">

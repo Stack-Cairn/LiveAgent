@@ -3,6 +3,8 @@
 // 协议决定请求体结构、流解析、端点路径和 pi-ai 的 Model.api；方言决定同一协议下
 // 的字段取舍、鉴权附加头、思考参数映射。四个协议字面量与 pi-ai 一致，不做翻译。
 
+import { endpointHostOf } from "./hosts";
+
 export const PROVIDER_CHAT_PROTOCOLS = [
   "anthropic-messages",
   "openai-completions",
@@ -27,10 +29,6 @@ export const PROVIDER_PROTOCOL_FAMILY: Record<ProviderChatProtocol, ProviderProt
   "openai-responses": "openai",
   "google-generative-ai": "gemini",
 };
-
-export function isProviderProtocolFamily(value: unknown): value is ProviderProtocolFamily {
-  return PROVIDER_PROTOCOL_FAMILIES.includes(value as ProviderProtocolFamily);
-}
 
 export const PROVIDER_CHAT_PROTOCOL_LABELS: Record<ProviderChatProtocol, string> = {
   "anthropic-messages": "Anthropic Messages",
@@ -110,13 +108,9 @@ export function inferDialectFromBaseUrl(
   protocol: ProviderChatProtocol,
   baseUrl: string | undefined,
 ): ProviderWireDialect | undefined {
-  if (PROVIDER_PROTOCOL_FAMILY[protocol] !== "openai" || !baseUrl) return undefined;
-  let host = "";
-  try {
-    host = new URL(baseUrl.trim()).hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
+  if (PROVIDER_PROTOCOL_FAMILY[protocol] !== "openai") return undefined;
+  const host = endpointHostOf(baseUrl);
+  if (!host) return undefined;
   for (const [pattern, dialect] of OFFICIAL_HOST_DIALECTS) {
     if (pattern.test(host)) return dialect;
   }
@@ -166,22 +160,6 @@ export function buildProtocolAuthHeaders(
   return headers;
 }
 
-/** 大小写不敏感的头合并：后者覆盖前者，保留后者的键写法。 */
-export function mergeHeaderLayers(
-  ...layers: (Record<string, string> | undefined | null)[]
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const layer of layers) {
-    if (!layer) continue;
-    for (const [key, value] of Object.entries(layer)) {
-      const existing = Object.keys(out).find((k) => k.toLowerCase() === key.toLowerCase());
-      if (existing && existing !== key) delete out[existing];
-      out[key] = value;
-    }
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // 网关实现偏差推导（pi-ai 隔着本地反代看不到真实域名，这里按端点地址补上）
 // ---------------------------------------------------------------------------
@@ -226,6 +204,9 @@ const KNOWN_HOST_QUIRKS: readonly [RegExp, InferredEndpointQuirks][] = [
     { supportsReasoningEffort: false, supportsStore: false, maxTokensField: "max_tokens" },
   ],
   [/(^|\.)cerebras\.ai$/i, { supportsStore: false }],
+  // 旧 modelFactory 对 groq 还有一条 qwen/qwen3-32b 的档位特判（thinkingLevelMap 全部
+  // 映射到 "default"）；那是按模型而非按网关的偏差，不属于端点 quirks，这里不恢复。
+  [/(^|\.)groq\.com$/i, { supportsStore: false }],
 ];
 
 /**
@@ -236,13 +217,9 @@ export function inferEndpointQuirksFromBaseUrl(
   protocol: ProviderChatProtocol,
   baseUrl: string | undefined,
 ): InferredEndpointQuirks | undefined {
-  if (protocol !== "openai-completions" || !baseUrl) return undefined;
-  let host = "";
-  try {
-    host = new URL(baseUrl.trim()).hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
+  if (protocol !== "openai-completions") return undefined;
+  const host = endpointHostOf(baseUrl);
+  if (!host) return undefined;
   for (const [pattern, quirks] of KNOWN_HOST_QUIRKS) {
     if (pattern.test(host)) return { ...quirks };
   }

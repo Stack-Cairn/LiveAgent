@@ -1,6 +1,7 @@
 // 探测对话框（设计文档 5.1 - 5.3）：对候选接口逐个拉模型列表，展示每个接口
 // 的状态；完成后给出摘要——渠道芯片可取消、模型按家族分组勾选（"其他"默认不勾）
-// ——采纳后交给调用方写入设置。
+// ——采纳后交给调用方写入设置。已配置的端点（existing）探测失败也保留，只是不
+// 参与模型合并；取消时观测仍经 onDismiss 写回。
 
 import type { ProviderChatProtocol, ProviderCredential } from "@liveagent/app/lib/settings";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -49,7 +50,13 @@ function previewModelsUrl(candidate: EndpointCandidate): string {
 }
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChipButton, ProbeStatusChip, protocolLabel } from "./providerChips";
+import {
+  ChipButton,
+  dialectLabel,
+  ProbeReason,
+  ProbeStatusChip,
+  protocolLabel,
+} from "./providerChips";
 import { probeSummaryFor } from "./providerSettingsModel";
 
 export type ProviderProbeRequest = {
@@ -70,9 +77,11 @@ export function ProviderProbeDialog(props: {
     probe: ProviderProbeResult;
     candidates: EndpointCandidate[];
   }) => void;
+  /** 未采纳即关闭：探测已完成时把观测交回调用方（只写 lastProbe） */
+  onDismiss?: (result: { probe: ProviderProbeResult; candidates: EndpointCandidate[] }) => void;
   onClose: () => void;
 }) {
-  const { request, onAccept, onClose } = props;
+  const { request, onAccept, onDismiss, onClose } = props;
   const { t } = useLocale();
   const [open, setOpen] = useState(true);
   const [progress, setProgress] = useState<ProviderProbeResult | null>(null);
@@ -85,6 +94,7 @@ export function ProviderProbeDialog(props: {
   );
   const [rejectedGroups, setRejectedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [failure, setFailure] = useState<string | null>(null);
+  const acceptedRef = useRef(false);
   // 探测只发起一次；效果重跑（StrictMode、request 变化）时只重新挂接结果。
   const activeRef = useRef(false);
   const probeRef = useRef<{
@@ -162,7 +172,11 @@ export function ProviderProbeDialog(props: {
   function toggleProtocol(protocol: ProviderChatProtocol) {
     if (!done) return;
     const status = summarizeEndpointStatus(done, protocol).status;
-    if (status === "ok") {
+    const existing = request.candidates.some(
+      (candidate) => candidate.protocol === protocol && candidate.origin === "existing",
+    );
+    // 已配置端点：探测失败也保留，点击只是"取消 / 恢复采纳"（采纳后写 enabled:false）。
+    if (status === "ok" || existing) {
       setRejectedProtocols((previous) => {
         const next = new Set(previous);
         if (next.has(protocol)) next.delete(protocol);
@@ -200,8 +214,16 @@ export function ProviderProbeDialog(props: {
       rejectedGroups,
       forcedProtocols,
     });
+    acceptedRef.current = true;
     onAccept({ auto, probe: done, candidates: request.candidates });
     setOpen(false);
+  }
+
+  function handleClosed() {
+    if (!acceptedRef.current && done && !failure) {
+      onDismiss?.({ probe: done, candidates: request.candidates });
+    }
+    onClose();
   }
 
   const totalModels = groups.reduce((count, group) => count + group.models.length, 0);
@@ -216,7 +238,7 @@ export function ProviderProbeDialog(props: {
         if (!next) setOpen(false);
       }}
       onOpenChangeComplete={(next) => {
-        if (!next) onClose();
+        if (!next) handleClosed();
       }}
     >
       <DialogContent
@@ -252,44 +274,53 @@ export function ProviderProbeDialog(props: {
               const summary =
                 probed && progress ? probeSummaryFor(progress, candidate.protocol) : undefined;
               const status = summary?.status;
+              const existing = candidate.origin === "existing";
               const accepted =
                 done !== null &&
                 ((status === "ok" && !rejectedProtocols.has(candidate.protocol)) ||
-                  (status !== "ok" &&
+                  (existing && status !== "ok" && !rejectedProtocols.has(candidate.protocol)) ||
+                  (!existing &&
+                    status !== "ok" &&
                     status !== "missing" &&
                     forcedProtocols.has(candidate.protocol)));
+              const unreachable = !existing && status === "missing";
               return (
                 <div
                   key={candidate.protocol}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs"
+                  className="space-y-1 rounded-lg border bg-card px-3 py-2 text-xs"
                 >
-                  {done ? (
-                    <ChipButton
-                      tone={accepted ? "on" : "default"}
-                      strike={status === "missing" || (!accepted && status !== "ok")}
-                      active={accepted}
-                      disabled={status === "missing"}
-                      onClick={() => toggleProtocol(candidate.protocol)}
-                      title={
-                        status === "ok"
-                          ? t("settings.providerProbeToggleEndpoint")
-                          : status === "missing"
-                            ? t("settings.providerProbeStatus.missing")
-                            : t("settings.providerProbeForceEnable")
-                      }
-                    >
-                      {protocolLabel(candidate.protocol)}
-                    </ChipButton>
-                  ) : (
-                    <span className="font-medium">{protocolLabel(candidate.protocol)}</span>
-                  )}
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-                    {previewModelsUrl(candidate)}
-                  </span>
-                  {candidate.note ? (
-                    <span className="text-[10.5px] text-muted-foreground/70">{candidate.note}</span>
-                  ) : null}
-                  <ProbeStatusChip probe={summary} pending={!probed} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {done ? (
+                      <ChipButton
+                        tone={accepted ? "on" : "default"}
+                        strike={unreachable || (!accepted && status !== "ok")}
+                        active={accepted}
+                        disabled={unreachable}
+                        onClick={() => toggleProtocol(candidate.protocol)}
+                        title={
+                          status === "ok" || existing
+                            ? t("settings.providerProbeToggleEndpoint")
+                            : status === "missing"
+                              ? t("settings.providerProbeStatus.missing")
+                              : t("settings.providerProbeForceEnable")
+                        }
+                      >
+                        {protocolLabel(candidate.protocol)}
+                      </ChipButton>
+                    ) : (
+                      <span className="font-medium">{protocolLabel(candidate.protocol)}</span>
+                    )}
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+                      {previewModelsUrl(candidate)}
+                    </span>
+                    {candidate.note ? (
+                      <span className="text-[10.5px] text-muted-foreground/70">
+                        {candidate.note}
+                      </span>
+                    ) : null}
+                    <ProbeStatusChip probe={summary} pending={!probed} />
+                  </div>
+                  <ProbeReason probe={summary} />
                 </div>
               );
             })}
@@ -348,7 +379,9 @@ export function ProviderProbeDialog(props: {
                       {group.protocol ? (
                         <span className="text-[10.5px] text-muted-foreground">
                           → {protocolLabel(group.protocol)}
-                          {group.dialect !== "generic" ? ` · ${group.dialect}` : ""}
+                          {group.dialect !== "generic"
+                            ? ` · ${dialectLabel(t, group.dialect)}`
+                            : ""}
                         </span>
                       ) : null}
                       <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-muted-foreground/70">

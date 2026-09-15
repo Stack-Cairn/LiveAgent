@@ -5,6 +5,7 @@ import {
   PROVIDER_CHAT_PROTOCOL_LABELS,
   type ProviderChatProtocol,
   type ProviderEndpointProbe,
+  type ProviderWireDialect,
 } from "@liveagent/app/lib/settings";
 import { Eye, EyeOff } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -16,7 +17,7 @@ import {
   type ComponentProps,
   type KeyboardEvent,
   type ReactNode,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -169,6 +170,31 @@ export function ProbeStatusChip(props: {
   );
 }
 
+const PROBE_REASON_LIMIT = 120;
+
+/** "未知"结果的简短原因（截断到 120 字）；其它状态含义自明，原因只留在 title。 */
+export function probeReason(probe: ProviderEndpointProbe | undefined): string | undefined {
+  if (!probe || probe.status !== "unknown" || !probe.error) return undefined;
+  const text = probe.error.replace(/\s+/g, " ").trim();
+  if (!text) return undefined;
+  return text.length > PROBE_REASON_LIMIT ? `${text.slice(0, PROBE_REASON_LIMIT)}…` : text;
+}
+
+export function ProbeReason(props: { probe: ProviderEndpointProbe | undefined }) {
+  const reason = probeReason(props.probe);
+  if (!reason) return null;
+  return (
+    <p className="break-all text-[10.5px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+      {reason}
+    </p>
+  );
+}
+
+/** 方言的界面文案（中英各一套）；"generic" 显示为"通用"。 */
+export function dialectLabel(t: (key: string) => string, dialect: ProviderWireDialect): string {
+  return t(`settings.providerDialectLabel.${dialect}`);
+}
+
 const PROTOCOL_SHORT_LABELS: Record<ProviderChatProtocol, string> = {
   "anthropic-messages": "Messages",
   "openai-completions": "Completions",
@@ -243,13 +269,17 @@ export function CommittedInput(
   const { value, onCommit, commitOnChange, onKeyDown, ...rest } = props;
   const [draft, setDraft] = useState(value);
   const editingRef = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!editingRef.current) setDraft(value);
   }, [value]);
 
   function commit() {
     editingRef.current = false;
-    if (draft !== value) onCommit(draft);
+    if (draft === value) return;
+    onCommit(draft);
+    // 调用方可能拒绝写入（例如清空地址）：草稿回到当前值，被接受时上面的效果会
+    // 再同步到归一化后的新值。
+    setDraft(value);
   }
 
   return (
@@ -340,8 +370,9 @@ export function SectionTitle(props: {
     <div className={cn("flex min-h-7 flex-wrap items-center gap-2", className)}>
       <span className="text-[13px] font-semibold tracking-tight text-foreground/90">{title}</span>
       {badge}
-      <span className="flex-1" />
-      {actions}
+      {actions ? (
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-1">{actions}</span>
+      ) : null}
     </div>
   );
 }

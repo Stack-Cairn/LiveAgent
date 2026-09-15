@@ -46,8 +46,12 @@ function runtimeRouteParams(runtime: ProviderRuntimeConfig, providerId: Provider
   return { protocol: wire.protocol, dialect: wire.dialect };
 }
 
-function failoverScope(runtime: ProviderRuntimeConfig) {
-  return { credentialId: runtime.credentialId, protocol: runtime.protocol ?? runtime.chatProtocol };
+/** 熔断 key 的分表维度：接口取路由视图，与 wire 层读到的协议同源。 */
+function failoverScope(runtime: ProviderRuntimeConfig, providerId: ProviderId) {
+  return {
+    credentialId: runtime.credentialId,
+    protocol: resolveRuntimeWireRoute(providerId, runtime).protocol,
+  };
 }
 
 // 导出供 turn runner 估算 provider 边界追加段（用量环 fixed 校准），非请求路径。
@@ -302,9 +306,13 @@ export async function streamAssistantMessage(params: {
     ? failoverBreakerKey(
         failover.primary.selectedModel.customProviderId,
         failover.primary.selectedModel.model,
-        failoverScope(params.runtime),
+        failoverScope(params.runtime, params.providerId),
       )
-    : failoverBreakerKey(params.providerId, modelId, failoverScope(params.runtime));
+    : failoverBreakerKey(
+        params.providerId,
+        modelId,
+        failoverScope(params.runtime, params.providerId),
+      );
 
   type PreparedTextFailoverTarget = {
     model: ReturnType<typeof createModelFromRuntime>;
@@ -417,7 +425,7 @@ export async function streamAssistantMessage(params: {
             : failoverBreakerKey(
                 fallback?.selectedModel.customProviderId ?? "",
                 fallback?.selectedModel.model ?? "",
-                fallback ? failoverScope(fallback.runtime) : undefined,
+                fallback ? failoverScope(fallback.runtime, fallback.providerId) : undefined,
               ),
         label: targetIndex === 0 ? primaryFailoverLabel : (fallback?.label ?? ""),
         model:

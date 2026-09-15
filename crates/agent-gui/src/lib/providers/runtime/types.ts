@@ -53,8 +53,6 @@ export type ProviderRuntimeConfig = {
   apiKey: string;
   /** 供应商级与端点级用户头合并后的结果（路由输出）。 */
   customHeaders?: CustomProvider["customHeaders"];
-  /** 端点级用户头（已并入 customHeaders，单独保留供诊断）。 */
-  endpointHeaders?: CustomProvider["customHeaders"];
   /** 端点 quirks；映射到 pi-ai Model.compat 同名键。 */
   quirks?: ProviderEndpointQuirks;
   /** 端点鉴权头覆盖；缺省由协议头档决定。 */

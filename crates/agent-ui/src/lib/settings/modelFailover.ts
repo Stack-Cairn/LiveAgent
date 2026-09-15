@@ -2,10 +2,14 @@ import {
   type CustomProvider,
   DEFAULT_PROVIDER_FAILOVER_SETTINGS,
   getDefaultModelFailoverSettings,
+  getProviderImplicitChatProtocol,
+  isProviderChatProtocolEnabled,
   LEGACY_FAILOVER_TYPE_FAMILY,
   MODEL_FAILOVER_QUEUE_LIMIT,
   type ModelFailoverSettings,
-  PROVIDER_FAILOVER_FAMILIES,
+  PROVIDER_CHAT_PROTOCOLS,
+  PROVIDER_PROTOCOL_FAMILIES,
+  PROVIDER_PROTOCOL_FAMILY,
   type ProviderFailoverSettings,
   type ProviderId,
   type ProviderProtocolFamily,
@@ -52,7 +56,8 @@ function queueEntryProviderId(raw: unknown): string {
 
 /**
  * 故障转移分组依据是接口家族（设计文档 8.2）。一个供应商属于某家族的条件是它至少
- * 有一个该家族的接口可用；候选是否真的能服务某个模型由计划构造器按路由再判定。
+ * 有一个该家族的接口**已启用**（显式端点未关闭；无显式端点时默认 / 旧推导接口视为
+ * 启用）；候选是否真的能服务某个模型由计划构造器按路由再判定。默认接口的家族排在前面。
  */
 export function providerFailoverFamilies(
   provider: Pick<
@@ -60,23 +65,14 @@ export function providerFailoverFamilies(
     "type" | "defaultChatProtocol" | "endpointConfigs" | "requestFormat"
   >,
 ): ProviderProtocolFamily[] {
+  const implicitProtocol = getProviderImplicitChatProtocol(provider);
   const families = new Set<ProviderProtocolFamily>();
-  families.add(
-    provider.defaultChatProtocol
-      ? protocolFamily(provider.defaultChatProtocol)
-      : LEGACY_FAILOVER_TYPE_FAMILY[provider.type],
-  );
-  for (const [protocol, config] of Object.entries(provider.endpointConfigs ?? {})) {
-    if (!config || config.enabled === false) continue;
-    families.add(protocolFamily(protocol));
+  for (const protocol of [implicitProtocol, ...PROVIDER_CHAT_PROTOCOLS]) {
+    if (isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)) {
+      families.add(PROVIDER_PROTOCOL_FAMILY[protocol]);
+    }
   }
   return [...families];
-}
-
-function protocolFamily(protocol: string): ProviderProtocolFamily {
-  if (protocol === "anthropic-messages") return "anthropic";
-  if (protocol === "google-generative-ai") return "gemini";
-  return "openai";
 }
 
 /**
@@ -131,7 +127,7 @@ const LEGACY_ONLY_TYPES: readonly ProviderId[] = LEGACY_TYPES.filter((type) => t
 /** True for the pre-per-vendor persisted shape ({enabled, queue, ...}). */
 function isLegacyFlatModelFailoverShape(obj: Record<string, unknown>): boolean {
   return (
-    !PROVIDER_FAILOVER_FAMILIES.some((family) => family in obj) &&
+    !PROVIDER_PROTOCOL_FAMILIES.some((family) => family in obj) &&
     !LEGACY_TYPES.some((type) => type in obj) &&
     ("enabled" in obj || "queue" in obj || "maxSwitches" in obj)
   );
@@ -186,7 +182,7 @@ export function normalizeModelFailoverSettings(
   // per-family normalizer, so a mixed legacy queue splits cleanly.
   if (isLegacyFlatModelFailoverShape(obj)) {
     const result = getDefaultModelFailoverSettings();
-    for (const family of PROVIDER_FAILOVER_FAMILIES) {
+    for (const family of PROVIDER_PROTOCOL_FAMILIES) {
       const migrated = normalizeProviderFailoverSettings(obj, customProviders, family);
       // Only families that actually kept queue entries stay enabled; an empty
       // migrated queue with enabled=true would surface confusing "on but
@@ -203,7 +199,7 @@ export function normalizeModelFailoverSettings(
     ? mergeLegacyPerTypeShape(obj)
     : obj;
   const result = getDefaultModelFailoverSettings();
-  for (const family of PROVIDER_FAILOVER_FAMILIES) {
+  for (const family of PROVIDER_PROTOCOL_FAMILIES) {
     result[family] = normalizeProviderFailoverSettings(source[family], customProviders, family);
   }
   return result;

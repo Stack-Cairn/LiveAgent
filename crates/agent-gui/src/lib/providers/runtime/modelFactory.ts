@@ -6,6 +6,7 @@ import {
   type ThinkingLevelMap,
   toThinkingLevelMap,
 } from "@liveagent/ui/lib/models/modelThinking";
+import { inferEndpointQuirksFromBaseUrl } from "@liveagent/ui/lib/providers/registry/protocols";
 import {
   type CodexRequestFormat,
   getProviderChatProtocolAdapter,
@@ -76,11 +77,17 @@ type CodexApi = "openai-responses" | "openai-completions";
 /**
  * 方言 → pi-ai Model.provider。pi-ai 的 detectCompat 按它推导 Completions 兼容开关
  * （deepseek：max_tokens / reasoning_content 回放 / thinkingFormat；xai：不发
- * reasoning_effort），openai 保留官方语义；通用网关用 "custom" 让 pi-ai 不做任何
- * 厂商假设。
+ * reasoning_effort），openai 保留官方语义。
+ *
+ * generic 方言也落到 "openai"，而不是 "custom"：Model.provider 同时是历史消息的
+ * 身份键——pi-ai transformMessages 用 `assistantMsg.provider === model.provider`
+ * 判定"同一模型"，异模型会剥掉带签名的思考块。既有 OpenAI 兼容实例的历史会话
+ * 全部以 "openai" 落盘，改名会让升级后的第一轮被判为换模型。detectCompat 对
+ * "custom" 与 "openai" 没有任何分支差异；非官方上游的 store / developer /
+ * finish_reason 默认已由 resolveOpenAICompletionsCompat 显式给出，不依赖它。
  */
 const DIALECT_PROVIDER_IDS: Record<ProviderWireDialect, string> = {
-  generic: "custom",
+  generic: "openai",
   openai: "openai",
   xai: "xai",
   deepseek: "deepseek",
@@ -553,6 +560,7 @@ export function createModelFromRuntime(
       runtime.requestFormat,
       runtime.modelConfig,
       runtime.baseUrl.trim(),
+      runtime.quirks,
     );
   }
   return createModelFromRoute({
@@ -571,6 +579,11 @@ export function createModelFromRuntime(
 /**
  * 旧签名：按 ProviderId + requestFormat 推导 (protocol, dialect)。保留 Base URL 后缀
  * 与 xAI 直连（api.x.ai）识别——那是旧存档没有显式接口时的路由来源，不是兼容开关。
+ *
+ * 端点 quirks 与路由路径同源：按上游地址推导已知网关的 Completions 实现偏差
+ * （z.ai 的 thinkingFormat、chutes 的 max_tokens 等），显式传入的 quirks 覆盖推导值，
+ * 与 resolveProviderChatRoute 的合并顺序一致。pi-ai 隔着本地反代看不到真实域名，
+ * 不在这里补齐就只有新签名的调用方能拿到这些偏差。
  */
 export function createModelFromConfig(
   providerId: ProviderId,
@@ -579,6 +592,7 @@ export function createModelFromConfig(
   requestFormat?: CodexRequestFormat,
   modelConfig?: ProviderModelConfig,
   upstreamBaseUrl?: string,
+  quirks?: ProviderEndpointQuirks,
 ): Model<Api> {
   let wire = resolveLegacyWireRoute(providerId, requestFormat);
   if (providerId === "codex" || providerId === "xai") {
@@ -594,6 +608,10 @@ export function createModelFromConfig(
       dialect: isXaiTarget ? "xai" : "openai",
     });
   }
+  const mergedQuirks: ProviderEndpointQuirks = {
+    ...inferEndpointQuirksFromBaseUrl(wire.protocol, upstreamBaseUrl?.trim() || baseUrl),
+    ...quirks,
+  };
   return createModelFromRoute({
     protocol: wire.protocol,
     dialect: wire.dialect,
@@ -602,6 +620,7 @@ export function createModelFromConfig(
     baseUrl,
     upstreamBaseUrl,
     modelConfig,
+    ...(Object.keys(mergedQuirks).length > 0 ? { quirks: mergedQuirks } : {}),
     // 目录与限额表继续按旧供应商分组查询（codex 直连 api.x.ai 仍按 codex 查）。
     adapterProviderId: providerId,
   });

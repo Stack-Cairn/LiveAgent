@@ -69,7 +69,6 @@ export function createProviderRuntimeConfig(
   const credential = getProviderCredentials(provider).find(
     (item) => item.id === route.credentialId,
   );
-  const endpointHeaders = provider.endpointConfigs?.[route.protocol]?.headers;
   return {
     baseUrl: route.baseUrl,
     isFullUrl: route.isFullUrl,
@@ -83,7 +82,6 @@ export function createProviderRuntimeConfig(
     credentialId: route.credentialId,
     apiKey: credential?.apiKey ?? provider.apiKey,
     customHeaders: route.headers,
-    ...(endpointHeaders && endpointHeaders.length > 0 ? { endpointHeaders } : {}),
     ...(Object.keys(route.quirks).length > 0 ? { quirks: route.quirks } : {}),
     ...(route.auth ? { authOverride: route.auth } : {}),
     requestFormat: route.requestFormat,

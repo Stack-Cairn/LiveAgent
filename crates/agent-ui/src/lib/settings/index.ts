@@ -30,6 +30,8 @@ import {
   isProviderWireDialect,
   legacyTypeForPreset,
   matchPresetModelRule,
+  type PresetModelRule,
+  type ProviderPreset,
   presetIdForLegacyProvider,
   presetMatchesBaseUrl,
   resolveModelFamily,
@@ -151,6 +153,9 @@ import {
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
+  getLegacyProviderChatProtocol,
+  getProviderImplicitChatProtocol,
+  isProviderChatProtocolEnabled,
   MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_CHAT_PROTOCOLS,
@@ -266,17 +271,6 @@ export function normalizeProviderWireDialect(input: unknown): ProviderWireDialec
   return isProviderWireDialect(input) ? input : undefined;
 }
 
-export function getLegacyProviderChatProtocol(
-  providerId: ProviderId,
-  requestFormat?: CodexRequestFormat,
-): ProviderChatProtocol {
-  if (providerId === "claude_code") return "anthropic-messages";
-  if (providerId === "gemini") return "google-generative-ai";
-  if (providerId === "deepseek") return "openai-responses";
-  if (providerId === "xai") return "openai-responses";
-  return requestFormat === "openai-completions" ? "openai-completions" : "openai-responses";
-}
-
 /** 旧供应商类型隐含的方言（xAI / DeepSeek 原生渠道、Codex 分组的 OpenAI 官方语义）。 */
 export function getLegacyProviderDialect(providerId: ProviderId): ProviderWireDialect | undefined {
   if (providerId === "xai") return "xai";
@@ -325,11 +319,11 @@ type RouteProvider = Pick<CustomProvider, "type" | "baseUrl" | "isFullUrl"> &
     >
   >;
 
-type ResolvedEndpoint = {
+export type ResolvedProviderEndpoint = {
   protocol: ProviderChatProtocol;
-  /** false = 主连接充当该协议的隐式端点 */
+  /** false = 主连接充当该协议的隐式端点（config 由 baseUrl / isFullUrl / modelsUrl 物化） */
   explicit: boolean;
-  config?: ProviderEndpointConfig;
+  config: ProviderEndpointConfig;
 };
 
 function providerLegacyProtocol(provider: RouteProvider): ProviderChatProtocol {
@@ -337,28 +331,44 @@ function providerLegacyProtocol(provider: RouteProvider): ProviderChatProtocol {
 }
 
 /**
- * 某协议在该供应商上是否可用：显式端点未关闭；或没有显式端点但它是供应商默认/
- * 旧推导协议（主连接充当隐式端点）。
+ * 主连接物化成一条端点配置。隐式端点与显式端点从此走同一条读取路径，界面与路由
+ * 不再各自拼接主连接字段。
+ */
+function primaryConnectionEndpoint(
+  provider: RouteProvider,
+  isFullUrl: boolean = provider.isFullUrl,
+): ProviderEndpointConfig {
+  return {
+    baseUrl: provider.baseUrl,
+    ...(isFullUrl ? { isFullUrl: true } : {}),
+    ...(provider.modelsUrl ? { modelsUrl: provider.modelsUrl } : {}),
+    source: "user",
+  };
+}
+
+/**
+ * 某协议在该供应商上的端点：显式端点未关闭时返回它；没有显式端点但它是隐式接口
+ * （`defaultChatProtocol ?? 旧推导`）时返回由主连接物化的配置；否则不可用。
  */
 export function resolveProviderEndpoint(
   provider: RouteProvider,
   protocol: ProviderChatProtocol,
-): ResolvedEndpoint | undefined {
+  implicitProtocol: ProviderChatProtocol = getProviderImplicitChatProtocol(provider),
+): ResolvedProviderEndpoint | undefined {
+  if (!isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)) return undefined;
   const config = provider.endpointConfigs?.[protocol];
-  if (config) {
-    return config.enabled === false ? undefined : { protocol, explicit: true, config };
-  }
-  const implicit = provider.defaultChatProtocol ?? providerLegacyProtocol(provider);
-  return protocol === implicit ? { protocol, explicit: false } : undefined;
+  return config
+    ? { protocol, explicit: true, config }
+    : { protocol, explicit: false, config: primaryConnectionEndpoint(provider) };
 }
 
 /** 供应商已启用的接口（有序：默认接口在前，其余按四类固定顺序）。 */
 export function getProviderEnabledProtocols(provider: RouteProvider): ProviderChatProtocol[] {
+  const implicitProtocol = getProviderImplicitChatProtocol(provider);
   const out: ProviderChatProtocol[] = [];
-  const preferred = provider.defaultChatProtocol ?? providerLegacyProtocol(provider);
-  for (const protocol of [preferred, ...PROVIDER_CHAT_PROTOCOLS]) {
+  for (const protocol of [implicitProtocol, ...PROVIDER_CHAT_PROTOCOLS]) {
     if (out.includes(protocol)) continue;
-    if (resolveProviderEndpoint(provider, protocol)) out.push(protocol);
+    if (isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)) out.push(protocol);
   }
   return out;
 }
@@ -368,6 +378,28 @@ export type ProtocolDecision = {
   source: ProviderRouteProtocolSource;
 };
 
+/** 路由各步骤共用的上下文：预设、模型规则、旧推导与隐式接口在入口只算一次。 */
+export type ProviderRouteContext = {
+  preset: ProviderPreset | undefined;
+  rule: PresetModelRule | undefined;
+  legacyProtocol: ProviderChatProtocol;
+  implicitProtocol: ProviderChatProtocol;
+};
+
+export function buildProviderRouteContext(
+  provider: RouteProvider,
+  modelId: string,
+): ProviderRouteContext {
+  const preset = findProviderPreset(provider.presetId);
+  const legacyProtocol = providerLegacyProtocol(provider);
+  return {
+    preset,
+    rule: matchPresetModelRule(preset, modelId),
+    legacyProtocol,
+    implicitProtocol: provider.defaultChatProtocol ?? legacyProtocol,
+  };
+}
+
 /**
  * 接口的决定顺序（设计文档 4.2）：模型显式列表 > 预设按模型规则 > 模型家族偏好 ∩
  * 已启用渠道 > 供应商默认接口 > 旧推导。每一步都跳过被关闭的渠道。
@@ -376,18 +408,20 @@ export function resolveModelRouteProtocol(
   provider: RouteProvider,
   modelId: string,
   model?: Pick<ProviderModelConfig, "chatProtocols" | "chatProtocol">,
+  context: ProviderRouteContext = buildProviderRouteContext(provider, modelId),
 ): ProtocolDecision {
+  const { implicitProtocol } = context;
   const available = (protocol: ProviderChatProtocol | undefined) =>
-    protocol && resolveProviderEndpoint(provider, protocol) ? protocol : undefined;
+    protocol && isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)
+      ? protocol
+      : undefined;
   const firstAvailable = (list: readonly ProviderChatProtocol[] | undefined) =>
     list?.map((item) => available(item)).find((item) => item !== undefined);
 
   const explicit = firstAvailable(model?.chatProtocols) ?? available(model?.chatProtocol);
   if (explicit) return { protocol: explicit, source: "model" };
 
-  const preset = findProviderPreset(provider.presetId);
-  const rule = matchPresetModelRule(preset, modelId);
-  const fromPreset = firstAvailable(rule?.chatProtocols);
+  const fromPreset = firstAvailable(context.rule?.chatProtocols);
   if (fromPreset) return { protocol: fromPreset, source: "preset" };
 
   const fromFamily = firstAvailable(resolveModelFamily(modelId).prefer);
@@ -396,7 +430,7 @@ export function resolveModelRouteProtocol(
   const fromProvider = available(provider.defaultChatProtocol);
   if (fromProvider) return { protocol: fromProvider, source: "provider" };
 
-  const legacy = providerLegacyProtocol(provider);
+  const legacy = context.legacyProtocol;
   return { protocol: available(legacy) ?? legacy, source: "legacy" };
 }
 
@@ -406,9 +440,11 @@ export function resolveProviderDialect(
   options?: {
     model?: Pick<ProviderModelConfig, "dialect">;
     endpoint?: Pick<ProviderEndpointConfig, "dialect" | "baseUrl">;
+    /** 调用方已算好的路由上下文；缺省按 presetId 查一次预设 */
+    context?: Pick<ProviderRouteContext, "preset">;
   },
 ): ProviderWireDialect {
-  const preset = findProviderPreset(provider.presetId);
+  const preset = options?.context ? options.context.preset : findProviderPreset(provider.presetId);
   // Codex 分组的"OpenAI 官方语义"只是缺省：直连 api.x.ai / api.deepseek.com 的旧配置
   // 仍按域名取 xai / deepseek 方言（与改造前 isXaiProviderTarget 的行为一致）。
   const legacyDialect = getLegacyProviderDialect(provider.type);
@@ -452,9 +488,7 @@ export function getProviderCredentials(
   ];
 }
 
-function credentialScopeMatches(pattern: string, modelId: string): boolean {
-  const id = modelId.trim();
-  const stripped = stripModelVendorPrefix(id);
+function credentialScopeMatches(pattern: string, id: string, stripped: string): boolean {
   if (pattern.endsWith("*")) {
     const prefix = pattern.slice(0, -1);
     return id.startsWith(prefix) || stripped.startsWith(prefix);
@@ -462,15 +496,36 @@ function credentialScopeMatches(pattern: string, modelId: string): boolean {
   return id === pattern || stripped === pattern;
 }
 
+/** auto 范围的 lastModels 是精确 ID 集合：按对象缓存 Set，避免每次线性扫描。 */
+const CREDENTIAL_LAST_MODELS_SETS = new WeakMap<
+  NonNullable<ProviderCredential["lastModels"]>,
+  ReadonlySet<string>
+>();
+
+function credentialLastModelSet(
+  lastModels: NonNullable<ProviderCredential["lastModels"]>,
+): ReadonlySet<string> {
+  let set = CREDENTIAL_LAST_MODELS_SETS.get(lastModels);
+  if (!set) {
+    set = new Set(lastModels.models);
+    CREDENTIAL_LAST_MODELS_SETS.set(lastModels, set);
+  }
+  return set;
+}
+
 /** 该 Key 的模型范围是否包含该模型（设计文档 5.6）。 */
 export function credentialCoversModel(credential: ProviderCredential, modelId: string): boolean {
   const scope = credential.modelScope ?? { mode: "auto" };
   if (scope.mode === "all") return true;
+  const id = modelId.trim();
+  const stripped = stripModelVendorPrefix(id);
   if (scope.mode === "manual") {
-    return scope.models.some((pattern) => credentialScopeMatches(pattern, modelId));
+    return scope.models.some((pattern) => credentialScopeMatches(pattern, id, stripped));
   }
-  if (!credential.lastModels || credential.lastModels.models.length === 0) return true;
-  return credential.lastModels.models.some((entry) => credentialScopeMatches(entry, modelId));
+  const lastModels = credential.lastModels;
+  if (!lastModels || lastModels.models.length === 0) return true;
+  const known = credentialLastModelSet(lastModels);
+  return known.has(id) || known.has(stripped);
 }
 
 export function selectProviderCredential(
@@ -528,21 +583,25 @@ export function resolveProviderChatRoute(
   // snapshot (and older snapshots did not require `models`). Keep this
   // resolver tolerant at that boundary.
   const model = provider.models?.find((item) => item.id === modelId);
+  const context = buildProviderRouteContext(provider, modelId);
   const decision = options?.protocol
     ? { protocol: options.protocol, source: "model" as const }
-    : resolveModelRouteProtocol(provider, modelId, model);
+    : resolveModelRouteProtocol(provider, modelId, model, context);
   const protocol = decision.protocol;
-  const endpoint = resolveProviderEndpoint(provider, protocol);
-  const config = endpoint?.config;
-  const legacyProtocol = providerLegacyProtocol(provider);
-  const dialect = resolveProviderDialect(provider, protocol, { model, endpoint: config });
-  const preset = findProviderPreset(provider.presetId);
-  const presetEndpoint = preset?.endpoints[protocol];
-  const rule = matchPresetModelRule(preset, modelId);
+  // 端点是唯一真相：显式端点或由主连接物化的隐式端点。被强制指定的接口未配置 /
+  // 渠道全部关闭时退回主连接，完整 URL 模式只对主连接自己的接口有意义。
+  const config =
+    resolveProviderEndpoint(provider, protocol, context.implicitProtocol)?.config ??
+    primaryConnectionEndpoint(
+      provider,
+      protocol === context.implicitProtocol && provider.isFullUrl,
+    );
+  const dialect = resolveProviderDialect(provider, protocol, { model, endpoint: config, context });
+  const presetEndpoint = context.preset?.endpoints[protocol];
   const credential = selectProviderCredential(provider, modelId, [
     { credentialId: options?.credentialId, source: "model" },
     { credentialId: model?.credentialId, source: "model" },
-    { credentialId: config?.credentialId, source: "endpoint" },
+    { credentialId: config.credentialId, source: "endpoint" },
   ]);
   return {
     protocol,
@@ -550,30 +609,23 @@ export function resolveProviderChatRoute(
     family: PROVIDER_PROTOCOL_FAMILY[protocol],
     dialect,
     adapterProviderId: getProviderChatProtocolAdapter(protocol, dialect),
-    baseUrl: config?.baseUrl || provider.baseUrl,
-    // 显式端点自带完整 URL 开关；主连接的完整 URL 模式只对旧推导协议生效。
-    isFullUrl: config
-      ? config.isFullUrl === true
-      : protocol === legacyProtocol && provider.isFullUrl,
-    ...(config?.modelsUrl
-      ? { modelsUrl: config.modelsUrl }
-      : !config && provider.modelsUrl
-        ? { modelsUrl: provider.modelsUrl }
-        : {}),
+    baseUrl: config.baseUrl,
+    isFullUrl: config.isFullUrl === true,
+    ...(config.modelsUrl ? { modelsUrl: config.modelsUrl } : {}),
     ...(protocol === "openai-completions" || protocol === "openai-responses"
       ? { requestFormat: protocol }
       : {}),
-    wireModelId: model?.wireModelId?.trim() || rule?.wireModelId || modelId,
+    wireModelId: model?.wireModelId?.trim() || context.rule?.wireModelId || modelId,
     credentialId: credential.credential.id,
     credentialSource: credential.source,
-    headers: mergeHeaderLists(provider.customHeaders, config?.headers),
+    headers: mergeHeaderLists(provider.customHeaders, config.headers),
     quirks: {
-      ...inferEndpointQuirksFromBaseUrl(protocol, config?.baseUrl || provider.baseUrl),
+      ...inferEndpointQuirksFromBaseUrl(protocol, config.baseUrl),
       ...presetEndpoint?.quirks,
-      ...config?.quirks,
+      ...config.quirks,
     },
-    ...((config?.auth ?? presetEndpoint?.auth)
-      ? { auth: { ...presetEndpoint?.auth, ...config?.auth } }
+    ...((config.auth ?? presetEndpoint?.auth)
+      ? { auth: { ...presetEndpoint?.auth, ...config.auth } }
       : {}),
   };
 }
@@ -1635,23 +1687,34 @@ export function normalizeProviderEndpointConfig(
   };
 }
 
+/**
+ * 端点表归一化。返回保留下来的端点，以及"声明过但因地址为空等原因被丢弃"的接口，
+ * 供默认接口守卫判断默认接口是否已不复存在。
+ */
 function normalizeProviderEndpointConfigs(
   input: unknown,
   credentialIds?: ReadonlySet<string>,
-): CustomProvider["endpointConfigs"] | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+): { configs: CustomProvider["endpointConfigs"] | undefined; dropped: Set<ProviderChatProtocol> } {
+  const dropped = new Set<ProviderChatProtocol>();
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return { configs: undefined, dropped };
+  }
   const source = input as Record<string, unknown>;
   const configs: NonNullable<CustomProvider["endpointConfigs"]> = {};
   for (const [key, raw] of Object.entries(source)) {
     const legacy = normalizeLegacyProtocolInput(key);
     if (!legacy) continue;
     const config = normalizeProviderEndpointConfig(legacy.protocol, raw, credentialIds);
-    if (!config) continue;
+    if (!config) {
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) dropped.add(legacy.protocol);
+      continue;
+    }
     if (legacy.dialect && !config.dialect) config.dialect = legacy.dialect;
     // 旧键与新键同时存在时保留新键。
     if (!configs[legacy.protocol] || key === legacy.protocol) configs[legacy.protocol] = config;
   }
-  return Object.keys(configs).length > 0 ? configs : undefined;
+  for (const protocol of Object.keys(configs) as ProviderChatProtocol[]) dropped.delete(protocol);
+  return { configs: Object.keys(configs).length > 0 ? configs : undefined, dropped };
 }
 
 const CREDENTIAL_MODELS_LIMIT = 1000;
@@ -1783,11 +1846,19 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     obj.apiKeyConfigured === true,
   );
   const credentialIds = new Set(credentials.map((credential) => credential.id));
-  const endpointConfigs = normalizeProviderEndpointConfigs(obj.endpointConfigs, credentialIds);
-  // 默认接口不能是被关闭的渠道：自动切到第一个已启用的显式端点（设计文档 5.4 / 9）。
+  const { configs: endpointConfigs, dropped: droppedEndpoints } = normalizeProviderEndpointConfigs(
+    obj.endpointConfigs,
+    credentialIds,
+  );
+  // 默认接口不能是被关闭的渠道，也不能是刚被丢弃（空地址）的端点：自动切到第一个
+  // 已启用的显式端点；一个都没有时保留原值，由主连接充当隐式端点（设计文档 5.4 / 9）。
   const defaultChatProtocol = (() => {
     const requested = legacyDefault?.protocol;
-    if (!requested || endpointConfigs?.[requested]?.enabled !== false) return requested;
+    if (!requested) return undefined;
+    const requestedUsable = endpointConfigs?.[requested]
+      ? endpointConfigs[requested]?.enabled !== false
+      : !droppedEndpoints.has(requested);
+    if (requestedUsable) return requested;
     const fallback = PROVIDER_CHAT_PROTOCOLS.find(
       (protocol) => endpointConfigs?.[protocol] && endpointConfigs[protocol]?.enabled !== false,
     );
@@ -1830,7 +1901,16 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     activeModels: normalizeModels(normalizeStringArray(obj.activeModels)).filter((modelId) =>
       validModelIds.has(modelId),
     ),
-    requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
+    // requestFormat 是 codex 分组的旧字段，必须与默认接口同步：默认接口是 OpenAI 家族
+    // 时就取它（xAI 固定 Responses），否则沿用地址后缀推导；其它类型不落这个字段。
+    requestFormat:
+      type === "xai"
+        ? "openai-responses"
+        : type === "codex" &&
+            defaultChatProtocol &&
+            PROVIDER_PROTOCOL_FAMILY[defaultChatProtocol] === "openai"
+          ? (defaultChatProtocol as CodexRequestFormat)
+          : codexRouting?.requestFormat,
     ...(defaultChatProtocol ? { defaultChatProtocol } : {}),
     ...(dialect ? { dialect } : {}),
     ...(endpointConfigs ? { endpointConfigs } : {}),

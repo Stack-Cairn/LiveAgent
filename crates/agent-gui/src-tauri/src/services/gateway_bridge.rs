@@ -521,19 +521,18 @@ pub async fn handle_provider_models(
             .collect::<Vec<_>>()
     });
     let config = if request_api_key.is_empty() {
-        let provider_id = request.provider_id.trim().to_string();
-        let expected_provider_type = provider_type.clone();
-        let is_full_url = request.is_full_url;
-        let custom_headers = request_custom_headers.clone();
+        let draft = ProviderModelsDraft {
+            provider_id: request.provider_id.trim().to_string(),
+            provider_type,
+            credential_id: request.credential_id.trim().to_string(),
+            base_url: request.base_url.trim().to_string(),
+            models_url: request.models_url.trim().to_string(),
+            is_full_url: request.is_full_url,
+            custom_headers: request_custom_headers,
+        };
         tauri::async_runtime::spawn_blocking(move || {
             let conn = open_db()?;
-            resolve_stored_provider_models_config(
-                &provider_id,
-                &expected_provider_type,
-                is_full_url,
-                custom_headers,
-                load_providers(&conn)?,
-            )
+            resolve_stored_provider_models_config(draft, load_providers(&conn)?)
         })
         .await
         .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
@@ -573,14 +572,127 @@ struct ProviderModelsRequestConfig {
     custom_headers: Vec<(String, String)>,
 }
 
-fn resolve_stored_provider_models_config(
-    provider_id: &str,
-    expected_provider_type: &str,
+/// WebUI 探测草稿里不含 Key 的那部分。api_key 为空时桌面端按 provider_id 从落库
+/// 配置补 Key；地址与协议以草稿为准，草稿没给的字段再按落库端点回填。
+#[derive(Debug, Default)]
+struct ProviderModelsDraft {
+    provider_id: String,
+    provider_type: String,
+    /// `credentials[].id`；为空或找不到时退回供应商默认 Key。
+    credential_id: String,
+    base_url: String,
+    models_url: String,
     is_full_url: Option<bool>,
     custom_headers: Option<Vec<(String, String)>>,
+}
+
+/// 落库供应商的一个已知端点：主地址或 `endpointConfigs[*]`。
+#[derive(Debug)]
+struct StoredProviderEndpoint {
+    base_url: String,
+    models_url: Option<String>,
+    is_full_url: bool,
+}
+
+impl StoredProviderEndpoint {
+    fn from_value(value: &Value) -> Self {
+        Self {
+            base_url: trimmed_string_field(value, "baseUrl").unwrap_or_default(),
+            models_url: trimmed_string_field(value, "modelsUrl"),
+            is_full_url: value
+                .get("isFullUrl")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        }
+    }
+}
+
+fn trimmed_string_field(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+}
+
+/// 主地址排在首位，随后是每个渠道端点（跳过非对象条目，交给 TS 归一化丢弃）。
+fn stored_provider_endpoints(provider: &Value) -> Vec<StoredProviderEndpoint> {
+    let mut endpoints = vec![StoredProviderEndpoint::from_value(provider)];
+    if let Some(configs) = provider.get("endpointConfigs").and_then(Value::as_object) {
+        endpoints.extend(
+            configs
+                .values()
+                .filter(|endpoint| endpoint.is_object())
+                .map(StoredProviderEndpoint::from_value),
+        );
+    }
+    endpoints
+}
+
+/// `host:port` 形式的地址归属键；解析失败（非绝对 URL 等）返回 None，由后续
+/// 真正发请求的地方报格式错误。
+fn url_host_key(raw: &str) -> Option<String> {
+    let url = reqwest::Url::parse(raw.trim()).ok()?;
+    let host = url.host_str()?.to_ascii_lowercase();
+    Some(match url.port_or_known_default() {
+        Some(port) => format!("{host}:{port}"),
+        None => host,
+    })
+}
+
+fn same_endpoint_url(left: &str, right: &str) -> bool {
+    left.trim().trim_end_matches('/') == right.trim().trim_end_matches('/')
+}
+
+/// 草稿地址只能落在该供应商已知的主机上：落库 Key 不能被一次改地址的探测
+/// 请求带去任意主机。
+fn ensure_known_provider_host(
+    raw: &str,
+    known_hosts: &HashSet<String>,
+    label: &str,
+) -> Result<(), String> {
+    match url_host_key(raw) {
+        Some(host) if known_hosts.contains(&host) => Ok(()),
+        _ => Err(format!(
+            "{label} 的主机不在该供应商已保存的地址范围内，请先保存供应商配置或直接填写 API Key"
+        )),
+    }
+}
+
+/// 按 `credential_id` 从 `credentials[]` 取 Key；未指定或找不到时退回默认
+/// Key（供应商 `apiKey`，缺省再看 `credentials[0]`）。指定的凭据存在但没配 Key
+/// 时直接报错，不能悄悄换成别的 Key 去探测。
+fn resolve_stored_provider_api_key(
+    provider: &Value,
+    credential_id: &str,
+) -> Result<String, String> {
+    let credentials = provider.get("credentials").and_then(Value::as_array);
+    if !credential_id.is_empty() {
+        let matched = credentials.and_then(|items| {
+            items.iter().find(|credential| {
+                credential.get("id").and_then(Value::as_str).map(str::trim) == Some(credential_id)
+            })
+        });
+        if let Some(credential) = matched {
+            return trimmed_string_field(credential, "apiKey")
+                .ok_or_else(|| "所选凭据未配置 API Key".to_string());
+        }
+    }
+    trimmed_string_field(provider, "apiKey")
+        .or_else(|| {
+            credentials
+                .and_then(|items| items.first())
+                .and_then(|credential| trimmed_string_field(credential, "apiKey"))
+        })
+        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())
+}
+
+fn resolve_stored_provider_models_config(
+    draft: ProviderModelsDraft,
     providers: Option<Value>,
 ) -> Result<ProviderModelsRequestConfig, String> {
-    let provider_id = provider_id.trim();
+    let provider_id = draft.provider_id.trim();
     if provider_id.is_empty() {
         return Err("请先填写 API Key".to_string());
     }
@@ -591,35 +703,62 @@ fn resolve_stored_provider_models_config(
         .into_iter()
         .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
         .ok_or_else(|| "未找到已保存的供应商".to_string())?;
-    let stored_provider_type = provider
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
-    if stored_provider_type != expected_provider_type.trim() {
-        return Err("供应商类型与已保存配置不匹配".to_string());
-    }
-    let api_key = provider
-        .get("apiKey")
-        .and_then(Value::as_str)
-        .map(str::trim)
+
+    // 协议以草稿为准：探测同一供应商的其它渠道时草稿带的是该渠道的协议类型，
+    // 它只影响路径拼接与鉴权头名，不改变 Key 会发往哪台主机。
+    let provider_type = Some(draft.provider_type.trim())
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())?;
-    let base_url = provider
-        .get("baseUrl")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let models_url = provider
-        .get("modelsUrl")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
+        .or_else(|| trimmed_string_field(&provider, "type"))
+        .unwrap_or_default();
+    let api_key = resolve_stored_provider_api_key(&provider, draft.credential_id.trim())?;
+
+    let endpoints = stored_provider_endpoints(&provider);
+    let known_hosts: HashSet<String> = endpoints
+        .iter()
+        .flat_map(|endpoint| {
+            [
+                Some(endpoint.base_url.as_str()),
+                endpoint.models_url.as_deref(),
+            ]
+        })
+        .flatten()
+        .filter_map(url_host_key)
+        .collect();
+
+    let draft_base_url = draft.base_url.trim();
+    let draft_models_url = draft.models_url.trim();
+    // 草稿没带 Base URL → 主地址；带了 → 主机必须已知，再按完整地址找到对应端点，
+    // 让 modelsUrl / isFullUrl 从同一个端点回填而不是串到主地址上。
+    let matched_endpoint = if draft_base_url.is_empty() {
+        endpoints.first()
+    } else {
+        ensure_known_provider_host(draft_base_url, &known_hosts, "Base URL")?;
+        endpoints
+            .iter()
+            .find(|endpoint| same_endpoint_url(&endpoint.base_url, draft_base_url))
+    };
+    if !draft_models_url.is_empty() {
+        ensure_known_provider_host(draft_models_url, &known_hosts, "模型列表地址")?;
+    }
+    let base_url = if draft_base_url.is_empty() {
+        matched_endpoint
+            .map(|endpoint| endpoint.base_url.clone())
+            .unwrap_or_default()
+    } else {
+        draft_base_url.to_string()
+    };
+    let models_url = if draft_models_url.is_empty() {
+        matched_endpoint.and_then(|endpoint| endpoint.models_url.clone())
+    } else {
+        Some(draft_models_url.to_string())
+    };
+    let is_full_url = draft
+        .is_full_url
+        .unwrap_or_else(|| matched_endpoint.is_some_and(|endpoint| endpoint.is_full_url));
+
     Ok(ProviderModelsRequestConfig {
-        provider_type: stored_provider_type.to_string(),
+        provider_type,
         base_url,
         api_key,
         use_system_proxy: provider
@@ -627,13 +766,8 @@ fn resolve_stored_provider_models_config(
             .and_then(Value::as_bool)
             .unwrap_or(false),
         models_url,
-        is_full_url: is_full_url.unwrap_or_else(|| {
-            provider
-                .get("isFullUrl")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        }),
-        custom_headers: custom_headers.unwrap_or_else(|| {
+        is_full_url,
+        custom_headers: draft.custom_headers.unwrap_or_else(|| {
             provider
                 .get("customHeaders")
                 .and_then(Value::as_array)
@@ -1895,7 +2029,7 @@ mod tests {
     use super::{
         flatten_history_messages_json, flatten_history_messages_json_window,
         is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
-        resolve_stored_provider_models_config, sanitize_provider_summaries,
+        resolve_stored_provider_models_config, sanitize_provider_summaries, ProviderModelsDraft,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -2023,6 +2157,40 @@ mod tests {
         assert!(!serialized.contains("relay.example.com"));
     }
 
+    fn stored_draft(provider_id: &str, provider_type: &str) -> ProviderModelsDraft {
+        ProviderModelsDraft {
+            provider_id: provider_id.to_string(),
+            provider_type: provider_type.to_string(),
+            ..ProviderModelsDraft::default()
+        }
+    }
+
+    /// 多 Key + 多渠道的落库供应商：主地址在 stored.example.com，另有一个
+    /// anthropic 渠道落在 relay.example.com。
+    fn multi_endpoint_provider() -> Value {
+        json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1",
+            "apiKey": "sk-primary",
+            "modelsUrl": "https://stored.example.com/v1/models",
+            "credentials": [
+                { "id": "default", "label": "", "apiKey": "sk-primary", "enabled": true },
+                { "id": "backup", "label": "备用", "apiKey": "sk-backup", "enabled": true },
+                { "id": "empty", "label": "空", "apiKey": "", "apiKeyConfigured": false, "enabled": true }
+            ],
+            "endpointConfigs": {
+                "anthropic-messages": {
+                    "enabled": true,
+                    "baseUrl": "https://relay.example.com/anthropic",
+                    "modelsUrl": "https://relay.example.com/anthropic/v1/models",
+                    "isFullUrl": true
+                },
+                "openai-completions": "malformed-entry"
+            }
+        }])
+    }
+
     #[test]
     fn provider_models_resolves_redacted_webui_config_from_matching_provider() {
         let providers = json!([{
@@ -2034,12 +2202,10 @@ mod tests {
             "modelsUrl": "https://stored.example.com/models",
             "useSystemProxy": true
         }]);
+        // 旧请求：只带 provider_id / type，其余全部回填落库值。
         assert_eq!(
             resolve_stored_provider_models_config(
-                "provider-a",
-                "codex",
-                None,
-                None,
+                stored_draft("provider-a", "codex"),
                 Some(providers),
             )
             .expect("stored provider config"),
@@ -2056,6 +2222,149 @@ mod tests {
     }
 
     #[test]
+    fn provider_models_picks_stored_credential_by_id() {
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                credential_id: "backup".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.api_key, "sk-backup");
+        assert_eq!(config.base_url, "https://stored.example.com/v1");
+    }
+
+    #[test]
+    fn provider_models_falls_back_to_default_key_for_unknown_or_missing_credential_id() {
+        for credential_id in ["", "  ", "not-a-credential"] {
+            let config = resolve_stored_provider_models_config(
+                ProviderModelsDraft {
+                    credential_id: credential_id.to_string(),
+                    ..stored_draft("provider-a", "codex")
+                },
+                Some(multi_endpoint_provider()),
+            )
+            .expect("stored provider config");
+            assert_eq!(
+                config.api_key, "sk-primary",
+                "credential_id={credential_id:?}"
+            );
+        }
+
+        // 供应商默认 Key 缺失时退回 credentials[0]。
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1",
+            "credentials": [{ "id": "first", "apiKey": "sk-first" }]
+        }]);
+        let config = resolve_stored_provider_models_config(
+            stored_draft("provider-a", "codex"),
+            Some(providers),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.api_key, "sk-first");
+    }
+
+    #[test]
+    fn provider_models_rejects_selected_credential_without_key() {
+        assert_eq!(
+            resolve_stored_provider_models_config(
+                ProviderModelsDraft {
+                    credential_id: "empty".to_string(),
+                    ..stored_draft("provider-a", "codex")
+                },
+                Some(multi_endpoint_provider()),
+            )
+            .expect_err("credential without key"),
+            "所选凭据未配置 API Key"
+        );
+    }
+
+    #[test]
+    fn provider_models_keeps_draft_endpoint_on_known_secondary_host() {
+        // 探测 anthropic 渠道：草稿带该渠道的协议类型与地址，主机在 endpointConfigs 里。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://relay.example.com/anthropic".to_string(),
+                credential_id: "backup".to_string(),
+                ..stored_draft("provider-a", "claude_code")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.provider_type, "claude_code");
+        assert_eq!(config.base_url, "https://relay.example.com/anthropic");
+        assert_eq!(config.api_key, "sk-backup");
+        // modelsUrl / isFullUrl 从同一个渠道端点回填，而不是串到主地址的配置上。
+        assert_eq!(
+            config.models_url.as_deref(),
+            Some("https://relay.example.com/anthropic/v1/models")
+        );
+        assert!(config.is_full_url);
+
+        // 同主机但不是已保存的完整地址：沿用草稿地址，modelsUrl 不再从别的端点回填。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://relay.example.com/other".to_string(),
+                ..stored_draft("provider-a", "claude_code")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.base_url, "https://relay.example.com/other");
+        assert_eq!(config.models_url, None);
+        assert!(!config.is_full_url);
+
+        // 草稿显式给出的 models_url 也只要求主机已知。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                models_url: "https://stored.example.com/custom/models".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.base_url, "https://stored.example.com/v1");
+        assert_eq!(
+            config.models_url.as_deref(),
+            Some("https://stored.example.com/custom/models")
+        );
+    }
+
+    #[test]
+    fn provider_models_rejects_draft_urls_on_unknown_hosts() {
+        let providers = multi_endpoint_provider();
+        for draft in [
+            ProviderModelsDraft {
+                base_url: "https://evil.example.net/v1".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            // 同主机不同端口也视为陌生主机。
+            ProviderModelsDraft {
+                base_url: "https://stored.example.com:8443/v1".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            ProviderModelsDraft {
+                models_url: "https://evil.example.net/models".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            ProviderModelsDraft {
+                base_url: "not a url".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+        ] {
+            let error = resolve_stored_provider_models_config(draft, Some(providers.clone()))
+                .expect_err("unknown host must be rejected");
+            assert!(
+                error.contains("不在该供应商已保存的地址范围内"),
+                "unexpected error: {error}"
+            );
+        }
+    }
+
+    #[test]
     fn provider_models_custom_headers_fall_back_to_stored_only_when_draft_omits_them() {
         let providers = json!([{
             "id": "provider-a",
@@ -2067,10 +2376,7 @@ mod tests {
 
         // 草稿没带请求头（proto 的 custom_headers 缺省）→ 沿用落库配置。
         let inherited = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            None,
+            stored_draft("provider-a", "codex"),
             Some(providers.clone()),
         )
         .expect("stored provider config");
@@ -2081,10 +2387,10 @@ mod tests {
 
         // 草稿把请求头清空了 → 按空集发，绝不回落到落库配置（否则用户删不掉伪装头）。
         let cleared = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            Some(Vec::new()),
+            ProviderModelsDraft {
+                custom_headers: Some(Vec::new()),
+                ..stored_draft("provider-a", "codex")
+            },
             Some(providers.clone()),
         )
         .expect("stored provider config");
@@ -2092,10 +2398,13 @@ mod tests {
 
         // 草稿显式给了头 → 覆盖落库配置。
         let overridden = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            Some(vec![("User-Agent".to_string(), "draft-cli/2.0".to_string())]),
+            ProviderModelsDraft {
+                custom_headers: Some(vec![(
+                    "User-Agent".to_string(),
+                    "draft-cli/2.0".to_string(),
+                )]),
+                ..stored_draft("provider-a", "codex")
+            },
             Some(providers),
         )
         .expect("stored provider config");
@@ -2115,10 +2424,10 @@ mod tests {
             "isFullUrl": false
         }]);
         let config = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            Some(true),
-            None,
+            ProviderModelsDraft {
+                is_full_url: Some(true),
+                ..stored_draft("provider-a", "codex")
+            },
             Some(providers),
         )
         .expect("stored provider config with draft full URL mode");
@@ -2129,22 +2438,41 @@ mod tests {
     }
 
     #[test]
-    fn provider_models_rejects_mismatched_stored_provider_type() {
+    fn provider_models_uses_draft_protocol_and_falls_back_to_stored_type() {
         let providers = json!([{
             "id": "provider-a",
             "type": "claude_code",
+            "baseUrl": "https://stored.example.com",
             "apiKey": "stored-secret"
         }]);
+        // 草稿带的协议类型优先：同一供应商的其它渠道会带不同的 legacy type。
+        let config = resolve_stored_provider_models_config(
+            stored_draft("provider-a", "codex"),
+            Some(providers.clone()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.provider_type, "codex");
+        // 草稿没带类型时退回落库类型。
+        let config =
+            resolve_stored_provider_models_config(stored_draft("provider-a", ""), Some(providers))
+                .expect("stored provider config");
+        assert_eq!(config.provider_type, "claude_code");
+    }
+
+    #[test]
+    fn provider_models_requires_provider_id_or_saved_provider() {
+        assert_eq!(
+            resolve_stored_provider_models_config(stored_draft("", "codex"), None)
+                .expect_err("missing provider id"),
+            "请先填写 API Key"
+        );
         assert_eq!(
             resolve_stored_provider_models_config(
-                "provider-a",
-                "codex",
-                None,
-                None,
-                Some(providers),
+                stored_draft("provider-b", "codex"),
+                Some(multi_endpoint_provider()),
             )
-            .expect_err("provider type mismatch"),
-            "供应商类型与已保存配置不匹配"
+            .expect_err("unknown provider"),
+            "未找到已保存的供应商"
         );
     }
 

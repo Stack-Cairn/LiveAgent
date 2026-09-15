@@ -458,10 +458,16 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const selectedProvider = selection
     ? context.settings.customProviders.find((item) => item.id === selection.customProviderId)
     : undefined;
-  const selectedRoute =
-    selectedProvider && selection
-      ? resolveProviderChatRoute(selectedProvider, selection.model)
-      : undefined;
+  const selectedModelId = selection?.model;
+  // 路由解析按供应商对象与模型 id memo：Pane 随流式更新高频重渲染，
+  // 不能每帧都重跑一遍 resolveProviderChatRoute。
+  const selectedRoute = useMemo(
+    () =>
+      selectedProvider && selectedModelId
+        ? resolveProviderChatRoute(selectedProvider, selectedModelId)
+        : undefined,
+    [selectedProvider, selectedModelId],
+  );
   const paneRuntimeControls = useMemo(
     () =>
       normalizeChatRuntimeControlsForProvider(context.settings.chatRuntimeControls, {

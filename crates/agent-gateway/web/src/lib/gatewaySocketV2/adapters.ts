@@ -622,6 +622,7 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           useSystemProxy: bool(body.use_system_proxy),
           modelsUrl: trimStr(body.models_url),
           providerId: trimStr(body.provider_id),
+          credentialId: trimStr(body.credential_id),
           isFullUrl: typeof body.is_full_url === "boolean" ? body.is_full_url : undefined,
           // 字段存在性即语义：调用方没带 custom_headers 才回落到落库配置，带了空
           // 数组表示草稿把头清空了，桌面端必须按空集发。

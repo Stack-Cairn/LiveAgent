@@ -6,7 +6,6 @@ import {
   type CustomProvider,
   getProviderChatProtocolAdapter,
   PROVIDER_CHAT_PROTOCOLS,
-  PROVIDER_WIRE_DIALECT_LABELS,
   type ProviderChatProtocol,
   type ProviderWireDialect,
   resolveProviderDialect,
@@ -31,6 +30,7 @@ import {
   expandPresetBaseUrl,
   PROVIDER_PROTOCOL_AUTH_HEADER,
   PROVIDER_PROTOCOL_DIALECTS,
+  PROVIDER_PROTOCOL_FAMILY,
   PROVIDER_PROTOCOL_MODELS_PATH,
   PROVIDER_PROTOCOL_REQUEST_PATH,
 } from "@liveagent/ui/lib/providers/registry";
@@ -47,7 +47,10 @@ import {
   Chip,
   ChipButton,
   CommittedInput,
+  dialectLabel,
+  ProbeReason,
   ProbeStatusChip,
+  probeReason,
   protocolLabel,
   SourceTag,
 } from "./providerChips";
@@ -189,6 +192,40 @@ export function RequestConfigDrawer(props: {
     }
   }
 
+  /** 停用的端点也能"设为默认"：先启用再切换，并提示发生了什么，而不是静默无效。 */
+  function makeDefault(protocol: ProviderChatProtocol, isEnabled: boolean) {
+    setNotice(null);
+    onChange((current) =>
+      setDefaultProtocol(
+        isEnabled ? current : setEndpointEnabled(current, protocol, true),
+        protocol,
+      ),
+    );
+    if (!isEnabled) {
+      setNotice(
+        t("settings.providerEndpointEnabledAndDefault").replace(
+          "{protocol}",
+          protocolLabel(protocol),
+        ),
+      );
+    }
+  }
+
+  async function removeEndpointConfirmed(protocol: ProviderChatProtocol) {
+    const confirmed = await confirm({
+      title: t("settings.providerEndpointRemove"),
+      description: t("settings.providerEndpointRemoveConfirm").replace(
+        "{protocol}",
+        protocolLabel(protocol),
+      ),
+      confirmLabel: t("settings.providerEndpointRemove"),
+      cancelLabel: t("settings.cancel"),
+      preferCancel: true,
+    });
+    if (!confirmed) return;
+    onChange((current) => removeEndpoint(current, protocol));
+  }
+
   function addEndpoint(protocol: ProviderChatProtocol) {
     const template = preset.endpoints[protocol];
     const origin = providerOrigin(provider);
@@ -260,6 +297,7 @@ export function RequestConfigDrawer(props: {
                   endpoint: { baseUrl: config.baseUrl },
                 });
                 const authDefault = PROVIDER_PROTOCOL_AUTH_HEADER[protocol];
+                const showQuirks = PROVIDER_PROTOCOL_FAMILY[protocol] === "openai";
                 const fullUrl = config.isFullUrl
                   ? config.baseUrl
                   : `${config.baseUrl.replace(/\/+$/, "")}${PROVIDER_PROTOCOL_REQUEST_PATH[protocol]}`;
@@ -290,10 +328,10 @@ export function RequestConfigDrawer(props: {
                           variant="ghost"
                           size="sm"
                           className="h-6 px-2 text-[11px]"
-                          disabled={!isEnabled}
-                          onClick={() =>
-                            onChange((current) => setDefaultProtocol(current, protocol))
+                          title={
+                            isEnabled ? undefined : t("settings.providerEndpointSetDefaultDisabled")
                           }
+                          onClick={() => makeDefault(protocol, isEnabled)}
                         >
                           {t("settings.providerEndpointSetDefault")}
                         </Button>
@@ -320,14 +358,19 @@ export function RequestConfigDrawer(props: {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => onChange((current) => removeEndpoint(current, protocol))}
+                          onClick={() => void removeEndpointConfirmed(protocol)}
                           title={t("settings.providerEndpointRemove")}
-                          aria-label={t("settings.providerEndpointRemove")}
+                          aria-label={`${t("settings.providerEndpointRemove")} ${protocolLabel(protocol)}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       ) : null}
                     </div>
+                    {probeReason(config.lastProbe) ? (
+                      <div className="px-3 pb-2">
+                        <ProbeReason probe={config.lastProbe} />
+                      </div>
+                    ) : null}
                     {isEnabled ? (
                       <div className="space-y-3 border-t px-3 py-3">
                         <div className="space-y-1.5">
@@ -411,10 +454,10 @@ export function RequestConfigDrawer(props: {
                               <SelectTrigger className="h-8 text-xs shadow-none">
                                 <SelectValue>
                                   {config.dialect
-                                    ? PROVIDER_WIRE_DIALECT_LABELS[config.dialect]
+                                    ? dialectLabel(t, config.dialect)
                                     : t("settings.providerDialectInherit").replace(
                                         "{dialect}",
-                                        PROVIDER_WIRE_DIALECT_LABELS[inheritedDialect],
+                                        dialectLabel(t, inheritedDialect),
                                       )}
                                 </SelectValue>
                               </SelectTrigger>
@@ -422,12 +465,12 @@ export function RequestConfigDrawer(props: {
                                 <SelectItem value="inherit">
                                   {t("settings.providerDialectInherit").replace(
                                     "{dialect}",
-                                    PROVIDER_WIRE_DIALECT_LABELS[inheritedDialect],
+                                    dialectLabel(t, inheritedDialect),
                                   )}
                                 </SelectItem>
                                 {PROVIDER_PROTOCOL_DIALECTS[protocol].map((dialect) => (
                                   <SelectItem key={dialect} value={dialect}>
-                                    {PROVIDER_WIRE_DIALECT_LABELS[dialect]}
+                                    {dialectLabel(t, dialect)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -494,45 +537,49 @@ export function RequestConfigDrawer(props: {
                             </Select>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-[11px] text-muted-foreground">
-                            {t("settings.providerQuirks")}
-                          </Label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {QUIRK_KEYS.map((key) => {
-                              const value = config.quirks?.[key];
-                              return (
-                                <ChipButton
-                                  key={key}
-                                  tone={value === false ? "bad" : value === true ? "on" : "default"}
-                                  onClick={() =>
-                                    onChange((current) =>
-                                      writeEndpoint(current, protocol, {
-                                        quirks: {
-                                          ...config.quirks,
-                                          [key]:
-                                            value === undefined
-                                              ? true
-                                              : value === true
-                                                ? false
-                                                : undefined,
-                                        },
-                                      }),
-                                    )
-                                  }
-                                  title={t("settings.providerQuirkCycleHint")}
-                                >
-                                  {QUIRK_LABELS[key]}：
-                                  {value === false
-                                    ? t("settings.providerQuirkOff")
-                                    : value === true
-                                      ? t("settings.providerQuirkOn")
-                                      : t("settings.providerQuirkAuto")}
-                                </ChipButton>
-                              );
-                            })}
+                        {showQuirks ? (
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">
+                              {t("settings.providerQuirks")}
+                            </Label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {QUIRK_KEYS.map((key) => {
+                                const value = config.quirks?.[key];
+                                return (
+                                  <ChipButton
+                                    key={key}
+                                    tone={
+                                      value === false ? "bad" : value === true ? "on" : "default"
+                                    }
+                                    onClick={() =>
+                                      onChange((current) =>
+                                        writeEndpoint(current, protocol, {
+                                          quirks: {
+                                            ...config.quirks,
+                                            [key]:
+                                              value === undefined
+                                                ? true
+                                                : value === true
+                                                  ? false
+                                                  : undefined,
+                                          },
+                                        }),
+                                      )
+                                    }
+                                    title={t("settings.providerQuirkCycleHint")}
+                                  >
+                                    {QUIRK_LABELS[key]}：
+                                    {value === false
+                                      ? t("settings.providerQuirkOff")
+                                      : value === true
+                                        ? t("settings.providerQuirkOn")
+                                        : t("settings.providerQuirkAuto")}
+                                  </ChipButton>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
+                        ) : null}
                         <CustomHeadersEditor
                           compact
                           title={t("settings.providerEndpointHeaders")}

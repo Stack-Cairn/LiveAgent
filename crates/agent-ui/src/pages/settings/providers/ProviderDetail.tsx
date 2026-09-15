@@ -1,12 +1,15 @@
-// 中栏"渠道详情"（设计文档 7）：标题行、API 密钥、API 地址、模型列表（按分组折叠）、
-// 更多设置、可用性（故障转移）、用量查询。所有写入经父组件的 onChange 走
-// normalizeCustomProvider。
+// 中栏"渠道详情"（设计文档 7）：标题行、API 密钥、API 地址、模型列表（按分组折叠、
+// 分组内可拖拽排序）、更多设置、可用性（故障转移）、用量查询。所有写入经父组件的
+// onChange 走 normalizeCustomProvider。模型行的路由 / 能力 / 凭据覆盖按 provider
+// 一次算成 Map，行组件 memo，避免大列表在无关状态变化时全量重算。
 
 import { ProviderCopyConfigButton } from "@liveagent/adapters/providerSettings";
 import type { getProviderUsageCardDisplay } from "@liveagent/app/lib/providers/usageQuery";
 import {
   type CustomProvider,
+  type ProviderChatProtocol,
   type ProviderModelConfig,
+  type ProviderWireDialect,
   resolveProviderChatRoute,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
@@ -25,13 +28,14 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
+import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { resolveModelInputModalities } from "@liveagent/ui/lib/models/modelCatalog";
 import { resolveModelThinking } from "@liveagent/ui/lib/models/modelThinking";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
-import { useState } from "react";
+import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import { UsagePlanLine, usageRelativeTimeText } from "../ProviderPresentation";
 import { ProviderFailoverSection } from "./ProviderFailoverSection";
 import { ProviderMoreSettings } from "./ProviderMoreSettings";
@@ -41,6 +45,8 @@ import {
   Chip,
   ChipButton,
   CommittedInput,
+  dialectLabel,
+  ProbeReason,
   ProbeStatusChip,
   ProviderAvatar,
   protocolLabel,
@@ -50,6 +56,7 @@ import {
 } from "./providerChips";
 import {
   addProviderModel,
+  configuredCredentials,
   credentialScopesMatch,
   credentialsCoveringModel,
   enabledCredentials,
@@ -61,6 +68,7 @@ import {
   providerDefaultProtocol,
   readEndpoint,
   removeProviderModel,
+  reorderProviderModels,
   setPrimaryApiKey,
   setProviderModelActive,
   writeEndpoint,
@@ -88,55 +96,90 @@ export type ProviderDetailProps = SettingsSectionProps & {
   };
 };
 
-function ModelRow(props: {
-  provider: CustomProvider;
-  model: ProviderModelConfig;
-  onChange: ProviderUpdater;
-  onEdit: () => void;
-}) {
-  const { provider, model, onChange, onEdit } = props;
-  const { t } = useLocale();
-  const active = provider.activeModels.includes(model.id);
+/** 模型行的派生信息：按 provider 一次算好，行组件只做渲染。 */
+type ModelRowInfo = {
+  active: boolean;
+  vision: boolean;
+  reasoning: boolean;
+  tools: boolean;
+  search: boolean;
+  protocol: ProviderChatProtocol;
+  protocolExplicit: boolean;
+  hasEndpoint: boolean;
+  dialect: ProviderWireDialect;
+  /** null = 不需要提示；labels 为空 = 无匹配 Key */
+  keyLabels: string[] | null;
+};
+
+function computeModelRowInfo(
+  provider: CustomProvider,
+  model: ProviderModelConfig,
+  enabledKeyCount: number,
+): ModelRowInfo {
   const route = resolveProviderChatRoute(provider, model.id);
   const thinking = resolveModelThinking(route.adapterProviderId, model.id);
   const modalities =
     model.inputModalities ?? resolveModelInputModalities(route.adapterProviderId, model.id);
-  const vision =
-    model.capabilities?.imageUnderstanding === "supported" ||
-    (model.capabilities?.imageUnderstanding !== "unsupported" && modalities?.includes("image"));
-  const reasoning =
-    model.capabilities?.reasoning === "supported" ||
-    (model.capabilities?.reasoning !== "unsupported" && thinking.reasoning);
-  const tools = model.capabilities?.tools === "supported";
-  const search =
-    model.capabilities?.nativeWebSearch === "supported" || model.nativeWebSearch === true;
-  const enabledKeys = enabledCredentials(provider);
-  const coveringKeys = credentialsCoveringModel(provider, model.id);
-  const keyChip =
-    enabledKeys.length < 2
+  const coveringKeys = enabledKeyCount < 2 ? [] : credentialsCoveringModel(provider, model.id);
+  const keyLabels =
+    enabledKeyCount < 2 || coveringKeys.length === enabledKeyCount
       ? null
-      : coveringKeys.length === 0
-        ? { tone: "warn" as const, text: t("settings.modelKeyNoMatch") }
-        : coveringKeys.length === enabledKeys.length
-          ? null
-          : {
-              tone: "warn" as const,
-              text: `${t("settings.modelKeyLabel")}${coveringKeys
-                .map((credential) => credential.label || t("settings.providerCredentialPrimary"))
-                .join(" / ")}`,
-            };
-  const hasEndpoint = Boolean(readEndpoint(provider, route.protocol));
+      : coveringKeys.map((credential) => credential.label);
+  return {
+    active: provider.activeModels.includes(model.id),
+    vision:
+      model.capabilities?.imageUnderstanding === "supported" ||
+      (model.capabilities?.imageUnderstanding !== "unsupported" &&
+        modalities?.includes("image") === true),
+    reasoning:
+      model.capabilities?.reasoning === "supported" ||
+      (model.capabilities?.reasoning !== "unsupported" && thinking.reasoning),
+    tools: model.capabilities?.tools === "supported",
+    search: model.capabilities?.nativeWebSearch === "supported" || model.nativeWebSearch === true,
+    protocol: route.protocol,
+    protocolExplicit: route.protocolSource === "model",
+    hasEndpoint: Boolean(readEndpoint(provider, route.protocol)),
+    dialect: route.dialect,
+    keyLabels,
+  };
+}
+
+const ModelRow = memo(function ModelRow(props: {
+  model: ProviderModelConfig;
+  info: ModelRowInfo;
+  dragging: boolean;
+  onChange: ProviderUpdater;
+  onOpenDrawer: (drawer: ProviderDrawerState) => void;
+  renderDragHandle: (itemId: string, label: string) => ReactNode;
+  getItemProps: (itemId: string) => {
+    "data-vertical-reorder-id": string;
+    style?: React.CSSProperties;
+  };
+}) {
+  const { model, info, dragging, onChange, onOpenDrawer, renderDragHandle, getItemProps } = props;
+  const { t } = useLocale();
+  const keyChipText =
+    info.keyLabels === null
+      ? null
+      : info.keyLabels.length === 0
+        ? t("settings.modelKeyNoMatch")
+        : `${t("settings.modelKeyLabel")}${info.keyLabels
+            .map((label) => label || t("settings.providerCredentialPrimary"))
+            .join(" / ")}`;
 
   return (
     <div
+      {...getItemProps(model.id)}
       className={cn(
-        "settings-model-row group flex flex-wrap items-center gap-2 px-3 py-1.5 transition-colors hover:bg-accent/30",
-        !active && "opacity-60",
+        "settings-model-row group flex flex-wrap items-center gap-2 bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
+        !info.active && "opacity-60",
+        dragging && "z-10 bg-accent shadow-lg",
       )}
     >
+      {renderDragHandle(model.id, model.displayName || model.id)}
       <Switch
         size="sm"
-        checked={active}
+        checked={info.active}
         onCheckedChange={(next) =>
           onChange((current) => setProviderModelActive(current, model.id, next === true))
         }
@@ -159,7 +202,7 @@ function ModelRow(props: {
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-1 text-muted-foreground/70">
-        {vision ? (
+        {info.vision ? (
           <span
             role="img"
             title={t("settings.modelCapability.imageUnderstanding")}
@@ -168,7 +211,7 @@ function ModelRow(props: {
             <ImageIcon className="h-3.5 w-3.5" />
           </span>
         ) : null}
-        {reasoning ? (
+        {info.reasoning ? (
           <span
             role="img"
             title={t("settings.modelCapability.reasoning")}
@@ -177,7 +220,7 @@ function ModelRow(props: {
             <Lightbulb className="h-3.5 w-3.5" />
           </span>
         ) : null}
-        {tools ? (
+        {info.tools ? (
           <span
             role="img"
             title={t("settings.modelCapability.tools")}
@@ -186,7 +229,7 @@ function ModelRow(props: {
             <Wrench className="h-3.5 w-3.5" />
           </span>
         ) : null}
-        {search ? (
+        {info.search ? (
           <span
             role="img"
             title={t("settings.modelCapability.nativeWebSearch")}
@@ -196,28 +239,30 @@ function ModelRow(props: {
           </span>
         ) : null}
       </span>
-      {hasEndpoint ? (
-        <Chip tone={route.protocolSource === "model" ? "on" : "default"}>
-          {route.protocolSource === "model" ? "" : `${t("settings.modelRouteAuto")} · `}
-          {protocolLabel(route.protocol)}
+      {info.hasEndpoint ? (
+        <Chip tone={info.protocolExplicit ? "on" : "default"}>
+          {info.protocolExplicit ? "" : `${t("settings.modelRouteAuto")} · `}
+          {protocolLabel(info.protocol)}
         </Chip>
       ) : (
         <Chip tone="bad">{t("settings.modelNoEndpoint")}</Chip>
       )}
-      {route.dialect !== "generic" ? <Chip tone="purple">{route.dialect}</Chip> : null}
+      {info.dialect !== "generic" ? (
+        <Chip tone="purple">{dialectLabel(t, info.dialect)}</Chip>
+      ) : null}
       {model.wireModelId ? (
         <Chip className="font-mono">
           {t("settings.modelWireIdShort")} {model.wireModelId}
         </Chip>
       ) : null}
-      {keyChip ? <Chip tone={keyChip.tone}>{keyChip.text}</Chip> : null}
+      {keyChipText ? <Chip tone="warn">{keyChipText}</Chip> : null}
       <span className="flex shrink-0 items-center gap-0.5">
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={onEdit}
+          onClick={() => onOpenDrawer({ kind: "model", modelId: model.id })}
           title={t("settings.modelSettings")}
           aria-label={`${t("settings.modelSettings")} ${model.id}`}
         >
@@ -235,6 +280,81 @@ function ModelRow(props: {
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </span>
+    </div>
+  );
+});
+
+type ModelGroupView = {
+  key: string;
+  models: ProviderModelConfig[];
+  activeCount: number;
+};
+
+/** 一个分组一份拖拽上下文：分组内排序，写回时按显示顺序拼成全局 modelOrder。 */
+function ModelGroup(props: {
+  group: ModelGroupView;
+  collapsed: boolean;
+  infoById: ReadonlyMap<string, ModelRowInfo>;
+  onToggle: (key: string) => void;
+  onChange: ProviderUpdater;
+  onOpenDrawer: (drawer: ProviderDrawerState) => void;
+}) {
+  const { group, collapsed, infoById, onToggle, onChange, onOpenDrawer } = props;
+  const { t } = useLocale();
+  const itemIds = useMemo(() => group.models.map((model) => model.id), [group.models]);
+  const onReorder = useCallback(
+    (nextIds: string[]) =>
+      onChange((current) => reorderProviderModels(current, group.key, nextIds)),
+    [onChange, group.key],
+  );
+  const { draggingItemId, getItemProps, renderDragHandle, scrollContainerRef } =
+    useVerticalListReorder({
+      itemIds,
+      canReorder: true,
+      reorderLabel: t("settings.reorderModel"),
+      reorderHint: t("settings.reorderVerticalHint"),
+      disabledHint: t("settings.reorderNeedsTwoItems"),
+      onReorder,
+    });
+
+  return (
+    <div className="border-b last:border-b-0">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 bg-muted/20 px-3 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/40"
+        aria-expanded={!collapsed}
+        onClick={() => onToggle(group.key)}
+      >
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 transition-transform", collapsed && "-rotate-90")}
+        />
+        <span className="font-medium text-foreground/80">
+          {group.key === "other" ? t("settings.modelGroupOther") : group.key}
+        </span>
+        <Chip>
+          {group.activeCount} / {group.models.length}
+        </Chip>
+      </button>
+      {!collapsed ? (
+        <div ref={scrollContainerRef} className="divide-y">
+          {group.models.map((model) => {
+            const info = infoById.get(model.id);
+            if (!info) return null;
+            return (
+              <ModelRow
+                key={model.id}
+                model={model}
+                info={info}
+                dragging={draggingItemId === model.id}
+                onChange={onChange}
+                onOpenDrawer={onOpenDrawer}
+                renderDragHandle={renderDragHandle}
+                getItemProps={getItemProps}
+              />
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -264,10 +384,36 @@ export function ProviderDetail(props: ProviderDetailProps) {
   const configured = providerConfiguredProtocols(provider);
   const primary = primaryCredential(provider);
   const enabledKeys = enabledCredentials(provider);
+  const configuredKeyCount = configuredCredentials(provider).length;
   const redactedKey = isGatewayWebui && primary.apiKey === "" && primary.apiKeyConfigured === true;
   const keyConfigured = primary.apiKeyConfigured === true || primary.apiKey.length > 0;
-  const groups = groupProviderModels(provider);
+  const groups = useMemo<ModelGroupView[]>(
+    () =>
+      groupProviderModels(provider).map((group) => ({
+        ...group,
+        activeCount: group.models.filter((model) => provider.activeModels.includes(model.id))
+          .length,
+      })),
+    [provider],
+  );
+  const infoById = useMemo(() => {
+    const enabledKeyCount = enabledCredentials(provider).length;
+    return new Map(
+      provider.models.map((model) => [
+        model.id,
+        computeModelRowInfo(provider, model, enabledKeyCount),
+      ]),
+    );
+  }, [provider]);
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
   const [addingModel, setAddingModel] = useState(false);
   const [newModelName, setNewModelName] = useState("");
   const enabled = provider.enabled !== false;
@@ -283,7 +429,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="settings-provider-detail-title flex flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="ghost"
@@ -298,8 +444,8 @@ export function ProviderDetail(props: ProviderDetailProps) {
         <ProviderAvatar preset={preset} name={provider.name} className="h-9 w-9 text-base" />
         <CommittedInput
           value={provider.name}
-          className="h-8 w-56 max-w-full border-transparent bg-transparent px-2 text-base font-semibold tracking-tight shadow-none hover:border-border focus-visible:border-border"
-          aria-label={t("settings.providerName")}
+          className="h-8 w-56 min-w-0 max-w-full border-transparent bg-transparent px-2 text-base font-semibold tracking-tight shadow-none hover:border-border focus-visible:border-border max-[760px]:w-auto max-[760px]:flex-1 max-[760px]:basis-40"
+          aria-label={t("settings.channelName")}
           onCommit={(value) => {
             const name = value.trim();
             if (name) onChange((current) => ({ ...current, name }));
@@ -318,31 +464,46 @@ export function ProviderDetail(props: ProviderDetailProps) {
           <Plus className="h-3 w-3" />
           {t("settings.channelAddInstance")}
         </Button>
-        <span className="flex-1" />
-        <ProviderCopyConfigButton provider={provider} />
-        <ConfirmDeletePopover name={provider.name} onConfirm={onDelete}>
-          {(open) => (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              onClick={open}
-              title={t("settings.delete")}
-              aria-label={`${t("settings.delete")} ${provider.name}`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </ConfirmDeletePopover>
-        <span className="text-[11px] text-muted-foreground">{t("settings.enable")}</span>
-        <Switch
-          checked={enabled}
-          onCheckedChange={(next) =>
-            onChange((current) => ({ ...current, enabled: next === true ? undefined : false }))
-          }
-          aria-label={`${provider.name} ${t("settings.enable")}`}
-        />
+        <span className="settings-provider-detail-actions ml-auto flex items-center gap-2">
+          <ProviderCopyConfigButton provider={provider} />
+          <ConfirmDeletePopover name={provider.name} onConfirm={onDelete}>
+            {(open) => (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={open}
+                title={t("settings.delete")}
+                aria-label={`${t("settings.delete")} ${provider.name}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </ConfirmDeletePopover>
+          <span className="flex items-center gap-2 whitespace-nowrap">
+            <span className="text-[11px] text-muted-foreground">{t("settings.enable")}</span>
+            <Switch
+              checked={enabled}
+              onCheckedChange={(next) =>
+                onChange((current) => ({
+                  ...current,
+                  enabled: next === true ? undefined : false,
+                }))
+              }
+              aria-label={`${provider.name} ${t("settings.enable")}`}
+            />
+          </span>
+        </span>
       </div>
+
+      {!enabled ? (
+        <p
+          className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300"
+          role="status"
+        >
+          {t("settings.providerDisabledBanner")}
+        </p>
+      ) : null}
 
       {notice ? (
         <p
@@ -369,10 +530,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
               className="h-7 px-2 text-[11px]"
               onClick={() => onOpenDrawer({ kind: "keys" })}
             >
-              {t("settings.providerManageKeys").replace(
-                "{count}",
-                String((provider.credentials ?? [primary]).length),
-              )}
+              {t("settings.providerManageKeys").replace("{count}", String(configuredKeyCount))}
             </Button>
           }
         />
@@ -456,10 +614,10 @@ export function ProviderDetail(props: ProviderDetailProps) {
           }
         />
         <div className="space-y-2 rounded-xl border bg-card px-3 py-2.5">
-          <div className="flex items-center gap-2">
+          <div className="settings-provider-address-row flex flex-wrap items-center gap-2">
             <CommittedInput
               value={defaultEndpoint?.config.baseUrl ?? provider.baseUrl}
-              className="h-8 min-w-0 flex-1 font-mono text-xs shadow-none"
+              className="h-8 min-w-0 flex-1 basis-56 font-mono text-xs shadow-none"
               placeholder="https://api.example.com/v1"
               aria-label={t("settings.baseUrl")}
               autoComplete="off"
@@ -472,6 +630,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
               <SourceTag source={defaultEndpoint.config.source} />
             ) : null}
           </div>
+          <ProbeReason probe={defaultEndpoint?.config.lastProbe} />
           <div className="flex flex-wrap items-center gap-1.5">
             {configured.length === 0 ? (
               <span className="text-[11px] text-muted-foreground/75">
@@ -570,52 +729,17 @@ export function ProviderDetail(props: ProviderDetailProps) {
               {t("settings.modelsEmptyHint")}
             </div>
           ) : (
-            groups.map((group) => {
-              const collapsed = collapsedGroups.has(group.key);
-              const activeCount = group.models.filter((model) =>
-                provider.activeModels.includes(model.id),
-              ).length;
-              return (
-                <div key={group.key} className="border-b last:border-b-0">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 bg-muted/20 px-3 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/40"
-                    aria-expanded={!collapsed}
-                    onClick={() =>
-                      setCollapsedGroups((previous) => {
-                        const next = new Set(previous);
-                        if (next.has(group.key)) next.delete(group.key);
-                        else next.add(group.key);
-                        return next;
-                      })
-                    }
-                  >
-                    <ChevronDown
-                      className={cn("h-3.5 w-3.5 transition-transform", collapsed && "-rotate-90")}
-                    />
-                    <span className="font-medium text-foreground/80">
-                      {group.key === "other" ? t("settings.modelGroupOther") : group.key}
-                    </span>
-                    <Chip>
-                      {activeCount} / {group.models.length}
-                    </Chip>
-                  </button>
-                  {!collapsed ? (
-                    <div className="divide-y">
-                      {group.models.map((model) => (
-                        <ModelRow
-                          key={model.id}
-                          provider={provider}
-                          model={model}
-                          onChange={onChange}
-                          onEdit={() => onOpenDrawer({ kind: "model", modelId: model.id })}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
+            groups.map((group) => (
+              <ModelGroup
+                key={group.key}
+                group={group}
+                collapsed={collapsedGroups.has(group.key)}
+                infoById={infoById}
+                onToggle={toggleGroup}
+                onChange={onChange}
+                onOpenDrawer={onOpenDrawer}
+              />
+            ))
           )}
         </div>
       </section>

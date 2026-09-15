@@ -30,7 +30,7 @@ import {
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
   Dialog,
@@ -122,24 +122,32 @@ function isCronReasoningLevel(value: string): value is CronReasoningLevel {
   return (CRON_REASONING_LEVELS as readonly string[]).includes(value);
 }
 
-function getCronReasoningLevels(
+/** 模型选择值 → 供应商对象与模型 id；渲染期的路由 memo 以这两者为依赖。 */
+function resolveCronModelTarget(
   selectedModelValue: string,
   providers: CustomProvider[],
-): CronReasoningLevel[] {
+): { provider: CustomProvider; modelId: string } | undefined {
   const selectedModel = parseModelValue(selectedModelValue);
   const provider = selectedModel
     ? providers.find((item) => item.id === selectedModel.customProviderId)
     : undefined;
-  if (!selectedModel || !provider) return [...CRON_REASONING_LEVELS];
+  return selectedModel && provider ? { provider, modelId: selectedModel.model } : undefined;
+}
 
-  const route = resolveProviderChatRoute(provider, selectedModel.model);
+function getCronReasoningLevels(
+  target: { provider: CustomProvider; modelId: string } | undefined,
+): CronReasoningLevel[] {
+  if (!target) return [...CRON_REASONING_LEVELS];
+  const { provider, modelId } = target;
+
+  const route = resolveProviderChatRoute(provider, modelId);
 
   const supportedLevels = getChatRuntimeReasoningLevelsForProvider({
     providerId: route.adapterProviderId,
     requestFormat: route.requestFormat,
-    modelId: selectedModel.model,
+    modelId,
   }).filter(isCronReasoningLevel);
-  const thinkingAlwaysOn = isThinkingAlwaysOnForModel(route.adapterProviderId, selectedModel.model);
+  const thinkingAlwaysOn = isThinkingAlwaysOnForModel(route.adapterProviderId, modelId);
 
   return thinkingAlwaysOn ? supportedLevels : ["off", ...supportedLevels];
 }
@@ -258,7 +266,19 @@ export function CronTaskModal({
         ]
       : modelOptions;
 
-  const cronReasoningLevels = getCronReasoningLevels(selectedModelValue, providers);
+  const cronModelTarget = resolveCronModelTarget(selectedModelValue, providers);
+  const cronModelProvider = cronModelTarget?.provider;
+  const cronModelId = cronModelTarget?.modelId;
+  // 路由解析按供应商对象与模型 id memo，不随表单其它字段的每次输入重跑。
+  const cronReasoningLevels = useMemo(
+    () =>
+      getCronReasoningLevels(
+        cronModelProvider && cronModelId
+          ? { provider: cronModelProvider, modelId: cronModelId }
+          : undefined,
+      ),
+    [cronModelProvider, cronModelId],
+  );
 
   const selectedWorkspaceOption = customWorkdir
     ? null
@@ -855,7 +875,9 @@ export function CronTaskModal({
                       onChange={(value) => {
                         setFormError(null);
                         setSelectedModelValue(value);
-                        const nextReasoningLevels = getCronReasoningLevels(value, providers);
+                        const nextReasoningLevels = getCronReasoningLevels(
+                          resolveCronModelTarget(value, providers),
+                        );
                         setReasoning((current) =>
                           coerceCronReasoningLevel(nextReasoningLevels, current),
                         );

@@ -116,10 +116,8 @@ test("createProviderRuntimeConfig carries the resolved route: protocol, dialect,
     { key: "X-Endpoint", value: "endpoint" },
     { key: "x-shared", value: "endpoint" },
   ]);
-  assert.deepEqual(runtime.endpointHeaders, [
-    { key: "X-Endpoint", value: "endpoint" },
-    { key: "x-shared", value: "endpoint" },
-  ]);
+  // 端点头只以合并结果存在：运行时没有任何读者，不再单独落一份。
+  assert.equal("endpointHeaders" in runtime, false);
   assert.deepEqual(runtime.quirks, {
     supportsReasoningEffort: false,
     supportsUsageInStreaming: false,
@@ -147,7 +145,6 @@ test("createProviderRuntimeConfig honours failover overrides for credential and 
   assert.equal(byProtocol.protocol, "openai-responses");
   // Responses 没有显式端点：退回主连接，端点头 / quirks / auth 不再带入。
   assert.equal(byProtocol.baseUrl, "https://relay.example/v1");
-  assert.equal(byProtocol.endpointHeaders, undefined);
   assert.equal(byProtocol.quirks, undefined);
   assert.equal(byProtocol.authOverride, undefined);
   assert.deepEqual(byProtocol.customHeaders, [
@@ -377,8 +374,11 @@ test("model factory maps the dialect onto Model.provider so pi-ai detectCompat a
   assert.equal(xai.thinkingLevelMap?.minimal, "low");
 
   // generic / openai 方言在非官方端点上仍保留 pi-ai 隔着反代看不到的中转默认。
+  // generic 的 Model.provider 必须仍是 "openai"：它同时是历史消息的身份键
+  // （pi-ai transformMessages 按 provider 判同模型，异模型丢签名思考块），既有
+  // OpenAI 兼容实例的会话都以 "openai" 落盘；detectCompat 对 "custom" 无额外分支。
   const generic = createModelFromRoute({ ...base, protocol: "openai-completions", dialect: "generic" });
-  assert.equal(generic.provider, "custom");
+  assert.equal(generic.provider, "openai");
   assert.deepEqual(generic.compat, {
     supportsStore: false,
     supportsDeveloperRole: false,
@@ -408,6 +408,136 @@ test("model factory maps the dialect onto Model.provider so pi-ai detectCompat a
   assert.equal(xaiResponses.api, "openai-responses");
   assert.equal(xaiResponses.provider, "xai");
   assert.deepEqual(xaiResponses.compat, { supportsDeveloperRole: false });
+});
+
+test("dialect → Model.provider table: generic shares openai's identity, xai / deepseek keep their own", () => {
+  const base = {
+    modelId: "some-model",
+    baseUrl: "http://127.0.0.1:18080/proxy/codex/v1",
+    upstreamBaseUrl: "https://relay.example/v1",
+  };
+  const providerOf = (dialect, protocol = "openai-completions") =>
+    createModelFromRoute({ ...base, protocol, dialect }).provider;
+  assert.equal(providerOf("generic"), "openai");
+  assert.equal(providerOf("openai"), "openai");
+  assert.equal(providerOf("xai"), "xai");
+  assert.equal(providerOf("deepseek"), "deepseek");
+  assert.equal(providerOf("generic", "openai-responses"), "openai");
+  assert.equal(providerOf("xai", "openai-responses"), "xai");
+  // 历史会话身份：旧存档里 OpenAI 兼容实例的 assistant.provider 都是 "openai"，
+  // 升级后 generic 方言构造的模型必须与之相等，否则第一轮就被判为换模型。
+  const legacyAssistantProvider = "openai";
+  assert.equal(providerOf("generic"), legacyAssistantProvider);
+});
+
+test("legacy createModelFromConfig infers known-gateway quirks from the upstream address, explicit quirks override", () => {
+  const proxyBaseUrl = "http://127.0.0.1:18080/proxy/codex/v1";
+  // z.ai / bigmodel：思考参数写法、max_tokens 字段、不发 reasoning_effort / store。
+  const zai = createModelFromConfig(
+    "codex",
+    "glm-5",
+    proxyBaseUrl,
+    "openai-completions",
+    undefined,
+    "https://api.z.ai/api/paas/v4",
+  );
+  assert.equal(zai.api, "openai-completions");
+  assert.deepEqual(zai.compat, {
+    supportsStore: false,
+    supportsDeveloperRole: false,
+    supportsFinishReason: false,
+    thinkingFormat: "zai",
+    supportsReasoningEffort: false,
+    maxTokensField: "max_tokens",
+  });
+  // chutes：只改 max_tokens 字段与 store。
+  const chutes = createModelFromConfig(
+    "codex",
+    "deepseek-ai/DeepSeek-V3",
+    proxyBaseUrl,
+    "openai-completions",
+    undefined,
+    "https://llm.chutes.ai/v1",
+  );
+  assert.equal(chutes.compat.maxTokensField, "max_tokens");
+  assert.equal(chutes.compat.supportsStore, false);
+  assert.equal(chutes.compat.thinkingFormat, undefined);
+  // 无 upstream 时按 baseUrl 本身推导（旧调用方只传一个地址）。
+  const direct = createModelFromConfig(
+    "codex",
+    "glm-5",
+    "https://open.bigmodel.cn/api/paas/v4",
+    "openai-completions",
+  );
+  assert.equal(direct.compat.thinkingFormat, "zai");
+  // 推导只对 Completions 生效：Responses 与普通中转不带任何推导键。
+  const responses = createModelFromConfig(
+    "codex",
+    "glm-5",
+    proxyBaseUrl,
+    "openai-responses",
+    undefined,
+    "https://api.z.ai/api/paas/v4",
+  );
+  assert.equal(responses.compat.thinkingFormat, undefined);
+  assert.equal(responses.compat.maxTokensField, undefined);
+  const relay = createModelFromConfig(
+    "codex",
+    "gpt-5.2",
+    proxyBaseUrl,
+    "openai-completions",
+    undefined,
+    "https://relay.example.com/v1",
+  );
+  assert.deepEqual(relay.compat, {
+    supportsStore: false,
+    supportsDeveloperRole: false,
+    supportsFinishReason: false,
+  });
+  // 显式 quirks 覆盖推导值（与 resolveProviderChatRoute 的合并顺序一致）。
+  const overridden = createModelFromConfig(
+    "codex",
+    "glm-5",
+    proxyBaseUrl,
+    "openai-completions",
+    undefined,
+    "https://api.z.ai/api/paas/v4",
+    { maxTokensField: "max_completion_tokens", supportsUsageInStreaming: false },
+  );
+  assert.equal(overridden.compat.maxTokensField, "max_completion_tokens");
+  assert.equal(overridden.compat.thinkingFormat, "zai");
+  assert.equal(overridden.compat.supportsUsageInStreaming, false);
+});
+
+test("createModelFromRuntime's legacy branch (no route fields) also picks up inferred quirks", () => {
+  const legacyZai = createModelFromRuntime(
+    "codex",
+    {
+      baseUrl: "https://api.z.ai/api/paas/v4",
+      apiKey: "sk",
+      requestFormat: "openai-completions",
+    },
+    "glm-5",
+    "http://127.0.0.1:18080/proxy/codex/v1",
+  );
+  assert.equal(legacyZai.api, "openai-completions");
+  assert.equal(legacyZai.provider, "openai");
+  assert.equal(legacyZai.compat.thinkingFormat, "zai");
+  assert.equal(legacyZai.compat.maxTokensField, "max_tokens");
+  // 手写 runtime 上显式声明的 quirks 依然覆盖推导。
+  const legacyOverride = createModelFromRuntime(
+    "codex",
+    {
+      baseUrl: "https://llm.chutes.ai/v1",
+      apiKey: "sk",
+      requestFormat: "openai-completions",
+      quirks: { maxTokensField: "max_completion_tokens" },
+    },
+    "some-model",
+    "http://127.0.0.1:18080/proxy/codex/v1",
+  );
+  assert.equal(legacyOverride.compat.maxTokensField, "max_completion_tokens");
+  assert.equal(legacyOverride.compat.supportsStore, false);
 });
 
 test("endpoint quirks map onto same-named compat keys on top of the defaults", () => {

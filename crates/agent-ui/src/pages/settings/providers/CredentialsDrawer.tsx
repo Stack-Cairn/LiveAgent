@@ -5,6 +5,7 @@
 import type { CustomProvider, ProviderCredential } from "@liveagent/app/lib/settings";
 import { ArrowUp, ChevronDown, Plus, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
   Select,
@@ -39,21 +40,58 @@ export function CredentialsDrawer(props: {
 }) {
   const { provider, onChange, isGatewayWebui, onClose } = props;
   const { t } = useLocale();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const credentials = providerCredentials(provider);
   const primary = credentials[0];
   const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(() => new Set());
-  const [refreshFailed, setRefreshFailed] = useState<ReadonlySet<string>>(() => new Set());
+  const [refreshFailed, setRefreshFailed] = useState<ReadonlyMap<string, string>>(() => new Map());
 
   function update(mutate: (list: ProviderCredential[]) => ProviderCredential[]) {
     onChange((current) => setCredentials(current, mutate(providerCredentials(current))));
   }
 
-  function patch(id: string, patchValue: Partial<ProviderCredential>) {
+  /** 函数式补丁：读取写入时刻的当前值，异步探测回来后不会覆盖期间的改动。 */
+  function patch(
+    id: string,
+    patchValue:
+      | Partial<ProviderCredential>
+      | ((current: ProviderCredential) => Partial<ProviderCredential>),
+  ) {
     update((list) =>
       list.map((credential) =>
-        credential.id === id ? { ...credential, ...patchValue } : credential,
+        credential.id === id
+          ? {
+              ...credential,
+              ...(typeof patchValue === "function" ? patchValue(credential) : patchValue),
+            }
+          : credential,
       ),
     );
+  }
+
+  function credentialDisplayName(credential: ProviderCredential, index: number) {
+    return (
+      credential.label ||
+      (index === 0
+        ? t("settings.providerCredentialPrimary")
+        : `${t("settings.providerCredentialBackup")} ${index}`)
+    );
+  }
+
+  async function removeCredential(credential: ProviderCredential, index: number) {
+    const confirmed = await confirm({
+      title: t("settings.providerCredentialRemove"),
+      description: t("settings.providerCredentialRemoveConfirm").replace(
+        "{label}",
+        credentialDisplayName(credential, index),
+      ),
+      detail: t("settings.providerCredentialRemoveConfirmDesc"),
+      confirmLabel: t("settings.providerCredentialRemove"),
+      cancelLabel: t("settings.cancel"),
+      preferCancel: true,
+    });
+    if (!confirmed) return;
+    update((list) => list.filter((item) => item.id !== credential.id));
   }
 
   function move(index: number, delta: number) {
@@ -81,26 +119,31 @@ export function CredentialsDrawer(props: {
       });
       const seen = new Set<string>();
       let ok = false;
+      let reason = "";
       for (const entry of result.credentials) {
         for (const endpoint of entry.endpoints) {
-          if (endpoint.status !== "ok") continue;
+          if (endpoint.status !== "ok") {
+            reason ||= endpoint.error ?? "";
+            continue;
+          }
           ok = true;
           for (const model of endpoint.models) seen.add(model.id);
         }
       }
       if (!ok) {
-        setRefreshFailed((previous) => new Set(previous).add(credential.id));
+        setRefreshFailed((previous) => new Map(previous).set(credential.id, reason));
         return;
       }
       setRefreshFailed((previous) => {
-        const next = new Set(previous);
+        const next = new Map(previous);
         next.delete(credential.id);
         return next;
       });
-      patch(credential.id, {
-        modelScope: credential.modelScope ?? { mode: "auto" },
+      // 探测期间用户可能改了范围：按写入时刻的值补丁，而不是闭包里过期的 credential。
+      patch(credential.id, (current) => ({
+        modelScope: current.modelScope ?? { mode: "auto" },
         lastModels: { at: result.at, models: [...seen].sort() },
-      });
+      }));
     } finally {
       setRefreshing((previous) => {
         const next = new Set(previous);
@@ -217,11 +260,9 @@ export function CredentialsDrawer(props: {
                       size="icon"
                       className="h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       disabled={credentials.length === 1}
-                      onClick={() =>
-                        update((list) => list.filter((item) => item.id !== credential.id))
-                      }
+                      onClick={() => void removeCredential(credential, index)}
                       title={t("settings.providerCredentialRemove")}
-                      aria-label={t("settings.providerCredentialRemove")}
+                      aria-label={`${t("settings.providerCredentialRemove")} ${credentialDisplayName(credential, index)}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -297,8 +338,12 @@ export function CredentialsDrawer(props: {
                                 )
                               : t("settings.providerCredentialNotFetched")}
                           </span>
-                          {diff ? (
-                            diff.more === 0 && diff.less === 0 ? (
+                          {index > 0 && credential.lastModels ? (
+                            diff === null ? (
+                              <Chip tone="default">
+                                {t("settings.providerCredentialPrimaryNotFetched")}
+                              </Chip>
+                            ) : diff.more === 0 && diff.less === 0 ? (
                               <Chip tone="ok">{t("settings.providerCredentialSameAsPrimary")}</Chip>
                             ) : (
                               <Chip tone="warn">
@@ -309,7 +354,9 @@ export function CredentialsDrawer(props: {
                             )
                           ) : null}
                           {refreshFailed.has(credential.id) ? (
-                            <Chip tone="bad">{t("settings.providerCredentialRefreshFailed")}</Chip>
+                            <Chip tone="bad" title={refreshFailed.get(credential.id) || undefined}>
+                              {t("settings.providerCredentialRefreshFailed")}
+                            </Chip>
                           ) : null}
                         </div>
                       </div>
@@ -383,6 +430,7 @@ export function CredentialsDrawer(props: {
             </p>
           </div>
         </div>
+        {confirmDialog}
       </SheetContent>
     </Sheet>
   );

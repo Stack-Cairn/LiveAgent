@@ -15,6 +15,7 @@ import {
   presetForProvider,
   providerDefaultProtocol,
   providerEnabledProtocols,
+  providerKeyReady,
 } from "./providerSettingsModel";
 
 type CatalogRow =
@@ -135,6 +136,13 @@ export function ProviderCatalogList(props: {
                       .filter(Boolean)
                       .join(" · ");
               const enabled = row.kind === "provider" && row.provider.enabled !== false;
+              // 绿点 = 已启用且已配置 Key；空心点 = 已启用但没有 Key；灰点 = 已停用。
+              const keyReady = row.kind === "provider" && providerKeyReady(row.provider);
+              const statusLabel = !enabled
+                ? t("settings.providerDisabled")
+                : keyReady
+                  ? t("settings.providerEnabled")
+                  : t("settings.providerEnabledNoKey");
               return (
                 <li key={row.kind === "provider" ? `p:${row.provider.id}` : `s:${row.preset.id}`}>
                   <button
@@ -165,15 +173,15 @@ export function ProviderCatalogList(props: {
                     {row.kind === "provider" ? (
                       <span
                         role="img"
-                        aria-label={
-                          enabled ? t("settings.providerEnabled") : t("settings.providerDisabled")
-                        }
-                        title={
-                          enabled ? t("settings.providerEnabled") : t("settings.providerDisabled")
-                        }
+                        aria-label={statusLabel}
+                        title={statusLabel}
                         className={cn(
                           "h-2 w-2 shrink-0 rounded-full",
-                          enabled ? "bg-emerald-500" : "bg-muted-foreground/30",
+                          !enabled
+                            ? "bg-muted-foreground/30"
+                            : keyReady
+                              ? "bg-emerald-500"
+                              : "border border-amber-500 bg-transparent",
                         )}
                       />
                     ) : null}

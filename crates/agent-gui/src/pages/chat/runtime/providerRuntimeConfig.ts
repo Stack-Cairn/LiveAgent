@@ -1,5 +1,6 @@
 import { createProviderRuntimeConfig } from "../../../lib/providers/runtime/providerRuntimeConfig";
 import type { ProviderRuntimeConfig } from "../../../lib/providers/runtime/types";
+import { resolveRuntimeWireRoute } from "../../../lib/providers/runtime/wireRoute";
 import {
   type AppSettings,
   type ChatRuntimeControls,
@@ -8,7 +9,6 @@ import {
   DEFAULT_PROVIDER_FAILOVER_SETTINGS,
   getProviderCredentials,
   getProviderEnabledProtocols,
-  LEGACY_FAILOVER_TYPE_FAMILY,
   PROVIDER_CHAT_PROTOCOL_LABELS,
   PROVIDER_PROTOCOL_FAMILY,
   type ProviderChatProtocol,
@@ -17,7 +17,7 @@ import {
   resolveProviderEndpoint,
   type SelectedModel,
 } from "../../../lib/settings";
-import type { EffectiveChatModelSelection } from "./modelSelection";
+import { type EffectiveChatModelSelection, isProviderModelAvailable } from "./modelSelection";
 
 export function resolveMemorySummaryModelSelection(
   settings: AppSettings,
@@ -30,7 +30,8 @@ export function resolveMemorySummaryModelSelection(
   const provider = settings.customProviders.find(
     (item) => item.id === summaryModel.customProviderId,
   );
-  if (!provider?.activeModels.includes(summaryModel.model)) {
+  // 停用供应商与未启用模型同判：失效即走调用方既有回退（此处为 null）。
+  if (!provider || !isProviderModelAvailable(provider, summaryModel.model)) {
     return null;
   }
 
@@ -52,7 +53,7 @@ export function resolveConversationTitleModelSelection(
   }
 
   const provider = settings.customProviders.find((item) => item.id === titleModel.customProviderId);
-  if (!provider?.activeModels.includes(titleModel.model)) {
+  if (!provider || !isProviderModelAvailable(provider, titleModel.model)) {
     return fallback;
   }
 
@@ -78,7 +79,7 @@ export function resolveCommitMessageModelSelection(
   const provider = settings.customProviders.find(
     (item) => item.id === commitModel.customProviderId,
   );
-  if (!provider?.activeModels.includes(commitModel.model)) {
+  if (!provider || !isProviderModelAvailable(provider, commitModel.model)) {
     return null;
   }
 
@@ -145,17 +146,6 @@ export function failoverTargetLabel(providerName: string, model: string) {
   return `${providerName} · ${model}`;
 }
 
-function resolveFamily(
-  runtime: ProviderRuntimeConfig,
-  primary: EffectiveChatModelSelection,
-): ProviderProtocolFamily {
-  return (
-    runtime.family ??
-    PROVIDER_PROTOCOL_FAMILY[runtime.protocol ?? runtime.chatProtocol] ??
-    LEGACY_FAILOVER_TYPE_FAMILY[primary.providerId]
-  );
-}
-
 /**
  * 端点层候选：模型 chatProtocols 里首项之后的同家族已启用渠道；未声明时取供应商
  * 已启用的同家族其他渠道。当前路由所走的接口不重复列入。
@@ -208,10 +198,18 @@ export function buildModelFailoverPlan(
     primary.model,
     controlsInput,
   );
-  const family = resolveFamily(primaryRuntime, primary);
+  // 家族与接口一律读路由视图（resolveRuntimeWireRoute）：手写 runtime 的回退链
+  // （requestFormat → adapterProviderId 旧推导）只在那一处维护。
+  const primaryWire = resolveRuntimeWireRoute(primary.providerId, primaryRuntime);
+  const family = primaryWire.family;
   const failover = settings.modelFailover?.[family] ?? DEFAULT_PROVIDER_FAILOVER_SETTINGS;
   const fallbacks: ModelFailoverPlan["fallbacks"] = [];
   const seen = new Set<string>();
+  const candidateIdentity = (
+    provider: CustomProvider,
+    runtime: ProviderRuntimeConfig,
+    protocol: ProviderChatProtocol,
+  ) => `${provider.id}::${runtime.credentialId ?? ""}::${protocol}`;
   const pushFallback = (
     provider: CustomProvider,
     runtime: ProviderRuntimeConfig,
@@ -219,9 +217,10 @@ export function buildModelFailoverPlan(
     labelSuffix?: string,
   ) => {
     if (!runtime.baseUrl.trim() || !runtime.apiKey.trim()) return;
+    const wire = resolveRuntimeWireRoute(provider.type, runtime);
     // 解析后仍须同家族：端点 / 队列条目可能指向别的接口家族。
-    if (resolveFamily(runtime, primary) !== family) return;
-    const identity = `${provider.id}::${runtime.credentialId ?? ""}::${runtime.protocol ?? ""}`;
+    if (wire.family !== family) return;
+    const identity = candidateIdentity(provider, runtime, wire.protocol);
     if (seen.has(identity)) return;
     seen.add(identity);
     fallbacks.push({
@@ -233,9 +232,7 @@ export function buildModelFailoverPlan(
       layer,
     });
   };
-  seen.add(
-    `${primary.provider.id}::${primaryRuntime.credentialId ?? ""}::${primaryRuntime.protocol ?? ""}`,
-  );
+  seen.add(candidateIdentity(primary.provider, primaryRuntime, primaryWire.protocol));
 
   // 1. 凭据层：按凭据列表顺序，跳过当前 Key、停用的 Key 与范围不含该模型的 Key。
   getProviderCredentials(primary.provider).forEach((credential, index) => {
@@ -252,12 +249,11 @@ export function buildModelFailoverPlan(
   });
 
   // 2. 端点层：同家族其它已启用渠道。
-  const activeProtocol = primaryRuntime.protocol ?? primaryRuntime.chatProtocol;
   for (const protocol of resolveEndpointLayerProtocols(
     primary.provider,
     primary.model,
     family,
-    activeProtocol,
+    primaryWire.protocol,
   )) {
     pushFallback(
       primary.provider,

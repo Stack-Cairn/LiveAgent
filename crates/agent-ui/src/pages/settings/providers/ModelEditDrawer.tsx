@@ -1,15 +1,16 @@
 // 抽屉三"编辑模型"（设计文档 6 / 7）：ID、远端 ID、显示名、分组、能力芯片三态、
 // 输入模态、接口多选（只列已启用渠道，首项路由）、方言、凭据、限额、缓存提示、
-// 思考档位（目录只读）+ 默认档；底部展示 resolveProviderChatRoute 的解析结果。
-// 每个覆盖项显示来源（自动 / 用户）与还原。
+// 思考档位（目录只读）+ 默认档；底部展示 resolveProviderChatRoute 的解析结果与
+// 三层故障转移候选（设计文档 6.4）。每个覆盖项显示来源（自动 / 用户）与还原。
 
 import {
+  type AppSettings,
   type CapabilityState,
   type ChatCapabilityName,
   type CustomProvider,
   getProviderModelDefaults,
   PROMPT_CACHE_HINT_MODES,
-  PROVIDER_WIRE_DIALECT_LABELS,
+  PROVIDER_PROTOCOL_FAMILY_LABELS,
   type PromptCacheHintMode,
   type ProviderChatProtocol,
   type ProviderModelConfig,
@@ -34,6 +35,7 @@ import {
   resolveModelThinking,
   THINKING_LEVEL_LADDER,
 } from "@liveagent/ui/lib/models/modelThinking";
+import { mergeCustomHeaders } from "@liveagent/ui/lib/providers/customHeaders";
 import {
   buildProtocolAuthHeaders,
   PROVIDER_PROTOCOL_DIALECTS,
@@ -47,9 +49,17 @@ import {
 } from "@liveagent/ui/pages/settings/providerUtils";
 import { type ReactNode, useMemo } from "react";
 import { DrawerGroupLabel, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
-import { Chip, ChipButton, CommittedInput, protocolLabel, SourceTag } from "./providerChips";
+import {
+  Chip,
+  ChipButton,
+  CommittedInput,
+  dialectLabel,
+  protocolLabel,
+  SourceTag,
+} from "./providerChips";
 import {
   credentialsCoveringModel,
+  modelFailoverCandidates,
   modelGroupIsUser,
   modelGroupKey,
   providerCredentials,
@@ -87,17 +97,22 @@ function Field(props: { label: string; source?: ReactNode; children: ReactNode }
 }
 
 export function ModelEditDrawer(props: {
+  settings: AppSettings;
   provider: CustomProvider;
   modelId: string;
   onChange: (updater: (provider: CustomProvider) => CustomProvider) => void;
   onClose: () => void;
 }) {
-  const { provider, modelId, onChange, onClose } = props;
+  const { settings, provider, modelId, onChange, onClose } = props;
   const { t } = useLocale();
   const model = provider.models.find((item) => item.id === modelId);
   const route = useMemo(
     () => (model ? resolveProviderChatRoute(provider, modelId) : undefined),
     [provider, modelId, model],
+  );
+  const failover = useMemo(
+    () => (route ? modelFailoverCandidates(settings, provider, modelId, route) : undefined),
+    [settings, provider, modelId, route],
   );
   const enabledProtocols = providerEnabledProtocols(provider);
   const credentials = providerCredentials(provider);
@@ -140,11 +155,14 @@ export function ModelEditDrawer(props: {
     ...thinking.levels,
   ];
   const credential = credentials.find((item) => item.id === route.credentialId);
-  const authHeaders = buildProtocolAuthHeaders(route.protocol, "••••••", route.auth);
-  const finalHeaders = [
-    ...Object.entries(authHeaders).map(([key, value]) => ({ key, value })),
-    ...route.headers,
-  ];
+  // 与运行时同一份合并规则：鉴权头打底，用户头（供应商级 + 端点级，已按大小写去重）
+  // 覆盖；键为空 / 不合法 / 保留键的行不进入预览。
+  const finalHeaders = Object.entries(
+    mergeCustomHeaders(
+      buildProtocolAuthHeaders(route.protocol, "••••••", route.auth),
+      route.headers,
+    ),
+  );
 
   function capabilityDefault(name: ChatCapabilityName): CapabilityState {
     if (name === "reasoning") return thinking.reasoning ? "supported" : "unsupported";
@@ -325,7 +343,9 @@ export function ModelEditDrawer(props: {
                           ? t("settings.providerSource.user")
                           : effective === "unknown"
                             ? t("settings.modelCapabilityUnknown")
-                            : t("settings.providerSource.catalog")
+                            : name === "reasoning" && !thinking.fromCatalog
+                              ? t("settings.providerSource.heuristic")
+                              : t("settings.providerSource.catalog")
                       }
                     >
                       {t(`settings.modelCapability.${name}`)}
@@ -438,7 +458,7 @@ export function ModelEditDrawer(props: {
                           setProtocols(protocolList.filter((item) => item !== protocol))
                         }
                         title={t("settings.delete")}
-                        aria-label={t("settings.delete")}
+                        aria-label={`${t("settings.delete")} ${protocolLabel(protocol)}`}
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -485,10 +505,10 @@ export function ModelEditDrawer(props: {
                     <SelectTrigger className="h-8 text-xs shadow-none">
                       <SelectValue>
                         {model.dialect
-                          ? PROVIDER_WIRE_DIALECT_LABELS[model.dialect]
+                          ? dialectLabel(t, model.dialect)
                           : t("settings.providerDialectInherit").replace(
                               "{dialect}",
-                              PROVIDER_WIRE_DIALECT_LABELS[inheritedDialect],
+                              dialectLabel(t, inheritedDialect),
                             )}
                       </SelectValue>
                     </SelectTrigger>
@@ -496,12 +516,12 @@ export function ModelEditDrawer(props: {
                       <SelectItem value="inherit">
                         {t("settings.providerDialectInherit").replace(
                           "{dialect}",
-                          PROVIDER_WIRE_DIALECT_LABELS[inheritedDialect],
+                          dialectLabel(t, inheritedDialect),
                         )}
                       </SelectItem>
                       {PROVIDER_PROTOCOL_DIALECTS[route.protocol].map((dialect) => (
                         <SelectItem key={dialect} value={dialect}>
-                          {PROVIDER_WIRE_DIALECT_LABELS[dialect]}
+                          {dialectLabel(t, dialect)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -573,6 +593,7 @@ export function ModelEditDrawer(props: {
                       ...current,
                       contextWindow: defaults.contextWindow,
                       maxOutputToken: defaults.maxOutputToken,
+                      maxInputTokens: undefined,
                       limitsSource: defaults.source,
                     }))
                   }
@@ -606,7 +627,11 @@ export function ModelEditDrawer(props: {
                     onCommit={(value) => {
                       const parsed = value.trim() ? parsePositiveInteger(value) : undefined;
                       if (parsed === null) return;
-                      patch((current) => ({ ...current, maxInputTokens: parsed }));
+                      patch((current) => ({
+                        ...current,
+                        maxInputTokens: parsed,
+                        limitsSource: "user",
+                      }));
                     }}
                   />
                 </Field>
@@ -768,7 +793,12 @@ export function ModelEditDrawer(props: {
                   </span>
                 </span>
                 <span className="text-muted-foreground">{t("settings.providerDialect")}</span>
-                <span className="font-mono">{route.dialect}</span>
+                <span className="flex flex-wrap items-center gap-1.5 font-mono">
+                  {route.dialect}
+                  <span className="font-sans text-[10.5px] text-muted-foreground">
+                    {dialectLabel(t, route.dialect)}
+                  </span>
+                </span>
                 <span className="text-muted-foreground">{t("settings.baseUrl")}</span>
                 <span className="break-all font-mono">{route.baseUrl || "—"}</span>
                 <span className="text-muted-foreground">{t("settings.modelWireId")}</span>
@@ -788,14 +818,83 @@ export function ModelEditDrawer(props: {
                 </span>
                 <span className="text-muted-foreground">{t("settings.modelRouteHeaders")}</span>
                 <span className="space-y-0.5 font-mono">
-                  {finalHeaders.map((header) => (
-                    <span key={header.key} className="block break-all">
-                      {header.key}: {header.value}
+                  {finalHeaders.map(([key, value]) => (
+                    <span key={key} className="block break-all">
+                      {key}: {value}
                     </span>
                   ))}
                 </span>
               </div>
             </section>
+
+            {failover ? (
+              <section className="space-y-2">
+                <DrawerGroupLabel
+                  label={t("settings.modelFailoverCandidates")}
+                  hint={t("settings.modelFailoverCandidatesHint")}
+                />
+                <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border bg-muted/20 px-3 py-2.5 text-xs">
+                  <span className="text-muted-foreground">
+                    {t("settings.modelFailoverLayer.credential")}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {failover.credentials.length > 0 ? (
+                      failover.credentials.map((item) => (
+                        <Chip key={item.id}>
+                          {item.label ||
+                            (credentials.indexOf(item) === 0
+                              ? t("settings.providerCredentialPrimary")
+                              : `${t("settings.providerCredentialBackup")} ${credentials.indexOf(item)}`)}
+                        </Chip>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground/70">
+                        {t("settings.modelFailoverNone")}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t("settings.modelFailoverLayer.endpoint")}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {failover.endpoints.length > 0 ? (
+                      failover.endpoints.map((protocol, index) => (
+                        <Chip key={protocol}>
+                          {index + 1} · {protocolLabel(protocol)}
+                        </Chip>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground/70">
+                        {t("settings.modelFailoverNone")}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t("settings.modelFailoverLayer.provider")}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {!failover.providerLayerEnabled ? (
+                      <span className="text-muted-foreground/70">
+                        {t("settings.modelFailoverProviderLayerOff").replace(
+                          "{family}",
+                          PROVIDER_PROTOCOL_FAMILY_LABELS[failover.family],
+                        )}
+                      </span>
+                    ) : failover.providers.length > 0 ? (
+                      failover.providers.map((item, index) => (
+                        <Chip key={item.id}>
+                          P{index + 1} · {item.name}
+                        </Chip>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground/70">
+                        {t("settings.modelFailoverNone")}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </section>
+            ) : null}
           </div>
         </div>
       </SheetContent>

@@ -627,7 +627,7 @@ P2 与 P3 的任务清单在各自阶段开始前补充。
 | 注册表与预设 | `crates/agent-ui/src/lib/providers/registry/`；预设生成层由 `scripts/generate-provider-presets.mjs` 从 models.dev 派生（17 家、774 个目录模型），覆盖层手工维护；`pnpm generate:provider-presets[:check]` |
 | 协议枚举 | 四类字面量；`deepseek-responses` 在加载时改写为 Responses + deepseek 方言；适配器注册表内部仍用 `deepseek-responses` 作为 DeepSeek Responses 适配器的 api id，这是实现细节，不出现在设置层 |
 | 路由 | `resolveProviderChatRoute` 输出接口来源、家族、方言、远端 ID、凭据与来源、合并头、quirks、鉴权覆盖；运行时 `createProviderRuntimeConfig` 一次填充 |
-| 请求装配 | 协议头档 + 方言头档 + 用户头查表；`Model.provider` 填方言（generic → "custom"），quirks 映射到 pi-ai compat；删除了与 `detectCompat` 重复的域名判断，z.ai / OpenRouter / 通义等由路由层 quirks 推导补回 |
+| 请求装配 | 协议头档 + 方言头档 + 用户头查表；`Model.provider` 填方言（generic → "openai"，与 pi-ai 的同模型判定和 `detectCompat` 行为一致），quirks 映射到 pi-ai compat；删除了与 `detectCompat` 重复的域名判断，z.ai / OpenRouter / 通义等由路由层 quirks 推导补回 |
 | 故障转移 | 设置键按三家族，旧五组合并；计划构造按凭据层 → 端点层 → 供应商层展开，共用 `maxSwitches`；熔断 key 为 `provider::credential::protocol::model` |
 | 多 Key | 归一化保证 `apiKey === credentials[0].apiKey`；Gateway 同步与 Web 存储脱敏覆盖每把 Key，`providerId::credentialId` 作为额外 Key 的更新键；Rust 公开快照同样脱敏并按凭据 id 回填旧值 |
 | 探测 | `pages/settings/providerProbe.ts`：按候选接口 × 启用 Key 拉模型列表，200 / 404 / 401 / 其他分类；自动配置产出端点、默认接口、模型（分组、限额、预设规则）、每把 Key 的 `lastModels` |
@@ -637,3 +637,17 @@ P2 与 P3 的任务清单在各自阶段开始前补充。
 | Cherry Studio 导入 | 映射到 `presetId` / `endpointConfigs` / `credentials`，行为不变 |
 | 旧实例的预设归属 | 只有 Base URL 命中预设声明的官方主机才映射到该预设，否则归为自定义渠道；挂着官方预设但地址不在官方主机内的实例同样降级。探测候选一律从实例自己的地址派生，保证中转 Key 不会发到官方地址 |
 | 实机验证 | 桌面端对一个真实中转执行"检测并配置"：四类接口探测、模型合并、采纳后端点与模型写入均通过 |
+
+## 附录 D：完整性审查与修复（2026-09-15）
+
+对附录 C 的实现做了一轮全量审查（逐行、删除行为、跨文件调用、复用、简化、效率、修复深度、约定八个角度）加桌面端走查，修复项按层归类：
+
+| 层 | 修复 |
+| --- | --- |
+| 设置层 | 隐式端点由主连接物化为唯一真相（`resolveProviderEndpoint` 对隐式接口也返回 `config`）；`providerFailoverFamilies` 按已启用接口计算，全关返回空；主机解析统一到 `registry/hosts.ts`（无 scheme、显式 443 端口均可归属预设）；预设按 id / 主机建索引；路由上下文一次构造；`credentialCoversModel` 的 auto 范围用集合查找；空地址默认端点被丢弃时切到第一个已启用端点；旧 5 组故障转移迁移改用只在旧键集合出现的类型判定；鉴权头改名且未给前缀时不带 Bearer；全部 Key 停用时不再用停用 Key 发请求 |
+| 探测 | 模型列表地址保留非 v1 版本段（`/api/paas/v4` 不再被改写，TS 与 Rust 同步）；严格模式下 200 但无模型数组归"未知"；既有端点永不因探测失败被停用或切走默认接口，只更新观测；探测候选只从实例自己的地址派生 |
+| 运行时 | `Model.provider` generic → "openai"；旧工厂签名也应用 quirks 推导；家族与协议一律经 `resolveRuntimeWireRoute` 取得；删除无读者的 `endpointHeaders`；路由解析在渲染期按 `[provider, modelId]` 记忆化；停用供应商不进入聊天、摘要、标题、提交信息的模型选择 |
+| 网关桥 | WebUI 复用落库 Key 探测时按 `credential_id` 选凭据（proto 新增字段）；草稿地址主机必须属于该供应商已保存的地址集合，否则拒绝；协议沿用请求值，回填按命中的端点而不是主地址 |
+| 界面 | 再加一个实例预填自定义实例的地址与方言；停用端点上的"设为默认"不可用；编辑模型抽屉显示三层故障转移候选；窄屏换行；quirks 只在 OpenAI 家族卡片显示；`{origin}` 模板按输入实时展开；未知原因直接显示；最终请求头预览复用运行时合并规则；限额与推理来源徽标正确；管理密钥的差异只在两把 Key 都拉取过后显示，刷新不再覆盖探测期间的修改；取消探测仍写回观测；删除端点与 Key 需确认；添加渠道非自建必填 Key，非法请求头行可见；模型分组内拖拽排序写回 `modelOrder`；模型行记忆化；停用供应商显示提示条；清理无消费者的 i18n 键 |
+| 测试 | 新增/改写：注册表主机归属、隐式端点、故障转移家族与迁移、探测严格模式、网关桥凭据与主机、运行时方言映射与 quirks、辅助模型选择、WebUI 源码契约（改按三栏结构锁定） |
+

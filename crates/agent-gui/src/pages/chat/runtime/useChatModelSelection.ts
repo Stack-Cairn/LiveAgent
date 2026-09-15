@@ -92,10 +92,15 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     ? settings.customProviders.find((item) => item.id === activeSelectedModel.customProviderId)
     : undefined;
   const currentChatModelId = activeSelectedModel?.model;
-  const currentChatRoute =
-    currentChatProvider && currentChatModelId
-      ? resolveProviderChatRoute(currentChatProvider, currentChatModelId)
-      : undefined;
+  // 路由解析只在供应商对象或模型 id 变化时重算：它在每次渲染都跑会随流式
+  // 更新的高频重渲染放大（供应商对象随 settings 整体替换，身份即失效依据）。
+  const currentChatRoute = useMemo(
+    () =>
+      currentChatProvider && currentChatModelId
+        ? resolveProviderChatRoute(currentChatProvider, currentChatModelId)
+        : undefined,
+    [currentChatProvider, currentChatModelId],
+  );
 
   const handleSelectModel = useCallback(
     (selection: SelectedModel) => {

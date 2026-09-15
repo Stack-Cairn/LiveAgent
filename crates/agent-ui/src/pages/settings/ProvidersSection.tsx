@@ -27,6 +27,8 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   buildAutoConfiguration,
   buildEndpointCandidates,
+  type EndpointCandidate,
+  type ProviderProbeResult,
   probeProvider,
 } from "@liveagent/ui/pages/settings/providerProbe";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -60,6 +62,8 @@ import { RequestConfigDrawer } from "./providers/RequestConfigDrawer";
 type ProbeSession = {
   request: ProviderProbeRequest;
   onAccept: Parameters<typeof ProviderProbeDialog>[0]["onAccept"];
+  /** 取消时仍写回本次观测（观测不是配置） */
+  onDismiss?: Parameters<typeof ProviderProbeDialog>[0]["onDismiss"];
 };
 
 type Notice = { tone: "ok" | "bad"; text: string };
@@ -83,7 +87,11 @@ export function ProvidersSection(
   const [selection, setSelection] = useState<ProviderSelection>(() => defaultSelection(providers));
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [drawer, setDrawer] = useState<ProviderDrawerState>(null);
-  const [addChannel, setAddChannel] = useState<{ presetId?: string } | null>(null);
+  const [addChannel, setAddChannel] = useState<{
+    presetId?: string;
+    /** "再加一个实例"的来源实例：预填名称、类型、端点地址与方言 */
+    sourceProvider?: CustomProvider;
+  } | null>(null);
   const [customSettingsOpen, setCustomSettingsOpen] = useState(false);
   const [probeSession, setProbeSession] = useState<ProbeSession | null>(null);
   const [busy, setBusy] = useState<{ providerId: string; kind: "check" | "refresh" } | null>(null);
@@ -169,6 +177,24 @@ export function ProvidersSection(
     setNotice({ providerId, ...value });
   }
 
+  /** 探测对话框取消：只把已配置端点的 lastProbe 写回，不采纳端点 / 模型变更。 */
+  function recordProbeObservations(
+    providerId: string,
+    result: { probe: ProviderProbeResult; candidates: EndpointCandidate[] },
+  ) {
+    updateProvider(providerId, (current) => {
+      let next = current;
+      for (const candidate of result.candidates) {
+        next = recordEndpointProbe(
+          next,
+          candidate.protocol,
+          probeSummaryFor(result.probe, candidate.protocol),
+        );
+      }
+      return next;
+    });
+  }
+
   /** 未配置渠道的"检测并启用"：探测后创建实例。 */
   function setupPreset(presetId: string, input: { origin: string; apiKey: string }) {
     const preset = findProviderPreset(presetId);
@@ -235,6 +261,7 @@ export function ProvidersSection(
           applyProbeToProvider(current, { candidates: probed, probe, auto, mode: "configure" }),
         );
       },
+      onDismiss: (result) => recordProbeObservations(provider.id, result),
     });
   }
 
@@ -371,6 +398,7 @@ export function ProvidersSection(
           applyProbeToProvider(current, { candidates: probed, probe, auto, mode: "configure" }),
         );
       },
+      onDismiss: (result) => recordProbeObservations(provider.id, result),
     });
   }
 
@@ -451,7 +479,12 @@ export function ProvidersSection(
                 onProbeConfigure={() => probeConfigure(selectedProvider)}
                 onQuickCheck={() => void quickCheck(selectedProvider)}
                 onRefreshModels={() => void refreshModels(selectedProvider)}
-                onAddInstance={() => setAddChannel({ presetId: selectedProvider.presetId })}
+                onAddInstance={() =>
+                  setAddChannel({
+                    presetId: selectedProvider.presetId,
+                    sourceProvider: selectedProvider,
+                  })
+                }
                 onDelete={() => deleteProvider(selectedProvider.id)}
                 onBack={() => setMobileDetailOpen(false)}
                 busy={busy?.providerId === selectedProvider.id ? busy.kind : null}
@@ -493,6 +526,7 @@ export function ProvidersSection(
       ) : null}
       {selectedProvider && drawer?.kind === "model" ? (
         <ModelEditDrawer
+          settings={settings}
           provider={selectedProvider}
           modelId={drawer.modelId}
           onChange={updateSelectedProvider}
@@ -503,6 +537,7 @@ export function ProvidersSection(
         <AddChannelDialog
           providers={providers}
           initialPresetId={addChannel.presetId}
+          sourceProvider={addChannel.sourceProvider}
           onCreate={createFromDialog}
           onClose={() => setAddChannel(null)}
         />
@@ -511,6 +546,7 @@ export function ProvidersSection(
         <ProviderProbeDialog
           request={probeSession.request}
           onAccept={probeSession.onAccept}
+          onDismiss={probeSession.onDismiss}
           onClose={() => setProbeSession(null)}
         />
       ) : null}

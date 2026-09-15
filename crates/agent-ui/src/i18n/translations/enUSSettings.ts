@@ -500,14 +500,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.hideApiKey": "Hide API Key",
   "settings.showApiKey": "Show API Key",
   "settings.requestFormat": "Request Format",
-  "settings.providerDefaultChatProtocol": "Default chat protocol",
-  "settings.providerChatProtocolAuto": "Automatic ({protocol})",
-  "settings.providerDefaultChatProtocolHint":
-    "Models may override this route. Automatic keeps the existing provider type and request-format behavior.",
-  "settings.providerProtocolEndpoints": "Protocol endpoint overrides",
-  "settings.providerProtocolEndpointPlaceholder": "Leave blank to use the primary Base URL",
-  "settings.providerProtocolEndpointsHint":
-    "Only set a separate API root when a protocol needs one. The provider still owns the API key and custom headers.",
   "settings.reasoning": "Reasoning",
   "settings.reasoning.off": "Off",
   "settings.reasoning.minimal": "Minimal",
@@ -659,10 +651,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelInputModalitiesTextImage": "Text and images",
   "settings.modelInputModalitiesHint":
     "Uses the model name and built-in catalog by default. Override only when the provider capability differs.",
-  "settings.modelChatProtocol": "Chat protocol",
-  "settings.modelChatProtocolInherit": "Inherit provider ({protocol})",
-  "settings.modelChatProtocolHint":
-    "Override only when one provider serves different models over different protocols. Routing controls auth, payloads, and response parsing.",
   "settings.modelModalityImage": "Supports image input",
   "settings.modelModalityAudio": "Supports audio input",
   "settings.modelModalityVideo": "Supports video input",
@@ -1407,6 +1395,10 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelProbeHint":
     "Only the model-list endpoints are requested; nothing is billed. Everything is marked automatic afterwards and can be adjusted.",
   "settings.channelRequestPathHint": "The actual request path appears once you enter the API root",
+  "settings.channelTemplateNeedsOrigin": "Generated once the address is filled in",
+  "settings.customHeaderRowsIgnored":
+    "{count} row(s) not applied (rows with an empty or invalid key are not saved)",
+  "settings.channelApiKeyRequired": "Enter an API key (optional for “Self-hosted” local services)",
   "settings.channelRequestPathPreview": "Request path: ",
   "settings.channelSelectHint": "Select a channel on the left",
   "settings.channelSetupAddressAndKey": "Enter the address and API key",
@@ -1414,6 +1406,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelSetupKeyOnly": "Only an API key is needed",
   "settings.providerEnabled": "Enabled",
   "settings.providerDisabled": "Disabled",
+  "settings.providerEnabledNoKey": "Enabled, no key configured",
+  "settings.providerDisabledBanner": "Disabled: excluded from the model picker and failover.",
   "settings.providerApiAddress": "API address",
   "settings.providerAvailability": "Availability",
   "settings.providerMoreSettings": "More settings",
@@ -1429,7 +1423,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "No endpoint configured yet. Use “Probe and configure” or add one in request settings.",
   "settings.providerModelsRefreshed": "Model list refreshed: {total} total, {added} new",
   "settings.providerNativeWebSearchHint": "Let models use the provider's native web search.",
-  "settings.modelsEmptyHint": "No models yet. Fetch the model list or add one manually.",
+  "settings.modelsEmptyHint": "No models yet. Use “Refresh model list” or add one manually.",
   "settings.modelGroupOther": "Other",
   "settings.modelRouteAuto": "auto",
   "settings.modelNoEndpoint": "No endpoint available",
@@ -1477,6 +1471,11 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "The default endpoint cannot be disabled; switch the default first. Disabled endpoints take no part in routing, model discovery or failover.",
   "settings.providerEndpointDefault": "Default",
   "settings.providerEndpointSetDefault": "Set as default",
+  "settings.providerEndpointSetDefaultDisabled":
+    "This endpoint is disabled; clicking enables it and makes it the default",
+  "settings.providerEndpointEnabledAndDefault": "Enabled “{protocol}” and set it as default.",
+  "settings.providerEndpointRemoveConfirm":
+    "Remove the “{protocol}” endpoint? Its address, dialect, auth header, quirks and endpoint headers are deleted with it.",
   "settings.providerEndpointRetest": "Retest",
   "settings.providerEndpointRemove": "Remove endpoint",
   "settings.providerEndpointAdd": "Add endpoint",
@@ -1496,6 +1495,10 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerModelsUrlAuto": "Derived automatically when empty",
   "settings.providerDialect": "Dialect",
   "settings.providerDialectInherit": "Inherit ({dialect})",
+  "settings.providerDialectLabel.generic": "Generic",
+  "settings.providerDialectLabel.openai": "OpenAI official",
+  "settings.providerDialectLabel.xai": "xAI",
+  "settings.providerDialectLabel.deepseek": "DeepSeek",
   "settings.providerAuthHeader": "Auth header",
   "settings.providerQuirks": "Implementation quirks",
   "settings.providerQuirkCycleHint": "Click to cycle: auto → on → off",
@@ -1516,6 +1519,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerCredentialMoveUp": "Move up",
   "settings.providerCredentialMoveDown": "Move down",
   "settings.providerCredentialRemove": "Remove key",
+  "settings.providerCredentialRemoveConfirm": "Remove key “{label}”?",
+  "settings.providerCredentialRemoveConfirmDesc":
+    "Endpoints and models that pin it fall back to the default credential.",
   "settings.providerCredentialAdd": "Add backup key",
   "settings.providerCredentialScope": "Model scope",
   "settings.providerCredentialScope.auto": "Auto · models seen by this key",
@@ -1527,6 +1533,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerCredentialSeenModels": "{count} models seen",
   "settings.providerCredentialNotFetched": "Not fetched",
   "settings.providerCredentialSameAsPrimary": "Same as the default key",
+  "settings.providerCredentialPrimaryNotFetched": "Default key not fetched; nothing to compare",
   "settings.providerCredentialDiffFromPrimary": "vs default key: +{more} / −{less}",
   "settings.providerCredentialRefreshFailed": "Last refresh failed",
   "settings.providerCredentialsFooter":
@@ -1549,10 +1556,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelCapabilityUnknown": "unknown",
   "settings.modelCapability.reasoning": "Reasoning",
   "settings.modelCapability.tools": "Tools",
-  "settings.modelCapability.parallelTools": "Parallel tools",
   "settings.modelCapability.structuredOutput": "Structured output",
   "settings.modelCapability.nativeWebSearch": "Native search",
-  "settings.modelCapability.promptCaching": "Prompt caching",
   "settings.modelCapability.fileInput": "File input",
   "settings.modelCapability.imageUnderstanding": "Vision",
   "settings.modelInputModalitiesUnavailable":
@@ -1594,6 +1599,15 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelRouteResultHint": "Pure-function output; the runtime reads only this.",
   "settings.modelRouteProtocol": "Endpoint",
   "settings.modelRouteHeaders": "Final headers",
+  "settings.modelFailoverCandidates": "Failover candidates",
+  "settings.modelFailoverCandidatesHint":
+    "Tried in order — credential → endpoint → provider — sharing one switch budget; never crosses protocol families.",
+  "settings.modelFailoverLayer.credential": "Credential layer",
+  "settings.modelFailoverLayer.endpoint": "Endpoint layer",
+  "settings.modelFailoverLayer.provider": "Provider layer",
+  "settings.modelFailoverNone": "none",
+  "settings.modelFailoverProviderLayerOff":
+    "Provider-level failover for the {family} family is off",
   "settings.failoverFamilyTitle": "{family} family",
   "settings.failoverInQueue": "This provider is in the queue",
   "settings.failoverQueueFamilyHint":

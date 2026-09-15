@@ -83,6 +83,9 @@ const { streamAssistantMessage } = loader.loadModule(
 const { resetFailoverBreakers } = loader.loadModule(
   "src/lib/providers/runtime/providerFailover.ts",
 );
+const { selectedModelsMatch } = loader.loadModule(
+  "src/pages/chat/runtime/providerRuntimeConfig.ts",
+);
 
 const FAILOVER_CONFIG = { maxSwitches: 3, failureThreshold: 3, cooldownSeconds: 60 };
 
@@ -215,6 +218,122 @@ test("text mode fails over to the queued provider before content commits", async
   assert.equal(switched[0].target?.selectedModel.customProviderId, "p2");
   assert.equal(streamCalls.length, 2);
   assert.equal(streamCalls[1].model.baseUrl, "https://fallback.example");
+});
+
+// ---------------------------------------------------------------------------
+// 同供应商候选（凭据层 / 端点层）：selectedModel 与主选相同，只有 runtime 不同。
+// useSendChatTurn 的 onSwitched 用 selectedModelsMatch 守门，这样的切换不会改写
+// 会话选择；主选熔断打开时从备用候选起步，冷却后仍回到主选。
+// ---------------------------------------------------------------------------
+
+function makeSameProviderFailoverParams(overrides = {}) {
+  return makeFailoverParams({
+    fallbacks: [
+      {
+        // 凭据层候选：与主选同一 customProviderId / model，只是换了 Key。
+        selectedModel: { customProviderId: "p1", model: "claude-x" },
+        providerId: "claude_code",
+        model: "claude-x",
+        label: "P1 · claude-x · backup",
+        runtime: { ...makeRuntime("https://backup-key.example"), credentialId: "k2" },
+      },
+    ],
+    ...overrides,
+  });
+}
+
+test("a same-provider (credential-layer) winner reports the primary's selectedModel, so the conversation selection is a no-op", async () => {
+  streamImpl = (model) =>
+    model.baseUrl === "https://primary.example"
+      ? uncommittedErrorStream("401 unauthorized")
+      : successStream("backup-key-answer");
+
+  const switched = [];
+  const final = await streamAssistantMessage(
+    baseParams({
+      failover: makeSameProviderFailoverParams({
+        onSwitched: (event) => switched.push(event),
+      }),
+    }),
+  );
+
+  assert.equal(final.content[0].text, "backup-key-answer");
+  assert.equal(switched.length, 1);
+  assert.equal(switched[0].target?.runtime.credentialId, "k2");
+  // 与 useSendChatTurn 同一守门条件：目标 selectedModel 等于主选 → 不改写会话选择。
+  assert.equal(
+    selectedModelsMatch(
+      switched[0].target.selectedModel,
+      { customProviderId: "p1", model: "claude-x" },
+    ),
+    true,
+  );
+  assert.equal(streamCalls.length, 2);
+  assert.equal(streamCalls[1].model.baseUrl, "https://backup-key.example");
+});
+
+test("starting on the backup credential while the primary breaker is open still returns to the primary after cooldown", async () => {
+  const config = { maxSwitches: 3, failureThreshold: 2, cooldownSeconds: 0.2 };
+  let primaryHealthy = false;
+  streamImpl = (model) =>
+    model.baseUrl === "https://primary.example"
+      ? primaryHealthy
+        ? successStream("primary-answer")
+        : uncommittedErrorStream("503 service unavailable")
+      : successStream("backup-key-answer");
+
+  const runTurn = async () => {
+    const switched = [];
+    const failovers = [];
+    const callsBefore = streamCalls.length;
+    const final = await streamAssistantMessage(
+      baseParams({
+        failover: makeSameProviderFailoverParams({
+          config,
+          onSwitched: (event) => switched.push(event),
+          onFailover: (event) => failovers.push(event),
+        }),
+      }),
+    );
+    return {
+      text: final.content[0].text,
+      switched,
+      failovers,
+      baseUrls: streamCalls.slice(callsBefore).map((call) => call.model.baseUrl),
+    };
+  };
+
+  // 两轮失败把主选熔断打开（failureThreshold = 2）；每轮都真的尝试过主选。
+  for (let i = 0; i < 2; i++) {
+    const turn = await runTurn();
+    assert.equal(turn.text, "backup-key-answer");
+    assert.deepEqual(turn.baseUrls, ["https://primary.example", "https://backup-key.example"]);
+  }
+
+  // 熔断打开：本轮直接从备用凭据起步，主选根本不发请求；切换事件仍指向备用候选，
+  // 但其 selectedModel 与主选相同（会话选择不变）。
+  const skipped = await runTurn();
+  assert.equal(skipped.text, "backup-key-answer");
+  assert.deepEqual(skipped.baseUrls, ["https://backup-key.example"]);
+  assert.equal(skipped.failovers.length, 1);
+  assert.equal(skipped.failovers[0].errorMessage, "circuit breaker open");
+  assert.equal(skipped.switched.length, 1);
+  assert.equal(
+    selectedModelsMatch(
+      skipped.switched[0].target.selectedModel,
+      { customProviderId: "p1", model: "claude-x" },
+    ),
+    true,
+  );
+
+  // 冷却结束、主选恢复：新一轮从主选起步并直接成功，没有任何切换。
+  primaryHealthy = true;
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const recovered = await runTurn();
+  assert.equal(recovered.text, "primary-answer");
+  assert.deepEqual(recovered.baseUrls, ["https://primary.example"]);
+  assert.equal(recovered.failovers.length, 0);
+  assert.equal(recovered.switched.length, 0);
 });
 
 test("text mode surfaces errors after content committed without switching", async () => {

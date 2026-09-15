@@ -2,6 +2,7 @@
 // 探测与路由使用的查询函数（设计文档第 3 节）。
 
 import { type ModelFamily, resolveModelFamily, stripModelVendorPrefix } from "./families";
+import { endpointHostKey } from "./hosts";
 import {
   GENERATED_PRESETS,
   type GeneratedPreset,
@@ -110,9 +111,27 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = buildPresets();
 
 export const CUSTOM_PRESET_ID = "custom";
 
+const PRESET_BY_ID: ReadonlyMap<string, ProviderPreset> = new Map(
+  PROVIDER_PRESETS.map((preset) => [preset.id, preset]),
+);
+
+/** 预设声明的绝对地址主机集合（{origin} 模板不算）；按预设对象缓存。 */
+const PRESET_HOSTS_CACHE = new WeakMap<Pick<ProviderPreset, "endpoints">, readonly string[]>();
+
+/** 主机 → 预设（原生渠道优先；同一主机被多个预设声明时先到先得）。 */
+const PRESET_BY_HOST: ReadonlyMap<string, ProviderPreset> = (() => {
+  const byHost = new Map<string, ProviderPreset>();
+  const ordered = [...PROVIDER_PRESETS].sort((a, b) => Number(b.native) - Number(a.native));
+  for (const preset of ordered) {
+    for (const host of presetHosts(preset)) {
+      if (!byHost.has(host)) byHost.set(host, preset);
+    }
+  }
+  return byHost;
+})();
+
 export function findProviderPreset(id: string | undefined | null): ProviderPreset | undefined {
-  if (!id) return undefined;
-  return PROVIDER_PRESETS.find((preset) => preset.id === id);
+  return id ? PRESET_BY_ID.get(id) : undefined;
 }
 
 export function listProviderPresets(options?: {
@@ -136,24 +155,19 @@ export function presetIdForLegacyType(type: string): string {
   return LEGACY_TYPE_PRESET[type] ?? CUSTOM_PRESET_ID;
 }
 
-function hostOf(url: string | undefined): string {
-  if (!url) return "";
-  try {
-    return new URL(url.trim()).host.toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-/** 预设声明的绝对地址主机集合（{origin} 模板不算）。 */
-export function presetHosts(preset: Pick<ProviderPreset, "endpoints">): string[] {
+/** 预设声明的绝对地址主机集合（{origin} 模板不算），键与 endpointHostKey 一致。 */
+export function presetHosts(preset: Pick<ProviderPreset, "endpoints">): readonly string[] {
+  const cached = PRESET_HOSTS_CACHE.get(preset);
+  if (cached) return cached;
   const hosts = new Set<string>();
   for (const endpoint of Object.values(preset.endpoints)) {
     if (!endpoint || endpoint.baseUrl.includes("{origin}")) continue;
-    const host = hostOf(endpoint.baseUrl);
+    const host = endpointHostKey(endpoint.baseUrl);
     if (host) hosts.add(host);
   }
-  return [...hosts];
+  const out = Object.freeze([...hosts]);
+  PRESET_HOSTS_CACHE.set(preset, out);
+  return out;
 }
 
 /** 地址主机是否属于该预设声明的官方主机。没有绝对主机的预设（网关模板、自定义）返回 true。 */
@@ -164,16 +178,14 @@ export function presetMatchesBaseUrl(
   if (!preset) return false;
   const hosts = presetHosts(preset);
   if (hosts.length === 0) return true;
-  const host = hostOf(baseUrl);
+  const host = endpointHostKey(baseUrl);
   return host.length > 0 && hosts.includes(host);
 }
 
 /** 按地址主机反查预设（原生渠道优先）。 */
 export function findPresetForBaseUrl(baseUrl: string | undefined): ProviderPreset | undefined {
-  const host = hostOf(baseUrl);
-  if (!host) return undefined;
-  const ordered = [...PROVIDER_PRESETS].sort((a, b) => Number(b.native) - Number(a.native));
-  return ordered.find((preset) => presetHosts(preset).includes(host));
+  const host = endpointHostKey(baseUrl);
+  return host ? PRESET_BY_HOST.get(host) : undefined;
 }
 
 /**

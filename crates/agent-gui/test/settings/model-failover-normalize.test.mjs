@@ -135,6 +135,71 @@ test("queue entries are validated against same-family providers, deduped, and ca
   assert.deepEqual(normalized.openai, DEFAULT_VENDOR_FAILOVER);
 });
 
+test("failover families follow enabled endpoints only", () => {
+  // 家族表只有一份：设置层的旧名是同一个数组。
+  assert.equal(settings.PROVIDER_FAILOVER_FAMILIES, settings.PROVIDER_PROTOCOL_FAMILIES);
+
+  // 无显式端点：默认 / 旧推导接口视为启用。
+  assert.deepEqual(settings.providerFailoverFamilies({ type: "claude_code" }), ["anthropic"]);
+  assert.deepEqual(
+    settings.providerFailoverFamilies({ type: "codex", requestFormat: "openai-completions" }),
+    ["openai"],
+  );
+  assert.deepEqual(
+    settings.providerFailoverFamilies({ type: "codex", defaultChatProtocol: "google-generative-ai" }),
+    ["gemini"],
+  );
+
+  // 默认接口的显式端点被关闭：它的家族不再算进去，只剩其它已启用端点的家族。
+  assert.deepEqual(
+    settings.providerFailoverFamilies({
+      type: "codex",
+      defaultChatProtocol: "openai-responses",
+      endpointConfigs: {
+        "openai-responses": { baseUrl: "https://relay.example/v1", enabled: false },
+        "anthropic-messages": { baseUrl: "https://relay.example" },
+      },
+    }),
+    ["anthropic"],
+  );
+  // 默认接口家族在前，其余按接口固定顺序；Completions 与 Responses 合并为一个家族。
+  assert.deepEqual(
+    settings.providerFailoverFamilies({
+      type: "codex",
+      defaultChatProtocol: "google-generative-ai",
+      endpointConfigs: {
+        "anthropic-messages": { baseUrl: "https://relay.example" },
+        "openai-completions": { baseUrl: "https://relay.example/v1" },
+        "openai-responses": { baseUrl: "https://relay.example/v1" },
+        "google-generative-ai": { baseUrl: "https://relay.example/v1beta" },
+      },
+    }),
+    ["gemini", "anthropic", "openai"],
+  );
+  // 全部关闭 → 不属于任何家族，故障转移队列里的这个条目会被丢弃。
+  const dark = {
+    id: "dark",
+    name: "Dark",
+    type: "claude_code",
+    baseUrl: "https://relay.example",
+    apiKey: "k",
+    defaultChatProtocol: "anthropic-messages",
+    endpointConfigs: { "anthropic-messages": { baseUrl: "https://relay.example", enabled: false } },
+    models: [{ id: "model-1", contextWindow: 200000, maxOutputToken: 8192 }],
+    activeModels: ["model-1"],
+    reasoning: "high",
+    promptCachingEnabled: false,
+    nativeWebSearchEnabled: false,
+    useSystemProxy: false,
+  };
+  assert.deepEqual(settings.providerFailoverFamilies(dark), []);
+  const normalized = settings.normalizeModelFailoverSettings(
+    { anthropic: { enabled: true, queue: ["dark", "provider-a2"] } },
+    [...PROVIDERS, dark],
+  );
+  assert.deepEqual(normalized.anthropic.queue, ["provider-a2"]);
+});
+
 test("cross-family queue entries are always dropped", () => {
   const normalized = settings.normalizeModelFailoverSettings(
     {

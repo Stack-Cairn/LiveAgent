@@ -48,9 +48,56 @@ test("protocol auth headers follow the protocol profile and endpoint overrides",
     registry.buildProtocolAuthHeaders("openai-completions", "sk", { headerName: "api-key", prefix: "" }),
     { "api-key": "sk" },
   );
-  assert.deepEqual(registry.mergeHeaderLayers({ "User-Agent": "a" }, { "user-agent": "b" }), {
-    "user-agent": "b",
-  });
+});
+
+test("endpoint host helpers share one parsing rule and tolerate scheme-less input", () => {
+  assert.equal(registry.endpointHostOf("https://API.OpenAI.com/v1"), "api.openai.com");
+  assert.equal(registry.endpointHostOf("relay.example/v1"), "relay.example");
+  assert.equal(registry.endpointHostOf("http://localhost:11434/v1"), "localhost");
+  assert.equal(registry.endpointHostWithPort("http://localhost:11434/v1"), "localhost:11434");
+  assert.equal(registry.endpointHostWithPort("https://relay.example:8443/v1"), "relay.example:8443");
+  // 归属键：公网主机忽略端口，本地回环保留端口区分服务。
+  assert.equal(registry.endpointHostKey("https://relay.example:8443/v1"), "relay.example");
+  assert.equal(registry.endpointHostKey("http://127.0.0.1:1234/v1"), "127.0.0.1:1234");
+  assert.equal(registry.endpointHostOf("   "), "");
+  assert.equal(registry.endpointHostOf("not a url"), "");
+  assert.equal(registry.endpointHostOf(undefined), "");
+
+  // 三处消费方都走同一条规则：预设归属、方言推导、quirks 推导都接受无 scheme 输入。
+  assert.equal(registry.findPresetForBaseUrl("api.openai.com/v1")?.id, "openai");
+  assert.equal(registry.findPresetForBaseUrl("https://api.openai.com:443/v1")?.id, "openai");
+  assert.equal(registry.inferDialectFromBaseUrl("openai-responses", "api.x.ai/v1"), "xai");
+  assert.equal(
+    registry.inferEndpointQuirksFromBaseUrl("openai-completions", "openrouter.ai/api/v1")?.thinkingFormat,
+    "openrouter",
+  );
+});
+
+test("known gateway quirks include groq and only apply to completions", () => {
+  assert.deepEqual(
+    registry.inferEndpointQuirksFromBaseUrl("openai-completions", "https://api.groq.com/openai/v1"),
+    { supportsStore: false },
+  );
+  assert.equal(
+    registry.inferEndpointQuirksFromBaseUrl("openai-responses", "https://api.groq.com/openai/v1"),
+    undefined,
+  );
+  assert.equal(registry.inferEndpointQuirksFromBaseUrl("openai-completions", "https://api.openai.com/v1"), undefined);
+});
+
+test("preset lookups by id and host are stable and native-first", () => {
+  assert.equal(registry.findProviderPreset(undefined), undefined);
+  assert.equal(registry.findProviderPreset(""), undefined);
+  assert.equal(registry.findProviderPreset("openai"), registry.findProviderPreset("openai"));
+  // 原生渠道优先：官方地址命中原生预设而不是恰好也声明了该主机的其它预设。
+  assert.equal(registry.findPresetForBaseUrl("https://api.anthropic.com")?.id, "anthropic");
+  assert.equal(registry.findPresetForBaseUrl("https://api.deepseek.com/anthropic")?.id, "deepseek");
+  assert.equal(registry.findPresetForBaseUrl(""), undefined);
+  assert.deepEqual([...registry.presetHosts(registry.findProviderPreset("new-api"))], []);
+  assert.ok(registry.presetHosts(registry.findProviderPreset("openai")).includes("api.openai.com"));
+  // 已删除的导出不再存在。
+  assert.equal(registry.mergeHeaderLayers, undefined);
+  assert.equal(registry.isProviderProtocolFamily, undefined);
 });
 
 test("model families drive grouping and protocol preference", () => {
@@ -146,6 +193,13 @@ test("endpoint candidates expand preset templates and custom roots", () => {
   assert.equal(custom.find((c) => c.protocol === "anthropic-messages").baseUrl, "https://mine.example");
   assert.equal(custom.find((c) => c.protocol === "openai-completions").baseUrl, "https://mine.example/v1");
   assert.equal(custom.find((c) => c.protocol === "google-generative-ai").baseUrl, "https://mine.example/v1beta");
+
+  // 自定义根地址与 normalizeOrigin 同一口径：补 scheme、去 query、去尾部 v1 / v1beta。
+  assert.equal(probe.customEndpointBaseUrl("openai-completions", "relay.example/v1?x=1"), "https://relay.example/v1");
+  assert.equal(probe.customEndpointBaseUrl("openai-responses", "https://relay.example/api/v1beta/"), "https://relay.example/api/v1");
+  assert.equal(probe.customEndpointBaseUrl("anthropic-messages", "https://relay.example/v1"), "https://relay.example");
+  assert.equal(probe.customEndpointBaseUrl("google-generative-ai", "relay.example"), "https://relay.example/v1beta");
+  assert.equal(probe.customEndpointBaseUrl("openai-completions", "   "), "");
 });
 
 test("auto configuration keeps only usable endpoints and merges models per key", () => {
@@ -275,4 +329,97 @@ test("models URL keeps non-v1 version segments and only rewrites v1/v1beta", () 
   assert.equal(url("codex", "https://relay.example/v1"), "https://relay.example/v1/models");
   assert.equal(url("claude_code", "https://api.anthropic.com/v1"), "https://api.anthropic.com/v1/models");
   assert.equal(url("gemini", "https://generativelanguage.googleapis.com/v1beta"), "https://generativelanguage.googleapis.com/v1beta/models");
+});
+
+test("existing endpoints survive a failed probe: observation only, no drop, no disable", () => {
+  const candidates = [
+    { protocol: "anthropic-messages", baseUrl: "https://relay.example", origin: "existing", dialect: "generic", auth: { headerName: "x-api-key" } },
+    { protocol: "openai-completions", baseUrl: "https://relay.example/v1", origin: "preset" },
+    { protocol: "openai-responses", baseUrl: "https://relay.example/v1", origin: "preset" },
+  ];
+  const probeResult = {
+    at: 5,
+    credentials: [
+      {
+        credentialId: "k1",
+        endpoints: [
+          { protocol: "anthropic-messages", baseUrl: "https://relay.example", status: "unauthorized", error: "HTTP 401", models: [] },
+          { protocol: "openai-completions", baseUrl: "https://relay.example/v1", status: "ok", latencyMs: 3, models: [{ id: "gpt-5", contextWindow: 128000, maxOutputToken: 8192 }] },
+          { protocol: "openai-responses", baseUrl: "https://relay.example/v1", status: "unknown", error: "no model array", models: [] },
+        ],
+      },
+    ],
+  };
+  const credentials = [{ id: "k1", label: "", apiKey: "a", enabled: true }];
+  const auto = probe.buildAutoConfiguration({ preset: undefined, candidates, probe: probeResult, credentials });
+  // 已配置的 Messages 端点：保留、不停用、只记观测，方言 / 鉴权头原样带回。
+  const kept = auto.endpointConfigs["anthropic-messages"];
+  assert.ok(kept);
+  assert.equal(kept.enabled, undefined);
+  assert.equal(kept.source, "user");
+  assert.equal(kept.lastProbe.status, "unauthorized");
+  assert.equal(kept.dialect, "generic");
+  assert.deepEqual(kept.auth, { headerName: "x-api-key" });
+  // 新候选只有探测通过才创建；"未知"的 Responses 不创建。
+  assert.ok(auto.endpointConfigs["openai-completions"]);
+  assert.equal(auto.endpointConfigs["openai-responses"], undefined);
+  // 失败的既有端点不参与默认接口与模型合并。
+  assert.equal(auto.defaultChatProtocol, "openai-completions");
+  assert.deepEqual(auto.models.map((m) => m.id), ["gpt-5"]);
+
+  // 用户在摘要页主动取消既有端点：这是配置动作，写 enabled:false。
+  const rejected = probe.buildAutoConfiguration({
+    preset: undefined,
+    candidates,
+    probe: probeResult,
+    credentials,
+    rejectedProtocols: new Set(["anthropic-messages"]),
+  });
+  assert.equal(rejected.endpointConfigs["anthropic-messages"].enabled, false);
+
+  // 全部失败：既有端点仍在，usable=false 让对话框不能"采纳"。
+  const allFailed = probe.buildAutoConfiguration({
+    preset: undefined,
+    candidates: [candidates[0]],
+    probe: { at: 6, credentials: [{ credentialId: "k1", endpoints: [{ ...probeResult.credentials[0].endpoints[0] }] }] },
+    credentials,
+  });
+  assert.equal(allFailed.usable, false);
+  assert.equal(allFailed.endpointConfigs["anthropic-messages"].lastProbe.status, "unauthorized");
+  assert.equal(probe.protocolsFamilies, undefined, "unused export removed");
+});
+
+test("probeEndpoint fetches in strict mode with the credential id and classifies a bare failure as unknown", async () => {
+  const utils = loader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
+  const calls = [];
+  const utilsPath = new URL("../../../agent-ui/src/pages/settings/providerUtils.ts", import.meta.url).pathname;
+  const strictLoader = createTsModuleLoader({
+    mocks: {
+      [utilsPath]: {
+        ...utils,
+        fetchModelsFromApi: async (type, baseUrl, apiKey, options) => {
+          calls.push({ type, baseUrl, apiKey, options });
+          if (options?.strict) throw new utils.ProviderModelsFetchError("Model list response has no model array", null);
+          return [];
+        },
+      },
+    },
+  });
+  const strictProbe = strictLoader.loadModule("@liveagent/ui/pages/settings/providerProbe.ts");
+  const result = await strictProbe.probeProvider({
+    candidates: [{ protocol: "openai-completions", baseUrl: "https://open.bigmodel.cn/api/paas/v4", origin: "existing" }],
+    credentials: [
+      { id: "k-main", apiKey: "", enabled: true },
+      { id: "k-off", apiKey: "sk-off", enabled: false },
+    ],
+    providerId: "p-zhipu",
+  });
+  assert.equal(calls.length, 1, "disabled keys are not probed");
+  assert.equal(calls[0].options.strict, true);
+  assert.equal(calls[0].options.credentialId, "k-main");
+  assert.equal(calls[0].options.providerId, "p-zhipu");
+  assert.equal(calls[0].apiKey, "", "a redacted key is sent empty, never as the placeholder text");
+  // 200 但没有模型数组 → "未知"，不再被判"可用"。
+  assert.equal(result.credentials[0].endpoints[0].status, "unknown");
+  assert.equal(strictProbe.summarizeEndpointStatus(result, "openai-completions").status, "unknown");
 });

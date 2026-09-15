@@ -8,10 +8,11 @@ export type ExecutionMode = "text" | "tools" | "agent-dev";
 
 export type CodexRequestFormat = "openai-completions" | "openai-responses";
 
-import type {
-  ProviderChatProtocol,
-  ProviderProtocolFamily,
-  ProviderWireDialect,
+import {
+  PROVIDER_PROTOCOL_FAMILIES,
+  type ProviderChatProtocol,
+  type ProviderProtocolFamily,
+  type ProviderWireDialect,
 } from "@liveagent/ui/lib/providers/registry/protocols";
 
 export type {
@@ -359,12 +360,9 @@ export type ModelFailoverSettings = Record<ProviderProtocolFamily, ProviderFailo
 
 export const MODEL_FAILOVER_QUEUE_LIMIT = 8;
 
-/** 家族分组键（与 PROVIDER_PROTOCOL_FAMILIES 相同，独立导出便于设置层引用）。 */
-export const PROVIDER_FAILOVER_FAMILIES: readonly ProviderProtocolFamily[] = [
-  "anthropic",
-  "openai",
-  "gemini",
-];
+/** 家族分组键：就是 PROVIDER_PROTOCOL_FAMILIES，保留旧名再导出供设置层引用。 */
+export const PROVIDER_FAILOVER_FAMILIES: readonly ProviderProtocolFamily[] =
+  PROVIDER_PROTOCOL_FAMILIES;
 
 /** 旧存档的五个 ProviderId 分组 → 家族；合并时按此顺序追加去重。 */
 export const LEGACY_FAILOVER_TYPE_FAMILY: Record<ProviderId, ProviderProtocolFamily> = {
@@ -815,6 +813,47 @@ export type CustomProvider = {
 };
 
 export type ProviderRetryPolicy = { mode: "off" } | { mode: "custom"; maxRetries: number };
+
+export function getLegacyProviderChatProtocol(
+  providerId: ProviderId,
+  requestFormat?: CodexRequestFormat,
+): ProviderChatProtocol {
+  if (providerId === "claude_code") return "anthropic-messages";
+  if (providerId === "gemini") return "google-generative-ai";
+  if (providerId === "deepseek") return "openai-responses";
+  if (providerId === "xai") return "openai-responses";
+  return requestFormat === "openai-completions" ? "openai-completions" : "openai-responses";
+}
+
+type ProviderEndpointOwner = Pick<CustomProvider, "type"> &
+  Partial<Pick<CustomProvider, "defaultChatProtocol" | "requestFormat" | "endpointConfigs">>;
+
+/**
+ * 主连接（baseUrl / isFullUrl / modelsUrl）充当隐式端点的那个接口：`defaultChatProtocol`，
+ * 缺省由旧 `type` / `requestFormat` 推导。界面、路由与故障转移分组共用这一个判定键。
+ */
+export function getProviderImplicitChatProtocol(
+  provider: ProviderEndpointOwner,
+): ProviderChatProtocol {
+  return (
+    provider.defaultChatProtocol ??
+    getLegacyProviderChatProtocol(provider.type, provider.requestFormat)
+  );
+}
+
+/**
+ * 某接口在该供应商上是否已启用：有显式端点时看它的开关；没有时只有隐式端点
+ * （主连接）对应的接口算启用。
+ */
+export function isProviderChatProtocolEnabled(
+  provider: ProviderEndpointOwner,
+  protocol: ProviderChatProtocol,
+  implicitProtocol: ProviderChatProtocol = getProviderImplicitChatProtocol(provider),
+): boolean {
+  const config = provider.endpointConfigs?.[protocol];
+  if (config) return config.enabled !== false;
+  return protocol === implicitProtocol;
+}
 
 export const PROVIDER_RETRY_MAX_RETRIES_LIMITS = {
   min: 1,

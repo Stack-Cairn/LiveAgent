@@ -335,6 +335,69 @@ test("legacy Codex-group DeepSeek configs stay untouched — migration is user-d
   assert.equal(legacy.requestFormat, "openai-responses");
 });
 
+test("requestFormat is derived from an OpenAI-family defaultChatProtocol", () => {
+  // 存档地址没有 /chat/completions 后缀、也没写 requestFormat，只有默认接口：
+  // 旧字段必须跟默认接口一致，否则旧读取点与路由各说各话。
+  const completions = settings.normalizeCustomProvider({
+    id: "relay",
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    defaultChatProtocol: "openai-completions",
+    models: ["gpt-5"],
+  });
+  assert.equal(completions.defaultChatProtocol, "openai-completions");
+  assert.equal(completions.requestFormat, "openai-completions");
+  assert.equal(settings.getProviderImplicitChatProtocol(completions), "openai-completions");
+
+  // 默认接口与旧字段冲突时以默认接口为准。
+  const conflicting = settings.normalizeCustomProvider({
+    id: "relay-2",
+    type: "codex",
+    baseUrl: "https://relay.example/v1/chat/completions",
+    requestFormat: "openai-completions",
+    defaultChatProtocol: "openai-responses",
+    models: ["gpt-5"],
+  });
+  assert.equal(conflicting.baseUrl, "https://relay.example/v1");
+  assert.equal(conflicting.requestFormat, "openai-responses");
+
+  // requestFormat 是 codex 分组的旧字段：其它类型即使默认接口是 OpenAI 家族也不落它
+  //（旧读取点对这些类型从不读 requestFormat）。
+  const anthropicType = settings.normalizeCustomProvider({
+    id: "relay-anthropic-type",
+    type: "claude_code",
+    baseUrl: "https://relay.example/v1",
+    defaultChatProtocol: "openai-completions",
+    endpointConfigs: { "openai-completions": { baseUrl: "https://relay.example/v1" } },
+    models: ["gpt-5"],
+  });
+  assert.equal(anthropicType.defaultChatProtocol, "openai-completions");
+  assert.equal(anthropicType.requestFormat, undefined);
+
+  // 非 OpenAI 家族的默认接口不碰 requestFormat：仍按地址后缀推导。
+  const anthropicDefault = settings.normalizeCustomProvider({
+    id: "relay-3",
+    type: "codex",
+    baseUrl: "https://relay.example/v1/chat/completions",
+    defaultChatProtocol: "anthropic-messages",
+    endpointConfigs: { "anthropic-messages": { baseUrl: "https://relay.example" } },
+    models: ["claude-sonnet-4"],
+  });
+  assert.equal(anthropicDefault.requestFormat, "openai-completions");
+
+  // xAI 固定 Responses。
+  const xai = settings.normalizeCustomProvider({
+    id: "grok",
+    type: "xai",
+    baseUrl: "https://api.x.ai/v1",
+    defaultChatProtocol: "openai-completions",
+    endpointConfigs: { "openai-completions": { baseUrl: "https://api.x.ai/v1" } },
+    models: ["grok-4"],
+  });
+  assert.equal(xai.requestFormat, "openai-responses");
+  assert.equal(xai.defaultChatProtocol, "openai-completions");
+});
+
 test("settings normalization drops stale selected models and preserves valid selections", () => {
   const customProviders = [
     {

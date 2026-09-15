@@ -8,6 +8,7 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  expandPresetBaseUrl,
   PROVIDER_PROTOCOL_AUTH_HEADER,
   type ProviderPreset,
 } from "@liveagent/ui/lib/providers/registry";
@@ -69,6 +70,8 @@ export function ProviderPendingDetail(props: {
               const endpoint = preset.endpoints[protocol];
               if (!endpoint) return null;
               const isDefault = protocol === preset.defaultChatProtocol;
+              // {origin} 模板按当前输入实时展开；没填地址时给占位说明而不是裸模板。
+              const address = expandPresetBaseUrl(endpoint.baseUrl, origin);
               return (
                 <div
                   key={protocol}
@@ -78,9 +81,15 @@ export function ProviderPendingDetail(props: {
                     {protocolLabel(protocol)}
                     {isDefault ? ` · ${t("settings.providerEndpointDefault")}` : ""}
                   </Chip>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-                    {endpoint.baseUrl}
-                  </span>
+                  {address ? (
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+                      {address}
+                    </span>
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate text-[11px] italic text-muted-foreground/70">
+                      {t("settings.channelTemplateNeedsOrigin")}
+                    </span>
+                  )}
                   {endpoint.note ? (
                     <span className="text-[10.5px] text-muted-foreground/70">{endpoint.note}</span>
                   ) : null}

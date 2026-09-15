@@ -1,6 +1,7 @@
 // 请求头编辑器：从旧对话框的"请求配置"面板抽出，供请求配置抽屉的供应商级
 // 请求头（含导入与"模拟 CLI"）与端点请求头（精简模式）共用。编辑期间保留本地
-// 行（含尚未填名的空行），只把合法的头写回设置。
+// 行（含尚未填名的空行），只把合法的头写回设置；不合法的行留在界面上标红并计数，
+// 让用户看得出哪些没生效。
 
 import { ClipboardPaste, Fingerprint, List, Plus, Trash2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -51,6 +52,11 @@ function validHeaders(headers: readonly CustomHeader[]): CustomHeader[] {
       isValidCustomHeaderValue(header.value) &&
       !isReservedCustomHeaderKey(header.key),
   );
+}
+
+/** 行级问题：填了值却没填键的行也算无效（它不会被写入），全空的新行不算。 */
+function rowIssue(row: CustomHeader) {
+  return getCustomHeaderIssue(row, row.value.trim().length > 0);
 }
 
 function headersKey(headers: readonly CustomHeader[]): string {
@@ -216,8 +222,9 @@ export function CustomHeadersEditor(props: {
         .filter(Boolean)
         .join("; ")
     : null;
-  const firstIssue =
-    rows.map((row) => getCustomHeaderIssue(row, false)).find((issue) => issue !== null) ?? null;
+  const issues = rows.map(rowIssue);
+  const firstIssue = issues.find((issue) => issue !== null) ?? null;
+  const ignoredCount = issues.filter((issue) => issue !== null).length;
 
   return (
     <div className="space-y-2">
@@ -375,7 +382,7 @@ export function CustomHeadersEditor(props: {
       ) : (
         <div className="space-y-1.5" onScroll={() => setSuggest(null)}>
           {rows.map((row, index) => {
-            const issue = getCustomHeaderIssue(row, false);
+            const issue = issues[index];
             const issueTitle = issue ? customHeaderIssueMessage(issue, t) : undefined;
             const valueIssue = issue === "invalid-value";
             const keyIssue = issue !== null && !valueIssue;
@@ -488,6 +495,8 @@ export function CustomHeadersEditor(props: {
 
       {firstIssue && !importOpen ? (
         <p className="text-xs leading-relaxed text-destructive" role="alert">
+          {t("settings.customHeaderRowsIgnored").replace("{count}", String(ignoredCount))}
+          {" · "}
           {customHeaderIssueMessage(firstIssue, t)}
         </p>
       ) : null}

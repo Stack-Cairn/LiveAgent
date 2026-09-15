@@ -1369,6 +1369,9 @@ message ProviderModelsRequest {
   // 用户在供应商设置里显式配置的自定义请求头；未提供时沿用已保存配置。
   // 鉴权头与 host/content-length 等仍由落地侧的保留头名单兜底，不可被覆盖。
   ProviderCustomHeaders custom_headers = 8;
+  // WebUI 复用本地密钥时指定用 `credentials[]` 里哪把凭据（按 id）；为空或
+  // 找不到时退回供应商默认 Key。仅在 api_key 为空且 provider_id 非空时生效。
+  string credential_id = 9;
 }
 
 message ProviderModelsResponse {

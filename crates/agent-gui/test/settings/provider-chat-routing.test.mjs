@@ -107,7 +107,9 @@ test("route precedence is model > provider > legacy and resolves adapter familie
   assert.equal(geminiRoute.protocolSource, "family");
   assert.equal(geminiRoute.adapterProviderId, "gemini");
   assert.equal(geminiRoute.baseUrl, "https://gateway.example/v1");
-  assert.equal(geminiRoute.isFullUrl, false);
+  // 主连接充当的是 defaultChatProtocol（Gemini）的隐式端点：它的完整 URL 开关随主连接，
+  // 与界面 readEndpoint 的口径一致，而不是只对旧推导协议生效。
+  assert.equal(geminiRoute.isFullUrl, true);
 
   const legacy = settings.normalizeCustomProvider({
     id: "legacy",
@@ -125,6 +127,172 @@ test("route precedence is model > provider > legacy and resolves adapter familie
   assert.equal(legacyRoute.baseUrl, "https://gateway.example/v1");
   assert.equal(legacyRoute.isFullUrl, false);
   assert.equal(legacyRoute.requestFormat, "openai-completions");
+});
+
+test("implicit endpoint is materialized from the main connection with one decision key", () => {
+  // 存档：默认接口 Completions、主连接是完整 URL、没有 endpointConfigs。旧实现里
+  // 界面显示"完整 URL 开"，路由却按 requestFormat 推导的旧协议算出 false。
+  const provider = settings.normalizeCustomProvider({
+    id: "full-url",
+    type: "codex",
+    baseUrl: "https://relay.example/v1/custom-path",
+    isFullUrl: true,
+    modelsUrl: "https://relay.example/models",
+    defaultChatProtocol: "openai-completions",
+    models: ["my-model"],
+  });
+  assert.equal(provider.isFullUrl, true);
+  const endpoint = settings.resolveProviderEndpoint(provider, "openai-completions");
+  assert.equal(endpoint.explicit, false);
+  assert.deepEqual(endpoint.config, {
+    baseUrl: "https://relay.example/v1/custom-path",
+    isFullUrl: true,
+    modelsUrl: "https://relay.example/models",
+    source: "user",
+  });
+  assert.equal(settings.resolveProviderEndpoint(provider, "openai-responses"), undefined);
+  assert.deepEqual(settings.getProviderEnabledProtocols(provider), ["openai-completions"]);
+
+  const route = settings.resolveProviderChatRoute(provider, "my-model");
+  assert.equal(route.protocol, "openai-completions");
+  assert.equal(route.baseUrl, "https://relay.example/v1/custom-path");
+  assert.equal(route.isFullUrl, true);
+  assert.equal(route.modelsUrl, "https://relay.example/models");
+  assert.equal(route.requestFormat, "openai-completions");
+
+  // 显式端点存在时主连接不再参与：完整 URL 与模型列表地址都以端点为准。
+  const explicit = settings.normalizeCustomProvider({
+    ...provider,
+    endpointConfigs: { "openai-completions": { baseUrl: "https://relay.example/v1" } },
+  });
+  const explicitRoute = settings.resolveProviderChatRoute(explicit, "my-model");
+  assert.equal(explicitRoute.baseUrl, "https://relay.example/v1");
+  assert.equal(explicitRoute.isFullUrl, false);
+  assert.equal(explicitRoute.modelsUrl, undefined);
+  assert.equal(settings.resolveProviderEndpoint(explicit, "openai-completions").explicit, true);
+
+  // 旧存档没有 defaultChatProtocol：隐式接口就是旧推导（type + requestFormat）。
+  const legacy = settings.normalizeCustomProvider({
+    id: "legacy-full-url",
+    type: "codex",
+    baseUrl: "https://relay.example/v1/chat/completions",
+    isFullUrl: true,
+    models: ["my-model"],
+  });
+  assert.equal(legacy.requestFormat, "openai-completions");
+  assert.equal(settings.getProviderImplicitChatProtocol(legacy), "openai-completions");
+  const legacyRoute = settings.resolveProviderChatRoute(legacy, "my-model");
+  assert.equal(legacyRoute.protocol, "openai-completions");
+  assert.equal(legacyRoute.isFullUrl, true);
+});
+
+test("route context is computed once and can be supplied by the caller", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "ds",
+    type: "codex",
+    baseUrl: "https://api.deepseek.com",
+    defaultChatProtocol: "openai-completions",
+    models: ["deepseek-chat"],
+  });
+  const context = settings.buildProviderRouteContext(provider, "deepseek-chat");
+  assert.equal(context.preset.id, "deepseek");
+  assert.deepEqual(context.rule.chatProtocols, ["openai-completions"]);
+  assert.equal(context.legacyProtocol, "openai-completions");
+  assert.equal(context.implicitProtocol, "openai-completions");
+  assert.deepEqual(settings.resolveModelRouteProtocol(provider, "deepseek-chat", undefined, context), {
+    protocol: "openai-completions",
+    source: "preset",
+  });
+  // 旧签名仍然可用，结果一致。
+  assert.deepEqual(
+    settings.resolveModelRouteProtocol(provider, "deepseek-chat"),
+    settings.resolveModelRouteProtocol(provider, "deepseek-chat", undefined, context),
+  );
+  assert.equal(settings.resolveProviderDialect(provider, "openai-completions"), "deepseek");
+  assert.equal(
+    settings.resolveProviderDialect(provider, "openai-completions", { context }),
+    "deepseek",
+  );
+  // 调用方明确给出"无预设"的上下文时不再回查 presetId：没有 deepseek 预设的方言，
+  // 旧 codex 分组的 openai 缺省不被 api.deepseek.com 域名推翻。
+  assert.equal(
+    settings.resolveProviderDialect(provider, "openai-completions", {
+      context: { preset: undefined },
+    }),
+    "openai",
+  );
+  assert.equal(
+    settings.resolveProviderDialect(
+      { ...provider, baseUrl: "https://relay.example/v1" },
+      "openai-completions",
+      { context: { preset: undefined } },
+    ),
+    "openai",
+  );
+});
+
+test("credential scope checks use exact lookup for auto mode and patterns for manual mode", () => {
+  const auto = {
+    id: "k1",
+    label: "",
+    apiKey: "sk",
+    enabled: true,
+    lastModels: { at: 1, models: ["claude-sonnet-4", "gpt-5"] },
+  };
+  assert.equal(settings.credentialCoversModel(auto, "claude-sonnet-4"), true);
+  assert.equal(settings.credentialCoversModel(auto, " gpt-5 "), true);
+  // 网关前缀剥掉后命中。
+  assert.equal(settings.credentialCoversModel(auto, "anthropic/claude-sonnet-4"), true);
+  assert.equal(settings.credentialCoversModel(auto, "claude-sonnet-4*"), false);
+  assert.equal(settings.credentialCoversModel(auto, "gpt-4o"), false);
+  // 没有探测记录 → 视为覆盖全部。
+  assert.equal(settings.credentialCoversModel({ ...auto, lastModels: undefined }, "anything"), true);
+  assert.equal(
+    settings.credentialCoversModel({ ...auto, lastModels: { at: 1, models: [] } }, "anything"),
+    true,
+  );
+  const manual = { ...auto, modelScope: { mode: "manual", models: ["claude-*", "gpt-5"] } };
+  assert.equal(settings.credentialCoversModel(manual, "claude-opus-4"), true);
+  assert.equal(settings.credentialCoversModel(manual, "anthropic/claude-opus-4"), true);
+  assert.equal(settings.credentialCoversModel(manual, "gpt-5"), true);
+  assert.equal(settings.credentialCoversModel(manual, "gpt-5-mini"), false);
+  assert.equal(settings.credentialCoversModel({ ...auto, modelScope: { mode: "all" } }, "x"), true);
+});
+
+test("an endpoint with an empty address is dropped and the default protocol moves on", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    defaultChatProtocol: "openai-responses",
+    endpointConfigs: {
+      "openai-responses": { baseUrl: "   ", credentialId: "default" },
+      "anthropic-messages": { baseUrl: "https://relay.example" },
+      "openai-completions": { baseUrl: "https://relay.example/v1", enabled: false },
+    },
+    models: ["claude-sonnet-4"],
+  });
+  assert.deepEqual(Object.keys(provider.endpointConfigs).sort(), [
+    "anthropic-messages",
+    "openai-completions",
+  ]);
+  assert.equal(provider.defaultChatProtocol, "anthropic-messages");
+  // 旧字段跟着默认接口走：非 OpenAI 家族时沿用地址后缀推导。
+  assert.equal(provider.requestFormat, "openai-responses");
+  assert.deepEqual(settings.getProviderEnabledProtocols(provider), ["anthropic-messages"]);
+
+  // 没有其它可用显式端点时保留原默认接口，由主连接充当隐式端点。
+  const solo = settings.normalizeCustomProvider({
+    id: "solo",
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    defaultChatProtocol: "openai-responses",
+    endpointConfigs: { "openai-responses": { baseUrl: "" } },
+    models: ["gpt-5"],
+  });
+  assert.equal(solo.endpointConfigs, undefined);
+  assert.equal(solo.defaultChatProtocol, "openai-responses");
+  assert.equal(settings.resolveProviderChatRoute(solo, "gpt-5").baseUrl, "https://relay.example/v1");
 });
 
 test("disabled endpoints are skipped and the provider default takes over", () => {
