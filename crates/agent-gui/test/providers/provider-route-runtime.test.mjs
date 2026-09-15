@@ -81,7 +81,7 @@ function buildGatewayProvider(overrides = {}) {
       {
         id: "gpt-5.2",
         wireModelId: "openai/gpt-5.2",
-        chatProtocols: ["openai-completions", "openai-responses"],
+        chatProtocol: "openai-completions",
         credentialId: "k2",
         reasoning: "low",
         nativeWebSearch: false,

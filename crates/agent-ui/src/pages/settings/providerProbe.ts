@@ -447,9 +447,7 @@ function decorateAutoModel(
     ...(base ?? fetched),
     group: resolveModelGroup(fetched.id),
     ...(catalog?.name ? { displayName: catalog.name } : {}),
-    ...(rule?.chatProtocols
-      ? { chatProtocols: [...rule.chatProtocols], chatProtocol: rule.chatProtocols[0] }
-      : {}),
+    ...(rule?.chatProtocols ? { chatProtocol: rule.chatProtocols[0] } : {}),
     ...(rule?.wireModelId ? { wireModelId: rule.wireModelId } : {}),
     ...(rule?.dialect ? { dialect: rule.dialect } : {}),
     source: "auto",

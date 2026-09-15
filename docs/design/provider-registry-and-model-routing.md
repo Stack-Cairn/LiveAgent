@@ -145,7 +145,7 @@ type ProviderModelConfig = {
   displayName?: string;
   group?: string;                   // 列表分组，缺省由模型家族推导
   modelType?: "chat";               // image / embedding / rerank 保留，暂不可选
-  chatProtocols?: ProviderChatProtocol[];   // 有序：首项路由，其余端点层候选
+  chatProtocol?: ProviderChatProtocol;      // 显式选用的接口；可选范围见 4.2
   dialect?: ProviderWireDialect;
   ownedBy?: string;
 
@@ -159,8 +159,6 @@ type ProviderModelConfig = {
   reasoning?: ReasoningLevel;             // 默认使用哪一档；可选档位来自模型目录，见 6.5
   nativeWebSearch?: boolean;
   promptCacheHintMode?: PromptCacheHintMode;
-  /** 第 1 阶段字段，P2 起等于 chatProtocols[0] */
-  chatProtocol?: ProviderChatProtocol;
 };
 ```
 
@@ -308,11 +306,23 @@ type ResolvedProviderChatRoute = {
 
 ### 4.2 接口的决定顺序
 
-1. 模型 `chatProtocols` 中第一个**已启用**的渠道。
+1. 模型显式选用的 `chatProtocol`（须已启用；否则视为未指定）。
 2. 预设按模型规则给出的列表中第一个已启用的渠道。
 3. 模型家族偏好 ∩ 供应商已启用渠道，取交集第一个。
 4. 供应商 `defaultChatProtocol`（必须已启用）。
 5. 旧推导：`type` 与 `requestFormat`。
+
+**模型可显式选用的接口**（`modelSelectableProtocols`）按渠道决定，不由用户维护列表：
+
+| 渠道 | 可选接口 |
+| --- | --- |
+| Anthropic（原生） | Anthropic Messages（固定） |
+| OpenAI / xAI（原生） | Chat Completions ↔ Responses |
+| Gemini（原生） | generateContent v1beta（固定） |
+| DeepSeek（原生） | 预设声明的三个接口 |
+| 其它渠道（厂商 / 中转 / 自建 / 自定义） | Chat Completions、Responses、Anthropic Messages；Gemini 系列模型再加 v1beta |
+
+选项里没有配置地址（或已停用）的接口置灰不可选。模型只选一个接口；端点层故障转移候选不再由模型维护有序列表，而是自动取供应商已启用的同家族其它接口（8.2）。
 
 交集为空不猜测，直接退到第 4 步并把 `source` 标为 `provider`。任何一步得到的渠道若被关闭，跳到下一步。
 
@@ -373,7 +383,7 @@ WebUI 发起的探测经现有 `gateway_provider_models` 命令转到桌面执�
 1. 每个可用接口一条 `endpointConfigs[protocol]`，`enabled: true`，地址来自预设模板或探测所用地址。
 2. 默认接口：预设声明的默认接口若可用则用；否则取可用接口里家族表最常见的一个。
 3. 方言按 2.2 顺序。
-4. 模型：各接口列表合并去重；`group` 按家族表；`chatProtocols` 由预设规则或家族表推断，交集为空不写；能力与限制取目录，未命中标 `unknown`。
+4. 模型：各接口列表合并去重；`group` 按家族表；`chatProtocol` 只在预设规则明确指定时写入，否则留空按 4.2 推断；能力与限制取目录，未命中标 `unknown`。
 5. 鉴权头名只在探测证明仅某种头可通过时写覆盖。
 6. 请求头、多 Key、quirks 不自动生成。
 
@@ -573,7 +583,7 @@ WebUI 共用组件，秘密只显示 configured。窄屏退化为列表 → 详�
 | 层 | 触发 | 对象 | 熔断 key |
 | --- | --- | --- | --- |
 | 凭据层 | 鉴权、配额、账户类错误 | 同供应商下一把启用的 Key | `provider::credential::model` |
-| 端点层 | 连接、5xx、404 模型不存在 | 模型 `chatProtocols` 首项之后的同家族已启用渠道；未声明时取供应商已启用同家族渠道 | `provider::endpoint::model` |
+| 端点层 | 连接、5xx、404 模型不存在 | 供应商已启用的同家族其它渠道（当前路由接口除外） | `provider::endpoint::model` |
 | 供应商层 | 上两层用尽 | 队列下一个供应商（须启用同名模型且解析后同家族） | 同上 |
 
 `enabled` 只控制供应商层；凭据层与端点层随配置自动生效。错误分类表仍集中一处，方言可登记额外模式。熔断器保持进程内。不做跨模型兜底，不做负载均衡。
@@ -593,7 +603,7 @@ WebUI 共用组件，秘密只显示 configured。窄屏退化为列表 → 详�
 | --- | --- | --- |
 | P1 已完成 | 模型级聊天协议、端点 Base URL 覆盖、运行时统一读解析结果 | 现有单测通过 |
 | P1.5 接口收敛与预设 | 协议枚举减为四类并引入方言；`(protocol, dialect)` 选适配器；方言落到 `Model.provider` / `compat` / `thinkingLevelMap`，删除与 pi-ai 重复的推导；协议头档与方言头档；预设注册表与派生脚本；扁平供应商列表；故障转移分组迁移 | 无新字段的五类旧配置请求装配 Golden 不变；`deepseek-responses` 自动改写；三组队列合并后候选关系不丢失；每个旧分组对应一个预设 |
-| P2 多接口、多 Key、探测 | 端点完整配置（启用、quirks、鉴权头、凭据、头）；凭据列表与模型范围（5.6）；模型 `chatProtocols`；按预设的探测与摘要；渠道开关规则；路由输出扩展；凭据层与端点层候选 | 旧配置往返无丢失；多 Key 在 401 时按序切换并熔断到凭据；关闭默认渠道被阻止；探测四类接口各分支正确 |
+| P2 多接口、多 Key、探测 | 端点完整配置（启用、quirks、鉴权头、凭据、头）；凭据列表与模型范围（5.6）；模型 `chatProtocol`；按预设的探测与摘要；渠道开关规则；路由输出扩展；凭据层与端点层候选 | 旧配置往返无丢失；多 Key 在 401 时按序切换并熔断到凭据；关闭默认渠道被阻止；探测四类接口各分支正确 |
 | P3 模型配置与界面 | 三栏界面与两个抽屉；`wireModelId` / `displayName` / `group` / `maxInputTokens` / 模型级推理与原生搜索；`FieldValue` 来源与冲突提示；能力三态；原生搜索资格改为家族表 | 网关前缀模型能匹配目录；自动值与用户值来源正确；`unknown` 不关闭原本可用的工具与附件 |
 | P4 凭据隔离 | Key 不进 JS 运行时，本地代理只接受受控路由句柄，熔断状态下沉 | 另立文档 |
 

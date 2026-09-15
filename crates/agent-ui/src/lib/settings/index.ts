@@ -407,7 +407,7 @@ export function buildProviderRouteContext(
 export function resolveModelRouteProtocol(
   provider: RouteProvider,
   modelId: string,
-  model?: Pick<ProviderModelConfig, "chatProtocols" | "chatProtocol">,
+  model?: Pick<ProviderModelConfig, "chatProtocol">,
   context: ProviderRouteContext = buildProviderRouteContext(provider, modelId),
 ): ProtocolDecision {
   const { implicitProtocol } = context;
@@ -418,7 +418,7 @@ export function resolveModelRouteProtocol(
   const firstAvailable = (list: readonly ProviderChatProtocol[] | undefined) =>
     list?.map((item) => available(item)).find((item) => item !== undefined);
 
-  const explicit = firstAvailable(model?.chatProtocols) ?? available(model?.chatProtocol);
+  const explicit = available(model?.chatProtocol);
   if (explicit) return { protocol: explicit, source: "model" };
 
   const fromPreset = firstAvailable(context.rule?.chatProtocols);
@@ -432,6 +432,29 @@ export function resolveModelRouteProtocol(
 
   const legacy = context.legacyProtocol;
   return { protocol: available(legacy) ?? legacy, source: "legacy" };
+}
+
+/**
+ * 模型在该渠道可显式选用的接口集合（设计文档 4.10）：
+ * - 原生渠道（Anthropic / OpenAI / Gemini / xAI / DeepSeek）：预设声明的接口。Anthropic 与
+ *   Gemini 各只有一个，OpenAI 与 xAI 在 Completions / Responses 之间切换。
+ * - 其它渠道（厂商、中转、自建、自定义）：OpenAI 两类 + Anthropic Messages；只有 Gemini
+ *   系列模型再加 google-generative-ai。
+ * 返回顺序与 PROVIDER_CHAT_PROTOCOLS 一致；是否已配置地址由调用方另行判断。
+ */
+export function modelSelectableProtocols(
+  provider: Pick<CustomProvider, "presetId">,
+  modelId: string,
+): ProviderChatProtocol[] {
+  const preset = findProviderPreset(provider.presetId);
+  if (preset?.native) {
+    const declared = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => preset.endpoints[protocol]);
+    if (declared.length > 0) return declared;
+  }
+  const gemini = resolveModelFamily(modelId).key === "gemini";
+  return PROVIDER_CHAT_PROTOCOLS.filter((protocol) =>
+    protocol === "google-generative-ai" ? gemini : true,
+  );
 }
 
 export function resolveProviderDialect(
@@ -1297,7 +1320,10 @@ export function normalizeProviderModelConfig(
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   const inputModalities = normalizeInputModalities(obj.inputModalities);
   const legacyProtocol = normalizeLegacyProtocolInput(obj.chatProtocol);
-  const chatProtocols = normalizeModelChatProtocols(obj.chatProtocols, legacyProtocol?.protocol);
+  // 旧存档的有序 chatProtocols 只取首项：模型只显式选一个接口，端点层故障转移候选
+  // 改为按供应商已启用的同家族接口自动展开。
+  const chatProtocol =
+    legacyProtocol?.protocol ?? normalizeModelChatProtocols(obj.chatProtocols, undefined)?.[0];
   const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyProtocol?.dialect;
   const wireModelId = typeof obj.wireModelId === "string" ? obj.wireModelId.trim() : "";
   const displayName = typeof obj.displayName === "string" ? obj.displayName.trim() : "";
@@ -1326,7 +1352,7 @@ export function normalizeProviderModelConfig(
     // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
     // 重排顺序），合法覆盖永不被自动删除。
     ...(inputModalities ? { inputModalities } : {}),
-    ...(chatProtocols ? { chatProtocols, chatProtocol: chatProtocols[0] } : {}),
+    ...(chatProtocol ? { chatProtocol } : {}),
     ...(dialect ? { dialect } : {}),
     ...(credentialId ? { credentialId } : {}),
     ...(reasoning ? { reasoning } : {}),

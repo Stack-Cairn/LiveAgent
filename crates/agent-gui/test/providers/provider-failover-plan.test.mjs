@@ -191,7 +191,7 @@ const MULTI_KEY_PROVIDER = {
       id: "gpt-5.2",
       contextWindow: 400000,
       maxOutputToken: 128000,
-      chatProtocols: ["openai-responses", "openai-completions", "anthropic-messages"],
+      chatProtocol: "openai-responses",
     },
     { id: "claude-relay", contextWindow: 200000, maxOutputToken: 8192 },
   ],
@@ -305,8 +305,7 @@ test("endpoint layer: same-family enabled channels after the routed one, resolve
     selection(appSettings, "gateway", "gpt-5.2"),
   );
   const endpointLayer = plan.fallbacks.filter((f) => f.layer === "endpoint");
-  // chatProtocols = [responses, completions, anthropic]：首项路由；completions 是同家族候选，
-  // anthropic-messages 跨家族不入选。
+  // 模型显式选 Responses；已启用的 Completions 是同家族候选，Anthropic Messages 跨家族不入选。
   assert.equal(endpointLayer.length, 1);
   assert.equal(endpointLayer[0].runtime.protocol, "openai-completions");
   assert.equal(endpointLayer[0].runtime.baseUrl, "https://gateway.example/compat/v1");

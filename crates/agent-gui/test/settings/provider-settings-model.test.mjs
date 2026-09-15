@@ -292,7 +292,7 @@ test("failover candidates mirror the runtime plan across the three layers", () =
       { id: "d", label: "D", apiKey: "", enabled: true, modelScope: { mode: "all" } },
       { id: "e", label: "E", apiKey: "sk-e", enabled: true, modelScope: { mode: "manual", models: ["claude-*"] } },
     ],
-    models: [{ id: "gpt-5", chatProtocols: ["openai-responses", "openai-completions", "anthropic-messages"] }],
+    models: [{ id: "gpt-5", chatProtocol: "openai-responses" }],
     activeModels: ["gpt-5"],
     defaultChatProtocol: "openai-responses",
     endpointConfigs: {
@@ -352,7 +352,7 @@ test("failover candidates mirror the runtime plan across the three layers", () =
   assert.equal(candidates.providerLayerEnabled, true);
   // 凭据层：跳过当前 Key（a）、停用（c）、未配置（d）、范围不含（e）。
   assert.deepEqual(candidates.credentials.map((item) => item.id), ["b"]);
-  // 端点层：chatProtocols 首项之后的同家族已启用接口；Messages 跨家族被排除。
+  // 端点层：供应商已启用的同家族其它接口；Messages 跨家族被排除。
   assert.deepEqual(candidates.endpoints, ["openai-completions"]);
   // 供应商层：排除自己、跨家族、未启用同名模型、已停用的供应商。
   assert.deepEqual(candidates.providers.map((item) => item.id), ["p-other"]);

@@ -625,8 +625,11 @@ export type ProviderModelConfig = {
    * 该模型可走的接口，有序：首项即路由，其余为端点层故障转移候选。
    * 缺省按预设规则 / 模型家族 / 供应商默认推断。
    */
-  chatProtocols?: ProviderChatProtocol[];
-  /** 第 1 阶段字段；等于 chatProtocols[0]，写入时同步维护以兼容旧读者 */
+  /**
+   * 该模型在此渠道显式选用的接口；缺省按预设规则 → 模型系列 → 供应商默认推断。
+   * 可选范围由 modelSelectableProtocols 决定（原生渠道 = 预设声明的接口；其它渠道 =
+   * OpenAI 两类 + Anthropic Messages，Gemini 系列模型再加 v1beta）。
+   */
   chatProtocol?: ProviderChatProtocol;
   dialect?: ProviderWireDialect;
   /** 指定凭据（覆盖按范围与顺序的自动选择） */

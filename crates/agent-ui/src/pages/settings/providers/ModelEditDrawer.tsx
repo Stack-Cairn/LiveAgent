@@ -8,7 +8,10 @@ import {
   type AppSettings,
   type ChatCapabilityName,
   type CustomProvider,
+  getProviderImplicitChatProtocol,
   getProviderModelDefaults,
+  isProviderChatProtocolEnabled,
+  modelSelectableProtocols,
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_PROTOCOL_FAMILY_LABELS,
   type PromptCacheHintMode,
@@ -19,7 +22,7 @@ import {
   resolveProviderChatRoute,
   resolveProviderDialect,
 } from "@liveagent/app/lib/settings";
-import { ArrowUp, ChevronDown, X } from "@liveagent/ui/components/IconSet";
+import { X } from "@liveagent/ui/components/IconSet";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
   Select,
@@ -71,7 +74,6 @@ import {
   modelGroupKey,
   modelLimitFieldSources,
   providerCredentials,
-  providerEnabledProtocols,
   resetModelLimitField,
   updateProviderModel,
 } from "./providerSettingsModel";
@@ -126,7 +128,6 @@ export function ModelEditDrawer(props: {
     () => (route ? modelFailoverCandidates(settings, provider, modelId, route) : undefined),
     [settings, provider, modelId, route],
   );
-  const enabledProtocols = providerEnabledProtocols(provider);
   const credentials = providerCredentials(provider);
   const coveringCredentials = credentialsCoveringModel(provider, modelId);
 
@@ -153,7 +154,10 @@ export function ModelEditDrawer(props: {
   const effectiveInput = resolveModelInputModalitiesResolved(provider, model.id, route);
   const canOverrideModalities = providerSupportsModelInputModalitiesOverride(adapterId);
   const modalitiesMode = getModelInputModalitiesMode(model);
-  const protocolList = model.chatProtocols ?? [];
+  const selectableProtocols = modelSelectableProtocols(provider, model.id);
+  const implicitProtocol = getProviderImplicitChatProtocol(provider);
+  const protocolConfigured = (protocol: ProviderChatProtocol) =>
+    isProviderChatProtocolEnabled(provider, protocol, implicitProtocol);
   const inheritedDialect = resolveProviderDialect(provider, route.protocol, {
     endpoint: provider.endpointConfigs?.[route.protocol],
   });
@@ -186,24 +190,6 @@ export function ModelEditDrawer(props: {
         ...(Object.keys(next).length > 0 ? { capabilities: next } : { capabilities: undefined }),
       };
     });
-  }
-
-  function setProtocols(list: ProviderChatProtocol[]) {
-    patch((current) => ({
-      ...current,
-      ...(list.length > 0
-        ? { chatProtocols: list, chatProtocol: list[0] }
-        : { chatProtocols: undefined, chatProtocol: undefined }),
-    }));
-  }
-
-  function moveProtocol(index: number, delta: number) {
-    const target = index + delta;
-    if (target < 0 || target >= protocolList.length) return;
-    const next = [...protocolList];
-    const [item] = next.splice(index, 1);
-    next.splice(target, 0, item);
-    setProtocols(next);
   }
 
   const protocolSourceLabel = t(`settings.modelRouteSource.${route.protocolSource}`);
@@ -414,72 +400,76 @@ export function ModelEditDrawer(props: {
                 hint={t("settings.modelChatProtocolsHint")}
               />
               <Field
-                label={t("settings.modelChatProtocols")}
+                label={t("settings.modelChatProtocol")}
                 source={
                   <SourceTag
-                    source={protocolList.length > 0 ? "user" : "auto"}
-                    onReset={() => setProtocols([])}
+                    source={model.chatProtocol ? "user" : "auto"}
+                    onReset={() => drop("chatProtocol")}
                   />
                 }
               >
-                <div className="flex flex-wrap gap-1.5">
-                  {protocolList.map((protocol, index) => (
-                    <span
-                      key={protocol}
-                      className="inline-flex h-6 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 pl-2.5 pr-1 text-[11px] font-medium text-primary"
-                    >
-                      {index + 1} · {protocolLabel(protocol)}
-                      <button
-                        type="button"
-                        className="rounded p-0.5 hover:bg-primary/15 disabled:opacity-30"
-                        disabled={index === 0}
-                        onClick={() => moveProtocol(index, -1)}
-                        title={t("settings.providerCredentialMoveUp")}
-                        aria-label={t("settings.providerCredentialMoveUp")}
-                      >
-                        <ArrowUp className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-0.5 hover:bg-primary/15 disabled:opacity-30"
-                        disabled={index === protocolList.length - 1}
-                        onClick={() => moveProtocol(index, 1)}
-                        title={t("settings.providerCredentialMoveDown")}
-                        aria-label={t("settings.providerCredentialMoveDown")}
-                      >
-                        <ChevronDown className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-0.5 hover:bg-primary/15"
-                        onClick={() =>
-                          setProtocols(protocolList.filter((item) => item !== protocol))
-                        }
-                        title={t("settings.delete")}
-                        aria-label={`${t("settings.delete")} ${protocolLabel(protocol)}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
+                {selectableProtocols.length <= 1 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Chip tone="on">{protocolLabel(selectableProtocols[0] ?? route.protocol)}</Chip>
+                    <span className="text-[11px] text-muted-foreground/75">
+                      {t("settings.modelChatProtocolFixed")}
                     </span>
-                  ))}
-                  {enabledProtocols
-                    .filter((protocol) => !protocolList.includes(protocol))
-                    .map((protocol) => (
-                      <ChipButton
-                        key={protocol}
-                        onClick={() => setProtocols([...protocolList, protocol])}
-                      >
-                        ＋ {protocolLabel(protocol)}
-                      </ChipButton>
-                    ))}
-                </div>
-                {protocolList.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground/75">
-                    {t("settings.modelChatProtocolsAuto")
-                      .replace("{protocol}", protocolLabel(route.protocol))
-                      .replace("{source}", protocolSourceLabel)}
-                  </p>
-                ) : null}
+                  </div>
+                ) : (
+                  <Select
+                    value={model.chatProtocol ?? "auto"}
+                    onValueChange={(value) =>
+                      patch((current) => ({
+                        ...current,
+                        chatProtocol:
+                          value === "auto" ? undefined : (value as ProviderChatProtocol),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs shadow-none">
+                      <SelectValue>
+                        {model.chatProtocol
+                          ? protocolLabel(model.chatProtocol)
+                          : t("settings.modelChatProtocolAutoOption").replace(
+                              "{protocol}",
+                              protocolLabel(route.protocol),
+                            )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">
+                        {t("settings.modelChatProtocolAutoOption").replace(
+                          "{protocol}",
+                          protocolLabel(route.protocol),
+                        )}
+                      </SelectItem>
+                      {selectableProtocols.map((protocol) => (
+                        <SelectItem
+                          key={protocol}
+                          value={protocol}
+                          disabled={!protocolConfigured(protocol)}
+                        >
+                          {protocolLabel(protocol)}
+                          {protocolConfigured(protocol)
+                            ? ""
+                            : ` ${t("settings.modelChatProtocolUnconfigured")}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p className="text-[11px] text-muted-foreground/75">
+                  {model.chatProtocol && model.chatProtocol !== route.protocol
+                    ? t("settings.modelChatProtocolUnavailable").replace(
+                        "{protocol}",
+                        protocolLabel(route.protocol),
+                      )
+                    : model.chatProtocol
+                      ? t("settings.modelChatProtocolExplicit")
+                      : t("settings.modelChatProtocolsAuto")
+                          .replace("{protocol}", protocolLabel(route.protocol))
+                          .replace("{source}", protocolSourceLabel)}
+                </p>
               </Field>
               <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                 <Field

@@ -1608,11 +1608,17 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelInputModalitiesUnavailable":
     "Attachments on this endpoint do not read model modalities; nothing to set.",
   "settings.modelRouting": "Routing",
-  "settings.modelChatProtocols":
-    "Endpoints (first routes, the rest are endpoint-level failover candidates)",
+  "settings.modelChatProtocol": "Interface",
   "settings.modelChatProtocolsHint":
-    "Only enabled endpoints are listed; when unset, the preset rule, model series rule and provider default are tried in order.",
+    "The interface this model uses on this channel. Native channels only switch among the interfaces they provide; other channels can switch between the two OpenAI interfaces and Anthropic Messages, with Gemini v1beta added for Gemini-series models. Other enabled interfaces of the same family become endpoint-layer failover candidates automatically.",
   "settings.modelChatProtocolsAuto": "Not set; currently inferred as {protocol} (source: {source})",
+  "settings.modelChatProtocolAutoOption": "Auto ({protocol})",
+  "settings.modelChatProtocolUnconfigured": "(no address configured)",
+  "settings.modelChatProtocolFixed": "This channel provides only this interface",
+  "settings.modelChatProtocolExplicit":
+    "Set explicitly; other enabled interfaces of the same family are failover candidates.",
+  "settings.modelChatProtocolUnavailable":
+    "The selected interface is not configured or is disabled; requests currently use {protocol}.",
   "settings.modelRouteSource.model": "model override",
   "settings.modelRouteSource.preset": "preset rule",
   "settings.modelRouteSource.family": "model series rule",

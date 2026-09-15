@@ -28,7 +28,8 @@ test("provider routing normalization keeps valid routes and drops unknown protoc
     "anthropic-messages": { baseUrl: "https://gateway.example/anthropic/v1" },
   });
   assert.equal(provider.models[0].chatProtocol, "anthropic-messages");
-  assert.deepEqual(provider.models[0].chatProtocols, ["anthropic-messages"]);
+  // 旧有序列表只取首项，输出不再带 chatProtocols。
+  assert.equal("chatProtocols" in provider.models[0], false);
   assert.equal(provider.models[1].chatProtocol, undefined);
   // 新实例默认凭据与旧字段同步。
   assert.equal(provider.credentials.length, 1);
@@ -65,7 +66,7 @@ test("legacy deepseek-responses protocol rewrites to Responses + deepseek dialec
   assert.equal(provider.dialect, "deepseek");
   assert.equal(provider.endpointConfigs["openai-responses"].baseUrl, "https://relay.example/ds");
   assert.equal(provider.endpointConfigs["openai-responses"].dialect, "deepseek");
-  assert.deepEqual(provider.models[0].chatProtocols, ["openai-responses"]);
+  assert.equal(provider.models[0].chatProtocol, "openai-responses");
   const route = settings.resolveProviderChatRoute(provider, "deepseek-v4-pro");
   assert.equal(route.protocol, "openai-responses");
   assert.equal(route.dialect, "deepseek");
@@ -450,4 +451,53 @@ test("legacy codex pointing at api.deepseek.com keeps the standard OpenAI chain"
   assert.equal(provider.presetId, "deepseek");
   assert.equal(direct.protocol, "openai-responses");
   assert.equal(direct.dialect, "deepseek");
+});
+
+test("modelSelectableProtocols follows the channel: native = declared, others = 3 (+Gemini for Gemini models)", () => {
+  const pick = (presetId, modelId) => settings.modelSelectableProtocols({ presetId }, modelId);
+  assert.deepEqual(pick("anthropic", "claude-opus-4-6"), ["anthropic-messages"]);
+  assert.deepEqual(pick("openai", "gpt-5.2"), ["openai-completions", "openai-responses"]);
+  assert.deepEqual(pick("gemini", "gemini-2.5-pro"), ["google-generative-ai"]);
+  assert.deepEqual(pick("xai", "grok-4"), ["openai-completions", "openai-responses"]);
+  // 自定义 / 中转 / 厂商：OpenAI 两类 + Messages；Gemini 系列模型再加 v1beta。
+  assert.deepEqual(pick("custom", "gpt-5.2"), [
+    "anthropic-messages",
+    "openai-completions",
+    "openai-responses",
+  ]);
+  assert.deepEqual(pick("zhipu", "glm-5"), ["anthropic-messages", "openai-completions", "openai-responses"]);
+  assert.deepEqual(pick("custom", "gemini-2.5-flash"), [
+    "anthropic-messages",
+    "openai-completions",
+    "openai-responses",
+    "google-generative-ai",
+  ]);
+  assert.deepEqual(pick("new-api", "google/gemini-2.5-pro"), [
+    "anthropic-messages",
+    "openai-completions",
+    "openai-responses",
+    "google-generative-ai",
+  ]);
+});
+
+test("explicit chatProtocol wins only when that interface is enabled; failover expands automatically", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    name: "relay",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "https://relay.example/v1",
+    apiKey: "sk",
+    defaultChatProtocol: "openai-completions",
+    endpointConfigs: {
+      "openai-completions": { baseUrl: "https://relay.example/v1" },
+      "openai-responses": { baseUrl: "https://relay.example/v1", enabled: false },
+    },
+    models: [{ id: "gpt-5.2", chatProtocol: "openai-responses" }],
+    activeModels: ["gpt-5.2"],
+  });
+  // 显式选了停用的 Responses → 退回自动推断（Completions 是唯一已启用的同系列接口）。
+  const route = settings.resolveProviderChatRoute(provider, "gpt-5.2");
+  assert.equal(route.protocol, "openai-completions");
+  assert.notEqual(route.protocolSource, "model");
 });

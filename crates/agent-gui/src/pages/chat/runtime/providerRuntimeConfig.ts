@@ -14,7 +14,6 @@ import {
   type ProviderChatProtocol,
   type ProviderProtocolFamily,
   resolvePromptClarifyModel,
-  resolveProviderEndpoint,
   type SelectedModel,
 } from "../../../lib/settings";
 import { type EffectiveChatModelSelection, isProviderModelAvailable } from "./modelSelection";
@@ -147,23 +146,15 @@ export function failoverTargetLabel(providerName: string, model: string) {
 }
 
 /**
- * 端点层候选：模型 chatProtocols 里首项之后的同家族已启用渠道；未声明时取供应商
- * 已启用的同家族其他渠道。当前路由所走的接口不重复列入。
+ * 端点层候选：供应商已启用的同家族其它渠道。当前路由所走的接口不重复列入。
  */
 function resolveEndpointLayerProtocols(
   provider: CustomProvider,
-  modelId: string,
   family: ProviderProtocolFamily,
   activeProtocol: ProviderChatProtocol,
 ): ProviderChatProtocol[] {
-  const modelConfig = provider.models.find((item) => item.id === modelId);
-  const declared = modelConfig?.chatProtocols ?? [];
-  const source =
-    declared.length > 0
-      ? declared.filter((protocol) => resolveProviderEndpoint(provider, protocol) !== undefined)
-      : getProviderEnabledProtocols(provider);
   const out: ProviderChatProtocol[] = [];
-  for (const protocol of source) {
+  for (const protocol of getProviderEnabledProtocols(provider)) {
     if (protocol === activeProtocol || out.includes(protocol)) continue;
     if (PROVIDER_PROTOCOL_FAMILY[protocol] !== family) continue;
     out.push(protocol);
@@ -178,8 +169,7 @@ function resolveEndpointLayerProtocols(
  * 绝不互为候选。候选按三层展开并共用一份 maxSwitches 预算（设计文档 8.2）：
  *
  * 1. 凭据层：同供应商下其它启用且范围覆盖该模型的 Key，各自独立熔断。
- * 2. 端点层：同供应商内同家族的其它已启用渠道（模型 chatProtocols 首项之后，
- *    未声明时取供应商已启用渠道）。
+ * 2. 端点层：同供应商内同家族的其它已启用渠道。
  * 3. 供应商层：家族队列里的其它供应商，须启用同名模型且解析后同家族。只有这一层
  *    受 `enabled` 开关控制；前两层随配置自动生效。
  *
@@ -251,7 +241,6 @@ export function buildModelFailoverPlan(
   // 2. 端点层：同家族其它已启用渠道。
   for (const protocol of resolveEndpointLayerProtocols(
     primary.provider,
-    primary.model,
     family,
     primaryWire.protocol,
   )) {

@@ -612,7 +612,7 @@ export type ModelFailoverCandidates = {
   providerLayerEnabled: boolean;
   /** 凭据层：同供应商其它启用、已配置且范围覆盖该模型的 Key */
   credentials: ProviderCredential[];
-  /** 端点层：chatProtocols 首项之后（未声明时取已启用渠道）的同家族已启用接口 */
+  /** 端点层：供应商已启用的同家族其它接口（当前路由接口除外） */
   endpoints: ProviderChatProtocol[];
   /** 供应商层：家族队列里启用同名模型且解析后同家族的其它供应商 */
   providers: CustomProvider[];
@@ -632,15 +632,8 @@ export function modelFailoverCandidates(
       credentialConfigured(credential) &&
       credentialCoversModel(credential, modelId),
   );
-  const model = provider.models.find((item) => item.id === modelId);
-  const enabledProtocols = providerEnabledProtocols(provider);
-  const declared = model?.chatProtocols ?? [];
-  const pool =
-    declared.length > 0
-      ? declared.filter((protocol) => enabledProtocols.includes(protocol))
-      : enabledProtocols;
   const endpoints: ProviderChatProtocol[] = [];
-  for (const protocol of pool) {
+  for (const protocol of providerEnabledProtocols(provider)) {
     if (protocol === route.protocol || endpoints.includes(protocol)) continue;
     if (PROVIDER_PROTOCOL_FAMILY[protocol] !== family) continue;
     endpoints.push(protocol);
