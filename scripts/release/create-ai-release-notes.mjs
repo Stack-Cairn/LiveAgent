@@ -5,8 +5,8 @@ import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseReleaseVersion } from "./release-version.mjs";
 
-const DEFAULT_BASE_URL = "https://codex-api.packycode.com/v1";
-const DEFAULT_MODEL = "gpt-5.5";
+const DEFAULT_BASE_URL = "https://api.deepseek.com/v1";
+const DEFAULT_MODEL = "deepseek-flash";
 const DEFAULT_REASONING_EFFORT = "";
 const MAX_CONTEXT_CHARS = 22000;
 
@@ -294,11 +294,9 @@ async function createChatCompletion({ apiKey, baseUrl, model, prompt, reasoningE
 
 async function main() {
   const apiKey =
-    process.env.AI_RELEASE_NOTES_API_KEY?.trim() ||
-    process.env.PACKYCODE_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim();
+    process.env.AI_RELEASE_NOTES_API_KEY?.trim() || process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) {
-    writeFallback("missing AI_RELEASE_NOTES_API_KEY/PACKYCODE_API_KEY/OPENAI_API_KEY");
+    writeFallback("missing AI_RELEASE_NOTES_API_KEY/DEEPSEEK_API_KEY");
     return;
   }
 

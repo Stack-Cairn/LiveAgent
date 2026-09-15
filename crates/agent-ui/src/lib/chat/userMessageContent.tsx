@@ -29,6 +29,11 @@ import {
   parsePastedTextDisplayReferences,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import {
+  cachedDateTimeFormat,
+  cachedNumberFormat,
+  cachedRelativeTimeFormat,
+} from "@liveagent/ui/lib/shared/intlFormatters";
+import {
   type FocusEvent,
   type MouseEvent,
   memo,
@@ -548,20 +553,20 @@ export function tokenizeUserMessage(
 }
 
 function formatPastedTextCount(value: number) {
-  return new Intl.NumberFormat().format(value);
+  return cachedNumberFormat(undefined, "count").format(value);
 }
 
 function formatCommitTooltipDate(value: string | undefined, locale: string) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const absolute = date.toLocaleString(locale, {
+  const absolute = cachedDateTimeFormat(locale, "commit-date", {
     year: "numeric",
     month: "long",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
+  }).format(date);
   const deltaSeconds = Math.round((date.getTime() - Date.now()) / 1000);
   const units: Array<{
     unit: "year" | "month" | "day" | "hour" | "minute" | "second";
@@ -578,10 +583,9 @@ function formatCommitTooltipDate(value: string | undefined, locale: string) {
     unit: "second",
     seconds: 1,
   };
-  const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
-    Math.round(deltaSeconds / selected.seconds),
-    selected.unit,
-  );
+  const relative = cachedRelativeTimeFormat(locale, "commit-relative", {
+    numeric: "auto",
+  }).format(Math.round(deltaSeconds / selected.seconds), selected.unit);
   return { relative, absolute };
 }
 

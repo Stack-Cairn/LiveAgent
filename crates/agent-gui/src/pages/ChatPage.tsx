@@ -3925,6 +3925,20 @@ export function ChatPage(props: ChatPageProps) {
       {workbenchDragGhost}
       {/* ---- Left column: navigation/sidebar ---- */}
       <ChatSidebarContainer
+        pinnedOrder={settings.system.sidebarPinnedOrder}
+        onReorderPinned={(sidebarPinnedOrder) =>
+          setSettings((previous) => ({
+            ...previous,
+            system: { ...previous.system, sidebarPinnedOrder },
+          }))
+        }
+        projectOrder={settings.system.workspaceProjectOrder}
+        onReorderProjects={(workspaceProjectOrder) =>
+          setSettings((previous) => ({
+            ...previous,
+            system: { ...previous.system, workspaceProjectOrder },
+          }))
+        }
         store={sidebarStore}
         approvalStore={conversationRuntimeRegistry.approvals}
         questionStore={conversationRuntimeRegistry.questions}
@@ -3986,17 +4000,13 @@ export function ChatPage(props: ChatPageProps) {
         onShareConversation={handleOpenShareModal}
         onOpenSharedConversations={handleOpenSharedHistoryManager}
         onCloseSidebar={handleCloseSidebar}
-        onOpenSettings={() => onOpenSettings()}
+        sidebarShortcuts={settings.customSettings.sidebarShortcuts}
+        onOpenSettings={onOpenSettings}
         appUpdate={appUpdate}
-        onOpenSkillsHub={() => {
+        onOpenResourceHub={(resource) => {
           cacheActiveComposerDraft();
           setRightDockOpen(false);
-          setActiveView("skills-hub");
-        }}
-        onOpenMcpHub={() => {
-          cacheActiveComposerDraft();
-          setRightDockOpen(false);
-          setActiveView("mcp-hub");
+          setActiveView(`${resource}-hub`);
         }}
       />
 

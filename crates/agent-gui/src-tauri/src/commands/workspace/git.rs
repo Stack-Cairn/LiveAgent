@@ -14,7 +14,7 @@ use wait_timeout::ChildExt;
 
 use crate::commands::system::validate_project_folder_name;
 use crate::runtime::process::{
-    configure_child_process_group, kill_child_process_tree_best_effort,
+    configure_child_process_group, kill_child_process_tree_best_effort, spawn_and_reap,
     terminate_process_tree_by_pid,
 };
 
@@ -1357,9 +1357,10 @@ fn spawn_system_file_manager(program: &str, args: &[String]) -> Result<(), Strin
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("打开系统资源管理器失败：{error}"))?;
+        .stderr(Stdio::null());
+    // 启动器不等，但必须收尸：`Child` 直接丢掉的话，子进程退出后没人 wait()，
+    // 每次"在文件管理器中显示"都会在本进程下留一个 <defunct>。
+    spawn_and_reap(&mut command).map_err(|error| format!("打开系统资源管理器失败：{error}"))?;
     Ok(())
 }
 

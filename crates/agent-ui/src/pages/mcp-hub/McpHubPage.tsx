@@ -17,6 +17,7 @@ type McpHubPageProps = {
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   isAgentMode: boolean;
+  embedded?: boolean;
 };
 
 type McpHubView = "installed" | "store" | "import";
@@ -81,6 +82,7 @@ export function McpHubPage(props: McpHubPageProps) {
     <div className="hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden">
         <HubHeader
+          embedded={props.embedded}
           title="MCP Hub"
           subtitle={t("mcpHub.subtitle")}
           prominent
@@ -108,7 +110,13 @@ export function McpHubPage(props: McpHubPageProps) {
           }
         />
 
-        <div className="hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10">
+        <div
+          className={
+            props.embedded
+              ? "hub-scroll min-h-0 flex-1 overflow-hidden"
+              : "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10"
+          }
+        >
           <div className="hub-content-stage mx-auto flex h-full min-h-0 w-full max-w-[1320px] flex-col">
             <Tabs
               value={view}

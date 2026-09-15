@@ -6,6 +6,8 @@ export type SetSettingsFn = (updater: (prev: AppSettings) => AppSettings) => voi
 
 export type SectionId =
   | "system"
+  | "skills"
+  | "mcp"
   | "systemTools"
   | "stt"
   | "providers"

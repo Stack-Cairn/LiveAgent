@@ -2,8 +2,10 @@ import { createSettingsExtension } from "@liveagent/adapters/settingsExtension";
 import type { SttProviderId } from "@liveagent/app/lib/settings";
 import type { SettingsPageProps } from "@liveagent/app/pages/settings/types";
 import {
+  Blend,
   BookOpen,
   Brain,
+  Cable,
   Clock3,
   Cloud,
   Cpu,
@@ -23,6 +25,7 @@ import { HooksSection } from "./HooksSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { ProvidersSection } from "./ProvidersSection";
 import { RemoteSection } from "./RemoteSection";
+import { ResourceHubSection } from "./ResourceHubSection";
 import { SettingsShell } from "./SettingsShell";
 import { SshSection } from "./SshSection";
 import { SttSection } from "./SttSection";
@@ -111,11 +114,28 @@ export function SettingsPage(props: SettingsPageProps) {
         icon: <BookOpen className={extension.iconClassName} />,
         render: () => <AgentsSection settings={settings} setSettings={setSettings} />,
       },
+      ...(["skills", "mcp"] as const).map((id, index) => ({
+        id,
+        groupKey: "settings.groupResources",
+        groupOrder: 20,
+        order: (index + 1) * 10,
+        labelKey: id === "skills" ? "settings.navSkills" : "settings.navMcp",
+        icon:
+          id === "skills" ? (
+            <Blend className={extension.iconClassName} />
+          ) : (
+            <Cable className={extension.iconClassName} />
+          ),
+        contentMode: "fill" as const,
+        render: () => (
+          <ResourceHubSection resource={id} settings={settings} setSettings={setSettings} />
+        ),
+      })),
       {
         id: "memory",
-        groupKey: "settings.groupIntelligence",
+        groupKey: "settings.groupResources",
         groupOrder: 20,
-        order: 10,
+        order: 40,
         labelKey: "settings.navMemory",
         icon: <Brain className={extension.iconClassName} />,
         contentMode: "fill",
@@ -130,7 +150,7 @@ export function SettingsPage(props: SettingsPageProps) {
       {
         id: "systemTools",
         groupKey: "settings.groupIntelligence",
-        groupOrder: 20,
+        groupOrder: 25,
         order: 20,
         labelKey: "settings.navSystemTools",
         icon: <Wrench className={extension.iconClassName} />,
@@ -142,7 +162,7 @@ export function SettingsPage(props: SettingsPageProps) {
         // 在桌面主机那台机器上完成的动作在 web 面收起——判定交给组件的 surface。
         id: "cua",
         groupKey: "settings.groupIntelligence",
-        groupOrder: 20,
+        groupOrder: 25,
         order: 25,
         labelKey: "settings.navCua",
         icon: <SquareMousePointer className={extension.iconClassName} />,
@@ -157,7 +177,7 @@ export function SettingsPage(props: SettingsPageProps) {
       {
         id: "stt",
         groupKey: "settings.groupIntelligence",
-        groupOrder: 20,
+        groupOrder: 25,
         order: 30,
         labelKey: "settings.navStt",
         icon: <Mic className={extension.iconClassName} />,
@@ -173,9 +193,9 @@ export function SettingsPage(props: SettingsPageProps) {
       },
       {
         id: "hooks",
-        groupKey: "settings.groupAutomation",
-        groupOrder: 30,
-        order: 10,
+        groupKey: "settings.groupResources",
+        groupOrder: 20,
+        order: 50,
         labelKey: "settings.navHooks",
         icon: <Zap className={extension.iconClassName} />,
         contentMode: "fill",
@@ -183,9 +203,9 @@ export function SettingsPage(props: SettingsPageProps) {
       },
       {
         id: "cron",
-        groupKey: "settings.groupAutomation",
-        groupOrder: 30,
-        order: 20,
+        groupKey: "settings.groupResources",
+        groupOrder: 20,
+        order: 30,
         labelKey: "settings.navCron",
         icon: <Clock3 className={extension.iconClassName} />,
         render: () => <CronSection settings={settings} setSettings={setSettings} />,

@@ -159,6 +159,12 @@ impl GatewayController {
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(GATEWAY_CHAT_LEASE_SWEEP_INTERVAL).await;
+                    // 未连上网关时这些 tick 什么也做不成（inbox 只有远端会写、
+                    // 租约只服务远端会话），但每条都要抢锁扫一遍。这条循环在未配置
+                    // 网关的机器上也常驻，所以先按 online 收敛。
+                    if !controller.status().online {
+                        continue;
+                    }
                     if let Err(error) = controller.expire_remote_chat_leases().await {
                         eprintln!("expire gateway remote chat leases failed: {error}");
                     }
@@ -179,6 +185,11 @@ impl GatewayController {
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(GATEWAY_RUNTIME_STATUS_REPUBLISH_INTERVAL).await;
+                    // 离线时发送本身就是 no-op，但快照构造 + protobuf 编码照旧执行。
+                    // 这条循环同样在未配置网关时常驻，先按 online 收敛掉。
+                    if !controller.status().online {
+                        continue;
+                    }
                     let Some((worker_id, state, visible, active_run_count)) =
                         controller.runtime_status_republish_snapshot()
                     else {

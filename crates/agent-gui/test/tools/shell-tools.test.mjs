@@ -1520,3 +1520,54 @@ test("resumable Bash blocks leading sleep polling but allows short or internal s
   );
   assert.equal(calls.length, 2);
 });
+
+test("Bash tool spells out a provider-capped timeout instead of leaving the kill unexplained", async () => {
+  // 实测报告里的困惑："同一个构建连续跑了三次，前两次日志里看不到失败原因"。
+  // 这一层从来没有自动重试——重复执行都是模型自己发起的；前两次是被 provider
+  // 的 30s 上限杀掉的，而被外部杀死的命令自己的日志里当然什么都没有。所以工具
+  // 结果必须把"这是超时被杀，不是崩溃/脚本报错"写清楚，并给出可行替代做法。
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command) {
+          assert.equal(command, "shell_run");
+          return {
+            exit_code: -1,
+            shell: "bash",
+            platform: "macos",
+            profile: "posix-bash",
+            shell_family: "posix",
+            stdout: "",
+            stderr: "",
+            stdout_truncated: false,
+            stderr_truncated: false,
+            timed_out: true,
+            cancelled: false,
+            effective_timeout_ms: 30_000,
+            duration_ms: 30_123,
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "deepseek",
+    runtimePlatform: "macos",
+  });
+
+  const result = await bundle.executeToolCall(createBashCall("make build"));
+
+  assert.equal(result.isError, true);
+  assert.equal(result.details.timed_out, true);
+  const text = result.content[0].text;
+  assert.match(text, /timed_out: true/);
+  assert.match(text, /timeout_ms: 30000/);
+  assert.match(text, /killed by the shell timeout \(30000ms\)/);
+  assert.match(text, /it did not crash/);
+  assert.match(text, /DeepSeek caps Bash at 30000ms/);
+  assert.match(text, /re-running the identical command unchanged reaches the same limit/);
+  assert.match(text, /redirect the output to a file/);
+});

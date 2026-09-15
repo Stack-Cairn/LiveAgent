@@ -7,6 +7,7 @@ import {
   type FollowEvent,
   type FollowState,
   isDominantVerticalWheel,
+  isPointInNativeScrollbarGutter,
   POINTER_DRAG_SLOP_PX,
   reduceFollowEvent,
   SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE,
@@ -289,6 +290,26 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
     // can swallow the matching pointerup.
     let pointerDownX = 0;
     let pointerDownY = 0;
+    // The viewport's own native scrollbar has no DOM node to hit-test, so a
+    // press is classified geometrically: inside the border box but outside
+    // the client box. Only mouse presses qualify — touch scrolls the content
+    // and never grabs a native thumb, and a stylus press is not a scroll intent.
+    const isPressOnNativeScrollbar = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse" || event.target !== viewport) {
+        return false;
+      }
+      const rect = viewport.getBoundingClientRect();
+      return isPointInNativeScrollbarGutter(event.clientX, event.clientY, {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        clientLeft: viewport.clientLeft,
+        clientTop: viewport.clientTop,
+        clientWidth: viewport.clientWidth,
+        clientHeight: viewport.clientHeight,
+      });
+    };
     const handlePointerDown = (event: PointerEvent) => {
       if (event.pointerType === "mouse" && event.button === 2) {
         return;
@@ -296,12 +317,21 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
       pointerDownX = event.clientX;
       pointerDownY = event.clientY;
       dispatch({ type: "pointerDown" });
-      // A press on the custom scrollbar is unambiguous scroll intent, and a
-      // track click jumps scrollTop synchronously on pointerdown with zero
-      // pointer movement — the movement-slop promotion below would never fire
-      // and the corrector would undo the jump. Content clicks keep the slop
-      // gate (static click + layout echo must not read as a drag).
-      if (event.target instanceof Element && event.target.closest("[data-scroll-area-scrollbar]")) {
+      // A press on a scrollbar is unambiguous scroll intent, and neither kind
+      // can rely on the movement-slop promotion below:
+      // - a custom-scrollbar track click jumps scrollTop synchronously on
+      //   pointerdown with zero pointer movement, so the corrector would undo
+      //   the jump;
+      // - a native thumb drag delivers no pointermove to the page at all
+      //   (Chromium/WebKit route it to the scrollbar), only scroll events, so
+      //   the drag would read as "following + gap opened" and get re-pinned to
+      //   the bottom on every frame — the thumb looks glued in place.
+      // Content clicks keep the slop gate (static click + layout echo must not
+      // read as a drag).
+      if (
+        (event.target instanceof Element && event.target.closest("[data-scroll-area-scrollbar]")) ||
+        isPressOnNativeScrollbar(event)
+      ) {
         cancelJumpAnimation();
         dispatch({ type: "pointerDragStart" });
       }

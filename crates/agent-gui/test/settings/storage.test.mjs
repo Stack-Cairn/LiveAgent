@@ -128,3 +128,32 @@ test("a missing retryErrorSettings field falls back to all presets (legacy snaps
     });
   });
 });
+
+
+test("sidebar shortcuts survive a local save and reload without changing resource activation", async () => {
+  await withGlobal("localStorage", createMemoryLocalStorage(), async () => {
+    const commands = [];
+    const loader = createTsModuleLoader({
+      mocks: { "@tauri-apps/api/core": { invoke: async (command) => {
+        commands.push(command);
+        return {};
+      } } },
+    });
+    const storage = loader.loadModule("src/lib/settings/storage.ts");
+    const settings = loader.loadModule("src/lib/settings/index.ts");
+    const initial = await storage.loadPersistedSettings();
+    assert.deepEqual(initial.customSettings.sidebarShortcuts, {
+      skills: true, mcp: true, cron: true, memory: true,
+    });
+    const hidden = { skills: false, mcp: true, cron: false, memory: false };
+    const next = settings.updateCustomSettings(initial, { sidebarShortcuts: hidden });
+    commands.length = 0;
+    await storage.persistSettings(initial, next);
+    assert.deepEqual(commands, []);
+    const loaded = await storage.loadPersistedSettings();
+    assert.deepEqual(loaded.customSettings.sidebarShortcuts, hidden);
+    for (const key of ["skills", "mcp", "memory"]) {
+      assert.deepEqual(loaded[key], initial[key]);
+    }
+  });
+});

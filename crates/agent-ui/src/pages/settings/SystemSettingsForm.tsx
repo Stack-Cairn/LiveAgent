@@ -49,6 +49,8 @@ import {
 } from "@liveagent/ui/pages/settings/shared";
 import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
 
+import { SidebarShortcutsSection } from "./SidebarShortcutsSection";
+
 const FONT_SCALE_OPTIONS = [0.9, 1, 1.1, 1.2] as const;
 type FontFamilySettingKey = "interfaceFontFamily" | "chatFontFamily" | "codeFontFamily";
 
@@ -436,6 +438,8 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           />
         </div>
       </SettingsGroup>
+
+      <SidebarShortcutsSection settings={settings} setSettings={setSettings} />
 
       <SettingsGroup title={t("settings.systemProxy")}>
         <div>

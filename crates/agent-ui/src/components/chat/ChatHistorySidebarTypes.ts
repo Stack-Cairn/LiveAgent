@@ -1,10 +1,13 @@
 import type { WorkspaceProject } from "@liveagent/app/lib/settings";
+import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
 import type {
   SidebarBatchDeleteOptions,
   SidebarBatchDeleteResult,
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
+import type { SidebarShortcutId, SidebarShortcuts } from "../../lib/settings/sidebarShortcuts";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
+import type { WorkspaceHistoryState } from "../../lib/sidebar/store";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 
@@ -25,6 +28,12 @@ export type WorkspaceFolderDropHandlers = {
 };
 
 export type ChatHistorySidebarProps = {
+  projectOrder?: readonly string[];
+  pinnedOrder?: readonly string[];
+  onReorderPinned?: (orderedKeys: string[]) => void;
+  onReorderProjects?: (orderedPaths: string[]) => void;
+  workspaceHistory?: ReadonlyMap<string, WorkspaceHistoryState>;
+  onLoadWorkspaceHistory?: (cwd: string, more?: boolean) => Promise<void>;
   items: readonly SidebarConversation[];
   currentConversationId: string;
   // Per-row in-flight mutations: only that row's menu/inputs disable.
@@ -57,7 +66,7 @@ export type ChatHistorySidebarProps = {
   fontScale?: number;
   /** Incremented by the desktop host when its configured search shortcut fires. */
   conversationSearchRequestKey?: number;
-  activeView?: "chat" | "skills-hub" | "mcp-hub";
+  activeView?: ApplicationViewId;
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
   projects?: WorkspaceProject[];
@@ -140,9 +149,9 @@ export type ChatHistorySidebarProps = {
   ) => Promise<SidebarBatchDeleteResult>;
   onLoadMore: () => void;
   onCloseSidebar: () => void;
+  sidebarShortcuts?: SidebarShortcuts;
   onOpenSettings: () => void;
-  onOpenSkillsHub?: () => void;
-  onOpenMcpHub?: () => void;
+  onOpenResourceHub: (resource: SidebarShortcutId) => void;
   headerTop?: ReactNode;
   brand?: ReactNode;
   hideCloseButton?: boolean;
@@ -151,6 +160,10 @@ export type ChatHistorySidebarProps = {
 
 export type ChatHistorySidebarWorkspaceSource = Pick<
   ChatHistorySidebarProps,
+  | "pinnedOrder"
+  | "onReorderPinned"
+  | "projectOrder"
+  | "onReorderProjects"
   | "showProjects"
   | "workspaceProjectGroups"
   | "activeProjectId"
@@ -180,6 +193,10 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
 >;
 
 type OptionalWorkspaceSourceKey =
+  | "pinnedOrder"
+  | "onReorderPinned"
+  | "projectOrder"
+  | "onReorderProjects"
   | "workspaceProjectGroups"
   | "workspaceFolderDropActive"
   | "workspaceFolderDropHandlers"
@@ -211,9 +228,10 @@ export type ChatHistorySidebarContainerSource = Required<
     | "onShareConversation"
     | "onOpenSharedConversations"
     | "onCloseSidebar"
+    | "sidebarShortcuts"
     | "onOpenSettings"
   > &
-  Required<Pick<ChatHistorySidebarProps, "activeView" | "onOpenSkillsHub" | "onOpenMcpHub">> & {
+  Required<Pick<ChatHistorySidebarProps, "activeView" | "onOpenResourceHub">> & {
     projects: WorkspaceProject[];
   };
 
@@ -226,9 +244,9 @@ type ChatHistorySidebarConversationSource = Pick<
   | "onShareConversation"
   | "onOpenSharedConversations"
   | "onCloseSidebar"
+  | "sidebarShortcuts"
   | "onOpenSettings"
-  | "onOpenSkillsHub"
-  | "onOpenMcpHub"
+  | "onOpenResourceHub"
 >;
 
 type ChatHistorySidebarConversationHandlers = Pick<
@@ -310,8 +328,8 @@ export function buildChatHistorySidebarConversationProps(
     onOpenSharedConversations: source.onOpenSharedConversations,
     onCloseSidebar: source.onCloseSidebar,
     onOpenSettings: source.onOpenSettings,
-    onOpenSkillsHub: source.onOpenSkillsHub,
-    onOpenMcpHub: source.onOpenMcpHub,
+    sidebarShortcuts: source.sidebarShortcuts,
+    onOpenResourceHub: source.onOpenResourceHub,
   };
 }
 
@@ -321,6 +339,10 @@ export function buildChatHistorySidebarWorkspaceProps(
   runningProjectPathKeys: ReadonlySet<string>,
 ) {
   return {
+    pinnedOrder: source.pinnedOrder,
+    onReorderPinned: source.onReorderPinned,
+    projectOrder: source.projectOrder,
+    onReorderProjects: source.onReorderProjects,
     showProjects: source.showProjects,
     projects,
     workspaceProjectGroups: source.workspaceProjectGroups,

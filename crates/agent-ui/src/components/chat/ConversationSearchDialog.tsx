@@ -11,6 +11,7 @@ import {
   type PersistedConversationSearchResult,
   searchPersistedConversations,
 } from "@liveagent/ui/lib/chat/conversationSearch";
+import { cachedDateTimeFormat } from "@liveagent/ui/lib/shared/intlFormatters";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
@@ -47,7 +48,7 @@ function toSearchResult(item: SidebarConversation): PersistedConversationSearchR
 
 function formatUpdatedAt(value: number | undefined, locale: string) {
   if (!value || !Number.isFinite(value)) return "";
-  return new Intl.DateTimeFormat(locale, {
+  return cachedDateTimeFormat(locale, "search-updated-at", {
     month: "short",
     day: "numeric",
     hour: "2-digit",

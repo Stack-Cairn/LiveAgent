@@ -245,8 +245,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleSidebarConversationsRemoved,
     handleSidebarLocalDraftDeleted,
     handleSidebarNewConversation,
-    handleSidebarOpenMcpHub,
-    handleSidebarOpenSkillsHub,
+    handleSidebarOpenResourceHub,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
     handleSidebarSelectConversation,
@@ -1269,6 +1268,20 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
           <div className="gateway-editor-host">
             <GatewaySidebarContainer
+              pinnedOrder={settings.system.sidebarPinnedOrder}
+              onReorderPinned={(sidebarPinnedOrder) =>
+                setSettings((previous) => ({
+                  ...previous,
+                  system: { ...previous.system, sidebarPinnedOrder },
+                }))
+              }
+              projectOrder={settings.system.workspaceProjectOrder}
+              onReorderProjects={(workspaceProjectOrder) =>
+                setSettings((previous) => ({
+                  ...previous,
+                  system: { ...previous.system, workspaceProjectOrder },
+                }))
+              }
               store={sidebarStore}
               approvalConversationIds={approvalConversationIds}
               transientRunningConversations={manualCompactTransientConversations}
@@ -1328,9 +1341,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               onLocalDraftDeleted={handleSidebarLocalDraftDeleted}
               onConversationsRemoved={handleSidebarConversationsRemoved}
               onCloseSidebar={() => setSidebarOpen(false)}
-              onOpenSettings={() => openSettings()}
-              onOpenSkillsHub={handleSidebarOpenSkillsHub}
-              onOpenMcpHub={handleSidebarOpenMcpHub}
+              sidebarShortcuts={settings.customSettings.sidebarShortcuts}
+              onOpenSettings={openSettings}
+              onOpenResourceHub={handleSidebarOpenResourceHub}
             />
 
             {shareConversation ? (

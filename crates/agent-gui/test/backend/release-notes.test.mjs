@@ -98,8 +98,7 @@ test("AI release notes script falls back when no API key is configured", () => {
 
     const result = runNotesScript(["v0.1.6", outputPath, fallbackPath], {
       AI_RELEASE_NOTES_API_KEY: "",
-      PACKYCODE_API_KEY: "",
-      OPENAI_API_KEY: "",
+      DEEPSEEK_API_KEY: "",
     });
 
     assert.equal(
@@ -156,8 +155,7 @@ test("AI release notes script calls Chat Completions API and writes markdown", a
       AI_RELEASE_NOTES_BASE_URL: `http://${address.address}:${address.port}/v1`,
       AI_RELEASE_NOTES_MODEL: "gpt-test",
       AI_RELEASE_NOTES_TIMEOUT_MS: "2000",
-      PACKYCODE_API_KEY: "",
-      OPENAI_API_KEY: "",
+      DEEPSEEK_API_KEY: "",
     }, { cwd: dir });
 
     assert.equal(
@@ -227,8 +225,7 @@ test("AI release notes script falls back to Responses API when chat output is em
       AI_RELEASE_NOTES_BASE_URL: `http://${address.address}:${address.port}/v1`,
       AI_RELEASE_NOTES_MODEL: "gpt-test",
       AI_RELEASE_NOTES_TIMEOUT_MS: "2000",
-      PACKYCODE_API_KEY: "",
-      OPENAI_API_KEY: "",
+      DEEPSEEK_API_KEY: "",
     }, { cwd: dir });
 
     assert.equal(

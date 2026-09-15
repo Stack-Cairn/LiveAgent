@@ -1,3 +1,4 @@
+import { listPinnedSidebarConversations } from "@liveagent/ui/lib/sidebar/pinnedHistory";
 // GUI adapter for the shared sidebar state layer: wraps the Tauri chat-history
 // IPC surface and the single CHAT_HISTORY_SYNC_EVENT subscription. This file
 // is NOT mirrored — it is the desktop end's platform boundary.
@@ -61,6 +62,8 @@ function toSidebarBackendEvent(event: ChatHistorySyncEvent): SidebarBackendEvent
 
 export function createGuiSidebarBackend(): SidebarBackend {
   return {
+    listPinnedConversations: () =>
+      listPinnedSidebarConversations((page, pageSize) => listChatHistory(page, pageSize)),
     // scope.kind === "none" never reaches the adapter — the store resolves it
     // locally to an empty list without an IPC round-trip.
     listConversations: async (page, pageSize, scope) => {

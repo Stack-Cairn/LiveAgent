@@ -124,7 +124,8 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
     mutations,
     mutationErrors,
     projectActivityInputs,
-  } = useSidebarContainerState(store);
+    workspaceHistory,
+  } = useSidebarContainerState(store, props.showProjects);
   const conversationIndex = useSidebarSelector(store, selectConversationIndex);
   const effectiveRunningActivity = useMemo(
     () =>
@@ -319,6 +320,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
   const sortedProjects = useMemo(
     () =>
       sortWorkspaceProjectsByActivity(projects, {
+        projectOrder: props.projectOrder,
         projectActivityUpdatedAts: projectActivityInputs.workdirActivity,
         runningProjectPathKeys: effectiveRunningActivity.runningProjectPathKeys,
       }),
@@ -326,11 +328,14 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       effectiveRunningActivity.runningProjectPathKeys,
       projectActivityInputs.workdirActivity,
       projects,
+      props.projectOrder,
     ],
   );
 
   return (
     <ChatHistorySidebar
+      workspaceHistory={workspaceHistory}
+      onLoadWorkspaceHistory={store.loadWorkspaceHistory}
       {...buildChatHistorySidebarBaseProps(props, {
         items,
         busyConversationIds: mutations,

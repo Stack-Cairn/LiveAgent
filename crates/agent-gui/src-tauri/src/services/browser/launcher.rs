@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::runtime::process::{configure_child_process_group, kill_child_process_tree_best_effort};
+use crate::runtime::process::{
+    configure_child_process_group, kill_child_process_tree_best_effort, process_start_time_ms,
+    spawn_child_reaper, terminate_process_tree_by_pid_if_same,
+};
 
 /// 浏览器自动化专用 profile，与用户日常浏览器 profile 隔离（防登录态/凭据暴露）。
 /// 见 docs/design/browser-automation.md。
@@ -76,7 +79,12 @@ fn browser_candidates() -> Vec<PathBuf> {
 }
 
 pub(crate) struct LaunchedBrowser {
-    pub child: Child,
+    /// 进程组 leader 的 pid。Child 句柄不在本结构里——它归收尸线程所有，见
+    /// `launch_browser` 与 `runtime::process::spawn_child_reaper`。
+    pid: u32,
+    /// 启动时刻的近似值（由 `ps -o etime` 反推），用于拒绝 pid 复用后的误杀；
+    /// 探测失败时为 None，此时 Drop 退回 pid-only 语义。
+    started_at_ms: Option<i64>,
     pub executable: PathBuf,
     pub debug_port: u16,
 }
@@ -84,13 +92,17 @@ pub(crate) struct LaunchedBrowser {
 impl LaunchedBrowser {
     /// 浏览器主进程 pid（供 BrowserManager 旁路记录，shutdown 兜底 kill 用）。
     pub(crate) fn child_pid(&self) -> u32 {
-        self.child.id()
+        self.pid
     }
 }
 
 impl Drop for LaunchedBrowser {
     fn drop(&mut self) {
-        kill_child_process_tree_best_effort(&mut self.child);
+        terminate_process_tree_by_pid_if_same(
+            self.pid,
+            self.started_at_ms,
+            Duration::from_millis(300),
+        );
     }
 }
 
@@ -123,11 +135,21 @@ pub(crate) fn launch_browser(executable: &PathBuf) -> Result<LaunchedBrowser, St
         .map_err(|e| format!("启动浏览器失败（{}）：{e}", executable.display()))?;
 
     match wait_for_devtools_port(&port_file, &mut child, Duration::from_secs(15)) {
-        Ok(debug_port) => Ok(LaunchedBrowser {
-            child,
-            executable: executable.clone(),
-            debug_port,
-        }),
+        Ok(debug_port) => {
+            let pid = child.id();
+            // 浏览器进程的存活期与整个会话相当，期间没有任何 tick 会去 try_wait
+            // 它。用户手关窗口（或它自己崩掉）之后，不收尸就会在父进程下留一个
+            // `<defunct>` 直到会话结束——实测报告里"每个 Browser 会话漏一个僵尸"
+            // 就是这条路径。句柄交给收尸线程后，kill 改走 pid + 启动时间比对。
+            let started_at_ms = process_start_time_ms(pid);
+            spawn_child_reaper(child);
+            Ok(LaunchedBrowser {
+                pid,
+                started_at_ms,
+                executable: executable.clone(),
+                debug_port,
+            })
+        }
         Err(error) => {
             kill_child_process_tree_best_effort(&mut child);
             Err(error)

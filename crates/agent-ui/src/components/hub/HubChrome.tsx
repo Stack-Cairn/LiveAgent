@@ -1,4 +1,3 @@
-import { HubTitleBar } from "@liveagent/adapters/hubChrome";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/shared/utils";
 
@@ -32,6 +31,7 @@ export function HubBackdrop(props: { tone?: "amber" | "violet" | "neutral" }) {
 // 侧栏开关不在这里渲染：AppWorkbenchChrome(ChatHeader)常驻于所有视图之上，
 // 侧栏收起时已经提供了同一个按钮。Hub 自己再画一个就会在窄屏上叠出两枚
 // PanelLeft(#501 之前 Hub 页面没有顶栏，才需要自带一枚)。
+// 顶栏也已预留 macOS 窗口控件空间，Hub 内容无需再次添加标题栏占位。
 export function HubHeader(props: {
   icon?: ReactNode;
   title: string;
@@ -39,29 +39,30 @@ export function HubHeader(props: {
   tone?: "amber" | "violet" | "neutral";
   actions?: ReactNode;
   prominent?: boolean;
+  embedded?: boolean;
 }) {
-  const { icon, title, subtitle, actions, prominent = false } = props;
+  const { icon, title, subtitle, actions, prominent = false, embedded = false } = props;
   return (
-    <>
-      <HubTitleBar />
+    <div
+      className={cn(
+        "hub-header relative z-10",
+        embedded ? "pb-5" : "px-5 sm:px-6 lg:px-8 xl:px-10",
+        !embedded && (prominent ? "pb-5 pt-4" : "pb-3 pt-4"),
+      )}
+    >
       <div
         className={cn(
-          "hub-header relative z-10 px-5 sm:px-6 lg:px-8 xl:px-10",
-          prominent ? "pb-5 pt-8" : "pb-3 pt-6",
+          "mx-auto flex w-full max-w-[1320px] gap-4",
+          prominent ? "items-end" : "items-center",
         )}
       >
-        <div
-          className={cn(
-            "mx-auto flex w-full max-w-[1320px] gap-4",
-            prominent ? "items-end" : "items-center",
-          )}
-        >
-          {icon ? (
-            <div className="hub-header-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-foreground shadow-xs">
-              {icon}
-            </div>
-          ) : null}
-          <div className="min-w-0 flex-1">
+        {icon ? (
+          <div className="hub-header-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-foreground shadow-xs">
+            {icon}
+          </div>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          {!embedded ? (
             <h1
               className={cn(
                 "font-semibold leading-tight tracking-tight text-foreground",
@@ -70,22 +71,22 @@ export function HubHeader(props: {
             >
               {title}
             </h1>
-            {subtitle ? (
-              <p
-                className={cn(
-                  "truncate text-muted-foreground",
-                  prominent ? "mt-1.5 text-sm" : "mt-0.5 text-[12px]",
-                )}
-                title={subtitle}
-              >
-                {subtitle}
-              </p>
-            ) : null}
-          </div>
-          {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+          ) : null}
+          {subtitle ? (
+            <p
+              className={cn(
+                "truncate text-muted-foreground",
+                prominent ? "mt-1.5 text-sm" : "mt-0.5 text-[12px]",
+              )}
+              title={subtitle}
+            >
+              {subtitle}
+            </p>
+          ) : null}
         </div>
+        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </div>
-    </>
+    </div>
   );
 }
 

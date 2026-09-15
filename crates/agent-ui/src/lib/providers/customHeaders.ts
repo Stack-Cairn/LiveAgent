@@ -55,8 +55,8 @@ export class CustomHeaderImportError extends Error {
 // 版本对不上本身就是破绽。
 // anthropic-beta 不在这里：它按请求内容逐次计算（comma 拼接的 beta 列表），写死一个
 // 值反而失真，因此列进 RESERVED_CUSTOM_HEADER_KEYS 由发请求那侧生成。
-// X-Stainless-OS/Arch/Runtime-Version 本为运行机实测值，这里固定成一台 macOS/arm64
-// 机器的成套取值。
+// X-Stainless-OS/Arch/Runtime-Version 与官方 SDK 默认值保持一致；平台相关的 CLI
+// User-Agent 由 buildCliUserAgent 按当前运行环境生成。
 export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "x-app": "cli",
   "Content-Type": "application/json",
@@ -74,6 +74,18 @@ export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "anthropic-dangerous-direct-browser-access": "true",
 } as const;
 
+function runtimePlatform(): { os: string; arch: string } {
+  const nav = typeof navigator !== "undefined" ? navigator : undefined;
+  const ua = nav?.userAgent ?? "";
+  const os = /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS/i.test(ua) ? "MacOS" : "Linux";
+  const arch = /arm|aarch/i.test(ua) ? "arm64" : "x86_64";
+  return { os, arch };
+}
+
+export function getCliRuntimePlatform(): { os: string; arch: string } {
+  return runtimePlatform();
+}
+
 // Claude Code 每会话头（claude-code-source src/services/api/client.ts:108 / :356）。
 // 取值是运行时 session UUID，一键模拟不写死；请求装配侧有 sessionId 时再填。
 export const CLAUDE_SESSION_ID_HEADER = "X-Claude-Code-Session-Id";
@@ -90,11 +102,12 @@ export const CODEX_THREAD_ID_HEADER = "thread-id";
 
 // 各官方 CLI 的版本号：UA 与随附的 version / client-version 头必须同源，二者对不上
 // 本身就是破绽。claude_code / xai 取自用户提供的官方源码（claude-code-source
-// package.json = 2.1.88；xai-grok-version/Cargo.toml = 1.0.6）；codex 源码树是占位
+// package.json = 2.1.88；Grok 当前发布版为 1.0.24；codex 源码树是占位
 // 0.0.0（release 才 bump），无法作真值，沿用当前发行号。
 const CLAUDE_CLI_VERSION = "2.1.88";
 const CODEX_CLI_VERSION = "0.151.0";
-const GROK_CLI_VERSION = "1.0.6";
+// 当前 grok CLI 发布版；UA 与 x-grok-client-version 必须保持一致。
+const GROK_CLI_VERSION = "1.0.24";
 
 // Codex CLI 每次请求除 UA 外恒发的两个静态身份头：originator（codex-rs
 // login/src/auth/default_client.rs default_headers()，值 codex_cli_rs）与 version
@@ -106,14 +119,12 @@ export const CODEX_VERSION_HEADER = "version";
 // grok-shell 除 UA 外恒发的静态客户端身份头（xai-grok-http/src/lib.rs 的
 // process_client_identifier / process_client_mode + xai-grok-shell
 // mvp_agent/mod.rs inject_proxy_headers）。client-identifier/version/mode 各端都发；
-// X-XAI-Token-Auth / x-authenticateresponse 仅走官方 cli-chat-proxy 时注入，属于 CLI
-// 默认（已登录）指纹的一部分，直连 api.x.ai 时服务端忽略未知头、无副作用。
+// 认证代理专用的 X-XAI-Token-Auth / x-authenticateresponse 不属于默认客户端身份，
+// 因此不在预设中注入。
 const GROK_IDENTITY_HEADERS: readonly CustomHeader[] = [
   { key: "x-grok-client-identifier", value: "grok-shell" },
   { key: "x-grok-client-version", value: GROK_CLI_VERSION },
   { key: "x-grok-client-mode", value: "interactive" },
-  { key: "X-XAI-Token-Auth", value: "xai-grok-cli" },
-  { key: "x-authenticateresponse", value: "authenticate-response" },
 ];
 
 // grok-shell 每回合头（xai-grok-sampler/src/client.rs GrokRequestHeaders），取值随
@@ -179,13 +190,21 @@ export function isAnthropicOAuthApiKey(apiKey: string | undefined): boolean {
 // claude-code-source src/utils/http.ts、codex-rs login/src/auth/default_client.rs 的
 // get_codex_user_agent()、grok xai-grok-sampler/src/client.rs。版本号取自上面三个
 // *_CLI_VERSION 常量，保证 UA 与随附的 version / client-version 头同源。os/arch/终端
-// 段本为运行机实测值，这里固定成成套取值（codex 取 WSL Ubuntu；grok 取 linux）。
+// 段按当前运行机平台生成；静态预览值仅用于下拉菜单展示。
 // 这些值只在用户点按钮时写进自定义请求头，发请求那侧不含任何内置伪装。
 export const CLI_IDENTITY_USER_AGENTS = {
   claude_code: `claude-cli/${CLAUDE_CLI_VERSION} (external, cli)`,
   codex: `codex_cli_rs/${CODEX_CLI_VERSION} (Ubuntu 24.4.0; x86_64) WindowsTerminal`,
   xai: `grok-shell/${GROK_CLI_VERSION} (linux; x86_64)`,
 } as const;
+
+export function buildCliUserAgent(type: CliIdentityProviderId): string {
+  const version = CLI_IDENTITY_USER_AGENTS[type].match(/\/([0-9][^ ]*)/)?.[1] ?? "0.0.0";
+  const { os, arch } = runtimePlatform();
+  if (type === "claude_code") return `claude-cli/${version} (external, cli)`;
+  if (type === "codex") return `codex_cli_rs/${version} (${os}; ${arch})`;
+  return `grok-shell/${version} (${os.toLowerCase()}; ${arch})`;
+}
 
 export type CliIdentityProviderId = keyof typeof CLI_IDENTITY_USER_AGENTS;
 
@@ -209,7 +228,7 @@ export function listCliIdentityProviderIds(preferred?: string): readonly CliIden
 // x-grok-conv-id/req-id/session-id/turn-idx）冒充成固定串反而比不带更可疑，一律留给
 // 请求装配侧按 sessionId 填，或用户自己填（键名已进各自预设）。
 export function buildCliIdentityHeaders(type: CliIdentityProviderId): CustomHeader[] {
-  const headers: CustomHeader[] = [{ key: "User-Agent", value: CLI_IDENTITY_USER_AGENTS[type] }];
+  const headers: CustomHeader[] = [{ key: "User-Agent", value: buildCliUserAgent(type) }];
   if (type === "claude_code") {
     // Anthropic SDK 指纹头整套写入（Content-Type 除外，见上）。
     for (const [key, value] of Object.entries(ANTHROPIC_DEFAULT_REQUEST_HEADERS)) {

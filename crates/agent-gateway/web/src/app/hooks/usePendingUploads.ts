@@ -1,3 +1,4 @@
+import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { t as translate } from "@liveagent/ui/i18n/index";
@@ -38,7 +39,7 @@ type UsePendingUploadsParams = {
   historyShareToken: string | null;
   settingsSyncReady: boolean;
   settingsOpen: boolean;
-  activeView: "chat" | "skills-hub" | "mcp-hub";
+  activeView: ApplicationViewId;
   locale: AppSettings["locale"];
   executionMode: AppSettings["system"]["executionMode"];
   conversationId: string;

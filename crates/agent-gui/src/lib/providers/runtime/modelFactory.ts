@@ -217,6 +217,21 @@ function resolveCodexModelInput(api: CodexApi, modelId: string): Model<Api>["inp
   return ["text"];
 }
 
+/**
+ * DeepSeek 只有 Flash 家族吃图片：官方《图像理解》指南明确 deepseek-flash 支持
+ * image_url / input_image / Files API file_id 三种传法，并注明旧模型名
+ * deepseek-v4-flash-vision-exp 已下线、其请求同样由最新 Flash 承接。Pro 与更早
+ * 的模型不跟着一起放开，避免产生虚假能力声明。
+ *
+ * 中转端点若实际不吃图，用设置里的 inputModalities 覆盖成 ["text"]：用户覆盖
+ * 优先于本推断（见 createModelFromConfig 的 inputOverride）。
+ */
+function resolveDeepSeekModelInput(modelId: string): Model<Api>["input"] {
+  const normalizedModelId = modelId.trim().toLowerCase();
+  if (!normalizedModelId) return ["text"];
+  return normalizedModelId.includes("flash") ? ["text", "image"] : ["text"];
+}
+
 function isOfficialOpenAIBaseUrl(baseUrl: string | undefined) {
   if (!baseUrl?.trim()) return false;
   try {
@@ -345,7 +360,12 @@ export type ModelFactoryRoute = {
 function buildDeepSeekResponsesModel(
   route: ModelFactoryRoute,
   wireModelId: string,
-  fields: { contextWindow: number; maxTokens: number; thinking: ModelThinkingCapability },
+  fields: {
+    contextWindow: number;
+    maxTokens: number;
+    thinking: ModelThinkingCapability;
+    inputOverride: ReturnType<typeof normalizeInputModalities>;
+  },
 ): Model<Api> {
   const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   return {
@@ -357,7 +377,7 @@ function buildDeepSeekResponsesModel(
       officialHost: isOfficialDeepSeekBaseUrl(route.upstreamBaseUrl?.trim() || route.baseUrl),
     }),
     ...resolveModelThinkingFields(fields.thinking, DEEPSEEK_THINKING_WIRE_VALUES),
-    input: ["text"],
+    input: fields.inputOverride ?? resolveDeepSeekModelInput(route.modelId),
     cost: zeroCost,
     contextWindow: fields.contextWindow,
     maxTokens: fields.maxTokens,
@@ -454,13 +474,18 @@ export function createModelFromRoute(route: ModelFactoryRoute): Model<Api> {
   // 输入模态的用户显式覆盖（如给未被内置白名单识别的多模态模型开启图片
   // 输入）；缺省走各 provider 的内置推断/已知模型目录。校验逻辑与设置加载
   // 共用同一个 normalizer，不信任调用方的静态类型。
-  // 只在附件发送确实受 model.input 门控的分支生效（OpenAI 家族 / gemini）；
-  // DeepSeek Responses 的 wire 层硬拒绝图片、anthropic 附件路径暂不读 model.input，
-  // 这两处不适用用户覆盖，避免产生虚假能力声明。
+  // 只在附件发送确实受 model.input 门控的分支生效（OpenAI 家族 / gemini /
+  // DeepSeek Responses）；anthropic 附件路径暂不读 model.input，那里不适用用户
+  // 覆盖，避免产生虚假能力声明。
   const inputOverride = normalizeInputModalities(route.modelConfig?.inputModalities);
 
   if (route.protocol === "openai-responses" && route.dialect === "deepseek") {
-    return buildDeepSeekResponsesModel(route, wireModelId, { contextWindow, maxTokens, thinking });
+    return buildDeepSeekResponsesModel(route, wireModelId, {
+      contextWindow,
+      maxTokens,
+      thinking,
+      inputOverride,
+    });
   }
 
   if (route.protocol === "openai-responses" || route.protocol === "openai-completions") {

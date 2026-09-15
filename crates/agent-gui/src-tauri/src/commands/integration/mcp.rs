@@ -903,7 +903,14 @@ impl SseTransport {
         let thread_server_id = config.id.trim().to_string();
         let thread_server_url = url.to_string();
 
-        let handle = std::thread::spawn(move || loop {
+        // 失败重连用退避：固定 1s 会在上游不可达时以每秒一次的频率反复建连
+        //（DNS + TCP + TLS 握手），而"配置了 SSE server 却连不上"时这个循环是
+        // 常驻的。连上一次即复位，避免把瞬时抖动放大成持续退避。
+        const SSE_RECONNECT_MIN: Duration = Duration::from_secs(1);
+        const SSE_RECONNECT_MAX: Duration = Duration::from_secs(30);
+        let handle = std::thread::spawn(move || {
+            let mut backoff = SSE_RECONNECT_MIN;
+            loop {
             if thread_stop.load(Ordering::Relaxed) {
                 break;
             }
@@ -921,15 +928,22 @@ impl SseTransport {
             builder = builder.header(ACCEPT, "text/event-stream");
 
             let resp = match builder.send() {
-                Ok(r) => r,
+                Ok(r) => {
+                    // 建连成功即复位退避：下一次失败重新从最小间隔起，避免把
+                    // 瞬时抖动累积成持续 30s 才重连一次。
+                    backoff = SSE_RECONNECT_MIN;
+                    r
+                }
                 Err(_) => {
-                    std::thread::sleep(Duration::from_secs(1));
+                    std::thread::sleep(backoff);
+                    backoff = (backoff * 2).min(SSE_RECONNECT_MAX);
                     continue;
                 }
             };
 
             if !resp.status().is_success() {
-                std::thread::sleep(Duration::from_secs(1));
+                std::thread::sleep(backoff);
+                backoff = (backoff * 2).min(SSE_RECONNECT_MAX);
                 continue;
             }
 
@@ -995,6 +1009,7 @@ impl SseTransport {
                     data_lines.push(rest.trim_start().to_string());
                     continue;
                 }
+            }
             }
         });
 

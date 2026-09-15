@@ -1,3 +1,4 @@
+import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { sidebarScopeKey } from "@liveagent/ui/lib/sidebar/scope";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
@@ -45,7 +46,7 @@ type UseWorkspaceProjectsParams = {
   workdir: string;
   t: (key: string) => string;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
-  setActiveView: Dispatch<SetStateAction<"chat" | "skills-hub" | "mcp-hub">>;
+  setActiveView: Dispatch<SetStateAction<ApplicationViewId>>;
   setRightDockOpen: Dispatch<SetStateAction<boolean>>;
   startNewConversationActionRef: MutableRefObject<(options?: { workdir?: string }) => string>;
   prepareComposerForConversationChangeActionRef: MutableRefObject<() => void>;

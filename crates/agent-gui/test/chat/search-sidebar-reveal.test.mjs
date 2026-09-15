@@ -14,10 +14,12 @@ const virtualizer = {
 const icons = [
   "AlertCircle",
   "Blend",
+  "Brain",
   "Cable",
   "Check",
   "ChevronRight",
   "CirclePlus",
+  "Clock3",
   "Folder",
   "FolderClosed",
   "FolderOpen",

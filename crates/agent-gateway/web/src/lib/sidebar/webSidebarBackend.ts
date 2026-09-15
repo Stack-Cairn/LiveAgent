@@ -1,3 +1,4 @@
+import { listPinnedSidebarConversations } from "@liveagent/ui/lib/sidebar/pinnedHistory";
 // Web-only SidebarBackend adapter over the gateway WebSocket client. NOT
 // byte-mirrored: everything gateway-specific (snake_case summaries, epoch
 // units, the activity-store bridge) is normalized here so the mirrored store
@@ -154,6 +155,14 @@ export function createWebSidebarBackend(deps: WebSidebarBackendDeps): SidebarBac
   const { api, activityStore } = deps;
 
   return {
+    listPinnedConversations: () =>
+      listPinnedSidebarConversations(async (page, pageSize) => {
+        const response = await api.listHistory(page, pageSize);
+        return {
+          items: response.conversations.map(normalizeGatewayConversationSummary),
+          totalCount: response.total_count,
+        };
+      }),
     async listConversations(page, pageSize, scope): Promise<SidebarListPage> {
       const filter = scopeToHistoryListFilter(scope);
       if (!filter) {

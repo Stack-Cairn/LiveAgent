@@ -127,7 +127,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     mutations: busyConversationIds,
     mutationErrors,
     projectActivityInputs,
-  } = useSidebarContainerState(store);
+    workspaceHistory,
+  } = useSidebarContainerState(store, props.showProjects);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -137,10 +138,16 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
   const sortedProjects = useMemo(
     () =>
       sortWorkspaceProjectsByActivity(projects, {
+        projectOrder: props.projectOrder,
         projectActivityUpdatedAts: projectActivityInputs.workdirActivity,
         runningProjectPathKeys: projectActivityInputs.runningWorkdirPathKeys,
       }),
-    [projectActivityInputs.runningWorkdirPathKeys, projectActivityInputs.workdirActivity, projects],
+    [
+      projectActivityInputs.runningWorkdirPathKeys,
+      projectActivityInputs.workdirActivity,
+      projects,
+      props.projectOrder,
+    ],
   );
 
   const handleStartRenaming = useCallback(
@@ -244,6 +251,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
 
   return (
     <ChatHistorySidebar
+      workspaceHistory={workspaceHistory}
+      onLoadWorkspaceHistory={store.loadWorkspaceHistory}
       {...buildChatHistorySidebarBaseProps(props, {
         items,
         runningConversationIds,

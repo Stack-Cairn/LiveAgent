@@ -1,4 +1,8 @@
 export const ZH_CN_SETTINGS_TRANSLATIONS = {
+  "settings.navMcp": "MCP",
+  "settings.groupResources": "资源与自动化",
+  "settings.sidebarShortcuts": "侧栏快捷入口",
+  "settings.showSidebarShortcut": "在侧栏显示 {name}",
   "settings.navSystem": "系统设置",
   "settings.navSystemTools": "系统工具",
   "settings.navStt": "语音输入",
@@ -10,7 +14,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.navHooks": "Hooks",
   "settings.navAgents": "提示词模板",
   "settings.navSsh": "SSH",
-  "settings.navCron": "Cron",
+  "settings.navCron": "定时任务",
   "settings.navRemote": "Remote",
   "settings.navSkills": "Skills",
   "settings.navMemory": "记忆",
