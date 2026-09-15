@@ -443,7 +443,6 @@ test("groq has an overlay so it lands in the official channel catalog with a key
   const groq = registry.findProviderPreset("groq");
   assert.ok(groq);
   assert.equal(groq.name, "Groq");
-  assert.equal(groq.category, "official");
   assert.equal(groq.input, "key");
   assert.equal(groq.defaultChatProtocol, "openai-completions");
   assert.equal(groq.apiKeyUrl, "https://console.groq.com/keys");

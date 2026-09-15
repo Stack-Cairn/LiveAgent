@@ -1372,7 +1372,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelBackToList": "Back to channel list",
   "settings.channelCatalogHint":
     "Configured instances first; open any other channel and enter a key to enable it.",
-  "settings.channelCategory": "Type",
   "settings.channelDeclaredEndpoints": "Endpoints this channel provides (from the preset registry)",
   "settings.channelDocs": "Docs",
   "settings.channelEndpointRequired": "Fill in at least one endpoint Base URL",
@@ -1402,7 +1401,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelTemplateNeedsOrigin": "Generated once the address is filled in",
   "settings.customHeaderRowsIgnored":
     "{count} row(s) not applied (rows with an empty or invalid key are not saved)",
-  "settings.channelApiKeyRequired": "Enter an API key (optional for “Self-hosted” local services)",
   "settings.channelRequestPathPreview": "Request path: ",
   "settings.channelSelectHint": "Select a channel on the left",
   "settings.channelSetupAddressAndKey": "Enter the address and API key",
@@ -1441,9 +1439,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerSource.heuristic": "fallback",
   "settings.providerSourceReset": "reset",
   "settings.providerSecretConfigured": "Configured (type to replace)",
-  "settings.providerCategory.official": "Official",
-  "settings.providerCategory.relay": "Relay",
-  "settings.providerCategory.self-hosted": "Self-hosted",
   "settings.providerProbeStatus.none": "Not checked",
   "settings.providerProbeStatus.pending": "Checking…",
   "settings.providerProbeStatus.ok": "Available",

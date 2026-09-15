@@ -137,7 +137,6 @@ test("createProviderFromEndpoints derives the default endpoint and legacy type",
   const provider = model.createProviderFromEndpoints({
     name: "My relay",
     preset: undefined,
-    category: "relay",
     apiKey: "sk-relay",
     endpoints: {
       "anthropic-messages": "https://relay.example.com",
@@ -393,7 +392,6 @@ test("copying an instance prefills endpoints, dialects and auth from the source"
   const copy = model.createProviderFromEndpoints({
     name: "Packy · 2",
     preset: undefined,
-    category: "relay",
     apiKey: "sk-copy",
     endpoints: {
       "openai-completions": "https://www.packyapi.com/v1",

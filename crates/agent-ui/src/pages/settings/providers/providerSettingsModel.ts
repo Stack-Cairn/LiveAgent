@@ -826,7 +826,6 @@ export function createProviderFromAutoConfiguration(params: {
   name: string;
   apiKey: string;
   auto: AutoConfiguration;
-  category?: CustomProvider["category"];
 }): CustomProvider {
   const { preset, auto } = params;
   const defaultEndpoint = auto.endpointConfigs[auto.defaultChatProtocol];
@@ -846,7 +845,6 @@ export function createProviderFromAutoConfiguration(params: {
     id: createUuid(),
     name: params.name,
     presetId: preset.id,
-    category: params.category ?? preset.category,
     enabled: true,
     baseUrl: defaultEndpoint?.baseUrl ?? "",
     isFullUrl: defaultEndpoint?.isFullUrl === true,
@@ -875,7 +873,6 @@ export function createProviderFromAutoConfiguration(params: {
 export function createProviderFromEndpoints(params: {
   name: string;
   preset: ProviderPreset | undefined;
-  category: CustomProvider["category"];
   apiKey: string;
   endpoints: Partial<Record<ProviderChatProtocol, string>>;
   template?: CustomProvider;
@@ -917,7 +914,6 @@ export function createProviderFromEndpoints(params: {
     id: createUuid(),
     name: params.name.trim(),
     presetId: preset?.id ?? CUSTOM_PRESET_ID,
-    category: params.category,
     enabled: true,
     baseUrl: endpointConfigs[defaultChatProtocol]?.baseUrl ?? "",
     isFullUrl: false,

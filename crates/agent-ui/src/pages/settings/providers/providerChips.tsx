@@ -11,7 +11,7 @@ import { Eye, EyeOff } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import type { PresetCategory, ProviderPreset } from "@liveagent/ui/lib/providers/registry";
+import type { ProviderPreset } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   type ComponentProps,
@@ -208,12 +208,6 @@ export function protocolShortLabel(protocol: ProviderChatProtocol): string {
 
 export function protocolLabel(protocol: ProviderChatProtocol): string {
   return PROVIDER_CHAT_PROTOCOL_LABELS[protocol];
-}
-
-export function CategoryChip({ category }: { category: PresetCategory | undefined }) {
-  const { t } = useLocale();
-  if (!category) return null;
-  return <Chip>{t(`settings.providerCategory.${category}`)}</Chip>;
 }
 
 /** 预设头像：原生渠道用品牌图标，其余用名称首字。 */

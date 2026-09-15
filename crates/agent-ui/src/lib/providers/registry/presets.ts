@@ -12,7 +12,6 @@ import { endpointHostKey } from "./hosts";
 import { GENERATED_PRESETS, type GeneratedPreset } from "./presets.generated";
 import {
   PRESET_OVERLAYS,
-  type PresetCategory,
   type PresetEndpointOverlay,
   type PresetIdentity,
   type PresetInputKind,
@@ -32,7 +31,6 @@ export type ProviderPreset = {
   id: string;
   name: string;
   native: boolean;
-  category: PresetCategory;
   input: PresetInputKind;
   defaultOrigin?: string;
   authOptional: boolean;
@@ -84,7 +82,6 @@ function mergePreset(
     id,
     name: overlay?.name ?? generated?.name ?? id,
     native: overlay?.native === true,
-    category: overlay?.category ?? "official",
     input: overlay?.input ?? "key",
     defaultOrigin: overlay?.defaultOrigin,
     authOptional: overlay?.authOptional === true,
@@ -282,5 +279,5 @@ export function findPresetCatalogModel(
   return preset.catalogModels.find((model) => model.id === id || model.id === stripped);
 }
 
-export type { ModelFamily, PresetCategory, PresetIdentity, PresetInputKind, PresetModelRule };
+export type { ModelFamily, PresetIdentity, PresetInputKind, PresetModelRule };
 export { resolveModelFamily };

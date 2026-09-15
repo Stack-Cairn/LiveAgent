@@ -51,8 +51,6 @@ import {
 const PRIMARY_PROTOCOLS: ProviderChatProtocol[] = ["openai-completions", "anthropic-messages"];
 const MORE_PROTOCOLS: ProviderChatProtocol[] = ["openai-responses", "google-generative-ai"];
 
-type Category = NonNullable<CustomProvider["category"]>;
-
 function endpointsFromPreset(
   preset: ProviderPreset,
 ): Partial<Record<ProviderChatProtocol, string>> {
@@ -101,9 +99,6 @@ export function AddChannelDialog(props: {
         ? instanceNameForPreset(initialPreset, providers)
         : "",
   );
-  const [category, setCategory] = useState<Category>(
-    sourceProvider?.category ?? initialPreset?.category ?? "relay",
-  );
   const [apiKey, setApiKey] = useState("");
   const [presetId, setPresetId] = useState(
     initialPreset && initialPreset.id !== CUSTOM_PRESET_ID ? initialPreset.id : "",
@@ -134,7 +129,6 @@ export function AddChannelDialog(props: {
     const next = findProviderPreset(id);
     if (!next) return;
     setEndpoints(endpointsFromPreset(next));
-    setCategory(next.category);
     if (!name.trim()) setName(instanceNameForPreset(next, providers));
     if (MORE_PROTOCOLS.some((protocol) => next.endpoints[protocol])) setMoreOpen(true);
   }
@@ -142,11 +136,6 @@ export function AddChannelDialog(props: {
   function submit() {
     if (!name.trim()) {
       setError(t("settings.channelNameRequired"));
-      return;
-    }
-    // 只有"自建"（本地服务）允许不填 Key；中转 / 官方没有 Key 探测必然鉴权失败。
-    if (!apiKey.trim() && category !== "self-hosted") {
-      setError(t("settings.channelApiKeyRequired"));
       return;
     }
     const filled = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => endpoints[protocol]?.trim());
@@ -158,7 +147,6 @@ export function AddChannelDialog(props: {
       createProviderFromEndpoints({
         name,
         preset,
-        category,
         apiKey,
         endpoints,
         template: sourceProvider,
@@ -251,28 +239,10 @@ export function AddChannelDialog(props: {
                 }}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                {t("settings.channelCategory")}
-              </Label>
-              <Select value={category} onValueChange={(value) => setCategory(value as Category)}>
-                <SelectTrigger className="h-8 w-full text-xs shadow-none">
-                  <SelectValue>{t(`settings.providerCategory.${category}`)}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {(["relay", "official", "self-hosted"] as const).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {t(`settings.providerCategory.${value}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="add-channel-key" className="text-xs text-muted-foreground">
               API Key
-              {category !== "self-hosted" ? <span className="text-destructive"> *</span> : null}
             </Label>
             <SecretInput
               id="add-channel-key"

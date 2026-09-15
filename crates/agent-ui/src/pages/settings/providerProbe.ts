@@ -279,7 +279,7 @@ export function groupProbeModels(
       family.prefer.find((item) => availableProtocols.includes(item));
     // 家族方言只在官方渠道生效；中转/自建按路由实际解析（一般为 generic 或供应商默认）。
     const dialect: ProviderWireDialect =
-      rule?.dialect ?? (preset?.category === "official" ? family.dialect : "generic");
+      rule?.dialect ?? (preset?.native ? family.dialect : "generic");
     const group = groups.get(family.key) ?? { key: family.key, models: [], protocol, dialect };
     group.models.push(model);
     groups.set(family.key, group);

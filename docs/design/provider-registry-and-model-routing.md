@@ -22,7 +22,7 @@
 
 | 事实 | 对象 | 内容 |
 | --- | --- | --- |
-| 谁提供连接与凭据 | `CustomProvider` | 名称、预设、分类、凭据列表、主连接、请求默认值、系统代理、重试、用量查询 |
+| 谁提供连接与凭据 | `CustomProvider` | 名称、预设、凭据列表、主连接、请求默认值、系统代理、重试、用量查询 |
 | 这次请求怎样发 | `ProviderEndpointConfig`（供应商内按接口分键） | 启用、地址、模型列表地址、方言、开关、鉴权头覆盖、指定凭据、端点请求头 |
 | 模型能做什么 | `ProviderModelConfig` | 远端 ID、可用接口列表、方言、分组、能力、模态、限制、参数覆盖 |
 
@@ -60,7 +60,6 @@ type CustomProvider = {
   type: ProviderId;
   /** 预设 ID；自定义供应商为空 */
   presetId?: string;
-  category?: "official" | "relay" | "self-hosted";
   enabled: boolean;
 
   // 主连接 = 未覆盖接口的缺省端点
@@ -183,7 +182,6 @@ type ProviderPreset = {
   name: string;
   /** 五家原生接口渠道为 true；列表排序与"原生"标记用 */
   native?: boolean;
-  category: "official" | "relay" | "self-hosted";
   /** 用户需要填写什么：只填 Key、填 origin、填完整 Base URL */
   input: "key" | "origin" | "base";
   /** origin 类渠道的缺省地址，例如本地服务的默认端口 */
@@ -235,7 +233,7 @@ type PresetModelRule = {
 
 分两类：**原生接口**（应用自带适配器语义的五家）与**其他渠道**（按四类接口之一接入的厂商、中转与本地服务）。
 
-| 渠道 | 类型 | 接口与地址 | 鉴权 | 方言 | 按模型规则 |
+| 渠道 | 说明 | 接口与地址 | 鉴权 | 方言 | 按模型规则 |
 | --- | --- | --- | --- | --- | --- |
 | Anthropic | 原生 | anthropic-messages `https://api.anthropic.com/v1`（默认） | x-api-key + anthropic-version；OAuth Key 时不带 | generic | — |
 | OpenAI | 原生 | openai-responses `https://api.openai.com/v1`（默认）；openai-completions 同地址 | Bearer | openai | — |
@@ -524,11 +522,11 @@ outputReserve = min(maxOutputToken, 用户请求的输出上限)
 
 **左栏：渠道目录。** 搜索框下方是"添加渠道"按钮；列表项即注册表条目：已配置实例在前（图标、名称、启用点、默认接口与"多接口"标签），未配置渠道在后（灰显，标"未配置"与它提供的接口）。只有搜索，没有分类或接口筛选。
 
-**添加渠道对话框**（自定义中转、聚合网关、尚未内置的厂商）：头像与名称、类型（中转 / 厂商 / 自建）、API 密钥、端点设置。端点设置按四类接口各一个 Base URL 输入，Chat Completions 与 Anthropic Messages 常显，Responses 与 Gemini 折叠在"更多设置"；填入根地址后即时显示实际请求路径（例如 `…/v1/chat/completions`、`…/v1/messages`），留空的接口不创建。底部"从预设创建（可选）"下拉选择注册表条目后填入该渠道的接口与地址，用于同一渠道的第二个账号、Coding Plan 或项目隔离，地址与 Key 仍可单独改。提交后立即按已填接口探测并拉取模型，默认接口取预设声明或按 Completions、Responses、Messages、Gemini 的顺序取第一个已填项。
+**添加渠道对话框**（自定义中转、聚合网关、尚未内置的厂商）：头像与名称、API 密钥（本地服务可留空）、端点设置。端点设置按四类接口各一个 Base URL 输入，Chat Completions 与 Anthropic Messages 常显，Responses 与 Gemini 折叠在"更多设置"；填入根地址后即时显示实际请求路径（例如 `…/v1/chat/completions`、`…/v1/messages`），留空的接口不创建。底部"从预设创建（可选）"下拉选择注册表条目后填入该渠道的接口与地址，用于同一渠道的第二个账号、Coding Plan 或项目隔离，地址与 Key 仍可单独改。提交后立即按已填接口探测并拉取模型，默认接口取预设声明或按 Completions、Responses、Messages、Gemini 的顺序取第一个已填项。
 
 **中栏：供应商详情。**
 
-1. 标题行：名称、启用开关、渠道与分类标签、"再加一个实例"。未配置渠道的详情只显示注册表声明的接口与地址、鉴权方式、取 Key 链接，以及 Key（和地址）输入与"检测并启用"。
+1. 标题行：名称、启用开关、渠道标签、"再加一个实例"。未配置渠道的详情只显示注册表声明的接口与地址、鉴权方式、取 Key 链接，以及 Key（和地址）输入与"检测并启用"。
 2. API 密钥：默认 Key，"管理密钥"进多 Key 抽屉，"检测"。
 3. API 地址：默认接口地址与状态芯片，"检测并配置"，"请求配置"；已启用渠道以小标签横排显示。
 4. 模型列表：按 `group` 折叠分组，行内能力图标、接口标签（自动浅色 / 显式实色）、方言标签、编辑与移除；"获取模型列表"、"手动添加"。

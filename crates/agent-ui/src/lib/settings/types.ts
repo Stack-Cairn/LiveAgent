@@ -34,8 +34,6 @@ export {
   PROVIDER_WIRE_DIALECTS,
 } from "@liveagent/ui/lib/providers/registry/protocols";
 
-export type ProviderCategory = "official" | "relay" | "self-hosted";
-
 export type ProviderEndpointQuirks = {
   /** = pi-ai compat.supportsUsageInStreaming */
   supportsUsageInStreaming?: boolean;
@@ -780,7 +778,6 @@ export type CustomProvider = {
   type: ProviderId;
   /** 预设注册表 ID；自定义渠道为 "custom" */
   presetId?: string;
-  category?: ProviderCategory;
   /** 供应商启用开关；缺省 true */
   enabled?: boolean;
   baseUrl: string;

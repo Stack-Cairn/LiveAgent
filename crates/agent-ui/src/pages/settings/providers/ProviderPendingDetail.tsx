@@ -13,14 +13,7 @@ import {
   type ProviderPreset,
 } from "@liveagent/ui/lib/providers/registry";
 import { useState } from "react";
-import {
-  CategoryChip,
-  Chip,
-  ProviderAvatar,
-  protocolLabel,
-  SecretInput,
-  SectionTitle,
-} from "./providerChips";
+import { Chip, ProviderAvatar, protocolLabel, SecretInput, SectionTitle } from "./providerChips";
 
 export function ProviderPendingDetail(props: {
   preset: ProviderPreset;
@@ -55,7 +48,6 @@ export function ProviderPendingDetail(props: {
         <ProviderAvatar preset={preset} name={preset.name} className="h-9 w-9 text-base" />
         <h2 className="text-base font-semibold tracking-tight">{preset.name}</h2>
         {preset.native ? <Chip tone="on">{t("settings.channelNative")}</Chip> : null}
-        <CategoryChip category={preset.category} />
         <span className="flex-1" />
         <Chip>{t("settings.channelPending")}</Chip>
       </div>

@@ -40,7 +40,6 @@ import { ProviderFailoverSection } from "./ProviderFailoverSection";
 import { ProviderMoreSettings } from "./ProviderMoreSettings";
 import { ProviderUsageQueryPanel } from "./ProviderUsageQueryPanel";
 import {
-  CategoryChip,
   Chip,
   ChipButton,
   CommittedInput,
@@ -454,7 +453,6 @@ export function ProviderDetail(props: ProviderDetailProps) {
           }}
         />
         <Chip>{preset.name}</Chip>
-        <CategoryChip category={provider.category ?? preset.category} />
         <Button
           type="button"
           variant="ghost"

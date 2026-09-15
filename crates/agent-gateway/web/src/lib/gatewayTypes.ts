@@ -4,7 +4,6 @@ import type {
   ChatRuntimeControls,
   CodexRequestFormat,
   PromptCacheHintMode,
-  ProviderCategory,
   ProviderChatProtocol,
   ProviderEndpointConfig,
   ProviderId,
@@ -52,7 +51,6 @@ export type GatewayProviderSummary = {
   name: string;
   type: ProviderId;
   presetId?: string;
-  category?: ProviderCategory;
   enabled?: boolean;
   dialect?: ProviderWireDialect;
   defaultChatProtocol?: ProviderChatProtocol;

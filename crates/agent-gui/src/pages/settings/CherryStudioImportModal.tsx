@@ -212,7 +212,7 @@ export function cherryProviderRegistryFields(
   existing?: CustomProvider,
 ): Pick<
   CustomProvider,
-  "presetId" | "category" | "defaultChatProtocol" | "dialect" | "endpointConfigs" | "credentials"
+  "presetId" | "defaultChatProtocol" | "dialect" | "endpointConfigs" | "credentials"
 > {
   const preset = cherryPresetFor(item);
   const endpointConfigs = cherryEndpointConfigs(item, allItems, existing);
@@ -220,7 +220,6 @@ export function cherryProviderRegistryFields(
   const dialect = existing?.dialect ?? preset?.dialect;
   return {
     presetId: preset?.id ?? presetIdForLegacyType(item.providerType),
-    ...(preset?.category ? { category: preset.category } : {}),
     defaultChatProtocol: cherryItemChatProtocol(item),
     ...(dialect ? { dialect } : {}),
     ...(endpointConfigs ? { endpointConfigs } : {}),

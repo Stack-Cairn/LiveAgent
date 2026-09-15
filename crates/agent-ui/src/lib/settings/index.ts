@@ -103,7 +103,6 @@ import type {
   ModelLimitsSource,
   ProjectPromptStrategy,
   PromptCacheHintMode,
-  ProviderCategory,
   ProviderChatProtocol,
   ProviderCredential,
   ProviderCredentialScope,
@@ -1443,10 +1442,6 @@ function isProviderId(input: unknown): input is ProviderId {
   );
 }
 
-function normalizeProviderCategory(input: unknown): ProviderCategory | undefined {
-  return input === "official" || input === "relay" || input === "self-hosted" ? input : undefined;
-}
-
 function normalizeProviderId(input: unknown): ProviderId {
   switch (input) {
     case "codex":
@@ -1891,8 +1886,6 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     presetFromInput && presetMatchesBaseUrl(presetFromInput, primaryBaseUrl)
       ? presetFromInput.id
       : presetIdForLegacyProvider(type, primaryBaseUrl);
-  const category =
-    normalizeProviderCategory(obj.category) ?? findProviderPreset(presetId)?.category;
   const primaryKey = credentials[0]?.apiKey ?? apiKey;
 
   return {
@@ -1900,7 +1893,6 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     name: normalizeProviderName(id, obj.name),
     type,
     presetId,
-    ...(category ? { category } : {}),
     ...(obj.enabled === false ? { enabled: false } : {}),
     baseUrl: codexRouting
       ? codexRouting.baseUrl

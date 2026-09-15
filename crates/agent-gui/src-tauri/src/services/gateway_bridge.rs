@@ -1982,7 +1982,6 @@ fn sanitize_provider_summary(provider: &Value) -> Result<Value, String> {
         "name",
         "type",
         "presetId",
-        "category",
         "enabled",
         "dialect",
         "defaultChatProtocol",
@@ -2108,7 +2107,6 @@ mod tests {
                 "name": "A",
                 "type": "codex",
                 "presetId": "openai",
-                "category": "official",
                 "enabled": false,
                 "dialect": "openai",
                 "defaultChatProtocol": "openai-responses",
@@ -2134,7 +2132,6 @@ mod tests {
         .expect("sanitize provider summaries");
 
         assert_eq!(result[0]["presetId"], "openai");
-        assert_eq!(result[0]["category"], "official");
         assert_eq!(result[0]["enabled"], false);
         assert_eq!(result[0]["dialect"], "openai");
         assert_eq!(result[0]["defaultChatProtocol"], "openai-responses");

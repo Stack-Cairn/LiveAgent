@@ -7,7 +7,6 @@
 
 import type { ProviderChatProtocol, ProviderWireDialect } from "./protocols";
 
-export type PresetCategory = "official" | "relay" | "self-hosted";
 export type PresetInputKind = "key" | "origin" | "base";
 export type PresetIdentity = "claude-cli" | "codex-cli" | "grok-shell";
 
@@ -42,7 +41,6 @@ export type PresetOverlay = {
   name?: string;
   /** 五家原生接口渠道 */
   native?: boolean;
-  category: PresetCategory;
   input: PresetInputKind;
   /** origin 类渠道的缺省地址（本地服务的默认端口） */
   defaultOrigin?: string;
@@ -68,7 +66,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "anthropic",
     native: true,
-    category: "official",
     input: "key",
     defaultChatProtocol: "anthropic-messages",
     identity: "claude-cli",
@@ -78,7 +75,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "openai",
     native: true,
-    category: "official",
     input: "key",
     dialect: "openai",
     defaultChatProtocol: "openai-responses",
@@ -91,7 +87,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     id: "gemini",
     name: "Gemini",
     native: true,
-    category: "official",
     input: "key",
     defaultChatProtocol: "google-generative-ai",
     apiKeyUrl: "https://aistudio.google.com/apikey",
@@ -100,7 +95,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "xai",
     native: true,
-    category: "official",
     input: "key",
     dialect: "xai",
     defaultChatProtocol: "openai-responses",
@@ -112,7 +106,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "deepseek",
     native: true,
-    category: "official",
     input: "key",
     dialect: "deepseek",
     defaultChatProtocol: "openai-completions",
@@ -133,7 +126,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "groq",
     name: "Groq",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     apiKeyUrl: "https://console.groq.com/keys",
@@ -142,7 +134,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "zhipu",
     name: "智谱 GLM",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: { "anthropic-messages": { baseUrl: "https://open.bigmodel.cn/api/anthropic" } },
@@ -152,7 +143,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "minimax",
     name: "MiniMax",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: {
@@ -165,7 +155,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "minimax-cn",
     name: "MiniMax（国内）",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: {
@@ -178,7 +167,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "moonshot",
     name: "Moonshot Kimi",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: { "anthropic-messages": { baseUrl: "https://api.moonshot.ai/anthropic" } },
@@ -188,7 +176,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "moonshot-cn",
     name: "Moonshot Kimi（国内）",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: { "anthropic-messages": { baseUrl: "https://api.moonshot.cn/anthropic" } },
@@ -198,7 +185,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "dashscope",
     name: "通义千问（国际）",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     apiKeyUrl: "https://modelstudio.console.alibabacloud.com/?tab=model#/api-key",
@@ -207,7 +193,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "dashscope-cn",
     name: "通义千问",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: {
@@ -219,7 +204,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "volcengine",
     name: "豆包 · 火山方舟",
-    category: "official",
     input: "key",
     defaultChatProtocol: "openai-completions",
     apiKeyUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
@@ -228,7 +212,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "siliconflow",
     name: "硅基流动（国际）",
-    category: "relay",
     input: "key",
     defaultChatProtocol: "openai-completions",
     apiKeyUrl: "https://cloud.siliconflow.com/account/ak",
@@ -237,7 +220,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "siliconflow-cn",
     name: "硅基流动",
-    category: "relay",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: { "openai-completions": { baseUrl: "https://api.siliconflow.cn/v1" } },
@@ -246,7 +228,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "openrouter",
-    category: "relay",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: {
@@ -263,7 +244,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "new-api",
     name: "New API / One API",
-    category: "relay",
     input: "origin",
     defaultChatProtocol: "openai-completions",
     endpoints: {
@@ -277,7 +257,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "ollama",
     name: "Ollama",
-    category: "self-hosted",
     input: "origin",
     defaultOrigin: "http://localhost:11434",
     authOptional: true,
@@ -297,7 +276,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "lmstudio",
     name: "LM Studio",
-    category: "self-hosted",
     input: "origin",
     defaultOrigin: "http://localhost:1234",
     authOptional: true,
@@ -318,7 +296,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "custom",
     name: "自定义渠道",
-    category: "self-hosted",
     input: "base",
     defaultChatProtocol: "openai-completions",
     hidden: true,
