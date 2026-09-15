@@ -1,5 +1,6 @@
 import type { Locale } from "@liveagent/app/i18n/config";
 import type { ThinkingLevel } from "@liveagent/ui/lib/models/modelThinking";
+import type { EndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders";
 import type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
 
 import type { SidebarShortcuts } from "./sidebarShortcuts";
@@ -93,6 +94,11 @@ export type ProviderEndpointConfig = {
   /** 引用 credentials[].id；缺省用默认凭据 */
   credentialId?: string;
   headers?: { key: string; value: string }[];
+  /**
+   * 身份模拟（按端点）：某家 CLI 的 UA、静态身份头与会话头叠在方言头档之上；
+   * "none" = 只带协议头；缺省 = 只有内置协议头档 + 方言头档。
+   */
+  identity?: EndpointIdentity;
   /** 观测值，不参与路由；备份与同步时剥离 */
   lastProbe?: ProviderEndpointProbe;
   /** 值来源：auto = 预设或探测得出；user = 手动修改 */
@@ -142,6 +148,8 @@ export type ResolvedProviderChatRoute = {
   headers: { key: string; value: string }[];
   quirks: ProviderEndpointQuirks;
   auth?: ProviderEndpointAuth;
+  /** 端点身份模拟；缺省 = 只有内置协议头档 + 方言头档 */
+  identity?: EndpointIdentity;
 };
 
 export type ReasoningLevel = "off" | ThinkingLevel;

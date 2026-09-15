@@ -1516,3 +1516,60 @@ test("runtime models always carry zero pricing (billing removed)", () => {
   );
   assert.deepEqual(claudeModel.cost, zeroCost);
 });
+
+test("endpoint identity layer sits above the dialect layer and follows the endpoint, not the provider", () => {
+  const requestHeaders = loader.loadModule("@liveagent/ui/lib/providers/requestHeaders.ts");
+  // Responses 端点在通用方言下选 Codex：UA + originator/version + 完整 Codex 会话头。
+  const codex = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "openai-responses",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+    identity: "codex",
+  });
+  assert.equal(codex.Authorization, "Bearer secret");
+  assert.match(codex["User-Agent"], /^codex_cli_rs\//);
+  assert.equal(codex.originator, "codex_cli_rs");
+  assert.equal(codex["session-id"], "conv-1");
+  assert.equal(codex["thread-id"], "conv-1");
+  assert.equal(codex["x-client-request-id"], "conv-1");
+  // 不选身份：通用方言的 Responses 只有协议头。
+  const plain = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "openai-responses",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+  });
+  assert.deepEqual(Object.keys(plain), ["Authorization"]);
+  // Messages 端点选 Claude Code：SDK 指纹头 + claude-cli UA + 会话头。
+  const claude = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "anthropic-messages",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+    identity: "claude_code",
+  });
+  assert.match(claude["User-Agent"], /^claude-cli\//);
+  assert.equal(claude["x-api-key"], "secret");
+  assert.equal(claude["X-Claude-Code-Session-Id"], "conv-1");
+  assert.ok(Object.keys(claude).some((key) => key.toLowerCase().startsWith("x-stainless")));
+  // "none"：连方言头都不带，只剩协议头档。
+  const none = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "anthropic-messages",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+    identity: "none",
+  });
+  assert.deepEqual(Object.keys(none).sort(), ["anthropic-version", "x-api-key"]);
+  // 运行时入口与共享层同一份实现。
+  assert.deepEqual(
+    providers.buildProviderRequestHeaders("claude_code", "secret", "conversation-1"),
+    requestHeaders.buildBuiltinRequestHeaders({
+      protocol: "anthropic-messages",
+      dialect: "generic",
+      apiKey: "secret",
+      sessionId: "conversation-1",
+    }),
+  );
+});

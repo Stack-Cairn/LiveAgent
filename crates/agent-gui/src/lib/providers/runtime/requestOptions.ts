@@ -1,18 +1,11 @@
 import type { CacheRetention, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import {
-  ANTHROPIC_DEFAULT_REQUEST_HEADERS,
-  CLAUDE_SESSION_ID_HEADER,
-  CLIENT_REQUEST_ID_HEADER,
-  CODEX_CONVERSATION_ID_HEADER,
-  CODEX_OFFICIAL_SESSION_ID_HEADER,
-  CODEX_SESSION_ID_HEADER,
-  CODEX_THREAD_ID_HEADER,
-  isAnthropicOAuthApiKey,
+  type EndpointIdentity,
   mergeCustomHeaders,
 } from "@liveagent/ui/lib/providers/customHeaders";
 import { type PreparedProxyRequest, prepareProxyRequest } from "@liveagent/ui/lib/providers/proxy";
 import { buildProtocolAuthHeaders } from "@liveagent/ui/lib/providers/registry/protocols";
-import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
 import type {
   CodexRequestFormat,
   ProviderChatProtocol,
@@ -47,65 +40,8 @@ export function buildGeminiAuthHeaders(apiKey: string): Record<string, string> {
 }
 
 /**
- * 后一层覆盖前一层，键按大小写不敏感去重，并以后一层的写法与位置为准——
- * 这样协议头档里的 anthropic-version 会落到 SDK 指纹头档中它原本的位置，
- * 最终头集与分层前的字面顺序一致。
- */
-function overlayHeaderLayers(
-  ...layers: (Record<string, string> | undefined)[]
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const layer of layers) {
-    if (!layer) continue;
-    for (const [key, value] of Object.entries(layer)) {
-      const lower = key.toLowerCase();
-      for (const existing of Object.keys(out)) {
-        if (existing.toLowerCase() === lower) delete out[existing];
-      }
-      out[key] = value;
-    }
-  }
-  return out;
-}
-
-/**
- * 方言头档（设计文档 4.3）：按 (protocol, dialect) 查表。
- * - anthropic-messages：官方 SDK 指纹头 + 每会话 X-Claude-Code-Session-Id。
- * - openai-responses + openai：Codex CLI 会话身份头（session-id / thread-id /
- *   x-client-request-id，下划线旧名留给既有中转）。
- * - Chat Completions 是无状态协议，任何方言都不附会话头；其余组合只带协议头档。
- */
-function buildDialectRequestHeaders(
-  protocol: ProviderChatProtocol,
-  dialect: ProviderWireDialect,
-  sessionId?: string,
-): Record<string, string> | undefined {
-  if (protocol === "anthropic-messages") {
-    const requestSessionId = normalizeSessionId(sessionId);
-    return {
-      ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
-      // 官方 CLI 每请求都带 X-Claude-Code-Session-Id（client.ts:108）。
-      ...(requestSessionId ? { [CLAUDE_SESSION_ID_HEADER]: requestSessionId } : {}),
-    };
-  }
-  if (protocol === "openai-responses" && dialect === "openai") {
-    const requestSessionId = normalizeSessionId(sessionId) ?? createUuid();
-    return {
-      // 现行 Codex CLI（codex-api responses.rs）：session-id / thread-id /
-      // x-client-request-id。下划线旧名留给既有中转与 LiveAgent 存量链路。
-      [CODEX_OFFICIAL_SESSION_ID_HEADER]: requestSessionId,
-      [CODEX_THREAD_ID_HEADER]: requestSessionId,
-      [CLIENT_REQUEST_ID_HEADER]: requestSessionId,
-      [CODEX_SESSION_ID_HEADER]: requestSessionId,
-      [CODEX_CONVERSATION_ID_HEADER]: requestSessionId,
-    };
-  }
-  return undefined;
-}
-
-/**
- * 内置头装配：协议头档（鉴权头，可被端点 auth 覆盖）< 方言头档。
- * Anthropic OAuth Key 由本地反代自行注入 Bearer，这里保持不带任何头。
+ * 内置头装配：协议头档 < 方言头档 < 端点身份档（共享层 requestHeaders.ts，与设置页
+ * 的"最终请求头"预览同一份实现）。
  */
 export function buildProtocolRequestHeaders(params: {
   protocol: ProviderChatProtocol;
@@ -113,14 +49,9 @@ export function buildProtocolRequestHeaders(params: {
   apiKey: string;
   sessionId?: string;
   auth?: ProviderEndpointAuth;
+  identity?: EndpointIdentity;
 }): Record<string, string> {
-  if (params.protocol === "anthropic-messages" && isAnthropicOAuthApiKey(params.apiKey)) {
-    return {};
-  }
-  return overlayHeaderLayers(
-    buildProtocolAuthHeaders(params.protocol, params.apiKey, params.auth),
-    buildDialectRequestHeaders(params.protocol, params.dialect, params.sessionId),
-  );
+  return buildBuiltinRequestHeaders(params);
 }
 
 /** 旧签名：按 ProviderId + requestFormat 推导 (protocol, dialect) 后查表。 */
@@ -167,6 +98,7 @@ export async function prepareProviderRequest(
         apiKey: runtime.apiKey,
         sessionId: options?.sessionId,
         auth: runtime.authOverride,
+        identity: runtime.identity,
       }),
       runtime.customHeaders,
     ),

@@ -88,6 +88,7 @@ export function createProviderRuntimeConfig(
     customHeaders: route.headers,
     ...(Object.keys(route.quirks).length > 0 ? { quirks: route.quirks } : {}),
     ...(route.auth ? { authOverride: route.auth } : {}),
+    ...(route.identity ? { identity: route.identity } : {}),
     requestFormat: route.requestFormat,
     reasoning: resolveRuntimeReasoning({
       controls,

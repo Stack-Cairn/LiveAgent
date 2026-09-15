@@ -43,10 +43,8 @@ import {
   THINKING_LEVEL_LADDER,
 } from "@liveagent/ui/lib/models/modelThinking";
 import { mergeCustomHeaders } from "@liveagent/ui/lib/providers/customHeaders";
-import {
-  buildProtocolAuthHeaders,
-  PROVIDER_PROTOCOL_DIALECTS,
-} from "@liveagent/ui/lib/providers/registry";
+import { PROVIDER_PROTOCOL_DIALECTS } from "@liveagent/ui/lib/providers/registry";
+import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   applyModelInputModalitiesMode,
@@ -174,7 +172,14 @@ export function ModelEditDrawer(props: {
   // 覆盖；键为空 / 不合法 / 保留键的行不进入预览。
   const finalHeaders = Object.entries(
     mergeCustomHeaders(
-      buildProtocolAuthHeaders(route.protocol, "••••••", route.auth),
+      buildBuiltinRequestHeaders({
+        protocol: route.protocol,
+        dialect: route.dialect,
+        apiKey: "••••••",
+        sessionId: "{session-id}",
+        auth: route.auth,
+        identity: route.identity,
+      }),
       route.headers,
     ),
   );

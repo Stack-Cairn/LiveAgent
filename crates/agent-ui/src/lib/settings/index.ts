@@ -21,6 +21,7 @@ import {
   resolveModelThinking,
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
+import { isEndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders";
 import {
   coerceDialectForProtocol,
   findProviderPreset,
@@ -650,6 +651,7 @@ export function resolveProviderChatRoute(
     ...((config.auth ?? presetEndpoint?.auth)
       ? { auth: { ...presetEndpoint?.auth, ...config.auth } }
       : {}),
+    ...(config.identity ? { identity: config.identity } : {}),
   };
 }
 
@@ -1703,6 +1705,7 @@ export function normalizeProviderEndpointConfig(
   const quirks = normalizeEndpointQuirks(raw.quirks);
   const auth = normalizeEndpointAuth(raw.auth);
   const headers = normalizeEndpointHeaders(raw.headers);
+  const identity = isEndpointIdentity(raw.identity) ? raw.identity : undefined;
   const lastProbe = normalizeEndpointProbe(raw.lastProbe);
   return {
     ...(raw.enabled === false ? { enabled: false } : {}),
@@ -1716,6 +1719,7 @@ export function normalizeProviderEndpointConfig(
       ? { credentialId }
       : {}),
     ...(headers ? { headers } : {}),
+    ...(identity ? { identity } : {}),
     ...(lastProbe ? { lastProbe } : {}),
     ...(raw.source === "user"
       ? { source: "user" as const }

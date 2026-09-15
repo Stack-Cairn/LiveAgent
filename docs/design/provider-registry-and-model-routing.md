@@ -328,19 +328,22 @@ type ResolvedProviderChatRoute = {
 
 ### 4.3 请求头装配
 
-三层头档加用户头，合并顺序固定：
+三层内置头档加用户头，合并顺序固定：
 
 ```text
-协议头档 < 方言头档 < 供应商 customHeaders < 端点 headers < 每会话动态头
+协议头档 < 方言头档 < 端点身份档 < 供应商 customHeaders < 端点 headers
 ```
 
 | 层 | 内容 | 键 |
 | --- | --- | --- |
 | 协议头档 | 鉴权头名（可被端点 `auth` 覆盖）、协议版本头 | protocol |
-| 方言头档 | Codex 会话头、Anthropic SDK 指纹头、grok 客户端头 | (protocol, dialect) |
-| 用户头 | 供应商级、端点级、"模拟 CLI"写入的身份头 | 供应商 / 端点 |
+| 方言头档 | Anthropic SDK 指纹头 + 每会话 `X-Claude-Code-Session-Id`；Responses + OpenAI 官方方言的 Codex 会话头 | (protocol, dialect) |
+| 端点身份档 | 端点 `identity` 选定的 CLI：User-Agent、静态身份头（Codex 的 originator / version、grok-shell 的客户端头、Anthropic SDK 头）与该 CLI 的每会话动态头 | 端点 |
+| 用户头 | 供应商级、端点级业务头 | 供应商 / 端点 |
 
-同名按大小写不敏感覆盖。保留键（`anthropic-beta`、`Content-Type`、`Content-Length`、`Host`、代理控制头）由发请求一侧最终决定。Completions 不附会话头这条规则放在协议头档。"模拟 CLI"身份档按接口推荐，与设置分组无关；不做按模型的请求头。
+**身份模拟按端点，不按供应商。** 同一个中转开了 Messages / Responses / Completions 三个端点时，每个端点各自选择 Claude Code / Codex / Grok / 不模拟 / 纯协议头；推荐值按该端点自己的接口与方言给（Messages → Claude Code，xAI 方言 → Grok，其余 OpenAI 家族 → Codex，Gemini 无对应 CLI）。缺省（未选）= 只有协议头档 + 方言头档，与改造前一致；`none` = 连方言头都不带。供应商级请求头编辑器不再提供"模拟 CLI"，检测到旧配置里供应商级写入的 CLI 身份头时给出提示与一键移除，避免一套指纹覆盖到所有接口。
+
+同名按大小写不敏感覆盖。保留键（`anthropic-beta`、`Content-Type`、`Content-Length`、`Host`、代理控制头）由发请求一侧最终决定。Grok 的每回合头（conv / req / turn）没有稳定来源，不伪造。装配实现在共享层 `lib/providers/requestHeaders.ts`，设置页"最终请求头"预览与运行时 `prepareProviderRequest` 用同一份。不做按模型的请求头。
 
 ### 4.4 与 pi-ai 的对应
 

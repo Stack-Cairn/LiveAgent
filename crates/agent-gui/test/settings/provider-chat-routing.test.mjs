@@ -501,3 +501,33 @@ test("explicit chatProtocol wins only when that interface is enabled; failover e
   assert.equal(route.protocol, "openai-completions");
   assert.notEqual(route.protocolSource, "model");
 });
+
+test("endpoint identity is normalized per endpoint and surfaces on the resolved route", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    name: "relay",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "https://relay.example/v1",
+    apiKey: "sk",
+    defaultChatProtocol: "openai-responses",
+    endpointConfigs: {
+      "openai-responses": { baseUrl: "https://relay.example/v1", identity: "codex" },
+      "anthropic-messages": { baseUrl: "https://relay.example", identity: "claude_code" },
+      "openai-completions": { baseUrl: "https://relay.example/v1", identity: "bogus" },
+    },
+    models: [
+      { id: "gpt-5.2" },
+      { id: "claude-opus-4-6" },
+      { id: "glm-5", chatProtocol: "openai-completions" },
+    ],
+    activeModels: ["gpt-5.2", "claude-opus-4-6", "glm-5"],
+  });
+  assert.equal(provider.endpointConfigs["openai-responses"].identity, "codex");
+  assert.equal(provider.endpointConfigs["anthropic-messages"].identity, "claude_code");
+  assert.equal("identity" in provider.endpointConfigs["openai-completions"], false);
+  // 同一供应商的三个接口各带各的身份。
+  assert.equal(settings.resolveProviderChatRoute(provider, "gpt-5.2").identity, "codex");
+  assert.equal(settings.resolveProviderChatRoute(provider, "claude-opus-4-6").identity, "claude_code");
+  assert.equal(settings.resolveProviderChatRoute(provider, "glm-5").identity, undefined);
+});

@@ -24,7 +24,14 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { getCustomHeaderKeyPresets } from "@liveagent/ui/lib/providers/customHeaders";
+import {
+  CLI_IDENTITY_PROVIDER_IDS,
+  detectCliIdentityInHeaders,
+  type EndpointIdentity,
+  getCustomHeaderKeyPresets,
+  recommendedIdentityForEndpoint,
+  stripCliIdentityHeaders,
+} from "@liveagent/ui/lib/providers/customHeaders";
 import {
   CUSTOM_PRESET_ID,
   expandPresetBaseUrl,
@@ -55,7 +62,6 @@ import {
   SourceTag,
 } from "./providerChips";
 import {
-  identityForProvider,
   presetForProvider,
   primaryCredential,
   probeSummaryFor,
@@ -117,7 +123,7 @@ export function RequestConfigDrawer(props: {
     : PROVIDER_CHAT_PROTOCOLS.filter(
         (protocol) => !configured.includes(protocol) && !preset.endpoints[protocol],
       );
-  const identity = identityForProvider(provider);
+  const providerLevelIdentity = detectCliIdentityInHeaders(provider.customHeaders);
   const headerPresetKeys = getCustomHeaderKeyPresets(
     getProviderChatProtocolAdapter(
       defaultProtocol,
@@ -433,7 +439,7 @@ export function RequestConfigDrawer(props: {
                             }
                           />
                         </div>
-                        <div className="grid grid-cols-3 gap-3 max-[720px]:grid-cols-1">
+                        <div className="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2 max-[720px]:grid-cols-1">
                           <div className="space-y-1">
                             <Label className="text-[11px] text-muted-foreground">
                               {t("settings.providerDialect")}
@@ -475,6 +481,64 @@ export function RequestConfigDrawer(props: {
                                 ))}
                               </SelectContent>
                             </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label
+                              className="text-[11px] text-muted-foreground"
+                              title={t("settings.providerEndpointIdentityHint")}
+                            >
+                              {t("settings.providerEndpointIdentity")}
+                            </Label>
+                            {(() => {
+                              const recommended = recommendedIdentityForEndpoint(
+                                protocol,
+                                config.dialect ?? inheritedDialect,
+                              );
+                              const label = (value: EndpointIdentity | "inherit") =>
+                                value === "inherit"
+                                  ? t("settings.providerEndpointIdentityInherit")
+                                  : value === "none"
+                                    ? t("settings.providerEndpointIdentityNone")
+                                    : t(`settings.cliIdentity.${value}`);
+                              return (
+                                <Select
+                                  value={config.identity ?? "inherit"}
+                                  onValueChange={(value) =>
+                                    onChange((current) =>
+                                      writeEndpoint(current, protocol, {
+                                        identity:
+                                          value === "inherit"
+                                            ? undefined
+                                            : (value as EndpointIdentity),
+                                      }),
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger
+                                    className="h-8 text-xs shadow-none"
+                                    title={t("settings.providerEndpointIdentityHint")}
+                                  >
+                                    <SelectValue>
+                                      <span className="truncate">
+                                        {label(config.identity ?? "inherit")}
+                                      </span>
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="inherit">{label("inherit")}</SelectItem>
+                                    {CLI_IDENTITY_PROVIDER_IDS.map((item) => (
+                                      <SelectItem key={item} value={item}>
+                                        {label(item)}
+                                        {item === recommended
+                                          ? ` · ${t("settings.providerEndpointIdentityRecommended")}`
+                                          : ""}
+                                      </SelectItem>
+                                    ))}
+                                    <SelectItem value="none">{label("none")}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </div>
                           <div className="space-y-1">
                             <Label className="text-[11px] text-muted-foreground">
@@ -636,11 +700,34 @@ export function RequestConfigDrawer(props: {
                 idPrefix="provider-headers"
                 headers={provider.customHeaders ?? []}
                 presetKeys={headerPresetKeys}
-                identity={identity}
                 onChange={(headers) =>
                   onChange((current) => ({ ...current, customHeaders: headers }))
                 }
               />
+              {providerLevelIdentity ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+                  <span className="min-w-0 flex-1">
+                    {t("settings.providerHeadersIdentityNotice").replace(
+                      "{cli}",
+                      t(`settings.cliIdentity.${providerLevelIdentity}`),
+                    )}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[11px]"
+                    onClick={() =>
+                      onChange((current) => ({
+                        ...current,
+                        customHeaders: stripCliIdentityHeaders(current.customHeaders ?? []),
+                      }))
+                    }
+                  >
+                    {t("settings.providerHeadersIdentityStrip")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

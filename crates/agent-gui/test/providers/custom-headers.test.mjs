@@ -400,3 +400,23 @@ test("parsed and saved headers reach runtime merge while CR/LF values are reject
     },
   );
 });
+
+test("endpoint identity helpers: recommendation by endpoint, detection and stripping of provider-level identity", () => {
+  assert.equal(customHeaders.recommendedIdentityForEndpoint("anthropic-messages", "generic"), "claude_code");
+  assert.equal(customHeaders.recommendedIdentityForEndpoint("openai-responses", "xai"), "xai");
+  assert.equal(customHeaders.recommendedIdentityForEndpoint("openai-completions", "generic"), "codex");
+  assert.equal(customHeaders.recommendedIdentityForEndpoint("google-generative-ai", "generic"), undefined);
+
+  const legacy = customHeaders.applyCliIdentity(
+    [{ key: "X-Title", value: "LiveAgent" }],
+    "claude_code",
+  ).headers;
+  assert.equal(customHeaders.detectCliIdentityInHeaders(legacy), "claude_code");
+  assert.equal(customHeaders.detectCliIdentityInHeaders([{ key: "X-Title", value: "x" }]), undefined);
+  const stripped = customHeaders.stripCliIdentityHeaders(legacy);
+  assert.deepEqual(stripped, [{ key: "X-Title", value: "LiveAgent" }]);
+
+  assert.equal(customHeaders.isEndpointIdentity("codex"), true);
+  assert.equal(customHeaders.isEndpointIdentity("none"), true);
+  assert.equal(customHeaders.isEndpointIdentity("browser"), false);
+});

@@ -33,7 +33,6 @@ import {
   resolveModelCapabilities,
   resolveModelInputModalitiesResolved,
 } from "@liveagent/ui/lib/models/modelCapabilities";
-import type { CliIdentityProviderId } from "@liveagent/ui/lib/providers/customHeaders";
 import {
   CUSTOM_PRESET_ID,
   findProviderPreset,
@@ -579,16 +578,6 @@ export function adapterProviderIdForModel(provider: CustomProvider, modelId: str
 export function defaultAdapterProviderId(provider: CustomProvider): ProviderId {
   const protocol = providerDefaultProtocol(provider);
   return getProviderChatProtocolAdapter(protocol, resolveProviderDialect(provider, protocol));
-}
-
-/** "模拟 CLI"按钮的推荐身份档：按默认接口与方言决定。 */
-export function identityForProvider(provider: CustomProvider): CliIdentityProviderId {
-  const protocol = providerDefaultProtocol(provider);
-  if (protocol === "anthropic-messages") return "claude_code";
-  const dialect = resolveProviderDialect(provider, protocol, {
-    endpoint: readEndpoint(provider, protocol)?.config,
-  });
-  return dialect === "xai" ? "xai" : "codex";
 }
 
 // ---------------------------------------------------------------------------

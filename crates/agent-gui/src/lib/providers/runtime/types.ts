@@ -4,6 +4,7 @@ import type {
   ResolvedModelInputModalities,
 } from "@liveagent/ui/lib/models/modelCapabilities";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
+import type { EndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders";
 import type {
   CodexRequestFormat,
   CustomProvider,
@@ -61,6 +62,8 @@ export type ProviderRuntimeConfig = {
   quirks?: ProviderEndpointQuirks;
   /** 端点鉴权头覆盖；缺省由协议头档决定。 */
   authOverride?: ProviderEndpointAuth;
+  /** 端点身份模拟（路由输出）；缺省 = 只有协议头档 + 方言头档。 */
+  identity?: EndpointIdentity;
   requestFormat?: CodexRequestFormat;
   reasoning?: ReasoningLevel;
   promptCachingEnabled?: boolean;

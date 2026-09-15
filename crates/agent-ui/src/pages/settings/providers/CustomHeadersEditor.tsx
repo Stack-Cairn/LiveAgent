@@ -3,23 +3,13 @@
 // 行（含尚未填名的空行），只把合法的头写回设置；不合法的行留在界面上标红并计数，
 // 让用户看得出哪些没生效。
 
-import { ClipboardPaste, Fingerprint, List, Plus, Trash2 } from "@liveagent/ui/components/IconSet";
+import { ClipboardPaste, List, Plus, Trash2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
-  applyCliIdentity,
-  CLI_IDENTITY_USER_AGENTS,
-  type CliIdentityProviderId,
   type CustomHeader,
   CustomHeaderImportError,
   type CustomHeaderImportErrorCode,
@@ -27,7 +17,6 @@ import {
   isReservedCustomHeaderKey,
   isValidCustomHeaderKey,
   isValidCustomHeaderValue,
-  listCliIdentityProviderIds,
   mergeImportedCustomHeaders,
   parseCustomHeadersImport,
 } from "@liveagent/ui/lib/providers/customHeaders";
@@ -68,13 +57,12 @@ export function CustomHeadersEditor(props: {
   onChange: (headers: CustomHeader[]) => void;
   presetKeys: readonly string[];
   /** 提供时显示"模拟 CLI"下拉，并把该身份档排在最前 */
-  identity?: CliIdentityProviderId;
   /** 精简模式：无导入、无模拟 CLI、无空态大按钮（端点请求头） */
   compact?: boolean;
   title: string;
   idPrefix: string;
 }) {
-  const { headers, onChange, presetKeys, identity, compact, title, idPrefix } = props;
+  const { headers, onChange, presetKeys, compact, title, idPrefix } = props;
   const { t } = useLocale();
   const [rows, setRows] = useState<CustomHeader[]>(() => headers.map((header) => ({ ...header })));
   const committedRef = useRef(headersKey(validHeaders(headers)));
@@ -140,20 +128,6 @@ export function CustomHeadersEditor(props: {
     updateRow(suggest.index, "key", preset);
     setSuggest(null);
     focusRow(suggest.index, "value");
-  }
-
-  function applyIdentity(target: CliIdentityProviderId) {
-    const result = applyCliIdentity(rows, target);
-    commit(result.headers);
-    setSuggest(null);
-    setImportOpen(false);
-    setImportError(null);
-    setImportSummary({
-      importedCount: result.importedCount,
-      overwrittenCount: result.overwrittenCount,
-      removedCount: result.removedCount,
-      issues: [],
-    });
   }
 
   function importHeaders() {
@@ -236,42 +210,6 @@ export function CustomHeadersEditor(props: {
           </span>
         ) : null}
         <span className="flex-1" />
-        {identity && !compact ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 text-xs" />
-              }
-            >
-              <Fingerprint className="h-3.5 w-3.5" />
-              {t("settings.cliIdentityHeaders")}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
-                {t("settings.cliIdentityHeadersHint")}
-              </DropdownMenuLabel>
-              {listCliIdentityProviderIds(identity).map((item) => (
-                <DropdownMenuItem
-                  key={item}
-                  className="items-center gap-2 rounded-md py-1.5 text-xs"
-                  onSelect={() => applyIdentity(item)}
-                >
-                  <span className="shrink-0 whitespace-nowrap font-medium leading-5">
-                    {t(`settings.cliIdentity.${item}`)}
-                  </span>
-                  {item === identity ? (
-                    <span className="shrink-0 whitespace-nowrap rounded bg-primary/10 px-1 py-px text-[10px] font-medium text-primary">
-                      {t("settings.cliIdentityRecommended")}
-                    </span>
-                  ) : null}
-                  <span className="ml-auto min-w-0 truncate font-mono text-[10px] text-muted-foreground">
-                    {CLI_IDENTITY_USER_AGENTS[item].split(" ")[0]}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
         {!compact ? (
           <Button
             type="button"
