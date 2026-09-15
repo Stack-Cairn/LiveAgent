@@ -155,7 +155,10 @@ export function buildProtocolAuthHeaders(
 ): Record<string, string> {
   const spec = PROVIDER_PROTOCOL_AUTH_HEADER[protocol];
   const headerName = override?.headerName?.trim() || spec.headerName;
-  const prefix = override?.prefix ?? spec.prefix ?? "";
+  // 改了头名但没给前缀：按无前缀处理（api-key / X-Api-Key 类头不带 Bearer）；
+  // 沿用协议默认头名时才继承默认前缀。
+  const renamed = headerName.toLowerCase() !== spec.headerName.toLowerCase();
+  const prefix = override?.prefix ?? (renamed ? "" : (spec.prefix ?? ""));
   const headers: Record<string, string> = { [headerName]: `${prefix}${apiKey}` };
   if (protocol === "anthropic-messages") {
     headers[ANTHROPIC_API_VERSION_HEADER] = ANTHROPIC_API_VERSION;

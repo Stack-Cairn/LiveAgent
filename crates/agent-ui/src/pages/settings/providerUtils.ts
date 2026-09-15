@@ -394,10 +394,16 @@ export type ProviderModelsFailure = {
   message: string;
 };
 
+// KEEP IN SYNC: crates/agent-gui/src-tauri/src/services/provider_models.rs 的
+// build_provider_models_url。只有 v1 / v1beta 这一层会被统一改写；地址已带其它版本段
+// （如智谱的 /api/paas/v4、火山的 /api/v3）时原样保留，直接追加 /models。
 function buildVersionedModelsUrl(baseUrl: string, versionPath: string) {
-  const apiRoot = normalizeBaseUrl(baseUrl)
-    .replace(/\/models$/i, "")
-    .replace(/\/v\d+(?:beta)?$/i, "");
+  const root = normalizeBaseUrl(baseUrl).replace(/\/models$/i, "");
+  const trailing = root.match(/\/(v\d+(?:beta|alpha)?)$/i)?.[1]?.toLowerCase();
+  if (trailing && !/^v1(?:beta|alpha)?$/.test(trailing)) {
+    return `${root}/models`;
+  }
+  const apiRoot = root.replace(/\/v1(?:beta|alpha)?$/i, "");
   return `${apiRoot}/${versionPath}/models`;
 }
 
@@ -517,6 +523,7 @@ async function fetchModelsThroughGateway(
   providerId: string,
   isFullUrl: boolean,
   customHeaders?: readonly CustomHeader[],
+  extra?: { credentialId?: string; strict?: boolean },
 ): Promise<ProviderModelConfig[]> {
   const token =
     typeof window !== "undefined"
@@ -536,11 +543,19 @@ async function fetchModelsThroughGateway(
     is_full_url: isFullUrl,
     // 恒传（哪怕空数组）：草稿里清空请求头也得让桌面端按空集发，不能回落到落库配置。
     custom_headers: (customHeaders ?? []).map((header) => ({ ...header })),
+    ...(extra?.credentialId ? { credential_id: extra.credentialId } : {}),
   });
 
   const items = extractModelListItems(data);
   if (items !== null) {
     return normalizeApiFetchedModels(items, type);
+  }
+  if (extra?.strict) {
+    const hasError =
+      data && typeof data === "object" && "error" in (data as Record<string, unknown>);
+    if (!hasError) {
+      throw new ProviderModelsFetchError("Model list response has no model array", null);
+    }
   }
 
   const maybeError =
@@ -733,6 +748,13 @@ export async function fetchModelsFromApi(
     modelsUrl?: string;
     providerId?: string;
     customHeaders?: readonly CustomHeader[];
+    /**
+     * 严格模式（探测用）：响应里找不到模型数组时抛错而不是返回空列表，
+     * 让 200 + `{"code":401}` 这类伪成功归为"未知"而不是"可用"。
+     */
+    strict?: boolean;
+    /** WebUI：用已落库的某把凭据发请求（Key 值不出桌面）。 */
+    credentialId?: string;
   },
 ): Promise<ProviderModelConfig[]> {
   const modelsUrlOverride = type === "gemini" ? "" : (options?.modelsUrl?.trim() ?? "");
@@ -747,6 +769,7 @@ export async function fetchModelsFromApi(
       options?.providerId?.trim() ?? "",
       options?.isFullUrl === true,
       options?.customHeaders,
+      { credentialId: options?.credentialId, strict: options?.strict === true },
     );
   }
 
@@ -798,7 +821,11 @@ export async function fetchModelsFromApi(
 
     const items = extractModelListItems(data);
     if (items === null) {
-      emptyResult ??= [];
+      if (options?.strict) {
+        failures.push({ status: null, message: "Model list response has no model array" });
+      } else {
+        emptyResult ??= [];
+      }
       continue;
     }
     const models = normalizeApiFetchedModels(items, type);

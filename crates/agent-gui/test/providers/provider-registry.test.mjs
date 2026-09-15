@@ -250,3 +250,29 @@ test("legacy providers map to presets by host, relays fall back to custom", () =
   });
   assert.ok(official.every((c) => c.baseUrl.startsWith("https://api.openai.com")));
 });
+
+test("renamed auth headers drop the protocol prefix unless one is given", () => {
+  assert.deepEqual(
+    registry.buildProtocolAuthHeaders("openai-completions", "sk", { headerName: "X-Api-Key" }),
+    { "X-Api-Key": "sk" },
+  );
+  assert.deepEqual(
+    registry.buildProtocolAuthHeaders("openai-completions", "sk", { headerName: "authorization" }),
+    { authorization: "Bearer sk" },
+  );
+  assert.deepEqual(
+    registry.buildProtocolAuthHeaders("openai-completions", "sk", { headerName: "X-Token", prefix: "Token " }),
+    { "X-Token": "Token sk" },
+  );
+});
+
+test("models URL keeps non-v1 version segments and only rewrites v1/v1beta", () => {
+  const utils = loader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
+  const url = (type, base, kind = "official") =>
+    utils.buildProviderModelsUrl(type, utils.normalizeProviderModelsBaseUrl(type, base, false), kind);
+  assert.equal(url("codex", "https://open.bigmodel.cn/api/paas/v4"), "https://open.bigmodel.cn/api/paas/v4/models");
+  assert.equal(url("codex", "https://ark.cn-beijing.volces.com/api/v3"), "https://ark.cn-beijing.volces.com/api/v3/models");
+  assert.equal(url("codex", "https://relay.example/v1"), "https://relay.example/v1/models");
+  assert.equal(url("claude_code", "https://api.anthropic.com/v1"), "https://api.anthropic.com/v1/models");
+  assert.equal(url("gemini", "https://generativelanguage.googleapis.com/v1beta"), "https://generativelanguage.googleapis.com/v1beta/models");
+});

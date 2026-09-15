@@ -244,3 +244,42 @@ test("a disabled default endpoint falls back to the first enabled explicit endpo
   });
   assert.equal(provider.defaultChatProtocol, "anthropic-messages");
 });
+
+test("disabling every credential yields an empty key instead of a disabled one", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "solo",
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    credentials: [{ id: "k1", label: "only", apiKey: "sk-1", enabled: false }],
+    models: ["gpt-5"],
+  });
+  const picked = settings.selectProviderCredential(provider, "gpt-5");
+  assert.equal(picked.credential.apiKey, "");
+  assert.equal(picked.source, "fallback");
+});
+
+test("legacy codex pointing at api.deepseek.com keeps the standard OpenAI chain", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "ds-via-codex",
+    type: "codex",
+    baseUrl: "https://api.deepseek.com/v1",
+    models: ["deepseek-chat"],
+  });
+  // 预设按主机归属 deepseek，是预设自身的方言决定链路；这里断言旧 codex 分组的
+  // 域名推导只对 xAI 覆盖 openai 缺省。
+  const relay = settings.normalizeCustomProvider({
+    id: "openai-preset-relay",
+    type: "codex",
+    presetId: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    endpointConfigs: { "openai-responses": { baseUrl: "https://api.deepseek.com/v1" } },
+    models: ["deepseek-chat"],
+  });
+  assert.equal(settings.resolveProviderChatRoute(relay, "deepseek-chat").dialect, "openai");
+  // 直连官方地址的旧实例按主机归属 deepseek 预设：接口仍是旧推导的 Responses，
+  // 方言随预设变为 deepseek（走 DeepSeek 原生 Responses 适配器）。
+  const direct = settings.resolveProviderChatRoute(provider, "deepseek-chat");
+  assert.equal(provider.presetId, "deepseek");
+  assert.equal(direct.protocol, "openai-responses");
+  assert.equal(direct.dialect, "deepseek");
+});

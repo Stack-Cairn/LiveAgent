@@ -418,8 +418,11 @@ export function resolveProviderDialect(
   );
   // "openai" 只表示 OpenAI 官方语义的缺省：预设或旧分组给出 openai 时，端点域名
   // 若明确是 xAI / DeepSeek 官方，以域名为准。
+  // 只有 xAI 保留"域名推翻 openai 缺省"的旧行为（改造前 isXaiProviderTarget 就按
+  // api.x.ai 识别）；DeepSeek 官方地址挂在 OpenAI 分组下时维持标准 OpenAI 链路，
+  // 避免存量会话的 provider 身份变化。
   const softOpenAI = (dialect: ProviderWireDialect | undefined) =>
-    dialect === "openai" ? (inferredDialect ?? dialect) : dialect;
+    dialect === "openai" && inferredDialect === "xai" ? inferredDialect : dialect;
   const candidate =
     options?.model?.dialect ??
     options?.endpoint?.dialect ??
@@ -477,7 +480,13 @@ export function selectProviderCredential(
 ): { credential: ProviderCredential; source: ProviderRouteCredentialSource } {
   const all = getProviderCredentials(provider);
   const enabled = all.filter((credential) => credential.enabled);
-  if (enabled.length === 0) return { credential: all[0], source: "fallback" };
+  if (enabled.length === 0) {
+    // 全部 Key 都被停用：不能拿被停用的 Key 发请求，交给运行时按"未配置 Key"报错。
+    return {
+      credential: { ...all[0], apiKey: "", apiKeyConfigured: false },
+      source: "fallback",
+    };
+  }
   for (const item of preferred ?? []) {
     if (!item.credentialId) continue;
     const hit = enabled.find((credential) => credential.id === item.credentialId);
@@ -2234,7 +2243,7 @@ export function normalizeSelectedModelForProviders(
   }
 
   const provider = customProviders.find((item) => item.id === selectedModel.customProviderId);
-  if (!provider) {
+  if (!provider || provider.enabled === false) {
     return undefined;
   }
 

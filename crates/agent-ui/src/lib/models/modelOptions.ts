@@ -22,6 +22,8 @@ export type ModelOptionsSettings<TProviderType extends string = string> = {
     name: string;
     type: TProviderType;
     activeModels: readonly string[];
+    /** 供应商停用后不进入选择器 */
+    enabled?: boolean;
     /** 可选：带 displayName 时选择器用它做标签 */
     models?: readonly { id: string; displayName?: string }[];
   }[];
@@ -99,6 +101,7 @@ export function buildModelOptions<TProviderType extends string>(
 ): SharedModelOption<TProviderType>[] {
   const modelOptions: SharedModelOption<TProviderType>[] = [];
   for (const provider of settings.customProviders) {
+    if (provider.enabled === false) continue;
     const displayNames = new Map(
       (provider.models ?? [])
         .filter((item) => item.displayName?.trim())

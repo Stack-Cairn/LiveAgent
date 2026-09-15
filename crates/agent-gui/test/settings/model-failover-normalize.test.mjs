@@ -281,3 +281,23 @@ test("updateModelFailover patches one family through full normalization", () => 
   // Other families are untouched.
   assert.deepEqual(updated.modelFailover.openai, base.modelFailover.openai);
 });
+
+test("legacy per-vendor shapes still migrate when the ambiguous gemini key is present", () => {
+  const normalized = settings.normalizeModelFailoverSettings(
+    {
+      claude_code: { enabled: true, queue: ["provider-a2"], maxSwitches: 5 },
+      codex: { enabled: false, queue: ["provider-b"], maxSwitches: 2 },
+      gemini: { ...DEFAULT_VENDOR_FAILOVER },
+      xai: { ...DEFAULT_VENDOR_FAILOVER },
+      deepseek: { enabled: true, queue: ["provider-d"], maxSwitches: 7, failureThreshold: 3, cooldownSeconds: 120 },
+    },
+    PROVIDERS,
+  );
+  assert.deepEqual(normalized.anthropic.queue, ["provider-a2"]);
+  assert.equal(normalized.anthropic.maxSwitches, 5);
+  // openai family: codex (disabled) + deepseek (enabled) → knobs from the enabled group.
+  assert.deepEqual(normalized.openai.queue, ["provider-b", "provider-d"]);
+  assert.equal(normalized.openai.enabled, true);
+  assert.equal(normalized.openai.maxSwitches, 7);
+  assert.equal(normalized.openai.cooldownSeconds, 120);
+});

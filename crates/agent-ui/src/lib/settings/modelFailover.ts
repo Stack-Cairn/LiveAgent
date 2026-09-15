@@ -124,6 +124,10 @@ export function normalizeProviderFailoverSettings(
 
 const LEGACY_TYPES = Object.keys(LEGACY_FAILOVER_TYPE_FAMILY) as ProviderId[];
 
+// "gemini" 既是旧 ProviderId 键也是新家族键，判定新旧形状时不能用它。
+const NEW_ONLY_FAMILIES: readonly ProviderProtocolFamily[] = ["anthropic", "openai"];
+const LEGACY_ONLY_TYPES: readonly ProviderId[] = LEGACY_TYPES.filter((type) => type !== "gemini");
+
 /** True for the pre-per-vendor persisted shape ({enabled, queue, ...}). */
 function isLegacyFlatModelFailoverShape(obj: Record<string, unknown>): boolean {
   return (
@@ -136,8 +140,8 @@ function isLegacyFlatModelFailoverShape(obj: Record<string, unknown>): boolean {
 /** True for the per-ProviderId shape ({claude_code, codex, gemini, xai, deepseek}). */
 function isLegacyPerTypeShape(obj: Record<string, unknown>): boolean {
   return (
-    !PROVIDER_FAILOVER_FAMILIES.some((family) => family in obj) &&
-    LEGACY_TYPES.some((type) => type in obj)
+    !NEW_ONLY_FAMILIES.some((family) => family in obj) &&
+    LEGACY_ONLY_TYPES.some((type) => type in obj)
   );
 }
 
@@ -155,10 +159,16 @@ function mergeLegacyPerTypeShape(obj: Record<string, unknown>): Record<string, u
     if (!merged[family]) merged[family] = { enabled: false, queue: [] as unknown[] };
     const target = merged[family];
     if (source.enabled === true) target.enabled = true;
-    if (target.maxSwitches === undefined && source.maxSwitches !== undefined) {
+    // 阈值优先取启用过的旧分组（用户真正调过的那份），否则取第一份。
+    const knobsFromEnabled = target.__knobsFromEnabled === true;
+    if (
+      source.maxSwitches !== undefined &&
+      (target.maxSwitches === undefined || (source.enabled === true && !knobsFromEnabled))
+    ) {
       target.maxSwitches = source.maxSwitches;
       target.failureThreshold = source.failureThreshold;
       target.cooldownSeconds = source.cooldownSeconds;
+      if (source.enabled === true) target.__knobsFromEnabled = true;
     }
     if (Array.isArray(source.queue)) (target.queue as unknown[]).push(...source.queue);
   }
