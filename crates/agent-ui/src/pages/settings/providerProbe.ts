@@ -259,28 +259,43 @@ export function summarizeEndpointStatus(
 export type ProbeModelGroup = {
   key: string;
   models: ProviderModelConfig[];
-  /** 该分组按家族推荐并与可用接口取交集后的接口；空表示退到供应商默认 */
+  /** 该分组按系列偏好与采纳后可路由的接口取交集后的接口；空表示退到供应商默认 */
   protocol?: ProviderChatProtocol;
+  /** 推荐接口本次探测是否通过（false = 端点仍启用、路由会选它，但模型列表探测未通过） */
+  verified: boolean;
   dialect: ProviderWireDialect;
 };
 
-/** 摘要页分组：按模型家族，附推荐接口。 */
+/**
+ * 摘要页分组：按模型系列，附推荐接口。推荐接口与运行时路由同一规则——系列偏好 ∩
+ * 采纳后**已启用**的接口（`routableProtocols`：本次探测通过的 + 既有已启用端点），
+ * 而不只是探测通过的接口；否则中转的 Messages 端点没实现 /v1/models 时，摘要会
+ * 把 Claude 标成 Completions，采纳后实际却走 Messages。
+ */
 export function groupProbeModels(
   models: readonly ProviderModelConfig[],
   availableProtocols: readonly ProviderChatProtocol[],
   preset: ProviderPreset | undefined,
+  routableProtocols: readonly ProviderChatProtocol[] = availableProtocols,
 ): ProbeModelGroup[] {
   const groups = new Map<string, ProbeModelGroup>();
   for (const model of models) {
     const family = resolveModelFamily(model.id);
     const rule = matchPresetModelRule(preset, model.id);
     const protocol =
-      rule?.chatProtocols?.find((item) => availableProtocols.includes(item)) ??
-      family.prefer.find((item) => availableProtocols.includes(item));
+      rule?.chatProtocols?.find((item) => routableProtocols.includes(item)) ??
+      family.prefer.find((item) => routableProtocols.includes(item));
+    const verified = protocol !== undefined && availableProtocols.includes(protocol);
     // 家族方言只在官方渠道生效；中转/自建按路由实际解析（一般为 generic 或供应商默认）。
     const dialect: ProviderWireDialect =
       rule?.dialect ?? (preset?.native ? family.dialect : "generic");
-    const group = groups.get(family.key) ?? { key: family.key, models: [], protocol, dialect };
+    const group = groups.get(family.key) ?? {
+      key: family.key,
+      models: [],
+      protocol,
+      verified,
+      dialect,
+    };
     group.models.push(model);
     groups.set(family.key, group);
   }

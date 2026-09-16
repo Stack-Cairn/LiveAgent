@@ -287,6 +287,18 @@ test("auto configuration keeps only usable endpoints and merges models per key",
     ["glm", "openai-completions"],
     ["gpt", "openai-responses"],
   ]);
+  assert.equal(groups.every((g) => g.verified), true);
+  // 中转的 Messages 端点没实现 /v1/models（探测未通过）但仍是既有已启用端点：
+  // 推荐接口按"可路由集合"仍是 Messages（与运行时一致），只是标为未验证。
+  const partial = probe.groupProbeModels(
+    auto.models,
+    ["openai-completions", "openai-responses"],
+    preset,
+    ["openai-completions", "openai-responses", "anthropic-messages"],
+  );
+  assert.deepEqual(partial.find((g) => g.key === "claude").protocol, "anthropic-messages");
+  assert.equal(partial.find((g) => g.key === "claude").verified, false);
+  assert.equal(partial.find((g) => g.key === "gpt").verified, true);
 
   // 拒绝一个接口与一个分组。
   const trimmed = probe.buildAutoConfiguration({

@@ -1397,6 +1397,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerProbeKeysSummary": "{count} 把 Key 参与探测",
   "settings.providerProbeNoModels": "接口可用，但没有返回模型；可在详情里手动添加。",
   "settings.providerProbeNoEndpoints": "没有可用的接口。检查地址与 API Key 后重试。",
+  "settings.providerProbeGroupUnverified": "接口未验证",
+  "settings.providerProbeGroupUnverifiedHint":
+    "该系列按偏好会走这个接口（端点已启用），但本次模型列表探测未通过——多数中转的 Anthropic 路径没有 /v1/models，不代表聊天不可用。要改走其它接口，可在模型里显式指定。",
   "settings.providerProbeAcceptHint": "采纳后所有值标为“自动”，可在详情页逐项修改或还原。",
   "settings.providerProbeAcceptCreate": "采纳并创建",
   "settings.providerProbeAcceptApply": "采纳",

@@ -153,6 +153,17 @@ export function ProviderProbeDialog(props: {
       done ? availableProtocols(done, request.candidates, rejectedProtocols, forcedProtocols) : [],
     [done, request.candidates, rejectedProtocols, forcedProtocols],
   );
+  // 采纳后可路由的接口 = 本次探测通过的 + 既有端点（既有端点不会因探测失败被停用，
+  // 只要用户没在上面取消它）。摘要里的推荐接口按这个集合算，与运行时路由一致。
+  const routable = useMemo(() => {
+    const out = [...available];
+    for (const candidate of request.candidates) {
+      if (candidate.origin !== "existing") continue;
+      if (rejectedProtocols.has(candidate.protocol) || out.includes(candidate.protocol)) continue;
+      out.push(candidate.protocol);
+    }
+    return out;
+  }, [available, request.candidates, rejectedProtocols]);
   const groups = useMemo(
     () =>
       done
@@ -160,9 +171,18 @@ export function ProviderProbeDialog(props: {
             collectModels(done, request.candidates, rejectedProtocols, forcedProtocols),
             available,
             request.preset,
+            routable,
           )
         : [],
-    [done, request.candidates, request.preset, rejectedProtocols, forcedProtocols, available],
+    [
+      done,
+      request.candidates,
+      request.preset,
+      rejectedProtocols,
+      forcedProtocols,
+      available,
+      routable,
+    ],
   );
   const okCount = done
     ? request.candidates.filter(
@@ -386,6 +406,11 @@ export function ProviderProbeDialog(props: {
                             ? ` · ${dialectLabel(t, group.dialect)}`
                             : ""}
                         </span>
+                      ) : null}
+                      {group.protocol && !group.verified ? (
+                        <Chip tone="warn" title={t("settings.providerProbeGroupUnverifiedHint")}>
+                          {t("settings.providerProbeGroupUnverified")}
+                        </Chip>
                       ) : null}
                       <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-muted-foreground/70">
                         {group.models

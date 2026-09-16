@@ -1468,6 +1468,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Endpoint available but returned no models; add them manually in the detail view.",
   "settings.providerProbeNoEndpoints":
     "No endpoint available. Check the address and API key, then retry.",
+  "settings.providerProbeGroupUnverified": "interface unverified",
+  "settings.providerProbeGroupUnverifiedHint":
+    "This series will route to this interface (the endpoint is enabled), but its model-list probe did not pass — most relays have no /v1/models on the Anthropic path, which does not mean chat is unavailable. Pick another interface on the model to override.",
   "settings.providerProbeAcceptHint":
     "Accepted values are marked “auto” and can be changed or reset individually.",
   "settings.providerProbeAcceptCreate": "Accept and create",
