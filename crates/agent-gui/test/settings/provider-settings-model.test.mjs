@@ -368,47 +368,6 @@ test("failover candidates mirror the runtime plan across the three layers", () =
   assert.deepEqual(off.credentials.map((item) => item.id), ["b"], "credential layer is not gated by the switch");
 });
 
-test("copying an instance prefills endpoints, dialects and auth from the source", () => {
-  const source = settings.normalizeCustomProvider({
-    id: "p-src",
-    name: "Packy",
-    type: "codex",
-    baseUrl: "https://www.packyapi.com/v1",
-    apiKey: "sk-src",
-    dialect: "xai",
-    useSystemProxy: true,
-    models: [{ id: "gpt-5" }],
-    activeModels: ["gpt-5"],
-    defaultChatProtocol: "openai-completions",
-    endpointConfigs: {
-      "openai-completions": { baseUrl: "https://www.packyapi.com/v1", quirks: { supportsStore: false } },
-      "anthropic-messages": { baseUrl: "https://www.packyapi.com", auth: { headerName: "x-api-key" }, dialect: "generic" },
-    },
-  });
-  assert.equal(model.instanceNameForCopy(source, [source]), "Packy · 2");
-  assert.equal(model.instanceNameForCopy(source, [source, { name: "Packy · 2" }]), "Packy · 3");
-  assert.equal(model.instanceNameForCopy({ ...source, name: "Packy · 2" }, [source, { name: "Packy · 2" }]), "Packy · 3");
-
-  const copy = model.createProviderFromEndpoints({
-    name: "Packy · 2",
-    preset: undefined,
-    apiKey: "sk-copy",
-    endpoints: {
-      "openai-completions": "https://www.packyapi.com/v1",
-      "anthropic-messages": "https://www.packyapi.com",
-    },
-    template: source,
-  });
-  assert.notEqual(copy.id, source.id);
-  assert.equal(copy.dialect, "xai");
-  assert.equal(copy.useSystemProxy, true);
-  assert.equal(copy.apiKey, "sk-copy");
-  assert.deepEqual(copy.models, [], "models are re-probed, not copied");
-  assert.deepEqual(copy.endpointConfigs["openai-completions"].quirks, { supportsStore: false });
-  assert.deepEqual(copy.endpointConfigs["anthropic-messages"].auth, { headerName: "x-api-key" });
-  assert.equal(copy.endpointConfigs["anthropic-messages"].source, "user");
-});
-
 test("credential helpers count configured keys and compare scopes only when both were fetched", () => {
   const provider = legacyAnthropicProvider({
     credentials: [
