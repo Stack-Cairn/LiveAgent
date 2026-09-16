@@ -837,6 +837,82 @@ export function modelCapabilityFlags(
   };
 }
 
+/** 模型文档页：供应商自填的 docUrl 优先，其次预设的 doc；都没有则 undefined。 */
+export function providerDocUrl(
+  provider: Pick<CustomProvider, "presetId" | "docUrl">,
+): string | undefined {
+  return provider.docUrl || findProviderPreset(provider.presetId)?.doc || undefined;
+}
+
+export type ModelListCapabilityKey = keyof ModelCapabilityFlags;
+export const MODEL_LIST_CAPABILITY_KEYS: readonly ModelListCapabilityKey[] = [
+  "vision",
+  "file",
+  "reasoning",
+  "tools",
+  "search",
+];
+export type ModelListEnabledKey = "enabled" | "disabled";
+
+/** 模型列表工具栏的搜索词与过滤项；各维度之间取交集，维度内部见 filterProviderModels。 */
+export type ModelListFilter = {
+  query: string;
+  capabilities: readonly ModelListCapabilityKey[];
+  enabled: readonly ModelListEnabledKey[];
+  protocols: readonly ProviderChatProtocol[];
+};
+
+export const EMPTY_MODEL_LIST_FILTER: ModelListFilter = {
+  query: "",
+  capabilities: [],
+  enabled: [],
+  protocols: [],
+};
+
+/** 过滤函数需要的每行派生信息：能力位、启用状态与解析出的接口。 */
+export type ModelListFilterInfo = ModelCapabilityFlags & {
+  active: boolean;
+  protocol: ProviderChatProtocol;
+};
+
+/** 已选的过滤项数（不含搜索词）：给过滤按钮的角标。 */
+export function modelListFilterCount(filter: ModelListFilter): number {
+  return filter.capabilities.length + filter.enabled.length + filter.protocols.length;
+}
+
+export function modelListFilterActive(filter: ModelListFilter): boolean {
+  return filter.query.trim().length > 0 || modelListFilterCount(filter) > 0;
+}
+
+/**
+ * 返回可见模型 id 集合。搜索词按模型 ID / 显示名 / 远端 ID 做不区分大小写的子串
+ * 匹配；能力多选要求全部具备（越选越窄）；状态与接口多选内部取并集；四个维度之间
+ * 取交集。infoById 里缺失的模型视为不可见。
+ */
+export function filterProviderModels(
+  models: readonly ProviderModelConfig[],
+  infoById: ReadonlyMap<string, ModelListFilterInfo>,
+  filter: ModelListFilter,
+): Set<string> {
+  const query = filter.query.trim().toLowerCase();
+  const enabledSet = new Set(filter.enabled);
+  const protocolSet = new Set(filter.protocols);
+  const visible = new Set<string>();
+  for (const model of models) {
+    const info = infoById.get(model.id);
+    if (!info) continue;
+    if (query) {
+      const haystack = [model.id, model.displayName, model.wireModelId];
+      if (!haystack.some((text) => text?.toLowerCase().includes(query))) continue;
+    }
+    if (filter.capabilities.some((key) => !info[key])) continue;
+    if (enabledSet.size > 0 && !enabledSet.has(info.active ? "enabled" : "disabled")) continue;
+    if (protocolSet.size > 0 && !protocolSet.has(info.protocol)) continue;
+    visible.add(model.id);
+  }
+  return visible;
+}
+
 export function adapterProviderIdForModel(provider: CustomProvider, modelId: string): ProviderId {
   return resolveProviderChatRoute(provider, modelId).adapterProviderId;
 }

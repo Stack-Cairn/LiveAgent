@@ -285,6 +285,27 @@ export function RequestConfigDrawer(props: {
           <div className="space-y-5">
             <div className="space-y-2">
               <DrawerGroupLabel
+                label={t("settings.providerDocUrl")}
+                hint={t("settings.providerDocUrlHint")}
+              />
+              <CommittedInput
+                value={provider.docUrl ?? ""}
+                className="h-8 font-mono text-xs shadow-none"
+                placeholder={preset.doc ?? "https://"}
+                aria-label={t("settings.providerDocUrl")}
+                autoComplete="off"
+                spellCheck={false}
+                onCommit={(value) =>
+                  onChange((current) => {
+                    const { docUrl: _previous, ...rest } = current;
+                    const docUrl = value.trim();
+                    return docUrl ? { ...rest, docUrl } : rest;
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <DrawerGroupLabel
                 label={t("settings.providerEndpointsTitle")}
                 hint={t("settings.providerEndpointsHint")}
               />

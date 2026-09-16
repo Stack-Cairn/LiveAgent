@@ -1863,6 +1863,20 @@ function normalizeProviderCredentials(
   return list;
 }
 
+/** 只接受 http(s) 绝对地址的可选字段（文档页等外链）：其它值一律丢弃。 */
+export function normalizeHttpUrl(input: unknown): string | undefined {
+  if (typeof input !== "string") return undefined;
+  const value = input.trim();
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+  } catch {
+    return undefined;
+  }
+  return value;
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const legacyDefault = normalizeLegacyProtocolInput(obj.defaultChatProtocol);
@@ -1943,6 +1957,10 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ...(type !== "gemini" && typeof obj.modelsUrl === "string" && obj.modelsUrl.trim()
       ? { modelsUrl: obj.modelsUrl.trim() }
       : {}),
+    ...((): { docUrl?: string } => {
+      const docUrl = normalizeHttpUrl(obj.docUrl);
+      return docUrl ? { docUrl } : {};
+    })(),
     apiKey: primaryKey,
     apiKeyConfigured: primaryKey.length > 0 || credentials[0]?.apiKeyConfigured === true,
     credentials,

@@ -799,6 +799,8 @@ export type CustomProvider = {
   isFullUrl: boolean;
   /** 可选的模型列表完整地址；留空时从 baseUrl 自动推导。 */
   modelsUrl?: string;
+  /** 模型文档页地址（仅 http(s)）；覆盖预设的 doc，留空时用预设值。 */
+  docUrl?: string;
   /** 默认凭据；始终等于 credentials[0].apiKey，保证旧读者可用 */
   apiKey: string;
   apiKeyConfigured?: boolean;
