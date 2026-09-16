@@ -75,18 +75,27 @@ test("normalizeProviderModelConfig drops malformed inputModalities and legacy ar
 });
 
 test("modelFactory: codex completions custom model honors the override", () => {
+  // 目录（kimi-for-coding 分区）已收录 k3 且声明支持图片：无覆盖时按目录给 image；
+  // 用户覆盖仍最高优先，且构造带覆盖的模型不能反向污染此前创建的实例。
   const base = ["codex", "k3", "https://api.kimi.com/coding/v1", "openai-completions"];
   const withoutOverride = createModelFromConfig(...base);
-  assert.deepEqual(withoutOverride.input, ["text"]);
+  assert.deepEqual(withoutOverride.input, ["text", "image"]);
   const withOverride = createModelFromConfig(...base, {
     id: "k3",
     contextWindow: 258000,
     maxOutputToken: 32000,
-    inputModalities: ["text", "image"],
+    inputModalities: ["text"],
   });
-  // 构造带覆盖的模型不能反向污染此前创建的无覆盖模型实例。
-  assert.deepEqual(withoutOverride.input, ["text"]);
-  assert.deepEqual(withOverride.input, ["text", "image"]);
+  assert.deepEqual(withoutOverride.input, ["text", "image"]);
+  assert.deepEqual(withOverride.input, ["text"]);
+  // 目录未收录的模型仍走内置白名单：纯文本。
+  const unknown = createModelFromConfig(
+    "codex",
+    "totally-unknown-model",
+    "https://relay.example/v1",
+    "openai-completions",
+  );
+  assert.deepEqual(unknown.input, ["text"]);
 });
 
 test(
