@@ -1595,7 +1595,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelPropertyColumn.current": "Current",
   "settings.modelPropertyColumn.source": "Source",
   "settings.modelCapabilityRow.imageUnderstanding": "Vision (image input)",
-  "settings.modelCapabilityRow.fileInput": "File input (PDF / attachments)",
+  "settings.modelCapabilityRow.fileInput": "Files (PDF)",
   "settings.modelCapabilityRow.audioInput": "Audio input",
   "settings.modelCapabilityRow.videoInput": "Video input",
   "settings.modelCapabilityOverrideInherit": "Inherit",

@@ -364,6 +364,8 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     name: "小米 MiMo",
     input: "key",
     defaultChatProtocol: "openai-completions",
+    // 官方 Anthropic 兼容入口：{base}/v1/messages（用户提供）。
+    endpoints: { "anthropic-messages": { baseUrl: "https://api.xiaomimimo.com/anthropic" } },
     apiKeyUrl: "https://platform.xiaomimimo.com/#/console/api-keys",
     order: 100,
   },

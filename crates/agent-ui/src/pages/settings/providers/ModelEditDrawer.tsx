@@ -131,21 +131,34 @@ function Field(props: { label: string; hint?: string; source?: ReactNode; childr
 // 时每行改为上下堆叠（容器查询，随抽屉而非视口）。
 // ---------------------------------------------------------------------------
 
-const TABLE_ROW_CLASS =
-  "grid grid-cols-[148px_minmax(64px,0.8fr)_minmax(0,1.4fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-1.5 @max-[500px]:grid-cols-1 @max-[500px]:py-2";
+// 四列固定模板：末列宽度按表固定（能力表 = 三态分段控件宽，限额表 = 来源徽标 + 还原），
+// 每行各自成 grid 时才不会因为末列内容宽窄不同（"—" vs 分段控件）把中间列挤歪。
+const TABLE_ROW_BASE_CLASS =
+  "grid items-center gap-x-3 gap-y-1 px-3 py-1.5 @max-[500px]:grid-cols-1 @max-[500px]:py-2";
+const CAPABILITY_ROW_CLASS = cn(TABLE_ROW_BASE_CLASS, "grid-cols-[128px_44px_minmax(0,1fr)_136px]");
+const LIMIT_ROW_CLASS = cn(TABLE_ROW_BASE_CLASS, "grid-cols-[128px_44px_minmax(0,1fr)_96px]");
 
-function PropertyTable(props: { columns: readonly string[]; children: ReactNode }) {
+function PropertyTable(props: {
+  columns: readonly string[];
+  rowClass: string;
+  children: ReactNode;
+}) {
   return (
     <div className="@container">
       <div className="divide-y overflow-hidden rounded-xl border bg-muted/20 text-xs">
         <div
           className={cn(
-            TABLE_ROW_CLASS,
+            props.rowClass,
             "bg-muted/30 text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground/70 @max-[500px]:hidden",
           )}
         >
-          {props.columns.map((column) => (
-            <span key={column}>{column}</span>
+          {props.columns.map((column, index) => (
+            <span
+              key={column}
+              className={index === props.columns.length - 1 ? "justify-self-end" : undefined}
+            >
+              {column}
+            </span>
           ))}
         </div>
         {props.children}
@@ -460,6 +473,7 @@ export function ModelEditDrawer(props: {
                 hint={t("settings.modelCapabilitiesHint")}
               />
               <PropertyTable
+                rowClass={CAPABILITY_ROW_CLASS}
                 columns={[
                   t("settings.modelPropertyColumn.property"),
                   columnCatalog,
@@ -471,7 +485,7 @@ export function ModelEditDrawer(props: {
                   const label = t(CAPABILITY_ROW_LABEL_KEYS[row.key]);
                   const view = capabilityChipView(row.effective);
                   return (
-                    <div key={row.key} className={TABLE_ROW_CLASS}>
+                    <div key={row.key} className={CAPABILITY_ROW_CLASS}>
                       <span className="text-foreground/90">{label}</span>
                       <Cell column={columnCatalog}>
                         <CatalogMark value={row.catalog} />
@@ -529,6 +543,7 @@ export function ModelEditDrawer(props: {
                 hint={t("settings.modelLimitsHint")}
               />
               <PropertyTable
+                rowClass={LIMIT_ROW_CLASS}
                 columns={[
                   t("settings.modelPropertyColumn.property"),
                   columnCatalog,
@@ -541,7 +556,7 @@ export function ModelEditDrawer(props: {
                   const source = limitSources[field];
                   const value = model[field];
                   return (
-                    <div key={field} className={TABLE_ROW_CLASS}>
+                    <div key={field} className={LIMIT_ROW_CLASS}>
                       <span className="text-foreground/90">{label}</span>
                       <Cell column={columnCatalog}>
                         <span className="tabular-nums text-muted-foreground">
