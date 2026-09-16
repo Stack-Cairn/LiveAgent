@@ -406,6 +406,7 @@ export function ModelScopeLogo(props: LogoProps) {
 /** 预设 id → 品牌 logo；未收录（含 custom）返回 undefined，由调用方退到中性图标。 */
 const PRESET_LOGOS: Record<string, ComponentType<LogoProps>> = {
   zhipu: ZhipuLogo,
+  "zhipu-intl": ZhipuLogo,
   minimax: MinimaxLogo,
   "minimax-cn": MinimaxLogo,
   moonshot: KimiLogo,

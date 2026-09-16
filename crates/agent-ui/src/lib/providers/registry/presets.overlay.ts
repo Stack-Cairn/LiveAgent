@@ -140,6 +140,15 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     order: 60,
   },
   {
+    id: "zhipu-intl",
+    name: "智谱 Z.AI（国际）",
+    input: "key",
+    defaultChatProtocol: "openai-completions",
+    endpoints: { "anthropic-messages": { baseUrl: "https://api.z.ai/api/anthropic" } },
+    apiKeyUrl: "https://z.ai/manage-apikey/apikey-list",
+    order: 61,
+  },
+  {
     id: "minimax",
     name: "MiniMax",
     input: "key",

@@ -129,6 +129,7 @@ const PRESETS = [
   { id: "xai", section: "xai" },
   { id: "deepseek", section: "deepseek" },
   { id: "zhipu", section: "zhipuai", source: "zhipuai" },
+  { id: "zhipu-intl", section: "zhipuai", source: "zai" },
   { id: "minimax", section: "minimax" },
   { id: "minimax-cn", section: "minimax-cn" },
   { id: "moonshot", section: "moonshotai" },
