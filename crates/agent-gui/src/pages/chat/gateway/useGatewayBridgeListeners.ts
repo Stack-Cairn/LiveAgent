@@ -21,6 +21,7 @@ import {
 } from "./gatewayBridgeTypes";
 
 type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
+  enabled?: boolean;
   queueGatewayBridgeEventForRequest: (
     requestId: string,
     event: Record<string, unknown>,
@@ -152,6 +153,7 @@ function normalizeGatewayBaseMessageRef(value: unknown): HistoryMessageRef | und
 }
 
 export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParams) {
+  const enabled = params.enabled ?? true;
   const latestParamsRef = useRef(params);
   latestParamsRef.current = params;
   const workerIdRef = useRef("");
@@ -160,6 +162,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
   }
 
   useEffect(() => {
+    if (!enabled) return;
     let disposed = false;
     let unlistenChatRequestReady: (() => void) | null = null;
     let unlistenChatRuntimeWake: (() => void) | null = null;
@@ -793,5 +796,5 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
       unlistenGatewayStatus?.();
       unlistenClarifyTurnRequested?.();
     };
-  }, []);
+  }, [enabled]);
 }

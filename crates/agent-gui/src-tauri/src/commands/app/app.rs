@@ -1,7 +1,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, State};
+use sha2::{Digest, Sha256};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::runtime::terminal::TerminalSessionRegistry;
@@ -37,7 +38,9 @@ pub fn app_frontend_ready(
     window: tauri::WebviewWindow,
     ready_state: State<'_, Arc<FrontendReadyState>>,
 ) -> Result<(), String> {
-    ready_state.0.store(true, Ordering::SeqCst);
+    if window.label() == crate::MAIN_WINDOW_LABEL {
+        ready_state.0.store(true, Ordering::SeqCst);
+    }
     if window.is_visible().unwrap_or(false) {
         return Ok(());
     }
@@ -47,6 +50,122 @@ pub fn app_frontend_ready(
     window
         .set_focus()
         .map_err(|error| format!("failed to focus frontend-ready window: {error}"))
+}
+
+const CONVERSATION_WINDOW_LABEL_PREFIX: &str = "conversation-";
+const MAX_CONVERSATION_ID_LENGTH: usize = 256;
+const MAX_CONVERSATION_WINDOW_TITLE_LENGTH: usize = 96;
+
+fn normalize_conversation_window_id(conversation_id: &str) -> Result<&str, String> {
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversation_id is required".to_string());
+    }
+    if conversation_id.chars().count() > MAX_CONVERSATION_ID_LENGTH {
+        return Err("conversation_id is too long".to_string());
+    }
+    Ok(conversation_id)
+}
+
+fn conversation_window_label(conversation_id: &str) -> String {
+    let digest = Sha256::digest(conversation_id.as_bytes());
+    let suffix = digest[..12]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("{CONVERSATION_WINDOW_LABEL_PREFIX}{suffix}")
+}
+
+fn normalize_conversation_window_title(title: Option<&str>) -> String {
+    let title = title
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut chars = title.chars();
+    let shortened = chars
+        .by_ref()
+        .take(MAX_CONVERSATION_WINDOW_TITLE_LENGTH)
+        .collect::<String>();
+    let suffix = if chars.next().is_some() { "…" } else { "" };
+    if shortened.is_empty() {
+        "LiveAgent".to_string()
+    } else {
+        format!("{shortened}{suffix} — LiveAgent")
+    }
+}
+
+fn focus_conversation_window(app: &AppHandle, conversation_id: &str) -> Result<bool, String> {
+    let conversation_id = normalize_conversation_window_id(conversation_id)?;
+    let label = conversation_window_label(conversation_id);
+    let Some(window) = app.get_webview_window(&label) else {
+        return Ok(false);
+    };
+
+    window
+        .show()
+        .map_err(|error| format!("failed to show conversation window: {error}"))?;
+    window
+        .unminimize()
+        .map_err(|error| format!("failed to restore conversation window: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("failed to focus conversation window: {error}"))?;
+    Ok(true)
+}
+
+/// Focuses the independent window that owns this conversation, if one exists.
+/// The main window calls this before opening history so one conversation never
+/// has two simultaneously editable desktop views.
+#[tauri::command]
+pub fn app_focus_conversation_window(
+    app: AppHandle,
+    conversation_id: String,
+) -> Result<bool, String> {
+    focus_conversation_window(&app, &conversation_id)
+}
+
+/// Opens an idle conversation in its own native window. Labels are derived
+/// from the complete conversation id, so repeated requests reuse and focus the
+/// same window without exposing user-controlled ids as Tauri labels.
+#[tauri::command]
+pub async fn app_open_conversation_window(
+    app: AppHandle,
+    conversation_id: String,
+    title: Option<String>,
+) -> Result<String, String> {
+    let conversation_id = normalize_conversation_window_id(&conversation_id)?.to_string();
+    let label = conversation_window_label(&conversation_id);
+    let window_title = normalize_conversation_window_title(title.as_deref());
+
+    if let Some(window) = app.get_webview_window(&label) {
+        window
+            .set_title(&window_title)
+            .map_err(|error| format!("failed to update conversation window title: {error}"))?;
+        focus_conversation_window(&app, &conversation_id)?;
+        return Ok(label);
+    }
+
+    let route = format!(
+        "index.html?appWindow=conversation&conversationId={}&conversationTitle={}",
+        urlencoding::encode(&conversation_id),
+        urlencoding::encode(title.as_deref().unwrap_or_default().trim()),
+    );
+    let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(route.into()))
+        .title(window_title)
+        .inner_size(1100.0, 760.0)
+        .min_inner_size(760.0, 560.0)
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+        .visible(false);
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.decorations(false);
+    }
+    builder
+        .build()
+        .map_err(|error| format!("failed to create conversation window: {error}"))?;
+
+    Ok(label)
 }
 
 /// 前端主动切换置顶（置顶指示器点击取消）；状态变更仍经
@@ -356,5 +475,31 @@ mod tests {
         assert!(!is_close_window_exit(&state));
         state.store(CLOSE_WINDOW_BEHAVIOR_EXIT, Ordering::SeqCst);
         assert!(is_close_window_exit(&state));
+    }
+
+    #[test]
+    fn conversation_window_labels_are_stable_and_safe() {
+        let first = conversation_window_label("conversation/with spaces");
+        assert_eq!(first, conversation_window_label("conversation/with spaces"));
+        assert_ne!(first, conversation_window_label("another-conversation"));
+        assert!(first.starts_with(CONVERSATION_WINDOW_LABEL_PREFIX));
+        assert!(first
+            .strip_prefix(CONVERSATION_WINDOW_LABEL_PREFIX)
+            .unwrap()
+            .chars()
+            .all(|character| character.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn conversation_window_title_is_trimmed_and_bounded() {
+        assert_eq!(normalize_conversation_window_title(None), "LiveAgent");
+        assert_eq!(
+            normalize_conversation_window_title(Some("  My   conversation  ")),
+            "My conversation — LiveAgent"
+        );
+        let long_title = "会".repeat(MAX_CONVERSATION_WINDOW_TITLE_LENGTH + 1);
+        let normalized = normalize_conversation_window_title(Some(&long_title));
+        assert!(normalized.starts_with(&"会".repeat(MAX_CONVERSATION_WINDOW_TITLE_LENGTH)));
+        assert!(normalized.ends_with("… — LiveAgent"));
     }
 }

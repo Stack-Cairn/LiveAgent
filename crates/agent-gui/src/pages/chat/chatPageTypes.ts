@@ -15,4 +15,6 @@ export type ChatPageProps = {
   onToggleTheme: () => void;
   appUpdate?: AppUpdateController;
   onRunningConversationCountChange?: (count: number) => void;
+  /** When set, render only this conversation in a dedicated desktop window. */
+  standaloneConversationId?: string;
 };

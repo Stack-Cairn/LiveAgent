@@ -4,6 +4,7 @@ import {
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
 import {
+  AppWindow,
   Archive,
   ArchiveRestore,
   Check,
@@ -149,6 +150,8 @@ type HistoryRowProps = {
   ) => void;
   /** Menu alternative to dragging: open the conversation in a split pane. */
   onOpenInWorkbenchSplit?: (item: SidebarConversation) => void;
+  /** Desktop-only action that transfers the conversation to its native window. */
+  onOpenInWindow?: (item: SidebarConversation) => void;
 };
 
 function areRenderedHistoryItemsEqual(previous: SidebarConversation, next: SidebarConversation) {
@@ -204,7 +207,8 @@ function areHistoryRowPropsEqual(previous: HistoryRowProps, next: HistoryRowProp
     previous.onEnterSelectionMode === next.onEnterSelectionMode &&
     previous.onMenuOpenChange === next.onMenuOpenChange &&
     previous.onWorkbenchDragIntent === next.onWorkbenchDragIntent &&
-    previous.onOpenInWorkbenchSplit === next.onOpenInWorkbenchSplit
+    previous.onOpenInWorkbenchSplit === next.onOpenInWorkbenchSplit &&
+    previous.onOpenInWindow === next.onOpenInWindow
   );
 }
 
@@ -244,6 +248,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     onMenuOpenChange,
     onWorkbenchDragIntent,
     onOpenInWorkbenchSplit,
+    onOpenInWindow,
   } = props;
   const { t } = useLocale();
   // Either blocked state replaces the spinner: the turn is suspended on the
@@ -925,6 +930,16 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   >
                     <Columns2 className={CONVERSATION_MENU_ICON_CLASS} />
                     {t("workbench.openInSplit")}
+                  </DropdownMenuItem>
+                ) : null}
+                {onOpenInWindow && !item.isPending ? (
+                  <DropdownMenuItem
+                    disabled={isInteractionDisabled || isRunning || isBusy}
+                    onSelect={() => onOpenInWindow(item)}
+                    className={CONVERSATION_MENU_ITEM_CLASS}
+                  >
+                    <AppWindow className={CONVERSATION_MENU_ICON_CLASS} />
+                    {t("chat.conversationOpenInWindow")}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem

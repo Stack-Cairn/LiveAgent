@@ -28,7 +28,7 @@ function reportWindowChromeError(action: string, error: unknown) {
   console.error(`failed to ${action} LiveAgent window`, error);
 }
 
-export function WindowsTitleBar() {
+export function WindowsTitleBar(props: { title?: string }) {
   const { t } = useLocale();
   const [isVisible, setIsVisible] = useState(() => isWindowsTauriRuntime());
   const [isMaximized, setIsMaximized] = useState(false);
@@ -191,7 +191,7 @@ export function WindowsTitleBar() {
           draggable={false}
         />
         <span className="truncate text-[12px] font-medium leading-[1.45] tracking-[0.01em] text-foreground/80">
-          {t("app.name")}
+          {props.title?.trim() || t("app.name")}
         </span>
       </div>
 

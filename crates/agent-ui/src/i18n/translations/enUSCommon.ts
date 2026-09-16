@@ -301,6 +301,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.conversationUnpin": "Unpin",
   "chat.conversationRename": "Rename",
   "chat.conversationMoveToWorkspace": "Move to workspace",
+  "chat.conversationOpenInWindow": "Open in new window",
+  "chat.conversationOpenInWindowFailed": "Failed to open conversation window",
   "chat.conversationShare": "Share",
   "chat.conversationDelete": "Delete conversation",
   "chat.conversationDeleteConfirm": 'Delete "{title}"?',

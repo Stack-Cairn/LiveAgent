@@ -21,6 +21,7 @@ function ThemeToggleIcon(props: { theme: Theme }) {
 export type ChatHeaderProps = {
   settings: AppSettings;
   sidebarOpen: boolean;
+  sidebarAvailable?: boolean;
   onOpenSettings: (section?: "providers", providerId?: string) => void;
   onToggleTheme: () => void;
   onOpenSidebar: () => void;
@@ -34,6 +35,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
   const {
     settings,
     sidebarOpen,
+    sidebarAvailable = true,
     onOpenSettings,
     onToggleTheme,
     onOpenSidebar,
@@ -57,12 +59,16 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
       data-tauri-drag-region
       className={cn(
         "flex items-center justify-between gap-2 py-2.5 pr-4",
-        !sidebarOpen && desktopTitleBarInset ? "pl-[232px]" : "pl-4",
+        !sidebarOpen && desktopTitleBarInset
+          ? sidebarAvailable
+            ? "pl-[232px]"
+            : "pl-[88px]"
+          : "pl-4",
         className,
       )}
     >
       <div className="flex min-w-0 items-center gap-1.5">
-        {!sidebarOpen && !desktopTitleBarInset ? (
+        {sidebarAvailable && !sidebarOpen && !desktopTitleBarInset ? (
           <Button
             variant="ghost"
             size="icon"
@@ -91,7 +97,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         >
           <ThemeToggleIcon theme={nextTheme} />
         </Button>
-        {!sidebarOpen && !desktopTitleBarInset ? (
+        {sidebarAvailable && !sidebarOpen && !desktopTitleBarInset ? (
           <Button
             variant="ghost"
             size="icon"

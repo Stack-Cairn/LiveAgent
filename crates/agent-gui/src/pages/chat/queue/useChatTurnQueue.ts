@@ -63,6 +63,7 @@ import {
 } from "./chatTurnQueue";
 
 type UseChatTurnQueueParams = {
+  enableGatewayListeners?: boolean;
   settings: AppSettings;
   currentConversationId: string;
   queueStore?: ConversationQueueStore;
@@ -109,6 +110,7 @@ type UseChatTurnQueueParams = {
  */
 export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   const {
+    enableGatewayListeners = true,
     settings,
     currentConversationId,
     queueStore: providedQueueStore,
@@ -882,6 +884,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: This native listener is registered once and dispatches through latest-action and mutable state refs to avoid stale closures without re-subscribing.
   useEffect(() => {
+    if (!enableGatewayListeners) return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
     type GatewayChatQueueRequestEvent = {
@@ -1271,7 +1274,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       disposed = true;
       unlisten?.();
     };
-  }, []);
+  }, [enableGatewayListeners]);
 
   return {
     queuedChatTurnsRef,

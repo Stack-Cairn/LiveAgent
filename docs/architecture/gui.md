@@ -58,6 +58,7 @@
 
 | 领域 | 命令族 |
 |---|---|
+| App / window | `app_frontend_ready/app_open_conversation_window/app_focus_conversation_window` |
 | Chat history | `chat_history_list/search/get/upsert/upsert_active_segment/append_segment/rename/set_pinned/share_get/share_set/delete` |
 | Subagent store | `subagent_identity_upsert/list`、`subagent_run_save/list/load/prune`、`subagent_message_append/list` |
 | File system | `fs_read_text/read_image_source/write_text/edit_text/delete/list/glob/grep/mention_list` |

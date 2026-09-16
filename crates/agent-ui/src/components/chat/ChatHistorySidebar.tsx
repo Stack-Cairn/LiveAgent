@@ -215,6 +215,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     archivedProjectPathKeys = EMPTY_PROJECT_PATH_KEYS,
     onNewConversation,
     onSelectConversation,
+    onConversationOpenInWindow,
     onConversationWorkbenchDragIntent,
     onConversationOpenInWorkbenchSplit,
     onProjectWorkbenchDragIntent,
@@ -1128,6 +1129,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         onMenuOpenChange={handleMenuOpenChange}
         onWorkbenchDragIntent={onConversationWorkbenchDragIntent}
         onOpenInWorkbenchSplit={onConversationOpenInWorkbenchSplit}
+        onOpenInWindow={onConversationOpenInWindow}
       />
     ),
     [
@@ -1146,6 +1148,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       handleSelectConversation,
       onConversationWorkbenchDragIntent,
       onConversationOpenInWorkbenchSplit,
+      onConversationOpenInWindow,
       handleMoveToWorkspace,
       handleSetPinned,
       handleSetPendingDelete,

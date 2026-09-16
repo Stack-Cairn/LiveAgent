@@ -186,6 +186,8 @@ macro_rules! app_invoke_handler {
             commands::update::app_restart,
             commands::app::app_runtime_platform,
             commands::app::app_frontend_ready,
+            commands::app::app_open_conversation_window,
+            commands::app::app_focus_conversation_window,
             commands::app::app_set_close_window_behavior,
             commands::app::app_set_global_shortcuts,
             commands::app::app_run_shortcut,

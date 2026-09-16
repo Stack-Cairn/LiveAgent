@@ -286,6 +286,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       })}
       onConversationWorkbenchDragIntent={props.onConversationWorkbenchDragIntent}
       onConversationOpenInWorkbenchSplit={props.onConversationOpenInWorkbenchSplit}
+      onConversationOpenInWindow={props.onConversationOpenInWindow}
       onProjectWorkbenchDragIntent={props.onProjectWorkbenchDragIntent}
       headerTop={<DesktopSidebarTitleBar />}
       brand={<DesktopSidebarBrand />}

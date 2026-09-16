@@ -48,6 +48,7 @@ import {
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import { desktopSttSettingsService } from "./lib/stt/desktopSttSettingsService";
+import { readAppWindowLaunchContext } from "./lib/windowLaunchContext";
 import type { SectionId } from "./pages/settings/types";
 
 let chatPageModule: Promise<typeof import("./pages/ChatPage")> | null = null;
@@ -92,7 +93,7 @@ function interpolateMessage(template: string, values: Record<string, string>) {
 
 const GATEWAY_SETTINGS_SYNC_EVENT = "gateway:settings-sync";
 
-function AppChrome(props: { children: ReactNode }) {
+function AppChrome(props: { children: ReactNode; title?: string }) {
   // Plain inputs get a shared cut/copy/paste menu; everything else keeps the
   // suppressed native menu (surfaces with their own menus opt out upstream).
   const { onRootContextMenu, onRootMouseDownCapture, menu } = useNativeInputContextMenu();
@@ -103,7 +104,7 @@ function AppChrome(props: { children: ReactNode }) {
       onContextMenu={onRootContextMenu}
       onMouseDownCapture={onRootMouseDownCapture}
     >
-      <WindowsTitleBar />
+      <WindowsTitleBar title={props.title} />
       <div className="relative min-h-0 flex-1 overflow-hidden bg-background">{props.children}</div>
       {menu}
     </div>
@@ -214,6 +215,10 @@ function applyRuntimeSystemDefaults(settings: AppSettings, defaultWorkdir: strin
 }
 
 export default function App() {
+  const windowLaunchContext = useMemo(readAppWindowLaunchContext, []);
+  const isConversationWindow = windowLaunchContext.kind === "conversation";
+  const conversationWindowTitle =
+    windowLaunchContext.kind === "conversation" ? windowLaunchContext.conversationTitle : undefined;
   const {
     settingsOpen,
     overlay,
@@ -281,16 +286,17 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (!settingsReady) return;
+    if (!settingsReady || isConversationWindow) return;
     void invoke("app_set_close_window_behavior", {
       behavior: settings.closeWindowBehavior,
     }).catch(() => {
       // Ignore non-Tauri and older desktop shells.
     });
-  }, [settingsReady, settings.closeWindowBehavior]);
+  }, [isConversationWindow, settingsReady, settings.closeWindowBehavior]);
 
   // 启动时恢复本机保存的全局快捷键（桌面端专属，非 Tauri 环境内部自动忽略）。
   useEffect(() => {
+    if (isConversationWindow) return;
     let disposed = false;
     let cleanup: (() => void) | undefined;
     void import("./lib/shortcuts/globalShortcuts")
@@ -304,12 +310,13 @@ export default function App() {
       disposed = true;
       cleanup?.();
     };
-  }, []);
+  }, [isConversationWindow]);
 
   // 窗口置顶状态：Rust 侧是唯一事实源（快捷键或指示器切换都经它广播），
   // 挂载时查询一次以覆盖 webview 重载后指示器丢失的情况。
   const [windowPinned, setWindowPinned] = useState(false);
   useEffect(() => {
+    if (isConversationWindow) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     invoke<boolean>("app_window_pinned")
@@ -338,7 +345,7 @@ export default function App() {
         unlisten();
       }
     };
-  }, []);
+  }, [isConversationWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -388,7 +395,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!settingsReady) return;
+    if (!settingsReady || isConversationWindow) return;
     const revealBackgroundHosts = () => setBackgroundHostsReady(true);
     if (typeof window.requestIdleCallback === "function") {
       const idleId = window.requestIdleCallback(revealBackgroundHosts, { timeout: 1_000 });
@@ -396,7 +403,7 @@ export default function App() {
     }
     const timeoutId = window.setTimeout(revealBackgroundHosts, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [settingsReady]);
+  }, [isConversationWindow, settingsReady]);
 
   // Push the user's retry-error classification (preset Cloudflare 5xx toggles +
   // custom substrings) into the stream-retry runtime. The extension is a pure
@@ -548,6 +555,7 @@ export default function App() {
   setThemeRef.current = setTheme;
   const runUpdateCheckRef = useRef<() => void>(() => {});
   useEffect(() => {
+    if (isConversationWindow) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     listen<{ action: string; id?: string; value?: string }>("app:action", (event) => {
@@ -603,7 +611,7 @@ export default function App() {
         unlisten();
       }
     };
-  }, [setSettings]);
+  }, [isConversationWindow, setSettings]);
 
   const handleTransitionEnd = handleSettingsOverlayTransitionEnd;
 
@@ -640,7 +648,7 @@ export default function App() {
   }, []);
 
   const appUpdate = useAppUpdateController({
-    enabled: settingsReady,
+    enabled: settingsReady && !isConversationWindow,
     includePrereleases: settings.updates.includePrereleases,
     messages: appUpdateMessages,
     beforeRestart: beforeAppRestart,
@@ -651,16 +659,16 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!settingsReady) return;
+    if (!settingsReady || isConversationWindow) return;
     void import("@liveagent/ui/lib/automation/index")
       .then(({ initAutomation }) => initAutomation())
       .catch((error) => {
         console.warn("Failed to initialize automation store", error);
       });
-  }, [settingsReady]);
+  }, [isConversationWindow, settingsReady]);
 
   useEffect(() => {
-    if (!settingsReady) {
+    if (!settingsReady || isConversationWindow) {
       return;
     }
 
@@ -696,12 +704,12 @@ export default function App() {
       cancelled = true;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [queueSettingsSave, settingsReady]);
+  }, [isConversationWindow, queueSettingsSave, settingsReady]);
 
   if (!settingsReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
-        <AppChrome>
+        <AppChrome title={conversationWindowTitle}>
           <AppBootShell loadingLabel={translate("app.loading", settings.locale)} />
         </AppChrome>
       </LocaleContext.Provider>
@@ -713,8 +721,8 @@ export default function App() {
 
   return (
     <LocaleContext.Provider value={localeContextValue}>
-      <AppChrome>
-        {backgroundHostsReady ? (
+      <AppChrome title={conversationWindowTitle}>
+        {backgroundHostsReady && !isConversationWindow ? (
           <Suspense fallback={null}>
             <CronPromptRunner settings={settings} />
             <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
@@ -735,7 +743,14 @@ export default function App() {
               onOpenSettings={openSettings}
               onToggleTheme={toggleTheme}
               appUpdate={appUpdate}
-              onRunningConversationCountChange={handleRunningConversationCountChange}
+              onRunningConversationCountChange={
+                isConversationWindow ? undefined : handleRunningConversationCountChange
+              }
+              standaloneConversationId={
+                windowLaunchContext.kind === "conversation"
+                  ? windowLaunchContext.conversationId
+                  : undefined
+              }
             />
           </Suspense>
         </AppErrorBoundary>
@@ -771,7 +786,7 @@ export default function App() {
             </AppErrorBoundary>
           </div>
         )}
-        {windowPinned && (
+        {!isConversationWindow && windowPinned && (
           <button
             type="button"
             onClick={() => {

@@ -274,6 +274,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.conversationUnpin": "取消置顶",
   "chat.conversationRename": "修改标题",
   "chat.conversationMoveToWorkspace": "移动到工作空间",
+  "chat.conversationOpenInWindow": "在新窗口中打开",
+  "chat.conversationOpenInWindowFailed": "打开对话窗口失败",
   "chat.conversationShare": "分享",
   "chat.conversationDelete": "删除对话",
   "chat.conversationDeleteConfirm": "删除「{title}」？",

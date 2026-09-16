@@ -287,7 +287,10 @@ export function ChatPage(props: ChatPageProps) {
     onToggleTheme,
     appUpdate,
     onRunningConversationCountChange,
+    standaloneConversationId,
   } = props;
+  const isStandaloneConversationWindow = Boolean(standaloneConversationId?.trim());
+  const workbenchEnabled = sessionWorkbench.enabled ? !isStandaloneConversationWindow : false;
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
@@ -404,7 +407,7 @@ export function ChatPage(props: ChatPageProps) {
       sidebarStore.stop();
     };
   }, [sidebarStore]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(!isStandaloneConversationWindow);
   const [conversationSearchRequestKey, setConversationSearchRequestKey] = useState(0);
   const { remoteRuntimeStatus, setRemoteRuntimeStatus } = useGatewayStatus({
     remote: settings.remote,
@@ -954,6 +957,7 @@ export function ChatPage(props: ChatPageProps) {
     shouldQueueGatewayChatRequest,
     enqueueGatewayChatRequest,
   } = useChatTurnQueue({
+    enableGatewayListeners: !isStandaloneConversationWindow,
     settings,
     currentConversationId,
     queueStore: conversationRuntimeRegistry.queue,
@@ -1504,6 +1508,7 @@ export function ChatPage(props: ChatPageProps) {
   }, [currentRequestContext, setContext]);
 
   useGatewayBridgeListeners({
+    enabled: !isStandaloneConversationWindow,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
     ensureGatewayBridgeConversationReadyRef,
@@ -1773,12 +1778,15 @@ export function ChatPage(props: ChatPageProps) {
   // （handleSelectConversation 定义之后）；这里先备好 ref 镜像。
   const handleNewConversationRef = useRef(handleNewConversation);
   handleNewConversationRef.current = handleNewConversation;
+  const detachConversationFromWorkbenchRef = useRef<(conversationId: string) => void>(
+    () => undefined,
+  );
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
   const isDraftConversationRef = useRef(isDraftConversation);
   isDraftConversationRef.current = isDraftConversation;
 
-  const handleSelectConversation = useCallback(
+  const openConversationInCurrentWindow = useCallback(
     (id: string, options?: ConversationOpenOptions) => {
       const targetConversationId = id.trim();
       if (!targetConversationId) {
@@ -1807,6 +1815,35 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
+  const handleSelectConversation = useCallback(
+    (id: string, options?: ConversationOpenOptions) => {
+      const targetConversationId = id.trim();
+      if (!targetConversationId) return;
+      if (isStandaloneConversationWindow) {
+        openConversationInCurrentWindow(targetConversationId, options);
+        return;
+      }
+
+      void invoke<boolean>("app_focus_conversation_window", {
+        conversationId: targetConversationId,
+      })
+        .then((focused) => {
+          if (!focused) openConversationInCurrentWindow(targetConversationId, options);
+        })
+        .catch(() => openConversationInCurrentWindow(targetConversationId, options));
+    },
+    [isStandaloneConversationWindow, openConversationInCurrentWindow],
+  );
+
+  const standaloneConversationOpenedRef = useRef(false);
+  useEffect(() => {
+    const conversationId = standaloneConversationId?.trim() ?? "";
+    if (!conversationId || standaloneConversationOpenedRef.current) return;
+    standaloneConversationOpenedRef.current = true;
+    setActiveView("chat");
+    handleSelectConversation(conversationId);
+  }, [handleSelectConversation, setActiveView, standaloneConversationId]);
+
   // 托盘/快捷键动作参数的 ref 镜像：监听 effect 是 []-dep，闭包内一律
   // 经 ref 取最新值（handleSelectWorkspaceProject 等依赖 settings，不稳定）。
   const sidebarRunningConversationIds = useSidebarSelector(
@@ -1814,13 +1851,37 @@ export function ChatPage(props: ChatPageProps) {
     selectRunningConversationIds,
   );
   useEffect(() => {
+    if (isStandaloneConversationWindow) return;
     onRunningConversationCountChange?.(sidebarRunningConversationIds.size);
-  }, [onRunningConversationCountChange, sidebarRunningConversationIds.size]);
+  }, [
+    isStandaloneConversationWindow,
+    onRunningConversationCountChange,
+    sidebarRunningConversationIds.size,
+  ]);
   useEffect(
     () => () => {
       onRunningConversationCountChange?.(0);
     },
     [onRunningConversationCountChange],
+  );
+  const handleOpenConversationInWindow = useCallback(
+    (item: SidebarConversation) => {
+      void invoke<string>("app_open_conversation_window", {
+        conversationId: item.id,
+        title: item.title,
+      })
+        .then(() => {
+          detachConversationFromWorkbenchRef.current(item.id);
+          if (currentConversationIdRef.current === item.id) {
+            setActiveView("chat");
+            handleNewConversationRef.current();
+          }
+        })
+        .catch((error) => {
+          addNotify("error", asErrorMessage(error, t("chat.conversationOpenInWindowFailed")));
+        });
+    },
+    [addNotify, currentConversationIdRef, setActiveView, t],
   );
   const appActionParamsRef = useRef({
     handleSelectConversation,
@@ -1849,6 +1910,8 @@ export function ChatPage(props: ChatPageProps) {
     // 单个会话的停止：完整序列在 stopConversation（stop intent + 队列取消 +
     // abort + force 清理）。未停到任何东西且会话未运行时必须消费掉 stop
     // intent，否则该会话下一次 send 会被静默吞掉（同 gateway:chat-cancel 守卫）。
+    if (isStandaloneConversationWindow) return;
+
     const stopConversationRun = (conversationId: string) => {
       const params = appActionParamsRef.current;
       const stopped = params.stopConversation(conversationId);
@@ -1982,7 +2045,7 @@ export function ChatPage(props: ChatPageProps) {
         unlistenFeedback();
       }
     };
-  }, [composerRef, setActiveView]);
+  }, [composerRef, isStandaloneConversationWindow, setActiveView]);
 
   // 托盘菜单同步：任一输入变化即重建模型推送（syncTrayMenu 内部按 JSON 签名
   // 去抖），300ms 尾随防抖吸收流式期间侧栏 upsert 引起的高频变化。
@@ -1991,6 +2054,7 @@ export function ChatPage(props: ChatPageProps) {
   const trayPrefs = useTrayPrefs();
   const automationState = useAutomation();
   useEffect(() => {
+    if (isStandaloneConversationWindow) return;
     const timer = window.setTimeout(() => {
       void syncTrayMenu(
         buildTrayMenuModel({
@@ -2021,6 +2085,7 @@ export function ChatPage(props: ChatPageProps) {
     settings.remote,
     remoteRuntimeStatus.online,
     trayPrefs,
+    isStandaloneConversationWindow,
   ]);
 
   // Called by the sidebar container after the store confirmed a deletion:
@@ -2714,7 +2779,7 @@ export function ChatPage(props: ChatPageProps) {
     beginDrag: beginWorkbenchDrag,
     dragGhostRef: workbenchDragGhostRef,
   } = useWorkbenchDragSession({
-    enabled: sessionWorkbench.enabled,
+    enabled: workbenchEnabled,
     layoutRef: workbench.layoutRef,
     geometryRef: workbenchGeometryRef,
     onCommit: handleWorkbenchDropCommit,
@@ -2870,6 +2935,7 @@ export function ChatPage(props: ChatPageProps) {
   // 前的 connecting 窗口。
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
+    if (!workbenchEnabled) return;
     return tauriTerminalClient.subscribe((event) => {
       if (event.kind !== "closed") return;
       // 应用退出的 close_all 不是用户关闭单个终端:保住布局里的终端 Pane,
@@ -2883,7 +2949,7 @@ export function ChatPage(props: ChatPageProps) {
       });
       if (paneId) handleWorkbenchClosePane(paneId);
     });
-  }, [handleWorkbenchClosePane, workbench]);
+  }, [handleWorkbenchClosePane, workbench, workbenchEnabled]);
 
   const handleProjectWorkbenchDragIntent = useCallback(
     (
@@ -3086,7 +3152,7 @@ export function ChatPage(props: ChatPageProps) {
   // the composer's data-file-upload-conversation-id marker at drop time.
   const lastNativeDropHoverPaneRef = useRef<string | null>(null);
   workbenchNativeDropHoverRef.current = (point) => {
-    if (!sessionWorkbench.enabled || !point) {
+    if (!workbenchEnabled || !point) {
       lastNativeDropHoverPaneRef.current = null;
       return;
     }
@@ -3115,7 +3181,7 @@ export function ChatPage(props: ChatPageProps) {
   // pane-initiated selection is still in flight.
   const lastWorkbenchSyncedConversationRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!sessionWorkbench.enabled) return;
+    if (!workbenchEnabled) return;
     const pending = workbenchPendingSelectRef.current;
     if (
       pending &&
@@ -3142,12 +3208,18 @@ export function ChatPage(props: ChatPageProps) {
     }
     lastWorkbenchSyncedConversationRef.current = currentConversationId;
     workbench.syncCurrentConversation(currentConversationId, conversationSurfaceProject);
-  }, [currentConversationId, conversationSurfaceProject, conversationRuntimeCacheRef, workbench]);
+  }, [
+    currentConversationId,
+    conversationSurfaceProject,
+    conversationRuntimeCacheRef,
+    workbench,
+    workbenchEnabled,
+  ]);
 
   // Close panes whose conversation was deleted from history (the focused
   // pane already falls back through the legacy new-conversation path).
   useEffect(() => {
-    if (!sessionWorkbench.enabled) return;
+    if (!workbenchEnabled) return;
     const layout = workbench.layoutRef.current;
     for (const pane of Object.values(layout.panes)) {
       if (pane.surface.kind !== "conversation") continue;
@@ -3164,6 +3236,7 @@ export function ChatPage(props: ChatPageProps) {
     handleWorkbenchClosePane,
     sidebarConversationsById,
     workbench,
+    workbenchEnabled,
   ]);
 
   // Keyboard equivalents for workbench pane commands, all on Meta/Ctrl+Alt:
@@ -3171,7 +3244,7 @@ export function ChatPage(props: ChatPageProps) {
   // W closes it, and =/+ equalizes its parent split. Every command needs at
   // least two panes; with one pane the workbench has nothing to navigate.
   useEffect(() => {
-    if (!sessionWorkbench.enabled) return;
+    if (!workbenchEnabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
       const layout = workbench.layoutRef.current;
@@ -3223,7 +3296,7 @@ export function ChatPage(props: ChatPageProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleWorkbenchFocusPane, requestWorkbenchClosePane, workbench]);
+  }, [handleWorkbenchFocusPane, requestWorkbenchClosePane, workbench, workbenchEnabled]);
 
   // Background pane controllers (conversations visible in unfocused panes).
   const backgroundControllersRef = useRef(new Map<string, ConversationSurfaceController>());
@@ -3242,8 +3315,13 @@ export function ChatPage(props: ChatPageProps) {
     },
     [conversationControllerActions, conversationRuntimeRegistry],
   );
+  detachConversationFromWorkbenchRef.current = (conversationId) => {
+    if (!workbenchEnabled) return;
+    const paneId = workbench.paneIdForConversation(conversationId);
+    if (paneId) handleWorkbenchClosePane(paneId);
+  };
   useEffect(() => {
-    if (!sessionWorkbench.enabled) return;
+    if (!workbenchEnabled) return;
     const keep = new Set(
       Object.values(workbench.layout.panes).flatMap((pane) =>
         pane.surface.kind === "conversation" ? [pane.surface.conversationId] : [],
@@ -3255,7 +3333,7 @@ export function ChatPage(props: ChatPageProps) {
         backgroundControllersRef.current.delete(conversationId);
       }
     }
-  }, [workbench.layout]);
+  }, [workbench.layout, workbenchEnabled]);
   // 布局对账:终端 drop 事务在宿主挂载前同步占约,Pane 若在宿主接手
   // release 前被关闭,租约会永久悬挂(dock 里永远隐藏该终端)。宿主持有
   // 的租约在其卸载 cleanup 中先于本 effect 释放,不受影响。
@@ -3507,7 +3585,7 @@ export function ChatPage(props: ChatPageProps) {
     };
   };
 
-  const workbenchRegistrations: ConversationPaneRegistration[] = sessionWorkbench.enabled
+  const workbenchRegistrations: ConversationPaneRegistration[] = workbenchEnabled
     ? Object.values(workbench.layout.panes).flatMap((pane) => {
         // Only conversation panes register a host binding; terminal and
         // unsupported panes render self-contained surfaces.
@@ -3764,7 +3842,7 @@ export function ChatPage(props: ChatPageProps) {
     [terminalProjectPathKey, workbench.layout],
   );
 
-  const chatContent = sessionWorkbench.enabled ? (
+  const chatContent = workbenchEnabled ? (
     <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
       <WorkbenchCanvas
         layout={workbench.layout}
@@ -3886,7 +3964,7 @@ export function ChatPage(props: ChatPageProps) {
   );
 
   const workbenchDragGhost =
-    sessionWorkbench.enabled && workbenchDragState ? (
+    workbenchEnabled && workbenchDragState ? (
       <div
         ref={workbenchDragGhostRef}
         data-workbench-drag-ghost=""
@@ -3903,104 +3981,112 @@ export function ChatPage(props: ChatPageProps) {
       </div>
     ) : null;
 
+  const showConversationViewTabs =
+    activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes;
+
   return (
     <div
       data-app-frame="three-column"
       className="relative flex h-full min-h-0 w-full overflow-hidden"
     >
-      <MacOsTitleBarToggle
-        sidebarOpen={sidebarOpen}
-        onToggle={handleToggleSidebar}
-        onOpenSettings={() => onOpenSettings()}
-        appUpdate={appUpdate}
-      />
+      {!isStandaloneConversationWindow ? (
+        <MacOsTitleBarToggle
+          sidebarOpen={sidebarOpen}
+          onToggle={handleToggleSidebar}
+          onOpenSettings={() => onOpenSettings()}
+          appUpdate={appUpdate}
+        />
+      ) : null}
       {workbenchDragGhost}
       {/* ---- Left column: navigation/sidebar ---- */}
-      <ChatSidebarContainer
-        pinnedOrder={settings.system.sidebarPinnedOrder}
-        onReorderPinned={(sidebarPinnedOrder) =>
-          setSettings((previous) => ({
-            ...previous,
-            system: { ...previous.system, sidebarPinnedOrder },
-          }))
-        }
-        projectOrder={settings.system.workspaceProjectOrder}
-        onReorderProjects={(workspaceProjectOrder) =>
-          setSettings((previous) => ({
-            ...previous,
-            system: { ...previous.system, workspaceProjectOrder },
-          }))
-        }
-        store={sidebarStore}
-        approvalStore={conversationRuntimeRegistry.approvals}
-        questionStore={conversationRuntimeRegistry.questions}
-        currentConversationId={currentConversationId}
-        isOpen={sidebarOpen}
-        fontScale={settings.customSettings.fontScale.sidebar}
-        conversationSearchRequestKey={conversationSearchRequestKey}
-        activeView={activeView}
-        showProjects={isAgentMode}
-        projects={workspaceProjects}
-        workspaceProjectGroups={workspaceProjectGroups}
-        activeProjectId={activeWorkspaceProject?.id ?? ""}
-        missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-        projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
-        workspaceFolderDropActive={isWorkspaceFolderDropActive}
-        recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
-        onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
-        onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
-        onCreateProject={handleOpenCreateWorkspaceProject}
-        onCreateWorkspaceGroup={handleCreateWorkspaceGroup}
-        onRenameWorkspaceGroup={handleRenameWorkspaceGroup}
-        onDeleteWorkspaceGroup={handleDeleteWorkspaceGroup}
-        onMoveProjectToGroup={handleMoveWorkspaceProjectToGroup}
-        onToggleWorkspaceGroupCollapsed={handleToggleWorkspaceGroupCollapsed}
-        onSelectProject={handleSelectWorkspaceProject}
-        onNewConversationForProject={handleNewConversationForProject}
-        onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
-        onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
-        onConfigureProject={setProjectSettingsProject}
-        onSetProjectPinned={handleSetWorkspaceProjectPinned}
-        onRemoveProject={handleRemoveWorkspaceProject}
-        onArchiveProject={handleArchiveWorkspaceProject}
-        onUnarchiveProject={handleUnarchiveWorkspaceProject}
-        archivedProjectPathKeys={archivedWorkspaceProjectPathKeys}
-        onNewConversation={() => {
-          setActiveView("chat");
-          if (activeView !== "chat" && isDraftConversation) {
-            return;
+      {!isStandaloneConversationWindow ? (
+        <ChatSidebarContainer
+          pinnedOrder={settings.system.sidebarPinnedOrder}
+          onReorderPinned={(sidebarPinnedOrder) =>
+            setSettings((previous) => ({
+              ...previous,
+              system: { ...previous.system, sidebarPinnedOrder },
+            }))
           }
-          handleNewConversation();
-        }}
-        onSelectConversation={(id, options) => {
-          setActiveView("chat");
-          handleSelectConversation(id, options);
-        }}
-        onConversationDeleted={handleConversationDeleted}
-        onConversationCwdChanged={handleConversationCwdChanged}
-        onConversationWorkbenchDragIntent={
-          sessionWorkbench.enabled ? handleConversationWorkbenchDragIntent : undefined
-        }
-        onConversationOpenInWorkbenchSplit={
-          sessionWorkbench.enabled ? handleOpenConversationInSplit : undefined
-        }
-        onProjectWorkbenchDragIntent={
-          sessionWorkbench.enabled ? handleProjectWorkbenchDragIntent : undefined
-        }
-        canShareConversations={canShareHistory}
-        sharedConversationCount={sharedHistoryItems.length}
-        onShareConversation={handleOpenShareModal}
-        onOpenSharedConversations={handleOpenSharedHistoryManager}
-        onCloseSidebar={handleCloseSidebar}
-        sidebarShortcuts={settings.customSettings.sidebarShortcuts}
-        onOpenSettings={onOpenSettings}
-        appUpdate={appUpdate}
-        onOpenResourceHub={(resource) => {
-          cacheActiveComposerDraft();
-          setRightDockOpen(false);
-          setActiveView(`${resource}-hub`);
-        }}
-      />
+          projectOrder={settings.system.workspaceProjectOrder}
+          onReorderProjects={(workspaceProjectOrder) =>
+            setSettings((previous) => ({
+              ...previous,
+              system: { ...previous.system, workspaceProjectOrder },
+            }))
+          }
+          store={sidebarStore}
+          approvalStore={conversationRuntimeRegistry.approvals}
+          questionStore={conversationRuntimeRegistry.questions}
+          currentConversationId={currentConversationId}
+          isOpen={sidebarOpen}
+          fontScale={settings.customSettings.fontScale.sidebar}
+          conversationSearchRequestKey={conversationSearchRequestKey}
+          activeView={activeView}
+          showProjects={isAgentMode}
+          projects={workspaceProjects}
+          workspaceProjectGroups={workspaceProjectGroups}
+          activeProjectId={activeWorkspaceProject?.id ?? ""}
+          missingProjectPathKeys={missingWorkspaceProjectPathKeys}
+          projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+          workspaceFolderDropActive={isWorkspaceFolderDropActive}
+          recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
+          onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
+          onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
+          onCreateProject={handleOpenCreateWorkspaceProject}
+          onCreateWorkspaceGroup={handleCreateWorkspaceGroup}
+          onRenameWorkspaceGroup={handleRenameWorkspaceGroup}
+          onDeleteWorkspaceGroup={handleDeleteWorkspaceGroup}
+          onMoveProjectToGroup={handleMoveWorkspaceProjectToGroup}
+          onToggleWorkspaceGroupCollapsed={handleToggleWorkspaceGroupCollapsed}
+          onSelectProject={handleSelectWorkspaceProject}
+          onNewConversationForProject={handleNewConversationForProject}
+          onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
+          onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
+          onConfigureProject={setProjectSettingsProject}
+          onSetProjectPinned={handleSetWorkspaceProjectPinned}
+          onRemoveProject={handleRemoveWorkspaceProject}
+          onArchiveProject={handleArchiveWorkspaceProject}
+          onUnarchiveProject={handleUnarchiveWorkspaceProject}
+          archivedProjectPathKeys={archivedWorkspaceProjectPathKeys}
+          onNewConversation={() => {
+            setActiveView("chat");
+            if (activeView !== "chat" && isDraftConversation) {
+              return;
+            }
+            handleNewConversation();
+          }}
+          onSelectConversation={(id, options) => {
+            setActiveView("chat");
+            handleSelectConversation(id, options);
+          }}
+          onConversationDeleted={handleConversationDeleted}
+          onConversationCwdChanged={handleConversationCwdChanged}
+          onConversationWorkbenchDragIntent={
+            workbenchEnabled ? handleConversationWorkbenchDragIntent : undefined
+          }
+          onConversationOpenInWorkbenchSplit={
+            workbenchEnabled ? handleOpenConversationInSplit : undefined
+          }
+          onConversationOpenInWindow={handleOpenConversationInWindow}
+          onProjectWorkbenchDragIntent={
+            workbenchEnabled ? handleProjectWorkbenchDragIntent : undefined
+          }
+          canShareConversations={canShareHistory}
+          sharedConversationCount={sharedHistoryItems.length}
+          onShareConversation={handleOpenShareModal}
+          onOpenSharedConversations={handleOpenSharedHistoryManager}
+          onCloseSidebar={handleCloseSidebar}
+          sidebarShortcuts={settings.customSettings.sidebarShortcuts}
+          onOpenSettings={onOpenSettings}
+          appUpdate={appUpdate}
+          onOpenResourceHub={(resource) => {
+            cacheActiveComposerDraft();
+            setRightDockOpen(false);
+            setActiveView(`${resource}-hub`);
+          }}
+        />
+      ) : null}
 
       {/* ---- Center column: workbench chrome + conversation surfaces ---- */}
       <div
@@ -4010,13 +4096,14 @@ export function ChatPage(props: ChatPageProps) {
         <AppWorkbenchChrome
           settings={settings}
           sidebarOpen={sidebarOpen}
+          sidebarAvailable={!isStandaloneConversationWindow}
           onOpenSettings={onOpenSettings}
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleOpenSidebar}
           leadingActions={
             // 多 Pane 时切换点内嵌在聚焦 Pane 的左上角(PaneChrome),顶栏
             // 不再重复;单 Pane 无 Pane chrome,保留顶栏 Tabs。
-            activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
+            showConversationViewTabs && !isStandaloneConversationWindow ? (
               <ConversationViewTabs
                 active={renderedConversationView}
                 onChange={setActiveConversationView}
@@ -4133,10 +4220,10 @@ export function ChatPage(props: ChatPageProps) {
               onSshTerminalOpenFile={workspaceOverlays.handleOpenSftpFile}
               sshTerminalPaneLeasedSessionIds={leasedDockSessionIds}
               onSshTerminalFocusLeasedSession={
-                sessionWorkbench.enabled ? focusWorkbenchTerminalPane : undefined
+                workbenchEnabled ? focusWorkbenchTerminalPane : undefined
               }
               onSshTerminalSessionTabDragStart={
-                sessionWorkbench.enabled ? handleSshTerminalTabDragIntent : undefined
+                workbenchEnabled ? handleSshTerminalTabDragIntent : undefined
               }
             />
           }
@@ -4177,27 +4264,23 @@ export function ChatPage(props: ChatPageProps) {
         onSshProjectHostIdsChange={handleSshProjectHostIdsChange}
         onOpenSshSession={handleOpenSshTerminal}
         onSessionsChange={handleRightDockSessionsChange}
-        onTerminalTabDragStart={
-          sessionWorkbench.enabled ? handleTerminalTabWorkbenchDragIntent : undefined
-        }
-        onNewTerminalDragStart={
-          sessionWorkbench.enabled ? handleNewTerminalWorkbenchDragIntent : undefined
-        }
+        onTerminalTabDragStart={workbenchEnabled ? handleTerminalTabWorkbenchDragIntent : undefined}
+        onNewTerminalDragStart={workbenchEnabled ? handleNewTerminalWorkbenchDragIntent : undefined}
         onOpenTerminalInWorkbench={
-          sessionWorkbench.enabled ? handleOpenTerminalInWorkbenchSplit : undefined
+          workbenchEnabled ? handleOpenTerminalInWorkbenchSplit : undefined
         }
         onToolDragStart={
-          sessionWorkbench.enabled && terminalProjectPathKey
+          sessionWorkbench.enabled && terminalProjectPathKey && !isStandaloneConversationWindow
             ? handleToolWorkbenchDragIntent
             : undefined
         }
         onOpenToolInWorkbench={
-          sessionWorkbench.enabled && terminalProjectPathKey
+          sessionWorkbench.enabled && terminalProjectPathKey && !isStandaloneConversationWindow
             ? handleOpenToolInWorkbenchSplit
             : undefined
         }
         onOpenNewTerminalInWorkbench={
-          sessionWorkbench.enabled ? handleOpenNewTerminalInWorkbenchSplit : undefined
+          workbenchEnabled ? handleOpenNewTerminalInWorkbenchSplit : undefined
         }
         onSessionGhost={verifyTerminalSessionAlive}
         onInsertFileMention={handleRightDockInsertFileMention}

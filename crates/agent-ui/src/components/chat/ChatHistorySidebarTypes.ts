@@ -106,6 +106,8 @@ export type ChatHistorySidebarProps = {
   archivedProjectPathKeys?: ReadonlySet<string>;
   onNewConversation: () => void;
   onSelectConversation: (id: string, options?: ConversationOpenOptions) => void;
+  /** Opens an idle conversation in a dedicated native desktop window. */
+  onConversationOpenInWindow?: (item: SidebarConversation) => void;
   /** Workbench drag intent from a conversation row title (desktop pointer). */
   onConversationWorkbenchDragIntent?: (
     item: SidebarConversation,
@@ -223,6 +225,7 @@ export type ChatHistorySidebarContainerSource = Required<
     | "conversationSearchRequestKey"
     | "onNewConversation"
     | "onSelectConversation"
+    | "onConversationOpenInWindow"
     | "canShareConversations"
     | "sharedConversationCount"
     | "onShareConversation"
@@ -239,6 +242,7 @@ type ChatHistorySidebarConversationSource = Pick<
   ChatHistorySidebarContainerSource,
   | "onNewConversation"
   | "onSelectConversation"
+  | "onConversationOpenInWindow"
   | "canShareConversations"
   | "sharedConversationCount"
   | "onShareConversation"
@@ -321,6 +325,7 @@ export function buildChatHistorySidebarConversationProps(
   return {
     onNewConversation: source.onNewConversation,
     onSelectConversation: source.onSelectConversation,
+    onConversationOpenInWindow: source.onConversationOpenInWindow,
     ...handlers,
     canShareConversations: source.canShareConversations,
     sharedConversationCount: source.sharedConversationCount,
