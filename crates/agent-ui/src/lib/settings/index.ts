@@ -23,6 +23,7 @@ import {
 } from "@liveagent/ui/lib/models/modelThinking";
 import { isEndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders";
 import {
+  CUSTOM_PRESET_ID,
   coerceDialectForProtocol,
   findProviderPreset,
   inferDialectFromBaseUrl,
@@ -471,7 +472,10 @@ export function resolveProviderDialect(
   const preset = options?.context ? options.context.preset : findProviderPreset(provider.presetId);
   // Codex 分组的"OpenAI 官方语义"只是缺省：直连 api.x.ai / api.deepseek.com 的旧配置
   // 仍按域名取 xai / deepseek 方言（与改造前 isXaiProviderTarget 的行为一致）。
-  const legacyDialect = getLegacyProviderDialect(provider.type);
+  // 旧分组方言只对原生渠道与自定义 / 中转实例有意义；厂商预设（智谱、Kimi 等）
+  // 的 codex 分组只是历史遗留，不该被当成"OpenAI 官方"语义。
+  const legacyApplies = !preset || preset.native || preset.id === CUSTOM_PRESET_ID;
+  const legacyDialect = legacyApplies ? getLegacyProviderDialect(provider.type) : undefined;
   const inferredDialect = inferDialectFromBaseUrl(
     protocol,
     options?.endpoint?.baseUrl || provider.baseUrl,

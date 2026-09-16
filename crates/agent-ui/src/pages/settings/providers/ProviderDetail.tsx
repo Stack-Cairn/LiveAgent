@@ -48,6 +48,7 @@ import {
   ProbeStatusChip,
   ProviderAvatar,
   protocolLabel,
+  protocolShortLabel,
   SecretInput,
   SectionTitle,
   SourceTag,
@@ -163,7 +164,7 @@ const ModelRow = memo(function ModelRow(props: {
     <div
       {...getItemProps(model.id)}
       className={cn(
-        "settings-model-row group flex flex-wrap items-center gap-2 bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
+        "settings-model-row group @container/row flex items-center gap-2 bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
         !info.active && "opacity-60",
         dragging && "z-10 bg-accent shadow-lg",
       )}
@@ -177,7 +178,7 @@ const ModelRow = memo(function ModelRow(props: {
         }
         aria-label={model.id}
       />
-      <span className="min-w-0 flex-1 basis-40 leading-tight">
+      <span className="min-w-0 flex-1 leading-tight">
         <span className="block truncate font-mono text-[12.5px] text-foreground/90">
           {model.displayName ? (
             <>
@@ -241,16 +242,24 @@ const ModelRow = memo(function ModelRow(props: {
         ) : null}
       </span>
       {info.hasEndpoint ? (
-        <Chip tone={info.protocolExplicit ? "on" : "default"}>
-          {info.protocolExplicit ? "" : `${t("settings.modelRouteAuto")} · `}
-          {protocolLabel(info.protocol)}
+        <Chip
+          tone={info.protocolExplicit ? "on" : "default"}
+          className="max-w-[40cqw] shrink overflow-hidden"
+          title={protocolLabel(info.protocol)}
+        >
+          <span className="truncate">
+            {info.protocolExplicit ? "" : `${t("settings.modelRouteAuto")} · `}
+            {protocolShortLabel(info.protocol)}
+          </span>
         </Chip>
       ) : (
         <Chip tone="bad">{t("settings.modelNoEndpoint")}</Chip>
       )}
-      {info.dialect !== "generic" ? <Chip>{dialectLabel(t, info.dialect)}</Chip> : null}
+      {model.dialect ? (
+        <Chip className="@max-[720px]/row:hidden">{dialectLabel(t, model.dialect)}</Chip>
+      ) : null}
       {model.wireModelId ? (
-        <Chip className="font-mono">
+        <Chip className="font-mono @max-[840px]/row:hidden">
           {t("settings.modelWireIdShort")} {model.wireModelId}
         </Chip>
       ) : null}
