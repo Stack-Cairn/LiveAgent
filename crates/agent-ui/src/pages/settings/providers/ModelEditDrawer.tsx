@@ -1,12 +1,15 @@
-// 抽屉三"编辑模型"（设计文档 6 / 7）：ID、远端 ID、显示名、系列（分组）、目录信息
-// （只读，6.6）、能力芯片（有效状态 + 来源，6.1）、输入模态（有效值 + 来源）、接口
-// 多选（只列已启用渠道，首项路由）、方言、凭据、限额（逐字段来源）、缓存提示、
-// 思考档位（目录只读）+ 默认档；底部展示 resolveProviderChatRoute 的解析结果与
-// 三层故障转移候选（设计文档 6.4）。每个覆盖项显示来源（自动 / 用户）与还原。
+// 抽屉三"编辑模型"（设计文档 6 / 7），每个属性只出现一次，固定六节：
+// 1. 标识：ID、远端 ID、显示名、系列（分组）。
+// 2. 目录：一行摘要（分区 / 条目 · 快照 · 发布 · 状态 · 价格）+ "查看目录"。
+// 3. 能力与模态：一张表，列 = 属性 | 目录值 | 有效值 | 覆盖（三态）；视觉行的覆盖
+//    同时写 capabilities.imageUnderstanding 与 inputModalities；音频 / 视频只读。
+// 4. 限额：属性 | 目录值 | 当前值 | 来源，逐行还原。
+// 5. 思考：目录档位阶梯（只读）；默认档由会话控制，不在模型级设置。
+// 6. 路由：接口、方言、凭据、缓存提示；其下"实际请求预览"与"故障转移候选"
+//    两个折叠块（默认收起）。
 
 import {
   type AppSettings,
-  type ChatCapabilityName,
   type CustomProvider,
   getProviderImplicitChatProtocol,
   getProviderModelDefaults,
@@ -18,11 +21,10 @@ import {
   type ProviderChatProtocol,
   type ProviderModelConfig,
   type ProviderWireDialect,
-  type ReasoningLevel,
   resolveProviderChatRoute,
   resolveProviderDialect,
 } from "@liveagent/app/lib/settings";
-import { BookOpen, X } from "@liveagent/ui/components/IconSet";
+import { BookOpen, ChevronDown, X } from "@liveagent/ui/components/IconSet";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
   Select,
@@ -33,11 +35,7 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import {
-  resolveModelCapabilities,
-  resolveModelCatalogInfo,
-  resolveModelInputModalitiesResolved,
-} from "@liveagent/ui/lib/models/modelCapabilities";
+import { resolveModelCatalogInfo } from "@liveagent/ui/lib/models/modelCapabilities";
 import type { CatalogProviderId } from "@liveagent/ui/lib/models/modelCatalog";
 import {
   resolveModelThinking,
@@ -47,15 +45,10 @@ import { mergeCustomHeaders } from "@liveagent/ui/lib/providers/customHeaders";
 import { PROVIDER_PROTOCOL_DIALECTS } from "@liveagent/ui/lib/providers/registry";
 import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import {
-  applyModelInputModalitiesMode,
-  formatTokenCount,
-  getModelInputModalitiesMode,
-  providerSupportsModelInputModalitiesOverride,
-} from "@liveagent/ui/pages/settings/providerUtils";
-import { type ReactNode, useMemo } from "react";
+import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
+import { type ReactNode, useMemo, useState } from "react";
 import { DrawerGroupLabel, HintTip, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
-import { ModalityChips, ModelCatalogInfoPanel } from "./ModelCatalogInfoPanel";
+import { ModelCatalogSummary } from "./ModelCatalogInfoPanel";
 import {
   Chip,
   ChipButton,
@@ -63,29 +56,49 @@ import {
   dialectLabel,
   protocolLabel,
   SourceTag,
-  StateChipButton,
+  StateChip,
 } from "./providerChips";
 import {
   capabilityChipView,
   credentialsCoveringModel,
+  hasModelCapabilityOverrides,
+  type ModelCapabilityOverride,
+  type ModelCapabilityRow,
   type ModelLimitField,
+  modelCapabilityRows,
   modelFailoverCandidates,
   modelGroupIsUser,
   modelGroupKey,
   modelLimitFieldSources,
   providerCredentials,
+  resetModelCapabilityOverrides,
   resetModelLimitField,
+  setModelCapabilityOverride,
   updateProviderModel,
 } from "./providerSettingsModel";
 
-const CAPABILITIES: readonly ChatCapabilityName[] = [
-  "reasoning",
-  "tools",
-  "structuredOutput",
-  "nativeWebSearch",
-  "fileInput",
-  "imageUnderstanding",
+const LIMIT_FIELDS: readonly ModelLimitField[] = [
+  "contextWindow",
+  "maxInputTokens",
+  "maxOutputToken",
 ];
+
+const LIMIT_FIELD_LABEL_KEYS: Record<ModelLimitField, string> = {
+  contextWindow: "settings.contextWindow",
+  maxInputTokens: "settings.modelMaxInputTokens",
+  maxOutputToken: "settings.maxOutputToken",
+};
+
+const CAPABILITY_ROW_LABEL_KEYS: Record<ModelCapabilityRow["key"], string> = {
+  imageUnderstanding: "settings.modelCapabilityRow.imageUnderstanding",
+  fileInput: "settings.modelCapabilityRow.fileInput",
+  audioInput: "settings.modelCapabilityRow.audioInput",
+  videoInput: "settings.modelCapabilityRow.videoInput",
+  reasoning: "settings.modelCapability.reasoning",
+  tools: "settings.modelCapability.tools",
+  structuredOutput: "settings.modelCapability.structuredOutput",
+  nativeWebSearch: "settings.modelCapability.nativeWebSearch",
+};
 
 function parsePositiveInteger(input: string): number | null {
   const value = Number(input.trim());
@@ -107,6 +120,140 @@ function Field(props: { label: string; hint?: string; source?: ReactNode; childr
       </div>
       {props.children}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 属性表：四列（属性 | 目录值 | 有效值或当前值 | 覆盖或来源），内容宽 < 500px（抽屉 < 560px）
+// 时每行改为上下堆叠（容器查询，随抽屉而非视口）。
+// ---------------------------------------------------------------------------
+
+const TABLE_ROW_CLASS =
+  "grid grid-cols-[148px_minmax(64px,0.8fr)_minmax(0,1.4fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-1.5 @max-[500px]:grid-cols-1 @max-[500px]:py-2";
+
+function PropertyTable(props: { columns: readonly string[]; children: ReactNode }) {
+  return (
+    <div className="@container">
+      <div className="divide-y overflow-hidden rounded-xl border bg-muted/20 text-xs">
+        <div
+          className={cn(
+            TABLE_ROW_CLASS,
+            "bg-muted/30 text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground/70 @max-[500px]:hidden",
+          )}
+        >
+          {props.columns.map((column) => (
+            <span key={column}>{column}</span>
+          ))}
+        </div>
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
+/** 表格单元：窄屏堆叠时在值前显示列名小字。 */
+function Cell(props: { column: string; className?: string; children: ReactNode }) {
+  return (
+    <div
+      className={cn("flex min-h-[22px] min-w-0 flex-wrap items-center gap-1.5", props.className)}
+    >
+      <span className="hidden w-14 shrink-0 text-[10.5px] text-muted-foreground/70 @max-[500px]:inline">
+        {props.column}
+      </span>
+      {props.children}
+    </div>
+  );
+}
+
+function CatalogMark(props: { value: ModelCapabilityOverride | undefined }) {
+  const { t } = useLocale();
+  if (props.value === undefined) {
+    return <span className="text-muted-foreground/60">—</span>;
+  }
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 tabular-nums",
+        props.value === "supported" ? "text-foreground/85" : "text-muted-foreground",
+      )}
+      title={t(`settings.modelCapabilityState.${props.value}`)}
+    >
+      <span aria-hidden="true">{props.value === "supported" ? "✓" : "✗"}</span>
+      <span className="sr-only">{t(`settings.modelCapabilityState.${props.value}`)}</span>
+    </span>
+  );
+}
+
+/** 三态覆盖：继承 / 支持 / 不支持，小型分段控件。 */
+function OverrideSegment(props: {
+  value: ModelCapabilityOverride | undefined;
+  label: string;
+  onChange: (next: ModelCapabilityOverride | undefined) => void;
+}) {
+  const { t } = useLocale();
+  const options: { key: string; value: ModelCapabilityOverride | undefined; label: string }[] = [
+    { key: "inherit", value: undefined, label: t("settings.modelCapabilityOverrideInherit") },
+    { key: "supported", value: "supported", label: t("settings.modelCapabilityState.supported") },
+    {
+      key: "unsupported",
+      value: "unsupported",
+      label: t("settings.modelCapabilityState.unsupported"),
+    },
+  ];
+  return (
+    <fieldset className="inline-flex h-[22px] items-stretch overflow-hidden rounded-md border border-border/70 p-0">
+      <legend className="sr-only">{props.label}</legend>
+      {options.map((option) => {
+        const active = option.value === props.value;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            aria-pressed={active}
+            className={cn(
+              "px-2 text-[11px] leading-none transition-colors first:rounded-l-md last:rounded-r-md",
+              active
+                ? "bg-primary/10 font-medium text-primary"
+                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            )}
+            onClick={() => props.onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+/** 可折叠块：标题行是按钮（含 chevron），说明气泡放在按钮外避免嵌套交互元素。 */
+function CollapsibleBlock(props: {
+  label: string;
+  hint?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(props.defaultOpen ?? false);
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((previous) => !previous)}
+          className="flex shrink-0 items-center gap-1 text-[10.5px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground/65 transition-colors hover:text-foreground"
+        >
+          <ChevronDown
+            className={cn("h-3 w-3 transition-transform", !open && "-rotate-90")}
+            aria-hidden="true"
+          />
+          {props.label}
+        </button>
+        {props.hint ? <HintTip text={props.hint} label={props.label} /> : null}
+        <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-foreground/[0.07]" />
+      </div>
+      {open ? props.children : null}
+    </section>
   );
 }
 
@@ -149,13 +296,11 @@ export function ModelEditDrawer(props: {
 
   const adapterId = route.adapterProviderId;
   const thinking = resolveModelThinking(adapterId, model.id);
-  // 能力 / 目录 / 输入模态都走 modelCapabilities 的单一解析入口（用户覆盖 >
-  // 目录 > 供应商规则 / 启发式），与运行时读到的是同一份结果。
-  const capabilities = resolveModelCapabilities(provider, model.id, route);
+  // 目录 / 能力 / 模态都走 modelCapabilities 的单一解析入口（用户覆盖 > 目录 >
+  // 供应商规则 / 启发式），与运行时读到的是同一份结果。
   const catalogInfo = resolveModelCatalogInfo(provider, model.id);
-  const effectiveInput = resolveModelInputModalitiesResolved(provider, model.id, route);
-  const canOverrideModalities = providerSupportsModelInputModalitiesOverride(adapterId);
-  const modalitiesMode = getModelInputModalitiesMode(model);
+  const catalogEntry = catalogInfo?.entry;
+  const capabilityRows = modelCapabilityRows(provider, model.id, route);
   const selectableProtocols = modelSelectableProtocols(provider, model.id);
   const implicitProtocol = getProviderImplicitChatProtocol(provider);
   const protocolConfigured = (protocol: ProviderChatProtocol) =>
@@ -165,12 +310,7 @@ export function ModelEditDrawer(props: {
   });
   const defaults = getProviderModelDefaults(adapterId, model.id, route.baseUrl);
   const limitSources = modelLimitFieldSources(model, defaults);
-  const reasoningOptions: ReasoningLevel[] = [
-    ...(thinking.alwaysOn ? [] : (["off"] as const)),
-    ...thinking.levels,
-  ];
   const credential = credentials.find((item) => item.id === route.credentialId);
-  const effectiveReasoning: ReasoningLevel = model.reasoning ?? provider.reasoning;
   // 与运行时同一份合并规则：鉴权头打底，用户头（供应商级 + 端点级，已按大小写去重）
   // 覆盖；键为空 / 不合法 / 保留键的行不进入预览。
   const finalHeaders = Object.entries(
@@ -187,31 +327,10 @@ export function ModelEditDrawer(props: {
     ),
   );
 
-  // 点击循环：用户支持 → 用户不支持 → 清除覆盖（回到目录 / 规则值）。
-  function cycleCapability(name: ChatCapabilityName) {
-    patch((current) => {
-      const value = current.capabilities?.[name];
-      const next = { ...current.capabilities };
-      if (value === undefined) next[name] = "supported";
-      else if (value === "supported") next[name] = "unsupported";
-      else delete next[name];
-      return {
-        ...current,
-        ...(Object.keys(next).length > 0 ? { capabilities: next } : { capabilities: undefined }),
-      };
-    });
-  }
-
   const protocolSourceLabel = t(`settings.modelRouteSource.${route.protocolSource}`);
-  const limitSourceTag = (field: ModelLimitField) => {
-    const source = limitSources[field];
-    return source ? (
-      <SourceTag
-        source={source}
-        onReset={() => patch((current) => resetModelLimitField(current, defaults, field))}
-      />
-    ) : null;
-  };
+  const columnCatalog = t("settings.modelPropertyColumn.catalog");
+  const catalogLimit = (field: ModelLimitField): string =>
+    catalogEntry?.[field] ? formatTokenCount(catalogEntry[field]) : "—";
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -241,6 +360,7 @@ export function ModelEditDrawer(props: {
         />
         <div className="settings-provider-drawer-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
           <div className="space-y-5">
+            {/* 1. 标识 */}
             <section className="space-y-3">
               <DrawerGroupLabel label={t("settings.modelIdentity")} />
               <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
@@ -305,19 +425,10 @@ export function ModelEditDrawer(props: {
                   />
                 </Field>
               </div>
-              <Field label={t("settings.modelType")}>
-                <div className="flex flex-wrap gap-1.5">
-                  <Chip tone="on">{t("settings.modelTypeChat")}</Chip>
-                  {(["image", "embedding", "rerank"] as const).map((kind) => (
-                    <Chip key={kind} className="opacity-50">
-                      {t(`settings.modelType.${kind}`)}
-                    </Chip>
-                  ))}
-                </div>
-              </Field>
             </section>
 
-            <ModelCatalogInfoPanel
+            {/* 2. 目录 */}
+            <ModelCatalogSummary
               info={catalogInfo}
               modelId={model.id}
               action={
@@ -339,89 +450,187 @@ export function ModelEditDrawer(props: {
               }
             />
 
-            <section className="space-y-3">
+            {/* 3. 能力与模态 */}
+            <section className="space-y-2">
               <DrawerGroupLabel
                 label={t("settings.modelCapabilities")}
                 hint={t("settings.modelCapabilitiesHint")}
               />
-              <div className="flex flex-wrap gap-1.5">
-                {CAPABILITIES.map((name) => {
-                  const resolved = capabilities[name];
-                  const view = capabilityChipView(resolved);
+              <PropertyTable
+                columns={[
+                  t("settings.modelPropertyColumn.property"),
+                  columnCatalog,
+                  t("settings.modelPropertyColumn.effective"),
+                  t("settings.modelPropertyColumn.override"),
+                ]}
+              >
+                {capabilityRows.map((row) => {
+                  const label = t(CAPABILITY_ROW_LABEL_KEYS[row.key]);
+                  const view = capabilityChipView(row.effective);
                   return (
-                    <StateChipButton
-                      key={name}
-                      state={view.state}
-                      overridden={view.overridden}
-                      onClick={() => cycleCapability(name)}
-                      title={`${t(`settings.modelCapabilityState.${resolved.state}`)} · ${t(
-                        `settings.modelCapabilitySource.${resolved.source}`,
-                      )}`}
-                    >
-                      {t(`settings.modelCapability.${name}`)}
-                    </StateChipButton>
+                    <div key={row.key} className={TABLE_ROW_CLASS}>
+                      <span className="text-foreground/90">{label}</span>
+                      <Cell column={columnCatalog}>
+                        <CatalogMark value={row.catalog} />
+                      </Cell>
+                      <Cell column={t("settings.modelPropertyColumn.effective")}>
+                        <StateChip state={view.state} overridden={view.overridden}>
+                          {t(`settings.modelCapabilityState.${row.effective.state}`)}
+                        </StateChip>
+                        <span className="text-[10.5px] text-muted-foreground">
+                          {t(`settings.modelCapabilitySource.${row.effective.source}`)}
+                        </span>
+                      </Cell>
+                      <Cell
+                        column={t("settings.modelPropertyColumn.override")}
+                        className="justify-self-end @max-[500px]:justify-self-start"
+                      >
+                        {row.editable ? (
+                          <OverrideSegment
+                            value={row.override}
+                            label={`${label} · ${t("settings.modelPropertyColumn.override")}`}
+                            onChange={(next) =>
+                              patch((current) => setModelCapabilityOverride(current, row.key, next))
+                            }
+                          />
+                        ) : (
+                          <span
+                            className="text-muted-foreground/60"
+                            title={t("settings.modelCapabilityOverrideReadonly")}
+                          >
+                            —
+                          </span>
+                        )}
+                      </Cell>
+                    </div>
                   );
                 })}
-                {model.capabilities ? (
-                  <ChipButton onClick={() => drop("capabilities")}>
+                <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+                  <span className="text-[10.5px] text-muted-foreground/70">
+                    {t("settings.modelCapabilitiesFootnote")}
+                  </span>
+                  <ChipButton
+                    disabled={!hasModelCapabilityOverrides(model)}
+                    onClick={() => patch(resetModelCapabilityOverrides)}
+                  >
                     {t("settings.modelCapabilitiesResetCatalog")}
                   </ChipButton>
-                ) : null}
-              </div>
-              <Field
-                label={t("settings.modelInputModalities")}
-                source={
-                  canOverrideModalities ? (
-                    <SourceTag
-                      source={modalitiesMode === "auto" ? "auto" : "user"}
-                      onReset={() =>
-                        patch((current) => applyModelInputModalitiesMode(current, "auto"))
-                      }
-                    />
-                  ) : null
-                }
-              >
-                {canOverrideModalities ? (
-                  <Select
-                    value={modalitiesMode}
-                    onValueChange={(value) => {
-                      if (value === "auto" || value === "text" || value === "text-image") {
-                        patch((current) => applyModelInputModalitiesMode(current, value));
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs shadow-none">
-                      <SelectValue>
-                        {t(
-                          modalitiesMode === "auto"
-                            ? "settings.modelInputModalitiesAuto"
-                            : modalitiesMode === "text"
-                              ? "settings.modelInputModalitiesText"
-                              : "settings.modelInputModalitiesTextImage",
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">{t("settings.modelInputModalitiesAuto")}</SelectItem>
-                      <SelectItem value="text">{t("settings.modelInputModalitiesText")}</SelectItem>
-                      <SelectItem value="text-image">
-                        {t("settings.modelInputModalitiesTextImage")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground/75">
-                    {t("settings.modelInputModalitiesUnavailable")}
-                  </p>
-                )}
-                <p className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-muted-foreground/70">
-                  {t("settings.modelInputModalitiesEffective")}
-                  <ModalityChips modalities={effectiveInput.modalities} />
-                  <span>· {t(`settings.modelCapabilitySource.${effectiveInput.source}`)}</span>
-                </p>
-              </Field>
+                </div>
+              </PropertyTable>
             </section>
 
+            {/* 4. 限额 */}
+            <section className="space-y-2">
+              <DrawerGroupLabel
+                label={t("settings.modelLimits")}
+                hint={t("settings.modelLimitsHint")}
+              />
+              <PropertyTable
+                columns={[
+                  t("settings.modelPropertyColumn.property"),
+                  columnCatalog,
+                  t("settings.modelPropertyColumn.current"),
+                  t("settings.modelPropertyColumn.source"),
+                ]}
+              >
+                {LIMIT_FIELDS.map((field) => {
+                  const label = t(LIMIT_FIELD_LABEL_KEYS[field]);
+                  const source = limitSources[field];
+                  const value = model[field];
+                  return (
+                    <div key={field} className={TABLE_ROW_CLASS}>
+                      <span className="text-foreground/90">{label}</span>
+                      <Cell column={columnCatalog}>
+                        <span className="tabular-nums text-muted-foreground">
+                          {catalogLimit(field)}
+                        </span>
+                      </Cell>
+                      <Cell column={t("settings.modelPropertyColumn.current")}>
+                        <CommittedInput
+                          value={value === undefined ? "" : String(value)}
+                          inputMode="numeric"
+                          className="h-7 w-full max-w-[160px] text-xs shadow-none"
+                          placeholder={
+                            field === "maxInputTokens"
+                              ? t("settings.modelMaxInputTokensUnset")
+                              : undefined
+                          }
+                          aria-label={label}
+                          onCommit={(input) => {
+                            const parsed =
+                              field === "maxInputTokens" && !input.trim()
+                                ? undefined
+                                : parsePositiveInteger(input);
+                            if (parsed === null) return;
+                            patch((current) => ({
+                              ...current,
+                              [field]: parsed,
+                              limitsSource: "user",
+                            }));
+                          }}
+                        />
+                      </Cell>
+                      <Cell
+                        column={t("settings.modelPropertyColumn.source")}
+                        className="justify-self-end @max-[500px]:justify-self-start"
+                      >
+                        {source ? (
+                          <SourceTag
+                            source={source}
+                            onReset={() =>
+                              patch((current) => resetModelLimitField(current, defaults, field))
+                            }
+                          />
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                      </Cell>
+                    </div>
+                  );
+                })}
+              </PropertyTable>
+            </section>
+
+            {/* 5. 思考 */}
+            <section className="space-y-3">
+              <DrawerGroupLabel
+                label={t("settings.modelThinkingLevels")}
+                hint={t("settings.modelThinkingLevelsHint")}
+              />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SourceTag source={thinking.fromCatalog ? "catalog" : "heuristic"} />
+                {thinking.reasoning ? (
+                  <>
+                    <Chip>
+                      {thinking.alwaysOn
+                        ? t("settings.modelThinkingAlwaysOn")
+                        : t("settings.modelThinkingCanDisable")}
+                    </Chip>
+                    {/* 可用档 = 描边芯片，不可用档 = 只降透明度。 */}
+                    {THINKING_LEVEL_LADDER.map((level) => {
+                      const available = thinking.levels.includes(level);
+                      return (
+                        <Chip
+                          key={level}
+                          className={cn(!available && "opacity-40")}
+                          title={
+                            available ? undefined : t("settings.modelThinkingLevelUnavailable")
+                          }
+                        >
+                          {t(`settings.reasoning.${level}`)}
+                        </Chip>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground/75">
+                    {t("settings.modelThinkingNone")}
+                  </span>
+                )}
+              </div>
+            </section>
+
+            {/* 6. 路由 */}
             <section className="space-y-3">
               <DrawerGroupLabel
                 label={t("settings.modelRouting")}
@@ -594,328 +803,166 @@ export function ModelEditDrawer(props: {
                       : t("settings.modelCredentialNoneCovering")}
                   </p>
                 </Field>
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <DrawerGroupLabel
-                label={t("settings.modelLimits")}
-                hint={t("settings.modelLimitsHint")}
-              />
-              <div className="grid grid-cols-3 gap-3 max-[720px]:grid-cols-1">
-                <Field label={t("settings.contextWindow")} source={limitSourceTag("contextWindow")}>
-                  <CommittedInput
-                    value={String(model.contextWindow)}
-                    inputMode="numeric"
-                    className="h-8 text-xs shadow-none"
-                    aria-label={t("settings.contextWindow")}
-                    onCommit={(value) => {
-                      const parsed = parsePositiveInteger(value);
-                      if (parsed === null) return;
-                      patch((current) => ({
-                        ...current,
-                        contextWindow: parsed,
-                        limitsSource: "user",
-                      }));
-                    }}
-                  />
-                </Field>
-                <Field
-                  label={t("settings.modelMaxInputTokens")}
-                  source={limitSourceTag("maxInputTokens")}
-                >
-                  <CommittedInput
-                    value={model.maxInputTokens ? String(model.maxInputTokens) : ""}
-                    inputMode="numeric"
-                    className="h-8 text-xs shadow-none"
-                    placeholder={t("settings.modelMaxInputTokensUnset")}
-                    aria-label={t("settings.modelMaxInputTokens")}
-                    onCommit={(value) => {
-                      const parsed = value.trim() ? parsePositiveInteger(value) : undefined;
-                      if (parsed === null) return;
-                      patch((current) => ({
-                        ...current,
-                        maxInputTokens: parsed,
-                        limitsSource: "user",
-                      }));
-                    }}
-                  />
-                </Field>
-                <Field
-                  label={t("settings.maxOutputToken")}
-                  source={limitSourceTag("maxOutputToken")}
-                >
-                  <CommittedInput
-                    value={String(model.maxOutputToken)}
-                    inputMode="numeric"
-                    className="h-8 text-xs shadow-none"
-                    aria-label={t("settings.maxOutputToken")}
-                    onCommit={(value) => {
-                      const parsed = parsePositiveInteger(value);
-                      if (parsed === null) return;
-                      patch((current) => ({
-                        ...current,
-                        maxOutputToken: parsed,
-                        limitsSource: "user",
-                      }));
-                    }}
-                  />
-                </Field>
-              </div>
-              <p className="text-[10.5px] text-muted-foreground/70">
-                {formatTokenCount(model.contextWindow)} {t("settings.modelCatalogCtx")} ·{" "}
-                {formatTokenCount(model.maxOutputToken)} {t("settings.modelCatalogMaxOutput")}
-              </p>
-              {adapterId === "codex" ? (
-                <Field
-                  label={t("settings.promptCacheHintModelOverride")}
-                  source={
-                    <SourceTag
-                      source={model.promptCacheHintMode ? "user" : "auto"}
-                      onReset={() => drop("promptCacheHintMode")}
-                    />
-                  }
-                >
-                  <Select
-                    value={model.promptCacheHintMode ?? "inherit"}
-                    onValueChange={(value) =>
-                      patch((current) => ({
-                        ...current,
-                        promptCacheHintMode:
-                          value === "inherit" ? undefined : (value as PromptCacheHintMode),
-                      }))
+                {adapterId === "codex" ? (
+                  <Field
+                    label={t("settings.promptCacheHintModelOverride")}
+                    source={
+                      <SourceTag
+                        source={model.promptCacheHintMode ? "user" : "auto"}
+                        onReset={() => drop("promptCacheHintMode")}
+                      />
                     }
                   >
-                    <SelectTrigger className="h-8 text-xs shadow-none">
-                      <SelectValue>
-                        {t(
-                          model.promptCacheHintMode
-                            ? PROMPT_CACHE_HINT_LABEL_KEYS[model.promptCacheHintMode]
-                            : "settings.promptCacheHintMode.inherit",
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">
-                        {t("settings.promptCacheHintMode.inherit")}
-                      </SelectItem>
-                      {PROMPT_CACHE_HINT_MODES.map((mode) => (
-                        <SelectItem key={mode} value={mode}>
-                          {t(PROMPT_CACHE_HINT_LABEL_KEYS[mode])}
+                    <Select
+                      value={model.promptCacheHintMode ?? "inherit"}
+                      onValueChange={(value) =>
+                        patch((current) => ({
+                          ...current,
+                          promptCacheHintMode:
+                            value === "inherit" ? undefined : (value as PromptCacheHintMode),
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-xs shadow-none">
+                        <SelectValue>
+                          {t(
+                            model.promptCacheHintMode
+                              ? PROMPT_CACHE_HINT_LABEL_KEYS[model.promptCacheHintMode]
+                              : "settings.promptCacheHintMode.inherit",
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inherit">
+                          {t("settings.promptCacheHintMode.inherit")}
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              ) : null}
-            </section>
-
-            <section className="space-y-3">
-              <DrawerGroupLabel
-                label={t("settings.modelThinkingLevels")}
-                hint={t("settings.modelThinkingLevelsHint")}
-              />
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SourceTag source={thinking.fromCatalog ? "catalog" : "heuristic"} />
-                {thinking.reasoning ? (
-                  <>
-                    <Chip>
-                      {thinking.alwaysOn
-                        ? t("settings.modelThinkingAlwaysOn")
-                        : t("settings.modelThinkingCanDisable")}
-                    </Chip>
-                    {/* 可用档 = 描边芯片，当前默认档 = 主色，不可用档 = 只降透明度。 */}
-                    {THINKING_LEVEL_LADDER.map((level) => {
-                      const available = thinking.levels.includes(level);
-                      const isDefault = available && level === effectiveReasoning;
-                      return (
-                        <Chip
-                          key={level}
-                          tone={isDefault ? "on" : "default"}
-                          className={cn(!available && "opacity-40")}
-                          title={
-                            isDefault
-                              ? t("settings.modelReasoningDefault")
-                              : available
-                                ? undefined
-                                : t("settings.modelThinkingLevelUnavailable")
-                          }
-                        >
-                          {t(`settings.reasoning.${level}`)}
-                        </Chip>
-                      );
-                    })}
-                  </>
-                ) : (
-                  <span className="text-[11px] text-muted-foreground/75">
-                    {t("settings.modelThinkingNone")}
-                  </span>
-                )}
+                        {PROMPT_CACHE_HINT_MODES.map((mode) => (
+                          <SelectItem key={mode} value={mode}>
+                            {t(PROMPT_CACHE_HINT_LABEL_KEYS[mode])}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                ) : null}
               </div>
-              {thinking.reasoning ? (
-                <Field
-                  label={t("settings.modelReasoningDefault")}
-                  source={
-                    <SourceTag
-                      source={model.reasoning ? "user" : "auto"}
-                      onReset={() => drop("reasoning")}
-                    />
-                  }
-                >
-                  <Select
-                    value={model.reasoning ?? "inherit"}
-                    onValueChange={(value) =>
-                      patch((current) => ({
-                        ...current,
-                        reasoning: value === "inherit" ? undefined : (value as ReasoningLevel),
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="h-8 text-xs shadow-none">
-                      <SelectValue>
-                        {model.reasoning
-                          ? t(`settings.reasoning.${model.reasoning}`)
-                          : t("settings.modelReasoningInherit").replace(
-                              "{level}",
-                              t(`settings.reasoning.${provider.reasoning}`),
-                            )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">
-                        {t("settings.modelReasoningInherit").replace(
-                          "{level}",
-                          t(`settings.reasoning.${provider.reasoning}`),
-                        )}
-                      </SelectItem>
-                      {reasoningOptions.map((level) => (
-                        <SelectItem key={level} value={level}>
-                          {t(`settings.reasoning.${level}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              ) : null}
-            </section>
 
-            <section className="space-y-2">
-              <DrawerGroupLabel
+              <CollapsibleBlock
                 label={t("settings.modelRouteResult")}
                 hint={t("settings.modelRouteResultHint")}
-              />
-              <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border bg-muted/20 px-3 py-2.5 text-xs">
-                <span className="text-muted-foreground">{t("settings.modelRouteProtocol")}</span>
-                <span className="flex flex-wrap items-center gap-1.5 font-mono">
-                  {route.protocol}
-                  <SourceTag source={route.protocolSource === "model" ? "user" : "auto"} />
-                  <span className="font-sans text-[10.5px] text-muted-foreground">
-                    {protocolSourceLabel}
-                  </span>
-                </span>
-                <span className="text-muted-foreground">{t("settings.providerDialect")}</span>
-                <span className="flex flex-wrap items-center gap-1.5 font-mono">
-                  {route.dialect}
-                  <span className="font-sans text-[10.5px] text-muted-foreground">
-                    {dialectLabel(t, route.dialect)}
-                  </span>
-                </span>
-                <span className="text-muted-foreground">{t("settings.baseUrl")}</span>
-                <span className="break-all font-mono">{route.baseUrl || "—"}</span>
-                <span className="text-muted-foreground">{t("settings.modelWireId")}</span>
-                <span className="font-mono">{route.wireModelId}</span>
-                <span className="text-muted-foreground">{t("settings.modelCredential")}</span>
-                <span className="flex flex-wrap items-center gap-1.5 font-mono">
-                  {credential?.label || t("settings.providerCredentialPrimary")}
-                  <span className="font-sans text-[10.5px] text-muted-foreground">
-                    {t(`settings.modelRouteCredentialSource.${route.credentialSource}`)}
-                  </span>
-                </span>
-                <span className="text-muted-foreground">{t("settings.modelRouteQuirks")}</span>
-                <span className="break-all font-mono">
-                  {Object.keys(route.quirks).length > 0
-                    ? JSON.stringify(route.quirks)
-                    : t("settings.providerQuirkAuto")}
-                </span>
-                <span className="text-muted-foreground">{t("settings.modelRouteHeaders")}</span>
-                <span className="space-y-0.5 font-mono">
-                  {finalHeaders.map(([key, value]) => (
-                    <span key={key} className="block break-all">
-                      {key}: {value}
-                    </span>
-                  ))}
-                </span>
-              </div>
-            </section>
-
-            {failover ? (
-              <section className="space-y-2">
-                <DrawerGroupLabel
-                  label={t("settings.modelFailoverCandidates")}
-                  hint={t("settings.modelFailoverCandidatesHint")}
-                />
+              >
                 <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border bg-muted/20 px-3 py-2.5 text-xs">
-                  <span className="text-muted-foreground">
-                    {t("settings.modelFailoverLayer.credential")}
+                  <span className="text-muted-foreground">{t("settings.modelRouteProtocol")}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 font-mono">
+                    {route.protocol}
+                    <SourceTag source={route.protocolSource === "model" ? "user" : "auto"} />
+                    <span className="font-sans text-[10.5px] text-muted-foreground">
+                      {protocolSourceLabel}
+                    </span>
                   </span>
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {failover.credentials.length > 0 ? (
-                      failover.credentials.map((item) => (
-                        <Chip key={item.id}>
-                          {item.label ||
-                            (credentials.indexOf(item) === 0
-                              ? t("settings.providerCredentialPrimary")
-                              : `${t("settings.providerCredentialBackup")} ${credentials.indexOf(item)}`)}
-                        </Chip>
-                      ))
-                    ) : (
-                      <span className="text-muted-foreground/70">
-                        {t("settings.modelFailoverNone")}
+                  <span className="text-muted-foreground">{t("settings.providerDialect")}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 font-mono">
+                    {route.dialect}
+                    <span className="font-sans text-[10.5px] text-muted-foreground">
+                      {dialectLabel(t, route.dialect)}
+                    </span>
+                  </span>
+                  <span className="text-muted-foreground">{t("settings.baseUrl")}</span>
+                  <span className="break-all font-mono">{route.baseUrl || "—"}</span>
+                  <span className="text-muted-foreground">{t("settings.modelWireId")}</span>
+                  <span className="font-mono">{route.wireModelId}</span>
+                  <span className="text-muted-foreground">{t("settings.modelCredential")}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 font-mono">
+                    {credential?.label || t("settings.providerCredentialPrimary")}
+                    <span className="font-sans text-[10.5px] text-muted-foreground">
+                      {t(`settings.modelRouteCredentialSource.${route.credentialSource}`)}
+                    </span>
+                  </span>
+                  <span className="text-muted-foreground">{t("settings.modelRouteQuirks")}</span>
+                  <span className="break-all font-mono">
+                    {Object.keys(route.quirks).length > 0
+                      ? JSON.stringify(route.quirks)
+                      : t("settings.providerQuirkAuto")}
+                  </span>
+                  <span className="text-muted-foreground">{t("settings.modelRouteHeaders")}</span>
+                  <span className="space-y-0.5 font-mono">
+                    {finalHeaders.map(([key, value]) => (
+                      <span key={key} className="block break-all">
+                        {key}: {value}
                       </span>
-                    )}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {t("settings.modelFailoverLayer.endpoint")}
-                  </span>
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {failover.endpoints.length > 0 ? (
-                      failover.endpoints.map((protocol, index) => (
-                        <Chip key={protocol}>
-                          {index + 1} · {protocolLabel(protocol)}
-                        </Chip>
-                      ))
-                    ) : (
-                      <span className="text-muted-foreground/70">
-                        {t("settings.modelFailoverNone")}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {t("settings.modelFailoverLayer.provider")}
-                  </span>
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {!failover.providerLayerEnabled ? (
-                      <span className="text-muted-foreground/70">
-                        {t("settings.modelFailoverProviderLayerOff").replace(
-                          "{family}",
-                          PROVIDER_PROTOCOL_FAMILY_LABELS[failover.family],
-                        )}
-                      </span>
-                    ) : failover.providers.length > 0 ? (
-                      failover.providers.map((item, index) => (
-                        <Chip key={item.id}>
-                          P{index + 1} · {item.name}
-                        </Chip>
-                      ))
-                    ) : (
-                      <span className="text-muted-foreground/70">
-                        {t("settings.modelFailoverNone")}
-                      </span>
-                    )}
+                    ))}
                   </span>
                 </div>
-              </section>
-            ) : null}
+              </CollapsibleBlock>
+
+              {failover ? (
+                <CollapsibleBlock
+                  label={t("settings.modelFailoverCandidates")}
+                  hint={t("settings.modelFailoverCandidatesHint")}
+                >
+                  <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border bg-muted/20 px-3 py-2.5 text-xs">
+                    <span className="text-muted-foreground">
+                      {t("settings.modelFailoverLayer.credential")}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {failover.credentials.length > 0 ? (
+                        failover.credentials.map((item) => (
+                          <Chip key={item.id}>
+                            {item.label ||
+                              (credentials.indexOf(item) === 0
+                                ? t("settings.providerCredentialPrimary")
+                                : `${t("settings.providerCredentialBackup")} ${credentials.indexOf(item)}`)}
+                          </Chip>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground/70">
+                          {t("settings.modelFailoverNone")}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t("settings.modelFailoverLayer.endpoint")}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {failover.endpoints.length > 0 ? (
+                        failover.endpoints.map((protocol, index) => (
+                          <Chip key={protocol}>
+                            {index + 1} · {protocolLabel(protocol)}
+                          </Chip>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground/70">
+                          {t("settings.modelFailoverNone")}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t("settings.modelFailoverLayer.provider")}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {!failover.providerLayerEnabled ? (
+                        <span className="text-muted-foreground/70">
+                          {t("settings.modelFailoverProviderLayerOff").replace(
+                            "{family}",
+                            PROVIDER_PROTOCOL_FAMILY_LABELS[failover.family],
+                          )}
+                        </span>
+                      ) : failover.providers.length > 0 ? (
+                        failover.providers.map((item, index) => (
+                          <Chip key={item.id}>
+                            P{index + 1} · {item.name}
+                          </Chip>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground/70">
+                          {t("settings.modelFailoverNone")}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </CollapsibleBlock>
+              ) : null}
+            </section>
           </div>
         </div>
       </SheetContent>

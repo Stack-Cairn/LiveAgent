@@ -6,7 +6,9 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // 1. normalizer 的过滤/补齐/规范顺序契约；
 // 2. 设置加载往返不丢字段；
 // 3. modelFactory 只在附件发送确实受 model.input 门控的分支（codex/gemini/
-//    deepseek）应用覆盖，anthropic 不适用（避免虚假能力声明）。
+//    deepseek）应用覆盖，anthropic 不适用（避免虚假能力声明）；
+// 4. 编辑模型抽屉的视觉行覆盖同时写 capabilities.imageUnderstanding 与
+//    inputModalities，"还原全部"两处一起清。
 const loader = createTsModuleLoader();
 const { normalizeInputModalities, normalizeProviderModelConfig, normalizeProviderModelConfigs } =
   loader.loadModule("src/lib/settings/index.ts");
@@ -18,12 +20,16 @@ const { createModelFromConfig } = loader.loadModule(
 const providerUtilsLoader = createTsModuleLoader({
   mocks: { "@tauri-apps/api/core": { invoke: async () => ({}) } },
 });
+const { normalizeFetchedModels } = providerUtilsLoader.loadModule(
+  "@liveagent/ui/pages/settings/providerUtils.ts",
+);
 const {
-  applyModelInputModalitiesMode,
-  getModelInputModalitiesMode,
-  normalizeFetchedModels,
-  providerSupportsModelInputModalitiesOverride,
-} = providerUtilsLoader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
+  modelCapabilityOverride,
+  resetModelCapabilityOverrides,
+  setModelCapabilityOverride,
+} = providerUtilsLoader.loadModule(
+  "@liveagent/ui/pages/settings/providers/providerSettingsModel.ts",
+);
 
 test("normalizeInputModalities rejects non-arrays and empty/fully-invalid arrays", () => {
   assert.equal(normalizeInputModalities(undefined), undefined);
@@ -98,26 +104,53 @@ test("modelFactory: codex completions custom model honors the override", () => {
   assert.deepEqual(unknown.input, ["text"]);
 });
 
-test(
-  "ProviderModal input capability mode preserves auto/text/image semantics and provider boundary",
-  () => {
-    const baseModel = { id: "k3", contextWindow: 258000, maxOutputToken: 32000 };
-    const textOnly = applyModelInputModalitiesMode(baseModel, "text");
-    const textAndImage = applyModelInputModalitiesMode(textOnly, "text-image");
-    const automatic = applyModelInputModalitiesMode(textAndImage, "auto");
+test("vision override writes capabilities.imageUnderstanding and inputModalities together", () => {
+  const baseModel = { id: "k3", contextWindow: 258000, maxOutputToken: 32000 };
+  const supported = setModelCapabilityOverride(baseModel, "imageUnderstanding", "supported");
+  assert.deepEqual(supported.capabilities, { imageUnderstanding: "supported" });
+  assert.deepEqual(supported.inputModalities, ["text", "image"]);
+  assert.equal(modelCapabilityOverride(supported, "imageUnderstanding"), "supported");
 
-    assert.equal(getModelInputModalitiesMode(baseModel), "auto");
-    assert.equal(getModelInputModalitiesMode(textOnly), "text");
-    assert.equal(getModelInputModalitiesMode(textAndImage), "text-image");
-    assert.equal("inputModalities" in automatic, false);
+  const unsupported = setModelCapabilityOverride(supported, "imageUnderstanding", "unsupported");
+  assert.deepEqual(unsupported.capabilities, { imageUnderstanding: "unsupported" });
+  assert.deepEqual(unsupported.inputModalities, ["text"]);
 
-    assert.equal(providerSupportsModelInputModalitiesOverride("codex"), true);
-    assert.equal(providerSupportsModelInputModalitiesOverride("xai"), true);
-    assert.equal(providerSupportsModelInputModalitiesOverride("gemini"), true);
-    assert.equal(providerSupportsModelInputModalitiesOverride("deepseek"), true);
-    assert.equal(providerSupportsModelInputModalitiesOverride("claude_code"), false);
-  },
-);
+  // 继承：两处都删，capabilities 清空后整键消失。
+  const inherited = setModelCapabilityOverride(unsupported, "imageUnderstanding", undefined);
+  assert.equal("capabilities" in inherited, false);
+  assert.equal("inputModalities" in inherited, false);
+  assert.equal(modelCapabilityOverride(inherited, "imageUnderstanding"), undefined);
+
+  // 只写了 inputModalities 的旧存档：视觉行照样读出覆盖。
+  assert.equal(
+    modelCapabilityOverride({ ...baseModel, inputModalities: ["text"] }, "imageUnderstanding"),
+    "unsupported",
+  );
+  // 其它行只写 capabilities，不碰模态；音频 / 视频没有能力位，写入是空操作。
+  const tools = setModelCapabilityOverride(supported, "tools", "unsupported");
+  assert.deepEqual(tools.capabilities, {
+    imageUnderstanding: "supported",
+    tools: "unsupported",
+  });
+  assert.deepEqual(tools.inputModalities, ["text", "image"]);
+  assert.equal(setModelCapabilityOverride(tools, "audioInput", "supported"), tools);
+  assert.equal(modelCapabilityOverride(tools, "audioInput"), undefined);
+});
+
+test("reset all capability overrides clears both capabilities and inputModalities", () => {
+  const model = {
+    id: "k3",
+    contextWindow: 258000,
+    maxOutputToken: 32000,
+    capabilities: { tools: "supported", imageUnderstanding: "unsupported" },
+    inputModalities: ["text"],
+  };
+  const restored = resetModelCapabilityOverrides(model);
+  assert.equal("capabilities" in restored, false);
+  assert.equal("inputModalities" in restored, false);
+  assert.equal(restored.id, "k3");
+  assert.equal(restored.contextWindow, 258000);
+});
 
 test("modelFactory: codex custom model ignores a malformed override", () => {
   const model = createModelFromConfig(

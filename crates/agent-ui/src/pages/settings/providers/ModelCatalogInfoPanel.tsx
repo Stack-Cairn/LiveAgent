@@ -1,8 +1,7 @@
-// "编辑模型"抽屉里的"目录信息"面板（设计文档 6.6）：只读展示目录命中的分区与
-// 条目、快照日期、系列、日期、状态、输入 / 输出模态、原始能力位、限额三项与
-// models.dev 公布的原生价格（仅展示，不计费）。
-// 未命中时说明能力与限额按启发式，可手动覆盖。条目详情本身抽成 CatalogEntryDetails
-// （只吃 CatalogModelEntry + 分区），"模型目录"浏览抽屉展开一行时复用同一份。
+// 模型目录条目的只读展示：CatalogEntryDetails 是完整详情（分区与条目、快照日期、
+// 系列、日期、状态、输入 / 输出模态、原始能力位、限额三项与 models.dev 公布的原生
+// 价格，仅展示不计费），"模型目录"浏览抽屉展开一行时使用；ModelCatalogSummary 是
+// "编辑模型"抽屉里的一行摘要，逐属性的目录值放在各节的"目录值"列，不在这里重复。
 
 import {
   AudioLines,
@@ -288,7 +287,12 @@ export function CatalogEntryDetails(props: {
   );
 }
 
-export function ModelCatalogInfoPanel(props: {
+/**
+ * "编辑模型"抽屉里的目录一行摘要：分区 / 条目 id（按 xxx 匹配）· 快照 · 发布 ·
+ * 状态 · 价格简写（输入 / 输出）。模态、能力位、限额与思考不再在这里重复——它们
+ * 在下方各节的"目录值"列里逐属性展示；完整条目由"查看目录"进入浏览抽屉。
+ */
+export function ModelCatalogSummary(props: {
   info: ResolvedModelCatalogInfo | undefined;
   modelId: string;
   /** 标题右侧的动作插槽（"查看目录"） */
@@ -296,6 +300,8 @@ export function ModelCatalogInfoPanel(props: {
 }) {
   const { info, modelId, action } = props;
   const { t } = useLocale();
+  const showMatchedAs = info !== undefined && info.matchedId !== modelId.trim();
+  const price = info ? catalogPriceSummary(t, info.entry) : undefined;
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-2">
@@ -308,16 +314,39 @@ export function ModelCatalogInfoPanel(props: {
         {action}
       </div>
       {!info ? (
-        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
           {t("settings.modelCatalogMiss")}
         </p>
       ) : (
-        <CatalogEntryDetails
-          entry={info.entry}
-          catalogProviderId={info.catalogProviderId}
-          matchedId={info.matchedId}
-          modelId={modelId}
-        />
+        <div className="flex min-h-[22px] flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border bg-muted/20 px-3 py-2 text-xs">
+          <span className="break-all font-mono">
+            {info.catalogProviderId} / {info.entry.id}
+          </span>
+          {showMatchedAs ? (
+            <Chip tone="warn" className="font-mono">
+              {t("settings.modelCatalogMatchedAs").replace("{id}", info.matchedId)}
+            </Chip>
+          ) : null}
+          <span className="tabular-nums text-muted-foreground">
+            · {t("settings.modelCatalogSnapshot")} {MODEL_CATALOG_SNAPSHOT_DATE}
+          </span>
+          {info.entry.releaseDate ? (
+            <span className="tabular-nums text-muted-foreground">
+              · {t("settings.modelCatalogReleased").replace("{date}", info.entry.releaseDate)}
+            </span>
+          ) : null}
+          <span className="text-muted-foreground">·</span>
+          <CatalogStatusChip entry={info.entry} />
+          <span className="text-muted-foreground">·</span>
+          <span className="tabular-nums" title={t("settings.modelCatalogPricingUnit")}>
+            {price ?? t("settings.modelCatalogPricingMissing")}
+          </span>
+          {price ? (
+            <span className="text-[10.5px] text-muted-foreground">
+              {t("settings.modelCatalogPrice.input")} / {t("settings.modelCatalogPrice.output")}
+            </span>
+          ) : null}
+        </div>
       )}
     </section>
   );

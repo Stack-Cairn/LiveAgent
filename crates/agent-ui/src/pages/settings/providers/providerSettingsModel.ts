@@ -4,6 +4,8 @@
 
 import {
   type AppSettings,
+  type CapabilityState,
+  type ChatCapabilityName,
   type CustomProvider,
   credentialCoversModel,
   getDefaultUsageQueryConfig,
@@ -31,9 +33,10 @@ import {
 import {
   type ResolvedCapability,
   resolveModelCapabilities,
+  resolveModelCatalogInfo,
   resolveModelInputModalitiesResolved,
 } from "@liveagent/ui/lib/models/modelCapabilities";
-import type { CatalogProviderId } from "@liveagent/ui/lib/models/modelCatalog";
+import type { CatalogModelEntry, CatalogProviderId } from "@liveagent/ui/lib/models/modelCatalog";
 import {
   CUSTOM_PRESET_ID,
   findProviderPreset,
@@ -484,6 +487,183 @@ export function capabilityChipView(resolved: ResolvedCapability): CapabilityChip
     overridden: resolved.source === "user",
     muted: resolved.source === "heuristic" || resolved.source === "provider",
   };
+}
+
+// ---------------------------------------------------------------------------
+// 能力与模态表（编辑模型抽屉）：每个属性一行 = 目录值 / 有效值 / 用户覆盖
+// ---------------------------------------------------------------------------
+// 视觉 / 文件 / 推理 / 工具 / 结构化输出 / 原生搜索对应 ChatCapabilityName；音频 /
+// 视频只有模态没有能力位，运行时也不读覆盖，故只读。视觉行的覆盖同时写
+// capabilities.imageUnderstanding 与 inputModalities（附件门控读的是后者）。
+
+export type ModelCapabilityRowKey =
+  | "imageUnderstanding"
+  | "fileInput"
+  | "audioInput"
+  | "videoInput"
+  | "reasoning"
+  | "tools"
+  | "structuredOutput"
+  | "nativeWebSearch";
+
+export const MODEL_CAPABILITY_ROWS: readonly ModelCapabilityRowKey[] = [
+  "imageUnderstanding",
+  "fileInput",
+  "audioInput",
+  "videoInput",
+  "reasoning",
+  "tools",
+  "structuredOutput",
+  "nativeWebSearch",
+];
+
+/** 用户覆盖只有两态；undefined = 继承（目录 / 规则 / 启发式）。 */
+export type ModelCapabilityOverride = "supported" | "unsupported";
+
+export type ModelCapabilityRow = {
+  key: ModelCapabilityRowKey;
+  /** 目录条目的原始值；目录未收录或该位未公布为 undefined（显示"—"） */
+  catalog: ModelCapabilityOverride | undefined;
+  /** 有效值与来源（用户覆盖 > 目录 > 供应商规则 / 启发式） */
+  effective: ResolvedCapability;
+  /** 用户覆盖；undefined = 继承 */
+  override: ModelCapabilityOverride | undefined;
+  /** 音频 / 视频运行时不支持覆盖 */
+  editable: boolean;
+};
+
+const CAPABILITY_ROW_TO_NAME: Partial<Record<ModelCapabilityRowKey, ChatCapabilityName>> = {
+  imageUnderstanding: "imageUnderstanding",
+  fileInput: "fileInput",
+  reasoning: "reasoning",
+  tools: "tools",
+  structuredOutput: "structuredOutput",
+  nativeWebSearch: "nativeWebSearch",
+};
+
+function toOverride(state: CapabilityState | undefined): ModelCapabilityOverride | undefined {
+  return state === "supported" || state === "unsupported" ? state : undefined;
+}
+
+/**
+ * 目录条目对某一行的原始值：与 resolveModelCapabilities 读目录的规则一致
+ * （文件 = attachment 位或 pdf 模态；推理 = 有 thinking；原生搜索目录不收录）。
+ */
+export function catalogCapabilityValue(
+  entry: CatalogModelEntry | undefined,
+  key: ModelCapabilityRowKey,
+): ModelCapabilityOverride | undefined {
+  if (!entry) return undefined;
+  const input = entry.inputModalities;
+  const fromModality = (modality: "image" | "audio" | "video") =>
+    input ? (input.includes(modality) ? "supported" : "unsupported") : undefined;
+  switch (key) {
+    case "imageUnderstanding":
+      return fromModality("image");
+    case "audioInput":
+      return fromModality("audio");
+    case "videoInput":
+      return fromModality("video");
+    case "fileInput":
+      if (entry.attachment || input?.includes("pdf")) return "supported";
+      return input ? "unsupported" : undefined;
+    case "reasoning":
+      return entry.thinking ? "supported" : "unsupported";
+    case "tools":
+      return entry.toolCall ? "supported" : "unsupported";
+    case "structuredOutput":
+      return entry.structuredOutput ? "supported" : "unsupported";
+    case "nativeWebSearch":
+      return undefined;
+  }
+}
+
+/** 某一行的用户覆盖；视觉行兼容只写了 inputModalities 的旧存档。 */
+export function modelCapabilityOverride(
+  model: Pick<ProviderModelConfig, "capabilities" | "inputModalities">,
+  key: ModelCapabilityRowKey,
+): ModelCapabilityOverride | undefined {
+  const name = CAPABILITY_ROW_TO_NAME[key];
+  if (!name) return undefined;
+  const explicit = toOverride(model.capabilities?.[name]);
+  if (explicit) return explicit;
+  if (key === "imageUnderstanding" && model.inputModalities) {
+    return model.inputModalities.some((modality) => modality === "image")
+      ? "supported"
+      : "unsupported";
+  }
+  return undefined;
+}
+
+export function modelCapabilityRows(
+  provider: CustomProvider,
+  modelId: string,
+  route: Pick<ResolvedProviderChatRoute, "adapterProviderId" | "protocol" | "baseUrl">,
+): ModelCapabilityRow[] {
+  const model = provider.models.find((item) => item.id === modelId.trim());
+  const entry = resolveModelCatalogInfo(provider, modelId)?.entry;
+  const capabilities = resolveModelCapabilities(provider, modelId, route);
+  const input = resolveModelInputModalitiesResolved(provider, modelId, route);
+  return MODEL_CAPABILITY_ROWS.map((key) => {
+    const name = CAPABILITY_ROW_TO_NAME[key];
+    const effective: ResolvedCapability = name
+      ? capabilities[name]
+      : {
+          state: input.modalities.includes(key === "audioInput" ? "audio" : "video")
+            ? "supported"
+            : "unsupported",
+          source: input.source,
+        };
+    return {
+      key,
+      catalog: catalogCapabilityValue(entry, key),
+      effective,
+      override: model ? modelCapabilityOverride(model, key) : undefined,
+      editable: name !== undefined,
+    };
+  });
+}
+
+/**
+ * 写入 / 清除某一行的用户覆盖。视觉行同时维护 inputModalities（支持 →
+ * ["text","image"]，不支持 → ["text"]，继承 → 删除）；capabilities 清空后整键删除。
+ */
+export function setModelCapabilityOverride(
+  model: ProviderModelConfig,
+  key: ModelCapabilityRowKey,
+  override: ModelCapabilityOverride | undefined,
+): ProviderModelConfig {
+  const name = CAPABILITY_ROW_TO_NAME[key];
+  if (!name) return model;
+  const next: ProviderModelConfig = { ...model };
+  const capabilities = { ...model.capabilities };
+  if (override) capabilities[name] = override;
+  else delete capabilities[name];
+  if (Object.keys(capabilities).length > 0) next.capabilities = capabilities;
+  else delete next.capabilities;
+  if (key === "imageUnderstanding") {
+    if (override === "supported") next.inputModalities = ["text", "image"];
+    else if (override === "unsupported") next.inputModalities = ["text"];
+    else delete next.inputModalities;
+  }
+  return next;
+}
+
+/** 还原全部为目录值：清掉 capabilities 与 inputModalities 两处覆盖。 */
+export function resetModelCapabilityOverrides(model: ProviderModelConfig): ProviderModelConfig {
+  const next: ProviderModelConfig = { ...model };
+  delete next.capabilities;
+  delete next.inputModalities;
+  return next;
+}
+
+export function hasModelCapabilityOverrides(
+  model: Pick<ProviderModelConfig, "capabilities" | "inputModalities">,
+): boolean {
+  return (
+    (model.capabilities !== undefined && Object.keys(model.capabilities).length > 0) ||
+    model.inputModalities !== undefined
+  );
 }
 
 export type ModelLimitField = "contextWindow" | "maxInputTokens" | "maxOutputToken";

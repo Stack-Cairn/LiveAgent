@@ -519,6 +519,56 @@ test("catalog info reports the section, entry and the normalized id it matched o
   );
 });
 
+test("capability table rows pair catalog value, effective value and user override", () => {
+  const provider = openaiProvider({
+    models: [
+      { id: "gpt-5.2", capabilities: { tools: "unsupported" }, inputModalities: ["text"] },
+      { id: "my-finetune" },
+    ],
+  });
+  const route = settings.resolveProviderChatRoute(provider, "gpt-5.2");
+  const rows = model.modelCapabilityRows(provider, "gpt-5.2", route);
+  assert.deepEqual(
+    rows.map((row) => row.key),
+    [
+      "imageUnderstanding",
+      "fileInput",
+      "audioInput",
+      "videoInput",
+      "reasoning",
+      "tools",
+      "structuredOutput",
+      "nativeWebSearch",
+    ],
+  );
+  const byKey = Object.fromEntries(rows.map((row) => [row.key, row]));
+  // 目录值 = 条目原始值；有效值 = 用户覆盖优先；覆盖列读 capabilities / inputModalities。
+  assert.equal(byKey.tools.catalog, "supported");
+  assert.deepEqual(byKey.tools.effective, { state: "unsupported", source: "user" });
+  assert.equal(byKey.tools.override, "unsupported");
+  assert.equal(byKey.imageUnderstanding.catalog, "supported");
+  assert.equal(byKey.imageUnderstanding.override, "unsupported");
+  assert.equal(byKey.imageUnderstanding.editable, true);
+  // 音频 / 视频：目录只给模态，运行时不支持覆盖。
+  assert.equal(byKey.audioInput.catalog, "unsupported");
+  assert.equal(byKey.audioInput.editable, false);
+  assert.equal(byKey.audioInput.override, undefined);
+  // 原生搜索目录不收录：目录值为空，有效值走供应商规则。
+  assert.equal(byKey.nativeWebSearch.catalog, undefined);
+  assert.equal(byKey.nativeWebSearch.effective.source, "provider");
+  assert.equal(model.hasModelCapabilityOverrides(provider.models[0]), true);
+
+  // 目录未收录：目录值整列为空，有效值按启发式 / 未知。
+  const miss = model.modelCapabilityRows(
+    provider,
+    "my-finetune",
+    settings.resolveProviderChatRoute(provider, "my-finetune"),
+  );
+  assert.ok(miss.every((row) => row.catalog === undefined));
+  assert.equal(miss.find((row) => row.key === "tools").effective.state, "unknown");
+  assert.equal(model.hasModelCapabilityOverrides(provider.models[1]), false);
+});
+
 test("limit fields carry per-field sources and reset individually", () => {
   const defaults = {
     contextWindow: 400_000,

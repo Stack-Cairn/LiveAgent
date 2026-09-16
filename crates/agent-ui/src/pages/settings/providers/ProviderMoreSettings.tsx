@@ -1,5 +1,6 @@
-// "更多设置"（设计文档 7 中栏第 5 条）：推理档、缓存、原生搜索、流内重试、系统代理。
-// 控件沿用旧对话框"请求配置"面板，写入即生效。
+// "更多设置"（设计文档 7 中栏第 5 条）：流内重试、缓存、原生搜索、系统代理。
+// 控件沿用旧对话框"请求配置"面板，写入即生效。思考强度不再在供应商级暴露
+// （旧存档里的 provider.reasoning 由归一化保留，模型默认档见"编辑模型"）。
 
 import {
   type CustomProvider,
@@ -7,7 +8,6 @@ import {
   PROVIDER_RETRY_DEFAULT_MAX_RETRIES,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
   type PromptCacheHintMode,
-  type ReasoningLevel,
 } from "@liveagent/app/lib/settings";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -19,12 +19,9 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { THINKING_LEVEL_LADDER } from "@liveagent/ui/lib/models/modelThinking";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
 import { CommittedInput } from "./providerChips";
-
-const REASONING_OPTIONS: readonly ReasoningLevel[] = ["off", ...THINKING_LEVEL_LADDER];
 
 function clampRetries(raw: number): number {
   if (!Number.isFinite(raw)) return PROVIDER_RETRY_DEFAULT_MAX_RETRIES;
@@ -83,25 +80,7 @@ export function ProviderMoreSettings(props: {
 
   return (
     <div className="space-y-3 rounded-xl border bg-card p-4">
-      <div className="grid grid-cols-3 gap-3 max-[720px]:grid-cols-1">
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">{t("settings.reasoning")}</Label>
-          <Select
-            value={provider.reasoning}
-            onValueChange={(value) => set({ reasoning: value as ReasoningLevel })}
-          >
-            <SelectTrigger className="h-8 text-xs shadow-none" aria-label={t("settings.reasoning")}>
-              <SelectValue>{t(`settings.reasoning.${provider.reasoning}`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {REASONING_OPTIONS.map((level) => (
-                <SelectItem key={level} value={level}>
-                  {t(`settings.reasoning.${level}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
         <div className="space-y-1">
           <Label className="text-[11px] text-muted-foreground">
             {t("settings.providerStreamRetry")}
