@@ -3,23 +3,19 @@
 // 范围芯片点击即跳到对应那把 Key。首把即旧字段 apiKey（setCredentials 维持不变量）。
 
 import type { CustomProvider, ProviderCredential } from "@liveagent/app/lib/settings";
-import { Plus, RefreshCw, Trash2 } from "@liveagent/ui/components/IconSet";
+import { Plus, Trash2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { getUsageRelativeTime } from "@liveagent/ui/lib/providers/usageQueryCore";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useState } from "react";
-import { usageRelativeTimeText } from "../ProviderPresentation";
-import { Chip, ChipButton, CommittedInput, SecretInput } from "./providerChips";
+import { Chip, CommittedInput, SecretInput } from "./providerChips";
 import {
   addProviderCredential,
   createCredential,
   credentialConfigured,
-  type ProviderDrawerState,
   providerCredentials,
-  refreshCredentialModelList,
   removeProviderCredential,
   updateProviderCredential,
 } from "./providerSettingsModel";
@@ -50,14 +46,11 @@ export function ProviderKeyList(props: {
   /** 免鉴权预设：缺 Key 不提示 */
   authOptional: boolean;
   onChange: ProviderUpdater;
-  onOpenDrawer: (drawer: ProviderDrawerState) => void;
 }) {
-  const { provider, isGatewayWebui, authOptional, onChange, onOpenDrawer } = props;
+  const { provider, isGatewayWebui, authOptional, onChange } = props;
   const { t } = useLocale();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const credentials = providerCredentials(provider);
-  const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(() => new Set());
-  const [refreshFailed, setRefreshFailed] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
 
   // 新增后聚焦到那一行的 Key 输入：等它渲染出来再找。
@@ -92,59 +85,6 @@ export function ProviderKeyList(props: {
     onChange((current) => removeProviderCredential(current, credential.id));
   }
 
-  async function refreshKey(credential: ProviderCredential) {
-    setRefreshing((previous) => new Set(previous).add(credential.id));
-    try {
-      const result = await refreshCredentialModelList(provider, credential);
-      if (!result.ok) {
-        setRefreshFailed((previous) => new Map(previous).set(credential.id, result.reason));
-        return;
-      }
-      setRefreshFailed((previous) => {
-        const next = new Map(previous);
-        next.delete(credential.id);
-        return next;
-      });
-      onChange((current) =>
-        updateProviderCredential(current, credential.id, (item) => ({
-          modelScope: item.modelScope ?? { mode: "auto" },
-          lastModels: { at: result.at, models: result.models },
-        })),
-      );
-    } finally {
-      setRefreshing((previous) => {
-        const next = new Set(previous);
-        next.delete(credential.id);
-        return next;
-      });
-    }
-  }
-
-  function scopeChipText(credential: ProviderCredential): string {
-    const scope = credential.modelScope ?? { mode: "auto" as const };
-    if (scope.mode === "all") return t("settings.providerCredentialScopeChip.all");
-    if (scope.mode === "manual") {
-      return t("settings.providerCredentialScopeChip.manual").replace(
-        "{count}",
-        String(scope.models.length),
-      );
-    }
-    return t("settings.providerCredentialScopeChip.auto");
-  }
-
-  function lastFetchText(credential: ProviderCredential): string {
-    if (!credential.lastModels) return t("settings.providerCredentialNotFetched");
-    const count = t("settings.providerCredentialSeenModels").replace(
-      "{count}",
-      String(credential.lastModels.models.length),
-    );
-    const time = usageRelativeTimeText(
-      t,
-      getUsageRelativeTime(credential.lastModels.at, Date.now()),
-    );
-    return `${count} · ${time}`;
-  }
-
   return (
     <div className="divide-y rounded-xl border bg-card">
       {credentials.map((credential, index) => {
@@ -152,7 +92,6 @@ export function ProviderKeyList(props: {
         const redacted =
           isGatewayWebui && credential.apiKey === "" && credential.apiKeyConfigured === true;
         const displayName = credentialDisplayName(t, credential, index);
-        const failure = refreshFailed.get(credential.id);
         return (
           <div
             key={credential.id}
@@ -193,7 +132,7 @@ export function ProviderKeyList(props: {
               configured={configured}
               redacted={redacted}
               ariaLabel={`${t("settings.apiKey")} · ${displayName}`}
-              className="min-w-[180px]"
+              className="min-w-[180px] flex-1"
               onCommit={(value) =>
                 onChange((current) =>
                   updateProviderCredential(current, credential.id, {
@@ -206,39 +145,7 @@ export function ProviderKeyList(props: {
             {!configured && !authOptional ? (
               <Chip tone="warn">{t("settings.providerKeyMissing")}</Chip>
             ) : null}
-            <ChipButton
-              onClick={() => onOpenDrawer({ kind: "keys", focus: credential.id })}
-              title={t("settings.providerCredentialScope")}
-            >
-              {scopeChipText(credential)}
-            </ChipButton>
-            <span
-              className={cn(
-                "text-[10.5px] text-muted-foreground/75",
-                failure !== undefined && "text-destructive",
-              )}
-              title={failure || undefined}
-            >
-              {failure !== undefined
-                ? t("settings.providerCredentialRefreshFailed")
-                : lastFetchText(credential)}
-            </span>
             <span className="ml-auto flex shrink-0 items-center gap-0.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-[11px]"
-                disabled={refreshing.has(credential.id) || (!configured && !authOptional)}
-                onClick={() => void refreshKey(credential)}
-                title={t("settings.providerCredentialRefetch")}
-                aria-label={`${t("settings.providerCredentialRefetch")} · ${displayName}`}
-              >
-                <RefreshCw
-                  className={cn("h-3 w-3", refreshing.has(credential.id) && "animate-spin")}
-                />
-                {t("settings.providerCheck")}
-              </Button>
               <Button
                 type="button"
                 variant="ghost"

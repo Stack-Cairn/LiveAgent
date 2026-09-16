@@ -757,7 +757,6 @@ export function ProviderDetail(props: ProviderDetailProps) {
           isGatewayWebui={isGatewayWebui}
           authOptional={preset.authOptional}
           onChange={onChange}
-          onOpenDrawer={onOpenDrawer}
         />
       </section>
 
