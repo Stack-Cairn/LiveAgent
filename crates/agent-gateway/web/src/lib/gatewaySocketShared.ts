@@ -930,3 +930,17 @@ export function persistActiveAgent(agentId: string) {
     // 隐私模式等场景不可写：选择只在本页生命周期内生效。
   }
 }
+
+/** 模型连通测试（WebUI → 桌面端）：与 tauriCore 的 gateway_provider_check_model 形参一致。 */
+export type GatewayProviderCheckModelPayload = {
+  url: string;
+  headers: readonly { key: string; value: string }[];
+  body: unknown;
+  use_system_proxy: boolean;
+  provider_id: string;
+  credential_id: string;
+  protocol: string;
+  auth_header_name?: string;
+  auth_prefix?: string;
+  timeout_ms?: number;
+};

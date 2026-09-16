@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use reqwest::{Client, StatusCode, Url};
 use serde_json::Value;
 
-const ANTHROPIC_API_VERSION: &str = "2023-06-01";
+pub(crate) const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const MAX_PROVIDER_MODELS_RESPONSE_BYTES: usize = 2 << 20;
 const PROVIDER_MODELS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const PROVIDER_MODELS_TIMEOUT_MESSAGE: &str = "供应商模型列表请求超时（10 秒）";
@@ -54,7 +54,7 @@ pub async fn fetch_provider_models(
     .await
 }
 
-fn direct_client() -> Result<Client, String> {
+pub(crate) fn direct_client() -> Result<Client, String> {
     static CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
     if let Some(client) = CLIENT.get() {
         return Ok(client.clone());
@@ -171,7 +171,7 @@ async fn read_limited_response(response: reqwest::Response) -> Result<Vec<u8>, S
     Ok(body)
 }
 
-fn parse_http_url(raw: &str, label: &str) -> Result<Url, String> {
+pub(crate) fn parse_http_url(raw: &str, label: &str) -> Result<Url, String> {
     let url = Url::parse(raw.trim()).map_err(|_| format!("{label} 必须是绝对 URL"))?;
     if !matches!(url.scheme(), "http" | "https")
         || !url.has_host()

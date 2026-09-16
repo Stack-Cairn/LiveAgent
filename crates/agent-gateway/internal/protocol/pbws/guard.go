@@ -43,6 +43,8 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		*gatewayv2.GatewayEnvelope_ProviderList,
 		*gatewayv2.GatewayEnvelope_ProviderUsage,
 		*gatewayv2.GatewayEnvelope_ProviderModels,
+		// 模型连通测试：桌面端按落库供应商的主机集合限制 Key 去向，网关只透传。
+		*gatewayv2.GatewayEnvelope_ProviderCheckModel,
 		*gatewayv2.GatewayEnvelope_SettingsGet,
 		*gatewayv2.GatewayEnvelope_SettingsUpdate,
 		*gatewayv2.GatewayEnvelope_SettingsResetSshKnownHost,

@@ -50,6 +50,7 @@ import {
   buildEndpointCandidates,
   type EndpointCandidate,
   type ProviderProbeResult,
+  probeProvider,
   summarizeEndpointStatus,
 } from "@liveagent/ui/pages/settings/providerProbe";
 import {
@@ -64,7 +65,8 @@ export type ProviderSelection =
 
 export type ProviderDrawerState =
   | { kind: "request"; focus?: ProviderChatProtocol }
-  | { kind: "keys" }
+  /** focus = 打开后定位到哪把 Key（credentials[].id） */
+  | { kind: "keys"; focus?: string }
   | { kind: "model"; modelId: string }
   /** 模型目录浏览（只读）；returnTo = 从别的抽屉跳来时关闭后回到哪 */
   | {
@@ -286,6 +288,82 @@ export function setPrimaryApiKey(
 
 export function createCredential(label: string): ProviderCredential {
   return { id: createUuid(), label, apiKey: "", enabled: true, modelScope: { mode: "auto" } };
+}
+
+/** 追加一把 Key（调用方先 createCredential 拿到 id，便于新增后聚焦）。 */
+export function addProviderCredential(
+  provider: CustomProvider,
+  credential: ProviderCredential,
+): CustomProvider {
+  return setCredentials(provider, [...providerCredentials(provider), credential]);
+}
+
+/** 删除一把 Key；至少保留一把（唯一的一把不可删）。 */
+export function removeProviderCredential(provider: CustomProvider, id: string): CustomProvider {
+  const credentials = providerCredentials(provider);
+  if (credentials.length <= 1) return provider;
+  return setCredentials(
+    provider,
+    credentials.filter((credential) => credential.id !== id),
+  );
+}
+
+/**
+ * 按 id 补丁一把 Key。函数式补丁读取写入时刻的当前值，异步探测回来后不会覆盖
+ * 期间的改动。
+ */
+export function updateProviderCredential(
+  provider: CustomProvider,
+  id: string,
+  patch:
+    | Partial<ProviderCredential>
+    | ((current: ProviderCredential) => Partial<ProviderCredential>),
+): CustomProvider {
+  return setCredentials(
+    provider,
+    providerCredentials(provider).map((credential) =>
+      credential.id === id
+        ? { ...credential, ...(typeof patch === "function" ? patch(credential) : patch) }
+        : credential,
+    ),
+  );
+}
+
+export type CredentialModelListRefresh =
+  | { ok: true; at: number; models: string[] }
+  | { ok: false; reason: string };
+
+/**
+ * 用这把 Key 对已配置端点各拉一次模型列表（任一端点通即成功），结果供调用方
+ * 写回 lastModels。没有已配置端点时返回失败。
+ */
+export async function refreshCredentialModelList(
+  provider: CustomProvider,
+  credential: ProviderCredential,
+): Promise<CredentialModelListRefresh> {
+  const candidates = providerExistingCandidates(provider);
+  if (candidates.length === 0) return { ok: false, reason: "" };
+  const result = await probeProvider({
+    candidates,
+    credentials: [{ ...credential, enabled: true }],
+    useSystemProxy: provider.useSystemProxy,
+    customHeaders: provider.customHeaders,
+    providerId: provider.id,
+  });
+  const seen = new Set<string>();
+  let ok = false;
+  let reason = "";
+  for (const entry of result.credentials) {
+    for (const endpoint of entry.endpoints) {
+      if (endpoint.status !== "ok") {
+        reason ||= endpoint.error ?? "";
+        continue;
+      }
+      ok = true;
+      for (const model of endpoint.models) seen.add(model.id);
+    }
+  }
+  return ok ? { ok: true, at: result.at, models: [...seen].sort() } : { ok: false, reason };
 }
 
 export function credentialsCoveringModel(

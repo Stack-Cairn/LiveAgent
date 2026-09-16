@@ -1,6 +1,6 @@
-// 抽屉二"管理密钥"（设计文档 5.6）：多 Key 列表（标签、Key、启停、排序、删除），
+// 抽屉二"范围与详情"（设计文档 5.6）：多 Key 列表（标签、Key、启停、排序、删除），
 // 每把 Key 的模型范围（自动 / 全部 / 手选通配）、上次拉取的模型数与与主 Key 的差异、
-// "用此 Key 重新拉取"。首把即旧字段 apiKey。
+// "用此 Key 重新拉取"。首把即旧字段 apiKey。从详情页的范围芯片打开时定位到那把 Key。
 
 import type { CustomProvider, ProviderCredential } from "@liveagent/app/lib/settings";
 import { ArrowUp, ChevronDown, Plus, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
@@ -18,16 +18,17 @@ import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/she
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { probeProvider } from "@liveagent/ui/pages/settings/providerProbe";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DrawerGroupLabel } from "../ProviderPresentation";
+import { credentialDisplayName as credentialName } from "./ProviderKeyList";
 import { Chip, CommittedInput, SecretInput } from "./providerChips";
 import {
   createCredential,
   credentialModelDiff,
   providerCredentials,
-  providerExistingCandidates,
+  refreshCredentialModelList,
   setCredentials,
+  updateProviderCredential,
 } from "./providerSettingsModel";
 
 const SCOPE_CHIP_LIMIT = 40;
@@ -36,15 +37,26 @@ export function CredentialsDrawer(props: {
   provider: CustomProvider;
   onChange: (updater: (provider: CustomProvider) => CustomProvider) => void;
   isGatewayWebui: boolean;
+  /** 打开后滚动到这把 Key（credentials[].id） */
+  focus?: string;
   onClose: () => void;
 }) {
-  const { provider, onChange, isGatewayWebui, onClose } = props;
+  const { provider, onChange, isGatewayWebui, focus, onClose } = props;
   const { t } = useLocale();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const credentials = providerCredentials(provider);
   const primary = credentials[0];
   const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(() => new Set());
   const [refreshFailed, setRefreshFailed] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!focus) return;
+    const card = bodyRef.current?.querySelector<HTMLElement>(
+      `[data-credential-id="${CSS.escape(focus)}"]`,
+    );
+    card?.scrollIntoView({ block: "center" });
+  }, [focus]);
 
   function update(mutate: (list: ProviderCredential[]) => ProviderCredential[]) {
     onChange((current) => setCredentials(current, mutate(providerCredentials(current))));
@@ -57,25 +69,11 @@ export function CredentialsDrawer(props: {
       | Partial<ProviderCredential>
       | ((current: ProviderCredential) => Partial<ProviderCredential>),
   ) {
-    update((list) =>
-      list.map((credential) =>
-        credential.id === id
-          ? {
-              ...credential,
-              ...(typeof patchValue === "function" ? patchValue(credential) : patchValue),
-            }
-          : credential,
-      ),
-    );
+    onChange((current) => updateProviderCredential(current, id, patchValue));
   }
 
   function credentialDisplayName(credential: ProviderCredential, index: number) {
-    return (
-      credential.label ||
-      (index === 0
-        ? t("settings.providerCredentialPrimary")
-        : `${t("settings.providerCredentialBackup")} ${index}`)
-    );
+    return credentialName(t, credential, index);
   }
 
   async function removeCredential(credential: ProviderCredential, index: number) {
@@ -106,32 +104,11 @@ export function CredentialsDrawer(props: {
   }
 
   async function refreshCredential(credential: ProviderCredential) {
-    const candidates = providerExistingCandidates(provider);
-    if (candidates.length === 0) return;
     setRefreshing((previous) => new Set(previous).add(credential.id));
     try {
-      const result = await probeProvider({
-        candidates,
-        credentials: [{ ...credential, enabled: true }],
-        useSystemProxy: provider.useSystemProxy,
-        customHeaders: provider.customHeaders,
-        providerId: provider.id,
-      });
-      const seen = new Set<string>();
-      let ok = false;
-      let reason = "";
-      for (const entry of result.credentials) {
-        for (const endpoint of entry.endpoints) {
-          if (endpoint.status !== "ok") {
-            reason ||= endpoint.error ?? "";
-            continue;
-          }
-          ok = true;
-          for (const model of endpoint.models) seen.add(model.id);
-        }
-      }
-      if (!ok) {
-        setRefreshFailed((previous) => new Map(previous).set(credential.id, reason));
+      const result = await refreshCredentialModelList(provider, credential);
+      if (!result.ok) {
+        setRefreshFailed((previous) => new Map(previous).set(credential.id, result.reason));
         return;
       }
       setRefreshFailed((previous) => {
@@ -142,7 +119,7 @@ export function CredentialsDrawer(props: {
       // 探测期间用户可能改了范围：按写入时刻的值补丁，而不是闭包里过期的 credential。
       patch(credential.id, (current) => ({
         modelScope: current.modelScope ?? { mode: "auto" },
-        lastModels: { at: result.at, models: [...seen].sort() },
+        lastModels: { at: result.at, models: result.models },
       }));
     } finally {
       setRefreshing((previous) => {
@@ -179,7 +156,10 @@ export function CredentialsDrawer(props: {
           aria-hidden="true"
           className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
         />
-        <div className="settings-provider-drawer-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+        <div
+          ref={bodyRef}
+          className="settings-provider-drawer-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4"
+        >
           <div className="space-y-4">
             <p className="text-[11px] leading-relaxed text-muted-foreground/80">
               {t("settings.providerCredentialsHint")}
@@ -192,7 +172,14 @@ export function CredentialsDrawer(props: {
               const redacted =
                 isGatewayWebui && credential.apiKey === "" && credential.apiKeyConfigured === true;
               return (
-                <div key={credential.id} className="rounded-xl border bg-card">
+                <div
+                  key={credential.id}
+                  data-credential-id={credential.id}
+                  className={cn(
+                    "rounded-xl border bg-card",
+                    focus === credential.id && "ring-1 ring-primary/50",
+                  )}
+                >
                   <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                     <Switch
                       size="sm"

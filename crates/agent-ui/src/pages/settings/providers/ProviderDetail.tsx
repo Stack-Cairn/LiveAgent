@@ -1,7 +1,8 @@
-// 中栏"渠道详情"（设计文档 7）：标题行、API 密钥、API 地址、模型列表（按分组折叠、
-// 分组内可拖拽排序）、更多设置、可用性（故障转移）、用量查询。所有写入经父组件的
-// onChange 走 normalizeCustomProvider。模型行的路由 / 能力 / 凭据覆盖按 provider
-// 一次算成 Map，行组件 memo，避免大列表在无关状态变化时全量重算。
+// 中栏"渠道详情"（设计文档 7）：标题行、API 密钥（多 Key 列表）、API 地址、模型列表
+// （按分组折叠、分组内可拖拽排序、逐模型连通测试）、更多设置、可用性（故障转移）、
+// 用量查询。所有写入经父组件的 onChange 走 normalizeCustomProvider。模型行的路由 /
+// 能力 / 凭据覆盖按 provider 一次算成 Map，行组件 memo，避免大列表在无关状态变化时
+// 全量重算。连通测试结果只在本组件内存里，切换供应商即清空。
 
 import { ProviderCopyConfigButton } from "@liveagent/adapters/providerSettings";
 import type { getProviderUsageCardDisplay } from "@liveagent/app/lib/providers/usageQuery";
@@ -14,12 +15,14 @@ import {
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
+  Activity,
   ArrowLeft,
   ChevronDown,
   FileText,
   Globe,
   ImageIcon,
   Lightbulb,
+  Loader2,
   Pencil,
   Plus,
   RefreshCw,
@@ -31,13 +34,19 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ModelCheckAggregate, ModelCheckResult } from "@liveagent/ui/lib/providers/modelCheck";
 import { CUSTOM_PRESET_ID } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
+import {
+  checkProviderModelAllKeys,
+  checkProviderModels,
+  formatTokenCount,
+} from "@liveagent/ui/pages/settings/providerUtils";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
-import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UsagePlanLine, usageRelativeTimeText } from "../ProviderPresentation";
 import { ProviderFailoverSection } from "./ProviderFailoverSection";
+import { credentialDisplayName, ProviderKeyList } from "./ProviderKeyList";
 import { ProviderMoreSettings } from "./ProviderMoreSettings";
 import { ProviderUsageQueryPanel } from "./ProviderUsageQueryPanel";
 import {
@@ -50,7 +59,6 @@ import {
   ProviderAvatar,
   protocolLabel,
   protocolShortLabel,
-  SecretInput,
   SectionTitle,
   SourceTag,
 } from "./providerChips";
@@ -64,18 +72,85 @@ import {
   modelCapabilityFlags,
   type ProviderDrawerState,
   presetForProvider,
-  primaryCredential,
   providerConfiguredProtocols,
+  providerCredentials,
   providerDefaultProtocol,
   readEndpoint,
   removeProviderModel,
   reorderProviderModels,
-  setPrimaryApiKey,
   setProviderModelActive,
   writeEndpoint,
 } from "./providerSettingsModel";
 
 type ProviderUpdater = (updater: (provider: CustomProvider) => CustomProvider) => void;
+
+const CHECKING: ModelCheckAggregate = { state: "checking", results: [] };
+
+/** 单把 Key 结果的失败文案：按归类取 i18n，http 带状态码。 */
+function modelCheckErrorText(t: (key: string) => string, result: ModelCheckResult): string {
+  const kind = result.kind ?? "http";
+  if (kind === "http") {
+    return t("settings.modelCheckError.http").replace(
+      "{status}",
+      result.status !== undefined ? String(result.status) : "?",
+    );
+  }
+  return t(`settings.modelCheckError.${kind}`);
+}
+
+function modelCheckResultLine(
+  t: (key: string) => string,
+  result: ModelCheckResult,
+  credentialIndex: number,
+): string {
+  const name = credentialDisplayName(t, { label: result.credentialLabel }, credentialIndex);
+  if (result.ok) return `${name}: ✓ ${result.latencyMs}ms`;
+  const reason = modelCheckErrorText(t, result);
+  return `${name}: ✗ ${reason}${result.error ? ` — ${result.error}` : ""}`;
+}
+
+/** 行内状态芯片：检测中 / ✓ 延迟 / ✗ 原因 / 部分 Key 失败；title 列每把 Key 的结果。 */
+function ModelCheckChip(props: {
+  check: ModelCheckAggregate;
+  credentialIndexById: ReadonlyMap<string, number>;
+}) {
+  const { check, credentialIndexById } = props;
+  const { t } = useLocale();
+  if (check.state === "idle") return null;
+  if (check.state === "checking") {
+    return (
+      <Chip tone="default">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        {t("settings.modelCheckState.checking")}
+      </Chip>
+    );
+  }
+  const title = check.results
+    .map((result) =>
+      modelCheckResultLine(t, result, credentialIndexById.get(result.credentialId) ?? 0),
+    )
+    .join("\n");
+  if (check.state === "ok") {
+    return (
+      <Chip tone="ok" title={title}>
+        ✓ {check.latencyMs}ms
+      </Chip>
+    );
+  }
+  if (check.state === "partial") {
+    return (
+      <Chip tone="warn" title={title}>
+        {t("settings.modelCheckState.partial")}
+      </Chip>
+    );
+  }
+  const first = check.results.find((result) => !result.ok);
+  return (
+    <Chip tone="bad" title={title} className="max-w-[40cqw] overflow-hidden">
+      <span className="truncate">✗ {first ? modelCheckErrorText(t, first) : ""}</span>
+    </Chip>
+  );
+}
 
 export type ProviderDetailProps = SettingsSectionProps & {
   provider: CustomProvider;
@@ -140,17 +215,32 @@ function computeModelRowInfo(
 const ModelRow = memo(function ModelRow(props: {
   model: ProviderModelConfig;
   info: ModelRowInfo;
+  check: ModelCheckAggregate | undefined;
+  credentialIndexById: ReadonlyMap<string, number>;
   dragging: boolean;
   onChange: ProviderUpdater;
   onOpenDrawer: (drawer: ProviderDrawerState) => void;
+  onCheck: (modelId: string) => void;
   renderDragHandle: (itemId: string, label: string) => ReactNode;
   getItemProps: (itemId: string) => {
     "data-vertical-reorder-id": string;
     style?: React.CSSProperties;
   };
 }) {
-  const { model, info, dragging, onChange, onOpenDrawer, renderDragHandle, getItemProps } = props;
+  const {
+    model,
+    info,
+    check,
+    credentialIndexById,
+    dragging,
+    onChange,
+    onOpenDrawer,
+    onCheck,
+    renderDragHandle,
+    getItemProps,
+  } = props;
   const { t } = useLocale();
+  const checking = check?.state === "checking";
   const keyChipText =
     info.keyLabels === null
       ? null
@@ -264,7 +354,20 @@ const ModelRow = memo(function ModelRow(props: {
         </Chip>
       ) : null}
       {keyChipText ? <Chip tone="warn">{keyChipText}</Chip> : null}
+      {check ? <ModelCheckChip check={check} credentialIndexById={credentialIndexById} /> : null}
       <span className="flex shrink-0 items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          disabled={checking}
+          onClick={() => onCheck(model.id)}
+          title={t("settings.modelCheck")}
+          aria-label={`${t("settings.modelCheck")} ${model.id}`}
+        >
+          <Activity className="h-3.5 w-3.5" />
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -303,11 +406,24 @@ function ModelGroup(props: {
   group: ModelGroupView;
   collapsed: boolean;
   infoById: ReadonlyMap<string, ModelRowInfo>;
+  checks: ReadonlyMap<string, ModelCheckAggregate>;
+  credentialIndexById: ReadonlyMap<string, number>;
   onToggle: (key: string) => void;
   onChange: ProviderUpdater;
   onOpenDrawer: (drawer: ProviderDrawerState) => void;
+  onCheck: (modelId: string) => void;
 }) {
-  const { group, collapsed, infoById, onToggle, onChange, onOpenDrawer } = props;
+  const {
+    group,
+    collapsed,
+    infoById,
+    checks,
+    credentialIndexById,
+    onToggle,
+    onChange,
+    onOpenDrawer,
+    onCheck,
+  } = props;
   const { t } = useLocale();
   const itemIds = useMemo(() => group.models.map((model) => model.id), [group.models]);
   const onReorder = useCallback(
@@ -353,9 +469,12 @@ function ModelGroup(props: {
                 key={model.id}
                 model={model}
                 info={info}
+                check={checks.get(model.id)}
+                credentialIndexById={credentialIndexById}
                 dragging={draggingItemId === model.id}
                 onChange={onChange}
                 onOpenDrawer={onOpenDrawer}
+                onCheck={onCheck}
                 renderDragHandle={renderDragHandle}
                 getItemProps={getItemProps}
               />
@@ -391,11 +510,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
   const defaultProtocol = providerDefaultProtocol(provider);
   const defaultEndpoint = readEndpoint(provider, defaultProtocol);
   const configured = providerConfiguredProtocols(provider);
-  const primary = primaryCredential(provider);
   const enabledKeys = enabledCredentials(provider);
   const configuredKeyCount = configuredCredentials(provider).length;
-  const redactedKey = isGatewayWebui && primary.apiKey === "" && primary.apiKeyConfigured === true;
-  const keyConfigured = primary.apiKeyConfigured === true || primary.apiKey.length > 0;
+  const credentialIndexById = useMemo(
+    () => new Map(providerCredentials(provider).map((credential, index) => [credential.id, index])),
+    [provider],
+  );
   const groups = useMemo<ModelGroupView[]>(
     () =>
       groupProviderModels(provider).map((group) => ({
@@ -427,6 +547,73 @@ export function ProviderDetail(props: ProviderDetailProps) {
   const [newModelName, setNewModelName] = useState("");
   const enabled = provider.enabled !== false;
   const firstUsagePlan = usage.display.plans[0];
+
+  // 连通测试结果只在内存里；切换供应商即清空，同时中止还在跑的批量测试。
+  const [checks, setChecks] = useState<ReadonlyMap<string, ModelCheckAggregate>>(() => new Map());
+  const [checkingAll, setCheckingAll] = useState(false);
+  const checkAllAbortRef = useRef<AbortController | null>(null);
+  // 最新的 provider 给异步测试用：用户在测试期间改了 Key / 地址时按最新配置发。
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
+  useEffect(() => {
+    return () => {
+      checkAllAbortRef.current?.abort();
+    };
+  }, []);
+  const setCheck = useCallback((modelId: string, aggregate: ModelCheckAggregate) => {
+    setChecks((previous) => new Map(previous).set(modelId, aggregate));
+  }, []);
+  const checkOne = useCallback(
+    (modelId: string) => {
+      setCheck(modelId, CHECKING);
+      void checkProviderModelAllKeys(providerRef.current, modelId).then((aggregate) =>
+        setCheck(modelId, aggregate),
+      );
+    },
+    [setCheck],
+  );
+  const activeModelIds = useMemo(
+    () =>
+      groups.flatMap((group) =>
+        group.models.filter((model) => provider.activeModels.includes(model.id)).map((m) => m.id),
+      ),
+    [groups, provider.activeModels],
+  );
+  function checkAll() {
+    if (checkingAll) {
+      // 立即停：按钮与"检测中"的行马上复位；已发出的请求由各自的结果自然落地或被丢弃。
+      checkAllAbortRef.current?.abort();
+      checkAllAbortRef.current = null;
+      setCheckingAll(false);
+      setChecks((previous) => {
+        const next = new Map(previous);
+        for (const [modelId, aggregate] of previous) {
+          if (aggregate.state === "checking") next.delete(modelId);
+        }
+        return next;
+      });
+      return;
+    }
+    if (activeModelIds.length === 0) return;
+    const controller = new AbortController();
+    checkAllAbortRef.current = controller;
+    setCheckingAll(true);
+    setChecks((previous) => {
+      const next = new Map(previous);
+      for (const modelId of activeModelIds) next.set(modelId, CHECKING);
+      return next;
+    });
+    void checkProviderModels(providerRef.current, activeModelIds, {
+      concurrency: 3,
+      signal: controller.signal,
+      onResult: setCheck,
+    }).finally(() => {
+      if (checkAllAbortRef.current === controller) {
+        checkAllAbortRef.current = null;
+        setCheckingAll(false);
+      }
+    });
+  }
 
   function submitNewModel() {
     const id = newModelName.trim();
@@ -524,60 +711,54 @@ export function ProviderDetail(props: ProviderDetailProps) {
       <section className="space-y-2">
         <SectionTitle
           title={t("settings.apiKey")}
+          badge={
+            enabledKeys.length >= 2 ? (
+              credentialScopesMatch(provider) ? (
+                <Chip tone="ok">
+                  {t("settings.providerKeysInterchangeable").replace(
+                    "{count}",
+                    String(enabledKeys.length),
+                  )}
+                </Chip>
+              ) : (
+                <Chip tone="warn">
+                  {t("settings.providerKeysScoped").replace("{count}", String(enabledKeys.length))}
+                </Chip>
+              )
+            ) : null
+          }
           actions={
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-[11px]"
-              onClick={() => onOpenDrawer({ kind: "keys" })}
-            >
-              {t("settings.providerManageKeys").replace("{count}", String(configuredKeyCount))}
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-[11px]"
+                disabled={busy !== null}
+                onClick={onQuickCheck}
+              >
+                <RefreshCw className={cn("h-3 w-3", busy === "check" && "animate-spin")} />
+                {t("settings.providerCheck")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => onOpenDrawer({ kind: "keys" })}
+              >
+                {t("settings.providerKeysDetails").replace("{count}", String(configuredKeyCount))}
+              </Button>
+            </>
           }
         />
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5">
-          <SecretInput
-            value={primary.apiKey}
-            configured={keyConfigured}
-            redacted={redactedKey}
-            ariaLabel={t("settings.apiKey")}
-            className="min-w-[200px]"
-            onCommit={(value) =>
-              onChange((current) =>
-                setPrimaryApiKey(current, value.trim(), { keepConfigured: redactedKey }),
-              )
-            }
-          />
-          {!keyConfigured && !preset.authOptional ? (
-            <Chip tone="warn">{t("settings.providerKeyMissing")}</Chip>
-          ) : null}
-          {enabledKeys.length >= 2 ? (
-            credentialScopesMatch(provider) ? (
-              <Chip tone="ok">
-                {t("settings.providerKeysInterchangeable").replace(
-                  "{count}",
-                  String(enabledKeys.length),
-                )}
-              </Chip>
-            ) : (
-              <Chip tone="warn">
-                {t("settings.providerKeysScoped").replace("{count}", String(enabledKeys.length))}
-              </Chip>
-            )
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5 text-[11px] shadow-none"
-            disabled={busy !== null}
-            onClick={onQuickCheck}
-          >
-            <RefreshCw className={cn("h-3 w-3", busy === "check" && "animate-spin")} />
-            {t("settings.providerCheck")}
-          </Button>
-        </div>
+        <ProviderKeyList
+          provider={provider}
+          isGatewayWebui={isGatewayWebui}
+          authOptional={preset.authOptional}
+          onChange={onChange}
+          onOpenDrawer={onOpenDrawer}
+        />
       </section>
 
       <section className="space-y-2">
@@ -683,6 +864,22 @@ export function ProviderDetail(props: ProviderDetailProps) {
                 variant="ghost"
                 size="sm"
                 className="h-7 gap-1.5 px-2 text-[11px]"
+                disabled={!checkingAll && activeModelIds.length === 0}
+                onClick={checkAll}
+                title={t("settings.modelCheckAllHint")}
+              >
+                {checkingAll ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Activity className="h-3 w-3" />
+                )}
+                {checkingAll ? t("settings.modelCheckStop") : t("settings.modelCheckAll")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-[11px]"
                 disabled={busy !== null}
                 onClick={onRefreshModels}
               >
@@ -741,9 +938,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
                 group={group}
                 collapsed={collapsedGroups.has(group.key)}
                 infoById={infoById}
+                checks={checks}
+                credentialIndexById={credentialIndexById}
                 onToggle={toggleGroup}
                 onChange={onChange}
                 onOpenDrawer={onOpenDrawer}
+                onCheck={checkOne}
               />
             ))
           )}

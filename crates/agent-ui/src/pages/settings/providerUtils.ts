@@ -1,9 +1,15 @@
 import {
+  type CustomProvider,
   createProviderModelConfig,
+  credentialCoversModel,
+  getProviderCredentials,
   normalizeInputModalities,
   normalizeProviderModelConfigs,
+  type ProviderCredential,
   type ProviderId,
   type ProviderModelConfig,
+  resolveProviderChatRoute,
+  selectProviderCredential,
   USAGE_QUERY_TIMEOUT_DEFAULT_SECS,
   USAGE_QUERY_TIMEOUT_MAX_SECS,
   USAGE_QUERY_TIMEOUT_MIN_SECS,
@@ -13,7 +19,16 @@ import {
 } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { type CustomHeader, mergeCustomHeaders } from "../../lib/providers/customHeaders";
+import {
+  aggregateModelCheck,
+  buildModelCheckRequest,
+  type ModelCheckAggregate,
+  type ModelCheckRequest,
+  type ModelCheckResult,
+  summarizeModelCheckResponse,
+} from "../../lib/providers/modelCheck";
 import { prepareProxyRequest } from "../../lib/providers/proxy";
+import { findProviderPreset } from "../../lib/providers/registry";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import { normalizeBaseUrl } from "../../lib/settings/normalize";
 
@@ -490,6 +505,18 @@ async function readFetchError(response: Response, fallback: string) {
   }
 }
 
+/** WebUI 走网关桥的请求都要求已登录的网关 token；缺失直接报错而不是发匿名请求。 */
+function requireGatewayToken(): string {
+  const token =
+    typeof window !== "undefined"
+      ? (window.localStorage.getItem(GATEWAY_TOKEN_STORAGE_KEY) ?? "").trim()
+      : "";
+  if (!token) {
+    throw new Error("Gateway token is required");
+  }
+  return token;
+}
+
 async function fetchModelsThroughGateway(
   type: ProviderId,
   baseUrl: string,
@@ -501,13 +528,7 @@ async function fetchModelsThroughGateway(
   customHeaders?: readonly CustomHeader[],
   extra?: { credentialId?: string; strict?: boolean },
 ): Promise<ProviderModelConfig[]> {
-  const token =
-    typeof window !== "undefined"
-      ? (window.localStorage.getItem(GATEWAY_TOKEN_STORAGE_KEY) ?? "").trim()
-      : "";
-  if (!token) {
-    throw new Error("Gateway token is required");
-  }
+  requireGatewayToken();
 
   const data = await invoke<unknown>("gateway_provider_models", {
     type,
@@ -816,4 +837,181 @@ export async function fetchModelsFromApi(
     failure?.message ?? "Failed to fetch model list",
     failure?.status ?? null,
   );
+}
+
+// ---------------------------------------------------------------------------
+// 模型连通测试（结果只在会话内存里，不落盘）
+// ---------------------------------------------------------------------------
+
+/** 桌面 `provider_check_model` 与网关桥 `gateway_provider_check_model` 的统一返回。 */
+type ProviderCheckResponse = { status: number; latency_ms: number; body: string };
+
+const MODEL_CHECK_DEFAULT_CONCURRENCY = 3;
+
+export type ProviderModelCheckOptions = {
+  /** 指定用哪把 Key；缺省按路由选 */
+  credentialId?: string;
+  signal?: AbortSignal;
+  sessionId?: string;
+  timeoutMs?: number;
+};
+
+async function checkModelThroughGateway(
+  request: ModelCheckRequest,
+  params: {
+    providerId: string;
+    credentialId: string;
+    protocol: string;
+    auth?: { headerName?: string; prefix?: string };
+    useSystemProxy: boolean;
+    timeoutMs?: number;
+  },
+): Promise<ProviderCheckResponse> {
+  requireGatewayToken();
+  const response = await invoke<unknown>("gateway_provider_check_model", {
+    url: request.url,
+    headers: Object.entries(request.headers).map(([key, value]) => ({ key, value })),
+    body: request.body,
+    use_system_proxy: params.useSystemProxy,
+    provider_id: params.providerId,
+    credential_id: params.credentialId,
+    protocol: params.protocol,
+    ...(params.auth?.headerName ? { auth_header_name: params.auth.headerName } : {}),
+    ...(params.auth?.prefix !== undefined ? { auth_prefix: params.auth.prefix } : {}),
+    ...(params.timeoutMs !== undefined ? { timeout_ms: params.timeoutMs } : {}),
+  });
+  const payload = (response && typeof response === "object" ? response : {}) as Partial<
+    Record<keyof ProviderCheckResponse, unknown>
+  >;
+  if (typeof payload.status !== "number") {
+    throw new Error("Model check response is malformed");
+  }
+  return {
+    status: payload.status,
+    latency_ms: typeof payload.latency_ms === "number" ? payload.latency_ms : 0,
+    body: typeof payload.body === "string" ? payload.body : "",
+  };
+}
+
+/**
+ * 用某把 Key 测一次该模型：按当前路由发最小生成请求，返回通 / 不通、延迟与错误摘要。
+ * 桌面端拿明文 Key 走 Tauri 命令；WebUI 脱敏态不带鉴权头，由桌面端按 credentialId
+ * 从落库配置补 Key（并限制请求主机属于该供应商已保存的地址）。
+ */
+export async function checkProviderModel(
+  provider: CustomProvider,
+  modelId: string,
+  options?: ProviderModelCheckOptions,
+): Promise<ModelCheckResult> {
+  const route = resolveProviderChatRoute(provider, modelId, {
+    credentialId: options?.credentialId,
+  });
+  const credentials = getProviderCredentials(provider);
+  const credential = credentials.find((item) => item.id === route.credentialId) ?? credentials[0];
+  const base = { credentialId: credential.id, credentialLabel: credential.label };
+  const apiKey = credential.apiKey.trim();
+  const webui = isGatewayWebuiRuntime();
+  const configured = credential.apiKeyConfigured === true || apiKey.length > 0;
+  const authOptional = findProviderPreset(provider.presetId)?.authOptional === true;
+  if (!apiKey && !(webui && configured) && !authOptional) {
+    return { ...base, ok: false, kind: "noKey", latencyMs: 0 };
+  }
+  const request = buildModelCheckRequest(route, apiKey, { sessionId: options?.sessionId });
+  if (!request.url) {
+    return { ...base, ok: false, kind: "network", error: "Base URL is empty", latencyMs: 0 };
+  }
+  const useSystemProxy = provider.useSystemProxy === true;
+  const startedAt = Date.now();
+  try {
+    const response = webui
+      ? await checkModelThroughGateway(request, {
+          providerId: provider.id,
+          credentialId: credential.id,
+          protocol: route.protocol,
+          auth: route.auth,
+          useSystemProxy,
+          timeoutMs: options?.timeoutMs,
+        })
+      : await invoke<ProviderCheckResponse>("provider_check_model", {
+          url: request.url,
+          headers: Object.entries(request.headers),
+          body: request.body,
+          use_system_proxy: useSystemProxy,
+          ...(options?.timeoutMs !== undefined ? { timeout_ms: options.timeoutMs } : {}),
+        });
+    const summary = summarizeModelCheckResponse(route.protocol, response.status, response.body);
+    return { ...base, ...summary, status: response.status, latencyMs: response.latency_ms };
+  } catch (error) {
+    return {
+      ...base,
+      ok: false,
+      kind: "network",
+      error: error instanceof Error ? error.message : String(error),
+      latencyMs: Date.now() - startedAt,
+    };
+  }
+}
+
+/** 覆盖该模型的启用 Key；没有任何 Key 覆盖时退回路由会选的那把（与运行时一致）。 */
+export function modelCheckCredentials(
+  provider: CustomProvider,
+  modelId: string,
+): ProviderCredential[] {
+  const covering = getProviderCredentials(provider).filter(
+    (credential) => credential.enabled && credentialCoversModel(credential, modelId),
+  );
+  if (covering.length > 0) return covering;
+  return [selectProviderCredential(provider, modelId).credential];
+}
+
+/** 逐把 Key 测同一模型并聚合（Key 之间串行，避免对同一网关瞬时打太多请求）。 */
+export async function checkProviderModelAllKeys(
+  provider: CustomProvider,
+  modelId: string,
+  options?: Pick<ProviderModelCheckOptions, "signal" | "sessionId" | "timeoutMs">,
+): Promise<ModelCheckAggregate> {
+  const results: ModelCheckResult[] = [];
+  for (const credential of modelCheckCredentials(provider, modelId)) {
+    if (options?.signal?.aborted) break;
+    results.push(
+      await checkProviderModel(provider, modelId, { ...options, credentialId: credential.id }),
+    );
+  }
+  return aggregateModelCheck(results);
+}
+
+export type ProviderModelsCheckOptions = Pick<
+  ProviderModelCheckOptions,
+  "signal" | "sessionId" | "timeoutMs"
+> & {
+  /** 同时在测的模型数；缺省 3 */
+  concurrency?: number;
+  onResult?: (modelId: string, aggregate: ModelCheckAggregate) => void;
+};
+
+/** 批量测试：固定并发的工作池，每测完一个模型立即回调；中止后不再回调。 */
+export async function checkProviderModels(
+  provider: CustomProvider,
+  modelIds: readonly string[],
+  options?: ProviderModelsCheckOptions,
+): Promise<Map<string, ModelCheckAggregate>> {
+  const queue = [...modelIds];
+  const out = new Map<string, ModelCheckAggregate>();
+  const concurrency = Math.max(
+    1,
+    Math.min(options?.concurrency ?? MODEL_CHECK_DEFAULT_CONCURRENCY, queue.length),
+  );
+  const worker = async () => {
+    while (queue.length > 0) {
+      if (options?.signal?.aborted) return;
+      const modelId = queue.shift();
+      if (modelId === undefined) return;
+      const aggregate = await checkProviderModelAllKeys(provider, modelId, options);
+      if (options?.signal?.aborted) return;
+      out.set(modelId, aggregate);
+      options?.onResult?.(modelId, aggregate);
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return out;
 }
