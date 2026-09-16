@@ -14,6 +14,10 @@ import {
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { type CustomHeader, mergeCustomHeaders } from "../../lib/providers/customHeaders";
 import { prepareProxyRequest } from "../../lib/providers/proxy";
+import {
+  isVerbatimEndpointBaseUrl,
+  stripEndpointVerbatimMarker,
+} from "../../lib/providers/registry";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import { normalizeBaseUrl } from "../../lib/settings/normalize";
 
@@ -324,7 +328,7 @@ export function normalizeProviderModelsBaseUrl(
   isFullUrl = false,
 ) {
   if (isFullUrl) return deriveModelsBaseUrlFromFullUrl(baseUrl);
-  let normalizedUrl = normalizeBaseUrl(baseUrl);
+  let normalizedUrl = normalizeBaseUrl(stripEndpointVerbatimMarker(baseUrl));
 
   if (type !== "codex" && type !== "xai" && type !== "deepseek" && type !== "gemini") {
     return normalizedUrl;
@@ -733,7 +737,13 @@ export async function fetchModelsFromApi(
     credentialId?: string;
   },
 ): Promise<ProviderModelConfig[]> {
-  const modelsUrlOverride = type === "gemini" ? "" : (options?.modelsUrl?.trim() ?? "");
+  // 地址以 # 结尾 = 原样使用：模型列表也直接挂在该根地址下，不补 /v1。
+  const verbatimModelsUrl =
+    isVerbatimEndpointBaseUrl(baseUrl) && !options?.isFullUrl
+      ? `${normalizeBaseUrl(stripEndpointVerbatimMarker(baseUrl))}/models`
+      : "";
+  const modelsUrlOverride =
+    type === "gemini" ? "" : options?.modelsUrl?.trim() || verbatimModelsUrl;
   const normalizedApiKey = apiKey.trim();
   if (isGatewayWebuiRuntime()) {
     return fetchModelsThroughGateway(

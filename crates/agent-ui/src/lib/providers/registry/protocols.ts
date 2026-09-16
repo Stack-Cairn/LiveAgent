@@ -51,6 +51,68 @@ export const PROVIDER_PROTOCOL_REQUEST_PATH: Record<ProviderChatProtocol, string
   "google-generative-ai": "/models/{model}:generateContent",
 };
 
+/** 地址以它结尾 = 原样使用，不补版本段（去掉标记本身）。 */
+export const ENDPOINT_VERBATIM_MARKER = "#";
+
+export function isVerbatimEndpointBaseUrl(baseUrl: string | undefined): boolean {
+  return (baseUrl ?? "").trim().endsWith(ENDPOINT_VERBATIM_MARKER);
+}
+
+/** 去掉末尾的 `#` 标记与尾斜杠；不改其它内容。 */
+export function stripEndpointVerbatimMarker(baseUrl: string): string {
+  let root = baseUrl.trim();
+  if (root.endsWith(ENDPOINT_VERBATIM_MARKER)) root = root.slice(0, -1);
+  return root.replace(/\/+$/, "");
+}
+
+/** 路径里是否已有版本段（/v1、/v3、/v4、/v1beta …，只看路径，不看主机）。 */
+export function hasApiVersionSegment(baseUrl: string): boolean {
+  const trimmed = baseUrl.trim();
+  let path = trimmed;
+  try {
+    path = new URL(trimmed).pathname;
+  } catch {
+    path = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, "");
+  }
+  return /(^|\/)v\d+[a-z]*(?=\/|$)/i.test(path);
+}
+
+export type ResolvedEndpointRequestBase = {
+  /** 规范化后的请求根地址（已补版本段 / 已去 # 标记）；存档原值不改。 */
+  base: string;
+  /** 该接口的实际请求地址（Gemini 保留 {model} 占位）。 */
+  requestUrl: string;
+  /** 用户以 # 结尾要求原样使用。 */
+  verbatim: boolean;
+};
+
+/**
+ * 端点地址的版本段规则（设置页预览、路由结果、模型列表推导共用同一口径）：
+ * - OpenAI 家族：路径无版本段时补 /v1；以 # 结尾原样使用；完整 URL 原样。
+ * - Anthropic Messages：地址不改；路径已以 /v1 结尾时请求 {base}/messages，否则 {base}/v1/messages。
+ * - Gemini：无版本段时补 /v1beta。
+ */
+export function resolveEndpointRequestBase(
+  protocol: ProviderChatProtocol,
+  baseUrl: string | undefined,
+  isFullUrl = false,
+): ResolvedEndpointRequestBase {
+  // 网关侧可能拿到归一化前的快照（baseUrl 缺省），这里同样容错。
+  const trimmed = typeof baseUrl === "string" ? baseUrl.trim() : "";
+  if (!trimmed) return { base: "", requestUrl: "", verbatim: false };
+  if (isFullUrl) return { base: trimmed, requestUrl: trimmed, verbatim: false };
+  const verbatim = isVerbatimEndpointBaseUrl(trimmed);
+  const root = stripEndpointVerbatimMarker(trimmed);
+  const requestPath = PROVIDER_PROTOCOL_REQUEST_PATH[protocol];
+  if (protocol === "anthropic-messages") {
+    const requestUrl = /\/v1$/i.test(root) ? `${root}/messages` : `${root}${requestPath}`;
+    return { base: root, requestUrl, verbatim };
+  }
+  const versionSegment = protocol === "google-generative-ai" ? "/v1beta" : "/v1";
+  const base = verbatim || hasApiVersionSegment(root) ? root : `${root}${versionSegment}`;
+  return { base, requestUrl: `${base}${requestPath}`, verbatim };
+}
+
 /** 各接口模型列表路径（探测用）。 */
 export const PROVIDER_PROTOCOL_MODELS_PATH: Record<ProviderChatProtocol, string> = {
   "anthropic-messages": "/v1/models",

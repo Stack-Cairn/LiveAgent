@@ -153,6 +153,51 @@ test("createProviderFromEndpoints derives the default endpoint and legacy type",
   assert.deepEqual(provider.models, []);
 });
 
+test("createProviderFromEndpoints turns multiple keys into credentials with the first as primary", () => {
+  const provider = model.createProviderFromEndpoints({
+    name: "Multi",
+    preset: undefined,
+    apiKeys: [
+      { key: " sk-one ", label: " 主账号 " },
+      { key: "", label: "空行会被剔除" },
+      { key: "sk-two" },
+      { key: "sk-three", label: "备用" },
+      { key: "   " },
+    ],
+    endpoints: { "openai-completions": "https://relay.example.com" },
+  });
+  assert.equal(provider.credentials.length, 3);
+  assert.deepEqual(
+    provider.credentials.map((item) => [item.apiKey, item.label]),
+    [
+      ["sk-one", "主账号"],
+      ["sk-two", ""],
+      ["sk-three", "备用"],
+    ],
+  );
+  assert.equal(provider.credentials[0].id, "default");
+  assert.equal(provider.apiKey, "sk-one");
+  assert.equal(provider.apiKey, provider.credentials[0].apiKey);
+  assert.equal(provider.apiKeyConfigured, true);
+  assert.equal(new Set(provider.credentials.map((item) => item.id)).size, 3);
+  for (const credential of provider.credentials) {
+    assert.equal(credential.enabled, true);
+    assert.equal(credential.apiKeyConfigured, true);
+    assert.deepEqual(credential.modelScope, { mode: "auto" });
+  }
+  // 一把都没填：仍有一条空的默认凭据（本地服务可无 Key）；存档保留原地址不补 /v1。
+  const noKey = model.createProviderFromEndpoints({
+    name: "Local",
+    preset: undefined,
+    apiKeys: [{ key: "", label: "" }],
+    endpoints: { "openai-completions": "http://127.0.0.1:11434" },
+  });
+  assert.equal(noKey.credentials.length, 1);
+  assert.equal(noKey.credentials[0].apiKey, "");
+  assert.equal(noKey.apiKeyConfigured, false);
+  assert.equal(noKey.endpointConfigs["openai-completions"].baseUrl, "http://127.0.0.1:11434");
+});
+
 test("instance names disambiguate repeated presets and origin hosts", () => {
   const registry = loader.loadModule("@liveagent/ui/lib/providers/registry/index.ts");
   const anthropic = registry.findProviderPreset("anthropic");

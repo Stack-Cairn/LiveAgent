@@ -38,6 +38,8 @@ export type ProviderRuntimeConfig = {
   readonly [PROVIDER_RUNTIME_CONFIG_BRAND]: true;
   baseUrl: string;
   isFullUrl: boolean;
+  /** 路由输出：地址以 # 结尾要求原样使用，模型工厂不再补 /v1 或 /v1beta。 */
+  baseUrlVerbatim?: boolean;
   /** Saved provider category remains caller identity; this is the resolved transport adapter. */
   adapterProviderId: ProviderId;
   chatProtocol: ProviderChatProtocol;

@@ -36,6 +36,7 @@ import {
   type ProviderPreset,
   presetIdForLegacyProvider,
   presetMatchesBaseUrl,
+  resolveEndpointRequestBase,
   resolveModelFamily,
   stripModelVendorPrefix,
 } from "@liveagent/ui/lib/providers/registry";
@@ -631,14 +632,21 @@ export function resolveProviderChatRoute(
     { credentialId: model?.credentialId, source: "model" },
     { credentialId: config.credentialId, source: "endpoint" },
   ]);
+  // 存档保留用户原值；路由结果给出已按接口补齐版本段（或按 # 原样）的请求根地址。
+  const requestBase = resolveEndpointRequestBase(
+    protocol,
+    config.baseUrl,
+    config.isFullUrl === true,
+  );
   return {
     protocol,
     protocolSource: decision.source,
     family: PROVIDER_PROTOCOL_FAMILY[protocol],
     dialect,
     adapterProviderId: getProviderChatProtocolAdapter(protocol, dialect),
-    baseUrl: config.baseUrl,
+    baseUrl: requestBase.base,
     isFullUrl: config.isFullUrl === true,
+    ...(requestBase.verbatim ? { baseUrlVerbatim: true as const } : {}),
     ...(config.modelsUrl ? { modelsUrl: config.modelsUrl } : {}),
     ...(protocol === "openai-completions" || protocol === "openai-responses"
       ? { requestFormat: protocol }

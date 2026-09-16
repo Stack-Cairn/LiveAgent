@@ -136,8 +136,11 @@ export type ResolvedProviderChatRoute = {
    * 新读取点应改读 protocol 与 dialect。
    */
   adapterProviderId: ProviderId;
+  /** 已按接口版本段规则规范化的请求根地址（resolveEndpointRequestBase）；存档原值不改。 */
   baseUrl: string;
   isFullUrl: boolean;
+  /** 用户以 # 结尾要求原样使用：运行时不得再补版本段。 */
+  baseUrlVerbatim?: true;
   modelsUrl?: string;
   requestFormat?: CodexRequestFormat;
   /** 发给远端的模型名；缺省等于本地模型 ID */

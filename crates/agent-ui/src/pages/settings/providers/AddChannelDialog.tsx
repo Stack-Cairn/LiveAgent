@@ -1,13 +1,14 @@
 // "添加渠道"对话框（设计文档 7）：自定义中转、聚合网关或尚未内置的厂商。
-// 渠道头像（预设 logo / 中性图标）、名称、API 密钥、四类接口的 Base URL（两类常显、两类折叠），
-// 填根地址后即时显示实际请求路径；"从预设创建（可选）"填入该渠道的接口与地址。
+// 统一两列栅格（左标签 / 右输入），分四节：基本信息、API Key（多把）、接口地址（四类
+// 接口平铺，填根地址后即时显示实际请求路径）、从预设创建（折叠，可选）。
+// 校验文案固定在底部按钮左侧。
 
 import {
   type CustomProvider,
   PROVIDER_CHAT_PROTOCOLS,
   type ProviderChatProtocol,
 } from "@liveagent/app/lib/settings";
-import { ChevronDown } from "@liveagent/ui/components/IconSet";
+import { ChevronDown, Plus, Trash2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -34,16 +35,36 @@ import {
   expandPresetBaseUrl,
   findProviderPreset,
   listProviderPresets,
-  PROVIDER_PROTOCOL_REQUEST_PATH,
   type ProviderPreset,
+  resolveEndpointRequestBase,
 } from "@liveagent/ui/lib/providers/registry";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ProviderAvatar, protocolLabel, SecretInput } from "./providerChips";
 import { createProviderFromEndpoints, instanceNameForPreset } from "./providerSettingsModel";
 
-const PRIMARY_PROTOCOLS: ProviderChatProtocol[] = ["openai-completions", "anthropic-messages"];
-const MORE_PROTOCOLS: ProviderChatProtocol[] = ["openai-responses", "google-generative-ai"];
+/** 界面顺序：先 OpenAI 两类，再 Anthropic，最后 Gemini。 */
+const ENDPOINT_ORDER: ProviderChatProtocol[] = [
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+  "google-generative-ai",
+];
+
+/** 占位符按接口给"正常样式"的根地址，不带 /v1（版本段由 resolveEndpointRequestBase 补）。 */
+const ENDPOINT_PLACEHOLDER: Record<ProviderChatProtocol, string> = {
+  "openai-completions": "https://api.example.com",
+  "openai-responses": "https://api.example.com",
+  "anthropic-messages": "https://api.example.com",
+  "google-generative-ai": "https://generativelanguage.googleapis.com",
+};
+
+type ApiKeyRow = { id: string; key: string; label: string };
+
+function emptyKeyRow(): ApiKeyRow {
+  return { id: createUuid(), key: "", label: "" };
+}
 
 function endpointsFromPreset(
   preset: ProviderPreset,
@@ -57,10 +78,46 @@ function endpointsFromPreset(
   return out;
 }
 
-function requestPathPreview(protocol: ProviderChatProtocol, baseUrl: string): string {
-  const root = baseUrl.trim().replace(/\/+$/, "");
-  if (protocol === "anthropic-messages" && /\/v1$/i.test(root)) return `${root}/messages`;
-  return `${root}${PROVIDER_PROTOCOL_REQUEST_PATH[protocol]}`;
+/** 分节：标题行 + 两列栅格（左标签 132px，右输入自适应；窄屏退化为单列）。 */
+function Section(props: { title: ReactNode; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="space-y-2.5">
+      <div className="flex flex-wrap items-baseline gap-x-2 text-xs font-medium text-foreground/85">
+        {props.title}
+        {props.hint ? (
+          <span className="font-normal text-muted-foreground/75">{props.hint}</span>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-[132px_minmax(0,1fr)] items-start gap-x-4 gap-y-3 max-[520px]:grid-cols-1 max-[520px]:gap-y-1.5">
+        {props.children}
+      </div>
+    </section>
+  );
+}
+
+/** 左列标签：与输入框首行对齐（h-8 输入框 → 标签行高 2rem）；可带一行小字说明。 */
+function FieldLabel(props: {
+  htmlFor?: string;
+  children: ReactNode;
+  hint?: ReactNode;
+  required?: boolean;
+}) {
+  return (
+    <div className="min-w-0 max-[520px]:flex max-[520px]:items-baseline max-[520px]:gap-2">
+      <Label
+        htmlFor={props.htmlFor}
+        className="flex h-8 items-center text-xs leading-none text-foreground/85"
+      >
+        <span className="truncate">{props.children}</span>
+        {props.required ? <span className="ml-0.5 text-destructive">*</span> : null}
+      </Label>
+      {props.hint ? (
+        <p className="-mt-1 truncate text-[10.5px] leading-4 text-muted-foreground/70 max-[520px]:mt-0">
+          {props.hint}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 export function AddChannelDialog(props: {
@@ -77,17 +134,14 @@ export function AddChannelDialog(props: {
   const [name, setName] = useState(() =>
     initialPreset ? instanceNameForPreset(initialPreset, providers) : "",
   );
-  const [apiKey, setApiKey] = useState("");
+  const [keys, setKeys] = useState<ApiKeyRow[]>(() => [emptyKeyRow()]);
   const [presetId, setPresetId] = useState(
     initialPreset && initialPreset.id !== CUSTOM_PRESET_ID ? initialPreset.id : "",
   );
+  const [presetOpen, setPresetOpen] = useState(() => Boolean(initialPreset));
   const [endpoints, setEndpoints] = useState<Partial<Record<ProviderChatProtocol, string>>>(() =>
     initialPreset ? endpointsFromPreset(initialPreset) : {},
   );
-  const [moreOpen, setMoreOpen] = useState(() => {
-    const initial = initialPreset ? endpointsFromPreset(initialPreset) : {};
-    return MORE_PROTOCOLS.some((protocol) => initial[protocol]);
-  });
   const [error, setError] = useState<string | null>(null);
   const presets = listProviderPresets();
   const preset = findProviderPreset(presetId);
@@ -99,7 +153,18 @@ export function AddChannelDialog(props: {
     if (!next) return;
     setEndpoints(endpointsFromPreset(next));
     if (!name.trim()) setName(instanceNameForPreset(next, providers));
-    if (MORE_PROTOCOLS.some((protocol) => next.endpoints[protocol])) setMoreOpen(true);
+  }
+
+  function patchKey(id: string, patch: Partial<Omit<ApiKeyRow, "id">>) {
+    setError(null);
+    setKeys((previous) => previous.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
+
+  function removeKey(id: string) {
+    setKeys((previous) => {
+      const next = previous.filter((row) => row.id !== id);
+      return next.length > 0 ? next : [emptyKeyRow()];
+    });
   }
 
   function submit() {
@@ -112,46 +177,20 @@ export function AddChannelDialog(props: {
       setError(t("settings.channelEndpointRequired"));
       return;
     }
-    onCreate(createProviderFromEndpoints({ name, preset, apiKey, endpoints }));
+    onCreate(
+      createProviderFromEndpoints({
+        name,
+        preset,
+        apiKeys: keys.map((row) => ({ key: row.key, label: row.label })),
+        endpoints,
+      }),
+    );
     setOpen(false);
   }
 
-  function renderEndpointField(protocol: ProviderChatProtocol) {
-    const value = endpoints[protocol] ?? "";
-    const id = `add-channel-endpoint-${protocol}`;
-    return (
-      <div key={protocol} className="space-y-1.5">
-        <Label htmlFor={id} className="text-xs text-foreground/85">
-          {protocolLabel(protocol)}
-        </Label>
-        <Input
-          id={id}
-          className="h-8 font-mono text-xs shadow-none"
-          value={value}
-          placeholder={`Base URL: https://example.com${
-            protocol === "google-generative-ai" ? "/v1beta" : "/v1"
-          }`}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => {
-            const next = event.currentTarget.value;
-            setError(null);
-            setEndpoints((previous) => ({ ...previous, [protocol]: next }));
-          }}
-        />
-        <p className="font-mono text-[10.5px] leading-relaxed text-muted-foreground/75">
-          {value.trim() ? (
-            <>
-              {t("settings.channelRequestPathPreview")}
-              <span className="text-muted-foreground">{requestPathPreview(protocol, value)}</span>
-            </>
-          ) : (
-            <span className="font-sans">{t("settings.channelRequestPathHint")}</span>
-          )}
-        </p>
-      </div>
-    );
-  }
+  const filledFromPreset = preset
+    ? ENDPOINT_ORDER.filter((protocol) => preset.endpoints[protocol] && endpoints[protocol]?.trim())
+    : [];
 
   return (
     <Dialog
@@ -164,125 +203,223 @@ export function AddChannelDialog(props: {
       }}
     >
       <DialogContent
-        className="flex max-h-[min(720px,calc(100dvh-2rem))] max-w-[560px] flex-col p-0"
+        className="flex max-h-[min(760px,calc(100dvh-2rem))] max-w-[600px] flex-col p-0"
         closeLabel={t("settings.close")}
         layout="fullscreen-mobile"
         showCloseButton
       >
-        <DialogHeader>
-          <DialogTitle className="text-sm">{t("settings.channelAdd")}</DialogTitle>
-          <DialogDescription className="text-xs">
-            {t("settings.channelAddDescription")}
-          </DialogDescription>
+        <DialogHeader className="flex-row items-center gap-3">
+          <ProviderAvatar preset={preset} className="h-10 w-10 rounded-xl" />
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <DialogTitle className="text-sm">{t("settings.channelAdd")}</DialogTitle>
+            <DialogDescription className="text-xs">
+              {t("settings.channelAddDescription")}
+            </DialogDescription>
+          </div>
         </DialogHeader>
-        <DialogBody className="space-y-4">
-          <div className="flex justify-center">
-            <ProviderAvatar preset={preset} className="h-14 w-14" />
-          </div>
-          <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="add-channel-name" className="text-xs text-muted-foreground">
-                {t("settings.channelName")} <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="add-channel-name"
-                className="h-8 shadow-none"
-                value={name}
-                placeholder={t("settings.channelNamePlaceholder")}
-                onChange={(event) => {
-                  setName(event.currentTarget.value);
-                  setError(null);
-                }}
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="add-channel-key" className="text-xs text-muted-foreground">
-              API Key
-            </Label>
-            <SecretInput
-              id="add-channel-key"
-              value={apiKey}
-              configured={false}
-              redacted={false}
-              placeholder={t("settings.channelApiKeyPlaceholder")}
-              ariaLabel="API Key"
-              onCommit={(value) => {
-                setApiKey(value);
+        <DialogBody className="space-y-6 py-4">
+          <Section title={t("settings.channelSectionBasic")}>
+            <FieldLabel htmlFor="add-channel-name" required>
+              {t("settings.channelName")}
+            </FieldLabel>
+            <Input
+              id="add-channel-name"
+              className="h-8 shadow-none"
+              value={name}
+              placeholder={t("settings.channelNamePlaceholder")}
+              onChange={(event) => {
+                setName(event.currentTarget.value);
                 setError(null);
               }}
             />
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-foreground/85">
-              {t("settings.channelEndpoints")}
-              <span className="font-normal text-muted-foreground/75">
-                {t("settings.channelEndpointsHint")}
-              </span>
-            </div>
-            {PRIMARY_PROTOCOLS.map(renderEndpointField)}
-            <div className="border-t pt-2">
-              <button
-                type="button"
-                className="flex w-full items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((previous) => !previous)}
-              >
-                {t("settings.channelMoreEndpoints")}
-                <ChevronDown
-                  className={cn(
-                    "ml-auto h-3.5 w-3.5 transition-transform",
-                    moreOpen && "rotate-180",
-                  )}
-                />
-              </button>
-              {moreOpen ? (
-                <div className="mt-3 space-y-3">{MORE_PROTOCOLS.map(renderEndpointField)}</div>
-              ) : null}
-            </div>
-          </div>
+          </Section>
 
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-foreground/85">
-              {t("settings.channelFromPreset")}
+          <Section title="API Key" hint={t("settings.channelKeysHint")}>
+            {keys.map((row, index) => {
+              const inputId = `add-channel-key-${row.id}`;
+              const rowLabel = `Key ${index + 1}`;
+              return (
+                <div key={row.id} className="contents">
+                  <FieldLabel
+                    htmlFor={inputId}
+                    hint={index === 0 ? t("settings.channelKeyPrimaryHint") : undefined}
+                  >
+                    {rowLabel}
+                  </FieldLabel>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <SecretInput
+                      id={inputId}
+                      value={row.key}
+                      configured={false}
+                      redacted={false}
+                      placeholder={t("settings.channelApiKeyPlaceholder")}
+                      ariaLabel={`API ${rowLabel}`}
+                      onCommit={(value) => patchKey(row.id, { key: value })}
+                    />
+                    <Input
+                      className="h-8 w-28 shrink-0 text-xs shadow-none max-[520px]:w-24"
+                      value={row.label}
+                      placeholder={t("settings.channelKeyLabelPlaceholder")}
+                      aria-label={`${rowLabel} ${t("settings.providerCredentialLabel")}`}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(event) => patchKey(row.id, { label: event.currentTarget.value })}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      disabled={keys.length === 1 && !row.key && !row.label}
+                      title={t("settings.channelKeyRemove")}
+                      aria-label={`${t("settings.channelKeyRemove")} ${rowLabel}`}
+                      onClick={() => removeKey(row.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="min-[521px]:col-start-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setKeys((previous) => [...previous, emptyKeyRow()])}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                {t("settings.channelKeyAdd")}
+              </Button>
             </div>
-            <p className="text-[10.5px] leading-relaxed text-muted-foreground/75">
-              {t("settings.channelFromPresetHint")}
-            </p>
-            <Select value={presetId} onValueChange={applyPreset}>
-              <SelectTrigger className="h-8 w-full text-xs shadow-none">
-                <SelectValue>
-                  {preset ? (
-                    <span className="flex items-center gap-2">
-                      <ProviderAvatar preset={preset} className="h-5 w-5" />
-                      {preset.name}
-                      {preset.native ? `（${t("settings.channelNative")}）` : ""}
-                    </span>
-                  ) : (
-                    t("settings.channelFromPresetPlaceholder")
-                  )}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {presets.map((item) => (
-                  <SelectItem key={item.id} value={item.id} className="text-xs">
-                    <span className="flex items-center gap-2">
-                      <ProviderAvatar preset={item} className="h-5 w-5" />
-                      {item.name}
-                      {item.native ? `（${t("settings.channelNative")}）` : ""}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          </Section>
+
+          <Section title={t("settings.channelEndpoints")} hint={t("settings.channelEndpointsHint")}>
+            {ENDPOINT_ORDER.map((protocol) => {
+              const value = endpoints[protocol] ?? "";
+              const id = `add-channel-endpoint-${protocol}`;
+              const resolved = resolveEndpointRequestBase(protocol, value);
+              return (
+                <div key={protocol} className="contents">
+                  <FieldLabel htmlFor={id} hint={t(`settings.channelEndpointDesc.${protocol}`)}>
+                    {protocolLabel(protocol)}
+                  </FieldLabel>
+                  <div className="min-w-0 space-y-1">
+                    <Input
+                      id={id}
+                      className="h-8 font-mono text-xs shadow-none"
+                      value={value}
+                      placeholder={ENDPOINT_PLACEHOLDER[protocol]}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(event) => {
+                        const next = event.currentTarget.value;
+                        setError(null);
+                        setEndpoints((previous) => ({ ...previous, [protocol]: next }));
+                      }}
+                    />
+                    <p className="truncate font-mono text-[10.5px] leading-4 text-muted-foreground/70">
+                      {resolved.requestUrl ? (
+                        <>
+                          <span className="font-sans">
+                            {t("settings.channelRequestPathPreview")}
+                          </span>
+                          <span className="text-muted-foreground">{resolved.requestUrl}</span>
+                        </>
+                      ) : (
+                        <span className="font-sans">{t("settings.channelRequestPathHint")}</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </Section>
+
+          <section className="rounded-xl border bg-muted/20">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-foreground/85 transition-colors hover:text-foreground"
+              aria-expanded={presetOpen}
+              aria-controls="add-channel-preset"
+              onClick={() => setPresetOpen((previous) => !previous)}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {t("settings.channelFromPreset")}
+                {preset ? (
+                  <span className="ml-2 font-normal text-muted-foreground">{preset.name}</span>
+                ) : null}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                  presetOpen && "rotate-180",
+                )}
+              />
+            </button>
+            {presetOpen ? (
+              <div id="add-channel-preset" className="space-y-2.5 border-t px-3 py-3">
+                <p className="text-[10.5px] leading-relaxed text-muted-foreground/75">
+                  {t("settings.channelFromPresetHint")}
+                </p>
+                <Select value={presetId} onValueChange={applyPreset}>
+                  <SelectTrigger className="h-8 w-full bg-background text-xs shadow-none">
+                    <SelectValue>
+                      {preset ? (
+                        <span className="flex items-center gap-2">
+                          <ProviderAvatar preset={preset} className="h-5 w-5" />
+                          {preset.name}
+                          {preset.native ? `（${t("settings.channelNative")}）` : ""}
+                        </span>
+                      ) : (
+                        t("settings.channelFromPresetPlaceholder")
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {presets.map((item) => (
+                      <SelectItem key={item.id} value={item.id} className="text-xs">
+                        <span className="flex items-center gap-2">
+                          <ProviderAvatar preset={item} className="h-5 w-5" />
+                          {item.name}
+                          {item.native ? `（${t("settings.channelNative")}）` : ""}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {preset ? (
+                  <div className="space-y-1 text-[10.5px] leading-4 text-muted-foreground/75">
+                    <p>{t("settings.channelPresetApplied")}</p>
+                    {filledFromPreset.length > 0 ? (
+                      <ul className="space-y-0.5">
+                        {filledFromPreset.map((protocol) => (
+                          <li key={protocol} className="flex min-w-0 gap-2">
+                            <span className="w-[132px] shrink-0 truncate max-[520px]:w-auto">
+                              {protocolLabel(protocol)}
+                            </span>
+                            <span className="truncate font-mono text-muted-foreground">
+                              {endpoints[protocol]}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>{t("settings.channelPresetAppliedNone")}</p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        </DialogBody>
+        <DialogFooter className="bg-muted/20">
           {error ? (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="min-w-0 flex-1 text-xs text-destructive" role="alert">
               {error}
             </p>
           ) : null}
-        </DialogBody>
-        <DialogFooter className="bg-muted/20">
           <DialogActions>
             <Button variant="outline" className="h-8" onClick={() => setOpen(false)}>
               {t("settings.cancel")}

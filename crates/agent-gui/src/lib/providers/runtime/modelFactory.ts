@@ -10,7 +10,10 @@ import {
   type ThinkingLevelMap,
   toThinkingLevelMap,
 } from "@liveagent/ui/lib/models/modelThinking";
-import { inferEndpointQuirksFromBaseUrl } from "@liveagent/ui/lib/providers/registry/protocols";
+import {
+  hasApiVersionSegment,
+  inferEndpointQuirksFromBaseUrl,
+} from "@liveagent/ui/lib/providers/registry/protocols";
 import {
   type CodexRequestFormat,
   getProviderChatProtocolAdapter,
@@ -142,7 +145,8 @@ function deriveAnthropicCompatForCustomModel(
   return isAnthropicAdaptiveModelId(modelId) ? { forceAdaptiveThinking: true } : undefined;
 }
 
-function maybeAppendGeminiApiVersion(baseUrl: string) {
+function maybeAppendGeminiApiVersion(baseUrl: string, verbatim = false) {
+  if (verbatim) return baseUrl.trim().replace(/\/+$/, "");
   try {
     const url = new URL(baseUrl);
     let pathname = url.pathname.replace(/\/+$/, "");
@@ -176,15 +180,14 @@ function maybeAppendGeminiApiVersion(baseUrl: string) {
   }
 }
 
-function maybeAppendCodexApiVersion(baseUrl: string) {
+// 与 resolveEndpointRequestBase 同一口径：路径里已有任一版本段（/v1、/api/paas/v4、
+// /v1/custom-path …）就不再补；# 原样使用。
+function maybeAppendCodexApiVersion(baseUrl: string, verbatim = false) {
+  if (verbatim) return baseUrl.trim().replace(/\/+$/, "");
   try {
     const url = new URL(baseUrl);
     const pathname = url.pathname.replace(/\/+$/, "");
-    if (!/\/v1$/i.test(pathname)) {
-      url.pathname = `${pathname}/v1`;
-    } else {
-      url.pathname = pathname;
-    }
+    url.pathname = hasApiVersionSegment(baseUrl) ? pathname : `${pathname}/v1`;
     return url.toString().replace(/\/+$/, "");
   } catch {
     return baseUrl;
@@ -315,7 +318,10 @@ function resolveOpenAICompletionsCompat(params: {
   };
 }
 
-function normalizeCodexBaseUrl(baseUrl: string): {
+function normalizeCodexBaseUrl(
+  baseUrl: string,
+  verbatim = false,
+): {
   baseUrl: string;
   preferredApi?: CodexApi;
 } {
@@ -335,7 +341,7 @@ function normalizeCodexBaseUrl(baseUrl: string): {
   }
 
   return {
-    baseUrl: maybeAppendCodexApiVersion(normalized),
+    baseUrl: maybeAppendCodexApiVersion(normalized, verbatim),
     preferredApi,
   };
 }
@@ -353,6 +359,8 @@ export type ModelFactoryRoute = {
   wireModelId?: string;
   /** Model.baseUrl：经本地反代后的地址。 */
   baseUrl: string;
+  /** 地址以 # 结尾要求原样使用：不补 /v1、/v1beta。 */
+  baseUrlVerbatim?: boolean;
   /** 上游真实地址：官方域名判定（目录限额、Anthropic [1m] 后缀、OpenAI 官方兼容）。 */
   upstreamBaseUrl?: string;
   modelConfig?: ProviderModelConfig;
@@ -438,7 +446,10 @@ function buildOpenAIFamilyModel(
   },
 ): Model<Api> {
   const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  const { baseUrl: normalizedBaseUrl } = normalizeCodexBaseUrl(route.baseUrl);
+  const { baseUrl: normalizedBaseUrl } = normalizeCodexBaseUrl(
+    route.baseUrl,
+    route.baseUrlVerbatim === true,
+  );
   const provider = DIALECT_PROVIDER_IDS[route.dialect];
   const quirkCompat = quirksToCompat(route.quirks);
   const baseCompat =
@@ -534,7 +545,10 @@ export function createModelFromRoute(route: ModelFactoryRoute): Model<Api> {
   }
 
   if (route.protocol === "google-generative-ai") {
-    const normalizedBaseUrl = maybeAppendGeminiApiVersion(route.baseUrl);
+    const normalizedBaseUrl = maybeAppendGeminiApiVersion(
+      route.baseUrl,
+      route.baseUrlVerbatim === true,
+    );
     const known = resolveKnownModel("google", modelId, normalizedBaseUrl);
     if (known && known.api === "google-generative-ai") {
       return {
@@ -630,6 +644,7 @@ export function createModelFromRuntime(
     modelId: localModelId,
     wireModelId: resolveRuntimeWireModelId(runtime, localModelId),
     baseUrl,
+    ...(runtime.baseUrlVerbatim ? { baseUrlVerbatim: true } : {}),
     upstreamBaseUrl: runtime.baseUrl.trim(),
     modelConfig: runtime.modelConfig,
     quirks: runtime.quirks,
