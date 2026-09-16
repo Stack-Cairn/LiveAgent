@@ -2,8 +2,11 @@ import {
   type CatalogInputModality,
   type CatalogModality,
   type CatalogModelEntry,
+  type CatalogModelPricing,
   type CatalogModelStatus,
   type CatalogModelThinking,
+  type CatalogPriceRates,
+  type CatalogPriceTier,
   type CatalogProviderId,
   MODEL_CATALOG,
 } from "./catalog.generated";
@@ -25,8 +28,11 @@ export type {
   CatalogInputModality,
   CatalogModality,
   CatalogModelEntry,
+  CatalogModelPricing,
   CatalogModelStatus,
   CatalogModelThinking,
+  CatalogPriceRates,
+  CatalogPriceTier,
   CatalogProviderId,
 };
 
@@ -52,6 +58,22 @@ export function catalogEntryLimits(entry: CatalogModelEntry): CatalogModelLimits
     maxOutputToken: entry.maxOutputToken,
     ...(entry.maxInputTokens ? { maxInputTokens: entry.maxInputTokens } : {}),
   };
+}
+
+// 价格只是目录的展示元数据（models.dev 公布的原生标价，USD / 1M tokens）：
+// 项目不做计费，运行时喂给流式层的 Model.cost 仍为零，这里不参与任何计算。
+
+/** 展示用价格格式：`$0.15`、`$1.75`、`$14`；0 显示为 freeLabel（默认"免费"）。 */
+export function formatCatalogPrice(value: number, freeLabel = "免费"): string {
+  if (!Number.isFinite(value) || value < 0) return "—";
+  if (value === 0) return freeLabel;
+  // 目录里最多 6 位小数（models.dev 原值），去掉尾零后原样展示，不做四舍五入到分。
+  return `$${value.toFixed(6).replace(/\.?0+$/, "")}`;
+}
+
+/** 目录条目是否免费：输入与输出都公布为 0（未公布价格不算免费）。 */
+export function catalogEntryIsFree(entry: Pick<CatalogModelEntry, "pricing">): boolean {
+  return entry.pricing?.input === 0 && entry.pricing?.output === 0;
 }
 
 /** 应用供应商类型 → 目录 provider 的唯一映射点。 */

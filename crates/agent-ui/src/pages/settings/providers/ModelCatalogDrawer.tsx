@@ -1,6 +1,7 @@
 // "模型目录"浏览抽屉：只读地翻看 MODEL_CATALOG（models.dev + Codex models.json 的
 // 生成快照）。顶部说明来源 / 快照 / 刷新方式与"渠道里的修改是覆盖值、不改目录"，
-// 下面是搜索、分区下拉、能力过滤芯片与分页列表；点击一行展开 CatalogEntryDetails。
+// 下面是搜索、分区下拉、能力 / 免费过滤芯片与分页列表（行副标题带输入 / 输出简写
+// 价格）；点击一行展开 CatalogEntryDetails。
 // 入口：供应商页齿轮菜单的"模型目录"，以及编辑模型抽屉"目录信息"的"查看目录"
 //（预选该模型所在分区并把搜索词填成模型 id）。
 
@@ -27,6 +28,7 @@ import {
   CatalogEntryDetails,
   CatalogStatusChip,
   catalogLimitsText,
+  catalogPriceSummary,
   MODALITY_ICONS,
 } from "./ModelCatalogInfoPanel";
 import {
@@ -315,6 +317,7 @@ export function ModelCatalogDrawer(props: {
                                 ? `${t("settings.modelCatalogFamily")} ${entry.family}`
                                 : null,
                               catalogLimitsText(t, entry),
+                              catalogPriceSummary(t, entry),
                             ]
                               .filter(Boolean)
                               .join(" · ")}

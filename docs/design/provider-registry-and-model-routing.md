@@ -526,8 +526,9 @@ outputReserve = min(maxOutputToken, 用户请求的输出上限)
 | `thinking` | reasoning_options（effort 阶梯 / 开关 / 预算） | 思考档位（6.5） |
 | `toolCall` / `structuredOutput` / `attachment` / `temperature` | tool_call / structured_output / attachment / temperature | 能力默认值（6.1） |
 | `knowledge` / `releaseDate` / `lastUpdated` / `status` / `openWeights` / `interleaved` | 同名字段 | 目录信息面板：知识截止、发布与更新日期、beta / deprecated 标记 |
+| `pricing` | cost（input / output / cache_read / cache_write / reasoning / input_audio / output_audio、tiers、context_over_200k） | 目录信息面板的价格行与目录浏览抽屉的简写价格、"免费"过滤；仅展示 |
 
-不收录价格（项目已移除计费）。不收录"模型支持哪些接口"：models.dev 只描述供应商适配器，接口归属由渠道端点 + 预设逐模型规则 + 模型系列偏好决定（4.10），目录信息面板把这条推导链展示出来而不是另存一份。
+收录 models.dev 公布的原生价格（USD / 1M tokens）仅作展示；不做计费，运行时 `Model.cost` 仍为零。不收录"模型支持哪些接口"：models.dev 只描述供应商适配器，接口归属由渠道端点 + 预设逐模型规则 + 模型系列偏好决定（4.10），目录信息面板把这条推导链展示出来而不是另存一份。
 
 **获取与刷新。**
 

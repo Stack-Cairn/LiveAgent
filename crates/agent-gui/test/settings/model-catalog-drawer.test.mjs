@@ -19,6 +19,7 @@ const glm = {
   inputModalities: ["text"],
   thinking: { levels: [], off: true },
   toolCall: true,
+  pricing: { input: 1, output: 3.2, cacheRead: 0.2 },
 };
 const glmVision = {
   id: "glm-4.6v",
@@ -28,6 +29,7 @@ const glmVision = {
   maxOutputToken: 32_000,
   inputModalities: ["text", "image", "video"],
   toolCall: true,
+  pricing: { input: 0, output: 0 },
 };
 const legacy = {
   id: "MiniMax-Text-01",
@@ -86,6 +88,43 @@ test("filters read the raw catalog flags", () => {
   assert.equal(browser.catalogEntryMatchesFilter(legacy, "tools"), false);
   assert.equal(browser.catalogEntryMatchesFilter(legacy, "deprecated"), true);
   assert.equal(browser.catalogEntryMatchesFilter(glm, "deprecated"), false);
+});
+
+test("free filter keeps only entries priced at zero for both input and output", () => {
+  assert.ok(browser.CATALOG_BROWSER_FILTERS.includes("free"));
+  assert.equal(browser.catalogEntryMatchesFilter(glmVision, "free"), true);
+  assert.equal(browser.catalogEntryMatchesFilter(glm, "free"), false);
+  // 未公布价格不算免费。
+  assert.equal(browser.catalogEntryMatchesFilter(legacy, "free"), false);
+  const free = browser.filterCatalogRows({
+    sectionId: "all",
+    query: "",
+    filters: ["free"],
+    catalog,
+  });
+  assert.deepEqual(
+    free.map((row) => row.entry.id),
+    ["glm-4.6v"],
+  );
+  // 与其他芯片取交集；排序仍是目录顺序。
+  const freeTools = browser.filterCatalogRows({
+    sectionId: "all",
+    query: "",
+    filters: new Set(["free", "tools"]),
+    catalog,
+  });
+  assert.deepEqual(
+    freeTools.map((row) => row.entry.id),
+    ["glm-4.6v"],
+  );
+  const realFree = browser.filterCatalogRows({ sectionId: "zhipuai", query: "", filters: ["free"] });
+  assert.ok(realFree.some((row) => row.entry.id === "glm-4.7-flash"));
+  assert.ok(
+    realFree.every((row) => row.entry.pricing.input === 0 && row.entry.pricing.output === 0),
+  );
+  const ids = MODEL_CATALOG.zhipuai.map((entry) => entry.id);
+  const positions = realFree.map((row) => ids.indexOf(row.entry.id));
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
 });
 
 test("filterCatalogRows intersects section, query and filter chips", () => {

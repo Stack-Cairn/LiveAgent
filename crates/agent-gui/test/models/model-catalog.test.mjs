@@ -58,7 +58,7 @@ const MODEL_CAP = 400;
 // 与生成脚本 MODALITIES 同值：模态字段的合法值全集兼规范顺序。
 const INPUT_MODALITIES = ["text", "image", "audio", "video", "pdf"];
 
-// 与生成脚本 ENTRY_FIELD_ORDER 同值：目录条目允许的全部字段（不含价格）。
+// 与生成脚本 ENTRY_FIELD_ORDER 同值：目录条目允许的全部字段。
 const ENTRY_FIELDS = new Set([
   "id",
   "name",
@@ -79,7 +79,19 @@ const ENTRY_FIELDS = new Set([
   "status",
   "openWeights",
   "interleaved",
+  "pricing",
 ]);
+// 与生成脚本 PRICE_RATE_FIELDS / PRICE_TIER_RATE_FIELDS 同值。
+const PRICE_RATE_FIELDS = new Set([
+  "input",
+  "output",
+  "cacheRead",
+  "cacheWrite",
+  "reasoning",
+  "inputAudio",
+  "outputAudio",
+]);
+const PRICE_TIER_RATE_FIELDS = new Set(["input", "output", "cacheRead", "cacheWrite"]);
 const FLAG_FIELDS = ["toolCall", "structuredOutput", "attachment", "temperature", "openWeights", "interleaved"];
 const DATE_FIELDS = ["knowledge", "releaseDate", "lastUpdated"];
 
@@ -122,7 +134,7 @@ test("generated catalog upholds the data invariants", () => {
           `${label}: maxInputTokens must be a positive integer within the window`,
         );
       }
-      // 计费功能已移除：目录条目只承载限额、模态、思考能力与描述性事实。
+      // 目录条目只承载限额、模态、思考能力、描述性事实与展示用的原生价格。
       for (const key of Object.keys(entry)) {
         assert.ok(ENTRY_FIELDS.has(key), `${label}: unexpected field ${key}`);
       }
@@ -155,8 +167,92 @@ test("generated catalog upholds the data invariants", () => {
       if (entry.thinking) {
         assert.deepEqual(Object.keys(entry.thinking).sort(), ["levels", "off"], label);
       }
+      if (entry.pricing) assertPricingInvariants(entry.pricing, label);
     }
   }
+});
+
+// 价格是展示用元数据（USD / 1M tokens，models.dev 原值）：费率非负有限数，
+// 分层按 contextOver 严格递增且不含未知字段。
+function assertRates(rates, allowed, label) {
+  assert.ok(rates && typeof rates === "object", `${label}: rates must be an object`);
+  const keys = Object.keys(rates).filter((key) => key !== "contextOver");
+  assert.ok(keys.length > 0, `${label}: empty rates`);
+  for (const key of keys) {
+    assert.ok(allowed.has(key), `${label}: unexpected rate ${key}`);
+    const value = rates[key];
+    assert.ok(
+      typeof value === "number" && Number.isFinite(value) && value >= 0,
+      `${label}: ${key} must be a non-negative number, got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+function assertPricingInvariants(pricing, label) {
+  const { contextOver200k, tiers, ...rates } = pricing;
+  assertRates(rates, PRICE_RATE_FIELDS, `${label}: pricing`);
+  assert.ok(
+    rates.input !== undefined && rates.output !== undefined,
+    `${label}: pricing must carry input and output`,
+  );
+  if (contextOver200k !== undefined) {
+    assertRates(contextOver200k, PRICE_TIER_RATE_FIELDS, `${label}: pricing.contextOver200k`);
+  }
+  if (tiers !== undefined) {
+    assert.ok(Array.isArray(tiers) && tiers.length > 0, `${label}: pricing.tiers must be non-empty`);
+    let previous = 0;
+    for (const tier of tiers) {
+      assert.ok(
+        Number.isInteger(tier.contextOver) && tier.contextOver > previous,
+        `${label}: pricing.tiers must be strictly ascending by contextOver`,
+      );
+      previous = tier.contextOver;
+      assertRates(tier, PRICE_TIER_RATE_FIELDS, `${label}: pricing.tiers ${tier.contextOver}`);
+    }
+  }
+}
+
+test("catalog keeps models.dev list prices verbatim as display-only metadata", () => {
+  // gpt-5.2 是 Codex 主源合并条目：Codex models.json 不发价格，沿用 models.dev 同 id 的标价。
+  assert.deepEqual(catalog.findCatalogModel("codex", "gpt-5.2").pricing, {
+    input: 1.75,
+    output: 14,
+    cacheRead: 0.175,
+  });
+  assert.deepEqual(catalog.findCatalogModel("claude_code", "claude-opus-4-6").pricing, {
+    input: 5,
+    output: 25,
+    cacheRead: 0.5,
+    cacheWrite: 6.25,
+  });
+  // 绝大多数条目带价格；未公布的（本地运行时等）保持字段缺席而不是伪造 0。
+  const entries = Object.values(catalog.MODEL_CATALOG).flat();
+  const priced = entries.filter((entry) => entry.pricing !== undefined).length;
+  assert.ok(priced > entries.length * 0.9, `only ${priced} of ${entries.length} entries are priced`);
+  assert.ok(entries.some((entry) => entry.pricing?.tiers !== undefined), "tiers must be extracted");
+  assert.ok(entries.some((entry) => entry.pricing === undefined), "unpriced entries stay unpriced");
+});
+
+test("formatCatalogPrice and catalogEntryIsFree are display helpers over the raw rates", () => {
+  assert.equal(catalog.formatCatalogPrice(0.15), "$0.15");
+  assert.equal(catalog.formatCatalogPrice(1.75), "$1.75");
+  assert.equal(catalog.formatCatalogPrice(14), "$14");
+  assert.equal(catalog.formatCatalogPrice(0.175), "$0.175");
+  assert.equal(catalog.formatCatalogPrice(0.11875), "$0.11875");
+  assert.equal(catalog.formatCatalogPrice(1000), "$1000");
+  assert.equal(catalog.formatCatalogPrice(0), "免费");
+  assert.equal(catalog.formatCatalogPrice(0, "Free"), "Free");
+  assert.equal(catalog.formatCatalogPrice(-1), "—");
+  assert.equal(catalog.formatCatalogPrice(Number.NaN), "—");
+  assert.equal(catalog.catalogEntryIsFree({ pricing: { input: 0, output: 0 } }), true);
+  assert.equal(catalog.catalogEntryIsFree({ pricing: { input: 0, output: 0.5 } }), false);
+  assert.equal(catalog.catalogEntryIsFree({ pricing: { input: 0 } }), false);
+  assert.equal(catalog.catalogEntryIsFree({}), false);
+  assert.equal(catalog.catalogEntryIsFree(catalog.findCatalogModel("codex", "gpt-5.2")), false);
+  assert.equal(
+    catalog.catalogEntryIsFree(catalog.findCatalogModelInSection("zhipuai", "glm-4.7-flash").entry),
+    true,
+  );
 });
 
 test("catalog carries the capability, limit and lifecycle facts models.dev publishes", () => {

@@ -396,8 +396,7 @@ function normalizeCodexThinking(model, supplementalThinking, label) {
 // ---------------------------------------------------------------------------
 // models.dev treats its boolean capability fields as "absent == false"; only
 // `true` is recorded so the generated file stays compact and consumers can
-// read "catalog hit + field absent" as unsupported. Pricing is intentionally
-// not extracted (the app has no billing features).
+// read "catalog hit + field absent" as unsupported.
 const STATUSES = new Set(["beta", "deprecated"]);
 
 function nonEmptyString(value) {
@@ -429,6 +428,78 @@ function descriptiveFields(model, id, label) {
       ? { interleaved: true }
       : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Pricing (display-only)
+// ---------------------------------------------------------------------------
+// models.dev `cost` publishes USD per 1M tokens: flat rates (input / output /
+// cache_read / cache_write / reasoning / input_audio / output_audio), an
+// optional `tiers` ladder ({ tier: { type: "context", size }, ...rates }) for
+// long-context surcharges, and the legacy `context_over_200k` block. Values
+// are copied verbatim (no rounding); the app has no billing — the runtime
+// still feeds zero cost to the streaming layer — so this is catalog metadata
+// for the info panel and the catalog browser only. Codex models.json publishes
+// no prices; the openai merge keeps the models.dev rate for the same id.
+const PRICE_RATE_FIELDS = [
+  ["input", "input"],
+  ["output", "output"],
+  ["cache_read", "cacheRead"],
+  ["cache_write", "cacheWrite"],
+  ["reasoning", "reasoning"],
+  ["input_audio", "inputAudio"],
+  ["output_audio", "outputAudio"],
+];
+const PRICE_TIER_RATE_FIELDS = PRICE_RATE_FIELDS.slice(0, 4);
+
+function normalizePriceRates(raw, fields, label) {
+  if (!raw || typeof raw !== "object") return undefined;
+  const rates = {};
+  for (const [upstreamKey, key] of fields) {
+    const value = raw[upstreamKey];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      console.error(`note ${label}: invalid cost.${upstreamKey} ${JSON.stringify(value)} dropped`);
+      continue;
+    }
+    rates[key] = value;
+  }
+  return Object.keys(rates).length > 0 ? rates : undefined;
+}
+
+function normalizePricing(model, label) {
+  const cost = model?.cost;
+  if (!cost || typeof cost !== "object") return undefined;
+  const pricing = normalizePriceRates(cost, PRICE_RATE_FIELDS, label) ?? {};
+  const contextOver200k = normalizePriceRates(
+    cost.context_over_200k,
+    PRICE_TIER_RATE_FIELDS,
+    `${label} context_over_200k`,
+  );
+  if (contextOver200k) pricing.contextOver200k = contextOver200k;
+  if (Array.isArray(cost.tiers)) {
+    const tiers = [];
+    for (const tier of cost.tiers) {
+      const size = tier?.tier?.size;
+      if (tier?.tier?.type !== "context" || !Number.isInteger(size) || size <= 0) {
+        console.error(`note ${label}: unknown cost tier ${JSON.stringify(tier?.tier)} dropped`);
+        continue;
+      }
+      const rates = normalizePriceRates(tier, PRICE_TIER_RATE_FIELDS, `${label} tier ${size}`);
+      if (!rates) continue;
+      tiers.push({ contextOver: size, ...rates });
+    }
+    tiers.sort((a, b) => a.contextOver - b.contextOver);
+    for (let i = 1; i < tiers.length; i += 1) {
+      if (tiers[i].contextOver === tiers[i - 1].contextOver) {
+        console.error(`note ${label}: duplicate cost tier ${tiers[i].contextOver} dropped`);
+        tiers.splice(i, 1);
+        i -= 1;
+      }
+    }
+    if (tiers.length > 0) pricing.tiers = tiers;
+  }
+  return Object.keys(pricing).length > 0 ? pricing : undefined;
 }
 
 function normalizeMaxInputTokens(model, contextWindow, label) {
@@ -632,6 +703,7 @@ function extractSection(section, upstream, codexModels) {
       const inputModalities = normalizeModalities(model?.modalities?.input, label);
       const outputModalities = normalizeOutputModalities(model?.modalities?.output, label);
       const maxInputTokens = normalizeMaxInputTokens(model, contextWindow, label);
+      const pricing = normalizePricing(model, label);
       entries.push({
         id,
         contextWindow,
@@ -641,6 +713,7 @@ function extractSection(section, upstream, codexModels) {
         ...(outputModalities ? { outputModalities } : {}),
         ...(thinking ? { thinking } : {}),
         ...descriptiveFields(model, id, label),
+        ...(pricing ? { pricing } : {}),
       });
     }
   }
@@ -698,13 +771,27 @@ const ENTRY_FIELD_ORDER = [
   "status",
   "openWeights",
   "interleaved",
+  "pricing",
 ];
+
+// Nested plain objects (pricing) render with bare keys like the entries
+// themselves; numbers go through JSON.stringify so the exact upstream value
+// survives the round trip.
+function renderObject(value) {
+  if (Array.isArray(value)) return `[${value.map((item) => renderObject(item)).join(", ")}]`;
+  if (value && typeof value === "object") {
+    const parts = Object.entries(value).map(([key, item]) => `${key}: ${renderObject(item)}`);
+    return `{ ${parts.join(", ")} }`;
+  }
+  return JSON.stringify(value);
+}
 
 function renderValue(key, value) {
   if (key === "thinking") {
     const levels = value.levels.map((level) => JSON.stringify(level)).join(", ");
     return `{ levels: [${levels}], off: ${value.off} }`;
   }
+  if (key === "pricing") return renderObject(value);
   if (Array.isArray(value)) return `[${value.map((item) => JSON.stringify(item)).join(", ")}]`;
   return JSON.stringify(value);
 }
@@ -729,8 +816,9 @@ function renderCatalog(catalog, truncated, snapshotDate) {
     "// Section order is the lookup order of findCatalogModelAcrossProviders; every",
     "// section keeps its own full list (presets list models per channel), so the",
     "// same id may appear under several sections. Boolean capability fields are",
-    "// only written when true (models.dev semantics: absent == false); pricing is",
-    "// not extracted.",
+    "// only written when true (models.dev semantics: absent == false). Pricing is",
+    "// models.dev `cost` verbatim (USD per 1M tokens) for display only — the app",
+    "// does no billing.",
   ];
   if (truncated.length > 0) {
     lines.push(`// Sections truncated to the first ${MODEL_CAP} ids (sorted):`);
@@ -751,6 +839,29 @@ function renderCatalog(catalog, truncated, snapshotDate) {
     "  levels: readonly CatalogThinkingLevel[];",
     "  /** Whether thinking can be turned off. */",
     "  off: boolean;",
+    "};",
+    "",
+    "/** USD per 1M tokens; each rate is absent when upstream publishes none. */",
+    "export type CatalogPriceRates = {",
+    "  input?: number;",
+    "  output?: number;",
+    "  cacheRead?: number;",
+    "  cacheWrite?: number;",
+    "};",
+    "",
+    "export type CatalogPriceTier = CatalogPriceRates & {",
+    "  /** Rates apply once the context exceeds this many tokens. */",
+    "  contextOver: number;",
+    "};",
+    "",
+    "export type CatalogModelPricing = CatalogPriceRates & {",
+    "  reasoning?: number;",
+    "  inputAudio?: number;",
+    "  outputAudio?: number;",
+    "  /** Legacy long-context block (models.dev cost.context_over_200k). */",
+    "  contextOver200k?: CatalogPriceRates;",
+    "  /** Long-context surcharges, ascending by contextOver (models.dev cost.tiers). */",
+    "  tiers?: readonly CatalogPriceTier[];",
     "};",
     "",
     "export type CatalogModelEntry = {",
@@ -784,6 +895,8 @@ function renderCatalog(catalog, truncated, snapshotDate) {
     "  openWeights?: true;",
     "  /** Supports interleaved thinking between tool calls. */",
     "  interleaved?: true;",
+    "  /** Published list price (models.dev cost), display only; absent = not published. */",
+    "  pricing?: CatalogModelPricing;",
     "};",
     "",
     `export type CatalogProviderId = ${keys.map((key) => JSON.stringify(key)).join(" | ")};`,

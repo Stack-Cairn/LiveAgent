@@ -1,5 +1,6 @@
 // "编辑模型"抽屉里的"目录信息"面板（设计文档 6.6）：只读展示目录命中的分区与
-// 条目、快照日期、系列、日期、状态、输入 / 输出模态、原始能力位与限额三项。
+// 条目、快照日期、系列、日期、状态、输入 / 输出模态、原始能力位、限额三项与
+// models.dev 公布的原生价格（仅展示，不计费）。
 // 未命中时说明能力与限额按启发式，可手动覆盖。条目详情本身抽成 CatalogEntryDetails
 // （只吃 CatalogModelEntry + 分区），"模型目录"浏览抽屉展开一行时复用同一份。
 
@@ -16,7 +17,10 @@ import type { ResolvedModelCatalogInfo } from "@liveagent/ui/lib/models/modelCap
 import {
   type CatalogModality,
   type CatalogModelEntry,
+  type CatalogPriceRates,
   type CatalogProviderId,
+  catalogEntryIsFree,
+  formatCatalogPrice,
   MODEL_CATALOG_SNAPSHOT_DATE,
 } from "@liveagent/ui/lib/models/modelCatalog";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -100,6 +104,79 @@ export function catalogLimitsText(t: (key: string) => string, entry: CatalogMode
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+type PriceRateKey = keyof CatalogPriceRates | "reasoning" | "inputAudio" | "outputAudio";
+const PRICE_RATE_KEYS: readonly PriceRateKey[] = ["input", "output", "cacheRead", "cacheWrite"];
+const PRICE_EXTRA_KEYS: readonly PriceRateKey[] = ["reasoning", "inputAudio", "outputAudio"];
+
+/** 一组费率拼成"输入 $1.75 · 输出 $14 · 缓存读 $0.175"；未公布的项跳过。 */
+function priceRatesText(
+  t: (key: string) => string,
+  rates: Partial<Record<PriceRateKey, number>>,
+  keys: readonly PriceRateKey[],
+): string {
+  const free = t("settings.modelCatalogPriceFree");
+  const parts: string[] = [];
+  for (const key of keys) {
+    const value = rates[key];
+    if (value === undefined) continue;
+    parts.push(`${t(`settings.modelCatalogPrice.${key}`)} ${formatCatalogPrice(value, free)}`);
+  }
+  return parts.join(" · ");
+}
+
+/** 列表行副标题的简写价格：`$1.75 / $14`（输入 / 输出）；免费模型显示"免费"。 */
+export function catalogPriceSummary(
+  t: (key: string) => string,
+  entry: CatalogModelEntry,
+): string | undefined {
+  const pricing = entry.pricing;
+  if (!pricing || (pricing.input === undefined && pricing.output === undefined)) return undefined;
+  const free = t("settings.modelCatalogPriceFree");
+  if (catalogEntryIsFree(entry)) return free;
+  return [pricing.input, pricing.output]
+    .map((value) => (value === undefined ? "—" : formatCatalogPrice(value, free)))
+    .join(" / ");
+}
+
+/** 价格一行：主费率 + 分层（tiers / 超 200K）小字；目录没给价格时说明"目录未提供"。 */
+function CatalogPricing(props: { entry: CatalogModelEntry }) {
+  const { t } = useLocale();
+  const pricing = props.entry.pricing;
+  if (!pricing) {
+    return (
+      <span className="text-muted-foreground/70">{t("settings.modelCatalogPricingMissing")}</span>
+    );
+  }
+  const main = priceRatesText(t, pricing, PRICE_RATE_KEYS);
+  const extra = priceRatesText(t, pricing, PRICE_EXTRA_KEYS);
+  // 上游同时发 tiers 与 context_over_200k 时两者常重复；有 200K 分层就不再重复列。
+  const tiers = pricing.tiers ?? [];
+  const over200k =
+    pricing.contextOver200k && !tiers.some((tier) => tier.contextOver === 200_000)
+      ? [{ contextOver: 200_000, ...pricing.contextOver200k }]
+      : [];
+  const ladder = [...tiers, ...over200k].sort((a, b) => a.contextOver - b.contextOver);
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="tabular-nums">
+        {[main, extra].filter(Boolean).join(" · ") || t("settings.modelCatalogUnpublished")}
+        <span className="ml-1.5 text-[10.5px] text-muted-foreground">
+          {t("settings.modelCatalogPricingUnit")}
+        </span>
+      </span>
+      {ladder.map((tier) => (
+        <span key={tier.contextOver} className="text-[10.5px] tabular-nums text-muted-foreground">
+          {t("settings.modelCatalogPriceTier").replace(
+            "{size}",
+            formatTokenCount(tier.contextOver),
+          )}
+          ：{priceRatesText(t, tier, PRICE_RATE_KEYS)}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 /**
@@ -203,6 +280,9 @@ export function CatalogEntryDetails(props: {
       </Row>
       <Row label={t("settings.modelLimits")}>
         <span className="tabular-nums">{catalogLimitsText(t, entry)}</span>
+      </Row>
+      <Row label={t("settings.modelCatalogPricing")}>
+        <CatalogPricing entry={entry} />
       </Row>
     </div>
   );

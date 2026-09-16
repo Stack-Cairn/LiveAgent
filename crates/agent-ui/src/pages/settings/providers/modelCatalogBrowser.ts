@@ -5,6 +5,7 @@
 import {
   type CatalogModelEntry,
   type CatalogProviderId,
+  catalogEntryIsFree,
   MODEL_CATALOG,
   normalizeModelIdCandidates,
 } from "@liveagent/ui/lib/models/modelCatalog";
@@ -17,6 +18,7 @@ export const CATALOG_BROWSER_FILTERS = [
   "file",
   "reasoning",
   "tools",
+  "free",
   "deprecated",
 ] as const;
 export type CatalogBrowserFilter = (typeof CATALOG_BROWSER_FILTERS)[number];
@@ -84,6 +86,8 @@ export function catalogEntryMatchesFilter(
       return entry.thinking !== undefined;
     case "tools":
       return entry.toolCall === true;
+    case "free":
+      return catalogEntryIsFree(entry);
     case "deprecated":
       return entry.status === "deprecated";
   }
