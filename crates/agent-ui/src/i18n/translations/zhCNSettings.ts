@@ -1298,8 +1298,6 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.channelAddDescription":
     "自定义中转、聚合网关或尚未内置的厂商。填地址与 Key 后按已填接口探测并拉取模型。",
   "settings.channelAddAndProbe": "添加并探测",
-  "settings.channelAddInstance": "再加一个实例",
-  "settings.channelAddInstanceHint": "同一渠道再加一个账号或地址",
   "settings.channelAddManually": "手动填写地址",
   "settings.channelApiKeyPlaceholder": "输入 API 密钥；本地服务可留空",
   "settings.channelAuthLabel": "鉴权：",

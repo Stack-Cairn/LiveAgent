@@ -1024,20 +1024,14 @@ export function createProviderFromAutoConfiguration(params: {
   });
 }
 
-/**
- * "添加渠道"对话框：按用户填写的端点直接创建实例，模型待探测。
- * `template` 是"再加一个实例"的来源实例：沿用其方言与各端点的方言 / 鉴权头 /
- * quirks / 模型列表地址（同一网关的接口形态一致）。
- */
+/** "添加渠道"对话框：按用户填写的端点直接创建实例，模型待探测。 */
 export function createProviderFromEndpoints(params: {
   name: string;
   preset: ProviderPreset | undefined;
   apiKey: string;
   endpoints: Partial<Record<ProviderChatProtocol, string>>;
-  template?: CustomProvider;
 }): CustomProvider {
-  const { preset, template } = params;
-  const templateEndpoints = template ? materializedEndpointConfigs(template) : {};
+  const { preset } = params;
   const filled = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => params.endpoints[protocol]?.trim());
   const order: ProviderChatProtocol[] = [
     "openai-completions",
@@ -1052,22 +1046,20 @@ export function createProviderFromEndpoints(params: {
   const endpointConfigs: NonNullable<CustomProvider["endpointConfigs"]> = {};
   for (const protocol of filled) {
     const presetEndpoint = preset?.endpoints[protocol];
-    const fromTemplate = templateEndpoints[protocol];
-    const dialect = fromTemplate?.dialect ?? presetEndpoint?.dialect;
-    const quirks = fromTemplate?.quirks ?? presetEndpoint?.quirks;
-    const auth = fromTemplate?.auth ?? presetEndpoint?.auth;
-    const modelsUrl = fromTemplate?.modelsUrl ?? presetEndpoint?.modelsUrl;
+    const dialect = presetEndpoint?.dialect;
+    const quirks = presetEndpoint?.quirks;
+    const auth = presetEndpoint?.auth;
+    const modelsUrl = presetEndpoint?.modelsUrl;
     endpointConfigs[protocol] = {
       baseUrl: params.endpoints[protocol]?.trim() ?? "",
-      ...(fromTemplate?.isFullUrl ? { isFullUrl: true } : {}),
       ...(dialect ? { dialect } : {}),
       ...(quirks ? { quirks } : {}),
       ...(auth ? { auth } : {}),
       ...(modelsUrl ? { modelsUrl } : {}),
-      source: fromTemplate ? "user" : presetEndpoint ? "auto" : "user",
+      source: presetEndpoint ? "auto" : "user",
     };
   }
-  const providerDialect = template?.dialect ?? preset?.dialect;
+  const providerDialect = preset?.dialect;
   const apiKey = params.apiKey.trim();
   return normalizeCustomProvider({
     id: createUuid(),
@@ -1097,18 +1089,7 @@ export function createProviderFromEndpoints(params: {
     reasoning: "off",
     promptCachingEnabled: true,
     nativeWebSearchEnabled: true,
-    useSystemProxy: template?.useSystemProxy ?? false,
+    useSystemProxy: false,
     usageQuery: getDefaultUsageQueryConfig(),
   });
-}
-
-/** "再加一个实例"的默认名：原名 + " · N"（已有同名时递增）。 */
-export function instanceNameForCopy(
-  source: CustomProvider,
-  providers: readonly CustomProvider[],
-): string {
-  const base = source.name.replace(/\s·\s\d+$/, "").trim() || source.name;
-  let index = 2;
-  while (providers.some((provider) => provider.name === `${base} · ${index}`)) index += 1;
-  return `${base} · ${index}`;
 }

@@ -1362,8 +1362,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelAddDescription":
     "A custom relay, aggregator gateway, or a vendor not yet built in. Fill in the address and key; the filled endpoints are probed and models fetched.",
   "settings.channelAddAndProbe": "Add and probe",
-  "settings.channelAddInstance": "Add another instance",
-  "settings.channelAddInstanceHint": "Another account or address for the same channel",
   "settings.channelAddManually": "Enter addresses manually",
   "settings.channelApiKeyPlaceholder": "API key; leave empty for local services",
   "settings.channelAuthLabel": "Auth: ",

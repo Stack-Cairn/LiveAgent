@@ -31,6 +31,7 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { CUSTOM_PRESET_ID } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
@@ -84,7 +85,6 @@ export type ProviderDetailProps = SettingsSectionProps & {
   onProbeConfigure: () => void;
   onQuickCheck: () => void;
   onRefreshModels: () => void;
-  onAddInstance: () => void;
   onDelete: () => void;
   onBack: () => void;
   busy: "check" | "refresh" | null;
@@ -378,7 +378,6 @@ export function ProviderDetail(props: ProviderDetailProps) {
     onProbeConfigure,
     onQuickCheck,
     onRefreshModels,
-    onAddInstance,
     onDelete,
     onBack,
     busy,
@@ -387,6 +386,8 @@ export function ProviderDetail(props: ProviderDetailProps) {
   } = props;
   const { t } = useLocale();
   const preset = presetForProvider(provider);
+  /** 预设厂商的名称固定，只有自定义渠道可以改名 */
+  const nameEditable = preset.id === CUSTOM_PRESET_ID;
   const defaultProtocol = providerDefaultProtocol(provider);
   const defaultEndpoint = readEndpoint(provider, defaultProtocol);
   const configured = providerConfiguredProtocols(provider);
@@ -450,27 +451,21 @@ export function ProviderDetail(props: ProviderDetailProps) {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <ProviderAvatar preset={preset} className="h-10 w-10" />
-        <CommittedInput
-          value={provider.name}
-          className="h-8 w-56 min-w-0 max-w-full border-transparent bg-transparent px-2 text-base font-semibold tracking-tight shadow-none hover:border-border focus-visible:border-border max-[760px]:w-auto max-[760px]:flex-1 max-[760px]:basis-40"
-          aria-label={t("settings.channelName")}
-          onCommit={(value) => {
-            const name = value.trim();
-            if (name) onChange((current) => ({ ...current, name }));
-          }}
-        />
-        <Chip>{preset.name}</Chip>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-[11px] text-muted-foreground"
-          onClick={onAddInstance}
-          title={t("settings.channelAddInstanceHint")}
-        >
-          <Plus className="h-3 w-3" />
-          {t("settings.channelAddInstance")}
-        </Button>
+        {nameEditable ? (
+          <CommittedInput
+            value={provider.name}
+            className="h-8 w-56 min-w-0 max-w-full border-transparent bg-transparent px-2 text-base font-semibold tracking-tight shadow-none hover:border-border focus-visible:border-border max-[760px]:w-auto max-[760px]:flex-1 max-[760px]:basis-40"
+            aria-label={t("settings.channelName")}
+            onCommit={(value) => {
+              const name = value.trim();
+              if (name) onChange((current) => ({ ...current, name }));
+            }}
+          />
+        ) : (
+          <span className="min-w-0 max-w-full truncate px-2 text-base font-semibold tracking-tight">
+            {provider.name}
+          </span>
+        )}
         <span className="settings-provider-detail-actions ml-auto flex items-center gap-2">
           <ProviderCopyConfigButton provider={provider} />
           <ConfirmDeletePopover name={provider.name} onConfirm={onDelete}>

@@ -94,11 +94,7 @@ export function ProvidersSection(
   const [selection, setSelection] = useState<ProviderSelection>(() => defaultSelection(providers));
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [drawer, setDrawer] = useState<ProviderDrawerState>(null);
-  const [addChannel, setAddChannel] = useState<{
-    presetId?: string;
-    /** "再加一个实例"的来源实例：预填名称、类型、端点地址与方言 */
-    sourceProvider?: CustomProvider;
-  } | null>(null);
+  const [addChannel, setAddChannel] = useState<{ presetId?: string } | null>(null);
   const [customSettingsOpen, setCustomSettingsOpen] = useState(false);
   const [probeSession, setProbeSession] = useState<ProbeSession | null>(null);
   const [busy, setBusy] = useState<{ providerId: string; kind: "check" | "refresh" } | null>(null);
@@ -507,12 +503,6 @@ export function ProvidersSection(
                 onProbeConfigure={() => probeConfigure(selectedProvider)}
                 onQuickCheck={() => void quickCheck(selectedProvider)}
                 onRefreshModels={() => void refreshModels(selectedProvider)}
-                onAddInstance={() =>
-                  setAddChannel({
-                    presetId: selectedProvider.presetId,
-                    sourceProvider: selectedProvider,
-                  })
-                }
                 onDelete={() => deleteProvider(selectedProvider.id)}
                 onBack={() => setMobileDetailOpen(false)}
                 busy={busy?.providerId === selectedProvider.id ? busy.kind : null}
@@ -573,7 +563,6 @@ export function ProvidersSection(
         <AddChannelDialog
           providers={providers}
           initialPresetId={addChannel.presetId}
-          sourceProvider={addChannel.sourceProvider}
           onCreate={createFromDialog}
           onClose={() => setAddChannel(null)}
         />

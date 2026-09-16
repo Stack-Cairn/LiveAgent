@@ -1,7 +1,6 @@
 // "添加渠道"对话框（设计文档 7）：自定义中转、聚合网关或尚未内置的厂商。
 // 渠道头像（预设 logo / 中性图标）、名称、API 密钥、四类接口的 Base URL（两类常显、两类折叠），
-// 填根地址后即时显示实际请求路径；"从预设创建（可选）"填入该渠道的接口与地址；
-// "再加一个实例"从来源实例预填名称、类型、端点地址与方言。
+// 填根地址后即时显示实际请求路径；"从预设创建（可选）"填入该渠道的接口与地址。
 
 import {
   type CustomProvider,
@@ -40,13 +39,8 @@ import {
 } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
-import { Chip, dialectLabel, ProviderAvatar, protocolLabel, SecretInput } from "./providerChips";
-import {
-  createProviderFromEndpoints,
-  instanceNameForCopy,
-  instanceNameForPreset,
-  materializedEndpointConfigs,
-} from "./providerSettingsModel";
+import { ProviderAvatar, protocolLabel, SecretInput } from "./providerChips";
+import { createProviderFromEndpoints, instanceNameForPreset } from "./providerSettingsModel";
 
 const PRIMARY_PROTOCOLS: ProviderChatProtocol[] = ["openai-completions", "anthropic-messages"];
 const MORE_PROTOCOLS: ProviderChatProtocol[] = ["openai-responses", "google-generative-ai"];
@@ -63,16 +57,6 @@ function endpointsFromPreset(
   return out;
 }
 
-function endpointsFromProvider(
-  provider: CustomProvider,
-): Partial<Record<ProviderChatProtocol, string>> {
-  const out: Partial<Record<ProviderChatProtocol, string>> = {};
-  for (const [protocol, config] of Object.entries(materializedEndpointConfigs(provider))) {
-    if (config?.baseUrl) out[protocol as ProviderChatProtocol] = config.baseUrl;
-  }
-  return out;
-}
-
 function requestPathPreview(protocol: ProviderChatProtocol, baseUrl: string): string {
   const root = baseUrl.trim().replace(/\/+$/, "");
   if (protocol === "anthropic-messages" && /\/v1$/i.test(root)) return `${root}/messages`;
@@ -83,39 +67,25 @@ export function AddChannelDialog(props: {
   providers: readonly CustomProvider[];
   /** 从未配置渠道的"手动填写地址"进入：按预设预填 */
   initialPresetId?: string;
-  /** "再加一个实例"：按来源实例预填名称、类型、四个端点地址与方言 */
-  sourceProvider?: CustomProvider;
   onCreate: (provider: CustomProvider) => void;
   onClose: () => void;
 }) {
-  const { providers, initialPresetId, sourceProvider, onCreate, onClose } = props;
+  const { providers, initialPresetId, onCreate, onClose } = props;
   const { t } = useLocale();
-  const initialPreset = findProviderPreset(sourceProvider?.presetId ?? initialPresetId);
+  const initialPreset = findProviderPreset(initialPresetId);
   const [open, setOpen] = useState(true);
   const [name, setName] = useState(() =>
-    sourceProvider
-      ? instanceNameForCopy(sourceProvider, providers)
-      : initialPreset
-        ? instanceNameForPreset(initialPreset, providers)
-        : "",
+    initialPreset ? instanceNameForPreset(initialPreset, providers) : "",
   );
   const [apiKey, setApiKey] = useState("");
   const [presetId, setPresetId] = useState(
     initialPreset && initialPreset.id !== CUSTOM_PRESET_ID ? initialPreset.id : "",
   );
   const [endpoints, setEndpoints] = useState<Partial<Record<ProviderChatProtocol, string>>>(() =>
-    sourceProvider
-      ? endpointsFromProvider(sourceProvider)
-      : initialPreset
-        ? endpointsFromPreset(initialPreset)
-        : {},
+    initialPreset ? endpointsFromPreset(initialPreset) : {},
   );
   const [moreOpen, setMoreOpen] = useState(() => {
-    const initial = sourceProvider
-      ? endpointsFromProvider(sourceProvider)
-      : initialPreset
-        ? endpointsFromPreset(initialPreset)
-        : {};
+    const initial = initialPreset ? endpointsFromPreset(initialPreset) : {};
     return MORE_PROTOCOLS.some((protocol) => initial[protocol]);
   });
   const [error, setError] = useState<string | null>(null);
@@ -142,15 +112,7 @@ export function AddChannelDialog(props: {
       setError(t("settings.channelEndpointRequired"));
       return;
     }
-    onCreate(
-      createProviderFromEndpoints({
-        name,
-        preset,
-        apiKey,
-        endpoints,
-        template: sourceProvider,
-      }),
-    );
+    onCreate(createProviderFromEndpoints({ name, preset, apiKey, endpoints }));
     setOpen(false);
   }
 
@@ -251,13 +213,6 @@ export function AddChannelDialog(props: {
               }}
             />
           </div>
-          {sourceProvider?.dialect ? (
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-              <span>{t("settings.providerDialect")}</span>
-              <Chip>{dialectLabel(t, sourceProvider.dialect)}</Chip>
-            </div>
-          ) : null}
-
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-medium text-foreground/85">
               {t("settings.channelEndpoints")}
