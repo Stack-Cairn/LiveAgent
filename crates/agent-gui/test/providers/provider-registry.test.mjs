@@ -136,10 +136,23 @@ test("presets merge models.dev facts with the overlay", () => {
   const gpt = registry.findPresetCatalogModel(registry.findProviderPreset("openai"), "gpt-5.2");
   assert.equal(gpt.toolCall, true);
   assert.equal(gpt.maxInputTokens, 272_000);
-  for (const presetId of ["moonshot-cn", "dashscope-cn", "stepfun-cn", "tencent", "xiaomi", "longcat", "sensenova", "modelscope", "siliconflow", "groq", "openrouter", "lmstudio"]) {
+  for (const presetId of ["moonshot-cn", "dashscope-cn", "stepfun-cn", "tencent", "xiaomi", "longcat", "sensenova", "modelscope", "siliconflow", "groq", "openrouter", "lmstudio", "zhipu-coding-plan", "minimax-cn-token-plan", "kimi-for-coding", "dashscope-cn-coding-plan", "dashscope-token-plan", "volcengine-coding-plan", "stepfun-cn-step-plan", "tencent-coding-plan", "tencent-token-plan", "xiaomi-token-plan-cn"]) {
     const preset = registry.findProviderPreset(presetId);
     assert.ok(preset?.catalogModels.length > 0, `${presetId} lists its channel models`);
   }
+  // 套餐渠道：地址与模型列表独立于主渠道，Anthropic 类套餐默认走 Messages。
+  const zhipuPlan = registry.findProviderPreset("zhipu-coding-plan");
+  assert.equal(zhipuPlan.catalogProviderId, "zhipuai-coding-plan");
+  assert.equal(zhipuPlan.endpoints["openai-completions"].baseUrl, "https://open.bigmodel.cn/api/coding/paas/v4");
+  assert.equal(zhipuPlan.endpoints["anthropic-messages"].baseUrl, "https://open.bigmodel.cn/api/anthropic");
+  const minimaxPlan = registry.findProviderPreset("minimax-cn-token-plan");
+  assert.equal(minimaxPlan.defaultChatProtocol, "anthropic-messages");
+  assert.equal(minimaxPlan.endpoints["anthropic-messages"].baseUrl, "https://api.minimaxi.com/anthropic/v1");
+  assert.equal(minimaxPlan.endpoints["openai-completions"].baseUrl, "https://api.minimaxi.com/v1");
+  assert.equal(registry.findProviderPreset("kimi-for-coding").defaultChatProtocol, "anthropic-messages");
+  // 主渠道分区不再并入套餐模型。
+  assert.equal(registry.findProviderPreset("tencent").catalogProviderId, "tencent");
+  assert.ok(!catalogModule.MODEL_CATALOG.tencent.some((entry) => entry.id === "tc-code-latest"));
   assert.equal(registry.findProviderPreset("custom").catalogProviderId, undefined);
   assert.equal(registry.MODEL_CATALOG_SNAPSHOT_DATE, catalogModule.MODEL_CATALOG_SNAPSHOT_DATE);
   assert.deepEqual(registry.matchPresetModelRule(deepseek, "deepseek-chat").chatProtocols, [

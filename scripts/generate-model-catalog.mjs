@@ -76,6 +76,11 @@ const MIN_CODEX_MODELS = 5;
 // come next; aggregators and local runtimes (siliconflow, groq, openrouter,
 // lmstudio) come last so an aggregator copy never shadows the vendor entry.
 //
+// Plan channels (Coding / Token / Step Plan) have their own API root and their
+// own model list and limits upstream, so each is its own section (keyed by the
+// models.dev id) placed right after the vendor's official section(s); the
+// preset is a separate channel entry so users pick the plan explicitly.
+//
 // `namespaced`: keep "vendor/model" ids. Aggregators and local runtimes serve
 // those ids verbatim; for vendor catalogs such ids are third-party deployments
 // (Bailian's "siliconflow/…", "kimi/…") that relays never serve verbatim and
@@ -89,20 +94,37 @@ const SECTIONS = [
   // zai (Z.AI, international brand) is a superset of zhipuai with identical
   // ids and limits for the overlap; keep the domestic brand as the key.
   { key: "zhipuai", sources: ["zai", "zhipuai"], min: 10 },
+  { key: "zhipuai-coding-plan", sources: ["zhipuai-coding-plan"], min: 6 },
   { key: "moonshotai-cn", sources: ["moonshotai-cn"], min: 2 },
   { key: "moonshotai", sources: ["moonshotai"], min: 2 },
+  { key: "kimi-for-coding", sources: ["kimi-for-coding"], min: 2 },
   { key: "minimax-cn", sources: ["minimax-cn"], min: 3 },
   { key: "minimax", sources: ["minimax"], min: 3 },
+  // models.dev 的 id 仍叫 coding-plan；官方套餐名已改为 Token Plan（预设 id 用后者）。
+  { key: "minimax-cn-coding-plan", sources: ["minimax-cn-coding-plan"], min: 4 },
+  { key: "minimax-coding-plan", sources: ["minimax-coding-plan"], min: 4 },
   { key: "stepfun", sources: ["stepfun"], min: 4 },
   { key: "stepfun-ai", sources: ["stepfun-ai"], min: 4 },
+  { key: "stepfun-step-plan", sources: ["stepfun-step-plan"], min: 2 },
+  { key: "stepfun-ai-step-plan", sources: ["stepfun-ai-step-plan"], min: 2 },
   { key: "xiaomi", sources: ["xiaomi"], min: 4 },
+  { key: "xiaomi-token-plan-cn", sources: ["xiaomi-token-plan-cn"], min: 2 },
+  { key: "xiaomi-token-plan-ams", sources: ["xiaomi-token-plan-ams"], min: 2 },
+  { key: "xiaomi-token-plan-sgp", sources: ["xiaomi-token-plan-sgp"], min: 2 },
   { key: "longcat", sources: ["longcat"], min: 1 },
   { key: "sensenova", sources: ["sensenova"], min: 3 },
   { key: "volcengine", sources: ["volcengine"], min: 6 },
+  { key: "volcengine-coding-plan", sources: ["volcengine-coding-plan"], min: 5 },
   { key: "alibaba-cn", sources: ["alibaba-cn"], min: 40 },
   { key: "alibaba", sources: ["alibaba"], min: 20 },
-  // 混元官方（TokenHub）在前，Coding Plan 托管的第三方模型在后。
-  { key: "tencent", sources: ["tencent-tokenhub", "tencent-coding-plan"], min: 4 },
+  { key: "alibaba-coding-plan-cn", sources: ["alibaba-coding-plan-cn"], min: 6 },
+  { key: "alibaba-coding-plan", sources: ["alibaba-coding-plan"], min: 6 },
+  { key: "alibaba-token-plan-cn", sources: ["alibaba-token-plan-cn"], min: 10 },
+  { key: "alibaba-token-plan", sources: ["alibaba-token-plan"], min: 10 },
+  // 混元官方（TokenHub）；Coding / Token Plan 各自成区。
+  { key: "tencent", sources: ["tencent-tokenhub"], min: 2 },
+  { key: "tencent-coding-plan", sources: ["tencent-coding-plan"], min: 4 },
+  { key: "tencent-token-plan", sources: ["tencent-token-plan"], min: 1 },
   { key: "modelscope", sources: ["modelscope"], min: 3, namespaced: true },
   { key: "siliconflow-cn", sources: ["siliconflow-cn"], min: 20, namespaced: true },
   { key: "siliconflow", sources: ["siliconflow"], min: 20, namespaced: true },
@@ -130,17 +152,33 @@ const PRESETS = [
   { id: "deepseek", section: "deepseek" },
   { id: "zhipu", section: "zhipuai", source: "zhipuai" },
   { id: "zhipu-intl", section: "zhipuai", source: "zai" },
+  { id: "zhipu-coding-plan", section: "zhipuai-coding-plan" },
   { id: "minimax", section: "minimax" },
   { id: "minimax-cn", section: "minimax-cn" },
+  { id: "minimax-token-plan", section: "minimax-coding-plan" },
+  { id: "minimax-cn-token-plan", section: "minimax-cn-coding-plan" },
   { id: "moonshot", section: "moonshotai" },
   { id: "moonshot-cn", section: "moonshotai-cn" },
+  { id: "kimi-for-coding", section: "kimi-for-coding" },
   { id: "dashscope", section: "alibaba" },
   { id: "dashscope-cn", section: "alibaba-cn" },
+  { id: "dashscope-coding-plan", section: "alibaba-coding-plan" },
+  { id: "dashscope-cn-coding-plan", section: "alibaba-coding-plan-cn" },
+  { id: "dashscope-token-plan", section: "alibaba-token-plan" },
+  { id: "dashscope-cn-token-plan", section: "alibaba-token-plan-cn" },
   { id: "volcengine", section: "volcengine" },
+  { id: "volcengine-coding-plan", section: "volcengine-coding-plan" },
   { id: "stepfun", section: "stepfun-ai" },
   { id: "stepfun-cn", section: "stepfun" },
-  { id: "tencent", section: "tencent", source: "tencent-tokenhub" },
+  { id: "stepfun-step-plan", section: "stepfun-ai-step-plan" },
+  { id: "stepfun-cn-step-plan", section: "stepfun-step-plan" },
+  { id: "tencent", section: "tencent" },
+  { id: "tencent-coding-plan", section: "tencent-coding-plan" },
+  { id: "tencent-token-plan", section: "tencent-token-plan" },
   { id: "xiaomi", section: "xiaomi" },
+  { id: "xiaomi-token-plan-cn", section: "xiaomi-token-plan-cn" },
+  { id: "xiaomi-token-plan-eu", section: "xiaomi-token-plan-ams" },
+  { id: "xiaomi-token-plan-sg", section: "xiaomi-token-plan-sgp" },
   { id: "longcat", section: "longcat" },
   { id: "sensenova", section: "sensenova" },
   { id: "modelscope", section: "modelscope" },
