@@ -33,6 +33,7 @@ import {
   resolveModelCapabilities,
   resolveModelInputModalitiesResolved,
 } from "@liveagent/ui/lib/models/modelCapabilities";
+import type { CatalogProviderId } from "@liveagent/ui/lib/models/modelCatalog";
 import {
   CUSTOM_PRESET_ID,
   findProviderPreset,
@@ -62,6 +63,13 @@ export type ProviderDrawerState =
   | { kind: "request"; focus?: ProviderChatProtocol }
   | { kind: "keys" }
   | { kind: "model"; modelId: string }
+  /** 模型目录浏览（只读）；returnTo = 从别的抽屉跳来时关闭后回到哪 */
+  | {
+      kind: "catalog";
+      sectionId?: CatalogProviderId;
+      query?: string;
+      returnTo?: ProviderDrawerState;
+    }
   | null;
 
 export const DEFAULT_CREDENTIAL_ID = "default";

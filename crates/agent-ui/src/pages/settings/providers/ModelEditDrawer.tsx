@@ -22,7 +22,7 @@ import {
   resolveProviderChatRoute,
   resolveProviderDialect,
 } from "@liveagent/app/lib/settings";
-import { X } from "@liveagent/ui/components/IconSet";
+import { BookOpen, X } from "@liveagent/ui/components/IconSet";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
   Select,
@@ -38,6 +38,7 @@ import {
   resolveModelCatalogInfo,
   resolveModelInputModalitiesResolved,
 } from "@liveagent/ui/lib/models/modelCapabilities";
+import type { CatalogProviderId } from "@liveagent/ui/lib/models/modelCatalog";
 import {
   resolveModelThinking,
   THINKING_LEVEL_LADDER,
@@ -115,8 +116,10 @@ export function ModelEditDrawer(props: {
   modelId: string;
   onChange: (updater: (provider: CustomProvider) => CustomProvider) => void;
   onClose: () => void;
+  /** 打开"模型目录"浏览抽屉，预选该模型所在分区并以模型 id 作为搜索词 */
+  onOpenCatalog?: (target: { sectionId?: CatalogProviderId; query: string }) => void;
 }) {
-  const { settings, provider, modelId, onChange, onClose } = props;
+  const { settings, provider, modelId, onChange, onClose, onOpenCatalog } = props;
   const { t } = useLocale();
   const model = provider.models.find((item) => item.id === modelId);
   const route = useMemo(
@@ -314,7 +317,27 @@ export function ModelEditDrawer(props: {
               </Field>
             </section>
 
-            <ModelCatalogInfoPanel info={catalogInfo} modelId={model.id} />
+            <ModelCatalogInfoPanel
+              info={catalogInfo}
+              modelId={model.id}
+              action={
+                onOpenCatalog ? (
+                  <button
+                    type="button"
+                    className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    onClick={() =>
+                      onOpenCatalog({
+                        sectionId: catalogInfo?.catalogProviderId,
+                        query: model.id,
+                      })
+                    }
+                  >
+                    <BookOpen className="h-3 w-3" />
+                    {t("settings.modelCatalogBrowserOpen")}
+                  </button>
+                ) : null
+              }
+            />
 
             <section className="space-y-3">
               <DrawerGroupLabel
@@ -479,6 +502,7 @@ export function ModelEditDrawer(props: {
               <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                 <Field
                   label={t("settings.providerDialect")}
+                  hint={t("settings.providerDialectHint")}
                   source={
                     <SourceTag
                       source={model.dialect ? "user" : "auto"}
@@ -639,8 +663,8 @@ export function ModelEditDrawer(props: {
                 </Field>
               </div>
               <p className="text-[10.5px] text-muted-foreground/70">
-                {formatTokenCount(model.contextWindow)} ctx ·{" "}
-                {formatTokenCount(model.maxOutputToken)} out
+                {formatTokenCount(model.contextWindow)} {t("settings.modelCatalogCtx")} ·{" "}
+                {formatTokenCount(model.maxOutputToken)} {t("settings.modelCatalogMaxOutput")}
               </p>
               {adapterId === "codex" ? (
                 <Field
@@ -807,7 +831,7 @@ export function ModelEditDrawer(props: {
                     {t(`settings.modelRouteCredentialSource.${route.credentialSource}`)}
                   </span>
                 </span>
-                <span className="text-muted-foreground">quirks</span>
+                <span className="text-muted-foreground">{t("settings.modelRouteQuirks")}</span>
                 <span className="break-all font-mono">
                   {Object.keys(route.quirks).length > 0
                     ? JSON.stringify(route.quirks)

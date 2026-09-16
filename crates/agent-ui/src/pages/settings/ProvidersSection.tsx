@@ -14,8 +14,14 @@ import {
   updateCustomProviders,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
-import { Settings } from "@liveagent/ui/components/IconSet";
+import { BookOpen, Settings } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   CUSTOM_PRESET_ID,
@@ -34,6 +40,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddChannelDialog } from "./providers/AddChannelDialog";
 import { CredentialsDrawer } from "./providers/CredentialsDrawer";
+import { ModelCatalogDrawer } from "./providers/ModelCatalogDrawer";
 import { ModelEditDrawer } from "./providers/ModelEditDrawer";
 import { ProviderCatalogList } from "./providers/ProviderCatalogList";
 import { ProviderCustomSettingsDrawer } from "./providers/ProviderCustomSettingsDrawer";
@@ -443,20 +450,41 @@ export function ProvidersSection(
                     setSettings={setSettings}
                     triggerClassName="h-8 rounded-md px-2 text-xs shadow-none"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className={cn(
-                      "h-8 w-8 shrink-0 shadow-none",
-                      customSettingsOpen && "bg-accent",
-                    )}
-                    onClick={() => setCustomSettingsOpen(true)}
-                    title={t("settings.openCustomSettings")}
-                    aria-label={t("settings.openCustomSettings")}
-                  >
-                    <Settings className="h-3.5 w-3.5" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className={cn(
+                            "h-8 w-8 shrink-0 shadow-none data-[popup-open]:bg-accent",
+                            (customSettingsOpen || drawer?.kind === "catalog") && "bg-accent",
+                          )}
+                          title={t("settings.providerPageTools")}
+                          aria-label={t("settings.providerPageTools")}
+                        />
+                      }
+                    >
+                      <Settings className="h-3.5 w-3.5" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-40">
+                      <DropdownMenuItem
+                        className="gap-2 text-xs"
+                        onSelect={() => setCustomSettingsOpen(true)}
+                      >
+                        <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t("settings.customSettings")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="gap-2 text-xs"
+                        onSelect={() => setDrawer({ kind: "catalog" })}
+                      >
+                        <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        {t("settings.modelCatalogBrowser")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>
               }
             />
@@ -531,6 +559,14 @@ export function ProvidersSection(
           modelId={drawer.modelId}
           onChange={updateSelectedProvider}
           onClose={() => setDrawer(null)}
+          onOpenCatalog={(target) => setDrawer({ kind: "catalog", ...target, returnTo: drawer })}
+        />
+      ) : null}
+      {drawer?.kind === "catalog" ? (
+        <ModelCatalogDrawer
+          initialSectionId={drawer.sectionId}
+          initialQuery={drawer.query}
+          onClose={() => setDrawer(drawer.returnTo ?? null)}
         />
       ) : null}
       {addChannel ? (

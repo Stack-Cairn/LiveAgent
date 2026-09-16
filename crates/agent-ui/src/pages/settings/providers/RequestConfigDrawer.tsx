@@ -48,7 +48,7 @@ import {
   probeProvider,
 } from "@liveagent/ui/pages/settings/providerProbe";
 import { useEffect, useRef, useState } from "react";
-import { DrawerGroupLabel } from "../ProviderPresentation";
+import { DrawerGroupLabel, HintTip } from "../ProviderPresentation";
 import { CustomHeadersEditor } from "./CustomHeadersEditor";
 import {
   Chip,
@@ -441,8 +441,12 @@ export function RequestConfigDrawer(props: {
                         </div>
                         <div className="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2 max-[720px]:grid-cols-1">
                           <div className="space-y-1">
-                            <Label className="text-[11px] text-muted-foreground">
+                            <Label className="flex items-center gap-1 text-[11px] text-muted-foreground">
                               {t("settings.providerDialect")}
+                              <HintTip
+                                text={t("settings.providerDialectHint")}
+                                label={t("settings.providerDialect")}
+                              />
                             </Label>
                             <Select
                               value={config.dialect ?? "inherit"}
