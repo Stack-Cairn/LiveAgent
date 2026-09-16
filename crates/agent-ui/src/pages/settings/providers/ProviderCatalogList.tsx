@@ -136,14 +136,17 @@ export function ProviderCatalogList(props: {
                       .filter(Boolean)
                       .join(" · ");
               const enabled = row.kind === "provider" && row.provider.enabled !== false;
-              // 实心绿点 = 已启用且已配置 Key；琥珀空心圈 = 已启用但没有 Key；灰点 = 已停用；
-              // 未配置渠道不显示状态点。title / aria-label 与之一致。
+              // 实心绿点 = 已启用且已配置 Key；灰点 = 已停用；已启用但没填 Key 不打点，
+              // 只在副标题里注明（原生五家初始就是这个状态，不用颜色提醒）。
               const keyReady = row.kind === "provider" && providerKeyReady(row.provider);
+              const showDot = row.kind === "provider" && (!enabled || keyReady);
               const statusLabel = !enabled
                 ? t("settings.providerDisabled")
-                : keyReady
-                  ? t("settings.providerEnabled")
-                  : t("settings.providerEnabledNoKey");
+                : t("settings.providerEnabled");
+              const rowSubtitle =
+                row.kind === "provider" && enabled && !keyReady
+                  ? `${subtitle} · ${t("settings.providerEnabledNoKey")}`
+                  : subtitle;
               return (
                 <li key={row.kind === "provider" ? `p:${row.provider.id}` : `s:${row.preset.id}`}>
                   <button
@@ -173,21 +176,17 @@ export function ProviderCatalogList(props: {
                         {name}
                       </span>
                       <span className="block truncate text-[10.5px] text-muted-foreground/75">
-                        {subtitle}
+                        {rowSubtitle}
                       </span>
                     </span>
-                    {row.kind === "provider" ? (
+                    {showDot ? (
                       <span
                         role="img"
                         aria-label={statusLabel}
                         title={statusLabel}
                         className={cn(
                           "h-2 w-2 shrink-0 rounded-full",
-                          !enabled
-                            ? "bg-muted-foreground/30"
-                            : keyReady
-                              ? "bg-emerald-500"
-                              : "border-[1.5px] border-amber-500 bg-transparent",
+                          !enabled ? "bg-muted-foreground/30" : "bg-emerald-500",
                         )}
                       />
                     ) : null}

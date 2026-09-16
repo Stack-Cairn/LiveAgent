@@ -1414,7 +1414,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelSetupKeyOnly": "Only an API key is needed",
   "settings.providerEnabled": "Enabled",
   "settings.providerDisabled": "Disabled",
-  "settings.providerEnabledNoKey": "Enabled, no key configured",
+  "settings.providerEnabledNoKey": "No key",
   "settings.providerDisabledBanner": "Disabled: excluded from the model picker and failover.",
   "settings.providerApiAddress": "API address",
   "settings.providerAvailability": "Availability",

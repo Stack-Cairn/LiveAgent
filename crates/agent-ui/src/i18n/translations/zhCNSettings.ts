@@ -1347,7 +1347,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.channelSetupKeyOnly": "只需填写 API Key",
   "settings.providerEnabled": "已启用",
   "settings.providerDisabled": "已停用",
-  "settings.providerEnabledNoKey": "已启用，未配置 Key",
+  "settings.providerEnabledNoKey": "未填 Key",
   "settings.providerDisabledBanner": "已停用：不进入模型选择器与故障转移。",
   "settings.providerApiAddress": "API 地址",
   "settings.providerAvailability": "可用性",
