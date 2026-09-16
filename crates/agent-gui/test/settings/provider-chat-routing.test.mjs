@@ -296,6 +296,68 @@ test("an endpoint with an empty address is dropped and the default protocol move
   assert.equal(settings.resolveProviderChatRoute(solo, "gpt-5").baseUrl, "https://relay.example/v1");
 });
 
+test("route baseUrl follows the endpoint version rule while the stored value is kept", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    type: "codex",
+    baseUrl: "https://relay.example",
+    models: ["gpt-5", "claude-sonnet-4", "gemini-2.5-pro"],
+    endpointConfigs: {
+      "openai-completions": { baseUrl: "https://relay.example" },
+      "anthropic-messages": { baseUrl: "https://relay.example" },
+      "google-generative-ai": { baseUrl: "https://relay.example" },
+    },
+  });
+  assert.equal(provider.endpointConfigs["openai-completions"].baseUrl, "https://relay.example");
+  assert.equal(
+    settings.resolveProviderChatRoute(provider, "gpt-5", { protocol: "openai-completions" }).baseUrl,
+    "https://relay.example/v1",
+  );
+  assert.equal(
+    settings.resolveProviderChatRoute(provider, "claude-sonnet-4", { protocol: "anthropic-messages" })
+      .baseUrl,
+    "https://relay.example",
+  );
+  assert.equal(
+    settings.resolveProviderChatRoute(provider, "gemini-2.5-pro", {
+      protocol: "google-generative-ai",
+    }).baseUrl,
+    "https://relay.example/v1beta",
+  );
+
+  const zhipu = settings.normalizeCustomProvider({
+    id: "zhipu",
+    type: "codex",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    models: ["glm-5"],
+  });
+  assert.equal(
+    settings.resolveProviderChatRoute(zhipu, "glm-5").baseUrl,
+    "https://open.bigmodel.cn/api/paas/v4",
+  );
+
+  const verbatim = settings.normalizeCustomProvider({
+    id: "verbatim",
+    type: "codex",
+    baseUrl: "https://relay.example#",
+    models: ["gpt-5"],
+  });
+  assert.equal(verbatim.baseUrl, "https://relay.example#");
+  assert.equal(settings.resolveProviderChatRoute(verbatim, "gpt-5").baseUrl, "https://relay.example");
+
+  const full = settings.normalizeCustomProvider({
+    id: "full",
+    type: "codex",
+    baseUrl: "https://relay.example/custom/final?region=cn",
+    isFullUrl: true,
+    models: ["gpt-5"],
+  });
+  assert.equal(
+    settings.resolveProviderChatRoute(full, "gpt-5").baseUrl,
+    "https://relay.example/custom/final?region=cn",
+  );
+});
+
 test("disabled endpoints are skipped and the provider default takes over", () => {
   const provider = settings.normalizeCustomProvider({
     id: "relay",

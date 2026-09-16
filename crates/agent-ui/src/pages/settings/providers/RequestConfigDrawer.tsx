@@ -39,7 +39,7 @@ import {
   PROVIDER_PROTOCOL_DIALECTS,
   PROVIDER_PROTOCOL_FAMILY,
   PROVIDER_PROTOCOL_MODELS_PATH,
-  PROVIDER_PROTOCOL_REQUEST_PATH,
+  resolveEndpointRequestBase,
 } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -304,9 +304,11 @@ export function RequestConfigDrawer(props: {
                 });
                 const authDefault = PROVIDER_PROTOCOL_AUTH_HEADER[protocol];
                 const showQuirks = PROVIDER_PROTOCOL_FAMILY[protocol] === "openai";
-                const fullUrl = config.isFullUrl
-                  ? config.baseUrl
-                  : `${config.baseUrl.replace(/\/+$/, "")}${PROVIDER_PROTOCOL_REQUEST_PATH[protocol]}`;
+                const fullUrl = resolveEndpointRequestBase(
+                  protocol,
+                  config.baseUrl,
+                  config.isFullUrl === true,
+                ).requestUrl;
                 return (
                   <div
                     key={protocol}
@@ -406,6 +408,11 @@ export function RequestConfigDrawer(props: {
                             {t("settings.channelRequestPathPreview")}
                             {fullUrl}
                           </p>
+                          {!config.isFullUrl ? (
+                            <p className="text-[10.5px] leading-relaxed text-muted-foreground/60">
+                              {t("settings.providerBaseUrlVersionHint")}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                           <div className="flex h-8 items-center justify-between gap-2 rounded-lg border px-3">

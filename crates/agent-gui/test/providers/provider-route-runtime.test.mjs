@@ -662,3 +662,52 @@ test("failover breaker keys extend to provider::credential::protocol::model whil
   );
   assert.equal(failoverBreakerKey("p", "m", { credentialId: "k1" }), "p::k1::::m");
 });
+
+test("model factory follows the endpoint version rule: any version segment stays, # is verbatim", () => {
+  // 已带非 v1 版本段（智谱 /api/paas/v4）：不再追加 /v1。
+  const zhipu = createModelFromRoute({
+    protocol: "openai-completions",
+    dialect: "generic",
+    modelId: "glm-5",
+    baseUrl: "http://127.0.0.1:18080/proxy/codex/api/paas/v4",
+    upstreamBaseUrl: "https://open.bigmodel.cn/api/paas/v4",
+  });
+  assert.equal(zhipu.baseUrl, "http://127.0.0.1:18080/proxy/codex/api/paas/v4");
+  // 版本段在路径中间同样算已有版本段。
+  const nested = createModelFromRoute({
+    protocol: "openai-responses",
+    dialect: "generic",
+    modelId: "gpt-5",
+    baseUrl: "http://127.0.0.1:18080/proxy/codex/v1/custom-path",
+    upstreamBaseUrl: "https://relay.example/v1/custom-path",
+  });
+  assert.equal(nested.baseUrl, "http://127.0.0.1:18080/proxy/codex/v1/custom-path");
+  // 无版本段：仍补 /v1（Gemini 补 /v1beta）。
+  const bare = createModelFromRoute({
+    protocol: "openai-completions",
+    dialect: "generic",
+    modelId: "gpt-5",
+    baseUrl: "http://127.0.0.1:18080/proxy/codex",
+    upstreamBaseUrl: "https://relay.example",
+  });
+  assert.equal(bare.baseUrl, "http://127.0.0.1:18080/proxy/codex/v1");
+  // # 原样：不补版本段。
+  const verbatim = createModelFromRoute({
+    protocol: "openai-completions",
+    dialect: "generic",
+    modelId: "gpt-5",
+    baseUrl: "http://127.0.0.1:18080/proxy/codex",
+    baseUrlVerbatim: true,
+    upstreamBaseUrl: "https://relay.example",
+  });
+  assert.equal(verbatim.baseUrl, "http://127.0.0.1:18080/proxy/codex");
+  const geminiVerbatim = createModelFromRoute({
+    protocol: "google-generative-ai",
+    dialect: "generic",
+    modelId: "gemini-2.5-pro",
+    baseUrl: "http://127.0.0.1:18080/proxy/gemini/custom",
+    baseUrlVerbatim: true,
+    upstreamBaseUrl: "https://relay.example/custom",
+  });
+  assert.equal(geminiVerbatim.baseUrl, "http://127.0.0.1:18080/proxy/gemini/custom");
+});

@@ -76,6 +76,7 @@ export function createProviderRuntimeConfig(
   return {
     baseUrl: route.baseUrl,
     isFullUrl: route.isFullUrl,
+    ...(route.baseUrlVerbatim ? { baseUrlVerbatim: true } : {}),
     adapterProviderId: route.adapterProviderId,
     chatProtocol: route.protocol,
     protocol: route.protocol,

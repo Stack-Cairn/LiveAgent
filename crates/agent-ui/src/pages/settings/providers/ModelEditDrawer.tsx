@@ -42,7 +42,10 @@ import {
   THINKING_LEVEL_LADDER,
 } from "@liveagent/ui/lib/models/modelThinking";
 import { mergeCustomHeaders } from "@liveagent/ui/lib/providers/customHeaders";
-import { PROVIDER_PROTOCOL_DIALECTS } from "@liveagent/ui/lib/providers/registry";
+import {
+  PROVIDER_PROTOCOL_DIALECTS,
+  resolveEndpointRequestBase,
+} from "@liveagent/ui/lib/providers/registry";
 import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
@@ -869,6 +872,13 @@ export function ModelEditDrawer(props: {
                   </span>
                   <span className="text-muted-foreground">{t("settings.baseUrl")}</span>
                   <span className="break-all font-mono">{route.baseUrl || "—"}</span>
+                  <span className="text-muted-foreground">
+                    {t("settings.channelRequestPathPreview").replace(/[:：]\s*$/, "")}
+                  </span>
+                  <span className="break-all font-mono">
+                    {resolveEndpointRequestBase(route.protocol, route.baseUrl, route.isFullUrl)
+                      .requestUrl || "—"}
+                  </span>
                   <span className="text-muted-foreground">{t("settings.modelWireId")}</span>
                   <span className="font-mono">{route.wireModelId}</span>
                   <span className="text-muted-foreground">{t("settings.modelCredential")}</span>

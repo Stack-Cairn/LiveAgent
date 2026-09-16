@@ -1103,10 +1103,39 @@ export function createProviderFromAutoConfiguration(params: {
 }
 
 /** "添加渠道"对话框：按用户填写的端点直接创建实例，模型待探测。 */
+export type NewProviderApiKey = { key: string; label?: string };
+
+/**
+ * 添加渠道对话框的多 Key 输入 → credentials[]：空 Key 行剔除，第一把即主 Key
+ *（provider.apiKey 与 credentials[0].apiKey 同步），modelScope 缺省 auto。
+ * 一把都没填时仍生成一条空的默认凭据（本地服务可无 Key）。
+ */
+export function credentialsFromApiKeys(
+  apiKeys: readonly NewProviderApiKey[] | undefined,
+  fallbackApiKey = "",
+): ProviderCredential[] {
+  const filled = (apiKeys ?? [])
+    .map((item) => ({ apiKey: item.key.trim(), label: item.label?.trim() ?? "" }))
+    .filter((item) => item.apiKey.length > 0);
+  const primary = filled[0]?.apiKey ?? fallbackApiKey.trim();
+  const rows = filled.length > 0 ? filled : [{ apiKey: primary, label: "" }];
+  return rows.map((item, index) => ({
+    id: index === 0 ? DEFAULT_CREDENTIAL_ID : createUuid(),
+    label: item.label,
+    apiKey: item.apiKey,
+    apiKeyConfigured: item.apiKey.length > 0,
+    enabled: true,
+    modelScope: { mode: "auto" as const },
+  }));
+}
+
 export function createProviderFromEndpoints(params: {
   name: string;
   preset: ProviderPreset | undefined;
-  apiKey: string;
+  /** 单 Key 旧调用；与 apiKeys 同时给时只在 apiKeys 全空时兜底 */
+  apiKey?: string;
+  /** 多 Key：第一把即主 Key */
+  apiKeys?: readonly NewProviderApiKey[];
   endpoints: Partial<Record<ProviderChatProtocol, string>>;
 }): CustomProvider {
   const { preset } = params;
@@ -1138,7 +1167,8 @@ export function createProviderFromEndpoints(params: {
     };
   }
   const providerDialect = preset?.dialect;
-  const apiKey = params.apiKey.trim();
+  const credentials = credentialsFromApiKeys(params.apiKeys, params.apiKey ?? "");
+  const apiKey = credentials[0].apiKey;
   return normalizeCustomProvider({
     id: createUuid(),
     name: params.name.trim(),
@@ -1148,16 +1178,7 @@ export function createProviderFromEndpoints(params: {
     isFullUrl: false,
     apiKey,
     apiKeyConfigured: apiKey.length > 0,
-    credentials: [
-      {
-        id: DEFAULT_CREDENTIAL_ID,
-        label: "",
-        apiKey,
-        apiKeyConfigured: apiKey.length > 0,
-        enabled: true,
-        modelScope: { mode: "auto" },
-      },
-    ],
+    credentials,
     customHeaders: [],
     models: [],
     activeModels: [],

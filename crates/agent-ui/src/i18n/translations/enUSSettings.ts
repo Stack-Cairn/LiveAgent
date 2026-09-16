@@ -1373,14 +1373,29 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelDeclaredEndpoints": "Endpoints this channel provides (from the preset registry)",
   "settings.channelDocs": "Docs",
   "settings.channelEndpointRequired": "Fill in at least one endpoint Base URL",
-  "settings.channelEndpoints": "Endpoints",
-  "settings.channelEndpointsHint": "Fill in the endpoints you need; empty ones are not created",
+  "settings.channelEndpoints": "Endpoint addresses",
+  "settings.channelEndpointsHint":
+    "Fill in the endpoints you need; empty ones are not created. Enter the API root; /v1 is added when the path has no version segment",
+  "settings.channelEndpointDesc.openai-completions": "OpenAI-compatible · /chat/completions",
+  "settings.channelEndpointDesc.openai-responses": "OpenAI · /responses",
+  "settings.channelEndpointDesc.anthropic-messages": "Claude · /v1/messages",
+  "settings.channelEndpointDesc.google-generative-ai": "Gemini · generateContent",
   "settings.channelFromPreset": "Create from preset (optional)",
   "settings.channelFromPresetHint":
     "For Coding Plan access, multiple accounts or project isolation. Selecting a preset fills in its endpoints and addresses; Base URL and key can still be changed.",
   "settings.channelFromPresetPlaceholder": "Create from a channel preset…",
   "settings.channelGetApiKey": "Get a key",
-  "settings.channelMoreEndpoints": "More settings (OpenAI Responses, Gemini)",
+  "settings.channelSectionBasic": "Basic info",
+  "settings.channelKeysHint":
+    "The first key is the default; extra keys are assigned by model scope and used as fallbacks in order",
+  "settings.channelKeyPrimaryHint": "Default key",
+  "settings.channelKeyLabelPlaceholder": "Label (optional)",
+  "settings.channelKeyAdd": "Add another key",
+  "settings.channelKeyRemove": "Remove this key",
+  "settings.channelPresetApplied":
+    "The endpoint addresses below were filled from the preset; you can still edit them above:",
+  "settings.channelPresetAppliedNone":
+    "This preset declares no fixed endpoints; enter the addresses above.",
   "settings.channelMultiEndpoint": "multi-endpoint",
   "settings.channelName": "Channel name",
   "settings.channelNamePlaceholder": "e.g. My relay",
@@ -1400,6 +1415,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.customHeaderRowsIgnored":
     "{count} row(s) not applied (rows with an empty or invalid key are not saved)",
   "settings.channelRequestPathPreview": "Request path: ",
+  "settings.providerBaseUrlVersionHint":
+    "/v1 is added when the path has no version segment (/v1beta for Gemini); end the address with # to use it as-is",
   "settings.channelSelectHint": "Select a channel on the left",
   "settings.channelSetupAddressAndKey": "Enter the address and API key",
   "settings.channelSetupAddressOnly": "Enter the address",
