@@ -272,6 +272,10 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           entry: cached,
           clearError: true,
         });
+        // Cache-hit is a real commit: afterCommit must fire here too, or
+        // callers that defer work to the commit point (e.g. workspace
+        // activation for #787) silently skip on the warm path.
+        request?.afterCommit?.();
         return "cache-hit";
       }
       conversationRuntimeCacheRef.current.delete(id);

@@ -303,30 +303,38 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [setSettings, workspaceProjects, activeWorkspaceProjectId, settings.system],
   );
 
-  // Reading persisted history does not require the original directory to exist.
-  const activateSearchConversationWorkspace = useCallback(
+  // Bring the workspace that owns `cwd` to the front so the right dock (file
+  // tree / terminal / git) and the sidebar highlight follow the conversation
+  // being opened. Reading persisted history does not require the original
+  // directory to exist, so a missing directory is preserved rather than
+  // cleared. No-op when the conversation already belongs to the active
+  // workspace or has no cwd.
+  const activateConversationWorkspace = useCallback(
     (cwd?: string) => {
       const path = cwd?.trim() ?? "";
       if (
-        path &&
-        workspaceProjectPathKey(path) !== workspaceProjectPathKey(activeWorkspaceProjectPath)
+        !path ||
+        workspaceProjectPathKey(path) === workspaceProjectPathKey(activeWorkspaceProjectPath)
       ) {
-        const project =
-          workspaceProjects.find(
-            (item) => workspaceProjectPathKey(item.path) === workspaceProjectPathKey(path),
-          ) ?? createWorkspaceProjectFromPath(path, "history");
-        activateWorkspaceProject(project, { preserveMissing: true });
+        return;
       }
+      const project =
+        workspaceProjects.find(
+          (item) => workspaceProjectPathKey(item.path) === workspaceProjectPathKey(path),
+        ) ?? createWorkspaceProjectFromPath(path, "history");
+      activateWorkspaceProject(project, { preserveMissing: true });
+    },
+    [activeWorkspaceProjectPath, workspaceProjects, activateWorkspaceProject],
+  );
+
+  const activateSearchConversationWorkspace = useCallback(
+    (cwd?: string) => {
+      const path = cwd?.trim() ?? "";
+      activateConversationWorkspace(path);
       setSearchNavigation({ mode: isAgentMode, cwd: path });
       sidebarStore.setScope(path ? { kind: "workdir", cwd: path } : { kind: "unscoped" });
     },
-    [
-      activeWorkspaceProjectPath,
-      workspaceProjects,
-      activateWorkspaceProject,
-      isAgentMode,
-      sidebarStore,
-    ],
+    [activateConversationWorkspace, isAgentMode, sidebarStore],
   );
 
   const handleSelectWorkspaceProject = useCallback(
@@ -736,6 +744,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     historyScopeKey,
     checkWorkspaceProjectDirectory,
     activateWorkspaceProject,
+    activateConversationWorkspace,
     activateSearchConversationWorkspace,
     clearSearchConversationWorkspace,
     searchConversationWorkdir: searchCwd,

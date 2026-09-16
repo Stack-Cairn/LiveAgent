@@ -353,6 +353,7 @@ export function ChatPage(props: ChatPageProps) {
     sidebarScope,
     historyScopeKey,
     activateWorkspaceProject,
+    activateConversationWorkspace,
     activateSearchConversationWorkspace,
     clearSearchConversationWorkspace,
     searchConversationWorkdir,
@@ -1796,11 +1797,28 @@ export function ChatPage(props: ChatPageProps) {
         });
       } else {
         prepareComposerForConversationChange();
-        openController.open(targetConversationId);
+        // 侧栏会话树跨工作空间点选:会话提交后再把它所属的工作空间置为
+        // 当前,右侧 dock(文件树/终端/Git)随 activeWorkspaceProjectPath
+        // 切到该工作空间根目录(#787)。必须等 afterCommit——先切工作空间
+        // 会让侧栏作用域先行刷新,旧的当前会话从列表消失会触发
+        // "会话被删"兜底新建草稿,反把这次打开顶掉(表现为要点两次)。
+        openController.open(targetConversationId, {
+          afterCommit: () => {
+            if (!isAgentMode) return;
+            const targetWorkdir =
+              conversationRuntimeCacheRef.current.get(targetConversationId)?.workdir?.trim() ||
+              sidebarStore.peek(targetConversationId)?.cwd?.trim() ||
+              "";
+            activateConversationWorkspace(targetWorkdir);
+          },
+        });
       }
     },
     [
+      activateConversationWorkspace,
       activateSearchConversationWorkspace,
+      conversationRuntimeCacheRef,
+      isAgentMode,
       openController,
       prepareComposerForConversationChange,
       sidebarStore,
