@@ -15,6 +15,7 @@ function readSharedSettingsSource(file) {
 }
 
 const providerDetailSource = readSharedSettingsSource("providers/ProviderDetail.tsx");
+const modelListToolbarSource = readSharedSettingsSource("providers/ModelListToolbar.tsx");
 const providersSectionSource = readSharedSettingsSource("ProvidersSection.tsx");
 const providerProbeSource = readSharedSettingsSource("providerProbe.ts");
 const providerChipsSource = readSharedSettingsSource("providers/providerChips.tsx");
@@ -36,9 +37,17 @@ function openingTagAround(source, anchor) {
 }
 
 test("WebUI provider model refresh only disables while a request is running", () => {
-  const openingTag = openingTagAround(providerDetailSource, "onClick={onRefreshModels}");
-  assert.match(openingTag, /disabled=\{busy !== null\}/);
+  // 按钮本体在 ModelListToolbar（ModelListActions）里，禁用条件由 ProviderDetail 传入：
+  // 只看 busy，不因 Key 已脱敏而禁用。
+  const openingTag = openingTagAround(modelListToolbarSource, "onClick={onRefreshModels}");
+  assert.match(openingTag, /disabled=\{refreshDisabled\}/);
   assert.doesNotMatch(openingTag, /isGatewayWebui|keyConfigured|redactedKey|canFetchModels/);
+  const actionsStart = providerDetailSource.indexOf("<ModelListActions");
+  assert.notEqual(actionsStart, -1);
+  const actionsEnd = providerDetailSource.indexOf("/>", actionsStart);
+  const actionsProps = providerDetailSource.slice(actionsStart, actionsEnd);
+  assert.match(actionsProps, /refreshDisabled=\{busy !== null\}/);
+  assert.doesNotMatch(actionsProps, /isGatewayWebui|keyConfigured|redactedKey|canFetchModels/);
 });
 
 test("provider model refresh reuses the saved WebUI key without exposing it", () => {

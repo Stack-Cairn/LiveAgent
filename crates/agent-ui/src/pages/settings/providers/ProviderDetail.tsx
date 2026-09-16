@@ -24,7 +24,6 @@ import {
   Lightbulb,
   Loader2,
   Pencil,
-  Plus,
   RefreshCw,
   Trash2,
   Wrench,
@@ -45,6 +44,7 @@ import {
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UsagePlanLine, usageRelativeTimeText } from "../ProviderPresentation";
+import { ModelListActions, ModelListToolbar } from "./ModelListToolbar";
 import { ProviderFailoverSection } from "./ProviderFailoverSection";
 import { credentialDisplayName, ProviderKeyList } from "./ProviderKeyList";
 import { ProviderMoreSettings } from "./ProviderMoreSettings";
@@ -67,14 +67,19 @@ import {
   configuredCredentials,
   credentialScopesMatch,
   credentialsCoveringModel,
+  EMPTY_MODEL_LIST_FILTER,
   enabledCredentials,
+  filterProviderModels,
   groupProviderModels,
+  type ModelListFilter,
   modelCapabilityFlags,
+  modelListFilterActive,
   type ProviderDrawerState,
   presetForProvider,
   providerConfiguredProtocols,
   providerCredentials,
   providerDefaultProtocol,
+  providerDocUrl,
   readEndpoint,
   removeProviderModel,
   reorderProviderModels,
@@ -397,14 +402,20 @@ const ModelRow = memo(function ModelRow(props: {
 
 type ModelGroupView = {
   key: string;
+  /** 搜索 / 过滤生效时只含匹配的模型；否则是分组全部模型 */
   models: ProviderModelConfig[];
+  totalCount: number;
   activeCount: number;
 };
 
-/** 一个分组一份拖拽上下文：分组内排序，写回时按显示顺序拼成全局 modelOrder。 */
+/**
+ * 一个分组一份拖拽上下文：分组内排序，写回时按显示顺序拼成全局 modelOrder。搜索 /
+ * 过滤生效时列表是子集，禁用拖拽（reorderProviderModels 要求整组 id）。
+ */
 function ModelGroup(props: {
   group: ModelGroupView;
   collapsed: boolean;
+  filtering: boolean;
   infoById: ReadonlyMap<string, ModelRowInfo>;
   checks: ReadonlyMap<string, ModelCheckAggregate>;
   credentialIndexById: ReadonlyMap<string, number>;
@@ -416,6 +427,7 @@ function ModelGroup(props: {
   const {
     group,
     collapsed,
+    filtering,
     infoById,
     checks,
     credentialIndexById,
@@ -434,7 +446,7 @@ function ModelGroup(props: {
   const { draggingItemId, getItemProps, renderDragHandle, scrollContainerRef } =
     useVerticalListReorder({
       itemIds,
-      canReorder: true,
+      canReorder: !filtering,
       reorderLabel: t("settings.reorderModel"),
       reorderHint: t("settings.reorderVerticalHint"),
       disabledHint: t("settings.reorderNeedsTwoItems"),
@@ -455,9 +467,15 @@ function ModelGroup(props: {
         <span className="font-medium text-foreground/80">
           {group.key === "other" ? t("settings.modelGroupOther") : group.key}
         </span>
-        <Chip>
-          {group.activeCount} / {group.models.length}
-        </Chip>
+        {filtering ? (
+          <Chip tone="on" title={t("settings.modelGroupMatchHint")}>
+            {group.models.length} / {group.totalCount}
+          </Chip>
+        ) : (
+          <Chip>
+            {group.activeCount} / {group.totalCount}
+          </Chip>
+        )}
       </button>
       {!collapsed ? (
         <div ref={scrollContainerRef} className="divide-y">
@@ -516,15 +534,6 @@ export function ProviderDetail(props: ProviderDetailProps) {
     () => new Map(providerCredentials(provider).map((credential, index) => [credential.id, index])),
     [provider],
   );
-  const groups = useMemo<ModelGroupView[]>(
-    () =>
-      groupProviderModels(provider).map((group) => ({
-        ...group,
-        activeCount: group.models.filter((model) => provider.activeModels.includes(model.id))
-          .length,
-      })),
-    [provider],
-  );
   const infoById = useMemo(() => {
     const enabledKeyCount = enabledCredentials(provider).length;
     return new Map(
@@ -534,6 +543,28 @@ export function ProviderDetail(props: ProviderDetailProps) {
       ]),
     );
   }, [provider]);
+  // 搜索 / 过滤只在内存里：切换供应商（父组件按 id 重挂）即复位。生效时无匹配的分组
+  // 整组隐藏，"全部测试"也只测可见的已启用模型。
+  const [listFilter, setListFilter] = useState<ModelListFilter>(EMPTY_MODEL_LIST_FILTER);
+  const filtering = modelListFilterActive(listFilter);
+  const allGroups = useMemo(() => groupProviderModels(provider), [provider]);
+  const groups = useMemo<ModelGroupView[]>(() => {
+    const visible = filtering ? filterProviderModels(provider.models, infoById, listFilter) : null;
+    const views: ModelGroupView[] = [];
+    for (const group of allGroups) {
+      const models = visible ? group.models.filter((model) => visible.has(model.id)) : group.models;
+      if (visible && models.length === 0) continue;
+      views.push({
+        key: group.key,
+        models,
+        totalCount: group.models.length,
+        activeCount: group.models.filter((model) => provider.activeModels.includes(model.id))
+          .length,
+      });
+    }
+    return views;
+  }, [allGroups, filtering, infoById, listFilter, provider.activeModels, provider.models]);
+  const docUrl = providerDocUrl(provider);
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const toggleGroup = useCallback((key: string) => {
     setCollapsedGroups((previous) => {
@@ -543,6 +574,11 @@ export function ProviderDetail(props: ProviderDetailProps) {
       return next;
     });
   }, []);
+  // "收起 / 展开全部"看当前显示的分组：全部已折叠时一键展开，否则一键折叠所有分组。
+  const allCollapsed = groups.length > 0 && groups.every((group) => collapsedGroups.has(group.key));
+  const toggleCollapseAll = useCallback(() => {
+    setCollapsedGroups(allCollapsed ? new Set() : new Set(allGroups.map((group) => group.key)));
+  }, [allCollapsed, allGroups]);
   const [addingModel, setAddingModel] = useState(false);
   const [newModelName, setNewModelName] = useState("");
   const enabled = provider.enabled !== false;
@@ -846,56 +882,37 @@ export function ProviderDetail(props: ProviderDetailProps) {
         </div>
       </section>
 
-      <section className="space-y-2">
+      <section className="@container/models space-y-2">
         <SectionTitle
           title={t("settings.models")}
           badge={
-            <Chip>
-              {t("settings.modelsEnabledCount")
-                .replace("{enabled}", String(provider.activeModels.length))
-                .replace("{total}", String(provider.models.length))}
-            </Chip>
+            <>
+              <Chip>
+                {t("settings.modelsEnabledCount")
+                  .replace("{enabled}", String(provider.activeModels.length))
+                  .replace("{total}", String(provider.models.length))}
+              </Chip>
+              <ModelListToolbar
+                docUrl={docUrl}
+                hasGroups={groups.length > 0}
+                allCollapsed={allCollapsed}
+                onToggleCollapseAll={toggleCollapseAll}
+                filter={listFilter}
+                onFilterChange={setListFilter}
+              />
+            </>
           }
           actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-[11px]"
-                disabled={!checkingAll && activeModelIds.length === 0}
-                onClick={checkAll}
-                title={t("settings.modelCheckAllHint")}
-              >
-                {checkingAll ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Activity className="h-3 w-3" />
-                )}
-                {checkingAll ? t("settings.modelCheckStop") : t("settings.modelCheckAll")}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-[11px]"
-                disabled={busy !== null}
-                onClick={onRefreshModels}
-              >
-                <RefreshCw className={cn("h-3 w-3", busy === "refresh" && "animate-spin")} />
-                {busy === "refresh" ? t("settings.fetching") : t("settings.refreshModels")}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-[11px]"
-                onClick={() => setAddingModel(true)}
-              >
-                <Plus className="h-3 w-3" />
-                {t("settings.manualAddModel")}
-              </Button>
-            </>
+            <ModelListActions
+              checkingAll={checkingAll}
+              checkAllDisabled={!checkingAll && activeModelIds.length === 0}
+              checkAllScoped={filtering}
+              onCheckAll={checkAll}
+              refreshing={busy === "refresh"}
+              refreshDisabled={busy !== null}
+              onRefreshModels={onRefreshModels}
+              onAddModel={() => setAddingModel(true)}
+            />
           }
         />
         <div className="overflow-hidden rounded-xl border bg-card">
@@ -928,7 +945,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
           ) : null}
           {groups.length === 0 ? (
             <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-              {t("settings.modelsEmptyHint")}
+              {filtering ? t("settings.modelsFilterEmpty") : t("settings.modelsEmptyHint")}
             </div>
           ) : (
             groups.map((group) => (
@@ -936,6 +953,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
                 key={group.key}
                 group={group}
                 collapsed={collapsedGroups.has(group.key)}
+                filtering={filtering}
                 infoById={infoById}
                 checks={checks}
                 credentialIndexById={credentialIndexById}
