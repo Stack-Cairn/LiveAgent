@@ -69,6 +69,7 @@ message GatewayEnvelope {
     InstalledAppsListRequest installed_apps_list = 100;
     ClarifyTurnRequest clarify_turn = 101;
     CuaDriverRequest cua_driver = 102;
+    ProviderCheckModelRequest provider_check_model = 103;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -152,6 +153,7 @@ message AgentEnvelope {
     ClarifyTurnResponse clarify_turn_resp = 106;
     CuaDriverResponse cua_driver_resp = 107;
     ClarifyTurnDelta clarify_turn_delta = 108;
+    ProviderCheckModelResponse provider_check_model_resp = 109;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1376,6 +1378,31 @@ message ProviderModelsRequest {
 
 message ProviderModelsResponse {
   string models_json = 1;
+}
+
+// 模型连通测试（WebUI → 桌面端）：浏览器把按路由拼好的最小生成请求交给桌面端
+// 发出。WebUI 里 Key 已脱敏时 headers 不含鉴权头，桌面端按 provider_id +
+// credential_id 从落库供应商取 Key，并按 protocol 与端点 auth 覆盖生成鉴权头；
+// 此时 url 主机必须属于该供应商已保存的地址集合。
+message ProviderCheckModelRequest {
+  string url = 1;
+  repeated ProviderCustomHeader headers = 2;
+  // 请求体 JSON 文本（POST）。
+  string body_json = 3;
+  bool use_system_proxy = 4;
+  string provider_id = 5;
+  string credential_id = 6;
+  // 四类聊天接口字面量（anthropic-messages / openai-completions / ...）。
+  string protocol = 7;
+  // 端点级鉴权头覆盖；为空沿用协议缺省（Authorization Bearer / x-api-key / x-goog-api-key）。
+  string auth_header_name = 8;
+  optional string auth_prefix = 9;
+  optional uint64 timeout_ms = 10;
+}
+
+// result_json：`{"status":200,"latency_ms":320,"body":"..."}`（body 截断到 4KB）。
+message ProviderCheckModelResponse {
+  string result_json = 1;
 }
 
 message ProviderUsageRequest {

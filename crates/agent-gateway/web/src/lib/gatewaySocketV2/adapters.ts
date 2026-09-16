@@ -72,6 +72,7 @@ import {
   InstalledAppsListRequestSchema,
   ManagedProcessRequestSchema,
   MemoryManageRequestSchema,
+  ProviderCheckModelRequestSchema,
   ProviderCustomHeaderSchema,
   ProviderCustomHeadersSchema,
   ProviderListRequestSchema,
@@ -636,6 +637,30 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
                 ),
               })
             : undefined,
+        }),
+      };
+    case "provider.check_model":
+      return {
+        case: "providerCheckModel",
+        value: create(ProviderCheckModelRequestSchema, {
+          url: trimStr(body.url),
+          headers: (Array.isArray(body.headers) ? body.headers : []).map((header) =>
+            create(ProviderCustomHeaderSchema, {
+              name: trimStr((header as { key?: unknown } | null)?.key),
+              value: str((header as { value?: unknown } | null)?.value),
+            }),
+          ),
+          bodyJson: body.body === undefined ? "" : JSON.stringify(body.body),
+          useSystemProxy: bool(body.use_system_proxy),
+          providerId: trimStr(body.provider_id),
+          credentialId: trimStr(body.credential_id),
+          protocol: trimStr(body.protocol),
+          authHeaderName: trimStr(body.auth_header_name),
+          authPrefix: typeof body.auth_prefix === "string" ? body.auth_prefix : undefined,
+          timeoutMs:
+            typeof body.timeout_ms === "number" && Number.isFinite(body.timeout_ms)
+              ? BigInt(Math.max(0, Math.floor(body.timeout_ms)))
+              : undefined,
         }),
       };
     case "provider.usage.query":
@@ -1236,6 +1261,13 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
         return parseJson(payload.value.resultJson);
       } catch {
         frameError("provider usage response is not valid JSON");
+      }
+      break;
+    case "providerCheckModelResp":
+      try {
+        return parseJson(payload.value.resultJson);
+      } catch {
+        frameError("provider check response is not valid JSON");
       }
       break;
     case "settingsGetResp": {

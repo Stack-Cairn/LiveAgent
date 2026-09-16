@@ -22,6 +22,24 @@ func TestVetAgentRequestAllowsProviderUsage(t *testing.T) {
 	}
 }
 
+func TestVetAgentRequestAllowsProviderCheckModel(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_ProviderCheckModel{
+			ProviderCheckModel: &gatewayv2.ProviderCheckModelRequest{
+				Url:          "https://api.example.com/v1/chat/completions",
+				BodyJson:     `{"model":"gpt-test"}`,
+				ProviderId:   "provider-1",
+				CredentialId: "default",
+				Protocol:     "openai-completions",
+			},
+		},
+	}
+
+	if err := vetAgentRequest(session.AgentView{}, env); err != nil {
+		t.Fatalf("vetAgentRequest() error = %v", err)
+	}
+}
+
 func TestVetAgentRequestAllowsInstalledAppsList(t *testing.T) {
 	env := &gatewayv2.GatewayEnvelope{
 		Payload: &gatewayv2.GatewayEnvelope_InstalledAppsList{

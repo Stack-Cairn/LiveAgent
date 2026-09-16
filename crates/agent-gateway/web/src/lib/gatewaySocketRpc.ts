@@ -75,6 +75,7 @@ import {
   type FsRootsResponse,
   type FsWriteTextResponse,
   type GatewayChatCommandInput,
+  type GatewayProviderCheckModelPayload,
   type GatewaySettingsUpdateResponse,
   type GatewayWorkspaceRootGrant,
   type GatewayWorkspaceRootGrantDraft,
@@ -1383,6 +1384,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     providerId = "",
     isFullUrl?: boolean,
     customHeaders?: readonly { key: string; value: string }[],
+    credentialId = "",
   ): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
@@ -1391,9 +1393,14 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       use_system_proxy: useSystemProxy,
       models_url: modelsUrl,
       provider_id: providerId,
+      credential_id: credentialId,
       is_full_url: isFullUrl,
       custom_headers: customHeaders,
     });
+  }
+
+  async checkProviderModel(payload: GatewayProviderCheckModelPayload): Promise<unknown> {
+    return this.requestWithRecovery("provider.check_model", payload);
   }
 
   async providerUsageQuery<T = unknown>(providerId: string, refresh: boolean): Promise<T> {

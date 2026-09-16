@@ -585,6 +585,21 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 502, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::ProviderCheckModel(request)) => {
+                match gateway_bridge::handle_provider_check_model(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::ProviderCheckModelResp(
+                                response,
+                            )),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 502, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::SettingsGet(_request)) => {
                 match self.current_settings_snapshot().await {
                     Ok(snapshot) => {

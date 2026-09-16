@@ -786,6 +786,175 @@ fn resolve_stored_provider_models_config(
     })
 }
 
+// ---------------------------------------------------------------------------
+// 模型连通测试（WebUI 走网关桥）
+// ---------------------------------------------------------------------------
+
+/// 端点级鉴权头覆盖；与前端 buildProtocolAuthHeaders 同一语义。
+#[derive(Debug, Default, Clone, PartialEq)]
+struct ProviderCheckAuthOverride {
+    header_name: String,
+    prefix: Option<String>,
+}
+
+/// 协议缺省的鉴权头名与前缀。KEEP IN SYNC: crates/agent-ui/src/lib/providers/
+/// registry/protocols.ts 的 PROVIDER_PROTOCOL_AUTH_HEADER。
+fn protocol_default_auth(protocol: &str) -> (&'static str, &'static str) {
+    match protocol {
+        "anthropic-messages" => ("x-api-key", ""),
+        "google-generative-ai" => ("x-goog-api-key", ""),
+        _ => ("Authorization", "Bearer "),
+    }
+}
+
+/// 该请求应携带的鉴权头名：端点覆盖优先，否则协议缺省。
+fn provider_check_auth_header_name(protocol: &str, auth: &ProviderCheckAuthOverride) -> String {
+    let name = auth.header_name.trim();
+    if name.is_empty() {
+        protocol_default_auth(protocol).0.to_string()
+    } else {
+        name.to_string()
+    }
+}
+
+fn provider_check_has_auth_header(
+    headers: &[(String, String)],
+    protocol: &str,
+    auth: &ProviderCheckAuthOverride,
+) -> bool {
+    let expected = provider_check_auth_header_name(protocol, auth);
+    headers
+        .iter()
+        .any(|(name, value)| name.eq_ignore_ascii_case(&expected) && !value.trim().is_empty())
+}
+
+/// 按协议与端点覆盖生成鉴权头；改了头名却没给前缀时按无前缀处理（api-key 类头
+/// 不带 Bearer），沿用协议缺省头名时才继承缺省前缀。
+fn build_provider_check_auth_headers(
+    protocol: &str,
+    auth: &ProviderCheckAuthOverride,
+    api_key: &str,
+) -> Vec<(String, String)> {
+    let (default_name, default_prefix) = protocol_default_auth(protocol);
+    let header_name = provider_check_auth_header_name(protocol, auth);
+    let renamed = !header_name.eq_ignore_ascii_case(default_name);
+    let prefix = auth.prefix.clone().unwrap_or_else(|| {
+        if renamed {
+            String::new()
+        } else {
+            default_prefix.to_string()
+        }
+    });
+    let mut out = vec![(header_name, format!("{prefix}{api_key}"))];
+    if protocol == "anthropic-messages" {
+        out.push((
+            "anthropic-version".to_string(),
+            crate::services::provider_models::ANTHROPIC_API_VERSION.to_string(),
+        ));
+    }
+    out
+}
+
+/// WebUI 脱敏态：请求没带鉴权头时按 `provider_id` + `credential_id` 从落库供应商
+/// 取 Key，并把鉴权头补进去。与模型列表拉取同一条红线：请求地址的主机必须属于
+/// 该供应商已保存的地址集合，落库 Key 不能被一次改地址的测试带去任意主机。
+fn resolve_stored_provider_check_headers(
+    providers: Option<Value>,
+    provider_id: &str,
+    credential_id: &str,
+    url: &str,
+    protocol: &str,
+    auth: &ProviderCheckAuthOverride,
+    mut headers: Vec<(String, String)>,
+) -> Result<Vec<(String, String)>, String> {
+    let provider_id = provider_id.trim();
+    if provider_id.is_empty() {
+        return Err("请先填写 API Key".to_string());
+    }
+    let providers = providers
+        .and_then(|value| value.as_array().cloned())
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let provider = providers
+        .into_iter()
+        .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let api_key = resolve_stored_provider_api_key(&provider, credential_id.trim())?;
+    let known_hosts: HashSet<String> = stored_provider_endpoints(&provider)
+        .iter()
+        .flat_map(|endpoint| {
+            [
+                Some(endpoint.base_url.as_str()),
+                endpoint.models_url.as_deref(),
+            ]
+        })
+        .flatten()
+        .filter_map(url_host_key)
+        .collect();
+    ensure_known_provider_host(url, &known_hosts, "请求地址")?;
+
+    for (name, value) in build_provider_check_auth_headers(protocol, auth, &api_key) {
+        headers.retain(|(existing, _)| !existing.eq_ignore_ascii_case(&name));
+        headers.push((name, value));
+    }
+    Ok(headers)
+}
+
+pub async fn handle_provider_check_model(
+    request: proto::ProviderCheckModelRequest,
+) -> Result<proto::ProviderCheckModelResponse, String> {
+    let body = if request.body_json.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str::<Value>(&request.body_json)
+            .map_err(|_| "请求体不是有效 JSON".to_string())?
+    };
+    let headers: Vec<(String, String)> = request
+        .headers
+        .iter()
+        .map(|header| (header.name.clone(), header.value.clone()))
+        .collect();
+    let protocol = request.protocol.trim().to_string();
+    let auth = ProviderCheckAuthOverride {
+        header_name: request.auth_header_name.trim().to_string(),
+        prefix: request.auth_prefix.clone(),
+    };
+    let headers = if provider_check_has_auth_header(&headers, &protocol, &auth) {
+        headers
+    } else {
+        let provider_id = request.provider_id.clone();
+        let credential_id = request.credential_id.clone();
+        let url = request.url.clone();
+        let protocol = protocol.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let conn = open_db()?;
+            resolve_stored_provider_check_headers(
+                load_providers(&conn)?,
+                &provider_id,
+                &credential_id,
+                &url,
+                &protocol,
+                &auth,
+                headers,
+            )
+        })
+        .await
+        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
+    };
+    let result = crate::services::provider_check::check_provider_model(
+        crate::services::provider_check::ProviderCheckRequest {
+            url: request.url,
+            headers,
+            body,
+            use_system_proxy: request.use_system_proxy,
+            timeout_ms: request.timeout_ms,
+        },
+    )
+    .await?;
+    let result_json = serde_json::to_string(&result)
+        .map_err(|error| format!("序列化模型连通测试结果失败：{error}"))?;
+    Ok(proto::ProviderCheckModelResponse { result_json })
+}
+
 pub async fn handle_skill_files_list() -> Result<proto::SkillFilesListResponse, String> {
     tauri::async_runtime::spawn_blocking(system_list_skill_files_sync)
         .await
@@ -2026,9 +2195,11 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::{
-        flatten_history_messages_json, flatten_history_messages_json_window,
-        is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
-        resolve_stored_provider_models_config, sanitize_provider_summaries, ProviderModelsDraft,
+        build_provider_check_auth_headers, flatten_history_messages_json,
+        flatten_history_messages_json_window, is_builtin_share_tool_name, parse_runs_limit,
+        provider_check_has_auth_header, redact_builtin_tool_content_json,
+        resolve_stored_provider_check_headers, resolve_stored_provider_models_config,
+        sanitize_provider_summaries, ProviderCheckAuthOverride, ProviderModelsDraft,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -2186,6 +2357,173 @@ mod tests {
                 "openai-completions": "malformed-entry"
             }
         }])
+    }
+
+    fn header_value<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+
+    #[test]
+    fn provider_check_auth_headers_follow_protocol_and_endpoint_override() {
+        let none = ProviderCheckAuthOverride::default();
+        let completions = build_provider_check_auth_headers("openai-completions", &none, "k");
+        assert_eq!(
+            header_value(&completions, "authorization"),
+            Some("Bearer k")
+        );
+        let messages = build_provider_check_auth_headers("anthropic-messages", &none, "k");
+        assert_eq!(header_value(&messages, "x-api-key"), Some("k"));
+        assert_eq!(
+            header_value(&messages, "anthropic-version"),
+            Some(crate::services::provider_models::ANTHROPIC_API_VERSION)
+        );
+        let gemini = build_provider_check_auth_headers("google-generative-ai", &none, "k");
+        assert_eq!(header_value(&gemini, "x-goog-api-key"), Some("k"));
+
+        // 改了头名却没给前缀：按无前缀处理；显式给前缀时照用。
+        let renamed = ProviderCheckAuthOverride {
+            header_name: "api-key".to_string(),
+            prefix: None,
+        };
+        let azure = build_provider_check_auth_headers("openai-completions", &renamed, "k");
+        assert_eq!(header_value(&azure, "api-key"), Some("k"));
+        let prefixed = ProviderCheckAuthOverride {
+            header_name: "X-Token".to_string(),
+            prefix: Some("Token ".to_string()),
+        };
+        let custom = build_provider_check_auth_headers("openai-responses", &prefixed, "k");
+        assert_eq!(header_value(&custom, "x-token"), Some("Token k"));
+
+        assert!(provider_check_has_auth_header(
+            &completions,
+            "openai-completions",
+            &none
+        ));
+        assert!(!provider_check_has_auth_header(
+            &completions,
+            "anthropic-messages",
+            &none
+        ));
+        assert!(!provider_check_has_auth_header(
+            &[("Authorization".to_string(), "".to_string())],
+            "openai-completions",
+            &none
+        ));
+    }
+
+    #[test]
+    fn provider_check_resolves_stored_credential_by_id_and_injects_auth_header() {
+        let base_headers = vec![("content-type".to_string(), "application/json".to_string())];
+        let headers = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "backup",
+            "https://stored.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("backup credential");
+        assert_eq!(
+            header_value(&headers, "authorization"),
+            Some("Bearer sk-backup")
+        );
+        assert_eq!(
+            header_value(&headers, "content-type"),
+            Some("application/json")
+        );
+
+        // 未指定 / 未知凭据退回默认 Key；指定了但没配 Key 的凭据直接报错。
+        for credential_id in ["", "missing"] {
+            let headers = resolve_stored_provider_check_headers(
+                Some(multi_endpoint_provider()),
+                "provider-a",
+                credential_id,
+                "https://stored.example.com/v1/responses",
+                "openai-responses",
+                &ProviderCheckAuthOverride::default(),
+                base_headers.clone(),
+            )
+            .expect("default credential");
+            assert_eq!(
+                header_value(&headers, "authorization"),
+                Some("Bearer sk-primary")
+            );
+        }
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "empty",
+            "https://stored.example.com/v1/responses",
+            "openai-responses",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .is_err());
+
+        // 次级渠道主机（anthropic 端点）也算已知主机，鉴权头按该协议生成。
+        let relay = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://relay.example.com/anthropic/v1/messages",
+            "anthropic-messages",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("relay host is known");
+        assert_eq!(header_value(&relay, "x-api-key"), Some("sk-primary"));
+        assert_eq!(header_value(&relay, "authorization"), None);
+    }
+
+    #[test]
+    fn provider_check_rejects_unknown_hosts_and_missing_provider() {
+        let error = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://evil.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .expect_err("unknown host must be rejected");
+        assert!(!error.contains("sk-primary"));
+
+        // 端口不同即视为另一台主机。
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://stored.example.com:8443/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_err());
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "",
+            "default",
+            "https://stored.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_err());
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-z",
+            "default",
+            "https://stored.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_err());
     }
 
     #[test]
