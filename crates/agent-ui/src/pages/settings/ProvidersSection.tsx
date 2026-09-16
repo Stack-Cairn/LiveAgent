@@ -548,6 +548,7 @@ export function ProvidersSection(
         <CredentialsDrawer
           provider={selectedProvider}
           isGatewayWebui={isGatewayWebui}
+          focus={drawer.focus}
           onChange={updateSelectedProvider}
           onClose={() => setDrawer(null)}
         />

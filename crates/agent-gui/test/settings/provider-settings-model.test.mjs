@@ -664,3 +664,35 @@ test("model row flags follow effective capabilities and input modalities", () =>
   assert.equal(claude.file, true);
   assert.equal(claude.vision, true);
 });
+
+test("credential list helpers keep apiKey === credentials[0].apiKey and never drop the last key", () => {
+  const provider = legacyAnthropicProvider();
+  const backup = model.createCredential("备用");
+  const added = model.addProviderCredential(provider, { ...backup, apiKey: "sk-backup" });
+  assert.equal(model.providerCredentials(added).length, 2);
+  assert.equal(added.apiKey, "sk-primary");
+  assert.equal(added.credentials[1].apiKey, "sk-backup");
+
+  const patched = model.updateProviderCredential(added, backup.id, { label: "第二把", enabled: false });
+  assert.equal(patched.credentials[1].label, "第二把");
+  assert.equal(patched.credentials[1].enabled, false);
+  const fnPatched = model.updateProviderCredential(patched, backup.id, (current) => ({
+    lastModels: { at: 1, models: ["claude-sonnet-4"] },
+    modelScope: current.modelScope ?? { mode: "auto" },
+  }));
+  assert.deepEqual(fnPatched.credentials[1].lastModels, { at: 1, models: ["claude-sonnet-4"] });
+
+  // 改首把 Key 时旧字段同步；删除首把后第二把升为默认，apiKey 跟着换。
+  const primaryChanged = model.updateProviderCredential(fnPatched, "default", {
+    apiKey: "sk-new",
+    apiKeyConfigured: true,
+  });
+  assert.equal(primaryChanged.apiKey, "sk-new");
+  const removed = model.removeProviderCredential(primaryChanged, "default");
+  assert.equal(model.providerCredentials(removed).length, 1);
+  assert.equal(removed.apiKey, "sk-backup");
+  assert.equal(removed.credentials[0].id, backup.id);
+  // 只剩一把时不可删。
+  const kept = model.removeProviderCredential(removed, backup.id);
+  assert.equal(model.providerCredentials(kept).length, 1);
+});
