@@ -144,7 +144,8 @@ const NPM_PROTOCOLS = {
   "@ai-sdk/anthropic": ["anthropic-messages"],
   "@ai-sdk/openai": ["openai-responses", "openai-completions"],
   "@ai-sdk/google": ["google-generative-ai"],
-  "@ai-sdk/xai": ["openai-responses", "openai-completions"],
+  // xAI 原生渠道只走 Responses（xai 方言）；Completions 不作为渠道接口提供。
+  "@ai-sdk/xai": ["openai-responses"],
   "@ai-sdk/openai-compatible": ["openai-completions"],
   "@openrouter/ai-sdk-provider": ["openai-completions"],
   "@ai-sdk/groq": ["openai-completions"],

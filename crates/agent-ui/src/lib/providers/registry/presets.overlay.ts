@@ -98,7 +98,6 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     input: "key",
     dialect: "xai",
     defaultChatProtocol: "openai-responses",
-    endpoints: { "openai-completions": { baseUrl: "https://api.x.ai/v1" } },
     identity: "grok-shell",
     apiKeyUrl: "https://console.x.ai",
     order: 40,

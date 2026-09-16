@@ -458,7 +458,8 @@ test("modelSelectableProtocols follows the channel: native = declared, others = 
   assert.deepEqual(pick("anthropic", "claude-opus-4-6"), ["anthropic-messages"]);
   assert.deepEqual(pick("openai", "gpt-5.2"), ["openai-completions", "openai-responses"]);
   assert.deepEqual(pick("gemini", "gemini-2.5-pro"), ["google-generative-ai"]);
-  assert.deepEqual(pick("xai", "grok-4"), ["openai-completions", "openai-responses"]);
+  // xAI 原生渠道只提供 Responses。
+  assert.deepEqual(pick("xai", "grok-4"), ["openai-responses"]);
   // 自定义 / 中转 / 厂商：OpenAI 两类 + Messages；Gemini 系列模型再加 v1beta。
   assert.deepEqual(pick("custom", "gpt-5.2"), [
     "anthropic-messages",

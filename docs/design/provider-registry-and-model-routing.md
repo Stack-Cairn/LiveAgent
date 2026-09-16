@@ -236,7 +236,7 @@ type PresetModelRule = {
 | Anthropic | 原生 | anthropic-messages `https://api.anthropic.com/v1`（默认） | x-api-key + anthropic-version；OAuth Key 时不带 | generic | — |
 | OpenAI | 原生 | openai-responses `https://api.openai.com/v1`（默认）；openai-completions 同地址 | Bearer | openai | — |
 | Gemini | 原生 | google-generative-ai `https://generativelanguage.googleapis.com/v1beta`（默认） | x-goog-api-key | generic | — |
-| xAI | 原生 | openai-responses `https://api.x.ai/v1`（默认）；openai-completions 同地址 | Bearer | xai | — |
+| xAI | 原生 | openai-responses `https://api.x.ai/v1`（唯一接口） | Bearer | xai | — |
 | DeepSeek | 原生 | openai-completions `https://api.deepseek.com`（默认）；openai-responses 同地址；anthropic-messages `https://api.deepseek.com/anthropic` | Bearer | deepseek | `deepseek-chat`、`deepseek-reasoner` 只允许 Completions；anthropic-messages 端点只允许 `deepseek-v4-*` |
 | 智谱 GLM | 厂商 | openai-completions `https://open.bigmodel.cn/api/paas/v4`（默认）；anthropic-messages `https://open.bigmodel.cn/api/anthropic` | Bearer | generic | — |
 | MiniMax | 厂商 | openai-completions `https://api.minimaxi.com/v1`（默认）；anthropic-messages `https://api.minimaxi.com/anthropic` | Bearer | generic | — |
@@ -317,7 +317,8 @@ type ResolvedProviderChatRoute = {
 | 渠道 | 可选接口 |
 | --- | --- |
 | Anthropic（原生） | Anthropic Messages（固定） |
-| OpenAI / xAI（原生） | Chat Completions ↔ Responses |
+| OpenAI（原生） | Chat Completions ↔ Responses |
+| xAI（原生） | Responses（固定） |
 | Gemini（原生） | generateContent v1beta（固定） |
 | DeepSeek（原生） | 预设声明的三个接口 |
 | 其它渠道（厂商 / 中转 / 自建 / 自定义） | Chat Completions、Responses、Anthropic Messages；Gemini 系列模型再加 v1beta |
