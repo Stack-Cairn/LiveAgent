@@ -136,7 +136,7 @@ test("presets merge models.dev facts with the overlay", () => {
   const gpt = registry.findPresetCatalogModel(registry.findProviderPreset("openai"), "gpt-5.2");
   assert.equal(gpt.toolCall, true);
   assert.equal(gpt.maxInputTokens, 272_000);
-  for (const presetId of ["moonshot-cn", "dashscope-cn", "siliconflow", "groq", "openrouter", "lmstudio"]) {
+  for (const presetId of ["moonshot-cn", "dashscope-cn", "stepfun-cn", "tencent", "xiaomi", "longcat", "sensenova", "modelscope", "siliconflow", "groq", "openrouter", "lmstudio"]) {
     const preset = registry.findProviderPreset(presetId);
     assert.ok(preset?.catalogModels.length > 0, `${presetId} lists its channel models`);
   }

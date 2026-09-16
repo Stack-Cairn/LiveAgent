@@ -243,6 +243,14 @@ type PresetModelRule = {
 | Moonshot Kimi | 厂商 | openai-completions `https://api.moonshot.cn/v1`（默认）；anthropic-messages `https://api.moonshot.cn/anthropic` | Bearer | generic | — |
 | 通义千问 | 厂商 | openai-completions `https://dashscope.aliyuncs.com/compatible-mode/v1` | Bearer | generic | — |
 | 豆包 · 火山方舟 | 厂商 | openai-completions `https://ark.cn-beijing.volces.com/api/v3` | Bearer | generic | — |
+| 阶跃星辰 | 厂商 | openai-completions `https://api.stepfun.com/v1`（国内）/ `https://api.stepfun.ai/v1`（国际） | Bearer | generic | — |
+| 腾讯云 · 混元 | 厂商 | openai-completions `https://tokenhub.tencentmaas.com/v1` | Bearer | generic | — |
+| 百度千帆 | 厂商 | openai-completions `https://qianfan.baidubce.com/v2`（覆盖层声明，models.dev 未收录） | Bearer | generic | — |
+| 小米 MiMo | 厂商 | openai-completions `https://api.xiaomimimo.com/v1` | Bearer | generic | — |
+| 美团 LongCat | 厂商 | openai-completions `https://api.longcat.chat/openai` | Bearer | generic | — |
+| 商汤 SenseNova | 厂商 | openai-completions `https://token.sensenova.cn/v1` | Bearer | generic | — |
+| 讯飞星火 | 厂商 | openai-completions `https://spark-api-open.xf-yun.com/v1`（覆盖层声明，models.dev 未收录） | Bearer | generic | — |
+| 魔搭 ModelScope | 聚合 | openai-completions `https://api-inference.modelscope.cn/v1` | Bearer | generic | — |
 | 硅基流动 | 中转 | openai-completions `https://api.siliconflow.cn/v1` | Bearer | generic | — |
 | OpenRouter | 中转 | openai-completions `https://openrouter.ai/api/v1`（默认）；anthropic-messages `https://openrouter.ai/api`；openai-responses 待探测 | Bearer | generic | `anthropic/*` 偏好 Messages；`openai/*` 偏好 Responses |
 | New API / One API | 中转（自部署） | 四类全部：openai-* `{origin}/v1`，anthropic-messages `{origin}`，google-generative-ai `{origin}/v1beta`；默认 Completions | Bearer | generic | 按家族表 |

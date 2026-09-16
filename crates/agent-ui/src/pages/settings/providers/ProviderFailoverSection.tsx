@@ -4,8 +4,12 @@
 
 import {
   type CustomProvider,
+  getProviderEnabledProtocols,
   hasProviderFailoverConfiguration,
   MODEL_FAILOVER_QUEUE_LIMIT,
+  PROVIDER_CHAT_PROTOCOL_LABELS,
+  PROVIDER_CHAT_PROTOCOLS,
+  PROVIDER_PROTOCOL_FAMILY,
   PROVIDER_PROTOCOL_FAMILY_LABELS,
   type ProviderFailoverSettings,
   type ProviderId,
@@ -81,6 +85,21 @@ function FailoverFamilyCard(
   const { t } = useLocale();
   const failover = settings.modelFailover[family];
   const familyLabel = PROVIDER_PROTOCOL_FAMILY_LABELS[family];
+  // 只列该供应商已启用的同家族接口（xAI 只有 Responses，就不再显示 Completions）。
+  const familyProtocolsLabel = useMemo(() => {
+    const enabled = getProviderEnabledProtocols(selected).filter(
+      (protocol) => PROVIDER_PROTOCOL_FAMILY[protocol] === family,
+    );
+    const list =
+      enabled.length > 0
+        ? enabled
+        : PROVIDER_CHAT_PROTOCOLS.filter((p) => PROVIDER_PROTOCOL_FAMILY[p] === family);
+    return list
+      .map((protocol) =>
+        PROVIDER_CHAT_PROTOCOL_LABELS[protocol].replace(/^(OpenAI|Anthropic|Gemini) /, ""),
+      )
+      .join(" + ");
+  }, [selected, family]);
   const familyProviders = useMemo(
     () =>
       settings.customProviders.filter(
@@ -156,13 +175,7 @@ function FailoverFamilyCard(
         <span className="text-[12.5px] font-medium">
           {t("settings.failoverFamilyTitle").replace("{family}", familyLabel)}
         </span>
-        <Chip>
-          {family === "openai"
-            ? "Completions + Responses"
-            : family === "anthropic"
-              ? "Messages"
-              : "generateContent"}
-        </Chip>
+        <Chip>{familyProtocolsLabel}</Chip>
         {queueValues.has(selected.id) ? (
           <Chip tone="on">{t("settings.failoverInQueue")}</Chip>
         ) : null}
