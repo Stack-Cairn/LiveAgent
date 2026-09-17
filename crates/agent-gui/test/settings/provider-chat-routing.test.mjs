@@ -594,3 +594,97 @@ test("endpoint identity is normalized per endpoint and surfaces on the resolved 
   assert.equal(settings.resolveProviderChatRoute(provider, "claude-opus-4-6").identity, "claude_code");
   assert.equal(settings.resolveProviderChatRoute(provider, "glm-5").identity, undefined);
 });
+
+test("origins are normalized: invalid dropped, duplicates collapsed, enabled defaults to true", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    name: "relay",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "{origin}/v1",
+    apiKey: "sk",
+    origins: [
+      { id: "o1", url: "https://packyapi.com/" },
+      { id: "o2", url: "not a url" },
+      { id: "o3", url: "" },
+      // 规范化后与 o1 同值 → 去重保留先出现的。
+      { id: "o4", url: "https://packyapi.com/v1" },
+      { id: "o5", url: "https://packy.ai", enabled: false },
+    ],
+  });
+  assert.deepEqual(
+    provider.origins.map((origin) => [origin.id, origin.url, origin.enabled]),
+    [
+      ["o1", "https://packyapi.com", undefined],
+      ["o5", "https://packy.ai", false],
+    ],
+  );
+});
+
+test("{origin} endpoints expand through the primary origin, or a caller-picked one", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    name: "relay",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "{origin}/v1",
+    apiKey: "sk",
+    defaultChatProtocol: "openai-completions",
+    origins: [
+      { id: "main", url: "https://packyapi.com" },
+      { id: "alt", url: "https://packy.ai" },
+    ],
+    endpointConfigs: {
+      "openai-completions": { baseUrl: "{origin}/v1" },
+      "anthropic-messages": { baseUrl: "{origin}" },
+    },
+    models: [{ id: "gpt-5.2" }, { id: "claude-opus-4-6" }],
+    activeModels: ["gpt-5.2", "claude-opus-4-6"],
+  });
+  // 主源展开：主连接与各端点一致。
+  const primary = settings.resolveProviderChatRoute(provider, "gpt-5.2");
+  assert.equal(primary.baseUrl, "https://packyapi.com/v1");
+  assert.equal(primary.originId, "main");
+  assert.equal(primary.originUrl, "https://packyapi.com");
+  assert.equal(provider.baseUrl, "https://packyapi.com/v1");
+  // 指定备用源：同一模板换主机。
+  const alt = settings.resolveProviderChatRoute(provider, "gpt-5.2", { originId: "alt" });
+  assert.equal(alt.baseUrl, "https://packy.ai/v1");
+  assert.equal(alt.originId, "alt");
+  // 另一接口同样跟随源。
+  assert.equal(
+    settings.resolveProviderChatRoute(provider, "claude-opus-4-6", { originId: "alt" }).baseUrl,
+    "https://packy.ai",
+  );
+  // 未知 / 停用的源 id 退回主源，不静默打到错误主机。
+  assert.equal(settings.resolveProviderChatRoute(provider, "gpt-5.2", { originId: "nope" }).originId, "main");
+});
+
+test("without origins a {origin} endpoint is not routable and absolute endpoints still are", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    name: "relay",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "https://absolute.example/v1",
+    apiKey: "sk",
+    defaultChatProtocol: "openai-completions",
+    endpointConfigs: {
+      "openai-completions": { baseUrl: "https://absolute.example/v1" },
+      "anthropic-messages": { baseUrl: "{origin}" },
+    },
+    models: [{ id: "gpt-5.2" }, { id: "claude-opus-4-6" }],
+    activeModels: ["gpt-5.2", "claude-opus-4-6"],
+  });
+  assert.equal(provider.origins, undefined);
+  // 模板端点没有源可展开 → 不参与路由；claude 退回已启用的 Completions。
+  assert.equal(
+    settings.getProviderEnabledProtocols(provider).includes("anthropic-messages"),
+    false,
+  );
+  assert.equal(
+    settings.resolveProviderChatRoute(provider, "claude-opus-4-6").protocol,
+    "openai-completions",
+  );
+  assert.equal(settings.resolveProviderChatRoute(provider, "gpt-5.2").baseUrl, "https://absolute.example/v1");
+});

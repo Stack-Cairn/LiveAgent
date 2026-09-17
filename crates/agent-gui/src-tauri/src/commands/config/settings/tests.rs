@@ -612,6 +612,14 @@ mod tests {
                         "lastModels": { "at": 1, "models": ["gpt-5"] }
                     }
                 ],
+                "origins": [
+                    {
+                        "id": "o1",
+                        "url": "https://api.openai.com",
+                        "lastProbe": { "at": 1, "status": "ok", "latencyMs": 9 }
+                    },
+                    "malformed-origin"
+                ],
                 "endpointConfigs": {
                     "openai-responses": {
                         "enabled": true,
@@ -640,6 +648,11 @@ mod tests {
         assert_eq!(endpoint["dialect"], "openai");
         assert_eq!(endpoint["source"], "auto");
         assert!(endpoint.get("lastProbe").is_none(), "端点观测值应剥离");
+        let origin = &provider["origins"][0];
+        assert_eq!(origin["id"], "o1");
+        assert_eq!(origin["url"], "https://api.openai.com");
+        assert!(origin.get("lastProbe").is_none(), "源地址观测值应剥离");
+        assert_eq!(provider["origins"][1], "malformed-origin", "非对象源条目原样透传");
         assert_eq!(
             provider["endpointConfigs"]["openai-completions"],
             "malformed-entry",
@@ -652,6 +665,7 @@ mod tests {
         assert!(stored[0]["endpointConfigs"]["openai-responses"]
             .get("lastProbe")
             .is_some());
+        assert!(stored[0]["origins"][0].get("lastProbe").is_some());
     }
 
     #[test]

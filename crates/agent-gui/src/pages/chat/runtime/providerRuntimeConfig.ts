@@ -1,3 +1,4 @@
+import type { ProviderFailoverLayer } from "../../../lib/providers/runtime/providerFailover";
 import { createProviderRuntimeConfig } from "../../../lib/providers/runtime/providerRuntimeConfig";
 import type { ProviderRuntimeConfig } from "../../../lib/providers/runtime/types";
 import { resolveRuntimeWireRoute } from "../../../lib/providers/runtime/wireRoute";
@@ -8,6 +9,7 @@ import {
   credentialCoversModel,
   DEFAULT_PROVIDER_FAILOVER_SETTINGS,
   getProviderCredentials,
+  getProviderEnabledOrigins,
   getProviderEnabledProtocols,
   PROVIDER_CHAT_PROTOCOL_LABELS,
   PROVIDER_PROTOCOL_FAMILY,
@@ -121,7 +123,7 @@ export function selectedModelsMatch(
   );
 }
 
-export type ModelFailoverLayer = "credential" | "endpoint" | "provider";
+export type ModelFailoverLayer = ProviderFailoverLayer;
 
 export type ModelFailoverPlan = {
   config: {
@@ -136,7 +138,7 @@ export type ModelFailoverPlan = {
     model: string;
     label: string;
     runtime: ProviderRuntimeConfig;
-    /** 候选来自哪一层（设计文档 8.2）；三层共用一份切换预算。 */
+    /** 候选来自哪一层（设计文档 8.2）；四层共用一份切换预算。 */
     layer: ModelFailoverLayer;
   }[];
 };
@@ -162,16 +164,27 @@ function resolveEndpointLayerProtocols(
   return out;
 }
 
+/** 源层候选的展示名：主机（含端口）；解析失败退回原串。 */
+export function originDisplayName(originUrl: string): string {
+  try {
+    return new URL(originUrl).host;
+  } catch {
+    return originUrl.replace(/^https?:\/\//i, "");
+  }
+}
+
 /**
  * Resolves settings.modelFailover into concrete fallback targets for one turn.
  *
  * 分组按接口家族（Anthropic / OpenAI / Gemini），家族取自主选的路由结果；跨家族
- * 绝不互为候选。候选按三层展开并共用一份 maxSwitches 预算（设计文档 8.2）：
+ * 绝不互为候选。候选按四层展开并共用一份 maxSwitches 预算（设计文档 8.2）：
  *
  * 1. 凭据层：同供应商下其它启用且范围覆盖该模型的 Key，各自独立熔断。
- * 2. 端点层：同供应商内同家族的其它已启用渠道。
- * 3. 供应商层：家族队列里的其它供应商，须启用同名模型且解析后同家族。只有这一层
- *    受 `enabled` 开关控制；前两层随配置自动生效。
+ * 2. 源层：同 Key、同接口，端点以 `{origin}` 占位时的其它已启用源。运行时只对连接 /
+ *    超时 / 5xx 类失败换源，鉴权类错误跳过这一层。
+ * 3. 端点层：同供应商内同家族的其它已启用渠道。
+ * 4. 供应商层：家族队列里的其它供应商，须启用同名模型且解析后同家族。只有这一层
+ *    受 `enabled` 开关控制；前三层随配置自动生效。
  *
  * Each fallback re-sends the conversation's *own model id* (cc-switch semantics:
  * switch target, keep model). The active selection stays first; queue entries
@@ -199,7 +212,7 @@ export function buildModelFailoverPlan(
     provider: CustomProvider,
     runtime: ProviderRuntimeConfig,
     protocol: ProviderChatProtocol,
-  ) => `${provider.id}::${runtime.credentialId ?? ""}::${protocol}`;
+  ) => `${provider.id}::${runtime.credentialId ?? ""}::${runtime.originId ?? ""}::${protocol}`;
   const pushFallback = (
     provider: CustomProvider,
     runtime: ProviderRuntimeConfig,
@@ -238,7 +251,22 @@ export function buildModelFailoverPlan(
     );
   });
 
-  // 2. 端点层：同家族其它已启用渠道。
+  // 2. 源层：当前端点由源展开时，按源列表顺序换到其它已启用的源（同 Key、同接口）。
+  if (primaryRuntime.originId) {
+    for (const origin of getProviderEnabledOrigins(primary.provider)) {
+      if (origin.id === primaryRuntime.originId) continue;
+      pushFallback(
+        primary.provider,
+        createProviderRuntimeConfig(primary.provider, primary.model, controlsInput, {
+          originId: origin.id,
+        }),
+        "origin",
+        ` · ${originDisplayName(origin.url)}`,
+      );
+    }
+  }
+
+  // 3. 端点层：同家族其它已启用渠道。
   for (const protocol of resolveEndpointLayerProtocols(
     primary.provider,
     family,
@@ -252,7 +280,7 @@ export function buildModelFailoverPlan(
     );
   }
 
-  // 3. 供应商层：只有这一层受 enabled 控制。
+  // 4. 供应商层：只有这一层受 enabled 控制。
   if (failover.enabled) {
     for (const providerId of failover.queue) {
       if (providerId === primary.selectedModel.customProviderId) continue;

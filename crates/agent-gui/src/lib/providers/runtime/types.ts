@@ -57,6 +57,9 @@ export type ProviderRuntimeConfig = {
   wireModelId?: string;
   /** 路由选中的凭据 ID；apiKey 即该凭据的值。 */
   credentialId?: string;
+  /** 端点地址由哪个源展开（端点用 `{origin}` 占位时才有）；熔断 key 与源层故障转移据此区分。 */
+  originId?: string;
+  originUrl?: string;
   apiKey: string;
   /** 供应商级与端点级用户头合并后的结果（路由输出）。 */
   customHeaders?: CustomProvider["customHeaders"];

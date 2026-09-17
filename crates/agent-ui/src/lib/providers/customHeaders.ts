@@ -322,7 +322,7 @@ export function recommendedIdentityForEndpoint(
 }
 
 /**
- * 端点身份档（设计文档 4.3）：所选 CLI 的 UA + 静态身份头 + 该 CLI 的每会话动态头。
+ * 端点身份档（设计文档 4.4）：所选 CLI 的 UA + 静态身份头 + 该 CLI 的每会话动态头。
  * 动态头按 sessionId 填；Grok 的每回合头（conv/req/turn）没有稳定来源，不伪造。
  */
 export function buildIdentityRequestHeaders(

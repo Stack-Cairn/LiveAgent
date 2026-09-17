@@ -22,7 +22,7 @@
 
 | 事实 | 对象 | 内容 |
 | --- | --- | --- |
-| 谁提供连接与凭据 | `CustomProvider` | 名称、预设、凭据列表、主连接、请求默认值、系统代理、重试、用量查询 |
+| 谁提供连接与凭据 | `CustomProvider` | 名称、预设、凭据列表、源地址列表、主连接、请求默认值、系统代理、重试、用量查询 |
 | 这次请求怎样发 | `ProviderEndpointConfig`（供应商内按接口分键） | 启用、地址、模型列表地址、方言、开关、鉴权头覆盖、指定凭据、端点请求头 |
 | 模型能做什么 | `ProviderModelConfig` | 远端 ID、可用接口列表、方言、分组、能力、模态、限制、参数覆盖 |
 
@@ -145,7 +145,7 @@ type ProviderModelConfig = {
   displayName?: string;
   group?: string;                   // 列表分组，缺省由模型家族推导
   modelType?: "chat";               // image / embedding / rerank 保留，暂不可选
-  chatProtocol?: ProviderChatProtocol;      // 显式选用的接口；可选范围见 4.2
+  chatProtocol?: ProviderChatProtocol;      // 显式选用的接口；可选范围见 4.3
   dialect?: ProviderWireDialect;
   ownedBy?: string;
 
@@ -313,7 +313,26 @@ type ResolvedProviderChatRoute = {
 
 `resolveProviderChatRoute(provider, modelId, options?)` 在 `createProviderRuntimeConfig` 构造运行时配置时调用一次，结果写入 `ProviderRuntimeConfig`；界面侧的调用只读 `protocol`、`dialect`、`source`。凭据值不进入路由结果，运行时按 `credentialId` 取值。
 
-### 4.2 接口的决定顺序
+### 4.2 源地址展开
+
+同一家渠道常有多个入口主机（例如 `packyapi.com` 与 `packy.ai`）：Key 相同、四类接口相同，只有主机不同。这类情况不建第二个实例，而是在供应商上维护**源地址列表**，接口地址相对源地址书写：
+
+```ts
+type ProviderOrigin = {
+  id: string;
+  url: string;          // normalizeOrigin 后的 scheme + host(+port) + 可选前缀路径
+  enabled?: boolean;    // 缺省 true
+  lastProbe?: ProviderEndpointProbe;  // 观测值，备份与同步时剥离
+};
+```
+
+端点地址里的 `{origin}` 占位在解析时按选中的源展开：主源 = 第一个启用的源；`resolveProviderChatRoute(provider, modelId, { originId })` 可指定源，指定的源不存在或已停用时退回主源，绝不静默打到别的主机。路由结果带 `originId` / `originUrl`，"实际请求预览"显示展开后的地址。
+
+没有 `origins` 的实例是单地址模式，行为与改造前一致；此时 `{origin}` 端点没有源可展开，视为未配置，既不参与路由也不进探测候选。旧实例可一键转为源地址模式：主连接的源抽成主源，同主机的端点地址改写成模板，别的主机的端点保持绝对地址，主连接展开后取值不变。
+
+探测按"源 × 接口"展开候选，摘要里每个接口逐源显示状态，模型列表取并集；写回时源的观测值取该源上的最差状态。网关侧的主机白名单把各源的主机一并纳入。
+
+### 4.3 接口的决定顺序
 
 1. 模型显式选用的 `chatProtocol`（须已启用；否则视为未指定）。
 2. 预设按模型规则给出的列表中第一个已启用的渠道。
@@ -336,7 +355,7 @@ type ResolvedProviderChatRoute = {
 
 交集为空不猜测，直接退到第 4 步并把 `source` 标为 `provider`。任何一步得到的渠道若被关闭，跳到下一步。
 
-### 4.3 请求头装配
+### 4.4 请求头装配
 
 三层内置头档加用户头，合并顺序固定：
 
@@ -355,7 +374,7 @@ type ResolvedProviderChatRoute = {
 
 同名按大小写不敏感覆盖。保留键（`anthropic-beta`、`Content-Type`、`Content-Length`、`Host`、代理控制头）由发请求一侧最终决定。Grok 的每回合头（conv / req / turn）没有稳定来源，不伪造。装配实现在共享层 `lib/providers/requestHeaders.ts`，设置页"最终请求头"预览与运行时 `prepareProviderRequest` 用同一份。不做按模型的请求头。
 
-### 4.4 与 pi-ai 的对应
+### 4.5 与 pi-ai 的对应
 
 | 本稿 | pi-ai 落点 |
 | --- | --- |
@@ -396,7 +415,7 @@ WebUI 发起的探测经现有 `gateway_provider_models` 命令转到桌面执�
 1. 每个可用接口一条 `endpointConfigs[protocol]`，`enabled: true`，地址来自预设模板或探测所用地址。
 2. 默认接口：预设声明的默认接口若可用则用；否则取可用接口里家族表最常见的一个。
 3. 方言按 2.2 顺序。
-4. 模型：各接口列表合并去重；`group` 按家族表；`chatProtocol` 只在预设规则明确指定时写入，否则留空按 4.2 推断；能力与限制取目录，未命中标 `unknown`。
+4. 模型：各接口列表合并去重；`group` 按家族表；`chatProtocol` 只在预设规则明确指定时写入，否则留空按 4.3 推断；能力与限制取目录，未命中标 `unknown`。
 5. 鉴权头名只在探测证明仅某种头可通过时写覆盖。
 6. 请求头、多 Key、quirks 不自动生成。
 
@@ -592,15 +611,16 @@ WebUI 共用组件，秘密只显示 configured。窄屏退化为列表 → 详�
 
 **分组按接口家族**：Anthropic ← `claude_code`；OpenAI ← `codex` + `xai` + `deepseek` 三份队列按序合并去重；Gemini ← `gemini`。Completions 与 Responses 同组，因为同一模型在两者下工具与流式语义等价，且现状 Codex 队列本来混合两种格式。跨家族不互为候选。方言不参与分组，每个候选按自己的方言装配。
 
-**候选三层**，共用 `maxSwitches`：
+**候选四层**，共用 `maxSwitches`：
 
 | 层 | 触发 | 对象 | 熔断 key |
 | --- | --- | --- | --- |
-| 凭据层 | 鉴权、配额、账户类错误 | 同供应商下一把启用的 Key | `provider::credential::model` |
-| 端点层 | 连接、5xx、404 模型不存在 | 供应商已启用的同家族其它渠道（当前路由接口除外） | `provider::endpoint::model` |
-| 供应商层 | 上两层用尽 | 队列下一个供应商（须启用同名模型且解析后同家族） | 同上 |
+| 凭据层 | 鉴权、配额、账户类错误 | 同供应商下一把启用的 Key | `provider::credential::protocol::model` |
+| 源层 | 连接、超时、5xx | 同 Key、同接口，端点走 `{origin}` 模板时的其它启用源（4.2） | `provider::credential::originHost::protocol::model` |
+| 端点层 | 连接、5xx、404 模型不存在 | 供应商已启用的同家族其它渠道（当前路由接口除外） | 同上 |
+| 供应商层 | 上三层用尽 | 队列下一个供应商（须启用同名模型且解析后同家族） | 同上 |
 
-`enabled` 只控制供应商层；凭据层与端点层随配置自动生效。错误分类表仍集中一处，方言可登记额外模式。熔断器保持进程内。不做跨模型兜底，不做负载均衡。
+鉴权类失败后源层候选整体跳过：同一把 Key 换主机照样被拒。熔断键带源主机，一个主机挂掉不影响同供应商的其它源。`enabled` 只控制供应商层；前三层随配置自动生效。错误分类表仍集中一处，方言可登记额外模式。熔断器保持进程内。不做跨模型兜底，不做负载均衡。
 
 ## 9. 迁移与兼容
 
@@ -701,4 +721,4 @@ P2 与 P3 的任务清单在各自阶段开始前补充。
 | 网关桥 | WebUI 复用落库 Key 探测时按 `credential_id` 选凭据（proto 新增字段）；草稿地址主机必须属于该供应商已保存的地址集合，否则拒绝；协议沿用请求值，回填按命中的端点而不是主地址 |
 | 界面 | 再加一个实例预填自定义实例的地址与方言；停用端点上的"设为默认"不可用；编辑模型抽屉显示三层故障转移候选；窄屏换行；quirks 只在 OpenAI 家族卡片显示；`{origin}` 模板按输入实时展开；未知原因直接显示；最终请求头预览复用运行时合并规则；限额与推理来源徽标正确；管理密钥的差异只在两把 Key 都拉取过后显示，刷新不再覆盖探测期间的修改；取消探测仍写回观测；删除端点与 Key 需确认；添加渠道非自建必填 Key，非法请求头行可见；模型分组内拖拽排序写回 `modelOrder`；模型行记忆化；停用供应商显示提示条；清理无消费者的 i18n 键 |
 | 测试 | 新增/改写：注册表主机归属、隐式端点、故障转移家族与迁移、探测严格模式、网关桥凭据与主机、运行时方言映射与 quirks、辅助模型选择、WebUI 源码契约（改按三栏结构锁定） |
-
+| 多源地址 | 供应商级 `origins[]` + 端点 `{origin}` 模板；路由按源展开并输出 `originId` / `originUrl`；故障转移在凭据层与端点层之间插入源层（鉴权失败不换源，熔断键带源主机）；探测按源 × 接口展开；旧实例可一键转为源地址模式 |

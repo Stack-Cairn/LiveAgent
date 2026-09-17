@@ -6,6 +6,8 @@
 
 import {
   type CustomProvider,
+  endpointUsesOrigin,
+  expandProviderOriginUrl,
   getProviderModelDefaults,
   normalizeProviderModelConfig,
   type ProviderChatProtocol,
@@ -14,6 +16,7 @@ import {
   type ProviderEndpointProbeStatus,
   type ProviderId,
   type ProviderModelConfig,
+  type ProviderOrigin,
   type ProviderWireDialect,
 } from "@liveagent/app/lib/settings";
 import type { CustomHeader } from "../../lib/providers/customHeaders";
@@ -32,6 +35,7 @@ import { fetchModelsFromApi, ProviderModelsFetchError } from "./providerUtils";
 
 export type EndpointCandidate = {
   protocol: ProviderChatProtocol;
+  /** 实际探测的地址（`{origin}` 已按 originId 对应的源展开） */
   baseUrl: string;
   modelsUrl?: string;
   isFullUrl?: boolean;
@@ -41,16 +45,58 @@ export type EndpointCandidate = {
   note?: string;
   /** 来源：preset = 注册表声明；existing = 当前配置；custom = 用户手填 */
   origin: "preset" | "existing" | "custom";
+  /** 候选按"源 × 接口"展开时所属的源；绝对地址的端点没有 */
+  originId?: string;
+  /** 采纳后写入端点的地址：`{origin}` 模板原样保留；只有按源展开的候选才有 */
+  template?: { baseUrl: string; modelsUrl?: string };
 };
 
 export type EndpointProbeResult = {
   protocol: ProviderChatProtocol;
   baseUrl: string;
+  originId?: string;
   status: ProviderEndpointProbeStatus;
   latencyMs?: number;
   error?: string;
   models: ProviderModelConfig[];
 };
+
+/** 源地址模式下四类接口的缺省模板（与 customEndpointBaseUrl 的路径形态一致）。 */
+export function originEndpointTemplate(protocol: ProviderChatProtocol): string {
+  switch (protocol) {
+    case "google-generative-ai":
+      return "{origin}/v1beta";
+    case "anthropic-messages":
+      return "{origin}";
+    default:
+      return "{origin}/v1";
+  }
+}
+
+type CandidateSpec = Omit<EndpointCandidate, "originId" | "template">;
+
+/**
+ * 一条候选规格按源展开：地址含 `{origin}` 且供应商有源时，每个启用的源各一条
+ * （带 originId 与模板）；模板但没有源时不可用；绝对地址原样一条。
+ */
+export function expandCandidateOrigins(
+  spec: CandidateSpec,
+  origins: readonly ProviderOrigin[] | undefined,
+): EndpointCandidate[] {
+  const templated = endpointUsesOrigin(spec.baseUrl) || endpointUsesOrigin(spec.modelsUrl);
+  if (!templated) return [spec];
+  const enabled = (origins ?? []).filter((origin) => origin.enabled !== false);
+  return enabled.map((origin) => {
+    const modelsUrl = expandProviderOriginUrl(spec.modelsUrl, origin);
+    return {
+      ...spec,
+      baseUrl: expandProviderOriginUrl(spec.baseUrl, origin),
+      ...(modelsUrl ? { modelsUrl } : { modelsUrl: undefined }),
+      originId: origin.id,
+      template: { baseUrl: spec.baseUrl, ...(spec.modelsUrl ? { modelsUrl: spec.modelsUrl } : {}) },
+    };
+  });
+}
 
 export type CredentialProbeResult = {
   credentialId: string;
@@ -77,13 +123,17 @@ export function legacyTypeForProtocol(protocol: ProviderChatProtocol): ProviderI
 /**
  * 候选接口：注册表声明的接口（自定义渠道为四类全部）叠加当前已配置的端点。
  * origin 类模板由用户填写的地址展开；base 类（自定义）把同一地址给所有接口，
- * Gemini 与 Anthropic 按惯例改写路径。
+ * Gemini 与 Anthropic 按惯例改写路径。供应商有源地址列表时，候选按"源 × 接口"
+ * 展开：既有 `{origin}` 端点与预设模板都按每个启用的源各探测一次，新接口的缺省
+ * 地址也写成模板（采纳后仍相对源地址）。
  */
 export function buildEndpointCandidates(params: {
   preset: ProviderPreset | undefined;
   origin?: string;
   baseUrl?: string;
   existing?: CustomProvider["endpointConfigs"];
+  /** 供应商的源地址列表（含停用的；这里只展开启用的） */
+  origins?: readonly ProviderOrigin[];
 }): EndpointCandidate[] {
   const { preset } = params;
   const out: EndpointCandidate[] = [];
@@ -92,19 +142,25 @@ export function buildEndpointCandidates(params: {
   const protocols = declared
     ? PROVIDER_CHAT_PROTOCOLS.filter((protocol) => declared[protocol])
     : PROVIDER_CHAT_PROTOCOLS;
+  const originMode = (params.origins ?? []).some((origin) => origin.enabled !== false);
   for (const protocol of protocols) {
     const existing = params.existing?.[protocol];
     if (existing) {
-      out.push({
-        protocol,
-        baseUrl: existing.baseUrl,
-        modelsUrl: existing.modelsUrl,
-        isFullUrl: existing.isFullUrl,
-        dialect: existing.dialect,
-        quirks: existing.quirks,
-        auth: existing.auth,
-        origin: "existing",
-      });
+      out.push(
+        ...expandCandidateOrigins(
+          {
+            protocol,
+            baseUrl: existing.baseUrl,
+            modelsUrl: existing.modelsUrl,
+            isFullUrl: existing.isFullUrl,
+            dialect: existing.dialect,
+            quirks: existing.quirks,
+            auth: existing.auth,
+            origin: "existing",
+          },
+          params.origins,
+        ),
+      );
       continue;
     }
     const presetEndpoint = declared?.[protocol];
@@ -116,18 +172,33 @@ export function buildEndpointCandidates(params: {
         !(params.baseUrl || params.origin) ||
         presetMatchesBaseUrl(preset, params.baseUrl ?? params.origin));
     if (presetEndpoint && presetApplies) {
-      const baseUrl = expandPresetBaseUrl(presetEndpoint.baseUrl, params.origin ?? params.baseUrl);
-      if (!baseUrl) continue;
-      out.push({
+      const spec = {
         protocol,
-        baseUrl,
         modelsUrl: presetEndpoint.modelsUrl,
         dialect: presetEndpoint.dialect,
         quirks: presetEndpoint.quirks,
         auth: presetEndpoint.auth,
         note: presetEndpoint.note,
-        origin: "preset",
-      });
+        origin: "preset" as const,
+      };
+      if (originMode && presetEndpoint.baseUrl.includes("{origin}")) {
+        out.push(
+          ...expandCandidateOrigins({ ...spec, baseUrl: presetEndpoint.baseUrl }, params.origins),
+        );
+        continue;
+      }
+      const baseUrl = expandPresetBaseUrl(presetEndpoint.baseUrl, params.origin ?? params.baseUrl);
+      if (!baseUrl) continue;
+      out.push({ ...spec, baseUrl });
+      continue;
+    }
+    if (originMode) {
+      out.push(
+        ...expandCandidateOrigins(
+          { protocol, baseUrl: originEndpointTemplate(protocol), origin: "custom" },
+          params.origins,
+        ),
+      );
       continue;
     }
     const custom = customEndpointBaseUrl(protocol, params.baseUrl ?? params.origin ?? "");
@@ -190,6 +261,7 @@ export async function probeEndpoint(params: {
     return {
       protocol: candidate.protocol,
       baseUrl: candidate.baseUrl,
+      ...(candidate.originId ? { originId: candidate.originId } : {}),
       status: "ok",
       latencyMs: Date.now() - startedAt,
       models,
@@ -199,6 +271,7 @@ export async function probeEndpoint(params: {
     return {
       protocol: candidate.protocol,
       baseUrl: candidate.baseUrl,
+      ...(candidate.originId ? { originId: candidate.originId } : {}),
       status: classified.status,
       latencyMs: Date.now() - startedAt,
       error: classified.message,
@@ -240,20 +313,56 @@ export async function probeProvider(params: {
   return result;
 }
 
-/** 某接口在所有 Key 下的汇总状态：任一 Key 可用即可用；否则取最"具体"的失败。 */
+export type ProbeStatusSummary = {
+  status: ProviderEndpointProbeStatus;
+  latencyMs?: number;
+  error?: string;
+};
+
+/**
+ * 某接口在所有 Key（与所有源）下的汇总状态：任一可用即可用；否则取最"具体"的失败。
+ * 传 originId 时只看该源上的结果。
+ */
 export function summarizeEndpointStatus(
   probe: ProviderProbeResult,
   protocol: ProviderChatProtocol,
-): { status: ProviderEndpointProbeStatus; latencyMs?: number; error?: string } {
-  const results = probe.credentials
-    .map((credential) => credential.endpoints.find((endpoint) => endpoint.protocol === protocol))
-    .filter((item): item is EndpointProbeResult => Boolean(item));
+  originId?: string,
+): ProbeStatusSummary {
+  const results = probe.credentials.flatMap((credential) =>
+    credential.endpoints.filter(
+      (endpoint) =>
+        endpoint.protocol === protocol &&
+        (originId === undefined || endpoint.originId === originId),
+    ),
+  );
   if (results.length === 0) return { status: "unknown" };
   const ok = results.find((item) => item.status === "ok");
   if (ok) return { status: "ok", latencyMs: ok.latencyMs };
   const order: ProviderEndpointProbeStatus[] = ["unauthorized", "missing", "unknown"];
   const worst = [...results].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))[0];
   return { status: worst.status, latencyMs: worst.latencyMs, error: worst.error };
+}
+
+/**
+ * 某个源的汇总状态：该源下各接口先按 Key 汇总，再取最差（连接失败 > 鉴权 > 404），
+ * 全部可用才算可用。没有该源的结果时为 unknown。
+ */
+export function summarizeOriginStatus(
+  probe: ProviderProbeResult,
+  candidates: readonly EndpointCandidate[],
+  originId: string,
+): ProbeStatusSummary {
+  const protocols = [
+    ...new Set(
+      candidates
+        .filter((candidate) => candidate.originId === originId)
+        .map((candidate) => candidate.protocol),
+    ),
+  ];
+  const summaries = protocols.map((protocol) => summarizeEndpointStatus(probe, protocol, originId));
+  if (summaries.length === 0) return { status: "unknown" };
+  const order: ProviderEndpointProbeStatus[] = ["unknown", "unauthorized", "missing", "ok"];
+  return [...summaries].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))[0];
 }
 
 export type ProbeModelGroup = {
@@ -337,7 +446,11 @@ export function buildAutoConfiguration(params: {
   const { preset, probe } = params;
   const endpointConfigs: NonNullable<CustomProvider["endpointConfigs"]> = {};
   const available: ProviderChatProtocol[] = [];
+  const seenProtocols = new Set<ProviderChatProtocol>();
   for (const candidate of params.candidates) {
+    // 按源展开的候选每个接口只写一条端点（模板相同）；状态按接口跨源、跨 Key 汇总。
+    if (seenProtocols.has(candidate.protocol)) continue;
+    seenProtocols.add(candidate.protocol);
     const summary = summarizeEndpointStatus(probe, candidate.protocol);
     const forced = params.forcedProtocols?.has(candidate.protocol) === true;
     const rejected = params.rejectedProtocols?.has(candidate.protocol) === true;
@@ -346,11 +459,13 @@ export function buildAutoConfiguration(params: {
     // 新发现的接口只有探测通过（或用户强制启用）才创建。
     if (!existing && summary.status !== "ok" && !forced) continue;
     const usable = summary.status === "ok" || forced;
+    // 端点落模板：按源展开的候选采纳后仍相对源地址书写。
+    const modelsUrl = candidate.template ? candidate.template.modelsUrl : candidate.modelsUrl;
     endpointConfigs[candidate.protocol] = {
       ...(rejected ? { enabled: false } : {}),
-      baseUrl: candidate.baseUrl,
+      baseUrl: candidate.template?.baseUrl ?? candidate.baseUrl,
       ...(candidate.isFullUrl ? { isFullUrl: true } : {}),
-      ...(candidate.modelsUrl ? { modelsUrl: candidate.modelsUrl } : {}),
+      ...(modelsUrl ? { modelsUrl } : {}),
       ...(candidate.dialect ? { dialect: candidate.dialect } : {}),
       ...(candidate.quirks ? { quirks: candidate.quirks } : {}),
       ...(candidate.auth ? { auth: candidate.auth } : {}),

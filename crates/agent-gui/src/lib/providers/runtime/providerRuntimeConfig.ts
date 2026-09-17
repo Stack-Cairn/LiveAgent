@@ -24,6 +24,8 @@ export type CreateProviderRuntimeConfigOptions = {
   protocol?: ProviderChatProtocol;
   /** 故障转移凭据层：强制使用指定凭据。 */
   credentialId?: string;
+  /** 故障转移源层：强制用指定的源展开 `{origin}` 端点。 */
+  originId?: string;
 };
 
 /**
@@ -61,6 +63,7 @@ export function createProviderRuntimeConfig(
   const route = resolveProviderChatRoute(provider, model, {
     ...(options?.protocol ? { protocol: options.protocol } : {}),
     ...(options?.credentialId ? { credentialId: options.credentialId } : {}),
+    ...(options?.originId ? { originId: options.originId } : {}),
   });
   const reasoningParams = {
     providerId: route.adapterProviderId,
@@ -85,6 +88,7 @@ export function createProviderRuntimeConfig(
     modelId: model,
     wireModelId: route.wireModelId,
     credentialId: route.credentialId,
+    ...(route.originId ? { originId: route.originId, originUrl: route.originUrl } : {}),
     apiKey: credential?.apiKey ?? provider.apiKey,
     customHeaders: route.headers,
     ...(Object.keys(route.quirks).length > 0 ? { quirks: route.quirks } : {}),

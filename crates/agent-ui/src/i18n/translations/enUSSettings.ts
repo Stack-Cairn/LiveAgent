@@ -1373,6 +1373,15 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelDeclaredEndpoints": "Endpoints this channel provides (from the preset registry)",
   "settings.channelDocs": "Docs",
   "settings.channelEndpointRequired": "Fill in at least one endpoint Base URL",
+  "settings.channelOrigins": "Origins",
+  "settings.channelOriginsHint":
+    "Optional. Once set, endpoint addresses default to {origin} templates; add backup origins for failover",
+  "settings.channelOriginPrimary": "Primary",
+  "settings.channelOriginBackup": "Backup {n}",
+  "settings.channelOriginAdd": "Add backup origin",
+  "settings.channelOriginRemove": "Remove backup origin",
+  "settings.channelOriginRequired":
+    "Endpoint addresses use the {origin} placeholder; fill in the primary origin",
   "settings.channelEndpoints": "Endpoint addresses",
   "settings.channelEndpointsHint":
     "Fill in the endpoints you need; empty ones are not created. Enter the API root; /v1 is added when the path has no version segment",
@@ -1426,6 +1435,21 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerEnabledNoKey": "No key",
   "settings.providerDisabledBanner": "Disabled: excluded from the model picker and failover.",
   "settings.providerApiAddress": "API address",
+  "settings.providerOrigins": "Origins",
+  "settings.providerOriginPrimary": "Primary",
+  "settings.providerOriginBackup": "Backup",
+  "settings.providerOriginAdd": "Add backup origin",
+  "settings.providerOriginRemove": "Remove origin",
+  "settings.providerOriginRemoveConfirm": "Remove origin {url}?",
+  "settings.providerOriginRemoveConfirmDesc":
+    "Endpoints written with the {origin} placeholder will no longer use it; failover candidates on it are dropped.",
+  "settings.providerOriginPlaceholder": "https://api.example.com",
+  "settings.providerOriginResolved": "Resolves to",
+  "settings.providerOriginUnresolved": "No enabled origin",
+  "settings.providerConvertToOrigins": "Switch to origin mode",
+  "settings.providerConvertToOriginsHint":
+    "Extract the current host as the primary origin and rewrite same-host endpoints as {origin} templates; then add backup origins for automatic failover.",
+  "settings.modelRouteOrigin": "Origin",
   "settings.providerAvailability": "Availability",
   "settings.providerMoreSettings": "More settings",
   "settings.providerCheck": "Check",
@@ -1751,6 +1775,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelFailoverCandidatesHint":
     "Tried in order — credential → endpoint → provider — sharing one switch budget; never crosses interface families.",
   "settings.modelFailoverLayer.credential": "Credential layer",
+  "settings.modelFailoverLayer.origin": "Origin layer",
   "settings.modelFailoverLayer.endpoint": "Endpoint layer",
   "settings.modelFailoverLayer.provider": "Provider layer",
   "settings.modelFailoverNone": "none",
