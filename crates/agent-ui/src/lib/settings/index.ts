@@ -1744,6 +1744,7 @@ function normalizeEndpointProbe(input: unknown): ProviderEndpointProbe | undefin
   const status = source.status;
   if (
     status !== "ok" &&
+    status !== "catalog" &&
     status !== "missing" &&
     status !== "unauthorized" &&
     status !== "unknown"

@@ -1448,9 +1448,14 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerProbeStatus.missing": "不存在",
   "settings.providerProbeStatus.unauthorized": "鉴权失败",
   "settings.providerProbeStatus.unknown": "未知",
+  "settings.providerProbeStatus.catalog": "内置目录",
+  "settings.providerProbeStatus.catalogHint": "该渠道的模型列表随应用内置，本次没有发请求。",
   "settings.providerProbeTitleSetup": "检测并启用 · {name}",
   "settings.providerProbeTitleConfigure": "检测并配置 · {name}",
   "settings.providerProbeDescription": "只请求各接口的模型列表，不产生生成任务，不计费。",
+  "settings.providerProbeDescriptionCatalog":
+    "该渠道的模型列表随应用内置，本次不请求任何接口，只核对渠道配置。",
+  "settings.providerProbeCatalogEndpointHint": "该渠道的模型列表随应用内置，无需请求 /models。",
   "settings.providerProbeEndpoints": "渠道",
   "settings.providerProbeEndpointsSummary": "{ok} / {total} 个可用",
   "settings.providerProbeToggleEndpoint": "点击取消或恢复采纳该渠道",
@@ -1458,6 +1463,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerProbeModels": "模型",
   "settings.providerProbeModelsSummary":
     "已选 {selected} / {total} 个，按系列分组；“其他”默认不勾选",
+  "settings.providerProbeModelsSummaryInactive":
+    "将添加 {selected} / {total} 个，按系列分组；采纳后默认全部关闭，在模型列表里逐个启用",
+  "settings.providerProbeModelsFromCatalog": "来自内置目录（快照 {date}）",
   "settings.providerProbeKeysSummary": "{count} 把 Key 参与探测",
   "settings.providerProbeNoModels": "接口可用，但没有返回模型；可在详情里手动添加。",
   "settings.providerProbeNoEndpoints": "没有可用的接口。检查地址与 API Key 后重试。",

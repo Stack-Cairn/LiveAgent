@@ -50,7 +50,12 @@ export type PresetOverlay = {
   defaultChatProtocol?: ProviderChatProtocol;
   /** 追加或覆盖生成层的端点；键不存在则沿用生成层 */
   endpoints?: Partial<Record<ProviderChatProtocol, PresetEndpointOverlay>>;
-  /** 模型列表来源：api = 各接口的 models 地址；catalog = 只用目录 */
+  /**
+   * 模型列表来源。catalog = 模型厂商自营渠道，模型列表随应用内置（目录分区
+   * MODEL_CATALOG[sourceId]），探测不请求 `/models`；api = 聚合站、中转、本地
+   * 服务与自定义渠道，模型列表只有问它才知道。缺省 api。
+   * 声明了 catalog 但目录里没有该渠道的模型时由 presets.ts 退回 api。
+   */
   modelListSource?: "api" | "catalog";
   models?: readonly PresetModelRule[];
   identity?: PresetIdentity;
@@ -65,6 +70,7 @@ export type PresetOverlay = {
 export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   {
     id: "anthropic",
+    modelListSource: "catalog",
     native: true,
     input: "key",
     defaultChatProtocol: "anthropic-messages",
@@ -74,6 +80,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "openai",
+    modelListSource: "catalog",
     native: true,
     input: "key",
     dialect: "openai",
@@ -85,6 +92,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "gemini",
+    modelListSource: "catalog",
     name: "Gemini",
     native: true,
     input: "key",
@@ -94,6 +102,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "xai",
+    modelListSource: "catalog",
     native: true,
     input: "key",
     dialect: "xai",
@@ -104,6 +113,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "deepseek",
+    modelListSource: "catalog",
     native: true,
     input: "key",
     dialect: "deepseek",
@@ -124,6 +134,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "groq",
+    modelListSource: "api",
     name: "Groq",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -132,6 +143,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "zhipu",
+    modelListSource: "catalog",
     name: "智谱 GLM",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -141,6 +153,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "zhipu-intl",
+    modelListSource: "catalog",
     name: "智谱 Z.AI（国际）",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -152,6 +165,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   // 各自一个预设，排在主渠道之后；取 Key 页沿用主渠道。
   {
     id: "zhipu-coding-plan",
+    modelListSource: "catalog",
     name: "智谱 GLM · Coding Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -161,6 +175,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "minimax",
+    modelListSource: "catalog",
     name: "MiniMax",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -173,6 +188,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "minimax-cn",
+    modelListSource: "catalog",
     name: "MiniMax（国内）",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -185,6 +201,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "minimax-token-plan",
+    modelListSource: "catalog",
     name: "MiniMax · Token Plan",
     input: "key",
     defaultChatProtocol: "anthropic-messages",
@@ -194,6 +211,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "minimax-cn-token-plan",
+    modelListSource: "catalog",
     name: "MiniMax（国内）· Token Plan",
     input: "key",
     defaultChatProtocol: "anthropic-messages",
@@ -203,6 +221,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "moonshot",
+    modelListSource: "catalog",
     name: "Moonshot Kimi",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -212,6 +231,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "moonshot-cn",
+    modelListSource: "catalog",
     name: "Moonshot Kimi（国内）",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -221,6 +241,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "kimi-for-coding",
+    modelListSource: "catalog",
     name: "Kimi for Coding",
     input: "key",
     defaultChatProtocol: "anthropic-messages",
@@ -229,6 +250,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "dashscope",
+    modelListSource: "catalog",
     name: "通义千问（国际）",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -237,6 +259,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "dashscope-cn",
+    modelListSource: "catalog",
     name: "通义千问",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -248,6 +271,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "dashscope-coding-plan",
+    modelListSource: "catalog",
     name: "通义千问（国际）· Coding Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -256,6 +280,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "dashscope-cn-coding-plan",
+    modelListSource: "catalog",
     name: "通义千问 · Coding Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -264,6 +289,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "dashscope-token-plan",
+    modelListSource: "catalog",
     name: "通义千问（国际）· Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -272,6 +298,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "dashscope-cn-token-plan",
+    modelListSource: "catalog",
     name: "通义千问 · Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -280,6 +307,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "volcengine",
+    modelListSource: "catalog",
     name: "豆包 · 火山方舟",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -288,6 +316,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "volcengine-coding-plan",
+    modelListSource: "catalog",
     name: "豆包 · 火山方舟 · Coding Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -296,6 +325,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "stepfun",
+    modelListSource: "catalog",
     name: "阶跃星辰（国际）",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -304,6 +334,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "stepfun-cn",
+    modelListSource: "catalog",
     name: "阶跃星辰",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -312,6 +343,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "stepfun-step-plan",
+    modelListSource: "catalog",
     name: "阶跃星辰（国际）· Step Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -320,6 +352,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "stepfun-cn-step-plan",
+    modelListSource: "catalog",
     name: "阶跃星辰 · Step Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -328,6 +361,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "tencent",
+    modelListSource: "catalog",
     name: "腾讯云 · 混元",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -336,6 +370,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "tencent-coding-plan",
+    modelListSource: "catalog",
     name: "腾讯云 · Coding Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -344,6 +379,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "tencent-token-plan",
+    modelListSource: "catalog",
     name: "腾讯云 · Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -352,6 +388,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "baidu",
+    modelListSource: "catalog",
     name: "百度千帆",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -361,6 +398,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "xiaomi",
+    modelListSource: "catalog",
     name: "小米 MiMo",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -371,6 +409,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "xiaomi-token-plan-cn",
+    modelListSource: "catalog",
     name: "小米 MiMo · Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -379,6 +418,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "xiaomi-token-plan-eu",
+    modelListSource: "catalog",
     name: "小米 MiMo（欧洲）· Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -387,6 +427,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "xiaomi-token-plan-sg",
+    modelListSource: "catalog",
     name: "小米 MiMo（新加坡）· Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -395,6 +436,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "longcat",
+    modelListSource: "catalog",
     name: "美团 LongCat",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -403,6 +445,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "sensenova",
+    modelListSource: "catalog",
     name: "商汤 SenseNova",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -411,6 +454,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "xunfei",
+    modelListSource: "catalog",
     name: "讯飞星火",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -420,6 +464,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "modelscope",
+    modelListSource: "api",
     name: "魔搭 ModelScope",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -428,6 +473,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "siliconflow",
+    modelListSource: "api",
     name: "硅基流动（国际）",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -436,6 +482,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "siliconflow-cn",
+    modelListSource: "api",
     name: "硅基流动",
     input: "key",
     defaultChatProtocol: "openai-completions",
@@ -445,6 +492,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "openrouter",
+    modelListSource: "api",
     input: "key",
     defaultChatProtocol: "openai-completions",
     endpoints: {
@@ -460,6 +508,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "new-api",
+    modelListSource: "api",
     name: "New API / One API",
     input: "origin",
     defaultChatProtocol: "openai-completions",
@@ -473,6 +522,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "ollama",
+    modelListSource: "api",
     name: "Ollama",
     input: "origin",
     defaultOrigin: "http://localhost:11434",
@@ -492,6 +542,7 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
   },
   {
     id: "lmstudio",
+    modelListSource: "api",
     name: "LM Studio",
     input: "origin",
     defaultOrigin: "http://localhost:1234",
@@ -507,11 +558,11 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
         },
       },
     },
-    modelListSource: "api",
     order: 141,
   },
   {
     id: "custom",
+    modelListSource: "api",
     name: "自定义渠道",
     input: "base",
     defaultChatProtocol: "openai-completions",

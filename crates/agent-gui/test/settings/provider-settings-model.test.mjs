@@ -127,7 +127,8 @@ test("applyProbeToProvider appends new models, keeps existing ones and records o
   const sonnet = next.models.find((item) => item.id === "claude-sonnet-4");
   assert.equal(sonnet.contextWindow, 123, "user limits survive a refresh");
   assert.ok(next.models.some((item) => item.id === "claude-opus-4"));
-  assert.deepEqual(next.activeModels, ["claude-sonnet-4", "claude-opus-4"]);
+  // 新模型只入列表不启用；用户已经开着的模型不被刷新关掉。
+  assert.deepEqual(next.activeModels, ["claude-sonnet-4"]);
   assert.equal(next.endpointConfigs["anthropic-messages"].lastProbe.status, "ok");
   assert.equal(next.endpointConfigs["anthropic-messages"].lastProbe.latencyMs, 42);
   assert.deepEqual(next.credentials[0].lastModels.models, ["claude-opus-4", "claude-sonnet-4"]);

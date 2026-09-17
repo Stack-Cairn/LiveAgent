@@ -3,6 +3,11 @@
 // 探测只用各接口的模型列表请求：对每把启用的 Key × 每个候选接口各拉一次，按
 // 200 / 404 / 401 / 其他分类。结果是观测值；自动配置把观测变成一份可采纳的草稿
 // （端点、默认接口、模型目录、每把 Key 的模型范围），全部标 `auto`。
+//
+// 按模型列表来源分流（`ProviderPreset.modelListSource`）：
+// - catalog（模型厂商自营渠道）：模型列表随应用内置，探测不发任何请求，端点状态
+//   记 `catalog`，模型取该渠道的目录分区；
+// - api（聚合站、中转、本地服务、自定义）：照旧逐个接口拉 `/models`。
 
 import {
   type CustomProvider,
@@ -28,10 +33,16 @@ import {
   PROVIDER_CHAT_PROTOCOLS,
   type ProviderPreset,
   presetMatchesBaseUrl,
+  presetUsesCatalogModels,
   resolveModelFamily,
   resolveModelGroup,
 } from "../../lib/providers/registry";
-import { fetchModelsFromApi, ProviderModelsFetchError } from "./providerUtils";
+import {
+  buildProviderModelsUrl,
+  fetchModelsFromApi,
+  normalizeProviderModelsBaseUrl,
+  ProviderModelsFetchError,
+} from "./providerUtils";
 
 export type EndpointCandidate = {
   protocol: ProviderChatProtocol;
@@ -118,6 +129,42 @@ export function legacyTypeForProtocol(protocol: ProviderChatProtocol): ProviderI
     default:
       return "codex";
   }
+}
+
+/** 观测里算"可用"的状态：真的拉到了列表，或模型列表本就内置（catalog）。 */
+export function isProbeStatusUsable(status: ProviderEndpointProbeStatus): boolean {
+  return status === "ok" || status === "catalog";
+}
+
+/**
+ * 该候选真正会请求的模型列表地址（与 fetchModelsFromApi 同一口径：去重 /v1、
+ * Gemini 用 v1beta）。界面预览与同一次探测里的请求去重都用它。
+ */
+export function probeModelsUrl(candidate: EndpointCandidate): string {
+  if (candidate.modelsUrl) return candidate.modelsUrl;
+  const type = legacyTypeForProtocol(candidate.protocol);
+  try {
+    return buildProviderModelsUrl(
+      type,
+      normalizeProviderModelsBaseUrl(type, candidate.baseUrl, candidate.isFullUrl === true),
+      "official",
+    );
+  } catch {
+    return candidate.baseUrl;
+  }
+}
+
+/** 目录模型 → 探测结果里的模型条目；限额与显示名由 decorateAutoModel 再补齐。 */
+export function catalogProbeModels(
+  preset: Pick<ProviderPreset, "catalogModels">,
+): ProviderModelConfig[] {
+  return preset.catalogModels.map((entry) => ({
+    id: entry.id,
+    ...(entry.name ? { displayName: entry.name } : {}),
+    contextWindow: entry.contextWindow,
+    maxOutputToken: entry.maxOutputToken,
+    limitsSource: "catalog" as const,
+  }));
 }
 
 /**
@@ -280,9 +327,41 @@ export async function probeEndpoint(params: {
   }
 }
 
+/** 该候选的模型列表请求签名：签名相同 = 发出去的请求逐字节相同。 */
+function probeRequestKey(candidate: EndpointCandidate): string {
+  // 鉴权头档随旧类型变（Messages 会回退 x-api-key，Completions 只发 Bearer），
+  // 所以地址相同还不够，必须连头档一起相同才算同一个请求。
+  return [
+    candidate.originId ?? "",
+    legacyTypeForProtocol(candidate.protocol),
+    candidate.isFullUrl === true ? "full" : "base",
+    probeModelsUrl(candidate),
+  ].join("|");
+}
+
+/** catalog 渠道：不发请求，每个候选接口都记 `catalog` 并带上该渠道的目录模型。 */
+function catalogEndpointResults(
+  candidates: readonly EndpointCandidate[],
+  preset: Pick<ProviderPreset, "catalogModels">,
+): EndpointProbeResult[] {
+  const models = catalogProbeModels(preset);
+  return candidates.map((candidate) => ({
+    protocol: candidate.protocol,
+    baseUrl: candidate.baseUrl,
+    ...(candidate.originId ? { originId: candidate.originId } : {}),
+    status: "catalog" as const,
+    models,
+  }));
+}
+
 /**
  * 对每把启用的 Key 探测每个候选接口。接口之间并行，Key 之间串行（避免对同一
  * 网关瞬时打太多请求）。
+ *
+ * 传入 catalog 渠道的预设时整个过程不发请求（模型列表随应用内置）。api 渠道下，
+ * 同一把 Key、同一个源上请求签名相同的候选**只发一次**请求，结果复用给共享它的
+ * 每个接口——这是去重不是跳过：摘要仍按接口逐行给状态，只是不再为同一个
+ * `…/v1/models` 重复打三次。
  */
 export async function probeProvider(params: {
   candidates: readonly EndpointCandidate[];
@@ -290,23 +369,40 @@ export async function probeProvider(params: {
   useSystemProxy?: boolean;
   customHeaders?: readonly CustomHeader[];
   providerId?: string;
+  /** 渠道预设；`modelListSource: "catalog"` 时不请求 `/models` */
+  preset?: ProviderPreset;
   onProgress?: (partial: ProviderProbeResult) => void;
 }): Promise<ProviderProbeResult> {
   const result: ProviderProbeResult = { at: Date.now(), credentials: [] };
+  const catalog = presetUsesCatalogModels(params.preset) ? params.preset : undefined;
   for (const credential of params.credentials) {
     if (!credential.enabled) continue;
-    const endpoints = await Promise.all(
-      params.candidates.map((candidate) =>
-        probeEndpoint({
-          candidate,
-          apiKey: credential.apiKey,
-          credentialId: credential.id,
-          useSystemProxy: params.useSystemProxy,
-          customHeaders: params.customHeaders,
-          providerId: params.providerId,
+    let endpoints: EndpointProbeResult[];
+    if (catalog) {
+      endpoints = catalogEndpointResults(params.candidates, catalog);
+    } else {
+      const inFlight = new Map<string, Promise<EndpointProbeResult>>();
+      endpoints = await Promise.all(
+        params.candidates.map(async (candidate) => {
+          const key = probeRequestKey(candidate);
+          let pending = inFlight.get(key);
+          if (!pending) {
+            pending = probeEndpoint({
+              candidate,
+              apiKey: credential.apiKey,
+              credentialId: credential.id,
+              useSystemProxy: params.useSystemProxy,
+              customHeaders: params.customHeaders,
+              providerId: params.providerId,
+            });
+            inFlight.set(key, pending);
+          }
+          const shared = await pending;
+          // 复用的观测挂回本接口自己的身份（源已在签名里，只需换协议与地址）。
+          return { ...shared, protocol: candidate.protocol, baseUrl: candidate.baseUrl };
         }),
-      ),
-    );
+      );
+    }
     result.credentials.push({ credentialId: credential.id, endpoints });
     params.onProgress?.({ ...result, credentials: [...result.credentials] });
   }
@@ -336,8 +432,13 @@ export function summarizeEndpointStatus(
     ),
   );
   if (results.length === 0) return { status: "unknown" };
-  const ok = results.find((item) => item.status === "ok");
-  if (ok) return { status: "ok", latencyMs: ok.latencyMs };
+  // catalog（模型列表内置、没发请求）与 ok 同样算可用，但没有延迟可报。
+  const usable = results.find((item) => isProbeStatusUsable(item.status));
+  if (usable) {
+    return usable.status === "catalog"
+      ? { status: "catalog" }
+      : { status: "ok", latencyMs: usable.latencyMs };
+  }
   const order: ProviderEndpointProbeStatus[] = ["unauthorized", "missing", "unknown"];
   const worst = [...results].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))[0];
   return { status: worst.status, latencyMs: worst.latencyMs, error: worst.error };
@@ -361,7 +462,13 @@ export function summarizeOriginStatus(
   ];
   const summaries = protocols.map((protocol) => summarizeEndpointStatus(probe, protocol, originId));
   if (summaries.length === 0) return { status: "unknown" };
-  const order: ProviderEndpointProbeStatus[] = ["unknown", "unauthorized", "missing", "ok"];
+  const order: ProviderEndpointProbeStatus[] = [
+    "unknown",
+    "unauthorized",
+    "missing",
+    "ok",
+    "catalog",
+  ];
   return [...summaries].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status))[0];
 }
 
@@ -416,6 +523,10 @@ export type AutoConfiguration = {
   defaultChatProtocol: ProviderChatProtocol;
   dialect?: ProviderWireDialect;
   models: ProviderModelConfig[];
+  /**
+   * 采纳后默认启用的模型。探测发现的模型一律**不**自动启用（恒为空数组）：
+   * 一个中转动辄几百个模型，开哪些由人决定，模型本身照常写入列表。
+   */
   activeModels: string[];
   credentials: ProviderCredential[];
   /** 有可用接口 */
@@ -427,8 +538,8 @@ export type AutoConfiguration = {
  * 1. 每个可用接口一条端点（enabled），不可用的新接口不创建；已配置的端点保留，
  *    只写入本次观测；
  * 2. 默认接口：预设声明的若可用则用，否则取可用接口里家族表最常见的一个；
- * 3. 模型：各 Key 各接口列表按 id 合并去重，group 按家族，限额取供应商声明 /
- *    预设目录 / 兜底；
+ * 3. 模型：各 Key 各接口列表按 id 合并去重（catalog 渠道则来自内置目录），group
+ *    按家族，限额取供应商声明 / 预设目录 / 兜底；一律不自动启用；
  * 4. 每把 Key 记录 lastModels 作为模型范围观测。
  */
 export function buildAutoConfiguration(params: {
@@ -457,8 +568,8 @@ export function buildAutoConfiguration(params: {
     const existing = candidate.origin === "existing";
     // 已配置的端点是用户的配置，不因一次探测失败而丢弃或停用，只更新观测；
     // 新发现的接口只有探测通过（或用户强制启用）才创建。
-    if (!existing && summary.status !== "ok" && !forced) continue;
-    const usable = summary.status === "ok" || forced;
+    if (!existing && !isProbeStatusUsable(summary.status) && !forced) continue;
+    const usable = isProbeStatusUsable(summary.status) || forced;
     // 端点落模板：按源展开的候选采纳后仍相对源地址书写。
     const modelsUrl = candidate.template ? candidate.template.modelsUrl : candidate.modelsUrl;
     endpointConfigs[candidate.protocol] = {
@@ -495,7 +606,7 @@ export function buildAutoConfiguration(params: {
   for (const credentialResult of probe.credentials) {
     const seen = seenByCredential.get(credentialResult.credentialId) ?? new Set<string>();
     for (const endpoint of credentialResult.endpoints) {
-      if (endpoint.status !== "ok" || !available.includes(endpoint.protocol)) continue;
+      if (!isProbeStatusUsable(endpoint.status) || !available.includes(endpoint.protocol)) continue;
       for (const fetched of endpoint.models) {
         seen.add(fetched.id);
         if (!merged.has(fetched.id)) merged.set(fetched.id, fetched);
@@ -528,7 +639,8 @@ export function buildAutoConfiguration(params: {
     defaultChatProtocol,
     dialect: preset?.dialect,
     models,
-    activeModels: models.map((model) => model.id),
+    // 模型默认全部关闭：采纳后在列表里逐个启用（见 AutoConfiguration.activeModels）。
+    activeModels: [],
     credentials,
     usable: available.length > 0,
   };

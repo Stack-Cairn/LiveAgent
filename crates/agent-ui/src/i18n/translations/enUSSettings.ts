@@ -1522,10 +1522,17 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerProbeStatus.missing": "Not found",
   "settings.providerProbeStatus.unauthorized": "Unauthorized",
   "settings.providerProbeStatus.unknown": "Unknown",
+  "settings.providerProbeStatus.catalog": "Built-in catalog",
+  "settings.providerProbeStatus.catalogHint":
+    "This channel's model list ships with the app; nothing was requested.",
   "settings.providerProbeTitleSetup": "Probe and enable · {name}",
   "settings.providerProbeTitleConfigure": "Probe and configure · {name}",
   "settings.providerProbeDescription":
     "Only the model-list endpoints are requested; no generation, nothing billed.",
+  "settings.providerProbeDescriptionCatalog":
+    "This channel's model list ships with the app; nothing is requested — only the channel setup is checked.",
+  "settings.providerProbeCatalogEndpointHint":
+    "This channel's model list ships with the app; /models is not requested.",
   "settings.providerProbeEndpoints": "Endpoints",
   "settings.providerProbeEndpointsSummary": "{ok} / {total} available",
   "settings.providerProbeToggleEndpoint": "Click to exclude or include this endpoint",
@@ -1533,6 +1540,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerProbeModels": "Models",
   "settings.providerProbeModelsSummary":
     "{selected} / {total} selected, grouped by series; “Other” is unchecked by default",
+  "settings.providerProbeModelsSummaryInactive":
+    "{selected} of {total} will be added, grouped by series; all stay disabled until you enable them in the model list",
+  "settings.providerProbeModelsFromCatalog": "from the built-in catalog (snapshot {date})",
   "settings.providerProbeKeysSummary": "{count} keys probed",
   "settings.providerProbeNoModels":
     "Endpoint available but returned no models; add them manually in the detail view.",

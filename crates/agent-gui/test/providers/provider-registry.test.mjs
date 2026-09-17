@@ -117,6 +117,92 @@ test("model families drive grouping and protocol preference", () => {
   assert.equal(registry.resolveModelFamily("grok-4").dialect, "xai");
 });
 
+// 模型列表来源：厂商自营渠道的模型随应用内置（不探测 /models），聚合站 / 中转 /
+// 本地服务 / 自定义才去问接口。改这张表就是改探测会不会发请求，故整表锁定。
+const CATALOG_PRESET_IDS = [
+  "anthropic",
+  "openai",
+  "gemini",
+  "xai",
+  "deepseek",
+  "zhipu",
+  "zhipu-intl",
+  "zhipu-coding-plan",
+  "minimax",
+  "minimax-cn",
+  "minimax-token-plan",
+  "minimax-cn-token-plan",
+  "moonshot",
+  "moonshot-cn",
+  "kimi-for-coding",
+  "dashscope",
+  "dashscope-cn",
+  "dashscope-coding-plan",
+  "dashscope-cn-coding-plan",
+  "dashscope-token-plan",
+  "dashscope-cn-token-plan",
+  "volcengine",
+  "volcengine-coding-plan",
+  "stepfun",
+  "stepfun-cn",
+  "stepfun-step-plan",
+  "stepfun-cn-step-plan",
+  "tencent",
+  "tencent-coding-plan",
+  "tencent-token-plan",
+  "xiaomi",
+  "xiaomi-token-plan-cn",
+  "xiaomi-token-plan-eu",
+  "xiaomi-token-plan-sg",
+  "longcat",
+  "sensenova",
+];
+
+const API_PRESET_IDS = [
+  // 聚合站与中转：模型列表只有问它才知道。
+  "openrouter",
+  "siliconflow",
+  "siliconflow-cn",
+  "modelscope",
+  "groq",
+  "new-api",
+  // 本地服务与自定义：装了什么模型只有本地知道。
+  "ollama",
+  "lmstudio",
+  "custom",
+  // 厂商渠道，但覆盖层自建、models.dev 未收录，没有目录分区 → 退回 api。
+  "baidu",
+  "xunfei",
+];
+
+test("model list source splits vendor channels from relays and local services", () => {
+  for (const id of CATALOG_PRESET_IDS) {
+    const preset = registry.findProviderPreset(id);
+    assert.ok(preset, `${id} missing from the registry`);
+    assert.equal(preset.modelListSource, "catalog", `${id} should ship its model list`);
+    assert.ok(preset.catalogModels.length > 0, `${id} has no catalog models`);
+    assert.equal(registry.presetUsesCatalogModels(preset), true, id);
+  }
+  for (const id of API_PRESET_IDS) {
+    const preset = registry.findProviderPreset(id);
+    assert.ok(preset, `${id} missing from the registry`);
+    assert.equal(preset.modelListSource, "api", `${id} should be probed`);
+    assert.equal(registry.presetUsesCatalogModels(preset), false, id);
+  }
+  // baidu / xunfei 在覆盖层声明的是 catalog，合并时因目录为空退回 api。
+  for (const id of ["baidu", "xunfei"]) {
+    assert.equal(registry.findProviderPreset(id).catalogModels.length, 0, id);
+  }
+  // 表格覆盖注册表全部预设，新增渠道必须显式表态。
+  assert.deepEqual(
+    registry
+      .listProviderPresets({ includeHidden: true })
+      .map((preset) => preset.id)
+      .filter((id) => !CATALOG_PRESET_IDS.includes(id) && !API_PRESET_IDS.includes(id)),
+    [],
+  );
+});
+
 test("presets merge models.dev facts with the overlay", () => {
   const deepseek = registry.findProviderPreset("deepseek");
   assert.ok(deepseek);
