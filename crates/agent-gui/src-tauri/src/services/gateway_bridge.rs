@@ -586,13 +586,16 @@ struct ProviderModelsDraft {
     custom_headers: Option<Vec<(String, String)>>,
 }
 
-/// 落库供应商的一个已知端点：主地址或 `endpointConfigs[*]`。
+/// 落库供应商的一个已知端点：主地址或 `endpointConfigs[*]`（`{origin}` 模板已按源展开）。
 #[derive(Debug)]
 struct StoredProviderEndpoint {
     base_url: String,
     models_url: Option<String>,
     is_full_url: bool,
 }
+
+/// 端点地址里的源地址占位；与 TS `PROVIDER_ORIGIN_PLACEHOLDER` 同一字面量。
+const PROVIDER_ORIGIN_PLACEHOLDER: &str = "{origin}";
 
 impl StoredProviderEndpoint {
     fn from_value(value: &Value) -> Self {
@@ -605,6 +608,45 @@ impl StoredProviderEndpoint {
                 .unwrap_or(false),
         }
     }
+
+    /// 地址含 `{origin}` 时按每个启用的源各展开一份；绝对地址原样一份。
+    fn expand_origins(self, origins: &[String]) -> Vec<Self> {
+        let templated = self.base_url.contains(PROVIDER_ORIGIN_PLACEHOLDER)
+            || self
+                .models_url
+                .as_deref()
+                .is_some_and(|url| url.contains(PROVIDER_ORIGIN_PLACEHOLDER));
+        if !templated {
+            return vec![self];
+        }
+        origins
+            .iter()
+            .map(|origin| Self {
+                base_url: self.base_url.replace(PROVIDER_ORIGIN_PLACEHOLDER, origin),
+                models_url: self
+                    .models_url
+                    .as_deref()
+                    .map(|url| url.replace(PROVIDER_ORIGIN_PLACEHOLDER, origin)),
+                is_full_url: self.is_full_url,
+            })
+            .collect()
+    }
+}
+
+/// 供应商已启用的源地址（`origins[*].url`；跳过 `enabled == false` 与非对象条目）。
+fn stored_provider_origins(provider: &Value) -> Vec<String> {
+    provider
+        .get("origins")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter(|origin| origin.is_object())
+                .filter(|origin| origin.get("enabled").and_then(Value::as_bool) != Some(false))
+                .filter_map(|origin| trimmed_string_field(origin, "url"))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn trimmed_string_field(value: &Value, key: &str) -> Option<String> {
@@ -616,17 +658,27 @@ fn trimmed_string_field(value: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// 主地址排在首位，随后是每个渠道端点（跳过非对象条目，交给 TS 归一化丢弃）。
+/// 主地址排在首位，随后是每个渠道端点（跳过非对象条目，交给 TS 归一化丢弃），
+/// `{origin}` 模板按启用的源展开；源地址本身也算已知主机（端点全是绝对地址时
+/// 备用源同样能通过主机校验）。
 fn stored_provider_endpoints(provider: &Value) -> Vec<StoredProviderEndpoint> {
-    let mut endpoints = vec![StoredProviderEndpoint::from_value(provider)];
+    let origins = stored_provider_origins(provider);
+    let mut endpoints = StoredProviderEndpoint::from_value(provider).expand_origins(&origins);
     if let Some(configs) = provider.get("endpointConfigs").and_then(Value::as_object) {
         endpoints.extend(
             configs
                 .values()
                 .filter(|endpoint| endpoint.is_object())
-                .map(StoredProviderEndpoint::from_value),
+                .flat_map(|endpoint| {
+                    StoredProviderEndpoint::from_value(endpoint).expand_origins(&origins)
+                }),
         );
     }
+    endpoints.extend(origins.into_iter().map(|origin| StoredProviderEndpoint {
+        base_url: origin,
+        models_url: None,
+        is_full_url: false,
+    }));
     endpoints
 }
 
@@ -2186,6 +2238,23 @@ fn sanitize_provider_summary(provider: &Value) -> Result<Value, String> {
             .collect::<serde_json::Map<_, _>>();
         payload.insert("endpointConfigs".to_string(), Value::Object(sanitized));
     }
+    // 源地址只带 id 与启停：地址与观测值同端点一样不进摘要。
+    if let Some(Value::Array(origins)) = source.get("origins") {
+        let sanitized = origins
+            .iter()
+            .filter_map(Value::as_object)
+            .map(|origin| {
+                let mut summary = serde_json::Map::new();
+                for key in ["id", "enabled"] {
+                    if let Some(value) = origin.get(key) {
+                        summary.insert(key.to_string(), value.clone());
+                    }
+                }
+                Value::Object(summary)
+            })
+            .collect();
+        payload.insert("origins".to_string(), Value::Array(sanitized));
+    }
 
     Ok(Value::Object(payload))
 }
@@ -2199,7 +2268,8 @@ mod tests {
         flatten_history_messages_json_window, is_builtin_share_tool_name, parse_runs_limit,
         provider_check_has_auth_header, redact_builtin_tool_content_json,
         resolve_stored_provider_check_headers, resolve_stored_provider_models_config,
-        sanitize_provider_summaries, ProviderCheckAuthOverride, ProviderModelsDraft,
+        sanitize_provider_summaries, stored_provider_endpoints, url_host_key,
+        ProviderCheckAuthOverride, ProviderModelsDraft,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -2323,6 +2393,104 @@ mod tests {
         assert!(!serialized.contains("secret-key"));
         assert!(!serialized.contains("leak"));
         assert!(!serialized.contains("relay.example.com"));
+    }
+
+    #[test]
+    fn provider_summary_keeps_origin_ids_but_not_addresses() {
+        let result = sanitize_provider_summaries(Some(json!([
+            {
+                "id": "provider-a",
+                "name": "A",
+                "origins": [
+                    { "id": "o1", "url": "https://packyapi.com", "lastProbe": { "at": 1, "status": "ok" } },
+                    { "id": "o2", "url": "https://packy.ai", "enabled": false },
+                    "malformed"
+                ]
+            }
+        ])))
+        .expect("sanitize provider summaries");
+        assert_eq!(
+            result[0]["origins"],
+            json!([{ "id": "o1" }, { "id": "o2", "enabled": false }])
+        );
+        let serialized = serde_json::to_string(&result).expect("serialize");
+        assert!(!serialized.contains("packyapi.com"));
+        assert!(!serialized.contains("lastProbe"));
+    }
+
+    /// 源地址模式的落库供应商：端点以 `{origin}` 占位，两个源，其中一个停用。
+    fn origin_mode_provider() -> Value {
+        json!([{
+            "id": "provider-o",
+            "type": "codex",
+            "baseUrl": "https://packyapi.com/v1",
+            "apiKey": "sk-origin",
+            "origins": [
+                { "id": "o1", "url": "https://packyapi.com" },
+                { "id": "o2", "url": "https://packy.ai" },
+                { "id": "o3", "url": "https://disabled.example.com", "enabled": false }
+            ],
+            "endpointConfigs": {
+                "openai-completions": {
+                    "baseUrl": "{origin}/v1",
+                    "modelsUrl": "{origin}/v1/models"
+                },
+                "anthropic-messages": { "baseUrl": "https://relay.example.com/anthropic" }
+            }
+        }])
+    }
+
+    #[test]
+    fn provider_known_hosts_include_expanded_origins() {
+        let hosts: std::collections::HashSet<String> = stored_provider_endpoints(&origin_mode_provider()[0])
+            .iter()
+            .flat_map(|endpoint| {
+                [
+                    Some(endpoint.base_url.as_str()),
+                    endpoint.models_url.as_deref(),
+                ]
+            })
+            .flatten()
+            .filter_map(url_host_key)
+            .collect();
+        assert!(hosts.contains("packyapi.com:443"));
+        assert!(hosts.contains("packy.ai:443"));
+        assert!(hosts.contains("relay.example.com:443"));
+        assert!(!hosts.contains("disabled.example.com:443"));
+
+        // 备用源上的草稿地址通过主机校验；停用的源与未知主机仍被拒绝。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://packy.ai/v1".to_string(),
+                ..stored_draft("provider-o", "codex")
+            },
+            Some(origin_mode_provider()),
+        )
+        .expect("backup origin is a known host");
+        assert_eq!(config.base_url, "https://packy.ai/v1");
+        assert_eq!(config.api_key, "sk-origin");
+        assert_eq!(
+            config.models_url.as_deref(),
+            Some("https://packy.ai/v1/models")
+        );
+        assert!(resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://disabled.example.com/v1".to_string(),
+                ..stored_draft("provider-o", "codex")
+            },
+            Some(origin_mode_provider()),
+        )
+        .is_err());
+        assert!(resolve_stored_provider_check_headers(
+            Some(origin_mode_provider()),
+            "provider-o",
+            "",
+            "https://packy.ai/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_ok());
     }
 
     fn stored_draft(provider_id: &str, provider_type: &str) -> ProviderModelsDraft {

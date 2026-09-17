@@ -1,7 +1,8 @@
 // 探测对话框（设计文档 5.1 - 5.3）：对候选接口逐个拉模型列表，展示每个接口
 // 的状态；完成后给出摘要——渠道芯片可取消、模型按家族分组勾选（"其他"默认不勾）
 // ——采纳后交给调用方写入设置。已配置的端点（existing）探测失败也保留，只是不
-// 参与模型合并；取消时观测仍经 onDismiss 写回。
+// 参与模型合并；取消时观测仍经 onDismiss 写回。源地址模式下候选按"源 × 接口"
+// 展开：摘要按接口分组，每个源一行状态；模型列表取并集。
 
 import type { ProviderChatProtocol, ProviderCredential } from "@liveagent/app/lib/settings";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -50,6 +51,7 @@ function previewModelsUrl(candidate: EndpointCandidate): string {
 }
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { originHostLabel } from "./ProviderOriginList";
 import {
   Chip,
   ChipButton,
@@ -60,6 +62,19 @@ import {
   protocolLabel,
 } from "./providerChips";
 import { probeSummaryFor } from "./providerSettingsModel";
+
+/** 候选按接口分组（保持首次出现顺序）；源地址模式下一个接口对应多个源的候选。 */
+function groupCandidatesByProtocol(
+  candidates: readonly EndpointCandidate[],
+): { protocol: ProviderChatProtocol; candidates: EndpointCandidate[] }[] {
+  const groups: { protocol: ProviderChatProtocol; candidates: EndpointCandidate[] }[] = [];
+  for (const candidate of candidates) {
+    const group = groups.find((item) => item.protocol === candidate.protocol);
+    if (group) group.candidates.push(candidate);
+    else groups.push({ protocol: candidate.protocol, candidates: [candidate] });
+  }
+  return groups;
+}
 
 export type ProviderProbeRequest = {
   preset: ProviderPreset | undefined;
@@ -184,9 +199,13 @@ export function ProviderProbeDialog(props: {
       routable,
     ],
   );
+  const protocolGroups = useMemo(
+    () => groupCandidatesByProtocol(request.candidates),
+    [request.candidates],
+  );
   const okCount = done
-    ? request.candidates.filter(
-        (candidate) => summarizeEndpointStatus(done, candidate.protocol).status === "ok",
+    ? protocolGroups.filter(
+        (group) => summarizeEndpointStatus(done, group.protocol).status === "ok",
       ).length
     : 0;
   const usable = available.length > 0;
@@ -286,11 +305,13 @@ export function ProviderProbeDialog(props: {
                 <span className="ml-2 text-muted-foreground">
                   {t("settings.providerProbeEndpointsSummary")
                     .replace("{ok}", String(okCount))
-                    .replace("{total}", String(request.candidates.length))}
+                    .replace("{total}", String(protocolGroups.length))}
                 </span>
               ) : null}
             </div>
-            {request.candidates.map((candidate) => {
+            {protocolGroups.map((group) => {
+              const candidate = group.candidates[0];
+              const multiOrigin = group.candidates.length > 1;
               const probed = progress
                 ? progress.credentials.some((entry) =>
                     entry.endpoints.some((endpoint) => endpoint.protocol === candidate.protocol),
@@ -299,7 +320,7 @@ export function ProviderProbeDialog(props: {
               const summary =
                 probed && progress ? probeSummaryFor(progress, candidate.protocol) : undefined;
               const status = summary?.status;
-              const existing = candidate.origin === "existing";
+              const existing = group.candidates.some((item) => item.origin === "existing");
               const accepted =
                 done !== null &&
                 ((status === "ok" && !rejectedProtocols.has(candidate.protocol)) ||
@@ -336,7 +357,9 @@ export function ProviderProbeDialog(props: {
                       <span className="font-medium">{protocolLabel(candidate.protocol)}</span>
                     )}
                     <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-                      {previewModelsUrl(candidate)}
+                      {multiOrigin
+                        ? (candidate.template?.baseUrl ?? "")
+                        : previewModelsUrl(candidate)}
                     </span>
                     {candidate.note ? (
                       <span className="text-[10.5px] text-muted-foreground/70">
@@ -345,7 +368,30 @@ export function ProviderProbeDialog(props: {
                     ) : null}
                     <ProbeStatusChip probe={summary} pending={!probed} />
                   </div>
-                  <ProbeReason probe={summary} />
+                  {multiOrigin
+                    ? group.candidates.map((item) => {
+                        const originSummary =
+                          probed && progress
+                            ? probeSummaryFor(progress, item.protocol, item.originId)
+                            : undefined;
+                        return (
+                          <div
+                            key={item.originId ?? item.baseUrl}
+                            className="flex flex-wrap items-center gap-2 pl-3 text-[11px]"
+                          >
+                            <span className="font-medium text-muted-foreground">
+                              {originHostLabel({ url: item.baseUrl })}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted-foreground/70">
+                              {previewModelsUrl(item)}
+                            </span>
+                            <ProbeStatusChip probe={originSummary} pending={!probed} />
+                            <ProbeReason probe={originSummary} />
+                          </div>
+                        );
+                      })
+                    : null}
+                  {!multiOrigin ? <ProbeReason probe={summary} /> : null}
                 </div>
               );
             })}

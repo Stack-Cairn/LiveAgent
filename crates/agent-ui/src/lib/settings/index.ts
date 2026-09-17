@@ -32,6 +32,7 @@ import {
   isProviderWireDialect,
   legacyTypeForPreset,
   matchPresetModelRule,
+  normalizeOrigin,
   type PresetModelRule,
   type ProviderPreset,
   presetIdForLegacyProvider,
@@ -116,6 +117,7 @@ import type {
   ProviderFailoverSettings,
   ProviderId,
   ProviderModelConfig,
+  ProviderOrigin,
   ProviderProtocolFamily,
   ProviderRetryPolicy,
   ProviderRouteCredentialSource,
@@ -155,9 +157,12 @@ import {
   CHAT_CAPABILITY_NAMES,
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
+  endpointUsesOrigin,
+  expandProviderOriginUrl,
   getDefaultUsageQueryConfig,
   getLegacyProviderChatProtocol,
   getProviderImplicitChatProtocol,
+  getProviderPrimaryOrigin,
   isProviderChatProtocolEnabled,
   MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
@@ -319,6 +324,7 @@ type RouteProvider = Pick<CustomProvider, "type" | "baseUrl" | "isFullUrl"> &
       | "apiKey"
       | "apiKeyConfigured"
       | "credentials"
+      | "origins"
     >
   >;
 
@@ -326,8 +332,34 @@ export type ResolvedProviderEndpoint = {
   protocol: ProviderChatProtocol;
   /** false = 主连接充当该协议的隐式端点（config 由 baseUrl / isFullUrl / modelsUrl 物化） */
   explicit: boolean;
+  /** 地址已按源展开（`{origin}` 占位替换成选中源的地址）；存档里的模板不变。 */
   config: ProviderEndpointConfig;
+  /** 端点地址由哪个源展开；绝对地址的端点没有。 */
+  originId?: string;
+  originUrl?: string;
 };
+
+/**
+ * 端点地址按源展开。地址不含 `{origin}` 时原样返回（不带源）；含占位而没有可用的源时
+ * 返回 undefined（端点不可用）。
+ */
+function expandEndpointConfigOrigin(
+  provider: Pick<RouteProvider, "origins">,
+  config: ProviderEndpointConfig,
+  originId?: string,
+): { config: ProviderEndpointConfig; origin?: ProviderOrigin } | undefined {
+  if (!endpointUsesOrigin(config.baseUrl) && !endpointUsesOrigin(config.modelsUrl)) {
+    return { config };
+  }
+  const origin = getProviderPrimaryOrigin(provider, originId);
+  if (!origin) return undefined;
+  const baseUrl = expandProviderOriginUrl(config.baseUrl, origin);
+  const modelsUrl = expandProviderOriginUrl(config.modelsUrl, origin);
+  return {
+    config: { ...config, baseUrl, ...(modelsUrl ? { modelsUrl } : { modelsUrl: undefined }) },
+    origin,
+  };
+}
 
 function providerLegacyProtocol(provider: RouteProvider): ProviderChatProtocol {
   return getLegacyProviderChatProtocol(provider.type, provider.requestFormat);
@@ -341,10 +373,13 @@ function primaryConnectionEndpoint(
   provider: RouteProvider,
   isFullUrl: boolean = provider.isFullUrl,
 ): ProviderEndpointConfig {
+  // 主连接归一化后总是绝对地址；这里再展开一次只为容错未归一化的快照。
+  const origin = getProviderPrimaryOrigin(provider);
+  const modelsUrl = expandProviderOriginUrl(provider.modelsUrl, origin);
   return {
-    baseUrl: provider.baseUrl,
+    baseUrl: expandProviderOriginUrl(provider.baseUrl, origin),
     ...(isFullUrl ? { isFullUrl: true } : {}),
-    ...(provider.modelsUrl ? { modelsUrl: provider.modelsUrl } : {}),
+    ...(modelsUrl ? { modelsUrl } : {}),
     source: "user",
   };
 }
@@ -357,12 +392,22 @@ export function resolveProviderEndpoint(
   provider: RouteProvider,
   protocol: ProviderChatProtocol,
   implicitProtocol: ProviderChatProtocol = getProviderImplicitChatProtocol(provider),
+  options?: { originId?: string },
 ): ResolvedProviderEndpoint | undefined {
   if (!isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)) return undefined;
-  const config = provider.endpointConfigs?.[protocol];
-  return config
-    ? { protocol, explicit: true, config }
-    : { protocol, explicit: false, config: primaryConnectionEndpoint(provider) };
+  const stored = provider.endpointConfigs?.[protocol];
+  const expanded = expandEndpointConfigOrigin(
+    provider,
+    stored ?? primaryConnectionEndpoint(provider),
+    options?.originId,
+  );
+  if (!expanded) return undefined;
+  return {
+    protocol,
+    explicit: stored !== undefined,
+    config: expanded.config,
+    ...(expanded.origin ? { originId: expanded.origin.id, originUrl: expanded.origin.url } : {}),
+  };
 }
 
 /** 供应商已启用的接口（有序：默认接口在前，其余按四类固定顺序）。 */
@@ -606,7 +651,12 @@ function mergeHeaderLists(
 export function resolveProviderChatRoute(
   provider: RouteProvider,
   modelId: string,
-  options?: { protocol?: ProviderChatProtocol; credentialId?: string },
+  options?: {
+    protocol?: ProviderChatProtocol;
+    credentialId?: string;
+    /** 故障转移源层：强制用指定的源展开 `{origin}` 端点；缺省主源 */
+    originId?: string;
+  },
 ): ResolvedProviderChatRoute {
   // Some gateway call sites can still receive a pre-normalization provider
   // snapshot (and older snapshots did not require `models`). Keep this
@@ -619,8 +669,11 @@ export function resolveProviderChatRoute(
   const protocol = decision.protocol;
   // 端点是唯一真相：显式端点或由主连接物化的隐式端点。被强制指定的接口未配置 /
   // 渠道全部关闭时退回主连接，完整 URL 模式只对主连接自己的接口有意义。
+  const endpoint = resolveProviderEndpoint(provider, protocol, context.implicitProtocol, {
+    originId: options?.originId,
+  });
   const config =
-    resolveProviderEndpoint(provider, protocol, context.implicitProtocol)?.config ??
+    endpoint?.config ??
     primaryConnectionEndpoint(
       provider,
       protocol === context.implicitProtocol && provider.isFullUrl,
@@ -648,6 +701,7 @@ export function resolveProviderChatRoute(
     isFullUrl: config.isFullUrl === true,
     ...(requestBase.verbatim ? { baseUrlVerbatim: true as const } : {}),
     ...(config.modelsUrl ? { modelsUrl: config.modelsUrl } : {}),
+    ...(endpoint?.originId ? { originId: endpoint.originId, originUrl: endpoint.originUrl } : {}),
     ...(protocol === "openai-completions" || protocol === "openai-responses"
       ? { requestFormat: protocol }
       : {}),
@@ -1877,8 +1931,46 @@ export function normalizeHttpUrl(input: unknown): string | undefined {
   return value;
 }
 
+/**
+ * 源地址列表归一化：地址按 normalizeOrigin 规范化（补 scheme、去 query 与尾部版本段），
+ * 空或非法丢弃，按规范化值去重（保留先出现的），enabled 只在显式 false 时落盘。
+ * 一条都没有时返回 undefined（等价旧存档的单源）。
+ */
+export function normalizeProviderOrigins(input: unknown): ProviderOrigin[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const out: ProviderOrigin[] = [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const source = raw as Record<string, unknown>;
+    const url = normalizeOrigin(typeof source.url === "string" ? source.url : "");
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const id = typeof source.id === "string" && source.id.trim() ? source.id.trim() : createUuid();
+    const lastProbe = normalizeEndpointProbe(source.lastProbe);
+    out.push({
+      id,
+      url,
+      ...(source.enabled === false ? { enabled: false } : {}),
+      ...(lastProbe ? { lastProbe } : {}),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const origins = normalizeProviderOrigins(obj.origins);
+  // 主连接始终落绝对地址（旧读取点直接读 baseUrl）：模板按主源展开；没有可用的源时为空。
+  const primaryOrigin = origins ? getProviderPrimaryOrigin({ origins }) : undefined;
+  const baseUrlInput = expandProviderOriginUrl(
+    typeof obj.baseUrl === "string" ? obj.baseUrl : "",
+    primaryOrigin,
+  );
+  const modelsUrlInput = expandProviderOriginUrl(
+    typeof obj.modelsUrl === "string" ? obj.modelsUrl : "",
+    primaryOrigin,
+  );
   const legacyDefault = normalizeLegacyProtocolInput(obj.defaultChatProtocol);
   const presetIdInput = typeof obj.presetId === "string" ? obj.presetId.trim() : "";
   const presetFromInput = findProviderPreset(presetIdInput);
@@ -1892,7 +1984,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
   const codexRouting =
     type === "codex" || type === "xai"
       ? normalizeCodexRouting(
-          obj.baseUrl,
+          baseUrlInput,
           // xAI / Grok 固定走 Responses；忽略历史配置中的 completions。
           type === "xai" ? "openai-responses" : obj.requestFormat,
           isFullUrl,
@@ -1933,9 +2025,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     return fallback ?? requested;
   })();
   const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyDefault?.dialect;
-  const primaryBaseUrl = codexRouting
-    ? codexRouting.baseUrl
-    : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : "");
+  const primaryBaseUrl = codexRouting ? codexRouting.baseUrl : normalizeBaseUrl(baseUrlInput);
   // 预设归属以地址为准：声明了绝对官方主机的预设，地址不在其主机内时降级为自定义，
   // 避免把中转的 Key 发到官方地址。
   const presetId =
@@ -1950,13 +2040,10 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     type,
     presetId,
     ...(obj.enabled === false ? { enabled: false } : {}),
-    baseUrl: codexRouting
-      ? codexRouting.baseUrl
-      : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : ""),
+    baseUrl: primaryBaseUrl,
     isFullUrl,
-    ...(type !== "gemini" && typeof obj.modelsUrl === "string" && obj.modelsUrl.trim()
-      ? { modelsUrl: obj.modelsUrl.trim() }
-      : {}),
+    ...(type !== "gemini" && modelsUrlInput.trim() ? { modelsUrl: modelsUrlInput.trim() } : {}),
+    ...(origins ? { origins } : {}),
     ...((): { docUrl?: string } => {
       const docUrl = normalizeHttpUrl(obj.docUrl);
       return docUrl ? { docUrl } : {};

@@ -1,10 +1,11 @@
 // "添加渠道"对话框（设计文档 7）：自定义中转、聚合网关或尚未内置的厂商。
-// 统一两列栅格（左标签 / 右输入），分四节：基本信息、API Key（多把）、接口地址（四类
-// 接口平铺，填根地址后即时显示实际请求路径）、从预设创建（折叠，可选）。
-// 校验文案固定在底部按钮左侧。
+// 统一两列栅格（左标签 / 右输入），分五节：基本信息、API Key（多把）、源地址（主源 +
+// 可选备用）、接口地址（四类接口平铺；填了主源后默认按 `{origin}` 模板预填，可改成
+// 绝对地址，预览按主源展开）、从预设创建（折叠，可选）。校验文案固定在底部按钮左侧。
 
 import {
   type CustomProvider,
+  endpointUsesOrigin,
   PROVIDER_CHAT_PROTOCOLS,
   type ProviderChatProtocol,
 } from "@liveagent/app/lib/settings";
@@ -40,6 +41,7 @@ import {
 } from "@liveagent/ui/lib/providers/registry";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { originEndpointTemplate } from "@liveagent/ui/pages/settings/providerProbe";
 import { type ReactNode, useState } from "react";
 import { ProviderAvatar, protocolLabel, SecretInput } from "./providerChips";
 import { createProviderFromEndpoints, instanceNameForPreset } from "./providerSettingsModel";
@@ -66,16 +68,49 @@ function emptyKeyRow(): ApiKeyRow {
   return { id: createUuid(), key: "", label: "" };
 }
 
-function endpointsFromPreset(
-  preset: ProviderPreset,
-): Partial<Record<ProviderChatProtocol, string>> {
-  const out: Partial<Record<ProviderChatProtocol, string>> = {};
+/**
+ * 预设的接口地址：`{origin}` 模板原样保留（随源地址列表切换），绝对地址照旧；
+ * 预设声明了默认源时一并作为主源预填。
+ */
+function endpointsFromPreset(preset: ProviderPreset): {
+  endpoints: Partial<Record<ProviderChatProtocol, string>>;
+  origin: string;
+} {
+  const endpoints: Partial<Record<ProviderChatProtocol, string>> = {};
+  let templated = false;
   for (const protocol of PROVIDER_CHAT_PROTOCOLS) {
     const endpoint = preset.endpoints[protocol];
     if (!endpoint) continue;
-    out[protocol] = expandPresetBaseUrl(endpoint.baseUrl, preset.defaultOrigin);
+    endpoints[protocol] = endpoint.baseUrl;
+    templated ||= endpointUsesOrigin(endpoint.baseUrl);
   }
-  return out;
+  return { endpoints, origin: templated ? (preset.defaultOrigin ?? "") : "" };
+}
+
+/** 填了主源后，空着的接口地址按 `{origin}` 模板预填；用户填过的（含绝对地址）不动。 */
+function prefillTemplates(
+  endpoints: Partial<Record<ProviderChatProtocol, string>>,
+  preset: ProviderPreset | undefined,
+): Partial<Record<ProviderChatProtocol, string>> {
+  const next = { ...endpoints };
+  const protocols = preset
+    ? PROVIDER_CHAT_PROTOCOLS.filter((protocol) => preset.endpoints[protocol])
+    : PROVIDER_CHAT_PROTOCOLS;
+  for (const protocol of protocols) {
+    if (next[protocol]?.trim()) continue;
+    const presetTemplate = preset?.endpoints[protocol]?.baseUrl;
+    next[protocol] =
+      presetTemplate && endpointUsesOrigin(presetTemplate)
+        ? presetTemplate
+        : originEndpointTemplate(protocol);
+  }
+  return next;
+}
+
+type OriginRow = { id: string; url: string };
+
+function emptyOriginRow(url = ""): OriginRow {
+  return { id: createUuid(), url };
 }
 
 /** 分节：标题行 + 两列栅格（左标签 132px，右输入自适应；窄屏退化为单列）。 */
@@ -140,19 +175,41 @@ export function AddChannelDialog(props: {
   );
   const [presetOpen, setPresetOpen] = useState(() => Boolean(initialPreset));
   const [endpoints, setEndpoints] = useState<Partial<Record<ProviderChatProtocol, string>>>(() =>
-    initialPreset ? endpointsFromPreset(initialPreset) : {},
+    initialPreset ? endpointsFromPreset(initialPreset).endpoints : {},
   );
+  // 源地址：首行主源，其余备用；空行提交时丢弃。
+  const [origins, setOrigins] = useState<OriginRow[]>(() => [
+    emptyOriginRow(initialPreset ? endpointsFromPreset(initialPreset).origin : ""),
+  ]);
   const [error, setError] = useState<string | null>(null);
   const presets = listProviderPresets();
   const preset = findProviderPreset(presetId);
+  const primaryOrigin = origins[0]?.url ?? "";
 
   function applyPreset(id: string) {
     setPresetId(id);
     setError(null);
     const next = findProviderPreset(id);
     if (!next) return;
-    setEndpoints(endpointsFromPreset(next));
+    const fromPreset = endpointsFromPreset(next);
+    setEndpoints(fromPreset.endpoints);
+    if (fromPreset.origin && !primaryOrigin) {
+      setOrigins((previous) => [{ ...previous[0], url: fromPreset.origin }, ...previous.slice(1)]);
+    }
     if (!name.trim()) setName(instanceNameForPreset(next, providers));
+  }
+
+  function patchOrigin(id: string, url: string) {
+    setError(null);
+    setOrigins((previous) => previous.map((row) => (row.id === id ? { ...row, url } : row)));
+    // 主源从空变为有值：空着的接口地址按模板预填。
+    if (id === origins[0]?.id && !primaryOrigin.trim() && url.trim()) {
+      setEndpoints((previous) => prefillTemplates(previous, preset));
+    }
+  }
+
+  function removeOrigin(id: string) {
+    setOrigins((previous) => previous.filter((row) => row.id !== id));
   }
 
   function patchKey(id: string, patch: Partial<Omit<ApiKeyRow, "id">>) {
@@ -177,12 +234,21 @@ export function AddChannelDialog(props: {
       setError(t("settings.channelEndpointRequired"));
       return;
     }
+    const originUrls = origins.map((row) => row.url.trim()).filter(Boolean);
+    if (
+      originUrls.length === 0 &&
+      filled.some((protocol) => endpointUsesOrigin(endpoints[protocol]))
+    ) {
+      setError(t("settings.channelOriginRequired"));
+      return;
+    }
     onCreate(
       createProviderFromEndpoints({
         name,
         preset,
         apiKeys: keys.map((row) => ({ key: row.key, label: row.label })),
         endpoints,
+        origins: originUrls,
       }),
     );
     setOpen(false);
@@ -295,11 +361,67 @@ export function AddChannelDialog(props: {
             </div>
           </Section>
 
+          <Section title={t("settings.channelOrigins")} hint={t("settings.channelOriginsHint")}>
+            {origins.map((row, index) => {
+              const inputId = `add-channel-origin-${row.id}`;
+              const rowLabel =
+                index === 0
+                  ? t("settings.channelOriginPrimary")
+                  : t("settings.channelOriginBackup").replace("{n}", String(index));
+              return (
+                <div key={row.id} className="contents">
+                  <FieldLabel htmlFor={inputId}>{rowLabel}</FieldLabel>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Input
+                      id={inputId}
+                      className="h-8 font-mono text-xs shadow-none"
+                      value={row.url}
+                      placeholder={t("settings.providerOriginPlaceholder")}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(event) => patchOrigin(row.id, event.currentTarget.value)}
+                    />
+                    {index > 0 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                        title={t("settings.channelOriginRemove")}
+                        aria-label={`${t("settings.channelOriginRemove")} ${rowLabel}`}
+                        onClick={() => removeOrigin(row.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="min-[521px]:col-start-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                disabled={!primaryOrigin.trim()}
+                onClick={() => setOrigins((previous) => [...previous, emptyOriginRow()])}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                {t("settings.channelOriginAdd")}
+              </Button>
+            </div>
+          </Section>
+
           <Section title={t("settings.channelEndpoints")} hint={t("settings.channelEndpointsHint")}>
             {ENDPOINT_ORDER.map((protocol) => {
               const value = endpoints[protocol] ?? "";
               const id = `add-channel-endpoint-${protocol}`;
-              const resolved = resolveEndpointRequestBase(protocol, value);
+              // 模板按主源展开后再算请求地址；没填主源时模板展开为空 → 显示提示。
+              const resolved = resolveEndpointRequestBase(
+                protocol,
+                expandPresetBaseUrl(value, primaryOrigin),
+              );
               return (
                 <div key={protocol} className="contents">
                   <FieldLabel htmlFor={id} hint={t(`settings.channelEndpointDesc.${protocol}`)}>
@@ -310,7 +432,11 @@ export function AddChannelDialog(props: {
                       id={id}
                       className="h-8 font-mono text-xs shadow-none"
                       value={value}
-                      placeholder={ENDPOINT_PLACEHOLDER[protocol]}
+                      placeholder={
+                        primaryOrigin.trim()
+                          ? originEndpointTemplate(protocol)
+                          : ENDPOINT_PLACEHOLDER[protocol]
+                      }
                       autoComplete="off"
                       spellCheck={false}
                       onChange={(event) => {

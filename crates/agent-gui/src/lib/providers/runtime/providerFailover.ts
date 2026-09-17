@@ -44,20 +44,37 @@ export const MODEL_FAILOVER_BREAKER_LIMITS = {
   cooldownSeconds: { min: 5, max: 3600, fallback: 60 },
 } as const;
 
+/** 候选来自哪一层（设计文档 8.2）：凭据 → 源 → 端点 → 供应商，四层共用一份切换预算。 */
+export type ProviderFailoverLayer = "credential" | "origin" | "endpoint" | "provider";
+
+/** 源地址的主机（含非默认端口）；解析失败退回原串，保证键仍可区分。 */
+function originHostKey(origin: string): string {
+  const trimmed = origin.trim();
+  if (!trimmed) return "";
+  try {
+    return new URL(trimmed).host.toLowerCase();
+  } catch {
+    return trimmed;
+  }
+}
+
 /**
- * 熔断 key。三层候选（设计文档 8.2）共用一张表：同一供应商下不同凭据 / 不同
- * 接口各自独立计数，一把 Key 或一条渠道对某个模型失败不影响其它候选。
- * 不带 scope 的旧调用保持 `provider::model`，以免破坏既有键。
+ * 熔断 key。四层候选（设计文档 8.2）共用一张表：同一供应商下不同凭据 / 不同源 /
+ * 不同接口各自独立计数，一把 Key、一个源或一条渠道对某个模型失败不影响其它候选。
+ * 带源时为 `provider::credential::originHost::protocol::model`；不带源时保持
+ * `provider::credential::protocol::model`，不带 scope 的旧调用保持 `provider::model`。
  */
 export function failoverBreakerKey(
   customProviderId: string,
   model: string,
-  scope?: { credentialId?: string; protocol?: string },
+  scope?: { credentialId?: string; protocol?: string; origin?: string },
 ): string {
   const credentialId = scope?.credentialId?.trim() ?? "";
   const protocol = scope?.protocol?.trim() ?? "";
-  if (!credentialId && !protocol) return `${customProviderId}::${model}`;
-  return `${customProviderId}::${credentialId}::${protocol}::${model}`;
+  const origin = originHostKey(scope?.origin ?? "");
+  if (!credentialId && !protocol && !origin) return `${customProviderId}::${model}`;
+  if (!origin) return `${customProviderId}::${credentialId}::${protocol}::${model}`;
+  return `${customProviderId}::${credentialId}::${origin}::${protocol}::${model}`;
 }
 
 type BreakerEntry = {
@@ -157,6 +174,28 @@ const FAILOVER_INELIGIBLE_ERROR_PATTERN = new RegExp(
  * and cross-provider failover (cc-switch keeps 401/403/429-with-quota in the
  * retryable bucket for exactly this reason).
  */
+/**
+ * 鉴权 / 账户类错误（401 / 403 等）：换 Key 或换供应商有意义，换源没有——同一把 Key
+ * 在另一台主机上照样被拒。源层候选对这类错误跳过。
+ */
+const FAILOVER_AUTH_ERROR_SOURCES = [
+  "\\b401\\b",
+  "\\b403\\b",
+  "unauthorized",
+  "forbidden",
+  "invalid.?(?:api.?key|x-api-key|token)",
+  "api.?key.?(?:not|is).?(?:valid|found)",
+  "authentication",
+  "permission.?denied",
+  "account.?(?:suspended|disabled|banned)",
+];
+
+const FAILOVER_AUTH_ERROR_PATTERN = new RegExp(FAILOVER_AUTH_ERROR_SOURCES.join("|"), "i");
+
+export function isFailoverAuthError(errorMessage: string | undefined): boolean {
+  return Boolean(errorMessage) && FAILOVER_AUTH_ERROR_PATTERN.test(errorMessage ?? "");
+}
+
 const FAILOVER_EXTRA_ELIGIBLE_ERROR_PATTERN = new RegExp(
   [
     // Quota / billing exhaustion — pi-ai marks these non-retryable for the
@@ -170,16 +209,8 @@ const FAILOVER_EXTRA_ELIGIBLE_ERROR_PATTERN = new RegExp(
     "available balance",
     "insufficient.?(?:credit|balance|funds)",
     // Auth / account state — another provider holds a different key.
-    "\\b401\\b",
     "\\b402\\b",
-    "\\b403\\b",
-    "unauthorized",
-    "forbidden",
-    "invalid.?(?:api.?key|x-api-key|token)",
-    "api.?key.?(?:not|is).?(?:valid|found)",
-    "authentication",
-    "permission.?denied",
-    "account.?(?:suspended|disabled|banned)",
+    ...FAILOVER_AUTH_ERROR_SOURCES,
     // Routing-level not-found: a relay without the model → another provider
     // may host it under the same id.
     "\\b404\\b",
@@ -216,6 +247,11 @@ export type ProviderFailoverCandidate = {
   key: string;
   /** Human-readable "Provider · model" label for status surfaces. */
   label: string;
+  /**
+   * 候选所属层；缺省视为供应商层。源层候选只对连接 / 超时 / 5xx 类失败生效：上一次
+   * 失败是鉴权类错误时跳过（同一把 Key 换主机无意义）。
+   */
+  layer?: ProviderFailoverLayer;
   /** Model identity used to synthesize an error message when start() fails. */
   model: { api: AssistantMessage["api"]; provider: AssistantMessage["provider"]; id: string };
   /**
@@ -349,20 +385,36 @@ export function withProviderFailover(
 
   void (async () => {
     let lastTerminal: TerminalEvent | undefined;
+    // 鉴权类失败后源层候选不再尝试：同一把 Key 换主机照样被拒。
+    let skipOriginLayer = false;
+    const nextCursor = (from: number): number => {
+      for (let cursor = from; cursor < attemptPlan.length; cursor++) {
+        if (skipOriginLayer && attemptPlan[cursor].candidate.layer === "origin") continue;
+        return cursor;
+      }
+      return -1;
+    };
+    /** 失败后是否还能换下一个候选；能则返回下一个游标，否则 -1。 */
+    const advance = (attempt: number, cursor: number): number => {
+      if (attempt + 1 >= maxAttempts || signal?.aborted) return -1;
+      skipOriginLayer ||= isFailoverAuthError(terminalErrorMessage(lastTerminal));
+      return nextCursor(cursor + 1);
+    };
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const { candidate, index } = attemptPlan[attempt];
-      const isLastAttempt = attempt === maxAttempts - 1;
+    let cursor = 0;
+    let previous: ProviderFailoverCandidate | undefined;
+    for (let attempt = 0; attempt < maxAttempts && cursor >= 0; attempt++) {
+      const { candidate, index } = attemptPlan[cursor];
 
       if (attempt > 0 || index !== 0) {
-        const previous = attempt > 0 ? attemptPlan[attempt - 1].candidate : candidates[0];
         options.onFailover?.({
-          fromLabel: previous.label,
+          fromLabel: (previous ?? candidates[0]).label,
           toLabel: candidate.label,
           toIndex: index,
           errorMessage: attempt > 0 ? terminalErrorMessage(lastTerminal) : "circuit breaker open",
         });
       }
+      previous = candidate;
 
       let source: AssistantMessageEventStream;
       try {
@@ -373,7 +425,11 @@ export function withProviderFailover(
         recordFailoverTargetResult(candidate.key, false, config, now());
         const failureMessage = buildStartFailureAssistantMessage(candidate, error);
         lastTerminal = { type: "error", reason: "error", error: failureMessage };
-        if (!isLastAttempt && !signal?.aborted) continue;
+        const next = advance(attempt, cursor);
+        if (next >= 0) {
+          cursor = next;
+          continue;
+        }
         // Surface the real failure through the standard error event contract.
         output.push(lastTerminal);
         output.end();
@@ -426,9 +482,13 @@ export function withProviderFailover(
 
       lastTerminal = terminal;
 
-      if (!committed && terminalEligible && !isLastAttempt && !signal?.aborted) {
-        // Discard this attempt's buffered events and try the next candidate.
-        continue;
+      if (!committed && terminalEligible) {
+        const next = advance(attempt, cursor);
+        if (next >= 0) {
+          // Discard this attempt's buffered events and try the next candidate.
+          cursor = next;
+          continue;
+        }
       }
 
       // Terminal failure we must surface: committed content, client-class

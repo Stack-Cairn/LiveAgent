@@ -8,11 +8,15 @@ import {
   type ChatCapabilityName,
   type CustomProvider,
   credentialCoversModel,
+  endpointUsesOrigin,
+  expandProviderOriginUrl,
   getDefaultUsageQueryConfig,
   getProviderChatProtocolAdapter,
   getProviderCredentials,
+  getProviderEnabledOrigins,
   getProviderEnabledProtocols,
   getProviderImplicitChatProtocol,
+  getProviderPrimaryOrigin,
   hasProviderFailoverConfiguration,
   normalizeCustomProvider,
   PROVIDER_CHAT_PROTOCOLS,
@@ -24,6 +28,7 @@ import {
   type ProviderId,
   type ProviderModelConfig,
   type ProviderModelDefaults,
+  type ProviderOrigin,
   type ProviderProtocolFamily,
   type ResolvedProviderChatRoute,
   resolveProviderChatRoute,
@@ -49,9 +54,12 @@ import {
   type AutoConfiguration,
   buildEndpointCandidates,
   type EndpointCandidate,
+  expandCandidateOrigins,
+  originEndpointTemplate,
   type ProviderProbeResult,
   probeProvider,
   summarizeEndpointStatus,
+  summarizeOriginStatus,
 } from "@liveagent/ui/pages/settings/providerProbe";
 import {
   createDraftModelConfig,
@@ -117,6 +125,33 @@ export function readEndpoint(
   return resolveProviderEndpoint(provider, protocol);
 }
 
+/**
+ * 端点视图按源展开（含被停用的端点，供界面显示"实际地址"）：`{origin}` 按主源
+ * （或指定的源）替换；模板但没有可用的源时地址为空串。
+ */
+export function readEndpointExpanded(
+  provider: CustomProvider,
+  protocol: ProviderChatProtocol,
+  originId?: string,
+): (EndpointView & { originId?: string; originUrl?: string }) | undefined {
+  const view = readEndpoint(provider, protocol);
+  if (!view) return undefined;
+  const templated =
+    endpointUsesOrigin(view.config.baseUrl) || endpointUsesOrigin(view.config.modelsUrl);
+  if (!templated) return view;
+  const origin = getProviderPrimaryOrigin(provider, originId);
+  const modelsUrl = expandProviderOriginUrl(view.config.modelsUrl, origin);
+  return {
+    ...view,
+    config: {
+      ...view.config,
+      baseUrl: expandProviderOriginUrl(view.config.baseUrl, origin),
+      ...(modelsUrl ? { modelsUrl } : { modelsUrl: undefined }),
+    },
+    ...(origin ? { originId: origin.id, originUrl: origin.url } : {}),
+  };
+}
+
 /** 已配置的接口（默认接口在前，其余按四类固定顺序），含被停用的。 */
 export function providerConfiguredProtocols(provider: CustomProvider): ProviderChatProtocol[] {
   const preferred = providerDefaultProtocol(provider);
@@ -148,8 +183,9 @@ export function materializedEndpointConfigs(
   return out;
 }
 
+/** 主连接 = 默认接口端点按主源展开后的地址（旧读取点直接读 baseUrl，始终是绝对地址）。 */
 function syncMainConnection(provider: CustomProvider): CustomProvider {
-  const view = readEndpoint(provider, providerDefaultProtocol(provider));
+  const view = readEndpointExpanded(provider, providerDefaultProtocol(provider));
   if (!view?.explicit) return provider;
   return {
     ...provider,
@@ -241,6 +277,100 @@ export function recordEndpointProbe(
 ): CustomProvider {
   if (!readEndpoint(provider, protocol)) return provider;
   return writeEndpoint(provider, protocol, (current) => ({ ...current, lastProbe: probe }));
+}
+
+// ---------------------------------------------------------------------------
+// 源地址（设计文档 2.3 / 4.2 / 8.2）
+// ---------------------------------------------------------------------------
+
+export function providerOrigins(provider: CustomProvider): ProviderOrigin[] {
+  return provider.origins ?? [];
+}
+
+/** 是否处于源地址模式（存档里有 origins）；旧实例为单地址模式。 */
+export function providerUsesOrigins(provider: CustomProvider): boolean {
+  return (provider.origins?.length ?? 0) > 0;
+}
+
+export function createOrigin(url: string): ProviderOrigin {
+  return { id: createUuid(), url: normalizeOrigin(url) };
+}
+
+/** 追加源；地址空 / 非法 / 重复时由归一化丢弃（返回值与输入等价）。 */
+export function addProviderOrigin(provider: CustomProvider, url: string): CustomProvider {
+  const origin = createOrigin(url);
+  if (!origin.url) return provider;
+  return finalizeProvider({ ...provider, origins: [...providerOrigins(provider), origin] });
+}
+
+export function updateProviderOrigin(
+  provider: CustomProvider,
+  id: string,
+  patch: Partial<Omit<ProviderOrigin, "id">>,
+): CustomProvider {
+  return finalizeProvider({
+    ...provider,
+    origins: providerOrigins(provider).map((origin) =>
+      origin.id === id ? { ...origin, ...patch } : origin,
+    ),
+  });
+}
+
+export function removeProviderOrigin(provider: CustomProvider, id: string): CustomProvider {
+  const origins = providerOrigins(provider).filter((origin) => origin.id !== id);
+  return finalizeProvider({ ...provider, origins });
+}
+
+export function recordOriginProbe(
+  provider: CustomProvider,
+  id: string,
+  probe: ProviderEndpointProbe,
+): CustomProvider {
+  if (!providerOrigins(provider).some((origin) => origin.id === id)) return provider;
+  return updateProviderOrigin(provider, id, { lastProbe: probe });
+}
+
+/** 地址属于该源（同源前缀，且边界落在路径分隔处）时改写成 `{origin}` 模板；否则原样。 */
+function templateUnderOrigin(url: string | undefined, origin: string): string | undefined {
+  if (!url) return url;
+  const trimmed = url.trim();
+  if (endpointUsesOrigin(trimmed)) return trimmed;
+  if (trimmed === origin) return "{origin}";
+  if (trimmed.startsWith(`${origin}/`)) return `{origin}${trimmed.slice(origin.length)}`;
+  return trimmed;
+}
+
+/** 旧实例能否转成源地址模式：还没有 origins，且主连接能得出源地址。 */
+export function canConvertProviderToOrigins(provider: CustomProvider): boolean {
+  return !providerUsesOrigins(provider) && providerOrigin(provider).length > 0;
+}
+
+/**
+ * 旧实例 → 源地址模式（纯函数）：把主连接的源抽成主源，所有属于该源的端点地址
+ * （含隐式端点物化的那条）改写成 `{origin}` 模板；别的主机的端点保持绝对地址。
+ * 主连接经 finalizeProvider 重新由主源展开，值不变。
+ */
+export function convertProviderToOrigins(provider: CustomProvider): CustomProvider {
+  if (!canConvertProviderToOrigins(provider)) return provider;
+  const origin = providerOrigin(provider);
+  const endpointConfigs: NonNullable<CustomProvider["endpointConfigs"]> = {};
+  for (const [protocol, config] of Object.entries(materializedEndpointConfigs(provider)) as [
+    ProviderChatProtocol,
+    ProviderEndpointConfig,
+  ][]) {
+    const baseUrl = templateUnderOrigin(config.baseUrl, origin) ?? config.baseUrl;
+    const modelsUrl = templateUnderOrigin(config.modelsUrl, origin);
+    endpointConfigs[protocol] = {
+      ...config,
+      baseUrl,
+      ...(modelsUrl ? { modelsUrl } : {}),
+    };
+  }
+  return finalizeProvider({
+    ...provider,
+    origins: [createOrigin(origin)],
+    endpointConfigs,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -932,6 +1062,8 @@ export type ModelFailoverCandidates = {
   providerLayerEnabled: boolean;
   /** 凭据层：同供应商其它启用、已配置且范围覆盖该模型的 Key */
   credentials: ProviderCredential[];
+  /** 源层：当前端点由源展开时的其它已启用源（同 Key、同接口） */
+  origins: ProviderOrigin[];
   /** 端点层：供应商已启用的同家族其它接口（当前路由接口除外） */
   endpoints: ProviderChatProtocol[];
   /** 供应商层：家族队列里启用同名模型且解析后同家族的其它供应商 */
@@ -952,6 +1084,9 @@ export function modelFailoverCandidates(
       credentialConfigured(credential) &&
       credentialCoversModel(credential, modelId),
   );
+  const origins = route.originId
+    ? getProviderEnabledOrigins(provider).filter((origin) => origin.id !== route.originId)
+    : [];
   const endpoints: ProviderChatProtocol[] = [];
   for (const protocol of providerEnabledProtocols(provider)) {
     if (protocol === route.protocol || endpoints.includes(protocol)) continue;
@@ -970,44 +1105,71 @@ export function modelFailoverCandidates(
         return [candidate];
       })
     : [];
-  return { family, providerLayerEnabled: failover.enabled, credentials, endpoints, providers };
+  return {
+    family,
+    providerLayerEnabled: failover.enabled,
+    credentials,
+    origins,
+    endpoints,
+    providers,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // 探测候选与自动配置的采纳
 // ---------------------------------------------------------------------------
 
+/** 供应商的源地址：源地址模式取主源；否则从默认接口地址推导。 */
 export function providerOrigin(provider: CustomProvider): string {
+  const primary = getProviderPrimaryOrigin(provider);
+  if (primary) return primary.url;
   const view = readEndpoint(provider, providerDefaultProtocol(provider));
   return normalizeOrigin(view?.config.baseUrl ?? provider.baseUrl);
 }
 
-/** 检测并配置：注册表声明的接口 + 已配置端点。 */
+/** 源地址模式下新增接口的缺省地址：预设模板优先，否则按接口的常见路径形态。 */
+export function providerEndpointTemplate(
+  provider: CustomProvider,
+  protocol: ProviderChatProtocol,
+): string {
+  const preset = presetForProvider(provider);
+  const template = preset.endpoints[protocol]?.baseUrl;
+  if (template && endpointUsesOrigin(template)) return template;
+  return originEndpointTemplate(protocol);
+}
+
+/** 检测并配置：注册表声明的接口 + 已配置端点（源地址模式按"源 × 接口"展开）。 */
 export function providerProbeCandidates(provider: CustomProvider): EndpointCandidate[] {
   const preset = presetForProvider(provider);
   const existing = materializedEndpointConfigs(provider);
   const origin = providerOrigin(provider);
-  const baseUrl = readEndpoint(provider, providerDefaultProtocol(provider))?.config.baseUrl;
+  const baseUrl = readEndpointExpanded(provider, providerDefaultProtocol(provider))?.config.baseUrl;
   return buildEndpointCandidates({
     preset: preset.id === CUSTOM_PRESET_ID ? undefined : preset,
     origin,
     baseUrl,
     existing,
+    origins: provider.origins,
   });
 }
 
-/** 获取模型列表 / 检测：只跑已启用的现有端点。 */
+/**
+ * 获取模型列表 / 检测：只跑已启用的现有端点（源地址模式按"源 × 接口"展开；
+ * 可限定只跑某个源或某个接口）。
+ */
 export function providerExistingCandidates(
   provider: CustomProvider,
-  options?: { includeDisabled?: boolean },
+  options?: { includeDisabled?: boolean; originId?: string; protocol?: ProviderChatProtocol },
 ): EndpointCandidate[] {
-  const protocols = options?.includeDisabled
-    ? providerConfiguredProtocols(provider)
-    : providerEnabledProtocols(provider);
+  const protocols = (
+    options?.includeDisabled
+      ? providerConfiguredProtocols(provider)
+      : providerEnabledProtocols(provider)
+  ).filter((protocol) => options?.protocol === undefined || protocol === options.protocol);
   return protocols.flatMap((protocol) => {
     const view = readEndpoint(provider, protocol);
     if (!view?.config.baseUrl) return [];
-    return [
+    return expandCandidateOrigins(
       {
         protocol,
         baseUrl: view.config.baseUrl,
@@ -1018,21 +1180,74 @@ export function providerExistingCandidates(
         auth: view.config.auth,
         origin: "existing" as const,
       },
-    ];
+      provider.origins,
+    ).filter(
+      (candidate) => options?.originId === undefined || candidate.originId === options.originId,
+    );
   });
 }
 
 export function probeSummaryFor(
   probe: ProviderProbeResult,
   protocol: ProviderChatProtocol,
+  originId?: string,
 ): ProviderEndpointProbe {
-  const summary = summarizeEndpointStatus(probe, protocol);
+  const summary = summarizeEndpointStatus(probe, protocol, originId);
   return {
     at: probe.at,
     status: summary.status,
     ...(summary.latencyMs !== undefined ? { latencyMs: summary.latencyMs } : {}),
     ...(summary.error ? { error: summary.error } : {}),
   };
+}
+
+export function originProbeSummaryFor(
+  probe: ProviderProbeResult,
+  candidates: readonly EndpointCandidate[],
+  originId: string,
+): ProviderEndpointProbe {
+  const summary = summarizeOriginStatus(probe, candidates, originId);
+  return {
+    at: probe.at,
+    status: summary.status,
+    ...(summary.latencyMs !== undefined ? { latencyMs: summary.latencyMs } : {}),
+    ...(summary.error ? { error: summary.error } : {}),
+  };
+}
+
+/** 候选里出现过的源（按出现顺序去重）。 */
+export function candidateOriginIds(candidates: readonly EndpointCandidate[]): string[] {
+  const out: string[] = [];
+  for (const candidate of candidates) {
+    if (candidate.originId && !out.includes(candidate.originId)) out.push(candidate.originId);
+  }
+  return out;
+}
+
+/**
+ * 只写观测（探测对话框取消、"检测"、单接口重测）：端点 lastProbe 按接口跨源汇总，
+ * 源 lastProbe 按该源下各接口取最差；不采纳端点 / 模型变更。
+ */
+export function recordProbeObservations(
+  provider: CustomProvider,
+  candidates: readonly EndpointCandidate[],
+  probe: ProviderProbeResult,
+): CustomProvider {
+  let next = provider;
+  const seen = new Set<ProviderChatProtocol>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.protocol)) continue;
+    seen.add(candidate.protocol);
+    next = recordEndpointProbe(
+      next,
+      candidate.protocol,
+      probeSummaryFor(probe, candidate.protocol),
+    );
+  }
+  for (const originId of candidateOriginIds(candidates)) {
+    next = recordOriginProbe(next, originId, originProbeSummaryFor(probe, candidates, originId));
+  }
+  return next;
 }
 
 /**
@@ -1054,8 +1269,11 @@ export function applyProbeToProvider(
 ): CustomProvider {
   const { candidates, probe, auto, mode } = params;
   const endpointConfigs = { ...materializedEndpointConfigs(provider) };
+  const seenProtocols = new Set<ProviderChatProtocol>();
   for (const candidate of candidates) {
     const protocol = candidate.protocol;
+    if (seenProtocols.has(protocol)) continue;
+    seenProtocols.add(protocol);
     const lastProbe = probeSummaryFor(probe, protocol);
     const existing = endpointConfigs[protocol];
     const autoConfig = auto.endpointConfigs[protocol];
@@ -1092,8 +1310,15 @@ export function applyProbeToProvider(
       : credential;
   });
 
+  const probedOrigins = candidateOriginIds(candidates);
+  const origins = providerOrigins(provider).map((origin) =>
+    probedOrigins.includes(origin.id)
+      ? { ...origin, lastProbe: originProbeSummaryFor(probe, candidates, origin.id) }
+      : origin,
+  );
   const draft: CustomProvider = {
     ...provider,
+    ...(origins.length > 0 ? { origins } : {}),
     endpointConfigs,
     credentials,
     models,
@@ -1213,8 +1438,11 @@ export function createProviderFromEndpoints(params: {
   /** 多 Key：第一把即主 Key */
   apiKeys?: readonly NewProviderApiKey[];
   endpoints: Partial<Record<ProviderChatProtocol, string>>;
+  /** 源地址：第一项为主源；空 / 非法 / 重复由归一化丢弃 */
+  origins?: readonly string[];
 }): CustomProvider {
   const { preset } = params;
+  const origins = (params.origins ?? []).map((url) => createOrigin(url)).filter((o) => o.url);
   const filled = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => params.endpoints[protocol]?.trim());
   const order: ProviderChatProtocol[] = [
     "openai-completions",
@@ -1252,6 +1480,7 @@ export function createProviderFromEndpoints(params: {
     enabled: true,
     baseUrl: endpointConfigs[defaultChatProtocol]?.baseUrl ?? "",
     isFullUrl: false,
+    ...(origins.length > 0 ? { origins } : {}),
     apiKey,
     apiKeyConfigured: apiKey.length > 0,
     credentials,

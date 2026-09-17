@@ -42,11 +42,7 @@ import {
   resolveEndpointRequestBase,
 } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import {
-  customEndpointBaseUrl,
-  type EndpointCandidate,
-  probeProvider,
-} from "@liveagent/ui/pages/settings/providerProbe";
+import { customEndpointBaseUrl, probeProvider } from "@liveagent/ui/pages/settings/providerProbe";
 import { useEffect, useRef, useState } from "react";
 import { DrawerGroupLabel, HintTip } from "../ProviderPresentation";
 import { CustomHeadersEditor } from "./CustomHeadersEditor";
@@ -64,14 +60,17 @@ import {
 import {
   presetForProvider,
   primaryCredential,
-  probeSummaryFor,
   providerConfiguredProtocols,
   providerCredentials,
   providerDefaultProtocol,
   providerEnabledProtocols,
+  providerEndpointTemplate,
+  providerExistingCandidates,
   providerOrigin,
+  providerUsesOrigins,
   readEndpoint,
-  recordEndpointProbe,
+  readEndpointExpanded,
+  recordProbeObservations,
   removeEndpoint,
   setDefaultProtocol,
   setEndpointEnabled,
@@ -161,19 +160,12 @@ export function RequestConfigDrawer(props: {
     onChange((current) => setEndpointEnabled(current, protocol, next));
   }
 
+  /** 单接口重测：源地址模式下按每个启用的源各测一次；观测写回端点与各源。 */
   async function reprobe(protocol: ProviderChatProtocol) {
     const view = readEndpoint(provider, protocol);
     if (!view?.config.baseUrl) return;
-    const candidate: EndpointCandidate = {
-      protocol,
-      baseUrl: view.config.baseUrl,
-      modelsUrl: view.config.modelsUrl,
-      isFullUrl: view.config.isFullUrl,
-      dialect: view.config.dialect,
-      quirks: view.config.quirks,
-      auth: view.config.auth,
-      origin: "existing",
-    };
+    const candidates = providerExistingCandidates(provider, { includeDisabled: true, protocol });
+    if (candidates.length === 0) return;
     const credential =
       credentials.find((item) => item.id === view.config.credentialId && item.enabled) ??
       credentials.find((item) => item.enabled) ??
@@ -181,14 +173,13 @@ export function RequestConfigDrawer(props: {
     setProbing((previous) => new Set(previous).add(protocol));
     try {
       const result = await probeProvider({
-        candidates: [candidate],
+        candidates,
         credentials: [{ ...credential, enabled: true }],
         useSystemProxy: provider.useSystemProxy,
         customHeaders: provider.customHeaders,
         providerId: provider.id,
       });
-      const summary = probeSummaryFor(result, protocol);
-      onChange((current) => recordEndpointProbe(current, protocol, summary));
+      onChange((current) => recordProbeObservations(current, candidates, result));
     } finally {
       setProbing((previous) => {
         const next = new Set(previous);
@@ -236,9 +227,12 @@ export function RequestConfigDrawer(props: {
     const template = preset.endpoints[protocol];
     const origin = providerOrigin(provider);
     const defaultBaseUrl = readEndpoint(provider, defaultProtocol)?.config.baseUrl ?? "";
-    const baseUrl = template
-      ? expandPresetBaseUrl(template.baseUrl, origin)
-      : customEndpointBaseUrl(protocol, defaultBaseUrl || origin);
+    // 源地址模式：新端点直接落 `{origin}` 模板，随源地址列表一起切换。
+    const baseUrl = providerUsesOrigins(provider)
+      ? providerEndpointTemplate(provider, protocol)
+      : template
+        ? expandPresetBaseUrl(template.baseUrl, origin)
+        : customEndpointBaseUrl(protocol, defaultBaseUrl || origin);
     if (!baseUrl) {
       setNotice(t("settings.providerEndpointAddNeedsAddress"));
       return;
@@ -318,16 +312,19 @@ export function RequestConfigDrawer(props: {
                 const view = readEndpoint(provider, protocol);
                 if (!view) return null;
                 const config = view.config;
+                // 预览与方言推导按主源展开后的地址；输入框保留模板。
+                const expandedBaseUrl =
+                  readEndpointExpanded(provider, protocol)?.config.baseUrl ?? config.baseUrl;
                 const isDefault = protocol === defaultProtocol;
                 const isEnabled = config.enabled !== false;
                 const inheritedDialect = resolveProviderDialect(provider, protocol, {
-                  endpoint: { baseUrl: config.baseUrl },
+                  endpoint: { baseUrl: expandedBaseUrl },
                 });
                 const authDefault = PROVIDER_PROTOCOL_AUTH_HEADER[protocol];
                 const showQuirks = PROVIDER_PROTOCOL_FAMILY[protocol] === "openai";
                 const fullUrl = resolveEndpointRequestBase(
                   protocol,
-                  config.baseUrl,
+                  expandedBaseUrl,
                   config.isFullUrl === true,
                 ).requestUrl;
                 return (
@@ -427,7 +424,7 @@ export function RequestConfigDrawer(props: {
                           />
                           <p className="truncate font-mono text-[10.5px] text-muted-foreground/70">
                             {t("settings.channelRequestPathPreview")}
-                            {fullUrl}
+                            {fullUrl || t("settings.providerOriginUnresolved")}
                           </p>
                           {!config.isFullUrl ? (
                             <p className="text-[10.5px] leading-relaxed text-muted-foreground/60">

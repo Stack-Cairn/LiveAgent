@@ -105,6 +105,63 @@ export type ProviderEndpointConfig = {
   source?: "auto" | "user";
 };
 
+/**
+ * 供应商级源地址（设计文档 2.3 / 4.2）：同一 Key、同一套接口，只有主机不同。
+ * 第一个启用的源即主源；端点地址用 `{origin}` 占位时按选中的源展开。
+ */
+export type ProviderOrigin = {
+  id: string;
+  /** 已按 normalizeOrigin 规范化：scheme + host(+port) + 可选前缀路径，无尾斜杠 */
+  url: string;
+  /** 缺省 true；关闭后不参与路由、探测与故障转移 */
+  enabled?: boolean;
+  /** 观测值：该源上次探测的最差状态；备份与同步时剥离 */
+  lastProbe?: ProviderEndpointProbe;
+};
+
+export const PROVIDER_ORIGIN_PLACEHOLDER = "{origin}";
+
+/** 地址是否以 `{origin}` 占位（相对源地址书写）。 */
+export function endpointUsesOrigin(url: string | undefined): boolean {
+  return typeof url === "string" && url.includes(PROVIDER_ORIGIN_PLACEHOLDER);
+}
+
+type ProviderOriginOwner = Partial<Pick<CustomProvider, "origins">>;
+
+/** 已启用的源（保持存档顺序；第一项即主源）。 */
+export function getProviderEnabledOrigins(provider: ProviderOriginOwner): ProviderOrigin[] {
+  return (provider.origins ?? []).filter((origin) => origin.enabled !== false);
+}
+
+/**
+ * 路由用的源：指定 originId 时取该源（须已启用），否则取主源。指定的源不存在或
+ * 已停用时退回主源，避免故障转移候选悬空。
+ */
+export function getProviderPrimaryOrigin(
+  provider: ProviderOriginOwner,
+  originId?: string,
+): ProviderOrigin | undefined {
+  const enabled = getProviderEnabledOrigins(provider);
+  if (originId) {
+    const hit = enabled.find((origin) => origin.id === originId);
+    if (hit) return hit;
+  }
+  return enabled[0];
+}
+
+/**
+ * 展开 `{origin}` 占位。模板但没有可用的源时返回空串（视为未配置）；绝对地址原样返回。
+ */
+export function expandProviderOriginUrl(
+  url: string | undefined,
+  origin: Pick<ProviderOrigin, "url"> | undefined,
+): string {
+  const value = url ?? "";
+  if (!endpointUsesOrigin(value)) return value;
+  if (!origin?.url) return "";
+  return value.split(PROVIDER_ORIGIN_PLACEHOLDER).join(origin.url);
+}
+
 export type ProviderCredentialScope =
   | { mode: "all" }
   | { mode: "auto" }
@@ -142,6 +199,10 @@ export type ResolvedProviderChatRoute = {
   /** 用户以 # 结尾要求原样使用：运行时不得再补版本段。 */
   baseUrlVerbatim?: true;
   modelsUrl?: string;
+  /** 端点地址由哪个源展开（端点用 `{origin}` 占位时才有）；故障转移源层据此换源。 */
+  originId?: string;
+  /** 该源的规范化地址；界面"实际请求预览"显示展开后的地址。 */
+  originUrl?: string;
   requestFormat?: CodexRequestFormat;
   /** 发给远端的模型名；缺省等于本地模型 ID */
   wireModelId: string;
@@ -801,6 +862,11 @@ export type CustomProvider = {
   modelsUrl?: string;
   /** 模型文档页地址（仅 http(s)）；覆盖预设的 doc，留空时用预设值。 */
   docUrl?: string;
+  /**
+   * 源地址列表；第一个启用的即主源。端点地址可用 `{origin}` 占位相对源地址书写。
+   * 缺省（旧存档）等价单源：所有端点按绝对地址解析。
+   */
+  origins?: ProviderOrigin[];
   /** 默认凭据；始终等于 credentials[0].apiKey，保证旧读者可用 */
   apiKey: string;
   apiKeyConfigured?: boolean;
@@ -844,7 +910,9 @@ export function getLegacyProviderChatProtocol(
 }
 
 type ProviderEndpointOwner = Pick<CustomProvider, "type"> &
-  Partial<Pick<CustomProvider, "defaultChatProtocol" | "requestFormat" | "endpointConfigs">>;
+  Partial<
+    Pick<CustomProvider, "defaultChatProtocol" | "requestFormat" | "endpointConfigs" | "origins">
+  >;
 
 /**
  * 主连接（baseUrl / isFullUrl / modelsUrl）充当隐式端点的那个接口：`defaultChatProtocol`，
@@ -861,7 +929,8 @@ export function getProviderImplicitChatProtocol(
 
 /**
  * 某接口在该供应商上是否已启用：有显式端点时看它的开关；没有时只有隐式端点
- * （主连接）对应的接口算启用。
+ * （主连接）对应的接口算启用。端点地址以 `{origin}` 占位而供应商没有任何启用的源时
+ * 视为未配置。
  */
 export function isProviderChatProtocolEnabled(
   provider: ProviderEndpointOwner,
@@ -869,7 +938,10 @@ export function isProviderChatProtocolEnabled(
   implicitProtocol: ProviderChatProtocol = getProviderImplicitChatProtocol(provider),
 ): boolean {
   const config = provider.endpointConfigs?.[protocol];
-  if (config) return config.enabled !== false;
+  if (config) {
+    if (config.enabled === false) return false;
+    return !endpointUsesOrigin(config.baseUrl) || getProviderPrimaryOrigin(provider) !== undefined;
+  }
   return protocol === implicitProtocol;
 }
 

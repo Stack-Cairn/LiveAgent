@@ -9,6 +9,7 @@ const loader = createTsModuleLoader({
 });
 const model = loader.loadModule("@liveagent/ui/pages/settings/providers/providerSettingsModel.ts");
 const settings = loader.loadModule("src/lib/settings/index.ts");
+const probe = loader.loadModule("@liveagent/ui/pages/settings/providerProbe.ts");
 
 function legacyAnthropicProvider(extra = {}) {
   return settings.normalizeCustomProvider({
@@ -699,4 +700,74 @@ test("credential list helpers keep apiKey === credentials[0].apiKey and never dr
   // 只剩一把时不可删。
   const kept = model.removeProviderCredential(removed, backup.id);
   assert.equal(model.providerCredentials(kept).length, 1);
+});
+
+test("converting a legacy instance to origin mode templates same-host endpoints and keeps foreign ones absolute", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "packy",
+    name: "Packy",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "https://www.packyapi.com/v1",
+    apiKey: "sk",
+    defaultChatProtocol: "openai-completions",
+    endpointConfigs: {
+      "openai-completions": { baseUrl: "https://www.packyapi.com/v1" },
+      "anthropic-messages": { baseUrl: "https://www.packyapi.com" },
+      // 别的主机：保持绝对地址，不被套模板。
+      "google-generative-ai": { baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
+    },
+    models: [{ id: "gpt-5.2" }],
+    activeModels: ["gpt-5.2"],
+  });
+  assert.equal(model.canConvertProviderToOrigins(provider), true);
+  const converted = model.convertProviderToOrigins(provider);
+  assert.deepEqual(
+    converted.origins.map((origin) => origin.url),
+    ["https://www.packyapi.com"],
+  );
+  assert.equal(converted.endpointConfigs["openai-completions"].baseUrl, "{origin}/v1");
+  assert.equal(converted.endpointConfigs["anthropic-messages"].baseUrl, "{origin}");
+  assert.equal(
+    converted.endpointConfigs["google-generative-ai"].baseUrl,
+    "https://generativelanguage.googleapis.com/v1beta",
+  );
+  // 主连接由主源重新展开，值不变：转换对运行时是无感的。
+  assert.equal(converted.baseUrl, "https://www.packyapi.com/v1");
+  assert.equal(
+    settings.resolveProviderChatRoute(converted, "gpt-5.2").baseUrl,
+    settings.resolveProviderChatRoute(provider, "gpt-5.2").baseUrl,
+  );
+  // 已是源地址模式的实例不再重复转换。
+  assert.equal(model.canConvertProviderToOrigins(converted), false);
+  assert.equal(model.convertProviderToOrigins(converted), converted);
+});
+
+test("probe candidates fan out over enabled origins and keep absolute endpoints single", () => {
+  const origins = [
+    { id: "main", url: "https://packyapi.com" },
+    { id: "alt", url: "https://packy.ai" },
+    { id: "off", url: "https://packy.dev", enabled: false },
+  ];
+  const candidates = probe.buildEndpointCandidates({
+    preset: undefined,
+    origins,
+    existing: {
+      "openai-completions": { baseUrl: "{origin}/v1" },
+      "anthropic-messages": { baseUrl: "https://fixed.example" },
+    },
+  });
+  const completions = candidates.filter((c) => c.protocol === "openai-completions");
+  // 模板端点 × 两个启用源；停用的 off 不展开。
+  assert.deepEqual(
+    completions.map((c) => [c.originId, c.baseUrl]),
+    [
+      ["main", "https://packyapi.com/v1"],
+      ["alt", "https://packy.ai/v1"],
+    ],
+  );
+  const messages = candidates.filter((c) => c.protocol === "anthropic-messages");
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].baseUrl, "https://fixed.example");
+  assert.equal(messages[0].originId, undefined);
 });

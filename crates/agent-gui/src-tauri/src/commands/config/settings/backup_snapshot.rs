@@ -230,10 +230,11 @@ pub(crate) fn collect_backup_snapshot(conn: &Connection) -> Result<BackupSnapsho
     })
 }
 
-/// 备份导出时剥离供应商域的观测值：端点 `endpointConfigs[*].lastProbe` 与凭据
-/// `credentials[*].lastModels`（设计文档 5.5）。它们是本机探测结果而非配置，
-/// 另一台机器导入后也没有意义；导入侧缺失即可，TS 归一化允许缺省。
-/// 只剥离这两个键，其余字段（含 Key 明文）与 providers 域既有策略一致原样保留。
+/// 备份导出时剥离供应商域的观测值：端点 `endpointConfigs[*].lastProbe`、源地址
+/// `origins[*].lastProbe` 与凭据 `credentials[*].lastModels`（设计文档 5.5）。它们是
+/// 本机探测结果而非配置，另一台机器导入后也没有意义；导入侧缺失即可，TS 归一化
+/// 允许缺省。只剥离这三个键，其余字段（含 Key 明文）与 providers 域既有策略一致
+/// 原样保留。
 pub(crate) fn strip_provider_observations(providers: Value) -> Value {
     let Value::Array(providers) = providers else {
         return providers;
@@ -249,6 +250,13 @@ pub(crate) fn strip_provider_observations(providers: Value) -> Value {
                     for endpoint in endpoints.values_mut() {
                         if let Some(endpoint) = endpoint.as_object_mut() {
                             endpoint.remove("lastProbe");
+                        }
+                    }
+                }
+                if let Some(Value::Array(origins)) = provider.get_mut("origins") {
+                    for origin in origins.iter_mut() {
+                        if let Some(origin) = origin.as_object_mut() {
+                            origin.remove("lastProbe");
                         }
                     }
                 }

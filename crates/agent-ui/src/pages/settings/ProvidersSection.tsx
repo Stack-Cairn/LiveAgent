@@ -61,7 +61,7 @@ import {
   providerCredentials,
   providerExistingCandidates,
   providerProbeCandidates,
-  recordEndpointProbe,
+  recordProbeObservations,
   setCredentials,
 } from "./providers/providerSettingsModel";
 import { RequestConfigDrawer } from "./providers/RequestConfigDrawer";
@@ -180,22 +180,14 @@ export function ProvidersSection(
     setNotice({ providerId, ...value });
   }
 
-  /** 探测对话框取消：只把已配置端点的 lastProbe 写回，不采纳端点 / 模型变更。 */
-  function recordProbeObservations(
+  /** 探测对话框取消：只把已配置端点与各源的 lastProbe 写回，不采纳端点 / 模型变更。 */
+  function recordDismissedProbe(
     providerId: string,
     result: { probe: ProviderProbeResult; candidates: EndpointCandidate[] },
   ) {
-    updateProvider(providerId, (current) => {
-      let next = current;
-      for (const candidate of result.candidates) {
-        next = recordEndpointProbe(
-          next,
-          candidate.protocol,
-          probeSummaryFor(result.probe, candidate.protocol),
-        );
-      }
-      return next;
-    });
+    updateProvider(providerId, (current) =>
+      recordProbeObservations(current, result.candidates, result.probe),
+    );
   }
 
   /** 未配置渠道的"检测并启用"：探测后创建实例。 */
@@ -264,11 +256,11 @@ export function ProvidersSection(
           applyProbeToProvider(current, { candidates: probed, probe, auto, mode: "configure" }),
         );
       },
-      onDismiss: (result) => recordProbeObservations(provider.id, result),
+      onDismiss: (result) => recordDismissedProbe(provider.id, result),
     });
   }
 
-  /** "检测"：只跑已配置端点，记录观测，不改模型。 */
+  /** "检测"：只跑已配置端点（源地址模式按源 × 接口展开），记录观测，不改模型。 */
   async function quickCheck(provider: CustomProvider) {
     const candidates = providerExistingCandidates(provider, { includeDisabled: true });
     if (candidates.length === 0) {
@@ -294,13 +286,12 @@ export function ProvidersSection(
         }
         seenByCredential.set(entry.credentialId, seen);
       }
+      const probedProtocols = [...new Set(candidates.map((candidate) => candidate.protocol))];
+      okCount = probedProtocols.filter(
+        (protocol) => probeSummaryFor(probe, protocol).status === "ok",
+      ).length;
       updateProvider(provider.id, (current) => {
-        let next = current;
-        for (const candidate of candidates) {
-          const summary = probeSummaryFor(probe, candidate.protocol);
-          if (summary.status === "ok") okCount += 1;
-          next = recordEndpointProbe(next, candidate.protocol, summary);
-        }
+        const next = recordProbeObservations(current, candidates, probe);
         const credentials = providerCredentials(next).map((credential) => {
           const seen = seenByCredential.get(credential.id);
           return seen && seen.size > 0
@@ -320,7 +311,10 @@ export function ProvidersSection(
               tone: "ok",
               text: t("settings.providerCheckDone")
                 .replace("{ok}", String(okCount))
-                .replace("{total}", String(candidates.length)),
+                .replace(
+                  "{total}",
+                  String(new Set(candidates.map((candidate) => candidate.protocol)).size),
+                ),
             }
           : { tone: "bad", text: t("settings.providerCheckFailed") },
       );
@@ -401,7 +395,7 @@ export function ProvidersSection(
           applyProbeToProvider(current, { candidates: probed, probe, auto, mode: "configure" }),
         );
       },
-      onDismiss: (result) => recordProbeObservations(provider.id, result),
+      onDismiss: (result) => recordDismissedProbe(provider.id, result),
     });
   }
 

@@ -25,6 +25,7 @@ import {
   failoverBreakerKey,
   type ModelFailoverRuntimeConfig,
   type ProviderFailoverCandidate,
+  type ProviderFailoverLayer,
   withProviderFailover,
 } from "./providerFailover";
 import {
@@ -50,6 +51,7 @@ function runtimeRouteParams(runtime: ProviderRuntimeConfig, providerId: Provider
 function failoverScope(runtime: ProviderRuntimeConfig, providerId: ProviderId) {
   return {
     credentialId: runtime.credentialId,
+    origin: runtime.originUrl,
     protocol: resolveRuntimeWireRoute(providerId, runtime).protocol,
   };
 }
@@ -180,6 +182,8 @@ export type TextStreamFailoverTarget = {
   /** Display label, e.g. "PackyCode · claude-sonnet-4-5". */
   label: string;
   runtime: ProviderRuntimeConfig;
+  /** 候选所属层；源层候选在鉴权类失败后被跳过。 */
+  layer?: ProviderFailoverLayer;
 };
 
 export type TextStreamFailoverParams = {
@@ -428,6 +432,7 @@ export async function streamAssistantMessage(params: {
                 fallback ? failoverScope(fallback.runtime, fallback.providerId) : undefined,
               ),
         label: targetIndex === 0 ? primaryFailoverLabel : (fallback?.label ?? ""),
+        ...(fallback?.layer ? { layer: fallback.layer } : {}),
         model:
           targetIndex === 0
             ? { api: m.api, provider: m.provider, id: m.id }

@@ -52,6 +52,7 @@ import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
 import { type ReactNode, useMemo, useState } from "react";
 import { DrawerGroupLabel, HintTip, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
 import { ModelCatalogSummary } from "./ModelCatalogInfoPanel";
+import { originHostLabel } from "./ProviderOriginList";
 import {
   Chip,
   ChipButton,
@@ -74,6 +75,7 @@ import {
   modelGroupKey,
   modelLimitFieldSources,
   providerCredentials,
+  providerUsesOrigins,
   resetModelCapabilityOverrides,
   resetModelLimitField,
   setModelCapabilityOverride,
@@ -885,6 +887,14 @@ export function ModelEditDrawer(props: {
                       {dialectLabel(t, route.dialect)}
                     </span>
                   </span>
+                  {route.originUrl ? (
+                    <>
+                      <span className="text-muted-foreground">
+                        {t("settings.modelRouteOrigin")}
+                      </span>
+                      <span className="break-all font-mono">{route.originUrl}</span>
+                    </>
+                  ) : null}
                   <span className="text-muted-foreground">{t("settings.baseUrl")}</span>
                   <span className="break-all font-mono">{route.baseUrl || "—"}</span>
                   <span className="text-muted-foreground">
@@ -945,6 +955,26 @@ export function ModelEditDrawer(props: {
                         </span>
                       )}
                     </span>
+                    {providerUsesOrigins(provider) ? (
+                      <>
+                        <span className="text-muted-foreground">
+                          {t("settings.modelFailoverLayer.origin")}
+                        </span>
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {failover.origins.length > 0 ? (
+                            failover.origins.map((item, index) => (
+                              <Chip key={item.id}>
+                                {index + 1} · {originHostLabel(item)}
+                              </Chip>
+                            ))
+                          ) : (
+                            <span className="text-muted-foreground/70">
+                              {t("settings.modelFailoverNone")}
+                            </span>
+                          )}
+                        </span>
+                      </>
+                    ) : null}
                     <span className="text-muted-foreground">
                       {t("settings.modelFailoverLayer.endpoint")}
                     </span>

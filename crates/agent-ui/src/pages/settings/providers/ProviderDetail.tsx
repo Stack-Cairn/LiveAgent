@@ -34,7 +34,7 @@ import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ModelCheckAggregate, ModelCheckResult } from "@liveagent/ui/lib/providers/modelCheck";
-import { CUSTOM_PRESET_ID } from "@liveagent/ui/lib/providers/registry";
+import { CUSTOM_PRESET_ID, resolveEndpointRequestBase } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   checkProviderModelAllKeys,
@@ -48,6 +48,7 @@ import { ModelListActions, ModelListToolbar } from "./ModelListToolbar";
 import { ProviderFailoverSection } from "./ProviderFailoverSection";
 import { credentialDisplayName, ProviderKeyList } from "./ProviderKeyList";
 import { ProviderMoreSettings } from "./ProviderMoreSettings";
+import { ProviderOriginList } from "./ProviderOriginList";
 import { ProviderUsageQueryPanel } from "./ProviderUsageQueryPanel";
 import {
   Chip,
@@ -64,7 +65,9 @@ import {
 } from "./providerChips";
 import {
   addProviderModel,
+  canConvertProviderToOrigins,
   configuredCredentials,
+  convertProviderToOrigins,
   credentialScopesMatch,
   credentialsCoveringModel,
   EMPTY_MODEL_LIST_FILTER,
@@ -80,7 +83,9 @@ import {
   providerCredentials,
   providerDefaultProtocol,
   providerDocUrl,
+  providerUsesOrigins,
   readEndpoint,
+  readEndpointExpanded,
   removeProviderModel,
   reorderProviderModels,
   setProviderModelActive,
@@ -527,6 +532,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
   const nameEditable = preset.id === CUSTOM_PRESET_ID;
   const defaultProtocol = providerDefaultProtocol(provider);
   const defaultEndpoint = readEndpoint(provider, defaultProtocol);
+  const usesOrigins = providerUsesOrigins(provider);
   const configured = providerConfiguredProtocols(provider);
   const enabledKeys = enabledCredentials(provider);
   const configuredKeyCount = configuredCredentials(provider).length;
@@ -831,55 +837,122 @@ export function ProviderDetail(props: ProviderDetailProps) {
             </>
           }
         />
-        <div className="space-y-2 rounded-xl border bg-card px-3 py-2.5">
-          <div className="settings-provider-address-row flex flex-wrap items-center gap-2">
-            <CommittedInput
-              value={defaultEndpoint?.config.baseUrl ?? provider.baseUrl}
-              className="h-8 min-w-0 flex-1 basis-56 font-mono text-xs shadow-none"
-              placeholder="https://api.example.com/v1"
-              aria-label={t("settings.baseUrl")}
-              autoComplete="off"
-              spellCheck={false}
-              onCommit={(value) =>
-                onChange((current) => writeEndpoint(current, defaultProtocol, { baseUrl: value }))
-              }
-            />
-            {defaultEndpoint?.config.source ? (
-              <SourceTag source={defaultEndpoint.config.source} />
-            ) : null}
+        {usesOrigins ? (
+          <div className="space-y-2">
+            <ProviderOriginList provider={provider} onChange={onChange} />
+            <div className="divide-y rounded-xl border bg-card">
+              {configured.length === 0 ? (
+                <div className="px-3 py-2 text-[11px] text-muted-foreground/75">
+                  {t("settings.providerNoEndpointsHint")}
+                </div>
+              ) : (
+                configured.map((protocol) => {
+                  const view = readEndpoint(provider, protocol);
+                  const expanded = readEndpointExpanded(provider, protocol);
+                  const isEnabled = view?.config.enabled !== false;
+                  const resolved = expanded?.config.baseUrl
+                    ? resolveEndpointRequestBase(
+                        protocol,
+                        expanded.config.baseUrl,
+                        expanded.config.isFullUrl === true,
+                      ).requestUrl
+                    : "";
+                  return (
+                    <div key={protocol} className="space-y-0.5 px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ChipButton
+                          tone={isEnabled ? "on" : "default"}
+                          className={cn(!isEnabled && "opacity-60")}
+                          onClick={() => onOpenDrawer({ kind: "request", focus: protocol })}
+                          title={
+                            isEnabled
+                              ? t("settings.providerDialogRequest")
+                              : `${protocolLabel(protocol)} · ${t("settings.providerDisabled")}`
+                          }
+                        >
+                          {protocolLabel(protocol)}
+                          {protocol === defaultProtocol
+                            ? ` · ${t("settings.providerEndpointDefault")}`
+                            : ""}
+                        </ChipButton>
+                        <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                          {view?.config.baseUrl}
+                        </span>
+                        <ProbeStatusChip probe={view?.config.lastProbe} />
+                      </div>
+                      <p className="truncate font-mono text-[10.5px] leading-4 text-muted-foreground/70">
+                        <span className="font-sans">{t("settings.providerOriginResolved")}: </span>
+                        {resolved || t("settings.providerOriginUnresolved")}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
-          <ProbeReason probe={defaultEndpoint?.config.lastProbe} />
-          <div className="flex flex-wrap items-center gap-1.5">
-            {configured.length === 0 ? (
-              <span className="text-[11px] text-muted-foreground/75">
-                {t("settings.providerNoEndpointsHint")}
-              </span>
-            ) : (
-              configured.map((protocol) => {
-                const view = readEndpoint(provider, protocol);
-                const isEnabled = view?.config.enabled !== false;
-                return (
-                  <ChipButton
-                    key={protocol}
-                    tone={isEnabled ? "on" : "default"}
-                    className={cn(!isEnabled && "opacity-60")}
-                    onClick={() => onOpenDrawer({ kind: "request", focus: protocol })}
-                    title={
-                      isEnabled
-                        ? t("settings.providerDialogRequest")
-                        : `${protocolLabel(protocol)} · ${t("settings.providerDisabled")}`
-                    }
-                  >
-                    {protocolLabel(protocol)}
-                    {protocol === defaultProtocol
-                      ? ` · ${t("settings.providerEndpointDefault")}`
-                      : ""}
-                  </ChipButton>
-                );
-              })
-            )}
+        ) : (
+          <div className="space-y-2 rounded-xl border bg-card px-3 py-2.5">
+            <div className="settings-provider-address-row flex flex-wrap items-center gap-2">
+              <CommittedInput
+                value={defaultEndpoint?.config.baseUrl ?? provider.baseUrl}
+                className="h-8 min-w-0 flex-1 basis-56 font-mono text-xs shadow-none"
+                placeholder="https://api.example.com/v1"
+                aria-label={t("settings.baseUrl")}
+                autoComplete="off"
+                spellCheck={false}
+                onCommit={(value) =>
+                  onChange((current) => writeEndpoint(current, defaultProtocol, { baseUrl: value }))
+                }
+              />
+              {defaultEndpoint?.config.source ? (
+                <SourceTag source={defaultEndpoint.config.source} />
+              ) : null}
+            </div>
+            <ProbeReason probe={defaultEndpoint?.config.lastProbe} />
+            <div className="flex flex-wrap items-center gap-1.5">
+              {configured.length === 0 ? (
+                <span className="text-[11px] text-muted-foreground/75">
+                  {t("settings.providerNoEndpointsHint")}
+                </span>
+              ) : (
+                configured.map((protocol) => {
+                  const view = readEndpoint(provider, protocol);
+                  const isEnabled = view?.config.enabled !== false;
+                  return (
+                    <ChipButton
+                      key={protocol}
+                      tone={isEnabled ? "on" : "default"}
+                      className={cn(!isEnabled && "opacity-60")}
+                      onClick={() => onOpenDrawer({ kind: "request", focus: protocol })}
+                      title={
+                        isEnabled
+                          ? t("settings.providerDialogRequest")
+                          : `${protocolLabel(protocol)} · ${t("settings.providerDisabled")}`
+                      }
+                    >
+                      {protocolLabel(protocol)}
+                      {protocol === defaultProtocol
+                        ? ` · ${t("settings.providerEndpointDefault")}`
+                        : ""}
+                    </ChipButton>
+                  );
+                })
+              )}
+              {canConvertProviderToOrigins(provider) ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-7 px-2 text-[11px] text-muted-foreground"
+                  title={t("settings.providerConvertToOriginsHint")}
+                  onClick={() => onChange((current) => convertProviderToOrigins(current))}
+                >
+                  {t("settings.providerConvertToOrigins")}
+                </Button>
+              ) : null}
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       <section className="@container/models space-y-2">

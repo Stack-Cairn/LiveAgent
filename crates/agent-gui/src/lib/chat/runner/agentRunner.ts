@@ -51,6 +51,7 @@ import {
   failoverBreakerKey,
   type ModelFailoverRuntimeConfig,
   type ProviderFailoverCandidate,
+  type ProviderFailoverLayer,
   withProviderFailover,
 } from "../../providers/runtime/providerFailover";
 import { resolveStreamRetryConfig } from "../../providers/runtime/retryPolicy";
@@ -407,6 +408,8 @@ export type AgentRunnerFailoverTarget = {
   /** Display label, e.g. "PackyCode · claude-sonnet-4-5". */
   label: string;
   runtime: ProviderRuntimeConfig;
+  /** 候选所属层；源层候选在鉴权类失败后被跳过。 */
+  layer?: ProviderFailoverLayer;
 };
 
 export type AgentRunnerFailoverSwitchEvent = {
@@ -589,6 +592,7 @@ export async function runAssistantWithTools(params: {
     // protocol 时与 wire 层同一条回退链推导，不再各读各的。
     const failoverScope = (runtime: ProviderRuntimeConfig, providerId: ProviderId) => ({
       credentialId: runtime.credentialId,
+      origin: runtime.originUrl,
       protocol: resolveRuntimeWireRoute(providerId, runtime).protocol,
     });
     /** 路由结果只在工厂构造的 runtime 上存在；手写 runtime 让中间件退回旧推导。 */
@@ -1519,6 +1523,7 @@ export async function runAssistantWithTools(params: {
                   fallback ? failoverScope(fallback.runtime, fallback.providerId) : undefined,
                 ),
           label: targetIndex === 0 ? primaryTarget.label : (fallback?.label ?? ""),
+          ...(fallback?.layer ? { layer: fallback.layer } : {}),
           model:
             targetIndex === 0
               ? { api: model.api, provider: model.provider, id: model.id }
