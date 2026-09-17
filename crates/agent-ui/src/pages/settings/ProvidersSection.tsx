@@ -62,6 +62,7 @@ import {
   providerCredentials,
   providerExistingCandidates,
   providerProbeCandidates,
+  providerUsesCatalogModels,
   recordProbeObservations,
   setCredentials,
 } from "./providers/providerSettingsModel";
@@ -367,7 +368,12 @@ export function ProvidersSection(
       );
       showNotice(provider.id, {
         tone: "ok",
-        text: t("settings.providerModelsRefreshed")
+        // 目录渠道没有发请求，措辞区分开：是按内置目录对齐，不是从上游拉取。
+        text: t(
+          providerUsesCatalogModels(provider)
+            ? "settings.providerModelsRefreshedCatalog"
+            : "settings.providerModelsRefreshed",
+        )
           .replace("{total}", String(auto.models.length))
           .replace("{added}", String(added)),
       });

@@ -1500,6 +1500,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerKeysScoped": "{count} keys · different model scopes, chosen per model",
   "settings.providerNoEndpointsHint":
     "No endpoint configured yet. Use “Probe and configure” or add one in request settings.",
+  "settings.providerModelsRefreshedCatalog":
+    "Synced with the built-in catalog: {total} models, {added} new (disabled by default).",
   "settings.providerModelsRefreshed": "Model list refreshed: {total} total, {added} new",
   "settings.providerNativeWebSearchHint": "Let models use the provider's native web search.",
   "settings.modelsEmptyHint": "No models yet. Use “Refresh model list” or add one manually.",

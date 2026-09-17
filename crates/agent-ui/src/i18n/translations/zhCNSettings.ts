@@ -1426,6 +1426,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerKeysInterchangeable": "{count} 把 Key · 模型范围相同，可互换",
   "settings.providerKeysScoped": "{count} 把 Key · 模型范围不同，按范围选 Key",
   "settings.providerNoEndpointsHint": "尚未配置任何渠道，点“检测并配置”或在请求配置里添加端点。",
+  "settings.providerModelsRefreshedCatalog":
+    "已按内置目录对齐：共 {total} 个模型，新增 {added} 个（默认关闭，按需启用）",
   "settings.providerModelsRefreshed": "模型列表已刷新：共 {total} 个，新增 {added} 个",
   "settings.providerNativeWebSearchHint": "允许模型使用供应商的原生联网搜索。",
   "settings.modelsEmptyHint": "还没有模型：点“刷新模型列表”或手动添加。",
