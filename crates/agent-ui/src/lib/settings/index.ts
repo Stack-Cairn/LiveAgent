@@ -1729,6 +1729,15 @@ function normalizeEndpointAuth(input: unknown): ProviderEndpointAuth | undefined
   return { ...(headerName ? { headerName } : {}), ...(prefix !== undefined ? { prefix } : {}) };
 }
 
+/** 探测错误文本的落盘上限；超出部分截断并标注。 */
+const PROBE_ERROR_MAX_LENGTH = 400;
+
+export function truncateProbeError(message: string): string {
+  const trimmed = message.trim();
+  if (trimmed.length <= PROBE_ERROR_MAX_LENGTH) return trimmed;
+  return `${trimmed.slice(0, PROBE_ERROR_MAX_LENGTH)}…`;
+}
+
 function normalizeEndpointProbe(input: unknown): ProviderEndpointProbe | undefined {
   if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
   const source = input as Record<string, unknown>;
@@ -1746,8 +1755,10 @@ function normalizeEndpointProbe(input: unknown): ProviderEndpointProbe | undefin
     typeof source.latencyMs === "number" && Number.isFinite(source.latencyMs)
       ? Math.max(0, Math.round(source.latencyMs))
       : undefined;
-  const error =
-    typeof source.error === "string" && source.error.trim() ? source.error.trim() : undefined;
+  // 上游失败时常回整页 HTML（Cloudflare 拦截页等）。观测值只用于界面提示，截断到
+  // PROBE_ERROR_MAX_LENGTH，避免把几 KB 的页面源码写进配置库与同步负载。
+  const rawError = typeof source.error === "string" ? source.error.trim() : "";
+  const error = rawError ? truncateProbeError(rawError) : undefined;
   return {
     at,
     status,

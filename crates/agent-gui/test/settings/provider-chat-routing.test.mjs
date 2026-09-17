@@ -688,3 +688,34 @@ test("without origins a {origin} endpoint is not routable and absolute endpoints
   );
   assert.equal(settings.resolveProviderChatRoute(provider, "gpt-5.2").baseUrl, "https://absolute.example/v1");
 });
+
+test("probe error text is truncated before it reaches the store", () => {
+  // 上游失败常回整页 HTML（Cloudflare 拦截页）；观测值只用于界面提示。
+  const html = `<!DOCTYPE html>${"<div>blocked</div>".repeat(200)}`;
+  assert.ok(html.length > 1000);
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    name: "relay",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "https://relay.example/v1",
+    apiKey: "sk",
+    origins: [{ id: "o1", url: "https://relay.example", lastProbe: { at: 1, status: "unauthorized", error: html } }],
+    endpointConfigs: {
+      "openai-completions": {
+        baseUrl: "https://relay.example/v1",
+        lastProbe: { at: 1, status: "unknown", error: html },
+      },
+    },
+  });
+  for (const probe of [
+    provider.origins[0].lastProbe,
+    provider.endpointConfigs["openai-completions"].lastProbe,
+  ]) {
+    assert.ok(probe.error.length < 500, "错误文本应截断");
+    assert.ok(probe.error.endsWith("…"), "截断处应有省略号");
+    assert.ok(probe.error.startsWith("<!DOCTYPE html>"));
+  }
+  // 正常长度的错误原样保留。
+  assert.equal(settings.truncateProbeError("HTTP 401 Unauthorized"), "HTTP 401 Unauthorized");
+});
