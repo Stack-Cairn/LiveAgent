@@ -47,6 +47,7 @@ import {
   findProviderPreset,
   normalizeOrigin,
   type ProviderPreset,
+  presetUsesCatalogModels,
   resolveModelGroup,
 } from "@liveagent/ui/lib/providers/registry";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
@@ -55,6 +56,7 @@ import {
   buildEndpointCandidates,
   type EndpointCandidate,
   expandCandidateOrigins,
+  isProbeStatusUsable,
   originEndpointTemplate,
   type ProviderProbeResult,
   probeProvider,
@@ -95,6 +97,22 @@ export function customPreset(): ProviderPreset {
 
 export function presetForProvider(provider: Pick<CustomProvider, "presetId">): ProviderPreset {
   return findProviderPreset(provider.presetId) ?? customPreset();
+}
+
+/**
+ * 该实例的模型列表是否随应用内置（厂商自营渠道）。为真时"刷新模型列表"与探测都
+ * 不该去请求 `/models`——该渠道的模型来自内置目录，问它也只会拿到同一份或 404。
+ */
+export function providerUsesCatalogModels(provider: Pick<CustomProvider, "presetId">): boolean {
+  return presetUsesCatalogModels(presetForProvider(provider));
+}
+
+/** 该实例的内置目录模型（`providerUsesCatalogModels` 为假时是空列表）。 */
+export function providerCatalogModels(
+  provider: Pick<CustomProvider, "presetId">,
+): readonly CatalogModelEntry[] {
+  const preset = presetForProvider(provider);
+  return presetUsesCatalogModels(preset) ? preset.catalogModels : [];
 }
 
 /** 默认接口 = 隐式接口（defaultChatProtocol ?? 旧类型推导），与路由层同一口径。 */
@@ -479,13 +497,14 @@ export async function refreshCredentialModelList(
     useSystemProxy: provider.useSystemProxy,
     customHeaders: provider.customHeaders,
     providerId: provider.id,
+    preset: presetForProvider(provider),
   });
   const seen = new Set<string>();
   let ok = false;
   let reason = "";
   for (const entry of result.credentials) {
     for (const endpoint of entry.endpoints) {
-      if (endpoint.status !== "ok") {
+      if (!isProbeStatusUsable(endpoint.status)) {
         reason ||= endpoint.error ?? "";
         continue;
       }
@@ -1270,7 +1289,7 @@ export function recordProbeObservations(
  * - 用户值（user 来源端点、手工模型、用户覆盖字段）不被覆盖；
  * - 已配置端点只写入观测：探测失败不停用、不切默认；启停只由用户决定
  *   （configure 采纳摘要页取消的接口为停用；refresh 不改启停）；
- * - 新模型追加并激活，已有模型保留全部字段；
+ * - 新模型追加但默认不启用（开哪些由人决定），已有模型保留全部字段与启停；
  * - 每把 Key 的 lastModels 刷新。
  */
 export function applyProbeToProvider(
@@ -1309,8 +1328,6 @@ export function applyProbeToProvider(
   }
 
   const models = mergeFetchedModels(auto.models, provider.models);
-  const knownIds = new Set(provider.models.map((model) => model.id));
-  const newIds = models.map((model) => model.id).filter((id) => !knownIds.has(id));
   const seenByCredential = new Map(
     auto.credentials.map((credential) => [credential.id, credential.lastModels]),
   );
@@ -1337,7 +1354,9 @@ export function applyProbeToProvider(
     endpointConfigs,
     credentials,
     models,
-    activeModels: [...provider.activeModels, ...newIds],
+    // 新发现的模型默认关闭，由人在列表里逐个启用；已存在模型的启停状态原样保留
+    // （refresh 不会把用户已经开着的模型关掉）。
+    activeModels: provider.activeModels,
     ...(auto.dialect && !provider.dialect ? { dialect: auto.dialect } : {}),
   };
   const enabled = getProviderEnabledProtocols(draft);

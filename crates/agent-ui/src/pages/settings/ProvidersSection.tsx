@@ -34,6 +34,7 @@ import {
   buildAutoConfiguration,
   buildEndpointCandidates,
   type EndpointCandidate,
+  isProbeStatusUsable,
   type ProviderProbeResult,
   probeProvider,
 } from "@liveagent/ui/pages/settings/providerProbe";
@@ -275,20 +276,21 @@ export function ProvidersSection(
         useSystemProxy: provider.useSystemProxy,
         customHeaders: provider.customHeaders,
         providerId: provider.id,
+        preset: presetForProvider(provider),
       });
       const seenByCredential = new Map<string, Set<string>>();
       let okCount = 0;
       for (const entry of probe.credentials) {
         const seen = seenByCredential.get(entry.credentialId) ?? new Set<string>();
         for (const endpoint of entry.endpoints) {
-          if (endpoint.status !== "ok") continue;
+          if (!isProbeStatusUsable(endpoint.status)) continue;
           for (const model of endpoint.models) seen.add(model.id);
         }
         seenByCredential.set(entry.credentialId, seen);
       }
       const probedProtocols = [...new Set(candidates.map((candidate) => candidate.protocol))];
-      okCount = probedProtocols.filter(
-        (protocol) => probeSummaryFor(probe, protocol).status === "ok",
+      okCount = probedProtocols.filter((protocol) =>
+        isProbeStatusUsable(probeSummaryFor(probe, protocol).status),
       ).length;
       updateProvider(provider.id, (current) => {
         const next = recordProbeObservations(current, candidates, probe);
@@ -340,6 +342,7 @@ export function ProvidersSection(
         useSystemProxy: provider.useSystemProxy,
         customHeaders: provider.customHeaders,
         providerId: provider.id,
+        preset,
       });
       const auto = buildAutoConfiguration({
         preset: preset.id === CUSTOM_PRESET_ID ? undefined : preset,

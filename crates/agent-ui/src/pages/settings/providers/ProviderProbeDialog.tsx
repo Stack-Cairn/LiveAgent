@@ -19,37 +19,22 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { CustomHeader } from "@liveagent/ui/lib/providers/customHeaders";
-import type { ProviderPreset } from "@liveagent/ui/lib/providers/registry";
+import {
+  MODEL_CATALOG_SNAPSHOT_DATE,
+  type ProviderPreset,
+  presetUsesCatalogModels,
+} from "@liveagent/ui/lib/providers/registry";
 import {
   type AutoConfiguration,
   buildAutoConfiguration,
   type EndpointCandidate,
   groupProbeModels,
-  legacyTypeForProtocol,
+  isProbeStatusUsable,
   type ProviderProbeResult,
+  probeModelsUrl,
   probeProvider,
   summarizeEndpointStatus,
 } from "@liveagent/ui/pages/settings/providerProbe";
-import {
-  buildProviderModelsUrl,
-  normalizeProviderModelsBaseUrl,
-} from "@liveagent/ui/pages/settings/providerUtils";
-
-/** 与真实拉取一致的模型列表地址预览（去重 /v1、Gemini 用 v1beta）。 */
-function previewModelsUrl(candidate: EndpointCandidate): string {
-  if (candidate.modelsUrl) return candidate.modelsUrl;
-  const type = legacyTypeForProtocol(candidate.protocol);
-  try {
-    return buildProviderModelsUrl(
-      type,
-      normalizeProviderModelsBaseUrl(type, candidate.baseUrl, candidate.isFullUrl === true),
-      "official",
-    );
-  } catch {
-    return candidate.baseUrl;
-  }
-}
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { originHostLabel } from "./ProviderOriginList";
 import {
@@ -100,6 +85,8 @@ export function ProviderProbeDialog(props: {
 }) {
   const { request, onAccept, onDismiss, onClose } = props;
   const { t } = useLocale();
+  // catalog 渠道：模型列表随应用内置，整场探测不发请求，文案与状态都换一套说法。
+  const fromCatalog = presetUsesCatalogModels(request.preset);
   const [open, setOpen] = useState(true);
   const [progress, setProgress] = useState<ProviderProbeResult | null>(null);
   const [done, setDone] = useState<ProviderProbeResult | null>(null);
@@ -127,6 +114,7 @@ export function ProviderProbeDialog(props: {
         promise: probeProvider({
           candidates: request.candidates,
           credentials: request.credentials,
+          preset: request.preset,
           useSystemProxy: request.useSystemProxy,
           customHeaders: request.customHeaders,
           providerId: request.providerId,
@@ -204,8 +192,8 @@ export function ProviderProbeDialog(props: {
     [request.candidates],
   );
   const okCount = done
-    ? protocolGroups.filter(
-        (group) => summarizeEndpointStatus(done, group.protocol).status === "ok",
+    ? protocolGroups.filter((group) =>
+        isProbeStatusUsable(summarizeEndpointStatus(done, group.protocol).status),
       ).length
     : 0;
   const usable = available.length > 0;
@@ -217,7 +205,7 @@ export function ProviderProbeDialog(props: {
       (candidate) => candidate.protocol === protocol && candidate.origin === "existing",
     );
     // 已配置端点：探测失败也保留，点击只是"取消 / 恢复采纳"（采纳后写 enabled:false）。
-    if (status === "ok" || existing) {
+    if (isProbeStatusUsable(status) || existing) {
       setRejectedProtocols((previous) => {
         const next = new Set(previous);
         if (next.has(protocol)) next.delete(protocol);
@@ -294,7 +282,11 @@ export function ProviderProbeDialog(props: {
             {request.title}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {t("settings.providerProbeDescription")}
+            {t(
+              fromCatalog
+                ? "settings.providerProbeDescriptionCatalog"
+                : "settings.providerProbeDescription",
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
@@ -321,12 +313,14 @@ export function ProviderProbeDialog(props: {
                 probed && progress ? probeSummaryFor(progress, candidate.protocol) : undefined;
               const status = summary?.status;
               const existing = group.candidates.some((item) => item.origin === "existing");
+              // 可用 = 拉到了列表（ok）或列表本就内置（catalog）。
+              const usableStatus = status !== undefined && isProbeStatusUsable(status);
               const accepted =
                 done !== null &&
-                ((status === "ok" && !rejectedProtocols.has(candidate.protocol)) ||
-                  (existing && status !== "ok" && !rejectedProtocols.has(candidate.protocol)) ||
+                ((usableStatus && !rejectedProtocols.has(candidate.protocol)) ||
+                  (existing && !usableStatus && !rejectedProtocols.has(candidate.protocol)) ||
                   (!existing &&
-                    status !== "ok" &&
+                    !usableStatus &&
                     status !== "missing" &&
                     forcedProtocols.has(candidate.protocol)));
               const unreachable = !existing && status === "missing";
@@ -344,7 +338,7 @@ export function ProviderProbeDialog(props: {
                         disabled={unreachable}
                         onClick={() => toggleProtocol(candidate.protocol)}
                         title={
-                          status === "ok" || existing
+                          usableStatus || existing
                             ? t("settings.providerProbeToggleEndpoint")
                             : status === "missing"
                               ? t("settings.providerProbeStatus.missing")
@@ -357,9 +351,11 @@ export function ProviderProbeDialog(props: {
                       <span className="font-medium">{protocolLabel(candidate.protocol)}</span>
                     )}
                     <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-                      {multiOrigin
-                        ? (candidate.template?.baseUrl ?? "")
-                        : previewModelsUrl(candidate)}
+                      {fromCatalog
+                        ? candidate.baseUrl
+                        : multiOrigin
+                          ? (candidate.template?.baseUrl ?? "")
+                          : probeModelsUrl(candidate)}
                     </span>
                     {candidate.note ? (
                       <span className="text-[10.5px] text-muted-foreground/70">
@@ -383,7 +379,7 @@ export function ProviderProbeDialog(props: {
                               {originHostLabel({ url: item.baseUrl })}
                             </span>
                             <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted-foreground/70">
-                              {previewModelsUrl(item)}
+                              {probeModelsUrl(item)}
                             </span>
                             <ProbeStatusChip probe={originSummary} pending={!probed} />
                             <ProbeReason probe={originSummary} />
@@ -391,6 +387,11 @@ export function ProviderProbeDialog(props: {
                         );
                       })
                     : null}
+                  {fromCatalog ? (
+                    <p className="text-[10.5px] leading-relaxed text-muted-foreground/70">
+                      {t("settings.providerProbeCatalogEndpointHint")}
+                    </p>
+                  ) : null}
                   {!multiOrigin ? <ProbeReason probe={summary} /> : null}
                 </div>
               );
@@ -407,10 +408,18 @@ export function ProviderProbeDialog(props: {
               <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-foreground/80">
                 {t("settings.providerProbeModels")}
                 <span className="text-muted-foreground">
-                  {t("settings.providerProbeModelsSummary")
+                  {t("settings.providerProbeModelsSummaryInactive")
                     .replace("{selected}", String(selectedModels))
                     .replace("{total}", String(totalModels))}
                 </span>
+                {fromCatalog ? (
+                  <span className="text-muted-foreground">
+                    {t("settings.providerProbeModelsFromCatalog").replace(
+                      "{date}",
+                      MODEL_CATALOG_SNAPSHOT_DATE,
+                    )}
+                  </span>
+                ) : null}
                 {done.credentials.length > 1 ? (
                   <span className="text-muted-foreground">
                     {t("settings.providerProbeKeysSummary").replace(
@@ -499,7 +508,7 @@ function availableProtocols(
   return candidates
     .filter((candidate) => {
       const status = summarizeEndpointStatus(probe, candidate.protocol).status;
-      if (status === "ok") return !rejected.has(candidate.protocol);
+      if (isProbeStatusUsable(status)) return !rejected.has(candidate.protocol);
       return status !== "missing" && forced.has(candidate.protocol);
     })
     .map((candidate) => candidate.protocol);
@@ -518,7 +527,7 @@ function collectModels(
   >();
   for (const credential of probe.credentials) {
     for (const endpoint of credential.endpoints) {
-      if (endpoint.status !== "ok" || !available.has(endpoint.protocol)) continue;
+      if (!isProbeStatusUsable(endpoint.status) || !available.has(endpoint.protocol)) continue;
       for (const model of endpoint.models) {
         if (!merged.has(model.id)) merged.set(model.id, model);
       }

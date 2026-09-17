@@ -72,6 +72,14 @@ function mergePreset(
     if (!baseUrl) continue;
     endpoints[protocol] = { ...base, ...patch, baseUrl };
   }
+  const catalogModels = generated ? MODEL_CATALOG[generated.sourceId] : [];
+  // 覆盖层自建、models.dev 未收录的厂商渠道（baidu / xunfei）没有目录分区：声明
+  // 了 catalog 也拿不出模型，退回 api，否则探测会给出一份空模型列表。
+  const declaredModelListSource = overlay?.modelListSource ?? "api";
+  const modelListSource =
+    declaredModelListSource === "catalog" && catalogModels.length === 0
+      ? "api"
+      : declaredModelListSource;
   const configured = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => endpoints[protocol]);
   const defaultChatProtocol =
     overlay?.defaultChatProtocol ??
@@ -88,9 +96,9 @@ function mergePreset(
     dialect: overlay?.dialect,
     defaultChatProtocol,
     endpoints,
-    modelListSource: overlay?.modelListSource ?? "api",
+    modelListSource,
     catalogProviderId: generated?.sourceId,
-    catalogModels: generated ? MODEL_CATALOG[generated.sourceId] : [],
+    catalogModels,
     models: overlay?.models ?? [],
     identity: overlay?.identity,
     doc: generated?.doc,
@@ -277,6 +285,17 @@ export function findPresetCatalogModel(
   const id = modelId.trim();
   const stripped = stripModelVendorPrefix(id);
   return preset.catalogModels.find((model) => model.id === id || model.id === stripped);
+}
+
+/**
+ * 该渠道的模型列表是否随应用内置（厂商自营渠道）。为真时探测不请求 `/models`，
+ * 模型直接来自 `catalogModels`。mergePreset 已把"声明 catalog 但目录为空"的渠道
+ * 退回 api，这里只读最终值；`catalogModels` 再判一次是防御，不是第二套规则。
+ */
+export function presetUsesCatalogModels(
+  preset: Pick<ProviderPreset, "modelListSource" | "catalogModels"> | undefined,
+): boolean {
+  return preset?.modelListSource === "catalog" && preset.catalogModels.length > 0;
 }
 
 export type { ModelFamily, PresetIdentity, PresetInputKind, PresetModelRule };

@@ -209,6 +209,14 @@ export function ProbeStatusChip(props: {
       </Chip>
     );
   }
+  // 内置目录：没发请求，所以没有延迟可报，只说明模型列表从哪来。
+  if (probe.status === "catalog") {
+    return (
+      <Chip tone="default" title={t("settings.providerProbeStatus.catalogHint")}>
+        {t("settings.providerProbeStatus.catalog")}
+      </Chip>
+    );
+  }
   if (probe.status === "missing") {
     return (
       <Chip tone="default" title={probe.error}>

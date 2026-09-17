@@ -68,7 +68,11 @@ export type ProviderEndpointAuth = {
   prefix?: string;
 };
 
-export type ProviderEndpointProbeStatus = "ok" | "missing" | "unauthorized" | "unknown";
+/**
+ * 端点观测状态。`catalog` = 该渠道的模型列表随应用内置（厂商自营渠道），本次没有
+ * 发请求，端点按预设声明启用；它与 `ok` 一样算"可用"，只是没有延迟可言。
+ */
+export type ProviderEndpointProbeStatus = "ok" | "catalog" | "missing" | "unauthorized" | "unknown";
 
 export type ProviderEndpointProbe = {
   at: number;
