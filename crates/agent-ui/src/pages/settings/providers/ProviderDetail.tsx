@@ -29,6 +29,7 @@ import {
   Wrench,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
@@ -87,6 +88,7 @@ import {
   readEndpoint,
   readEndpointExpanded,
   removeProviderModel,
+  removeProviderModels,
   reorderProviderModels,
   setProviderModelActive,
   writeEndpoint,
@@ -442,6 +444,7 @@ function ModelGroup(props: {
     onCheck,
   } = props;
   const { t } = useLocale();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const itemIds = useMemo(() => group.models.map((model) => model.id), [group.models]);
   const onReorder = useCallback(
     (nextIds: string[]) =>
@@ -458,30 +461,62 @@ function ModelGroup(props: {
       onReorder,
     });
 
+  const groupLabel = group.key === "other" ? t("settings.modelGroupOther") : group.key;
+
+  // 一键删除整组：搜索 / 过滤生效时只删当前可见的那些，确认框写明数量，避免误删
+  // 被过滤掉的模型。
+  async function removeGroup() {
+    const ids = group.models.map((model) => model.id);
+    if (ids.length === 0) return;
+    const confirmed = await confirm({
+      title: t("settings.modelGroupRemove"),
+      description: t("settings.modelGroupRemoveConfirm")
+        .replace("{group}", groupLabel)
+        .replace("{count}", String(ids.length)),
+      detail: filtering ? t("settings.modelGroupRemoveFilteredHint") : undefined,
+      confirmLabel: t("settings.delete"),
+      cancelLabel: t("settings.cancel"),
+      preferCancel: true,
+    });
+    if (!confirmed) return;
+    onChange((current) => removeProviderModels(current, ids));
+  }
+
   return (
     <div className="border-b last:border-b-0">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 bg-muted/20 px-3 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/40"
-        aria-expanded={!collapsed}
-        onClick={() => onToggle(group.key)}
-      >
-        <ChevronDown
-          className={cn("h-3.5 w-3.5 transition-transform", collapsed && "-rotate-90")}
-        />
-        <span className="font-medium text-foreground/80">
-          {group.key === "other" ? t("settings.modelGroupOther") : group.key}
-        </span>
-        {filtering ? (
-          <Chip tone="on" title={t("settings.modelGroupMatchHint")}>
-            {group.models.length} / {group.totalCount}
-          </Chip>
-        ) : (
-          <Chip>
-            {group.activeCount} / {group.totalCount}
-          </Chip>
-        )}
-      </button>
+      <div className="flex w-full items-center gap-2 bg-muted/20 pr-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/40">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left"
+          aria-expanded={!collapsed}
+          onClick={() => onToggle(group.key)}
+        >
+          <ChevronDown
+            className={cn("h-3.5 w-3.5 shrink-0 transition-transform", collapsed && "-rotate-90")}
+          />
+          <span className="truncate font-medium text-foreground/80">{groupLabel}</span>
+          {filtering ? (
+            <Chip tone="on" title={t("settings.modelGroupMatchHint")}>
+              {group.models.length} / {group.totalCount}
+            </Chip>
+          ) : (
+            <Chip>
+              {group.activeCount} / {group.totalCount}
+            </Chip>
+          )}
+        </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          onClick={() => void removeGroup()}
+          title={t("settings.modelGroupRemove")}
+          aria-label={`${t("settings.modelGroupRemove")} ${groupLabel}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
       {!collapsed ? (
         <div ref={scrollContainerRef} className="divide-y">
           {group.models.map((model) => {
@@ -505,6 +540,7 @@ function ModelGroup(props: {
           })}
         </div>
       ) : null}
+      {confirmDialog}
     </div>
   );
 }

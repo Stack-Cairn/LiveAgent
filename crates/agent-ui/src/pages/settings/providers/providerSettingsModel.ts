@@ -657,6 +657,21 @@ export function removeProviderModel(provider: CustomProvider, modelId: string): 
   });
 }
 
+/** 批量删除（分组一键删除）：一次归一化，避免逐个删触发 N 次写入与排序重算。 */
+export function removeProviderModels(
+  provider: CustomProvider,
+  modelIds: readonly string[],
+): CustomProvider {
+  const drop = new Set(modelIds);
+  if (drop.size === 0) return provider;
+  return finalizeProvider({
+    ...provider,
+    models: provider.models.filter((model) => !drop.has(model.id)),
+    activeModels: provider.activeModels.filter((id) => !drop.has(id)),
+    modelOrder: provider.modelOrder?.filter((id) => !drop.has(id)),
+  });
+}
+
 export function setProviderModelActive(
   provider: CustomProvider,
   modelId: string,

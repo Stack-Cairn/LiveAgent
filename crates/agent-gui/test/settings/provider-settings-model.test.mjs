@@ -771,3 +771,28 @@ test("probe candidates fan out over enabled origins and keep absolute endpoints 
   assert.equal(messages[0].baseUrl, "https://fixed.example");
   assert.equal(messages[0].originId, undefined);
 });
+
+test("removeProviderModels drops a whole group in one pass and keeps the rest intact", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay",
+    name: "relay",
+    type: "codex",
+    presetId: "custom",
+    baseUrl: "https://relay.example/v1",
+    apiKey: "sk",
+    models: [{ id: "gpt-5.2" }, { id: "gpt-4.1" }, { id: "claude-opus-4-6" }],
+    activeModels: ["gpt-5.2", "claude-opus-4-6"],
+    modelOrder: ["gpt-5.2", "gpt-4.1", "claude-opus-4-6"],
+  });
+  const next = model.removeProviderModels(provider, ["gpt-5.2", "gpt-4.1"]);
+  assert.deepEqual(next.models.map((m) => m.id), ["claude-opus-4-6"]);
+  assert.deepEqual(next.activeModels, ["claude-opus-4-6"]);
+  assert.deepEqual(next.modelOrder, ["claude-opus-4-6"]);
+  // 空列表是空操作，不触发归一化重写。
+  assert.equal(model.removeProviderModels(provider, []), provider);
+  // 不存在的 id 被忽略。
+  assert.deepEqual(
+    model.removeProviderModels(provider, ["nope"]).models.map((m) => m.id),
+    ["gpt-5.2", "gpt-4.1", "claude-opus-4-6"],
+  );
+});
