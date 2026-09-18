@@ -560,3 +560,22 @@ test("groq has an overlay so it lands in the official channel catalog with a key
   assert.ok(groq.order < 500, "ordered with the other vendors, not in the unranked tail");
   assert.equal(groq.endpoints["openai-completions"].baseUrl, "https://api.groq.com/openai/v1");
 });
+
+test("Tencent and Xiaomi plan channels expose both the OpenAI- and Anthropic-compatible entrypoints", () => {
+  const expected = [
+    ["tencent-coding-plan", "https://api.lkeap.cloud.tencent.com/coding/v3", "https://api.lkeap.cloud.tencent.com/coding/anthropic"],
+    ["tencent-token-plan", "https://api.lkeap.cloud.tencent.com/plan/v3", "https://api.lkeap.cloud.tencent.com/plan/anthropic"],
+    ["xiaomi", "https://api.xiaomimimo.com/v1", "https://api.xiaomimimo.com/anthropic"],
+    ["xiaomi-token-plan-cn", "https://token-plan-cn.xiaomimimo.com/v1", "https://token-plan-cn.xiaomimimo.com/anthropic"],
+    ["xiaomi-token-plan-eu", "https://token-plan-ams.xiaomimimo.com/v1", "https://token-plan-ams.xiaomimimo.com/anthropic"],
+    ["xiaomi-token-plan-sg", "https://token-plan-sgp.xiaomimimo.com/v1", "https://token-plan-sgp.xiaomimimo.com/anthropic"],
+  ];
+  for (const [presetId, completions, messages] of expected) {
+    const preset = registry.findProviderPreset(presetId);
+    assert.ok(preset, presetId);
+    assert.equal(preset.endpoints["openai-completions"].baseUrl, completions, presetId);
+    assert.equal(preset.endpoints["anthropic-messages"].baseUrl, messages, presetId);
+    // 两个入口都在同一主机上：探测与故障转移的主机白名单据此放行。
+    assert.equal(new URL(completions).host, new URL(messages).host, presetId);
+  }
+});

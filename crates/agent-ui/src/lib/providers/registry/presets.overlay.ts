@@ -374,6 +374,10 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     name: "腾讯云 · Coding Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
+    // Anthropic 兼容协议入口（用户提供）：{base}/v1/messages。
+    endpoints: {
+      "anthropic-messages": { baseUrl: "https://api.lkeap.cloud.tencent.com/coding/anthropic" },
+    },
     apiKeyUrl: "https://console.cloud.tencent.com/lkeap/api",
     order: 97,
   },
@@ -383,6 +387,10 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     name: "腾讯云 · Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
+    // Anthropic 兼容协议入口（用户提供）：{base}/v1/messages。
+    endpoints: {
+      "anthropic-messages": { baseUrl: "https://api.lkeap.cloud.tencent.com/plan/anthropic" },
+    },
     apiKeyUrl: "https://console.cloud.tencent.com/lkeap/api",
     order: 98,
   },
@@ -413,6 +421,10 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     name: "小米 MiMo · Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
+    // Anthropic 兼容协议入口（用户提供）：{base}/v1/messages。
+    endpoints: {
+      "anthropic-messages": { baseUrl: "https://token-plan-cn.xiaomimimo.com/anthropic" },
+    },
     apiKeyUrl: "https://platform.xiaomimimo.com/#/console/api-keys",
     order: 101,
   },
@@ -422,6 +434,10 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     name: "小米 MiMo（欧洲）· Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
+    // Anthropic 兼容协议入口（用户提供）：{base}/v1/messages。
+    endpoints: {
+      "anthropic-messages": { baseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic" },
+    },
     apiKeyUrl: "https://platform.xiaomimimo.com/#/console/api-keys",
     order: 102,
   },
@@ -431,6 +447,10 @@ export const PRESET_OVERLAYS: readonly PresetOverlay[] = [
     name: "小米 MiMo（新加坡）· Token Plan",
     input: "key",
     defaultChatProtocol: "openai-completions",
+    // Anthropic 兼容协议入口（用户提供）：{base}/v1/messages。
+    endpoints: {
+      "anthropic-messages": { baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic" },
+    },
     apiKeyUrl: "https://platform.xiaomimimo.com/#/console/api-keys",
     order: 103,
   },

@@ -455,7 +455,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerEndpointIdentityNone": "纯协议头",
   "settings.providerEndpointIdentityRecommended": "推荐",
   "settings.providerEndpointIdentityHint":
-    "按端点模拟某家官方 CLI 的 User-Agent、身份头与会话头；不模拟 = 只带内置协议 / 方言头；纯协议头 = 连方言头也不带。",
+    "按端点模拟某家官方 CLI 的 User-Agent、身份头与会话头；不模拟 = 只带内置的协议头与厂商实现头；纯协议头 = 连厂商实现头也不带。",
   "settings.providerHeadersIdentityNotice":
     "供应商级请求头里含 {cli} 的身份头，会覆盖到该供应商的所有接口；身份模拟应在上方按端点设置。",
   "settings.providerHeadersIdentityStrip": "移除身份头",
@@ -1346,6 +1346,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.channelProbeAll": "探测四类接口",
   "settings.channelProbeAllHint": "该渠道不声明接口，配置时按四类接口逐个探测。",
   "settings.channelProbeAndEnable": "检测并启用",
+  "settings.channelProbeHintCatalog":
+    "该渠道的模型列表随应用内置，只核对配置、不请求接口；模型采纳后默认关闭，按需启用。",
   "settings.channelProbeHint":
     "只请求各接口的模型列表，不计费；完成后所有配置标为自动，可逐项调整。",
   "settings.channelRequestPathHint": "填写 API 根地址后会显示实际请求路径",
@@ -1488,7 +1490,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerEndpointSetDefaultDisabled": "该渠道已停用；点击会先启用再设为默认",
   "settings.providerEndpointEnabledAndDefault": "已启用「{protocol}」并设为默认。",
   "settings.providerEndpointRemoveConfirm":
-    "移除「{protocol}」端点？它的地址、方言、鉴权头、quirks 与端点请求头会一起删除。",
+    "移除「{protocol}」端点？它的地址、厂商实现、鉴权头、兼容开关与端点请求头会一起删除。",
   "settings.providerEndpointRetest": "重测",
   "settings.providerEndpointRemove": "移除端点",
   "settings.providerEndpointAdd": "添加端点",
@@ -1503,16 +1505,16 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerEndpointCredential": "指定凭据",
   "settings.providerEndpointHeaders": "端点请求头",
   "settings.providerModelsUrlAuto": "留空自动推导",
-  "settings.providerDialect": "方言（厂商差异）",
+  "settings.providerDialect": "厂商实现",
   "settings.providerDialectHint":
-    "同一接口下不同厂商的字段差异：通用 = 标准 OpenAI 兼容；OpenAI 官方 = 官方 Responses / Completions 语义（会话头、store 等）；xAI / DeepSeek = 各自在 Responses 上的差异。一般不用改，按渠道自动推断。",
-  "settings.providerDialectInherit": "继承（{dialect}）",
+    "同一个接口，不同厂商发出去的字段不完全一样，这里选按谁的实现发：通用 = 标准 OpenAI 兼容写法，多数中转与厂商都用它；OpenAI 官方 = 官方 Responses / Completions 的语义（会话头、store 等）；xAI、DeepSeek = 这两家在 Responses 上的自有差异。按渠道自动推断，一般不用改。",
+  "settings.providerDialectInherit": "自动（{dialect}）",
   "settings.providerDialectLabel.generic": "通用",
   "settings.providerDialectLabel.openai": "OpenAI 官方",
   "settings.providerDialectLabel.xai": "xAI",
   "settings.providerDialectLabel.deepseek": "DeepSeek",
   "settings.providerAuthHeader": "鉴权头",
-  "settings.providerQuirks": "实现偏差（quirks）",
+  "settings.providerQuirks": "兼容开关",
   "settings.providerQuirkCycleHint": "点击循环：自动 → 开 → 关",
   "settings.providerQuirkAuto": "自动",
   "settings.providerQuirkOn": "开",
@@ -1520,7 +1522,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerCredentialAuto": "默认凭据",
   "settings.providerHeadersTitle": "供应商级请求头",
   "settings.providerHeadersMergeHint":
-    "合并顺序：协议头档 < 方言头档 < 供应商头 < 端点头 < 每会话动态头；anthropic-beta、Content-Type 等保留键由发请求侧最终决定。",
+    "合并顺序：协议头 < 厂商实现头 < 供应商头 < 端点头 < 每会话动态头；anthropic-beta、Content-Type 等保留键由发请求侧最终决定。",
   "settings.providerCredentialsTitle": "管理密钥",
   "settings.providerCredentialsHint":
     "按顺序备用：鉴权、配额、账户类错误时在能服务该模型的 Key 之间换下一把（凭据层故障转移），失败的 Key 按模型单独熔断。首把即默认 Key。",
@@ -1685,15 +1687,15 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.modelMaxInputTokensUnset": "未设置",
   "settings.modelThinkingLevels": "思考档位（来自模型目录，只读）",
   "settings.modelThinkingLevelsHint":
-    "每档在 wire 上怎么发（budget / effort / thinkingBudget / thinking.type）由协议与方言决定，不在这里配置。",
+    "每档实际怎么发（budget / effort / thinkingBudget / thinking.type）由接口与厂商实现决定，不在这里配置。",
   "settings.modelThinkingAlwaysOn": "始终开启",
   "settings.modelThinkingCanDisable": "可关闭",
   "settings.modelThinkingLevelUnavailable": "此模型不支持该档位",
   "settings.modelThinkingNone": "目录标记为非思考模型。",
   "settings.modelRouteResult": "实际请求预览",
   "settings.modelRouteResultHint":
-    "按当前配置解析出的这次请求会怎样发：走哪个接口、哪个方言、哪个地址、远端模型名、用哪把 Key、哪些 quirks、最终请求头（含协议头、方言头、身份头与自定义头）。运行时读的就是这一份。",
-  "settings.modelRouteQuirks": "兼容开关（quirks）",
+    "按当前配置解析出的这次请求会怎样发：走哪个接口、按谁的实现、哪个地址、远端模型名、用哪把 Key、哪些兼容开关、最终请求头（含协议头、厂商实现头、身份头与自定义头）。运行时读的就是这一份。",
+  "settings.modelRouteQuirks": "兼容开关",
   "settings.modelRouteProtocol": "接口",
   "settings.modelRouteHeaders": "最终请求头",
   "settings.modelFailoverCandidates": "故障转移候选",

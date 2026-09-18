@@ -11,6 +11,7 @@ import {
   expandPresetBaseUrl,
   PROVIDER_PROTOCOL_AUTH_HEADER,
   type ProviderPreset,
+  presetUsesCatalogModels,
 } from "@liveagent/ui/lib/providers/registry";
 import { useState } from "react";
 import { Chip, ProviderAvatar, protocolLabel, SecretInput, SectionTitle } from "./providerChips";
@@ -198,7 +199,12 @@ export function ProviderPendingDetail(props: {
               {t("settings.channelAddManually")}
             </Button>
             <span className="text-[11px] leading-relaxed text-muted-foreground/75">
-              {t("settings.channelProbeHint")}
+              {/* 目录渠道不发请求，提示措辞要和实际行为一致。 */}
+              {t(
+                presetUsesCatalogModels(preset)
+                  ? "settings.channelProbeHintCatalog"
+                  : "settings.channelProbeHint",
+              )}
             </span>
           </div>
         </div>

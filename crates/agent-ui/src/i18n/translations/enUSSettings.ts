@@ -475,7 +475,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerEndpointIdentityNone": "Protocol only",
   "settings.providerEndpointIdentityRecommended": "recommended",
   "settings.providerEndpointIdentityHint":
-    "Per-endpoint emulation of an official CLI's User-Agent, identity and session headers; None = built-in protocol / dialect headers only; Protocol only = no dialect headers either.",
+    "Per-endpoint emulation of an official CLI's User-Agent, identity and session headers; None = built-in protocol and vendor-implementation headers only; Protocol only = not even the vendor-implementation headers.",
   "settings.providerHeadersIdentityNotice":
     "Provider-level headers carry a {cli} identity, which overrides every interface of this provider; set identity per endpoint above instead.",
   "settings.providerHeadersIdentityStrip": "Remove identity headers",
@@ -1417,6 +1417,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.channelProbeAllHint":
     "This channel declares no endpoints; all four are probed during setup.",
   "settings.channelProbeAndEnable": "Probe and enable",
+  "settings.channelProbeHintCatalog":
+    "This channel's model list ships with the app: the check only validates the configuration and sends no requests. Adopted models start disabled.",
   "settings.channelProbeHint":
     "Only the model-list endpoints are requested; nothing is billed. Everything is marked automatic afterwards and can be adjusted.",
   "settings.channelRequestPathHint": "The actual request path appears once you enter the API root",
@@ -1570,7 +1572,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "This endpoint is disabled; clicking enables it and makes it the default",
   "settings.providerEndpointEnabledAndDefault": "Enabled “{protocol}” and set it as default.",
   "settings.providerEndpointRemoveConfirm":
-    "Remove the “{protocol}” endpoint? Its address, dialect, auth header, quirks and endpoint headers are deleted with it.",
+    "Remove the “{protocol}” endpoint? Its address, vendor implementation, auth header, compatibility switches and endpoint headers are deleted with it.",
   "settings.providerEndpointRetest": "Retest",
   "settings.providerEndpointRemove": "Remove endpoint",
   "settings.providerEndpointAdd": "Add endpoint",
@@ -1588,16 +1590,16 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerEndpointCredential": "Credential",
   "settings.providerEndpointHeaders": "Endpoint headers",
   "settings.providerModelsUrlAuto": "Derived automatically when empty",
-  "settings.providerDialect": "Dialect (vendor variant)",
+  "settings.providerDialect": "Vendor implementation",
   "settings.providerDialectHint":
-    "Field-level differences between vendors on the same endpoint: Generic = standard OpenAI-compatible; OpenAI official = official Responses / Completions semantics (session headers, store, etc.); xAI / DeepSeek = their own deviations on Responses. Usually left alone; inferred from the channel.",
-  "settings.providerDialectInherit": "Inherit ({dialect})",
+    "The same interface is sent slightly differently by each vendor; this picks whose implementation to follow: Generic = the standard OpenAI-compatible shape used by most relays and vendors; OpenAI official = official Responses / Completions semantics (session headers, store, etc.); xAI, DeepSeek = their own deviations on Responses. Inferred from the channel; usually left alone.",
+  "settings.providerDialectInherit": "Auto ({dialect})",
   "settings.providerDialectLabel.generic": "Generic",
   "settings.providerDialectLabel.openai": "OpenAI official",
   "settings.providerDialectLabel.xai": "xAI",
   "settings.providerDialectLabel.deepseek": "DeepSeek",
   "settings.providerAuthHeader": "Auth header",
-  "settings.providerQuirks": "Implementation quirks",
+  "settings.providerQuirks": "Compatibility switches",
   "settings.providerQuirkCycleHint": "Click to cycle: auto → on → off",
   "settings.providerQuirkAuto": "auto",
   "settings.providerQuirkOn": "on",
@@ -1605,7 +1607,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerCredentialAuto": "Default credential",
   "settings.providerHeadersTitle": "Provider headers",
   "settings.providerHeadersMergeHint":
-    "Merge order: protocol profile < dialect profile < provider headers < endpoint headers < per-session dynamic headers; reserved keys such as anthropic-beta and Content-Type are decided by the request layer.",
+    "Merge order: protocol headers < vendor-implementation headers < provider headers < endpoint headers < per-session dynamic headers; reserved keys such as anthropic-beta and Content-Type are decided by the request layer.",
   "settings.providerCredentialsTitle": "Manage keys",
   "settings.providerCredentialsHint":
     "Ordered fallback: on auth, quota or account errors the next key that can serve the model is tried (credential-level failover); a failed key is circuit-broken per model. The first key is the default key.",
@@ -1784,7 +1786,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelRouteResult": "Actual request preview",
   "settings.modelRouteResultHint":
     "How this request will be sent under the current configuration: which endpoint, dialect, base URL, remote model name, which key, which quirks, and the final headers (protocol, dialect, identity and custom headers). The runtime reads exactly this.",
-  "settings.modelRouteQuirks": "Compat switches (quirks)",
+  "settings.modelRouteQuirks": "Compatibility switches",
   "settings.modelRouteProtocol": "Endpoint",
   "settings.modelRouteHeaders": "Final headers",
   "settings.modelFailoverCandidates": "Failover candidates",
