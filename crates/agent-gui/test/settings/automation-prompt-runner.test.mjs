@@ -1,3 +1,4 @@
+import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -125,7 +126,7 @@ test("Cron manual run stays wired in shared UI", () => {
   assert.match(cronViewSource, /setManualRunStartedAt\(response\.startedAt\)/);
   assert.match(cronViewSource, /listCronRuns\(taskId, 500\)/);
   assert.match(cronViewSource, /settings\.cronViewRunNow/);
-  assert.match(cronViewSource, /<Play className="h-3\.5 w-3\.5" \/>/);
+  assertJsxDimensions(cronViewSource, "Play", { width: "3.5", height: "3.5" });
   assert.match(
     webAutomationBackendSource,
     /return cronManage<CronRunNowResponse>\("run_now", taskId\)/,
@@ -199,7 +200,7 @@ test("Cron workspace pin stays wired in shared UI", () => {
     assert.match(source, /const CUSTOM_WORKDIR_VALUE = "__custom-workdir__"/);
     assert.match(
       source,
-      /customWorkdir \? CUSTOM_WORKDIR_VALUE : workdir \|\| FOLLOW_ACTIVE_WORKSPACE_VALUE/,
+      /customWorkdir\s*\? CUSTOM_WORKDIR_VALUE\s*: workdir \|\| FOLLOW_ACTIVE_WORKSPACE_VALUE/,
     );
     // The save payload must always carry the workdir key: an empty string is
     // the explicit clear signal — dropping the key would keep a stale pin.

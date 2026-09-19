@@ -9,7 +9,9 @@ function read(relativePath) {
 test("assistant timestamp shares the action-button hover chrome", () => {
   const source = read("../../../agent-ui/src/components/chat/TranscriptMessageActions.tsx");
   const assistantFn = source.slice(source.indexOf("export function TranscriptAssistantMessageActions"));
-  const chromeOpen = assistantFn.indexOf("chat-row-hover-chrome chat-row-hover-chrome--actions");
+  const chromeOpen = assistantFn.indexOf(
+    "pointer-events-none flex items-center gap-0.5 opacity-100 transition-opacity",
+  );
   const chromeClose = assistantFn.indexOf("</div>", chromeOpen);
   const timestamp = assistantFn.indexOf("<TranscriptTimestampLabel");
 
@@ -21,8 +23,8 @@ test("assistant timestamp shares the action-button hover chrome", () => {
     "timestamp must not use a color/opacity modifier that can fight hover hide",
   );
   assert.equal(
-    (assistantFn.match(/chat-row-hover-chrome/g) ?? []).length,
-    2,
+    (assistantFn.match(/has-hover:\[\[data-assistant-row\]:hover_&\]:opacity-100/g) ?? []).length,
+    1,
     "assistant reply should have one hover-chrome container, not a sibling clock",
   );
 });

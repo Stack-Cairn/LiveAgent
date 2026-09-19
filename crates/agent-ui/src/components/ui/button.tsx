@@ -20,7 +20,9 @@ const buttonVariants = cva(
         default: "h-9 px-4 py-2",
         sm: "h-8 rounded-md px-3 text-xs",
         lg: "h-10 rounded-md px-6",
-        icon: "h-9 w-9",
+        icon: "size-9",
+        "icon-sm": "size-8",
+        "icon-xs": "size-7",
       },
     },
     defaultVariants: {
@@ -58,5 +60,44 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
 );
 
 Button.displayName = "Button";
+
+/** Manual refresh feedback only; data and error handling remain with the caller. */
+export const RefreshButton = React.forwardRef<HTMLElement, ButtonProps>(
+  ({ className, onClick, disabled, ...props }, ref) => {
+    const [minimumPending, setMinimumPending] = React.useState(false);
+    const feedbackTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    React.useEffect(
+      () => () => {
+        if (feedbackTimer.current !== null) clearTimeout(feedbackTimer.current);
+      },
+      [],
+    );
+    const refreshing =
+      minimumPending || props["aria-busy"] === true || props["aria-busy"] === "true";
+    return (
+      <Button
+        {...props}
+        ref={ref}
+        disabled={disabled || refreshing}
+        aria-busy={refreshing}
+        className={cn(
+          refreshing &&
+            "[&_[data-refresh-icon]]:animate-spin motion-reduce:[&_[data-refresh-icon]]:animate-none",
+          className,
+        )}
+        onClick={(event) => {
+          if (disabled || refreshing || feedbackTimer.current !== null) return;
+          setMinimumPending(true);
+          feedbackTimer.current = setTimeout(() => {
+            feedbackTimer.current = null;
+            setMinimumPending(false);
+          }, 500);
+          onClick?.(event);
+        }}
+      />
+    );
+  },
+);
+RefreshButton.displayName = "RefreshButton";
 
 export { buttonVariants };

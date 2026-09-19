@@ -2,6 +2,7 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
+import { floatingSurfaceClassName } from "./menu-surface";
 import { useZoneFontScaleStyle } from "./zone-font-scale";
 
 export function Popover(props: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Root>) {
@@ -21,7 +22,13 @@ export function PopoverClose(props: React.ComponentPropsWithoutRef<typeof Popove
 type PopoverContentProps = React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Popup> &
   Pick<
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Positioner>,
-    "align" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
+    | "align"
+    | "alignOffset"
+    | "collisionPadding"
+    | "side"
+    | "sideOffset"
+    | "anchor"
+    | "positionMethod"
   >;
 
 export const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
@@ -33,6 +40,8 @@ export const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentPro
       collisionPadding = 8,
       side = "bottom",
       sideOffset = 4,
+      anchor,
+      positionMethod,
       ...props
     },
     ref,
@@ -41,6 +50,8 @@ export const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentPro
     return (
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Positioner
+          anchor={anchor}
+          positionMethod={positionMethod}
           align={align}
           alignOffset={alignOffset}
           collisionPadding={collisionPadding}
@@ -53,7 +64,10 @@ export const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentPro
             ref={ref}
             data-slot="popover-content"
             className={cn(
-              "w-72 origin-(--transform-origin) rounded-xl border bg-popover p-4 text-sm text-popover-foreground shadow-md outline-none transition-[transform,opacity] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+              floatingSurfaceClassName,
+              "w-72 origin-(--transform-origin) p-4",
+              "text-sm outline-none transition-[transform,scale,opacity] duration-150",
+              "data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
               className,
             )}
             {...props}

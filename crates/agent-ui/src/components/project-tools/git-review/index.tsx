@@ -39,8 +39,6 @@ export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanel
   });
   const [changesStackedPane, setChangesStackedPane] = useState<GitReviewStackedPane>("list");
   const [historyStackedPane, setHistoryStackedPane] = useState<GitReviewStackedPane>("list");
-  const [changesStackedDir, setChangesStackedDir] = useState<"forward" | "back">("forward");
-  const [historyStackedDir, setHistoryStackedDir] = useState<"forward" | "back">("forward");
 
   const data = useGitReviewData({ active });
   const { busy, canWrite, cwd, disabledMessage, reviewMode, state } = data;
@@ -83,29 +81,19 @@ export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanel
     }));
   }, []);
 
-  const handleChangesStackedPaneChange = useCallback(
-    (pane: GitReviewStackedPane, dir: "forward" | "back") => {
-      setChangesStackedDir(dir);
-      setChangesStackedPane(pane);
-    },
-    [],
-  );
+  const handleChangesStackedPaneChange = useCallback((pane: GitReviewStackedPane) => {
+    setChangesStackedPane(pane);
+  }, []);
 
-  const handleHistoryStackedPaneChange = useCallback(
-    (pane: GitReviewStackedPane, dir: "forward" | "back") => {
-      setHistoryStackedDir(dir);
-      setHistoryStackedPane(pane);
-    },
-    [],
-  );
+  const handleHistoryStackedPaneChange = useCallback((pane: GitReviewStackedPane) => {
+    setHistoryStackedPane(pane);
+  }, []);
 
   const handleToolbarStackedPaneChange = useCallback(
-    (pane: GitReviewStackedPane, dir: "forward" | "back") => {
+    (pane: GitReviewStackedPane) => {
       if (data.reviewMode === "changes") {
-        setChangesStackedDir(dir);
         setChangesStackedPane(pane);
       } else {
-        setHistoryStackedDir(dir);
         setHistoryStackedPane(pane);
       }
     },
@@ -149,7 +137,6 @@ export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanel
           onStackedPaneChange={handleChangesStackedPaneChange}
           onToggleSection={handleToggleSection}
           panelRef={panelRef}
-          stackedDir={changesStackedDir}
           stackedPane={changesStackedPane}
           useSplitReviewLayout={useSplitReviewLayout}
           writeDisabled={writeDisabled}
@@ -159,7 +146,6 @@ export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanel
           data={data}
           onStackedPaneChange={handleHistoryStackedPaneChange}
           panelRef={panelRef}
-          stackedDir={historyStackedDir}
           stackedPane={historyStackedPane}
           useSplitReviewLayout={useSplitReviewLayout}
           writeDisabled={writeDisabled}

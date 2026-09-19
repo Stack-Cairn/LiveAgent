@@ -11,6 +11,10 @@ const source = readFileSync(
   new URL("../../../agent-ui/src/components/project-tools/XTermViewport.tsx", import.meta.url),
   "utf8",
 );
+const clipboardSource = readFileSync(
+  new URL("../../../agent-ui/src/lib/shared/clipboard.ts", import.meta.url),
+  "utf8",
+);
 
 test("XTermViewport wires attachCustomKeyEventHandler for copy/paste", () => {
   assert.match(
@@ -76,8 +80,13 @@ test("clipboard fallbacks stay reachable in insecure contexts", () => {
   // 按键让原生 paste 事件路径兜底(而不是把按键吞掉)。
   assert.match(
     source,
-    /fallbackCopyTextToClipboard\(text\)/,
-    "clipboard API 缺失时复制必须走 execCommand 兜底",
+    /copyTextToClipboard\(text,\s*\{\s*restoreFocus:\s*active\s*\}\)/,
+    "终端复制必须复用共享剪贴板边界并在兜底后恢复焦点",
+  );
+  assert.match(
+    clipboardSource,
+    /return fallbackCopyText\(text, options\)/,
+    "共享剪贴板边界必须在 clipboard API 缺失时走 execCommand 兜底",
   );
   assert.match(
     source,

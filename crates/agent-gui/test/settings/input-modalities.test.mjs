@@ -232,3 +232,13 @@ test("gemini fetch-path normalization preserves the inputModalities override", (
   assert.equal(viaFetch.length, 1);
   assert.deepEqual(viaFetch[0].inputModalities, ["text", "image"]);
 });
+
+
+test("model display names survive normalization without changing the request id", () => {
+  for (const field of ["displayName", "display_name", "name"]) {
+    const model = normalizeProviderModelConfig({ id: "my-model-id", [field]: "My Model" }, "codex");
+    assert.equal(model.id, "my-model-id");
+    assert.equal(model.displayName, "My Model");
+    assert.equal(normalizeProviderModelConfig(model, "codex").displayName, "My Model");
+  }
+});

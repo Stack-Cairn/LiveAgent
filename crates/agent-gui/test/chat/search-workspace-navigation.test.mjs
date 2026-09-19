@@ -296,6 +296,7 @@ for (const gesture of ["click", "Enter"]) {
     let searches = 0;
     const domEnv = await createDomTestEnv({
       mocks: {
+        "../IconSet": new Proxy({}, { get: () => () => null }),
         "@liveagent/ui/components/IconSet": Object.fromEntries(
           ["Clock3", "Loader2", "MessageSquareText", "Pin", "Search"].map((key) => [
             key,
@@ -340,7 +341,7 @@ for (const gesture of ["click", "Enter"]) {
           }),
         ),
       );
-      const input = container.querySelector("input");
+      const input = document.querySelector("input");
       await act(async () => {
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(
           input,
@@ -351,7 +352,7 @@ for (const gesture of ["click", "Enter"]) {
       await act(async () => new Promise((resolve) => setTimeout(resolve, 220)));
       assert.equal(searches, 1);
       await act(async () => {
-        if (gesture === "click") container.querySelector('[role="option"]').click();
+        if (gesture === "click") document.querySelector('[role="option"]').click();
         else input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
       });
       assert.deepEqual(calls, [{ id: "b", options: { source: "search" } }]);

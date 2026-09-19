@@ -28,7 +28,7 @@ test("chat transcript uses one native viewport for scrolling and follow listener
 test("earlier-history rejection is handled before pagination cleanup", () => {
   assert.match(
     transcriptListSource,
-    /onLoadEarlierHistory\(\)\s*\.catch\(\(\) => undefined\)\s*\.finally\(/,
+    /onLoadEarlierHistory\(\)\s*\.catch\([\s\S]*?lastRequestedBoundaryRef.current = null;[\s\S]*?\.finally\(/,
   );
   assert.doesNotMatch(transcriptListSource, /onLoadEarlierHistory\(\)\.finally\(/);
 });

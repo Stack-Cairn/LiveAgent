@@ -949,8 +949,9 @@ test("GatewayTranscript renders folded and live rows in one virtualized list", (
     findTreeNode(
       listTree,
       (node) =>
-        typeof node.props?.className === "string" &&
-        node.props.className.includes("gateway-transcript-row-user"),
+        typeof node.type === "function" &&
+        node.props?.row?.kind === "user" &&
+        node.props.row.text === "queued from gui",
     ),
     "live user bubble renders before the live assistant output",
   );

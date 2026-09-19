@@ -39,6 +39,7 @@ import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import {
   ChatComposerBar,
@@ -81,6 +82,11 @@ import {
   liveTrajectoryEvents,
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_SCROLL_TO_BOTTOM_CLASS,
+  GATEWAY_TRANSCRIPT_SCROLL_CLASS,
+} from "@/lib/webStyleClasses";
 import type { SectionId } from "@/pages/settings/types";
 import { ConversationStatsBarHost } from "../ConversationStatsBarHost";
 import {
@@ -209,7 +215,6 @@ export type GatewayConversationPrimarySurface = {
   onBranchConversation: Parameters<typeof GatewayTranscript>[0]["onBranchConversation"];
   branchPendingMessageId: string | null;
   onSuggestionSelect: Parameters<typeof GatewayTranscript>[0]["onSuggestionSelect"];
-  suggestionsDisabled: boolean;
   hasMoreHistory: boolean;
   isLoadingMoreHistory: boolean;
   onLoadEarlierHistory?: () => void;
@@ -242,6 +247,7 @@ export type GatewayConversationPaneHostProps = {
 };
 
 export function GatewayConversationPaneHost(props: GatewayConversationPaneHostProps) {
+  const chatFrameRef = useRef<HTMLDivElement | null>(null);
   const {
     paneId,
     conversationId,
@@ -731,9 +737,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         data-workbench-pane-id={paneId}
         data-workbench-surface="conversation"
         data-workbench-surface-id={`conversation:${conversationId}`}
-        className="flex h-full min-h-0 w-full items-center justify-center"
+        className="flex size-full min-h-0 items-center justify-center"
       >
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -785,13 +791,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         usePrimary ? (primary?.branchPendingMessageId ?? undefined) : undefined
       }
       onSuggestionSelect={usePrimary ? primary?.onSuggestionSelect : () => onFocusPane()}
-      suggestionsDisabled={usePrimary ? primary?.suggestionsDisabled : undefined}
     />
   );
 
-  // 嵌套一层 .gateway-chat-frame:ChatComposerBar(surface="web")把输入框
-  // 高度写到最近的 chat-frame CSS 变量上,这里让变量按 Pane 独立作用,多个
-  // 输入框互不干扰;DOM 结构与桌面端 ConversationSurface 一致。
+  // Each pane explicitly owns its composer-height variable, so concurrent
+  // panes never discover or update one another through a DOM ancestor query.
   return (
     <div
       data-workbench-pane-id={paneId}
@@ -802,15 +806,25 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       {blockedMessage ? (
         <div
           data-workbench-pane-blocked=""
-          className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400"
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400",
+          )}
         >
           {blockedMessage}
         </div>
       ) : null}
-      <div className="gateway-chat-frame relative flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div
+        ref={chatFrameRef}
+        className={cn(
+          GATEWAY_CHAT_FRAME_CLASS,
+          "relative flex size-full h-full min-h-0 min-w-0 flex-1",
+          "flex-col overflow-hidden max-820:h-full",
+        )}
+      >
         <section
           ref={usePrimary ? primary?.stageRef : undefined}
-          className="gateway-transcript-stage"
+          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden @container"
           style={
             {
               [CHAT_TRANSCRIPT_WIDTH_CSS_VAR]: `${context.transcriptContentWidth}px`,
@@ -835,7 +849,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               authoritativeRevision={trajectoryAuthoritativeRevision}
             />
           ) : (
-            <div className="gateway-transcript-scroll-shell">
+            <div className="relative h-full min-h-0">
               <ScrollArea
                 ref={usePrimary ? primary?.setTranscriptScrollAreaRoot : undefined}
                 viewportRef={
@@ -843,7 +857,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                     ? primary.setTranscriptViewport
                     : setViewport
                 }
-                className="gateway-transcript-scroll"
+                className={GATEWAY_TRANSCRIPT_SCROLL_CLASS}
               >
                 {usePrimary && primary ? (
                   <ChangedFilesActionsProvider value={primary.changedFilesActions}>
@@ -867,18 +881,19 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               {!transcriptFollowing && rowCount > 0 ? (
                 <button
                   type="button"
-                  className="gateway-scroll-to-bottom"
+                  className={GATEWAY_SCROLL_TO_BOTTOM_CLASS}
                   onClick={handleJumpToBottom}
                   aria-label="滚动到底部"
                   title="滚动到底部"
                 >
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDown className="size-4" />
                 </button>
               ) : null}
             </div>
           )}
           <ChatComposerBar
             surface="web"
+            overlayHeightOwnerRef={chatFrameRef}
             runClarifyTurn={
               context.settings.customSettings.promptClarifyEnabled ? runClarifyTurn : undefined
             }

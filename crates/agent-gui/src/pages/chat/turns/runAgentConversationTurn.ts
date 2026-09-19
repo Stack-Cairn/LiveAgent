@@ -978,7 +978,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     const deltas = Array.from(pendingToolCallDeltas.values());
     pendingToolCallDeltas.clear();
 
+    // 每帧热路径：gateway 事件流不活跃（未启用/已关闭）时跳过预览构造——
+    // buildGatewayToolCallPreviewArguments 对大参数每次都是 O(全文) 的行数统计与切片，
+    // 而 queueEvent 内部的 enabled 检查发生在构造之后。
+    const eventStreamActive = gatewayBridgeEvents.isEventStreamActive?.() !== false;
     for (const { round, toolCall } of deltas) {
+      if (!eventStreamActive) break;
       gatewayBridgeEvents.queueEvent({
         type: "tool_call_delta",
         id: toolCall.id,

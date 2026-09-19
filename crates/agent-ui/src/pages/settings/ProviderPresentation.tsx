@@ -8,6 +8,7 @@ import {
   Info,
   OpenaiChatgptIcon,
 } from "@liveagent/ui/components/IconSet";
+import { SwitchRoot, SwitchThumb } from "@liveagent/ui/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -141,16 +142,19 @@ export function HintTip(props: { text: string; label?: string }) {
           <button
             type="button"
             aria-label={label ?? text}
-            className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className={cn(
+              "inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/55",
+              "transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            )}
           />
         }
       >
-        <Info className="h-3 w-3" />
+        <Info className="size-3" />
       </TooltipTrigger>
       <TooltipContent
         side="bottom"
         align="start"
-        className="max-w-60 px-2.5 py-2 text-[11px] font-normal leading-relaxed text-popover-foreground/90"
+        className="max-w-60 px-2.5 py-2 text-xs font-normal leading-relaxed text-popover-foreground/90"
       >
         {text}
       </TooltipContent>
@@ -175,19 +179,14 @@ export function DrawerFieldLabel(props: { label: string; hint?: string }) {
  * 视觉上作为"类别分隔"存在，避免与紧随其后的字段标签混为一谈。
  */
 export function DrawerGroupLabel(props: { label: string; hint?: string }) {
-  const { label, hint } = props;
   return (
-    <div className="flex items-center gap-2">
-      <span className="flex shrink-0 items-center gap-1 text-[10.5px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground/65">
-        {label}
-        {hint ? <HintTip text={hint} label={label} /> : null}
-      </span>
-      <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-foreground/[0.07]" />
+    <div className="space-y-1">
+      <div className="text-xs font-medium text-foreground">{props.label}</div>
+      {props.hint && <p className="text-xs leading-5 text-muted-foreground">{props.hint}</p>}
     </div>
   );
 }
 
-/** 抽屉分区头：图标块 + 标题 + 说明气泡 + 右侧控件插槽。 */
 export function DrawerSectionHeader(props: {
   icon: ReactNode;
   title: string;
@@ -197,16 +196,16 @@ export function DrawerSectionHeader(props: {
 }) {
   const { icon, title, hint, badge, action } = props;
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-foreground/[0.05] bg-foreground/[0.04] text-foreground/70">
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
         {icon}
       </span>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <h3 className="truncate text-[13px] font-semibold tracking-tight text-foreground/90">
-          {title}
-        </h3>
-        {hint ? <HintTip text={hint} label={title} /> : null}
-        {badge}
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {badge}
+        </div>
+        {hint && <p className="text-xs leading-5 text-muted-foreground">{hint}</p>}
       </div>
       {action}
     </div>
@@ -220,13 +219,16 @@ export function DialogSwitch(props: {
 }) {
   const { checked, onCheckedChange, ariaLabel } = props;
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
+    <SwitchRoot
+      nativeButton
+      render={<button type="button" />}
+      checked={checked}
       aria-label={ariaLabel}
-      className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      onClick={() => onCheckedChange(!checked)}
+      className={cn(
+        "relative inline-flex size-8 shrink-0 items-center justify-center rounded-lg outline-none",
+        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      )}
+      onCheckedChange={onCheckedChange}
     >
       <span
         className={cn(
@@ -237,14 +239,14 @@ export function DialogSwitch(props: {
         {/* The thumb is placed with left-0.5 and then translated, so the travel
             is trackWidth - thumbWidth - both insets (28 - 12 - 2 - 2), not the
             single-inset figure the transform-only Switch primitive uses. */}
-        <span
+        <SwitchThumb
           className={cn(
-            "absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-background shadow-sm transition-transform",
+            "absolute left-0.5 top-0.5 size-3 rounded-full bg-background shadow-sm transition-transform",
             checked && "translate-x-3",
           )}
         />
       </span>
-    </button>
+    </SwitchRoot>
   );
 }
 

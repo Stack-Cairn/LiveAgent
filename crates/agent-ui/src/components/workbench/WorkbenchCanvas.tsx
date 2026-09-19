@@ -24,6 +24,7 @@ export type WorkbenchCanvasLabels = {
 };
 
 export type WorkbenchCanvasProps = {
+  canvasRef?: React.MutableRefObject<HTMLDivElement | null>;
   layout: WorkbenchLayout;
   labels: WorkbenchCanvasLabels;
   renderPaneContent: (pane: PaneRecord, context: PaneSurfaceRenderContext) => ReactNode;
@@ -70,6 +71,7 @@ function findSplitNode(
  */
 export function WorkbenchCanvas(props: WorkbenchCanvasProps) {
   const {
+    canvasRef,
     layout,
     labels,
     renderPaneContent,
@@ -87,6 +89,13 @@ export function WorkbenchCanvas(props: WorkbenchCanvasProps) {
   } = props;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const setContainerRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      containerRef.current = element;
+      if (canvasRef) canvasRef.current = element;
+    },
+    [canvasRef],
+  );
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const [resizePreview, setResizePreview] = useState<{ splitId: string; ratio: number } | null>(
     null,
@@ -168,7 +177,7 @@ export function WorkbenchCanvas(props: WorkbenchCanvasProps) {
 
   return (
     <div
-      ref={containerRef}
+      ref={setContainerRef}
       data-workbench-canvas=""
       className={cn("relative flex-1 min-h-0 min-w-0 overflow-hidden bg-background", className)}
     >

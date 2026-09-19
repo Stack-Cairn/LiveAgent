@@ -76,6 +76,7 @@ test("workbench pointer moves coalesce per frame and stable targets do not reren
     renderCount += 1;
     controller = useWorkbenchDragSession({
       enabled: true,
+      canvasRef: { current: canvas },
       layoutRef: { current: layout },
       geometryRef: { current: geometry },
       onCommit() {},

@@ -54,6 +54,32 @@ test("readRunReport tolerates null/garbage", () => {
   assert.equal(readRunReport(runWithReport([1, 2])).version, "legacy");
 });
 
+test("version alone cannot make malformed persisted data a v4 report", () => {
+  const malformedReports = [
+    { version: ORGANIZE_RUN_REPORT_VERSION },
+    {
+      ...createEmptyRunReport(),
+      safeDecisions: [{ op: "delete", slug: 42 }],
+    },
+    {
+      ...createEmptyRunReport(),
+      reviewItems: [{ phase: "apply", kind: "warning", severity: "warning" }],
+    },
+    {
+      ...createEmptyRunReport(),
+      manualApplyState: {
+        status: "applied",
+        appliedDecisionKeys: "not-an-array",
+        failedDecisionKeys: [],
+      },
+    },
+  ];
+
+  for (const report of malformedReports) {
+    assert.equal(readRunReport(runWithReport(report)).version, "legacy");
+  }
+});
+
 test("decision keys and default selection", () => {
   const decision = { op: "upsert", slug: "a", scope: "global", riskLevel: "low" };
   assert.equal(organizerDecisionKey(decision, 2), "2:upsert:global::a");

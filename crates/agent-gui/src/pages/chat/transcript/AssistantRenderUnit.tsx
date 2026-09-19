@@ -9,6 +9,7 @@ import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversat
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { AssistantBubbleUnit } from "../components/AssistantBubble";
 import { AssistantRowFooter } from "./RowActions";
+import { useReplyHovered } from "./rowInteraction";
 import type { AssistantFooterRenderUnit, AssistantUnitRow } from "./rowModel";
 
 export type AssistantRenderUnitProps = {
@@ -18,7 +19,6 @@ export type AssistantRenderUnitProps = {
   isCompactionRunning: boolean;
   awaitingDecision?: boolean;
   toolStatus: string | null;
-  actionsVisible?: boolean;
   retryAttempts?: RetryAttemptRecord[];
   workdir?: string;
   onOpenFileLink?: (link: ChatFileLink) => void;
@@ -33,22 +33,16 @@ export type AssistantRenderUnitProps = {
 
 const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
   unit: AssistantFooterRenderUnit;
+  replyKey: string;
   compacted: boolean;
   showUsage?: boolean;
   usageContextWindow?: number;
-  actionsVisible?: boolean;
   onResendFromEdit: AssistantRenderUnitProps["onResendFromEdit"];
   onBranchConversation?: AssistantRenderUnitProps["onBranchConversation"];
 }) {
-  const {
-    unit,
-    compacted,
-    showUsage,
-    usageContextWindow,
-    actionsVisible,
-    onResendFromEdit,
-    onBranchConversation,
-  } = props;
+  const { unit, compacted, showUsage, usageContextWindow, onResendFromEdit, onBranchConversation } =
+    props;
+  const actionsVisible = useReplyHovered(props.replyKey);
   const changedFiles = useMemo(
     () => (unit.hasChangedFilesCandidate ? collectChangedFiles(unit.rounds) : null),
     [unit.hasChangedFilesCandidate, unit.rounds],
@@ -66,6 +60,7 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
   return (
     <div
       data-actions-visible={actionsVisible ? "true" : undefined}
+      data-assistant-row
       className={cn("group/assistant w-full max-w-full", compacted && "opacity-70")}
     >
       {changedFiles ? (
@@ -98,7 +93,6 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
     isCompactionRunning,
     awaitingDecision,
     toolStatus,
-    actionsVisible,
     retryAttempts,
     workdir,
     onOpenFileLink,
@@ -114,7 +108,7 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
         compacted={row.compacted}
         showUsage={showUsage}
         usageContextWindow={usageContextWindow}
-        actionsVisible={actionsVisible}
+        replyKey={row.replyKey}
         onResendFromEdit={onResendFromEdit}
         onBranchConversation={onBranchConversation}
       />
@@ -122,7 +116,7 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
   }
 
   return (
-    <div className={cn("group/assistant w-full max-w-full", compactedClass)}>
+    <div className={cn("group/assistant w-full max-w-full", compactedClass)} data-assistant-row>
       <AssistantBubbleUnit
         row={row}
         isCompactionRunning={isCompactionRunning}

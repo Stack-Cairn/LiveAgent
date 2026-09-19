@@ -222,7 +222,12 @@ test("focusing another pane does not swap an object composer ref across hosts", 
 test("the primary pane stays disabled during hydration in multi-pane layouts", () => {
   const chatPage = readSource("../../src/pages/ChatPage.tsx");
   const registrations = chatPage.slice(chatPage.indexOf("const workbenchRegistrations"));
-  assert.match(registrations, /isUploadingFiles \|\|\s*isConversationHydrating/);
+  assert.match(registrations, /surface\.conversationId === currentConversationId\s*\? primaryPaneBinding/);
+  assert.match(chatPage, /isInputDisabled: isComposerInputDisabled/);
+  const disabled = chatPage.slice(chatPage.indexOf("const isComposerInputDisabled"), chatPage.indexOf("const canDropUpload"));
+  for (const condition of ["isCompactionRunning", "isConversationHydrating", "isConversationHydrationFailed", "isImportingPastedText", "isUploadingFiles"]) {
+    assert.ok(disabled.includes(condition), `${condition} must disable the primary composer`);
+  }
   assert.doesNotMatch(registrations, /isConversationHydrating &&\s*Object\.keys\(workbench\.layout\.panes\)/);
 });
 

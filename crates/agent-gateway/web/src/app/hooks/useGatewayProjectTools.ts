@@ -1,5 +1,5 @@
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
-import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
+import type { ToastTone } from "@liveagent/ui/components/ui/toast-manager";
 import { t as translate } from "@liveagent/ui/i18n/index";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
@@ -26,7 +26,7 @@ import { useProjectToolsRuntime } from "./useProjectToolsRuntime";
 
 type UseGatewayProjectToolsOptions = {
   activeWorkspaceProjectPath: string;
-  addNotify: (type: NotifyItem["type"], message: string) => void;
+  addNotify: (type: ToastTone, message: string) => void;
   api: ReturnType<typeof useGatewayClients>["api"];
   codeReviewSkill: ReturnType<typeof useGatewayChatConfiguration>["codeReviewSkill"];
   composerRef: MutableRefObject<MentionComposerHandle | null>;

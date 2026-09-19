@@ -5,22 +5,22 @@ export function HubBackdrop(props: { tone?: "amber" | "violet" | "neutral" }) {
   const { tone = "neutral" } = props;
   const haloClass =
     tone === "amber"
-      ? "bg-[radial-gradient(circle_at_top_left,hsl(0_0%_100%/0.85),transparent_60%)] dark:bg-[radial-gradient(circle_at_top_left,hsl(222_18%_14%/0.55),transparent_60%)]"
+      ? "bg-surface-glow-1 dark:bg-surface-glow-2"
       : tone === "violet"
-        ? "bg-[radial-gradient(circle_at_top_left,hsl(220_18%_98%/0.85),transparent_60%)] dark:bg-[radial-gradient(circle_at_top_left,hsl(224_20%_14%/0.55),transparent_60%)]"
-        : "bg-[radial-gradient(circle_at_top_left,hsl(0_0%_100%/0.8),transparent_60%)] dark:bg-[radial-gradient(circle_at_top_left,hsl(224_18%_14%/0.5),transparent_60%)]";
+        ? "bg-surface-glow-3 dark:bg-surface-glow-4"
+        : "bg-surface-glow-5 dark:bg-surface-glow-6";
   return (
     <>
       <div className="pointer-events-none absolute inset-0 bg-[hsl(var(--hub-canvas))]" />
       <div
         className={cn(
-          "pointer-events-none absolute -left-32 -top-24 h-[420px] w-[420px] rounded-full opacity-90 blur-3xl",
+          "pointer-events-none absolute -left-32 -top-24 size-420px rounded-full opacity-90 blur-3xl",
           haloClass,
         )}
       />
       <div
         className={cn(
-          "pointer-events-none absolute -right-24 bottom-0 h-[360px] w-[360px] rounded-full opacity-60 blur-3xl",
+          "pointer-events-none absolute -right-24 bottom-0 size-360px rounded-full opacity-60 blur-3xl",
           haloClass,
         )}
       />
@@ -52,12 +52,17 @@ export function HubHeader(props: {
     >
       <div
         className={cn(
-          "mx-auto flex w-full max-w-[1320px] gap-4",
+          "mx-auto flex w-full max-w-1320px gap-4",
           prominent ? "items-end" : "items-center",
         )}
       >
         {icon ? (
-          <div className="hub-header-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-foreground shadow-xs">
+          <div
+            className={cn(
+              "hub-header-icon flex size-11 shrink-0 items-center justify-center",
+              "rounded-xl border border-border bg-background text-foreground shadow-xs",
+            )}
+          >
             {icon}
           </div>
         ) : null}
@@ -66,7 +71,7 @@ export function HubHeader(props: {
             <h1
               className={cn(
                 "font-semibold leading-tight tracking-tight text-foreground",
-                prominent ? "text-[28px]" : "text-[21px]",
+                prominent ? "text-3xl" : "text-xl",
               )}
             >
               {title}
@@ -76,7 +81,7 @@ export function HubHeader(props: {
             <p
               className={cn(
                 "truncate text-muted-foreground",
-                prominent ? "mt-1.5 text-sm" : "mt-0.5 text-[12px]",
+                prominent ? "mt-1.5 text-sm" : "mt-0.5 text-xs",
               )}
               title={subtitle}
             >
@@ -107,7 +112,7 @@ export function GlassPanel(props: {
       case "violet":
       case "neutral":
         return active
-          ? "border-border/55 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_6px_22px_-14px_rgba(15,23,42,0.18)] dark:border-white/[0.09] dark:bg-white/[0.06] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_6px_22px_-14px_rgba(0,0,0,0.55)]"
+          ? "border-border/55 bg-background/80 shadow-ui-hubchrome-24 dark:border-white/[0.09] dark:bg-white/[0.06] dark:shadow-ui-hubchrome-25"
           : "border-border/40 bg-background/60";
       default:
         return "border-border/40 bg-background/60";

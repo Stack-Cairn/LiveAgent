@@ -9,10 +9,10 @@ import {
   Paperclip,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { resolveMentionPopupHorizontalLayout } from "@liveagent/ui/lib/chat/mentionPopupLayout";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { type RefObject, useEffect, useRef } from "react";
+import { Popover, PopoverContent } from "../ui/popover";
+import { PreviewCard, PreviewCardContent } from "../ui/preview-card";
 import {
   formatLargePasteCount,
   type MentionComposerCommitMention,
@@ -20,23 +20,6 @@ import {
   type MentionMenuMode,
   type MentionSuggestion,
 } from "./MentionComposerModel";
-
-export const MENTION_POPUP_MAX_LIST_HEIGHT = 240;
-export const MENTION_POPUP_MIN_LIST_HEIGHT = 76;
-
-const MENTION_POPUP_VIEWPORT_MARGIN = 8;
-const MENTION_POPUP_GAP = 8;
-const MENTION_POPUP_HEADER_HEIGHT = 38;
-
-export function resolveMentionPopupListMaxHeight(anchorTop: number) {
-  const availableAbove = Math.floor(
-    anchorTop - MENTION_POPUP_VIEWPORT_MARGIN - MENTION_POPUP_GAP - MENTION_POPUP_HEADER_HEIGHT,
-  );
-  return Math.max(
-    MENTION_POPUP_MIN_LIST_HEIGHT,
-    Math.min(MENTION_POPUP_MAX_LIST_HEIGHT, availableAbove),
-  );
-}
 
 function conversationUpdatedAtLabel(value: number | undefined, locale: string) {
   if (!value) return "";
@@ -66,7 +49,9 @@ export function Popup({
   showEmpty,
   emptyLabel,
   onBack,
+  onClose,
   onSelect,
+  onHighlight,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   trigger: MentionContext["trigger"];
@@ -78,248 +63,265 @@ export function Popup({
   showEmpty: boolean;
   emptyLabel: string;
   onBack: () => void;
+  onClose: () => void;
   onSelect: (suggestion: MentionSuggestion) => void;
+  onHighlight: (index: number) => void;
 }) {
   const { locale, t } = useLocale();
-  const popupRef = useRef<HTMLDivElement>(null);
+
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLButtonElement>(null);
+  // Pointer-driven highlight changes must not scroll: the row is already under
+  // the cursor, and scrolling it would slide the list out from under the mouse.
+  const skipScrollRef = useRef(false);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: highlightIndex is the trigger — hlRef points at a different row after each keyboard move, and the scroll must follow it.
   useEffect(() => {
+    if (skipScrollRef.current) {
+      skipScrollRef.current = false;
+      return;
+    }
     hlRef.current?.scrollIntoView({ block: "nearest" });
   }, [highlightIndex]);
 
-  useLayoutEffect(() => {
-    const anchor = anchorRef.current;
-    const popup = popupRef.current;
-    if (!anchor || !popup) return;
-    const inputSurface = anchor.closest<HTMLElement>(".composer-glass-card") ?? anchor;
-
-    const update = () => {
-      const rect = inputSurface.getBoundingClientRect();
-      const horizontal = resolveMentionPopupHorizontalLayout(rect, window.innerWidth);
-      popup.style.left = `${horizontal.left}px`;
-      popup.style.bottom = `${Math.max(
-        MENTION_POPUP_VIEWPORT_MARGIN,
-        window.innerHeight - rect.top + MENTION_POPUP_GAP,
-      )}px`;
-      popup.style.width = `${horizontal.width}px`;
-      const list = listRef.current;
-      if (list) {
-        list.style.maxHeight = `${resolveMentionPopupListMaxHeight(rect.top)}px`;
-      }
-    };
-
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(inputSurface);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [anchorRef]);
-
-  return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: The popup intercepts pointer-down solely to preserve editor focus; it is not an activation target.
-    <div
-      ref={popupRef}
-      className={cn(
-        "mention-popup-enter layer-popover fixed overflow-hidden rounded-2xl",
-        "border border-black/[0.075] bg-popover text-popover-foreground shadow-sm ring-0 dark:border-white/[0.15]",
-      )}
-      onMouseDown={(event) => {
-        // Any mousedown inside the popup must not blur the editor (blur closes
-        // the mention session), except on the native scrollbar strip where
-        // preventDefault would break thumb dragging in some engines.
-        const list = listRef.current;
-        if (list) {
-          const rect = list.getBoundingClientRect();
-          const onScrollbar =
-            event.clientX >= rect.left + list.clientLeft + list.clientWidth &&
-            event.clientY >= rect.top &&
-            event.clientY <= rect.bottom;
-          if (onScrollbar) return;
-        }
-        event.preventDefault();
+  return (
+    <Popover
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
     >
-      <div className="flex min-h-10 items-center px-3.5 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-        {trigger === "skill" ? (
-          "Skills"
-        ) : mode === "root" ? (
-          t("chat.composer.add")
-        ) : (
-          <button
-            type="button"
-            className="-ml-1 flex min-h-8 items-center gap-1 rounded-md px-1.5 transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-            onMouseDown={(event) => {
-              event.preventDefault();
-              onBack();
-            }}
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {mode === "apps"
-              ? t("chat.composer.mentionGroupApps")
-              : mode === "files"
-                ? t("chat.composer.filesAndFolders")
-                : t("chat.composer.conversations")}
-          </button>
-        )}
-      </div>
-      <div
-        ref={listRef}
-        role="listbox"
-        aria-label={
-          trigger === "skill"
-            ? "Skills"
-            : mode === "root"
-              ? t("chat.composer.add")
-              : mode === "apps"
-                ? t("chat.composer.mentionGroupApps")
-                : mode === "files"
-                  ? t("chat.composer.filesAndFolders")
-                  : t("chat.composer.conversations")
+      <PopoverContent
+        anchor={() =>
+          anchorRef.current?.closest<HTMLElement>(".composer-glass-card") ?? anchorRef.current
         }
-        className="mention-popup-scroll relative flex flex-col overflow-y-auto px-2 pb-2"
+        positionMethod="fixed"
+        side="top"
+        align="start"
+        sideOffset={8}
+        initialFocus={false}
+        finalFocus={false}
+        className="flex max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-0 flex-col overflow-hidden p-1"
+        onMouseDown={(event) => {
+          // Any mousedown inside the popup must not blur the editor (blur closes
+          // the mention session), except on the native scrollbar strip where
+          // preventDefault would break thumb dragging in some engines.
+          const list = listRef.current;
+          if (list) {
+            const rect = list.getBoundingClientRect();
+            const onScrollbar =
+              event.clientX >= rect.left + list.clientLeft + list.clientWidth &&
+              event.clientY >= rect.top &&
+              event.clientY <= rect.bottom;
+            if (onScrollbar) return;
+          }
+          event.preventDefault();
+        }}
       >
-        {isLoading && (
-          <div className="px-2 py-2 text-xs text-muted-foreground">
-            {mode === "conversations"
-              ? t("chat.composer.searchingConversations")
-              : t("chat.composer.indexingFiles")}
-          </div>
-        )}
-        {error && !isLoading && <div className="px-2 py-2 text-xs text-destructive">{error}</div>}
-        {suggestions.map((suggestion, i) => {
-          const isCategory = suggestion.type === "category";
-          const isSkill = suggestion.type === "skill";
-          const conversation = suggestion.type === "conversation" ? suggestion.conversation : null;
-          const isApp = suggestion.type === "app";
-          const entry = suggestion.type === "file" ? suggestion.entry : null;
-          const skill = suggestion.type === "skill" ? suggestion.skill : null;
-          const app = suggestion.type === "app" ? suggestion.app : null;
-          const isDir = entry?.kind === "dir";
-          const parts = entry ? entry.path.split("/") : [];
-          const fileName = parts.pop() || "";
-          const dirPath = parts.join("/");
-          const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
-          const category = suggestion.type === "category" ? suggestion.category : null;
-          const title =
-            app?.name ??
-            (category === "apps"
-              ? t("chat.composer.mentionGroupApps")
-              : category === "files"
-                ? t("chat.composer.filesAndFolders")
-                : category === "conversations"
-                  ? t("chat.composer.conversations")
-                  : (conversation?.title ?? skill?.name ?? fileName));
-          const updatedAtLabel = conversationUpdatedAtLabel(conversation?.updatedAt, locale);
-          const conversationMeta = [conversation?.cwd, updatedAtLabel].filter(Boolean).join(" · ");
-          const subtitle =
-            category === "apps"
-              ? t("chat.composer.appsHint")
-              : category === "files"
-                ? t("chat.composer.filesAndFoldersHint")
-                : category === "conversations"
-                  ? t("chat.composer.conversationsHint")
-                  : conversation
-                    ? conversation.searchPreview || conversationMeta
-                    : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
-          const RowIcon =
-            category === "apps"
-              ? AppWindow
-              : category === "files"
-                ? Paperclip
-                : category === "conversations" || conversation
-                  ? MessageSquareText
-                  : Icon;
-          return (
+        <div className="mb-0.5 shrink-0">
+          {trigger === "skill" || mode === "root" ? (
+            <div
+              className={cn(
+                "flex h-6 items-center gap-1.5 px-2",
+                "text-tiny font-medium text-muted-foreground",
+              )}
+            >
+              <span className="min-w-0 truncate">
+                {trigger === "skill" ? "Skills" : t("chat.composer.add")}
+              </span>
+            </div>
+          ) : (
             <button
               type="button"
-              role="option"
-              aria-selected={i === highlightIndex}
-              key={
-                entry
-                  ? `${entry.kind}:${entry.path}`
-                  : app
-                    ? `app:${app.bundleId || app.path || app.name}`
-                    : conversation
-                      ? `conversation:${conversation.id}`
-                      : category
-                        ? `category:${category}`
-                        : `skill:${skill?.skillFile ?? skill?.name}`
-              }
-              ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
-                // Rows are 38px hitboxes with 2px transparent borders so the
-                // visual 34px row keeps the 4px gap while clicks in the gap
-                // still land on a row instead of a dead strip. shrink-0 stops
-                // the max-h flex column from compressing rows before it scrolls.
-                "mention-popup-item group flex h-[38px] shrink-0 cursor-pointer items-center gap-3 rounded-lg border-y-2 border-transparent bg-clip-padding px-3 text-left text-xs leading-5 transition-colors",
-                i === highlightIndex
-                  ? "bg-foreground/[0.07] text-foreground"
-                  : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",
+                "flex h-6 w-full items-center gap-1.5 rounded-md px-2",
+                "text-tiny font-medium text-muted-foreground transition-colors",
+                "hover:bg-foreground/[0.05] hover:text-foreground",
+                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               )}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onSelect(suggestion);
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onBack();
               }}
             >
-              <span
-                className={cn(
-                  "flex h-4 w-4 shrink-0 items-center justify-center",
-                  isCategory || conversation
-                    ? "text-muted-foreground"
-                    : isSkill || isApp
-                      ? "text-foreground/85"
-                      : isDir
-                        ? "text-amber-600 dark:text-amber-300"
-                        : "text-muted-foreground",
-                )}
-              >
-                {isApp ? (
-                  app?.iconDataUrl ? (
-                    <img src={app.iconDataUrl} alt="" className="h-4 w-4 rounded-sm" />
-                  ) : (
-                    <AppWindow className="h-4 w-4" />
-                  )
-                ) : RowIcon ? (
-                  <RowIcon width={16} height={16} />
-                ) : (
-                  <Blend className="h-4 w-4" />
-                )}
+              <ArrowLeft className="size-3 shrink-0" />
+              <span className="min-w-0 truncate">
+                {mode === "apps"
+                  ? t("chat.composer.mentionGroupApps")
+                  : mode === "files"
+                    ? t("chat.composer.filesAndFolders")
+                    : t("chat.composer.conversations")}
               </span>
-              <span className="min-w-0 flex-1 truncate text-left">
-                <span className="font-normal text-foreground/95">{title}</span>
-                {subtitle && (
-                  <span className="ml-2 text-xs text-muted-foreground/75">{subtitle}</span>
-                )}
-              </span>
-              {isCategory ? (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
-              ) : isSkill ? (
-                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                  skill
-                </span>
-              ) : (
-                isDir && (
-                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                    dir
-                  </span>
-                )
-              )}
             </button>
-          );
-        })}
-        {showEmpty && !isLoading && !error && suggestions.length === 0 && (
-          <div className="px-2 py-2 text-xs text-muted-foreground">{emptyLabel}</div>
-        )}
-      </div>
-    </div>,
-    document.body,
+          )}
+        </div>
+        <div
+          ref={listRef}
+          role="listbox"
+          aria-label={
+            trigger === "skill"
+              ? "Skills"
+              : mode === "root"
+                ? t("chat.composer.add")
+                : mode === "apps"
+                  ? t("chat.composer.mentionGroupApps")
+                  : mode === "files"
+                    ? t("chat.composer.filesAndFolders")
+                    : t("chat.composer.conversations")
+          }
+          className={cn(
+            "relative flex min-h-0 max-h-60 flex-col gap-0.5 overflow-y-auto overscroll-contain",
+            "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0",
+          )}
+        >
+          {isLoading && (
+            <div className="flex h-8 items-center px-2 text-xs text-muted-foreground">
+              {mode === "conversations"
+                ? t("chat.composer.searchingConversations")
+                : t("chat.composer.indexingFiles")}
+            </div>
+          )}
+          {error && !isLoading && (
+            <div className="flex h-8 items-center px-2 text-xs text-destructive">{error}</div>
+          )}
+          {suggestions.map((suggestion, i) => {
+            const isCategory = suggestion.type === "category";
+            const isSkill = suggestion.type === "skill";
+            const conversation =
+              suggestion.type === "conversation" ? suggestion.conversation : null;
+            const isApp = suggestion.type === "app";
+            const entry = suggestion.type === "file" ? suggestion.entry : null;
+            const skill = suggestion.type === "skill" ? suggestion.skill : null;
+            const app = suggestion.type === "app" ? suggestion.app : null;
+            const isDir = entry?.kind === "dir";
+            const parts = entry ? entry.path.split("/") : [];
+            const fileName = parts.pop() || "";
+            const dirPath = parts.join("/");
+            const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
+            const category = suggestion.type === "category" ? suggestion.category : null;
+            const title =
+              app?.name ??
+              (category === "apps"
+                ? t("chat.composer.mentionGroupApps")
+                : category === "files"
+                  ? t("chat.composer.filesAndFolders")
+                  : category === "conversations"
+                    ? t("chat.composer.conversations")
+                    : (conversation?.title ?? skill?.name ?? fileName));
+            const updatedAtLabel = conversationUpdatedAtLabel(conversation?.updatedAt, locale);
+            const subtitle =
+              category === "apps"
+                ? t("chat.composer.appsHint")
+                : category === "files"
+                  ? t("chat.composer.filesAndFoldersHint")
+                  : category === "conversations"
+                    ? t("chat.composer.conversationsHint")
+                    : conversation
+                      ? conversation.searchPreview || (conversation.cwd ?? "")
+                      : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
+            const RowIcon =
+              category === "apps"
+                ? AppWindow
+                : category === "files"
+                  ? Paperclip
+                  : category === "conversations" || conversation
+                    ? MessageSquareText
+                    : Icon;
+            return (
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === highlightIndex}
+                key={
+                  entry
+                    ? `${entry.kind}:${entry.path}`
+                    : app
+                      ? `app:${app.bundleId || app.path || app.name}`
+                      : conversation
+                        ? `conversation:${conversation.id}`
+                        : category
+                          ? `category:${category}`
+                          : `skill:${skill?.skillFile ?? skill?.name}`
+                }
+                ref={i === highlightIndex ? hlRef : undefined}
+                className={cn(
+                  "group flex h-8 shrink-0 cursor-pointer items-center gap-2",
+                  "rounded-md px-2 text-left text-xs leading-5 transition-colors",
+                  i === highlightIndex
+                    ? "bg-foreground/[0.07] text-foreground"
+                    : "text-foreground/85 dark:text-foreground/90",
+                )}
+                onMouseMove={() => {
+                  if (i === highlightIndex) return;
+                  skipScrollRef.current = true;
+                  onHighlight(i);
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(suggestion);
+                }}
+              >
+                <span
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center",
+                    isCategory || conversation
+                      ? "text-muted-foreground"
+                      : isSkill || isApp
+                        ? "text-foreground/85"
+                        : isDir
+                          ? "text-amber-600 dark:text-amber-300"
+                          : "text-muted-foreground",
+                  )}
+                >
+                  {isApp ? (
+                    app?.iconDataUrl ? (
+                      <img src={app.iconDataUrl} alt="" className="size-4 rounded-sm" />
+                    ) : (
+                      <AppWindow className="size-4" />
+                    )
+                  ) : RowIcon ? (
+                    <RowIcon width={16} height={16} />
+                  ) : (
+                    <Blend className="size-4" />
+                  )}
+                </span>
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="shrink-0 truncate font-normal text-foreground/95">{title}</span>
+                  {subtitle && (
+                    <span className="min-w-0 flex-1 truncate text-tiny text-muted-foreground/75">
+                      {subtitle}
+                    </span>
+                  )}
+                </span>
+                {updatedAtLabel ? (
+                  <span className="shrink-0 text-tiny tabular-nums text-muted-foreground/70">
+                    {updatedAtLabel}
+                  </span>
+                ) : null}
+                {isCategory ? (
+                  <ChevronRight className="size-3 shrink-0 text-muted-foreground/65" />
+                ) : isSkill ? (
+                  <span className="shrink-0 rounded bg-muted/60 px-1 py-px text-tiny uppercase tracking-wide text-muted-foreground">
+                    skill
+                  </span>
+                ) : (
+                  isDir && (
+                    <span className="shrink-0 rounded bg-muted/60 px-1 py-px text-tiny uppercase tracking-wide text-muted-foreground">
+                      dir
+                    </span>
+                  )
+                )}
+              </button>
+            );
+          })}
+          {showEmpty && !isLoading && !error && suggestions.length === 0 && (
+            <div className="flex h-8 items-center px-2 text-xs text-muted-foreground">
+              {emptyLabel}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -376,28 +378,19 @@ export function commitStatLabel(template: string, count: string) {
 
 export function CommitMentionTooltip({
   commit,
-  rect,
+  anchor,
+  onClose,
   onMouseEnter,
   onMouseLeave,
 }: {
   commit: MentionComposerCommitMention;
-  rect: DOMRect;
+  anchor: HTMLElement;
+  onClose: () => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
   const { locale, t } = useLocale();
-  const maxWidth = Math.min(440, window.innerWidth - 16);
-  const minWidth = Math.min(200, maxWidth);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const [tooltipWidth, setTooltipWidth] = useState(minWidth);
-  const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - tooltipWidth - 8));
-  const availableAbove = rect.top - 16;
-  const availableBelow = window.innerHeight - rect.bottom - 16;
-  const placeAbove = availableAbove > 260 || availableAbove > availableBelow;
-  const maxHeight = Math.max(120, Math.min(520, placeAbove ? availableAbove : availableBelow));
-  const top = placeAbove
-    ? Math.max(8, rect.top - 8)
-    : Math.min(window.innerHeight - 8, rect.bottom + 8);
+
   const shortSha = commit.shortSha || commit.sha.slice(0, 7);
   const author = commit.authorName || t("chat.composer.commitTooltipUnknownAuthor");
   const date = formatCommitTooltipDate(commit.authorDate, locale);
@@ -418,74 +411,70 @@ export function CommitMentionTooltip({
   const subject = commit.subject.trim() || shortSha;
   const authorLabel = commit.authorEmail ? `${author} <${commit.authorEmail}>` : author;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: commit is the trigger — the tooltip is mounted un-keyed, so hovering another chip re-renders this instance with new content that must be re-measured.
-  useLayoutEffect(() => {
-    const node = tooltipRef.current;
-    if (!node) return;
-    const measuredWidth = Math.ceil(node.getBoundingClientRect().width);
-    setTooltipWidth(Math.min(maxWidth, Math.max(minWidth, measuredWidth)));
-  }, [commit, maxWidth, minWidth]);
-
-  return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: Hover and pointer handlers keep this non-interactive tooltip open while the pointer crosses into it.
-    <div
-      ref={tooltipRef}
-      className="layer-popover fixed overflow-y-auto rounded-xl border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-xl"
-      style={{
-        left,
-        top,
-        width: "fit-content",
-        minWidth,
-        maxWidth,
-        maxHeight,
-        transform: placeAbove ? "translateY(-100%)" : "none",
+  return (
+    <PreviewCard
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
-      onMouseDown={(event) => event.preventDefault()}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
     >
-      <div className="flex items-start gap-2">
-        <GitHubMarkIcon className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
-        <div className="min-w-0">
-          <div className="break-words font-medium leading-tight">{authorLabel}</div>
-          {date ? (
-            <div className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
-              {date.relative} ({date.absolute})
-            </div>
+      <PreviewCardContent
+        anchor={anchor}
+        align="start"
+        className="w-fit min-w-50 max-w-[min(440px,var(--available-width))] px-3 py-2.5 text-xs"
+        onMouseDown={(event) => event.preventDefault()}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      >
+        <div className="flex items-start gap-2">
+          <GitHubMarkIcon className="mt-0.5 size-4 shrink-0 text-foreground" />
+          <div className="min-w-0">
+            <div className="break-words font-medium leading-tight">{authorLabel}</div>
+            {date ? (
+              <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
+                {date.relative} ({date.absolute})
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-2 whitespace-pre-wrap break-words font-medium leading-snug">
+          {subject}
+        </div>
+        {messageBody ? (
+          <div className="mt-1.5 whitespace-pre-wrap break-words leading-snug text-muted-foreground">
+            {messageBody}
+          </div>
+        ) : null}
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-tight">
+          <span className="text-muted-foreground">{filesChangedLabel}</span>
+          <span className="font-medium text-emerald-600 dark:text-emerald-400">
+            {insertionsLabel}
+          </span>
+          <span className="font-medium text-rose-600 dark:text-rose-400">{deletionsLabel}</span>
+        </div>
+        <div
+          className={cn(
+            "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70",
+            "pt-1.5 text-xs leading-tight text-muted-foreground",
+          )}
+        >
+          <span className="font-mono text-foreground">{shortSha}</span>
+          {commit.remoteName ? <span>{commit.remoteName}</span> : null}
+          {commit.githubUrl ? (
+            <>
+              <span className="text-border">|</span>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-primary hover:bg-primary/10"
+                onClick={() => commit.githubUrl && void openUrl(commit.githubUrl)}
+              >
+                <GitHubMarkIcon className="size-3" />
+                {t("chat.composer.commitTooltipOpenGithub")}
+              </button>
+            </>
           ) : null}
         </div>
-      </div>
-      <div className="mt-2 whitespace-pre-wrap break-words font-medium leading-snug">{subject}</div>
-      {messageBody ? (
-        <div className="mt-1.5 whitespace-pre-wrap break-words leading-snug text-muted-foreground">
-          {messageBody}
-        </div>
-      ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[calc(11px*var(--zone-font-scale,1))] leading-tight">
-        <span className="text-muted-foreground">{filesChangedLabel}</span>
-        <span className="font-medium text-emerald-600 dark:text-emerald-400">
-          {insertionsLabel}
-        </span>
-        <span className="font-medium text-rose-600 dark:text-rose-400">{deletionsLabel}</span>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
-        <span className="font-mono text-foreground">{shortSha}</span>
-        {commit.remoteName ? <span>{commit.remoteName}</span> : null}
-        {commit.githubUrl ? (
-          <>
-            <span className="text-border">|</span>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-primary hover:bg-primary/10"
-              onClick={() => commit.githubUrl && void openUrl(commit.githubUrl)}
-            >
-              <GitHubMarkIcon className="h-3 w-3" />
-              {t("chat.composer.commitTooltipOpenGithub")}
-            </button>
-          </>
-        ) : null}
-      </div>
-    </div>,
-    document.body,
+      </PreviewCardContent>
+    </PreviewCard>
   );
 }

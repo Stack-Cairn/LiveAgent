@@ -62,7 +62,7 @@ export function AssistantStatus({
     <span
       role="status"
       className={cn(
-        "inline-flex min-h-5 min-w-0 max-w-full items-center text-[calc(13px*var(--zone-font-scale,1))] font-normal text-muted-foreground",
+        "inline-flex min-h-5 min-w-0 max-w-full items-center text-sm font-normal text-muted-foreground",
         className,
       )}
     >

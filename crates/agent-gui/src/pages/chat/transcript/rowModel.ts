@@ -245,7 +245,16 @@ function hasChangedFilesCandidate(rounds: readonly ReplyRound[]) {
   );
 }
 
-function measureBlockUnit(block: GroupedRoundBlock) {
+type BlockMeasurement = { estimate: number; renderCost: number };
+
+// Measuring a text block scans its whole text (O(chars)). Block objects come
+// from the per-round layout cache and are immutable, so memoizing by identity
+// limits per-flush measurement work to blocks of the round that changed.
+const blockMeasurementCache = new WeakMap<GroupedRoundBlock, BlockMeasurement>();
+
+function measureBlockUnit(block: GroupedRoundBlock): BlockMeasurement {
+  const cached = blockMeasurementCache.get(block);
+  if (cached) return cached;
   let estimate: number;
   let renderCost: number;
   if (block.kind === "text") {
@@ -285,10 +294,21 @@ function measureBlockUnit(block: GroupedRoundBlock) {
     estimate = 72;
     renderCost = 2;
   }
-  return {
+  const measurement: BlockMeasurement = {
     estimate: Math.max(36, estimate),
     renderCost,
   };
+  blockMeasurementCache.set(block, measurement);
+  return measurement;
+}
+
+function sameRowArray(previous: readonly AssistantUnitRow[], next: readonly AssistantUnitRow[]) {
+  if (previous === next) return true;
+  if (previous.length !== next.length) return false;
+  for (let index = 0; index < previous.length; index += 1) {
+    if (previous[index] !== next[index]) return false;
+  }
+  return true;
 }
 
 function sameStringArray(previous: string[], next: string[]) {
@@ -299,6 +319,7 @@ function sameStringArray(previous: string[], next: string[]) {
 }
 
 function sameGroupedBlock(previous: GroupedRoundBlock, next: GroupedRoundBlock) {
+  if (previous === next) return true;
   if (previous.kind !== next.kind || previous.key !== next.key) return false;
   if (previous.kind === "text" || previous.kind === "thinking") {
     return next.kind === previous.kind && previous.text === next.text;
@@ -327,7 +348,7 @@ function sameGroupedBlock(previous: GroupedRoundBlock, next: GroupedRoundBlock) 
 }
 
 function canReuseLiveUnit(previous: AssistantUnitRow, next: AssistantUnitRow) {
-  if (previous.mutable || next.mutable) return false;
+  if (previous.mutable !== next.mutable) return false;
   if (
     previous.key !== next.key ||
     previous.replyKey !== next.replyKey ||
@@ -350,14 +371,15 @@ function canReuseLiveUnit(previous: AssistantUnitRow, next: AssistantUnitRow) {
       previous.unit.durationMs === nextWorkTrace.durationMs &&
       previous.unit.entries.every((entry, index) => {
         const nextEntry = nextWorkTrace.entries[index];
-        return Boolean(
-          nextEntry &&
-            entry.key === nextEntry.key &&
-            entry.roundKey === nextEntry.roundKey &&
-            entry.roundMeta === nextEntry.roundMeta &&
-            entry.thinkingOpen === nextEntry.thinkingOpen &&
-            sameStringArray(entry.runningToolCallIds, nextEntry.runningToolCallIds) &&
-            sameGroupedBlock(entry.block, nextEntry.block),
+        if (!nextEntry) return false;
+        if (entry === nextEntry) return true;
+        return (
+          entry.key === nextEntry.key &&
+          entry.roundKey === nextEntry.roundKey &&
+          entry.roundMeta === nextEntry.roundMeta &&
+          entry.thinkingOpen === nextEntry.thinkingOpen &&
+          sameStringArray(entry.runningToolCallIds, nextEntry.runningToolCallIds) &&
+          sameGroupedBlock(entry.block, nextEntry.block)
         );
       }) &&
       previous.unit.latestToolGroupKey === nextWorkTrace.latestToolGroupKey &&
@@ -569,16 +591,12 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
   return reconciled;
 }
 
-export type TranscriptRowModelOptions = {
-  onRowsBorn?: (keys: readonly string[], isInitialBuild: boolean) => void;
-};
-
 export type TranscriptRowModel = {
   build: (historyItems: RenderTimelineItem[], live: LiveTailInput) => TranscriptRowsSnapshot;
   reset: () => void;
 };
 
-export function createTranscriptRowModel(options?: TranscriptRowModelOptions): TranscriptRowModel {
+export function createTranscriptRowModel(): TranscriptRowModel {
   // Keyed by the FIRST item of a render group: a plain user/summary item, or
   // the leading assistant part of a (possibly stitched) reply. `members`
   // records every item the cached rows were built from so a group that grows
@@ -594,8 +612,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
   >();
   let historyRowsCache: { items: RenderTimelineItem[]; rows: TranscriptRow[] } | null = null;
   let streamOrigins = new Map<string, string>();
-  let knownKeys = new Set<string>();
-  let hasBuilt = false;
   let turnSeq = 0;
   let activeTurn: {
     replyKey: string;
@@ -603,6 +619,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     liveUnitCache: Map<string, AssistantUnitRow>;
     lastLiveUnits: AssistantUnitRow[];
     settlingUnits: AssistantUnitRow[] | null;
+    lastActivityRow: AssistantActivityRow | null;
   } | null = null;
   let pendingSettle: { replyKey: string; historyLenAtStart: number } | null = null;
   let deferredSettles: { replyKey: string; historyLenAtStart: number }[] = [];
@@ -612,8 +629,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     rowCache = new WeakMap();
     historyRowsCache = null;
     streamOrigins = new Map();
-    knownKeys = new Set();
-    hasBuilt = false;
     turnSeq = 0;
     activeTurn = null;
     pendingSettle = null;
@@ -768,8 +783,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
   ): TranscriptRowsSnapshot => {
     const liveTailVisible =
       (live.isSending || live.isCompactionRunning === true) && !live.isSettled;
-    const isInitialBuild = !hasBuilt;
-    hasBuilt = true;
 
     if (liveTailVisible && pendingSettle && activeTurn) {
       if (!adoptSettledTwin(historyItems, pendingSettle)) {
@@ -782,6 +795,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         liveUnitCache: new Map(),
         lastLiveUnits: [],
         settlingUnits: null,
+        lastActivityRow: null,
       };
     } else if (liveTailVisible && !activeTurn) {
       pendingSettle = null;
@@ -791,6 +805,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         liveUnitCache: new Map(),
         lastLiveUnits: [],
         settlingUnits: null,
+        lastActivityRow: null,
       };
     } else if (!liveTailVisible && activeTurn) {
       // 落定交接：丢弃 activeTurn 的判据是「历史自 historyLenAtStart 起有没有
@@ -830,14 +845,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
       deferredSettles = deferredSettles.filter((turn) => !adoptSettledTwin(historyItems, turn));
     }
 
-    const bornKeys: string[] = [];
-    const trackBirth = (key: string) => {
-      if (!knownKeys.has(key)) {
-        knownKeys.add(key);
-        bornKeys.push(key);
-      }
-    };
-
     let historyRows: TranscriptRow[];
     if (historyRowsCache?.items === historyItems) {
       historyRows = historyRowsCache.rows;
@@ -848,7 +855,6 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         const members = group.kind === "reply" ? group.items : [group.item];
         const itemRows = buildHistoryRows(members, retryTarget);
         historyRows.push(...itemRows);
-        for (const row of itemRows) trackBirth(row.key);
         if (group.kind === "single" && group.item.kind === "user") retryTarget = group.item;
       }
       historyRowsCache = { items: historyItems, rows: historyRows };
@@ -882,7 +888,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
               ? [draftRound(live.draftAssistantText)]
               : [];
         const rounds = buildLiveReplyRounds(absorbed, tailRounds);
-        liveUnits = buildAssistantUnits({
+        const nextLiveUnits = buildAssistantUnits({
           replyKey: activeTurn.replyKey,
           live: true,
           renderMode: "streaming",
@@ -893,6 +899,12 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
           anchorUserKey: visibleHistoryRows.at(-1)?.anchorUserKey ?? null,
           liveUnitCache: activeTurn.liveUnitCache,
         });
+        // Preserve array identity when every unit was reused so the whole
+        // activity row (and its memoized subtree) can bail out on emits that
+        // change nothing visible (tool-status-only frames).
+        liveUnits = sameRowArray(activeTurn.lastLiveUnits, nextLiveUnits)
+          ? activeTurn.lastLiveUnits
+          : nextLiveUnits;
         activeTurn.lastLiveUnits = liveUnits;
         activeTurn.settlingUnits = null;
       } else {
@@ -905,14 +917,13 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         }
         liveUnits = activeTurn.settlingUnits;
       }
-      const liveActivity = buildAssistantActivityRow(activeTurn.replyKey, liveUnits);
+      const liveActivity =
+        activeTurn.lastActivityRow && activeTurn.lastActivityRow.units === liveUnits
+          ? activeTurn.lastActivityRow
+          : buildAssistantActivityRow(activeTurn.replyKey, liveUnits);
+      activeTurn.lastActivityRow = liveActivity;
       rows = [...visibleHistoryRows, liveActivity];
       liveStartIndex = rows.length - 1;
-      trackBirth(liveActivity.key);
-    }
-
-    if (bornKeys.length > 0 || isInitialBuild) {
-      options?.onRowsBorn?.(bornKeys, isInitialBuild);
     }
 
     return { rows, liveStartIndex };

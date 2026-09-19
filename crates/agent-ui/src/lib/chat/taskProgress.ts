@@ -107,28 +107,39 @@ export function createTaskProgressSnapshot(
   };
 }
 
+// Latest canonical result inside `rounds`: `undefined` when no task tool has
+// settled there yet, `null` when the newest one is an explicit clear (empty
+// TaskList), otherwise the snapshot. Callers layering live rounds over a
+// history baseline need the tri-state: a `null` from the live tail must
+// override the baseline, not fall back to it.
+export function selectRoundsTaskProgress(
+  rounds: readonly unknown[],
+): TaskProgressSnapshot | null | undefined {
+  let latest: TaskProgressSnapshot | null | undefined;
+  for (const round of rounds) {
+    if (!isRecord(round) || !Array.isArray(round.blocks)) continue;
+    for (const block of round.blocks) {
+      const snapshot = readTaskSnapshot(block);
+      if (snapshot !== undefined) latest = snapshot;
+    }
+  }
+  return latest;
+}
+
 export function selectLatestTaskProgress(
   rows: readonly unknown[],
   liveRounds: readonly unknown[] = [],
 ): TaskProgressSnapshot | null {
   let latest: TaskProgressSnapshot | null = null;
-  const visitRounds = (rounds: readonly unknown[]) => {
-    for (const round of rounds) {
-      if (!isRecord(round) || !Array.isArray(round.blocks)) continue;
-      for (const block of round.blocks) {
-        const snapshot = readTaskSnapshot(block);
-        if (snapshot !== undefined) latest = snapshot;
-      }
-    }
-  };
   for (const row of rows) {
     if (!isRecord(row)) continue;
     if (row.kind === "user") {
       latest = null;
     } else if (row.kind === "assistant" && Array.isArray(row.rounds)) {
-      visitRounds(row.rounds);
+      const result = selectRoundsTaskProgress(row.rounds);
+      if (result !== undefined) latest = result;
     }
   }
-  visitRounds(liveRounds);
-  return latest;
+  const live = selectRoundsTaskProgress(liveRounds);
+  return live === undefined ? latest : live;
 }

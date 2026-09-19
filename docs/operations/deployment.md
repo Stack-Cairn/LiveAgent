@@ -176,3 +176,20 @@ node scripts/release/prepare-app-version-from-tag.mjs vX.Y.Z
 Tauri 构建命令通过额外的 `--config "$LIVEAGENT_TAURI_VERSION_CONFIG"` 注入这个版本；Vite 和 Rust build script 通过 `LIVEAGENT_APP_VERSION` 注入同一个版本。这样发布版本以 tag 为事实来源，updater manifest、应用内显示版本和安装包版本会保持一致；忘记改 `package.json` 不会导致发布包仍显示旧版本。
 
 Windows 当前没有代码签名 secret，release workflow 会先自动发布 unsigned 包。接入 Windows `.p12/.pfx` 或 Trusted Signing 后再补签名步骤。
+
+带名字的预发布 tag（`v1.3.6-beta.1`）在打 MSI 时会被 tauri-bundler 拒绝：Windows Installer 要求 MSI 的 `ProductVersion` 必须是纯数字（`major.minor.patch[.build]`），报错为 `optional pre-release identifier in app version must be numeric-only and cannot be greater than 65535 for msi target`；纯数字后缀（`v1.3.6-1`）本来就会被推导成 `1.3.6.1`，不受影响。所以 overlay 会额外注入一个只作用于 MSI 的版本，App 版本（About 页、updater、产物命名）仍然保持 tag 语义：
+
+```json
+{
+  "version": "1.3.6-beta.1",
+  "bundle": {
+    "windows": {
+      "wix": {
+        "version": "1.3.6.1"
+      }
+    }
+  }
+}
+```
+
+推导规则是取预发布标识里最后一个纯数字段作为 build 号（`beta.1` -> `.1`，`beta` / `rc` -> `.0`），超过 65535 时截断到 65535。因此同一个 patch 下 `-beta.1` 与 `-rc.1` 的 MSI 产品版本相同；需要 MSI 版本严格递增时用 `vX.Y.Z-1`、`vX.Y.Z-2` 这类数字后缀。

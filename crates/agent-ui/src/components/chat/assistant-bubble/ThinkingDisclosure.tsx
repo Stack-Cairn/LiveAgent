@@ -3,6 +3,7 @@ import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import { sliceStreamingMarkdownTail } from "@liveagent/ui/lib/chat/streamingRenderPolicy";
 import { resolveThinkingDurationMs } from "@liveagent/ui/lib/chat/thinkingDurations";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -69,6 +70,11 @@ export function ThinkingDisclosure(props: {
   });
 
   const durationMs = resolveThinkingDurationMs(trackKey, active);
+
+  // 流式中只把尾部窗口交给 Markdown：视口 max-h-320px 本来只看得到尾部，
+  // 而全文重排是 O(累计思考长度)/帧。落定（active=false）后展开渲染全文。
+  const displayText =
+    active && renderMode === "streaming" ? sliceStreamingMarkdownTail(text) : text;
   const durationLabel = durationMs !== null ? formatElapsedTime(durationMs) : "";
   const settledLabel = durationLabel
     ? `${t("chat.thoughtFor")} ${durationLabel}`
@@ -84,19 +90,24 @@ export function ThinkingDisclosure(props: {
         type="button"
         aria-expanded={open}
         aria-label={t("chat.thinkingProcess")}
-        className="-mx-1.5 flex w-fit max-w-[calc(100%+0.75rem)] cursor-pointer select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[calc(13px*var(--zone-font-scale,1))] font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75"
+        className={cn(
+          "-mx-1.5 flex w-fit max-w-bleed-0p75rem cursor-pointer select-none items-center gap-1.5",
+          "rounded-lg px-1.5 py-1",
+          "text-left text-sm font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75",
+        )}
         onClick={() => {
           userOwnsDisclosureRef.current = true;
           setOpen((prev) => !prev);
         }}
       >
-        <Brain className="h-3 w-3 shrink-0 text-foreground/45" />
+        <Brain className="size-3 shrink-0 text-foreground/45" />
         <span className={cn("min-w-0 truncate", active && "shimmer")}>
           {active ? t("chat.thinking") : settledLabel}
         </span>
         <ChevronRight
           className={cn(
-            "h-3 w-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 ease-out group-hover/thinking:opacity-100 group-focus-within/thinking:opacity-100",
+            "size-3 shrink-0 text-foreground/40 opacity-0",
+            "transition-[opacity,transform] duration-150 ease-out group-hover/thinking:opacity-100 group-focus-within/thinking:opacity-100",
             open ? "rotate-90" : "",
           )}
         />
@@ -108,11 +119,11 @@ export function ThinkingDisclosure(props: {
             <div
               ref={setScrollViewport}
               data-thinking-scroll=""
-              className="max-h-[320px] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
+              className="max-h-320px overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
             >
               <div ref={setScrollContent} className="border-l border-border/55 pl-3">
                 <Markdown
-                  content={text}
+                  content={displayText}
                   className="font-chat thinking-markdown"
                   renderMode={renderMode}
                   readOnly={readOnly}

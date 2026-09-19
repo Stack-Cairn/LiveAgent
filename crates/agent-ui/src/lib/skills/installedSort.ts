@@ -4,9 +4,20 @@ import type { SkillSummary } from "./index";
 export type InstalledSkillSort = "name-asc" | "name-desc" | "installed-desc";
 
 export const DEFAULT_INSTALLED_SKILL_SORT: InstalledSkillSort = "name-asc";
+export const INSTALLED_SORT_STORAGE_KEY = "skillsHub.installedSort";
 
 export function isInstalledSkillSort(value: unknown): value is InstalledSkillSort {
   return value === "name-asc" || value === "name-desc" || value === "installed-desc";
+}
+
+export function readInstalledSortPreference(): InstalledSkillSort {
+  if (typeof window === "undefined") return DEFAULT_INSTALLED_SKILL_SORT;
+  try {
+    const stored = window.localStorage.getItem(INSTALLED_SORT_STORAGE_KEY);
+    return isInstalledSkillSort(stored) ? stored : DEFAULT_INSTALLED_SKILL_SORT;
+  } catch {
+    return DEFAULT_INSTALLED_SKILL_SORT;
+  }
 }
 
 function installedAtValue(skill: SkillSummary) {

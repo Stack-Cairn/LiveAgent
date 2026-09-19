@@ -1,4 +1,10 @@
-export const GRAPH_COLORS = ["#ffb000", "#dc267f", "#994f00", "#40b0a6", "#b66dff"];
+export const GRAPH_COLORS = [
+  "var(--git-review-graph-lane-1)",
+  "var(--git-review-graph-lane-2)",
+  "var(--git-review-graph-lane-3)",
+  "var(--git-review-graph-lane-4)",
+  "var(--git-review-graph-lane-5)",
+];
 
 export const GRAPH_REF_COLORS = {
   local: "var(--git-review-graph-ref-local)",

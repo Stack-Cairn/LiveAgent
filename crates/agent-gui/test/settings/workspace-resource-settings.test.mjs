@@ -171,8 +171,8 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.doesNotMatch(sharedProjectSettings, /window\.requestAnimationFrame/);
   assert.match(webRemotePathPicker, /selectedPathRef\.current = path/);
   assert.match(webRemotePathPicker, /pending\.resolve\(selectedPathRef\.current\)/);
-  assert.match(webRemotePathPicker, /h-\[min\(650px,92vh\)\]/);
-  assert.match(webRemotePathPicker, /max-h-\[92vh\]/);
+  assert.match(webRemotePathPicker, /h-dialog-650px-vh/);
+  assert.match(webRemotePathPicker, /max-h-92vh/);
   assert.match(webRemotePathPicker, /max-w-4xl/);
   assert.doesNotMatch(webRemotePathPicker, /forceRender/);
   assert.doesNotMatch(webRemotePathPicker, /overlayClassName|viewportClassName|z-\[\d+\]/);
@@ -220,12 +220,12 @@ test("global and project prompt cards share row and action layout", () => {
 
   assert.match(projectCards, /settings-card-row flex items-center gap-3 px-4 py-3/);
   assert.match(projectCards, /settings-card-actions flex items-center gap-1\.5/);
-  assert.match(projectCards, /settings-hover-actions ml-1 flex items-center gap-0\.5/);
+  assert.match(projectCards, /ml-1 flex items-center gap-0\.5/);
   assert.ok(previewButton >= 0 && previewButton < editButton);
   assert.match(projectCards, /disabled=\{!configured\}/);
   assert.match(
     projectCards,
-    /size="icon"[\s\S]*title=\{t\("settings\.agentsProjectEdit"\)\}/,
+    /size="icon-sm"[\s\S]*title=\{t\("settings\.agentsProjectEdit"\)\}/,
   );
   assert.doesNotMatch(
     projectCards,
@@ -233,21 +233,18 @@ test("global and project prompt cards share row and action layout", () => {
   );
 });
 
-test("project prompt preview renders the effective prompt without overflowing its details column", () => {
+test("project prompt preview renders the effective prompt with scope labels in one reading column", () => {
   assert.match(
     sharedAgentsSection,
     /resolveEffectivePromptSettings\(settings, viewingProject\.path\)/,
   );
   assert.match(sharedAgentsSection, /hidePromptHeader/);
   assert.match(sharedAgentsSection, /label: t\("chat\.globalPromptTitle"\)/);
-  assert.match(sharedAgentsSection, /<PromptScopeLabel label=\{segment\.label\}/);
-  assert.match(sharedAgentsSection, /my-5 h-px w-full bg-border\/70/);
-  assert.match(sharedAgentsSection, /md:grid-cols-\[minmax\(0,16rem\)_minmax\(0,1fr\)\]/);
-  assert.match(sharedAgentsSection, /\[overflow-wrap:anywhere\]/);
-  assert.match(
-    sharedAgentsSection,
-    /grid grid-cols-\[minmax\(0,1fr\)_auto\] items-start gap-3/,
-  );
+  assert.match(sharedAgentsSection, /\{segment.label\}/);
+  assert.match(sharedAgentsSection, /\{segment.prompt\}/);
+  assert.match(sharedAgentsSection, /whitespace-pre-wrap break-words/);
+  assert.doesNotMatch(sharedAgentsSection, /md:grid-cols-model-picker/);
+
 });
 
 test("chat runtime resolves and snapshots workspace resources from the effective workdir", () => {

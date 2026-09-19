@@ -27,7 +27,7 @@ export function isKnownProviderId(value: string | undefined): value is ProviderI
 // Unmatched types (including "codex") fall through to the OpenAI icon; callers
 // that need "unknown renders nothing" must guard with isKnownProviderId first.
 export function ProviderBrandIcon({ type, className }: { type?: ProviderId; className?: string }) {
-  const cls = cn("h-4 w-4 shrink-0", className);
+  const cls = cn("size-4 shrink-0", className);
   if (type === "claude_code") return <ClaudeIcon className={cls} />;
   if (type === "gemini") return <GeminiIcon className={cls} />;
   if (type === "xai") return <GrokIcon className={cls} />;

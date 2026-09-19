@@ -85,6 +85,7 @@ function createIndicatorHarness() {
         },
       },
       [tooltipPath]: tooltip,
+      "../ui/preview-card": { PreviewCard: (props) => ({props}), PreviewCardTrigger: (props) => ({props}), PreviewCardContent: (props) => ({props}) },
     },
   });
   const { TaskProgressIndicator } = loader.loadModule(
@@ -151,6 +152,7 @@ function findAll(node, predicate, matches = []) {
   if (!node || typeof node !== "object") return matches;
   if (predicate(node)) matches.push(node);
   findAll(node.props?.children, predicate, matches);
+  findAll(node.props?.render, predicate, matches);
   return matches;
 }
 
@@ -195,7 +197,7 @@ test("renders a compact trigger whose task list never occupies layout space", ()
   // 药丸按内容收缩，不再撑成固定宽度的常驻卡片。
   assert.match(root.props.className, /\binline-flex\b/);
   assert.match(root.props.className, /group\/task-progress/);
-  assert.doesNotMatch(root.props.className, /max-w-\[440px\]/);
+  assert.doesNotMatch(root.props.className, /max-w-440px/);
   assert.doesNotMatch(root.props.className, /\bmb-4\b/);
 
   // 触发器只留状态图标与步进文案。
@@ -206,17 +208,9 @@ test("renders a compact trigger whose task list never occupies layout space", ()
   assert.equal(otherButtons.length, 0);
   assert.equal(statusIcons(trigger)[0].props.state, "running");
 
-  // 浮层绝对定位在触发器之上，默认透明且不吃指针，hover / 键盘聚焦才显形。
+  // Preview Card owns portaling, focus/hover lifecycle and collision positioning.
   assert.equal(panel.props.role, "tooltip");
-  assert.match(panel.props.className, /\babsolute\b/);
-  assert.match(panel.props.className, /\bbottom-full\b/);
-  assert.match(panel.props.className, /\bpointer-events-none\b/);
-  assert.match(panel.props.className, /\bopacity-0\b/);
-  assert.match(panel.props.className, /group-hover\/task-progress:opacity-100/);
-  assert.match(panel.props.className, /group-hover\/task-progress:pointer-events-auto/);
-  assert.match(panel.props.className, /group-focus-within\/task-progress:opacity-100/);
-  assert.match(panel.props.className, /motion-reduce:transition-none/);
-  assert.equal(panel.props.hidden, undefined);
+  assert.doesNotMatch(panel.props.className, /absolute|opacity-0|group-hover/);
 
   assert.equal(progress.props["aria-label"], "Task progress · Step 2 of 3 · 1/3 completed · Running");
   assert.deepEqual(

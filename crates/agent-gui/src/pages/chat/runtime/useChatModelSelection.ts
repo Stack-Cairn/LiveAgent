@@ -60,8 +60,12 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
   } = params;
 
   const modelOptions = useMemo(
-    () => buildModelOptions(settings, { floatSelectedFirst: false }),
-    [settings],
+    () =>
+      buildModelOptions(
+        { customProviders: settings.customProviders },
+        { floatSelectedFirst: false },
+      ),
+    [settings.customProviders],
   );
   const activeSelectedModel = resolveActiveModelSelection(
     settings,

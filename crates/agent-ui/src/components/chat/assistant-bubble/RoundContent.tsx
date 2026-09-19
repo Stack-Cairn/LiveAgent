@@ -2,6 +2,7 @@ import { CompactingText } from "@liveagent/ui/components/chat/AssistantStatus";
 import { AssistantWorkTrace } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearchGroupView";
 import { LiveSparkle } from "@liveagent/ui/components/chat/LiveSparkle";
+import { StreamingSplitMarkdown } from "@liveagent/ui/components/chat/StreamingSplitMarkdown";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
@@ -118,16 +119,28 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
   } else if (block.kind === "checkpoint") {
     content = <CompactionSeamRow seam={block.seam} readOnly={readOnly} workdir={workdir} />;
   } else if (block.text.trim()) {
-    content = (
-      <Markdown
-        content={block.text}
-        className="font-chat"
-        renderMode={renderMode}
-        readOnly={readOnly}
-        workdir={workdir}
-        onOpenFileLink={onOpenFileLink}
-      />
-    );
+    // 流式模式下把已完成段落冻结为 static 实例，每帧只重解析活跃尾部；
+    // 落定孪生行保持 renderMode="streaming"（零 remount 设计），此时文本静止，
+    // 切分状态不再变化，成本为零。
+    content =
+      renderMode === "streaming" ? (
+        <StreamingSplitMarkdown
+          content={block.text}
+          className="font-chat"
+          readOnly={readOnly}
+          workdir={workdir}
+          onOpenFileLink={onOpenFileLink}
+        />
+      ) : (
+        <Markdown
+          content={block.text}
+          className="font-chat"
+          renderMode={renderMode}
+          readOnly={readOnly}
+          workdir={workdir}
+          onOpenFileLink={onOpenFileLink}
+        />
+      );
   } else {
     content = null;
   }

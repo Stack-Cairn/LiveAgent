@@ -4,7 +4,6 @@ import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { Shield } from "../../IconSet";
 
 export function WorkspaceGeneralSettingsPanel(props: {
   project: WorkspaceProject;
@@ -30,13 +29,19 @@ export function WorkspaceGeneralSettingsPanel(props: {
     <section className="space-y-4 p-6 max-[720px]:p-4">
       <h3 className="text-sm font-semibold">{t("chat.workspaceSettingsGeneral")}</h3>
 
-      <div className="overflow-hidden rounded-xl border border-border/60">
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-2">
+      <div className="space-y-2">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 rounded-xl bg-settings-tile px-4 py-3",
+            "max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-2",
+          )}
+        >
           <label htmlFor="workspace-project-name" className="shrink-0 text-sm font-medium">
             {t("chat.workspaceSettingsProjectName")}
           </label>
-          <div className="w-[280px] max-w-full max-[560px]:w-full">
+          <div className="w-280px max-w-full max-[560px]:w-full">
             <Input
+              variant="plain"
               id="workspace-project-name"
               value={projectName}
               onChange={(event) => onProjectNameChange(event.currentTarget.value)}
@@ -46,7 +51,7 @@ export function WorkspaceGeneralSettingsPanel(props: {
                 projectNameInvalid ? "workspace-project-name-description" : undefined
               }
               className={cn(
-                "h-8 shadow-none",
+                "h-9",
                 projectNameInvalid && "border-destructive focus-visible:ring-destructive/20",
               )}
             />
@@ -63,12 +68,17 @@ export function WorkspaceGeneralSettingsPanel(props: {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border/40 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-settings-tile px-4 py-3">
           <span className="text-sm font-medium">{t("chat.workspaceSettingsProjectType")}</span>
           <Badge variant="muted">{projectKindLabel}</Badge>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border/40 px-3 py-2.5 max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-1.5">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 rounded-xl bg-settings-tile px-4 py-3",
+            "max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:gap-1.5",
+          )}
+        >
           <span className="shrink-0 text-sm font-medium">
             {t("chat.workspaceSettingsPrimaryDirectory")}
           </span>
@@ -89,7 +99,6 @@ export function WorkspaceGeneralSettingsPanel(props: {
       </div>
 
       <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-        <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         {t("chat.workspaceSettingsPrimaryHint")}
       </p>
     </section>

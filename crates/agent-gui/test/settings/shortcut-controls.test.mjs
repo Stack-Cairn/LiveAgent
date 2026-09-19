@@ -28,80 +28,82 @@ document.body.append(host);
 const root = env.createRoot(host);
 await env.act(async () => root.render(env.React.createElement(GlobalShortcutsSection)));
 
-test("scope switch migrates an existing binding and preserves its accelerator", async () => {
+test("scope choice migrates an existing binding and preserves its accelerator", async () => {
   const row = host.querySelector('[data-ghk-row="newChat"]');
-  const toggle = row.querySelector('button[role="switch"][aria-label]');
+  const group = row.querySelector('[data-slot="toggle-group"]');
+  const items = [...group.querySelectorAll('[data-slot="toggle-group-item"]')];
   assert.equal(row.querySelector("select"), null);
-  assert.equal(toggle.getAttribute("aria-checked"), "false");
-  assert.match(toggle.textContent, /settings.shortcutScopeGlobal/);
-  assert.match(toggle.textContent, /settings.shortcutScopeApp/);
-  assert.ok(toggle.nextElementSibling.querySelector(".ghk-kbd"));
-  await env.act(async () => toggle.click());
-  assert.equal(toggle.getAttribute("aria-checked"), "true");
+  assert.equal(items.length, 2);
+  assert.equal(items[0].getAttribute("aria-pressed"), "true");
+  assert.equal(items[1].getAttribute("aria-pressed"), "false");
+  assert.match(group.textContent, /settings.shortcutScopeGlobal/);
+  assert.match(group.textContent, /settings.shortcutScopeApp/);
+  assert.ok(group.nextElementSibling.querySelector(".ghk-kbd"));
+  await env.act(async () => items[1].click());
+  assert.equal(items[1].getAttribute("aria-pressed"), "true");
   assert.deepEqual(shortcuts.readGlobalShortcutBindings().newChat, {
     accelerator: "Ctrl+KeyN",
     enabled: true,
     scope: "app",
   });
 });
-test("scope switch supports left and right arrow keys without entering recording", async () => {
-  const toggle = host.querySelector('[data-ghk-row="newChat"] button[role="switch"][aria-label]');
-  for (const [key, scope] of [
-    ["ArrowLeft", "global"],
-    ["ArrowRight", "app"],
-  ]) {
-    await env.act(async () =>
-      toggle.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key,
-          bubbles: true,
-          cancelable: true,
-        }),
-      ),
-    );
-    assert.equal(shortcuts.readGlobalShortcutBindings().newChat.scope, scope);
-    assert.ok(host.querySelector('[data-ghk-row="newChat"] button[role="switch"][aria-label]'));
-  }
+test("scope choice keeps the shared roving-tabindex keyboard model", async () => {
+  const items = [
+    ...host.querySelectorAll('[data-ghk-row="newChat"] [data-slot="toggle-group-item"]'),
+  ];
+  await env.act(async () => items[1].focus());
+  assert.equal(items[1].getAttribute("tabindex"), "0");
+  await env.act(async () =>
+    items[1].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true }),
+    ),
+  );
+  assert.equal(document.activeElement, items[0]);
+  assert.equal(items[0].getAttribute("tabindex"), "0");
+  await env.act(async () => items[0].click());
+  assert.equal(shortcuts.readGlobalShortcutBindings().newChat.scope, "global");
+  await env.act(async () => items[1].click());
+  assert.equal(shortcuts.readGlobalShortcutBindings().newChat.scope, "app");
+  assert.ok(host.querySelector('[data-ghk-row="newChat"] [data-slot="toggle-group"]'));
 });
-test("send shortcut uses a visible inline switch and saves both directions", async () => {
+test("send shortcut uses the shared segmented control and saves both directions", async () => {
   const row = host.querySelector('[data-ghk-row="sendMessage"]');
   assert.equal(row.parentElement, host.querySelector('[data-ghk-row="newChat"]').parentElement);
   assert.equal(row.querySelector("select"), null);
-  assert.equal(row.querySelectorAll("button").length, 1);
-  const toggle = row.querySelector('[role="switch"]');
-  assert.match(toggle.textContent, /Enter/);
-  assert.match(toggle.textContent, /Ctrl \+ Enter|⌘ \+ Enter/);
-  assert.equal(toggle.getAttribute("aria-checked"), "false");
-  assert.equal(
-    toggle.className,
-    host.querySelector('[data-ghk-row="newChat"] [role="switch"]').className,
+  const group = row.querySelector('[data-slot="toggle-group"]');
+  const items = [...group.querySelectorAll('[data-slot="toggle-group-item"]')];
+  assert.equal(items.length, 2);
+  assert.match(items[0].textContent, /Enter/);
+  assert.match(items[1].textContent, /Ctrl \+ Enter|⌘ \+ Enter/);
+  assert.equal(items[0].getAttribute("aria-pressed"), "true");
+  assert.deepEqual(
+    items.map((item) => item.className),
+    [...host.querySelectorAll('[data-ghk-row="newChat"] [data-slot="toggle-group-item"]')].map(
+      (item) => item.className,
+    ),
   );
-  await env.act(async () => toggle.click());
+  await env.act(async () => items[1].click());
   assert.equal(readSendShortcut(), "ctrlEnter");
-  assert.equal(toggle.getAttribute("aria-checked"), "true");
+  assert.equal(items[1].getAttribute("aria-pressed"), "true");
   assert.equal(document.querySelector('[data-slot="popover-content"]'), null);
   assert.doesNotMatch(row.textContent, /settings.shortcutRecordingHint/);
-  await env.act(async () => toggle.click());
+  await env.act(async () => items[0].click());
   assert.equal(readSendShortcut(), "enter");
-  assert.equal(toggle.getAttribute("aria-checked"), "false");
+  assert.equal(items[0].getAttribute("aria-pressed"), "true");
 });
-test("send switch supports left and right arrow keys", async () => {
-  const toggle = host.querySelector('[data-ghk-row="sendMessage"] [role="switch"]');
-  for (const [key, expected] of [
-    ["ArrowRight", "ctrlEnter"],
-    ["ArrowLeft", "enter"],
-  ]) {
-    await env.act(async () =>
-      toggle.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key,
-          bubbles: true,
-          cancelable: true,
-        }),
-      ),
-    );
-    assert.equal(readSendShortcut(), expected);
-  }
+test("send shortcut choice keeps the shared roving-tabindex keyboard model", async () => {
+  const items = [
+    ...host.querySelectorAll('[data-ghk-row="sendMessage"] [data-slot="toggle-group-item"]'),
+  ];
+  await env.act(async () => items[0].focus());
+  await env.act(async () =>
+    items[0].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
+    ),
+  );
+  assert.equal(document.activeElement, items[1]);
+  await env.act(async () => items[1].click());
+  assert.equal(readSendShortcut(), "ctrlEnter");
 });
 test("recording a replacement shortcut retains the chosen app scope", async () => {
   await env.act(async () => host.querySelector('[data-ghk-row="newChat"] button').click());

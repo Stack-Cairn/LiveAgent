@@ -1,5 +1,5 @@
 import type { AppSettings } from "@liveagent/app/lib/settings";
-import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import type { CSSProperties, HTMLAttributes, ReactNode, Ref } from "react";
 import type { SidebarShortcutId } from "../lib/settings/sidebarShortcuts";
 import { cn } from "../lib/shared/utils";
 import type { SkillSummary } from "../lib/skills/index";
@@ -10,6 +10,7 @@ import { SkillsHubPage } from "../pages/skills-hub/SkillsHubPage";
 export type ApplicationViewId = "chat" | `${SidebarShortcutId}-hub`;
 
 type ApplicationChatViewProps = {
+  containerRef?: Ref<HTMLDivElement>;
   containerProps?: Omit<HTMLAttributes<HTMLDivElement>, "children">;
   content: ReactNode;
 };
@@ -67,10 +68,11 @@ export function ApplicationView(props: ApplicationViewProps) {
       />
     );
   } else {
-    const { containerProps, content: chatContent } = chat;
+    const { containerProps, containerRef, content: chatContent } = chat;
     content = (
       <div
         {...containerProps}
+        ref={containerRef}
         className={cn(
           "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
           containerProps?.className,

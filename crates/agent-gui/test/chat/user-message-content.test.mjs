@@ -243,10 +243,9 @@ test("trailing newlines render a visual line anchor without changing DOM text", 
       text: "alpha\n",
     }),
   );
-  assert.equal(
-    html,
-    '<span class="chat-user-message-content">alpha\n<span aria-hidden="true" class="chat-user-trailing-newline-anchor"></span></span>',
-  );
+  assert.match(html, /^<span class="chat-user-message-content">alpha\n/);
+  assert.match(html, /<span aria-hidden="true" class="before:content-/);
+  assert.match(html, /<\/span><\/span>$/);
   assert.doesNotMatch(html, /\u200b/i);
 });
 

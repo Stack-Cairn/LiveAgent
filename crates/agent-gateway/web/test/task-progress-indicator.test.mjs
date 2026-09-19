@@ -18,6 +18,9 @@ const taskProgressIndicatorPath = fileURLToPath(
 const tooltipPath = fileURLToPath(
   new URL("../../../agent-ui/src/components/ui/tooltip.tsx", import.meta.url),
 );
+const previewCardPath = fileURLToPath(
+  new URL("../../../agent-ui/src/components/ui/preview-card.tsx", import.meta.url),
+);
 
 const labels = {
   title: "Task progress",
@@ -84,6 +87,13 @@ function createIndicatorHarness() {
         },
       },
       [tooltipPath]: tooltip,
+      // 面板改用 PreviewCard（Base UI + 区域字号 context，需要完整 React）：本用例的
+      // react 桩只提供 useId/useState，把它换成透明容器，只断言树形与数据钩子。
+      [previewCardPath]: {
+        PreviewCard: (props) => ({ type: "PreviewCard", props }),
+        PreviewCardTrigger: (props) => ({ type: "PreviewCardTrigger", props }),
+        PreviewCardContent: (props) => ({ type: "PreviewCardContent", props }),
+      },
     },
   });
   const { TaskProgressIndicator } = loader.loadModule(
@@ -142,6 +152,13 @@ function createSnapshot(overrides = {}) {
   };
 }
 
+// jsx 桩不执行函数组件，树里的元素保持未展开。Base UI 的 `render` 属性（用调用方
+// 给的元素作为输出）和 children 一样是子树，遵循同样的遍历。
+function childrenOf(node) {
+  const { children, render } = node.props ?? {};
+  return render && typeof render === "object" ? [render, children] : children;
+}
+
 function findAll(node, predicate, matches = []) {
   if (Array.isArray(node)) {
     for (const child of node) findAll(child, predicate, matches);
@@ -149,7 +166,7 @@ function findAll(node, predicate, matches = []) {
   }
   if (!node || typeof node !== "object") return matches;
   if (predicate(node)) matches.push(node);
-  findAll(node.props?.children, predicate, matches);
+  findAll(childrenOf(node), predicate, matches);
   return matches;
 }
 
@@ -157,7 +174,7 @@ function treeText(node) {
   if (Array.isArray(node)) return node.map(treeText).join("");
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (!node || typeof node !== "object") return "";
-  return treeText(node.props?.children);
+  return treeText(childrenOf(node));
 }
 
 function componentsNamed(node, name) {
@@ -194,7 +211,7 @@ test("web renders a compact trigger whose task list never occupies layout space"
   // 药丸按内容收缩，不再撑成固定宽度的常驻卡片。
   assert.match(root.props.className, /\binline-flex\b/);
   assert.match(root.props.className, /group\/task-progress/);
-  assert.doesNotMatch(root.props.className, /max-w-\[440px\]/);
+  assert.doesNotMatch(root.props.className, /max-w-440px/);
   assert.doesNotMatch(root.props.className, /\bmb-4\b/);
 
   // 触发器只留状态图标与步进文案。
@@ -205,16 +222,16 @@ test("web renders a compact trigger whose task list never occupies layout space"
   assert.equal(otherButtons.length, 0);
   assert.equal(statusIcons(trigger)[0].props.state, "running");
 
-  // 浮层绝对定位在触发器之上，默认透明且不吃指针，hover / 键盘聚焦才显形。
+  // 浮层是一个真正的 PreviewCard 弹出（Portal + 碰撞定位），不再是根节点内的绝对
+  // 定位覆盖层：平时完全不在 DOM 里，hover / 键盘聚焦才挂载，天然不占布局空间。
+  const previewCard = componentsNamed(root, "PreviewCard")[0];
+  const previewTrigger = componentsNamed(root, "PreviewCardTrigger")[0];
+  assert.ok(previewCard, "panel must be hosted by a PreviewCard");
+  assert.ok(previewTrigger, "trigger must be a PreviewCardTrigger");
+  assert.equal(previewTrigger.props.render, trigger, "the pill button is the card's trigger");
+  assert.equal(panel.type.name, "PreviewCardContent");
   assert.equal(panel.props.role, "tooltip");
-  assert.match(panel.props.className, /\babsolute\b/);
-  assert.match(panel.props.className, /\bbottom-full\b/);
-  assert.match(panel.props.className, /\bpointer-events-none\b/);
-  assert.match(panel.props.className, /\bopacity-0\b/);
-  assert.match(panel.props.className, /group-hover\/task-progress:opacity-100/);
-  assert.match(panel.props.className, /group-hover\/task-progress:pointer-events-auto/);
-  assert.match(panel.props.className, /group-focus-within\/task-progress:opacity-100/);
-  assert.match(panel.props.className, /motion-reduce:transition-none/);
+  assert.doesNotMatch(panel.props.className ?? "", /\babsolute\b|\bbottom-full\b|opacity-0/);
   assert.equal(panel.props.hidden, undefined);
 
   assert.equal(progress.props["aria-label"], "Task progress · Step 2 of 3 · 1/3 completed · Running");

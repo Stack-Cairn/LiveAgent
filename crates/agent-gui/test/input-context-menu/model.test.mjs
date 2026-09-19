@@ -5,7 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const model = loader.loadModule("src/components/input-context-menu/model.ts");
 
-const { isMenuEligibleTarget, computeMenuItems, clampMenuPosition, resolveOpenSelection } = model;
+const { isMenuEligibleTarget, computeMenuItems, resolveOpenSelection } = model;
 
 function makeSnapshot(overrides = {}) {
   return {
@@ -92,20 +92,8 @@ test("computeMenuItems disables select-all for empty inputs", () => {
   assert.equal(items.canSelectAll, false);
 });
 
-test("clampMenuPosition keeps an in-bounds menu untouched", () => {
-  assert.deepEqual(clampMenuPosition(100, 120, 160, 140, 1280, 800), { left: 100, top: 120 });
-});
 
-test("clampMenuPosition clamps right/bottom overflow with the margin", () => {
-  assert.deepEqual(clampMenuPosition(1250, 780, 160, 140, 1280, 800), {
-    left: 1280 - 160 - 8,
-    top: 800 - 140 - 8,
-  });
-});
 
-test("clampMenuPosition pins to the margin in tiny viewports", () => {
-  assert.deepEqual(clampMenuPosition(50, 50, 300, 300, 200, 200), { left: 8, top: 8 });
-});
 
 test("resolveOpenSelection keeps the live selection of a focused input", () => {
   assert.deepEqual(resolveOpenSelection(true, 2, 5, 10), { start: 2, end: 5 });

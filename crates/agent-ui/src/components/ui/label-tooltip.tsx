@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "../../lib/shared/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 /**
@@ -12,6 +13,8 @@ export function LabelTooltip(props: {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   closeOnClick?: boolean;
+  /** 覆盖气泡默认宽度约束（默认 max-w-64），用于结构化多列内容。 */
+  contentClassName?: string;
   children: ReactNode;
 }) {
   const { onOpenChange } = props;
@@ -25,7 +28,7 @@ export function LabelTooltip(props: {
         closeOnClick={props.closeOnClick ?? true}
         render={<span className="inline-flex shrink-0">{props.children}</span>}
       />
-      <TooltipContent className="label-tooltip-popup rounded-xl px-3 py-2">
+      <TooltipContent className={cn("rounded-xl px-3 py-2", props.contentClassName)}>
         {props.label}
       </TooltipContent>
     </Tooltip>

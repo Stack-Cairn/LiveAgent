@@ -3,6 +3,7 @@ import {
   type ConversationReferenceDropZoneHit,
   findConversationReferenceDropZone,
 } from "../chat/conversationReferenceDrag";
+import { acquireGlobalPointerStyle } from "../shared/globalPointerStyle";
 import {
   canvasAllowsPointerSplit,
   conversationReferenceForWorkbenchPayload,
@@ -42,6 +43,7 @@ export type WorkbenchDragPointerEvent = {
 
 export type UseWorkbenchDragSessionParams = {
   enabled: boolean;
+  canvasRef: React.MutableRefObject<HTMLDivElement | null>;
   layoutRef: React.MutableRefObject<WorkbenchLayout>;
   geometryRef: React.MutableRefObject<WorkbenchGeometry | null>;
   onCommit: (commit: WorkbenchDropCommit) => void;
@@ -72,7 +74,7 @@ export type WorkbenchDragRenderState = Omit<WorkbenchDragState, "pointer">;
  * machine and the drop-target resolution live in ./workbenchDragMachine.
  */
 export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
-  const { enabled, layoutRef, geometryRef, onCommit, onUnavailable } = params;
+  const { enabled, canvasRef, layoutRef, geometryRef, onCommit, onUnavailable } = params;
   const [dragState, setDragState] = useState<WorkbenchDragRenderState | null>(null);
   const publishedDragStateRef = useRef<WorkbenchDragRenderState | null>(null);
   const sessionRef = useRef<DragSessionState>(IDLE_DRAG_SESSION);
@@ -90,6 +92,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
   } | null>(null);
   const moveFrameRef = useRef<number | null>(null);
   const dragGhostElementRef = useRef<HTMLDivElement | null>(null);
+  const releaseGlobalStyleRef = useRef<(() => void) | null>(null);
 
   const cleanupListenersRef = useRef<(() => void) | null>(null);
 
@@ -143,7 +146,8 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
         // tab hidden by the drop's lease); capture dies with the element.
       }
     }
-    document.documentElement.style.removeProperty("cursor");
+    releaseGlobalStyleRef.current?.();
+    releaseGlobalStyleRef.current = null;
     if (publishedDragStateRef.current !== null) {
       publishedDragStateRef.current = null;
       setDragState(null);
@@ -219,7 +223,7 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
           }
           const reference = conversationReferenceForWorkbenchPayload(session.payload);
           referenceDragActiveRef.current = reference !== null;
-          const canvasElement = document.querySelector("[data-workbench-canvas]");
+          const canvasElement = canvasRef.current;
           const geometry = geometryRef.current;
           if ((!canvasElement || !geometry) && !reference) {
             onUnavailableRef.current?.("geometry-unavailable");
@@ -261,7 +265,10 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
             });
           }
           armClickSuppressor();
-          document.documentElement.style.setProperty("cursor", "grabbing");
+          releaseGlobalStyleRef.current = acquireGlobalPointerStyle({
+            cursor: "grabbing",
+            userSelect: "none",
+          });
           session = sessionRef.current;
         }
         if (session.phase === "idle") return;
@@ -384,7 +391,16 @@ export function useWorkbenchDragSession(params: UseWorkbenchDragSessionParams) {
         onKeyDown: handleKeyDown,
       });
     },
-    [dispatch, enabled, geometryRef, layoutRef, positionDragGhost, publishDragState, teardown],
+    [
+      canvasRef,
+      dispatch,
+      enabled,
+      geometryRef,
+      layoutRef,
+      positionDragGhost,
+      publishDragState,
+      teardown,
+    ],
   );
 
   return { dragState, beginDrag, dragGhostRef };

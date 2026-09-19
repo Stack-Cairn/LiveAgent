@@ -13,7 +13,12 @@ export function ResourceManagementPage({
   const { t } = useLocale();
   const memory = resource === "memory";
   return (
-    <div className="hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className={cn(
+        "hub-page relative flex h-full min-h-0 flex-1 flex-col overflow-hidden",
+        "bg-background",
+      )}
+    >
       <HubHeader title={t(memory ? "settings.navMemory" : "settings.navCron")} prominent />
       <div
         className={cn(
@@ -22,7 +27,7 @@ export function ResourceManagementPage({
         )}
       >
         <div
-          className={cn("mx-auto w-full max-w-[1320px]", memory && "flex min-h-0 flex-1 flex-col")}
+          className={cn("mx-auto w-full max-w-1320px", memory && "flex min-h-0 flex-1 flex-col")}
         >
           {memory ? (
             <MemoryPanel

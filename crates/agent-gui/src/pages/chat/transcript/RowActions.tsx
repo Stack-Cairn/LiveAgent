@@ -6,6 +6,7 @@ import type { UsageDetailEntry } from "@liveagent/ui/components/chat/UsagePanel"
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import type {
   HistoryMessageRef,
   RenderUserMessage,
@@ -52,8 +53,9 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
       copied={copied}
       copyDisabled={!replyText}
       onCopy={() => {
-        void navigator.clipboard.writeText(replyText);
-        markCopied();
+        void copyTextToClipboard(replyText).then((copied) => {
+          if (copied) markCopied();
+        });
       }}
       usageEntries={usageEntries}
       usageContextWindow={usageContextWindow}
@@ -98,8 +100,9 @@ export function UserRowFooter(props: UserRowFooterProps) {
       timestamp={timestamp}
       copied={copied}
       onCopy={() => {
-        void navigator.clipboard.writeText(text);
-        markCopied();
+        void copyTextToClipboard(text).then((copied) => {
+          if (copied) markCopied();
+        });
       }}
       editDisabled={isSending || !hasStableRef}
       editTitle={hasStableRef ? t("chat.edit") : "旧历史缺少稳定消息标识，无法编辑重发"}

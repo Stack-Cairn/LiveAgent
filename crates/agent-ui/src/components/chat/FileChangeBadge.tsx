@@ -14,10 +14,7 @@ export function FileChangeBadge({
   if (added === undefined && removed === undefined) return null;
   return (
     <span
-      className={cn(
-        "flex shrink-0 items-center gap-1.5 font-mono text-[calc(11px*var(--zone-font-scale,1))] tabular-nums",
-        className,
-      )}
+      className={cn("flex shrink-0 items-center gap-1.5 font-mono text-xs tabular-nums", className)}
     >
       {added !== undefined ? (
         <span className="flex items-center text-[hsl(var(--chat-success))]">

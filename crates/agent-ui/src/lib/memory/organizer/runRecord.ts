@@ -3,7 +3,16 @@
 // Runs written before v4 render as a legacy placeholder (summaries only).
 
 import type { MemoryBatchResponse, MemoryOrganizeRun } from "../api";
-import type { MemoryScope, MemoryType, RejectionBuckets, RiskLevel } from "../schema";
+import {
+  MEMORY_SCOPES,
+  MEMORY_TYPES,
+  type MemoryScope,
+  type MemoryType,
+  REJECTION_BUCKET_KEYS,
+  type RejectionBuckets,
+  RISK_LEVELS,
+  type RiskLevel,
+} from "../schema";
 
 export const ORGANIZE_RUN_REPORT_VERSION = 4;
 
@@ -73,6 +82,134 @@ export type OrganizeRunReport =
       reviewItems: OrganizerReviewItem[];
     };
 
+type UnknownRecord = Record<string, unknown>;
+
+const DECISION_OPS = ["upsert", "delete"] as const;
+const DECISION_APPLY_STATUSES = ["pending", "applied", "failed", "skipped"] as const;
+const REVIEW_PHASES = ["planning", "apply", "system"] as const;
+const REVIEW_KINDS = ["review", "skipped", "warning", "error"] as const;
+const REVIEW_SEVERITIES = ["info", "warning", "error"] as const;
+const MANUAL_APPLY_STATUSES = ["pending", "applied", "partial", "failed", ""] as const;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isOneOf<const TValues extends readonly unknown[]>(
+  value: unknown,
+  values: TValues,
+): value is TValues[number] {
+  return values.includes(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function hasOptional<T>(
+  record: UnknownRecord,
+  key: string,
+  guard: (value: unknown) => value is T,
+): boolean {
+  return record[key] === undefined || guard(record[key]);
+}
+
+function isOrganizerReviewItem(value: unknown): value is OrganizerReviewItem {
+  if (!isRecord(value)) return false;
+  return (
+    isOneOf(value.phase, REVIEW_PHASES) &&
+    isOneOf(value.kind, REVIEW_KINDS) &&
+    isOneOf(value.severity, REVIEW_SEVERITIES) &&
+    typeof value.message === "string" &&
+    hasOptional(value, "code", (item): item is string => typeof item === "string") &&
+    hasOptional(value, "slug", (item): item is string => typeof item === "string") &&
+    hasOptional(value, "op", (item): item is OrganizerSafeDecision["op"] =>
+      isOneOf(item, DECISION_OPS),
+    ) &&
+    hasOptional(value, "groupId", (item): item is string => typeof item === "string") &&
+    hasOptional(value, "decisionKey", (item): item is string => typeof item === "string")
+  );
+}
+
+function isOrganizerSafeDecision(value: unknown): value is OrganizerSafeDecision {
+  if (!isRecord(value)) return false;
+  const isString = (item: unknown): item is string => typeof item === "string";
+  const isBoolean = (item: unknown): item is boolean => typeof item === "boolean";
+  const isNumber = (item: unknown): item is number => typeof item === "number";
+  return (
+    isOneOf(value.op, DECISION_OPS) &&
+    typeof value.slug === "string" &&
+    hasOptional(value, "scope", (item): item is MemoryScope => isOneOf(item, MEMORY_SCOPES)) &&
+    hasOptional(value, "workdirHash", isString) &&
+    hasOptional(value, "memoryType", (item): item is MemoryType => isOneOf(item, MEMORY_TYPES)) &&
+    hasOptional(value, "description", isString) &&
+    hasOptional(value, "body", isString) &&
+    hasOptional(value, "reason", isString) &&
+    hasOptional(value, "confidence", isNumber) &&
+    hasOptional(value, "riskLevel", (item): item is RiskLevel => isOneOf(item, RISK_LEVELS)) &&
+    hasOptional(value, "requiresUserAck", isBoolean) &&
+    hasOptional(value, "sourceSlugs", isStringArray) &&
+    hasOptional(value, "evidencePreserved", isStringArray) &&
+    hasOptional(value, "blockedReasons", isStringArray) &&
+    hasOptional(value, "groupId", isString) &&
+    hasOptional(value, "applyStatus", (item): item is OrganizerDecisionApplyStatus =>
+      isOneOf(item, DECISION_APPLY_STATUSES),
+    ) &&
+    hasOptional(value, "applyError", isOrganizerReviewItem)
+  );
+}
+
+function isRejectionBuckets(value: unknown): value is RejectionBuckets {
+  return isRecord(value) && REJECTION_BUCKET_KEYS.every((key) => typeof value[key] === "number");
+}
+
+function isManualApplyState(value: unknown): value is OrganizerManualApplyState {
+  if (!isRecord(value)) return false;
+  const isNumber = (item: unknown): item is number => typeof item === "number";
+  return (
+    isOneOf(value.status, MANUAL_APPLY_STATUSES) &&
+    isStringArray(value.appliedDecisionKeys) &&
+    isStringArray(value.failedDecisionKeys) &&
+    hasOptional(value, "appliedAt", isNumber) &&
+    hasOptional(value, "selectedCount", isNumber) &&
+    hasOptional(value, "appliedCount", isNumber) &&
+    hasOptional(value, "warningCount", isNumber)
+  );
+}
+
+/** Runtime counterpart of OrganizeRunReportV4 for the persisted JSON boundary. */
+export function isOrganizeRunReportV4(value: unknown): value is OrganizeRunReportV4 {
+  if (!isRecord(value)) return false;
+  return (
+    value.version === ORGANIZE_RUN_REPORT_VERSION &&
+    isStringArray(value.clusterSummaries) &&
+    Array.isArray(value.reviewItems) &&
+    value.reviewItems.every(isOrganizerReviewItem) &&
+    Array.isArray(value.raw) &&
+    value.raw.every(
+      (item) =>
+        isRecord(item) && typeof item.clusterId === "string" && typeof item.text === "string",
+    ) &&
+    hasOptional(
+      value,
+      "safeDecisions",
+      (item): item is OrganizerSafeDecision[] =>
+        Array.isArray(item) && item.every(isOrganizerSafeDecision),
+    ) &&
+    hasOptional(value, "rejectionBuckets", isRejectionBuckets) &&
+    hasOptional(
+      value,
+      "compressionForecast",
+      (item): item is NonNullable<OrganizeRunReportV4["compressionForecast"]> =>
+        isRecord(item) &&
+        typeof item.from === "number" &&
+        typeof item.toMin === "number" &&
+        typeof item.toMax === "number",
+    ) &&
+    hasOptional(value, "manualApplyState", isManualApplyState)
+  );
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
@@ -92,18 +229,17 @@ export function createEmptyRunReport(): OrganizeRunReportV4 {
  *  degrades to a read-only legacy view of its summary strings. */
 export function readRunReport(run: MemoryOrganizeRun | null): OrganizeRunReport {
   const raw = run?.report;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     return { version: "legacy", clusterSummaries: [], reviewItems: [] };
   }
-  const record = raw as Record<string, unknown>;
-  if (record.version === ORGANIZE_RUN_REPORT_VERSION) {
-    return record as unknown as OrganizeRunReportV4;
+  if (isOrganizeRunReportV4(raw)) {
+    return raw;
   }
   // Legacy (pre-v4) blob: surface the human-readable strings, nothing else.
-  const notes = [...stringArray(record.reviewNotes)];
+  const notes = [...stringArray(raw.reviewNotes)];
   return {
     version: "legacy",
-    clusterSummaries: stringArray(record.clusterSummaries),
+    clusterSummaries: stringArray(raw.clusterSummaries),
     reviewItems: notes.map((message) => ({
       phase: "planning",
       kind: "review",

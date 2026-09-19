@@ -6,10 +6,14 @@ const controlsSource = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/SkillCategoryControls.tsx", import.meta.url),
   "utf8",
 );
-const hubSource = readFileSync(
-  new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
-  "utf8",
-);
+const hubSource = ["SkillsHubPage.tsx", "InstalledSkillsView.tsx"]
+  .map((file) =>
+    readFileSync(
+      new URL(`../../../agent-ui/src/pages/skills-hub/${file}`, import.meta.url),
+      "utf8",
+    ),
+  )
+  .join("\n");
 const importSource = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/SkillsImportView.tsx", import.meta.url),
   "utf8",
@@ -36,13 +40,23 @@ test("skill category navigation uses the shared standard Tabs components", () =>
   assert.doesNotMatch(controlsSource, /ToggleGroup/);
 });
 
+test("installed skill filtering renders directly without animated layout reordering", () => {
+  const installedSource = readFileSync(
+    new URL("../../../agent-ui/src/pages/skills-hub/InstalledSkillsView.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(installedSource, /motion\/react|LayoutGroup|LazyMotion|<m\.|layoutGroupId/);
+  assert.match(installedSource, /<div className=\{SKILL_LIST_GRID_CLASS\}>/);
+  assert.match(installedSource, /key=\{`\$\{skill.name\}-\$\{rootDir\}`\}/);
+});
+
 test("installed skill categories reuse the quiet store tabs with icons", () => {
-  assert.match(hubSource, /<StoreCategoryChips[\s\S]*value=\{installedCategory\}/);
+  assert.match(hubSource, /<StoreCategoryChips[\s\S]*value=\{category\}/);
   assert.doesNotMatch(hubSource, /appearance="outlined"/);
   assert.doesNotMatch(hubSource, /showIcons=\{false\}/);
   assert.match(controlsSource, /appearance === "outlined"/);
   assert.match(controlsSource, /showIcons \? <CategoryIcon/);
-  assert.match(controlsSource, /<Badge[\s\S]*h-4 min-w-4 rounded-full px-1/);
+  assert.match(controlsSource, /<Badge[\s\S]*size="filter-count"/);
   // Height lives in the base TabsTrigger now, so the chips must NOT pin their
   // own — that drift is what made every tab row a different size.
   assert.match(controlsSource, /shrink-0 gap-1 rounded-md px-2/);
@@ -72,7 +86,7 @@ test("primary and local-import navigation use standard Tabs without divider bord
 test("installed and local-import content keep stable scroll-area spacing", () => {
   assert.match(hubSource, /overflow-y-auto px-0\.5 pr-1 \[overflow-anchor:none\]/);
   assert.match(hubSource, /<div className="flex flex-col gap-3">/);
-  assert.match(importSource, /overflow-y-auto px-1\.5 pb-4 pt-1\.5/);
+  assert.match(importSource, /overflow-y-auto px-0\.5 pb-4 pr-1/);
   assert.match(importSource, /<div className="flex flex-col gap-3">/);
   assert.doesNotMatch(hubSource, /overflow-y-auto px-0\.5 pr-1 pt-1\.5/);
   assert.doesNotMatch(importSource, /sticky top-0[^\"]*(?:pb-1\.5|pt-1\.5)/);

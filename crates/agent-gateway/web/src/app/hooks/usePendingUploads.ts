@@ -1,6 +1,6 @@
 import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
-import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
+import type { ToastTone } from "@liveagent/ui/components/ui/toast-manager";
 import { t as translate } from "@liveagent/ui/i18n/index";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFilesWithStats } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -48,7 +48,7 @@ type UsePendingUploadsParams = {
   composerRef: RefObject<MentionComposerHandle | null>;
   // Upload feedback goes to the top-right toast stack, never into the
   // transcript area — a failed upload is not conversation output.
-  addNotify: (type: NotifyItem["type"], message: string) => void;
+  addNotify: (type: ToastTone, message: string) => void;
   /** 正文区拖入文件夹时的接管回调（挂载为附属目录）；未提供则忽略文件夹。 */
   onDropDirectories?: (directories: DroppedDirectory[]) => void;
   /**

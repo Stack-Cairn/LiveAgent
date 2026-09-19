@@ -43,7 +43,8 @@ export function TrajectoryRow(props: {
       aria-current={props.selected ? "true" : undefined}
       onClick={() => props.onSelect(record.index)}
       className={cn(
-        "flex h-[30px] w-full min-w-0 items-center gap-2 px-3 text-left text-[12px] transition-colors @max-[520px]:gap-1.5 @max-[520px]:px-2",
+        "flex h-30px w-full min-w-0 items-center gap-2 px-3",
+        "text-left text-xs transition-colors @max-[520px]:gap-1.5 @max-[520px]:px-2",
         "border-l-2 border-transparent hover:bg-muted/50",
         props.selected && "border-primary bg-muted/70",
         props.focused && !props.selected && "bg-muted/40",
@@ -53,7 +54,7 @@ export function TrajectoryRow(props: {
     >
       <span
         className={cn(
-          "shrink-0 rounded px-1.5 py-px font-medium text-[10px] tracking-wide",
+          "shrink-0 rounded px-1.5 py-px font-medium text-tiny tracking-wide",
           record.isError ? "bg-red-500/15 text-red-600 dark:text-red-300" : KIND_BADGE[record.kind],
         )}
       >
@@ -80,12 +81,12 @@ export function TrajectoryRow(props: {
       )}
 
       {record.status === "running" && (
-        <span className="shrink-0 text-[10px] text-muted-foreground">
+        <span className="shrink-0 text-tiny text-muted-foreground">
           {t("trajectory.status.running")}
         </span>
       )}
 
-      <span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground @max-[520px]:w-12 @max-[520px]:text-[11px]">
+      <span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground @max-[520px]:w-12 @max-[520px]:text-xs">
         {record.timeSeconds === null ? "" : formatTrajectorySeconds(record.timeSeconds, locale)}
       </span>
     </button>

@@ -234,6 +234,26 @@ test("useComposerStt starts permission, capture, then cloud open and drains FIFO
   assert.equal(result.state, "recognizing");
 });
 
+test("missing provider configuration uses the dedicated guidance callback without opening STT", async () => {
+  const harness = createHarness();
+  const errors = [];
+  let configurationRequired = 0;
+  const result = harness.render({
+    providerConfigured: false,
+    onError: (message) => errors.push(message),
+    onConfigurationRequired: () => {
+      configurationRequired += 1;
+    },
+  });
+
+  await result.toggle();
+  await settle();
+
+  assert.equal(configurationRequired, 1);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(harness.calls, []);
+});
+
 test("stop halts capture, sends four 100 ms tail chunks, then finishes transport", async () => {
   const harness = createHarness();
   let result = harness.render();

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
@@ -102,6 +103,47 @@ function nativeDragTo(viewport, ...tops) {
     });
   }
 }
+
+test("conversation-switch cleanup preserves the outgoing viewport before it is saved", () => {
+  const source = readFileSync(new URL("../../src/pages/ChatPage.tsx", import.meta.url), "utf8");
+  const body = source.match(/function resetVisibleTransientState\([^\n]*\) \{([\s\S]*?)\n  \}/)?.[1];
+  assert.ok(body);
+  const { root, captured } = mount();
+  const calls = [];
+  const reset = new Function("targetConversationId", "currentConversationIdRef", "composerRef",
+    "setPendingUploadsForConversation", "setErrorMessage", "setHookWarning", "scrollFollowRef", body);
+  env.act(() => {
+    captured.handle.restoreFollowing(false);
+    captured.viewport.scrollTop = 520;
+    reset("a", { current: "a" }, { current: { clear: () => calls.push("clear") } },
+      () => {}, () => {}, () => {}, { current: {
+        ...captured.handle,
+        saveReadingPosition: () => calls.push("snapshot"),
+      } });
+  });
+  assert.deepEqual(calls, ["snapshot", "clear"]);
+  assert.equal(captured.viewport.scrollTop, 520, "cleanup must not overwrite the position saved on unmount");
+  assert.equal(captured.handle.isFollowing(), false);
+  env.act(() => root.unmount());
+});
+
+test("restoring a reading position cancels follow without requiring a wheel gesture", () => {
+  const { root, captured } = mount();
+  env.act(() => {
+    captured.handle.restoreFollowing(false);
+    captured.viewport.scrollTop = 520;
+    captured.viewport.dispatchEvent(new env.dom.window.Event("scroll"));
+  });
+  assert.equal(captured.following, false);
+  assert.equal(captured.viewport.scrollTop, 520);
+  env.act(() => {
+    captured.handle.restoreFollowing(true);
+    captured.handle.stickToBottom();
+  });
+  assert.equal(captured.following, true);
+  assert.equal(captured.viewport.scrollTop, 1600);
+  env.act(() => root.unmount());
+});
 
 test("a mouse press inside the native scrollbar gutter lets a thumb drag detach follow", () => {
   const { root, captured } = mount();

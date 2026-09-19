@@ -97,6 +97,7 @@ export interface VirtualizerOptions<TScrollElement extends Element | Window, TIt
      * scroll direction so compositor-async scrolling reveals pre-rendered
      * content. 0 disables.
      */
+    overscanPx?: number;
     directionalOverscanPx?: number;
     scrollEndThreshold?: number;
     isScrollingResetDelay?: number;
@@ -136,6 +137,8 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
     shouldAdjustScrollPositionOnItemSizeChange: undefined | ((item: VirtualItem, delta: number, instance: Virtualizer<TScrollElement, TItemElement>) => boolean);
     elementsCache: Map<Key, TItemElement>;
     private now;
+    private resizeBatchDepth;
+    private resizeBatchChanged;
     private observer;
     range: {
         startIndex: number;

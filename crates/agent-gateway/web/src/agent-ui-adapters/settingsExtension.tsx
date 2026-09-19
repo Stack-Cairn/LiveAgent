@@ -11,7 +11,7 @@ export function createSettingsExtension(props: SettingsPageProps): {
 } {
   return {
     surface: "web",
-    iconClassName: "h-4 w-4",
+    iconClassName: "size-4",
     slots: {},
     sections: [
       {
@@ -20,7 +20,7 @@ export function createSettingsExtension(props: SettingsPageProps): {
         groupOrder: 40,
         order: 30,
         labelKey: "settings.navAgentManagement",
-        icon: <MonitorSmartphone className="h-4 w-4" />,
+        icon: <MonitorSmartphone className="size-4" />,
         showSaveIndicator: false,
         render: () => <DevicesSection onDirectoryChanged={props.onAgentDirectoryChanged} />,
       },

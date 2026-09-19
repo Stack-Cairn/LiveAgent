@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { readStyleSource } from "../../../agent-ui/test-support/style-values.mjs";
 
 function readShared(path) {
   return readFileSync(new URL(`../../../agent-ui/src/${path}`, import.meta.url), "utf8");
@@ -9,7 +10,9 @@ function readShared(path) {
 
 const providersSectionSource = readShared("pages/settings/ProvidersSection.tsx");
 const modelPickerSource = readShared("pages/settings/modelPicker.tsx");
-const baseStylesSource = readShared("styles/base.css");
+const baseStylesSource = readStyleSource(
+  new URL("../../../agent-ui/src/styles/base.css", import.meta.url),
+);
 
 const popupPortalSources = [
   ["Select", readShared("components/ui/select.tsx")],
@@ -63,7 +66,8 @@ test("the shared model picker can render options without a collapsible group", (
 
 test("all shared popup primitives use the semantic popover layer", () => {
   for (const [name, source] of popupPortalSources) {
-    assert.match(source, /<\w+(?:Primitive)?\.Portal>/, `${name} should render through a Portal`);
+    // 允许 Portal 带属性（如 dropdown-menu 的 container={portalContainer}）。
+    assert.match(source, /<\w+(?:Primitive)?\.Portal(?:\s[^>]*)?>/, `${name} should render through a Portal`);
     assert.match(source, /className="layer-popover(?: isolate)?"/, `${name} should use layer-popover`);
   }
 });

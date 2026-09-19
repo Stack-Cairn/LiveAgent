@@ -3,10 +3,12 @@ import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import {
   type ForwardedRef,
   forwardRef,
+  memo,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -25,6 +27,7 @@ import { buildQueuedChatTurnPreview } from "../queue/chatTurnQueue";
 import { ChatTranscript } from "../transcript/ChatTranscript";
 import {
   type ConversationPaneRegistration,
+  sameConversationPaneRegistration,
   useConversationPaneRegistration,
 } from "./ConversationPaneHostEnvironment";
 import { ConversationSurface } from "./ConversationSurface";
@@ -63,7 +66,7 @@ function PendingConversationPaneHost() {
   return <PaneLoadingSkeleton label={t("chat.loadingConversation")} />;
 }
 
-function RegisteredRestorableConversationPaneHost(props: {
+function RegisteredRestorableConversationPaneHostContent(props: {
   registration: ConversationPaneRegistration;
   title?: string;
   deferHydration: boolean;
@@ -112,7 +115,12 @@ function RegisteredRestorableConversationPaneHost(props: {
       return <PaneLoadingSkeleton label={t("chat.loadingConversation")} />;
     }
     return (
-      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-6 text-center">
+      <div
+        className={cn(
+          "flex size-full min-h-0 flex-col items-center justify-center gap-3 p-6",
+          "text-center",
+        )}
+      >
         <p className="text-sm text-muted-foreground">{title || t("chat.pendingTitle")}</p>
         <button
           type="button"
@@ -139,7 +147,7 @@ export const ConversationPaneHost = forwardRef<
   return <RegisteredConversationPaneHost ref={forwardedRef} registration={registration} />;
 });
 
-const RegisteredConversationPaneHost = forwardRef<
+const RegisteredConversationPaneHostContent = forwardRef<
   ConversationPaneHostHandle,
   { registration: ConversationPaneRegistration }
 >(function RegisteredConversationPaneHost(props, forwardedRef) {
@@ -304,3 +312,17 @@ const RegisteredConversationPaneHost = forwardRef<
     />
   );
 });
+
+// Context changes reach the small lookup wrapper; unchanged bindings stop here.
+const RegisteredRestorableConversationPaneHost = memo(
+  RegisteredRestorableConversationPaneHostContent,
+  (previous, next) =>
+    sameConversationPaneRegistration(previous.registration, next.registration) &&
+    previous.title === next.title &&
+    previous.deferHydration === next.deferHydration &&
+    previous.forwardedRef === next.forwardedRef,
+);
+const RegisteredConversationPaneHost = memo(
+  RegisteredConversationPaneHostContent,
+  (previous, next) => sameConversationPaneRegistration(previous.registration, next.registration),
+);

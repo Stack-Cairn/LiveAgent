@@ -52,7 +52,8 @@ export function useSettingsOverlay() {
   );
 
   const openSettingsOverlay = useCallback(() => {
-    setOverlay("entering");
+    // Retargeting an already visible page must not expose the chat underneath.
+    setOverlay((current) => (current === "closed" ? "entering" : "open"));
     armFallback("entering", "open");
 
     if (typeof document === "undefined" || document.visibilityState !== "visible") {

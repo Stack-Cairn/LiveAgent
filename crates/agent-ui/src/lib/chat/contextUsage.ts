@@ -364,10 +364,19 @@ function roundReplaysReasoning(
   });
 }
 
+// 无锚点会话的倒扫在流式期逐帧执行；轮次对象两端都按不可变更新替换，完整
+// 估算按轮身份缓存后，每帧只重估真正变化的活跃尾轮。onlyToolResults
+// 路径每次扫描至多走一轮（锚点轮），不缓存。
+const roundTokenCache = new WeakMap<object, number>();
+
 function estimateRoundTokens(
   round: NonNullable<ContextUsageScanItem["rounds"]>[number],
   onlyToolResults: boolean,
 ): number {
+  if (!onlyToolResults) {
+    const cached = roundTokenCache.get(round);
+    if (cached !== undefined) return cached;
+  }
   let assistantUnits = 0;
   let toolResultTokens = 0;
   for (const block of round.blocks ?? []) {
@@ -394,7 +403,10 @@ function estimateRoundTokens(
     }
   }
   if (onlyToolResults) return toolResultTokens;
-  return (assistantUnits > 0 ? messageTokensFromUnits(assistantUnits) : 0) + toolResultTokens;
+  const totalTokens =
+    (assistantUnits > 0 ? messageTokensFromUnits(assistantUnits) : 0) + toolResultTokens;
+  roundTokenCache.set(round, totalTokens);
+  return totalTokens;
 }
 
 // "有效 token 计数"的两端单一校验口径（floor 且必须是有限正数）。
@@ -519,6 +531,9 @@ export type DeriveContextUsageOptions = {
   unanchoredFixedTokens?: number;
 };
 
+// 用户消息项两端同样不可变；正文 + 附件元数据的估算按项身份缓存，
+// 避免无锚点倒扫每帧重估全部历史用户消息。
+const userItemTokenCache = new WeakMap<object, number>();
 /**
  * 倒扫 transcript 求当前上下文占用：最近一个 assistant 轮次的真实 API usage
  * 经 assistantAnchorTokens 现算为锚点（已含该轮之前的 system/tools/历史与
@@ -545,16 +560,19 @@ export function deriveContextUsageTokens(
         : estimatedTokens + trailingTokens + unanchoredFixedTokens;
     }
     if (item.kind === "user") {
-      let units = typeof item.text === "string" ? estimateTextTokenUnits(item.text.trim()) : 0;
-      // 附件按元数据序列化估算（路径/文件名/规模等即运行时注入的指令行量级；
-      // 原生 base64 附件路径下这是下界）。不计会让"检查点后发大批附件"的
-      // 空闲读数两端一致偏低，且纯附件消息此前完全计零。
-      for (const attachment of item.attachments ?? []) {
-        units += stringifiedTokenUnits(attachment);
+      let tokens = userItemTokenCache.get(item);
+      if (tokens === undefined) {
+        let units = typeof item.text === "string" ? estimateTextTokenUnits(item.text.trim()) : 0;
+        // 附件按元数据序列化估算（路径/文件名/规模等即运行时注入的指令行量级；
+        // 原生 base64 附件路径下这是下界）。不计会让「检查点后发大批附件」的
+        // 空闲读数两端一致偏低，且纯附件消息此前完全计零。
+        for (const attachment of item.attachments ?? []) {
+          units += stringifiedTokenUnits(attachment);
+        }
+        tokens = units > 0 ? messageTokensFromUnits(units) : 0;
+        userItemTokenCache.set(item, tokens);
       }
-      if (units > 0) {
-        trailingTokens += messageTokensFromUnits(units);
-      }
+      trailingTokens += tokens;
       continue;
     }
     if (item.kind !== "assistant" || !item.rounds) continue;
@@ -591,6 +609,10 @@ export function deriveContextUsageTokens(
   return unanchoredTotal > 0 ? unanchoredTotal : undefined;
 }
 
+// 无锚点会话里锚点判定每帧全扫（roundThinkingTokenUnits 为 O(思维链字符)）；
+// 判定只依赖轮次自身与 minPrefixTokens，按轮身份缓存。
+const roundAnchorCache = new WeakMap<object, { minPrefixTokens: number; anchored: boolean }>();
+
 /** 倒扫能否落到 usage / 权威检查点。无锚点时 GUI 空闲应改信账本（完整消息含 thinkingSignature）。 */
 export function hasContextUsageUsageAnchor(
   items: readonly ContextUsageScanItem[],
@@ -606,19 +628,23 @@ export function hasContextUsageUsageAnchor(
     for (let roundIndex = item.rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
       const round = item.rounds[roundIndex];
       if (!round || round.meta?.contextRelevant === false) continue;
-      if (roundHasHostedSearch(round)) {
-        if (hostedSearchFollowUpTokens(round.meta?.usage, minPrefixTokens) !== undefined) {
-          return true;
-        }
-        continue;
+      const cached = roundAnchorCache.get(round);
+      let anchored: boolean;
+      if (cached && cached.minPrefixTokens === minPrefixTokens) {
+        anchored = cached.anchored;
+      } else {
+        anchored = roundHasHostedSearch(round)
+          ? // input/totalTokens 是搜索全文聚合值；热缓存时 cacheRead+output 才可信。
+            hostedSearchFollowUpTokens(round.meta?.usage, minPrefixTokens) !== undefined
+          : assistantAnchorTokens({
+              usage: round.meta?.usage,
+              stopReason: round.meta?.stopReason,
+              thinkingTokenUnits: roundThinkingTokenUnits(round),
+              replayReasoning: roundReplaysReasoning(round),
+            }) !== undefined;
+        roundAnchorCache.set(round, { minPrefixTokens, anchored });
       }
-      const anchorTokens = assistantAnchorTokens({
-        usage: round.meta?.usage,
-        stopReason: round.meta?.stopReason,
-        thinkingTokenUnits: roundThinkingTokenUnits(round),
-        replayReasoning: roundReplaysReasoning(round),
-      });
-      if (anchorTokens !== undefined) return true;
+      if (anchored) return true;
     }
   }
   return false;

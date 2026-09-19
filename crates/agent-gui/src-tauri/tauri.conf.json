@@ -16,8 +16,8 @@
         "title": "",
         "width": 1400,
         "height": 800,
-        "minWidth": 1200,
-        "minHeight": 720,
+        "minWidth": 960,
+        "minHeight": 600,
         "visible": false,
         "backgroundThrottling": "disabled"
       }

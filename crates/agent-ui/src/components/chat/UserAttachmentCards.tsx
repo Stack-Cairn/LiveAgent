@@ -1,3 +1,4 @@
+import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useMemo, useState } from "react";
 import { useLocale } from "../../i18n";
 import { formatUploadedFileSize, type PendingUploadedFile } from "../../lib/chat/uploadedFiles";
@@ -8,12 +9,8 @@ import {
 import { cn } from "../../lib/shared/utils";
 import { X } from "../IconSet";
 import { getUploadedFileTypeIcon } from "./fileTypeIcons";
-import {
-  ImagePreview,
-  ImagePreviewActionFeedback,
-  ImagePreviewContextMenu,
-  type ImagePreviewSlide,
-} from "./ImagePreview";
+import { ImagePreview, type ImagePreviewSlide } from "./ImagePreview";
+import { ImagePreviewActionFeedback, ImagePreviewContextMenu } from "./ImagePreviewMenu";
 
 type ImagePreviewMode = "absolutePath" | "imageKind";
 
@@ -68,7 +65,6 @@ function UserImageAttachmentCard(props: {
   } = props;
   const [previewOpen, setPreviewOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [imageLoadState, setImageLoadState] = useState<{
     src: string | null;
     status: "loaded" | "error";
@@ -91,19 +87,23 @@ function UserImageAttachmentCard(props: {
     <div
       title={file.relativePath}
       className={cn(
-        "group relative overflow-hidden rounded-xl border border-white/60 bg-white/75 dark:border-white/[0.12] dark:bg-white/[0.06]",
-        compact ? "min-w-0 basis-[calc(33.333%-5.33px)] grow" : "w-full max-w-[280px]",
+        "group relative overflow-hidden",
+        "rounded-xl border border-white/60 bg-white/75 dark:border-white/[0.12] dark:bg-white/[0.06]",
+        compact ? "min-w-0 basis-third-minus-gap grow" : "w-full max-w-280px",
       )}
     >
       {onRemove ? (
         <button
           type="button"
           onClick={() => onRemove(file.relativePath)}
-          className="absolute top-1.5 right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/30 text-white/90 opacity-0 backdrop-blur-sm transition-all hover:bg-black/45 group-hover:opacity-100"
+          className={cn(
+            "absolute top-1.5 right-1.5 z-10 flex size-5 items-center justify-center",
+            "rounded-full bg-black/30 text-white/90 opacity-0 backdrop-blur-sm transition-all hover:bg-black/45 group-hover:opacity-100",
+          )}
           aria-label={removeLabel ?? file.fileName}
           title={removeLabel}
         >
-          <X className="h-3 w-3" />
+          <X className="size-3" />
         </button>
       ) : null}
       {imageSrc ? (
@@ -115,39 +115,41 @@ function UserImageAttachmentCard(props: {
                 compact ? "h-28" : "h-36",
               )}
             >
-              <FallbackIcon className="h-5 w-5" />
+              <FallbackIcon className="size-5" />
             </div>
           ) : (
-            <button
-              type="button"
-              className={cn(
-                "block w-full overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45",
-                canPreview ? "cursor-zoom-in" : "cursor-default",
-              )}
-              aria-label={labeledPreview}
-              title={labeledPreview}
+            <ImagePreviewContextMenu
+              slide={previewSlide}
               disabled={!canPreview}
-              onClick={() => setPreviewOpen(true)}
-              onContextMenu={(event) => {
-                if (!canPreview) return;
-                event.preventDefault();
-                setContextMenu({ x: event.clientX, y: event.clientY });
-              }}
-            >
-              <img
-                src={imageSrc}
-                alt={file.fileName}
-                className={cn(
-                  "block w-full bg-black/[0.02] dark:bg-white/5",
-                  compact ? "h-28 object-cover" : "max-h-56 object-contain",
-                )}
-                onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
-                onError={() => {
-                  setImageLoadState({ src: imageSrc, status: "error" });
-                  setContextMenu(null);
-                }}
-              />
-            </button>
+              onOpen={() => setPreviewOpen(true)}
+              onActionError={setActionError}
+              trigger={
+                <button
+                  type="button"
+                  className={cn(
+                    "block w-full overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45",
+                    canPreview ? "cursor-zoom-in" : "cursor-default",
+                  )}
+                  aria-label={labeledPreview}
+                  title={labeledPreview}
+                  disabled={!canPreview}
+                  onClick={() => setPreviewOpen(true)}
+                >
+                  <img
+                    src={imageSrc}
+                    alt={file.fileName}
+                    className={cn(
+                      "block w-full bg-black/[0.02] dark:bg-white/5",
+                      compact ? "h-28 object-cover" : "max-h-56 object-contain",
+                    )}
+                    onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
+                    onError={() => {
+                      setImageLoadState({ src: imageSrc, status: "error" });
+                    }}
+                  />
+                </button>
+              }
+            />
           )}
           {previewOpen ? (
             <ImagePreview
@@ -155,15 +157,6 @@ function UserImageAttachmentCard(props: {
               slides={previewSlides}
               closeLabel={closePreviewLabel}
               onClose={() => setPreviewOpen(false)}
-            />
-          ) : null}
-          {contextMenu && previewSlide ? (
-            <ImagePreviewContextMenu
-              slide={previewSlide}
-              position={contextMenu}
-              onOpen={() => setPreviewOpen(true)}
-              onClose={() => setContextMenu(null)}
-              onActionError={setActionError}
             />
           ) : null}
           <ImagePreviewActionFeedback
@@ -178,24 +171,22 @@ function UserImageAttachmentCard(props: {
             compact ? "h-28" : "h-36",
           )}
         >
-          <div
-            className={
-              isLoading
-                ? "h-16 w-16 animate-pulse rounded-xl bg-black/5 dark:bg-white/10"
-                : "flex h-10 w-10 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/10"
-            }
-          >
-            {isLoading ? null : <FallbackIcon className="h-5 w-5" />}
-          </div>
+          {isLoading ? (
+            <Skeleton className="size-16 rounded-xl bg-black/5 dark:bg-white/10" />
+          ) : (
+            <div className="flex size-10 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/10">
+              <FallbackIcon className="size-5" />
+            </div>
+          )}
         </div>
       )}
       <div className="flex items-center gap-1.5 px-2.5 py-1.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+          <div className="truncate text-xs font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
             {file.fileName}
           </div>
         </div>
-        <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
+        <span className="shrink-0 text-tiny tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </span>
       </div>
@@ -216,18 +207,25 @@ function UserFileAttachmentCard(props: {
     <div
       title={file.relativePath}
       className={cn(
-        "group relative flex items-center gap-2 rounded-xl border border-white/60 bg-white/75 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:border-white/[0.12] dark:bg-white/[0.06]",
-        compact ? "min-w-0 basis-[calc(33.333%-5.33px)] grow" : "w-full",
+        "group relative flex items-center gap-2",
+        "rounded-xl border border-white/60 bg-white/75 px-2.5 py-2 text-left shadow-ui-userattachmentcards-20",
+        "transition-shadow hover:shadow-ui-userattachmentcards-21 dark:border-white/[0.12] dark:bg-white/[0.06]",
+        compact ? "min-w-0 basis-third-minus-gap grow" : "w-full",
       )}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-black/[0.03] to-black/[0.06] dark:from-white/[0.06] dark:to-white/[0.1]">
-        <TypeIcon className="h-4.5 w-4.5" />
+      <div
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b",
+          "from-black/[0.03] to-black/[0.06] dark:from-white/[0.06] dark:to-white/[0.1]",
+        )}
+      >
+        <TypeIcon className="size-4.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+        <div className="truncate text-xs font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
           {file.fileName}
         </div>
-        <div className="mt-0.5 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
+        <div className="mt-0.5 text-tiny tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </div>
       </div>
@@ -235,11 +233,15 @@ function UserFileAttachmentCard(props: {
         <button
           type="button"
           onClick={() => onRemove(file.relativePath)}
-          className="absolute top-1/2 right-1.5 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-[hsl(var(--chat-user-fg)/0.3)] opacity-0 transition-all hover:bg-black/5 hover:text-[hsl(var(--chat-user-fg)/0.6)] group-hover:opacity-100 dark:hover:bg-white/10"
+          className={cn(
+            "absolute top-1/2 right-1.5 z-10 flex size-5 -translate-y-1/2 items-center",
+            "justify-center rounded-full text-[hsl(var(--chat-user-fg)/0.3)] opacity-0 transition-all",
+            "hover:bg-black/5 hover:text-[hsl(var(--chat-user-fg)/0.6)] group-hover:opacity-100 dark:hover:bg-white/10",
+          )}
           aria-label={removeLabel ?? file.fileName}
           title={removeLabel}
         >
-          <X className="h-3 w-3" />
+          <X className="size-3" />
         </button>
       ) : null}
     </div>

@@ -860,7 +860,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       // Queue-drained auto-starts are not a user gesture: the reader may be
       // deep in history when the previous run finishes, and force-pinning
       // for the next queued turn would yank them to the bottom. Manual sends
-      // still pin (here and via resetVisibleTransientState below).
+      // still pin here; transient-state cleanup must never move the viewport.
       if (isConversationVisible() && !overrides?.preserveComposerOnStart) {
         scrollFollowRef.current?.stickToBottom();
       }

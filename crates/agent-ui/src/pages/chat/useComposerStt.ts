@@ -42,6 +42,8 @@ export function useComposerStt(options: {
   hidden?: boolean;
   /** 错误上报回调（如麦克风不可用）；由宿主决定展示方式（toast 等）。 */
   onError?: (message: string) => void;
+  /** 供应商缺少必要配置；与运行时错误分流，供界面展示配置引导。 */
+  onConfigurationRequired?: () => void;
 }) {
   const {
     composerRef,
@@ -52,6 +54,7 @@ export function useComposerStt(options: {
     sessionKey,
     hidden = false,
     onError,
+    onConfigurationRequired,
   } = options;
   const [state, setState] = useState<SttUiState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -241,7 +244,8 @@ export function useComposerStt(options: {
       const message = "STT供应商配置不完整";
       setError(message);
       setState("error");
-      onError?.(message);
+      if (onConfigurationRequired) onConfigurationRequired();
+      else onError?.(message);
       return;
     }
     setError(null);
@@ -298,6 +302,7 @@ export function useComposerStt(options: {
     disabled,
     fail,
     onError,
+    onConfigurationRequired,
     onEvent,
     provider,
     providerConfigured,

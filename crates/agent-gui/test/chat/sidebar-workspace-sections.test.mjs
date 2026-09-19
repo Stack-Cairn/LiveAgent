@@ -78,9 +78,12 @@ const { act, createRoot } = env;
 window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 HTMLElement.prototype.scrollTo = () => {};
 HTMLElement.prototype.scrollIntoView = function () { scrolls.push(this.dataset.conversationId); };
-const { ChatHistorySidebar } = env.loadModule(
+const { ChatHistorySidebar: SidebarContentUnderTest } = env.loadModule(
   "@liveagent/ui/components/chat/ChatHistorySidebar.tsx",
 );
+const { SidebarProvider } = env.loadModule("@liveagent/ui/components/ui/sidebar.tsx");
+function ChatHistorySidebar(props) { return React.createElement(SidebarProvider, { open: props.isOpen }, React.createElement(SidebarContentUnderTest, props)); }
+
 const items = Array.from({ length: 100 }, (_, index) => ({
   id: String(index),
   title: String(index),
@@ -137,8 +140,8 @@ test("pinned and workspace sections collapse independently and only workspace ac
   props.onProjectsCollapsedChange = (collapsed) => { props = { ...props, projectsCollapsed: collapsed }; render(); };
   try {
     await act(async () => render());
-    const pinned = container.querySelector('section[aria-label="chat.pinnedSection"]');
-    const workspace = container.querySelector('section[aria-label="chat.workspaceSection"]');
+    const pinned = container.querySelector('[data-slot="sidebar-group"][aria-label="chat.pinnedSection"]');
+    const workspace = container.querySelector('[data-slot="sidebar-group"][aria-label="chat.workspaceSection"]');
     assert.equal(pinned.parentElement, workspace.parentElement);
     assert.equal(pinned.closest('[data-workspace-folder-drop-zone]'), null);
     assert.equal(workspace.hasAttribute('data-workspace-folder-drop-zone'), true);

@@ -1,0 +1,247 @@
+# UI 样式变量
+
+样式值集中管理；字号按已确认的 Tailwind 标准档位收敛。桌面 GUI 和 Gateway WebUI
+都通过共享 `base.css` 引入 `crates/agent-ui/src/styles/tokens.css`。
+
+## Tailwind v4 用法
+
+使用 CSS 中的 `@theme` 注册工具类，不使用 `tailwind.config.js`。
+两端入口用 `@plugin` 加载 typography，用 `@source` 声明依赖包的扫描范围，
+用 `@custom-variant dark` 保留原来的暗色选择器。
+
+```css
+@theme {
+  --spacing: 0.25rem;
+  --spacing-18px: 18px;
+  --text-tiny: 0.625rem;
+}
+```
+
+```tsx
+<div className="py-2 gap-3 text-xs">标准 Tailwind 尺度</div>
+<div className="py-1px h-18px text-sm">保留原来的特殊尺寸</div>
+```
+
+宽高值和变体前缀完全相同时使用 `size-*`，例如 `h-4 w-4` 合并为 `size-4`，
+`web:max-820:h-32px web:max-820:w-32px` 合并为 `web:max-820:size-32px`。
+不同断点、状态或条件分支下的宽高不能跨条件合并。
+
+`py-2` 等标准工具类继续通过 `--spacing` 管理；已有的 Tailwind 默认色板、
+字号和其他尺度直接使用 Tailwind 提供的变量。特殊值才新增代号，
+普通字号使用 `text-xs` 到 `text-5xl`，仅为紧凑徽标、计数和键帽保留
+`text-tiny`（0.625rem）。标准字号采用默认行高；已有显式 `leading-*` 继续控制行高。
+
+区域和弹层在 `base.css` 中按 `--zone-font-scale` 重定义标准字号，
+原 `text-scaled-*px` 消费方也直接使用标准类。Markdown 行内代码及公式保留
+相对段落字号的 `em`。xterm 的数值像素字号属于终端 API，不参与 UI 字号归并。
+安全区、转录宽度、弹窗尺寸继续采用具名表达式。
+
+普通 CSS 和内联样式可以引用同一组变量，例如 `var(--spacing-18px)`。
+颜色、阴影、圆角、行高和动画时长保留原数值；亮暗主题的原始颜色通道也在
+共享文件中。既有语义颜色映射通过 `@reference` 引入 `semantic-colors.css`，保持旧配置
+只展开映射、不额外导出颜色变量的行为。
+
+响应式条件、比例、零值、SVG 路径及运行时测量和布局计算保持原样。
+`@media` 条件不能直接使用 CSS 自定义属性。此次不改交互逻辑或组件结构。
+
+新增尺寸类时同步检查 `cn()` 的类名合并：字号不能被识别成颜色，阴影大小
+不能被识别成阴影颜色。`style-theme.test.mjs` 覆盖 CSS 编译和这些覆盖关系。
+
+## 单处使用的样式
+
+仅在一个标签消费的布局、字号、颜色和动画类，直接写成该标签的 Tailwind
+工具类。保留数值和原有条件，例如 `text-sm`、`animate-mention-popup-enter`
+和 `motion-reduce:animate-none!`。动画变量与关键帧统一在 `animations.css` 管理；阴影、网格等表达式继续在
+`tokens.css` 的 `@theme inline` 中集中管理。
+
+共享组件里的 `web:` 只匹配 Gateway 的 HTML 标记，`desktop:` 匹配桌面环境。
+`max-820:` 等变体保留原 CSS 的 `max-width: 820px`（包括边界），按断点从大到小
+注册；它们不替换已有的标准 Tailwind 响应式类。
+
+迁移时检查 CSS 层叠：原来未分层的规则可能覆盖组件工具类，改写后需保留同样
+的优先级。少数 `!` 用于继续覆盖仍存在的全局按钮样式或共享组件默认样式。
+多处消费的视觉类先评估是否适合组件变体：相同标签和职责可合并；仅共享动画、
+标签与交互不同的节点直接复用具名动画工具类。脚本定位类、第三方生成内容、
+跨元素规则和复杂绘制可继续保留 CSS。
+
+## 等价值和非 CSS 调用方
+
+动画时长只使用毫秒 token，例如 `--ui-duration-120ms`；`0.12s` 和 `120ms`
+不再分别维护。完全相同的颜色原语共用一个值，阴影、渐变和 API 调色板引用它。
+不同语义角色仍可以有名称，但值通过引用共用原语；不把相近颜色近似合并；字号统一使用 rem 档位。
+
+动画曲线通过 `--ease-*` 管理，标签使用 `ease-ui-enter` 等具名类。
+Web Animations 的 `easing` 和 xterm 的颜色解析器不接受 CSS 变量表达式，
+调用前必须通过 `getComputedStyle` 取得实际值。终端透明边线保留八位十六进制值。
+
+`touch-primary:` 保留原来的 `(hover: none), (pointer: coarse)` 条件；
+它与 `no-hover:` 的 `any-hover: none` 含义不同，分别服务原有的触屏行为。
+
+## Common CSS 加载组件（2026-09-10）
+
+- `Skeleton` 的 `shimmer` / `pulse` 变体分别沿用原闪光和脉冲效果。
+- `LoadingSurface` 的 `hero` / `skeleton` 变体集中加载容器的边框、渐变和伪元素；
+  `LoadingTrack` 与 `FrostSpinner` 复用进度装饰及十二段旋转指示器。
+- 组件仍输出原来的 div/span/i；调用方保留尺寸、子元素和业务属性。加载组件不接管
+  请求、可见性、状态切换或事件。`className` 经 `cn` 合并，渐变与背景色分别处理。
+- 动画表达式和关键帧统一在 `animations.css` 管理，通过 `@theme inline` 的
+  `--animate-*` 暴露工具类。
+  隐藏文档状态、减少动态效果、脉冲延迟及退出动画继续按原条件生效。
+- 原 CSS 的直接 HSL alpha 颜色使用 `--color-hsl-*` 精确映射，不能机械替换成
+  `/透明度` 工具类：当前 Tailwind 输出的 Oklab 混色表达式与原 HSL 表达式不同。
+  标准 Tailwind 类仍正常使用；这里只保留被迁移规则原本的色彩计算方式。
+
+## 动画统一入口
+
+`crates/agent-ui/src/styles/animations.css` 集中维护两端的 `--animate-*` 与
+`@keyframes`，由共享 `base.css` 在 `tokens.css` 后导入。组件继续使用
+`animate-hub-panel-enter` 等具名类，时长和曲线继续引用 `tokens.css` 的原语。
+
+关键帧保留原来的层级（包括 `@theme inline`、`@layer base/components` 和未分层定义），
+不因集中存放而统一曲线、时长、位移或延迟。相似效果只有参数完全一致时才考虑合并。
+`data-state`、减少动态效果、隐藏文档和跨元素状态选择器属于消费条件，仍放在原标签
+或对应样式规则中。今后新增动画定义进入此文件，不再散落到各页面 CSS。
+
+## 组件复用与防回退（2026-09-10）
+
+- 筛选页签使用 `TabsList variant="filter"`，计数徽标使用 `Badge size="filter-count"`。
+  Trigger 的现有密度、选中态和轮廓差异仍由调用方保留。
+- `EmptyState` 的 `workspace` / `settings` 只负责原有空态布局；`StepMarker` 与
+  `ChoiceCard` 只复用原 div/button 的样式。文案、请求状态、选择逻辑和事件仍归页面。
+- 确认弹层和标签 Tooltip 共用 `animations.css` 的状态规则，通过各自的距离、进入和
+  退出时长参数保留差异。检查变量引用时也要覆盖关键帧、脚本和跨端消费。
+- 阴影、背景图、drop-shadow 的 Tailwind 合并名称登记在
+  `style-token-names.generated.json`，由共享 UI 的契约测试核对其与 `tokens.css` 一致。
+  `cn()` 直接消费登记表，避免用组件名称前缀猜测工具类类型。
+
+## 设置与配置表单组合
+
+共享设置、模型配置和 MCP 表单优先复用
+`components/settings/FormField.tsx`：
+
+- `FormField` 只输出一个 div；默认沿用 `space-y-2`，`density="compact"`
+  沿用 `space-y-1.5`。列跨度、外边距等页面布局仍由调用方提供。
+- `FormFieldLabel` 复用现有 `Label`；默认保留 muted 文字，`size="compact"`
+  保留小号文字。`htmlFor`、ref 和其他原生属性继续透传。
+- `FormFieldDescription` 沿用 p 标签及 `text-xs leading-5 text-muted-foreground`。
+  其他行高、颜色或错误提示没有强行并成这一档。
+- 标签、控件、说明通过 children 组合；ID、`aria-describedby`、校验、受控值、事件、
+  加载和保存状态继续由业务组件管理，不自动生成关联或额外 DOM。
+- `SettingsSurface` 集中普通设置分组与 CUA 步骤卡片相同的表面样式。
+  `shadow-settings-surface` 沿用原阴影数值；不同表面的阴影不近似合并。
+
+现有 `SettingsRow`、`SettingsChoiceRow`、`DialogActions` 和基础输入控件继续复用。
+不要仅因其他结构也使用相同间距，就把工具栏、标签操作行或整个页面套进 FormField。
+
+## 字号收敛（2026-09-11）
+
+普通界面统一使用 rem 字号，删除数值命名的 px/rem 字号及 `text-scaled-*px`。
+本次归并按下面的尺度执行；后续组件优先直接选择标准档位，不恢复半像素字号。
+
+| 原字号（px，rem 以 16px 根字号换算） | 工具类 |
+| --- | --- |
+| 8–10.5 | `text-tiny`（仅紧凑徽标、计数和键帽等小文字） |
+| 11–12.5 | `text-xs` |
+| 13–14.5 | `text-sm` |
+| 15–16 | `text-base` |
+| 17–18 | `text-lg` |
+| 20–21 | `text-xl` |
+| 22–26 | `text-2xl` |
+| 28 / 36 / 46 | `text-3xl` / `text-4xl` / `text-5xl` |
+
+这次是有意统一排版，并非逐像素等价替换。已有 `leading-*` 类和区域缩放入口保留；
+未显式指定行高的标准字号使用 Tailwind 默认行高。`cn()` 继续遵循原来的覆盖顺序，
+调用方同时覆盖字号与行高时应一起传入，例如 `text-xs leading-none`。
+
+Markdown 行内代码和公式的局部比例直接写在消费处：`text-[0.9em]`、
+`text-[0.92em]`、`text-[1.04em]`，不注册全局字号变量。
+
+## rem 尺寸与字重去重（2026-09-11）
+
+rem 尺寸优先使用 Tailwind 标准尺度，例如 `h-10`、`w-8`、`max-w-48`、
+`px-2`。当前 `--spacing: 0.25rem`，替换保持原数值。局部特殊尺寸直接使用
+`min-w-[1.1rem]`、`translate-x-[0.15rem]`，不额外注册数值命名的 token。
+
+复杂布局、safe-area 和弹层尺寸的语义表达式继续集中管理；其中固定 rem 常量
+直接写在表达式中，不再经 `--spacing-1rem` 等变量间接引用。px 尺寸保留现状。
+
+字重使用 Tailwind 默认名称和变量（例如 `font-semibold`、`--font-weight-semibold`）。
+局部 450 字重使用 `font-[450]`；不再维护 `--font-weight-400/450/500/600/700`。
+
+## 状态颜色
+
+沿用 shadcn 主题模式：在 `:root/.dark` 定义颜色，通过 `@theme inline` 映射。
+错误反馈和危险操作统一使用 `destructive`，成功使用项目扩展 `success`；对应
+`*-foreground` 表示实心底色上的文字。浅底和边框透明度由 Badge 等共享变体管理。
+
+当前这两组变量是完整颜色值，直接 `var(...)`；其他旧 HSL 角色暂时仍需要
+`hsl(var(...))`。不要混用。映射、视觉变化与后续计划见 [UI 颜色迁移](ui-color-migration.md)。
+
+## 设置卡片与提示
+
+- `ChoiceCard` 的 `kind="command" | "http" | "prompt"` 和 `selected` 组合复用现有
+  类型卡片的选中/未选中表面。未指定 kind 的调用保留原有基础样式；按钮事件、disabled、
+  aria 属性仍由调用方传入，不自动推断产品语义。
+- `SettingsPanel` 承担折叠内容框（collapsible）和 MCP 配置分组（configuration）；
+  `SettingsHint` 保留 Provider 说明的 p 标签。其他面板不会因颜色接近而并入这些变体。
+- `SettingsNotice` 的 validation、warning、installation-warning、inline-error 分别
+  保留四种既有外观。组件只输出 div，不自动添加 alert/live region、图标或文本。
+- 系统设置下拉框的两个专用阴影写在 SettingsSelectTrigger/Content 的 Tailwind 类中，
+  继续引用原尺寸与主题变量；已移除对应全局编号 token 及类名合并注册项。
+
+## 颜色新增规则
+
+- 页面、文字、边框、成功和错误使用既有语义角色；亮暗取值在主题中定义。
+- 分类与装饰优先使用 Tailwind 标准色阶，不新增按 HEX/RGB/HSL 数值命名的变量。
+- 黑白透明色使用 `white/8`、`black/20` 等工具类；精确的非整数透明度可以
+  使用 `white/[0.055]`。不为每个 alpha 再注册全局颜色。
+- 阴影、渐变、遮罩内使用 `color-mix(in oklab, var(--color-black) 20%, transparent)`
+  等表达式，维护完整效果 token。黑色阴影不随意改成 foreground。
+- 终端等依赖库所需的精确颜色保留专用主题契约，例如透明色 `#00000000`。
+
+`pnpm check:ui-boundaries` 检查三处 UI 源码中的原始颜色声明。
+`scripts/legacy-ui-colors.json` 记录 tokens.css 剩余的历史名称，仅允许随迁移删减；
+不能通过扩大该清单添加新色。旧名称也不能在组件或宿主重新定义。
+新增语义变量应有明确消费者和用途；检查不限制正常的 Tailwind 色板及语义命名。
+
+## 快捷键立体键盘
+
+桌面设置页的键盘分为三个维护入口：
+
+- `ShortcutKeyboardLayout.ts`：平台键位、61/87/104 布局与几何尺寸。
+- `ShortcutKeyboard.tsx`：键帽、布局渲染及容器缩放；普通排版使用 Tailwind。
+- `ShortcutKeyboard.css`：局部主题、立体效果和状态变量，保持 ghk 前缀作用域。
+
+设置页继续负责快捷键录制、绑定、系统注册和分类映射，不再注入 CSS 字符串。
+四个分类的色值仅定义在 CSS 中，键帽、提示点和图例使用同一组 tone 类。
+键帽统一声明背景与阴影；状态按 bound、held、down、Enter 的顺序覆盖局部变量。
+当前配色仍引用历史原语，本批结构整理没有同时近似迁移彩色值。
+
+## 复制能力与反馈
+
+`lib/shared/clipboard.ts` 维护浏览器 Clipboard API 与 execCommand 兜底；返回是否成功，
+失败路径也清理临时 textarea。`components/ui/copy-button.tsx` 保留原导出作为兼容入口。
+原来只使用原生 Clipboard API 的分享和后台任务保持原有策略，不自动增加兜底或新提示。
+
+`useCopyFeedback` 只维护成功反馈、复位计时器和卸载清理。布尔值与列表项 ID 都可以作为
+反馈值；失败提示、关闭菜单、Tooltip 展示仍由调用方负责。连续复制会从最新成功操作
+重新计时，旧计时器不会清除新反馈。1200/1500/1600/2000ms 四档原时长集中在
+`COPY_FEEDBACK_DURATION`，不统一改成一个时长。
+
+设置里的 `SettingsCopyButton` 保留 CUA 的紧凑按钮和远程设置的普通按钮样式，CUA 的
+原 title 由调用方继续传入；确认复制成功后才展示勾选反馈。通用 CopyButton 继续保留
+原来的 Tooltip 和屏幕阅读器反馈，不把这种行为自动加到菜单项或设置按钮上。
+
+## 紧凑状态徽标
+
+使用 `<Badge size="compact" variant="success">` 表达紧凑成功状态，
+错误和中性状态分别使用 destructive、muted；这是无边框、圆角胶囊、10px 字号与单倍行高的规格。图标和文案由
+消费者传入，保留 title 等原生属性。普通 Badge 和 filter-count 用途保持不变；
+任务类型等分类标签不要仅因颜色相近就当作成功状态。
+
+## 设置页紧凑空状态
+
+`<EmptyState variant="settings" size="compact">` 用于保留 py-12/gap-3 的
+紧凑设置卡片；默认 settings 的 py-14/gap-4 不变。size 只调整 settings
+变体，不影响 workspace。内容与状态条件由消费者负责；已有块布局可用
+className="block" 保留段落 margin，避免与 flex gap 同时计入间距。

@@ -13,6 +13,7 @@ export function createHarness(options = {}) {
     anchorTo = "end",
     scrollAnchoring,
     directionalOverscanPx,
+    overscanPx,
     overscan = 0,
     scrollEndThreshold = 8,
   } = options;
@@ -92,6 +93,7 @@ export function createHarness(options = {}) {
     anchorTo,
     ...(scrollAnchoring !== undefined ? { scrollAnchoring } : {}),
     ...(directionalOverscanPx !== undefined ? { directionalOverscanPx } : {}),
+    ...(overscanPx !== undefined ? { overscanPx } : {}),
     scrollEndThreshold,
     initialOffset,
   });

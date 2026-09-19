@@ -3,8 +3,8 @@ import {
   Copy,
   GitBranch,
   Loader2,
-  Pencil,
   RefreshCw,
+  SquarePen,
   Undo2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "../../i18n/index";
@@ -30,7 +30,7 @@ function TranscriptTimestampLabel(props: { timestamp?: number; className?: strin
   return (
     <span
       className={cn(
-        "select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-[hsl(var(--muted-foreground)/0.7)]",
+        "select-none text-xs tabular-nums text-[hsl(var(--muted-foreground)/0.7)]",
         props.className,
       )}
     >
@@ -75,48 +75,58 @@ export function TranscriptUserMessageActions(
   const rewindTitle = rewind?.available ? t("chat.rewindCode") : t("chat.rewindUnavailable");
 
   return (
-    <div className="chat-user-bubble-actions mt-1 flex items-center justify-end gap-1.5">
+    <div className="mt-1 flex items-center justify-end gap-1.5 web:min-h-24px web:no-hover:opacity-100 web:max-640:opacity-100">
       <div
         className={cn(
-          "chat-row-hover-chrome chat-row-hover-chrome--actions flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-          alwaysShowActions && "[@media(any-hover:none)]:opacity-100",
+          "flex items-center gap-1.5 opacity-100 transition-opacity duration-150",
+          "motion-reduce:transition-none has-hover:opacity-0 has-hover:[[data-user-bubble-wrap]:hover_&]:pointer-events-auto has-hover:[[data-user-bubble-wrap]:hover_&]:opacity-100 has-hover:[[data-user-bubble-wrap]:focus-within_&]:pointer-events-auto has-hover:[[data-user-bubble-wrap]:focus-within_&]:opacity-100 data-[force-visible=true]:pointer-events-auto data-[force-visible=true]:opacity-100",
+          alwaysShowActions && "no-hover:opacity-100",
         )}
       >
         {!readOnly ? (
           <div className="flex gap-0.5">
             <button
               type="button"
-              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
+                "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+              )}
               title={t("chat.copy")}
               aria-label={t("chat.copy")}
               disabled={copyDisabled}
               onClick={onCopy}
             >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             </button>
             <button
               type="button"
-              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
+                "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+              )}
               title={editTitle}
               aria-label={editTitle}
               disabled={editDisabled}
               onClick={onEdit}
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <SquarePen className="size-3.5" />
             </button>
             {rewind ? (
               <button
                 type="button"
-                className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                className={cn(
+                  "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
+                  "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+                )}
                 title={rewindTitle}
                 aria-label={rewindTitle}
                 disabled={rewind.disabled}
                 onClick={rewind.onRewind}
               >
                 {rewind.pending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Undo2 className="h-3.5 w-3.5" />
+                  <Undo2 className="size-3.5" />
                 )}
               </button>
             ) : null}
@@ -165,22 +175,26 @@ export function TranscriptAssistantMessageActions(
     <div className="flex min-w-0 flex-1 items-center justify-start gap-0.5">
       <div
         className={cn(
-          "chat-row-hover-chrome chat-row-hover-chrome--actions pointer-events-none flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-data-[actions-visible=true]/assistant:pointer-events-auto group-data-[actions-visible=true]/assistant:opacity-100 group-focus-within/assistant:pointer-events-auto group-focus-within/assistant:opacity-100 group-hover/assistant:pointer-events-auto group-hover/assistant:opacity-100 motion-reduce:transition-none",
-          alwaysShowActions &&
-            "[@media(any-hover:none)]:pointer-events-auto [@media(any-hover:none)]:opacity-100",
+          "pointer-events-none flex items-center gap-0.5 opacity-100 transition-opacity duration-150",
+          "motion-reduce:transition-none has-hover:opacity-0 has-hover:[[data-assistant-row]:hover_&]:pointer-events-auto has-hover:[[data-assistant-row]:hover_&]:opacity-100 has-hover:[[data-assistant-row]:focus-within_&]:pointer-events-auto has-hover:[[data-assistant-row]:focus-within_&]:opacity-100 has-hover:[[data-assistant-row][data-actions-visible=true]_&]:pointer-events-auto has-hover:[[data-assistant-row][data-actions-visible=true]_&]:opacity-100",
+          "data-[force-visible=true]:pointer-events-auto data-[force-visible=true]:opacity-100",
+          alwaysShowActions && "no-hover:pointer-events-auto no-hover:opacity-100",
           branchPending && "pointer-events-auto opacity-100",
         )}
         data-force-visible={branchPending ? "true" : undefined}
       >
         <button
           type="button"
-          className="chat-assistant-action inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          className={cn(
+            "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+            "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+          )}
           title={t("chat.copy")}
           aria-label={t("chat.copy")}
           disabled={copyDisabled}
           onClick={onCopy}
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </button>
         <ConfirmActionPopover
           title={t("chat.retryConfirmTitle")}
@@ -193,13 +207,16 @@ export function TranscriptAssistantMessageActions(
           {(open) => (
             <button
               type="button"
-              className="chat-assistant-action inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+              )}
               title={retryTitle}
               aria-label={retryTitle}
               disabled={retryDisabled}
               onClick={open}
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="size-3.5" />
             </button>
           )}
         </ConfirmActionPopover>
@@ -215,16 +232,19 @@ export function TranscriptAssistantMessageActions(
           {(open) => (
             <button
               type="button"
-              className="chat-assistant-action inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+              )}
               title={branchTitle}
               aria-label={branchTitle}
               disabled={branchDisabled}
               onClick={open}
             >
               {branchPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <GitBranch className="h-3.5 w-3.5" />
+                <GitBranch className="size-3.5" />
               )}
             </button>
           )}

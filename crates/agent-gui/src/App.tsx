@@ -2,6 +2,7 @@ import type { Context } from "@earendil-works/pi-ai";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
 import {
   applyGatewaySettingsSyncPayload,
@@ -92,18 +93,18 @@ function interpolateMessage(template: string, values: Record<string, string>) {
 
 const GATEWAY_SETTINGS_SYNC_EVENT = "gateway:settings-sync";
 
-function AppChrome(props: { children: ReactNode }) {
+function AppChrome(props: { children: ReactNode; standaloneTitleBar?: boolean }) {
   // Plain inputs get a shared cut/copy/paste menu; everything else keeps the
   // suppressed native menu (surfaces with their own menus opt out upstream).
   const { onRootContextMenu, onRootMouseDownCapture, menu } = useNativeInputContextMenu();
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Root-level pointer handlers only route native input menus and dismissals; child controls own activation semantics.
     <div
-      className="relative flex h-full w-full flex-col overflow-hidden bg-background"
+      className="relative flex size-full flex-col overflow-hidden bg-background"
       onContextMenu={onRootContextMenu}
       onMouseDownCapture={onRootMouseDownCapture}
     >
-      <WindowsTitleBar />
+      {props.standaloneTitleBar ? <WindowsTitleBar /> : null}
       <div className="relative min-h-0 flex-1 overflow-hidden bg-background">{props.children}</div>
       {menu}
     </div>
@@ -701,6 +702,7 @@ export default function App() {
   if (!settingsReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
+        <Toaster />
         <AppChrome>
           <AppBootShell loadingLabel={translate("app.loading", settings.locale)} />
         </AppChrome>
@@ -713,14 +715,15 @@ export default function App() {
 
   return (
     <LocaleContext.Provider value={localeContextValue}>
-      <AppChrome>
+      <Toaster />
+      <AppChrome standaloneTitleBar={visible}>
         {backgroundHostsReady ? (
           <Suspense fallback={null}>
             <CronPromptRunner settings={settings} />
             <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
           </Suspense>
         ) : null}
-        <AppErrorBoundary>
+        <AppErrorBoundary fallbackHeader={<WindowsTitleBar />}>
           <Suspense
             fallback={<AppBootShell loadingLabel={translate("app.loading", settings.locale)} />}
           >
@@ -778,9 +781,13 @@ export default function App() {
               void invoke("app_toggle_window_pin").catch(() => {});
             }}
             title={translate("app.windowPinnedHint", settings.locale)}
-            className="layer-toast absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20"
+            className={cn(
+              "layer-toast absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5",
+              "rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1",
+              "text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20",
+            )}
           >
-            <Pin className="h-3 w-3" />
+            <Pin className="size-3" />
             {translate("app.windowPinned", settings.locale)}
           </button>
         )}

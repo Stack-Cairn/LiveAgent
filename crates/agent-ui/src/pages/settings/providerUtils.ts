@@ -27,6 +27,24 @@ export { isGatewayWebuiRuntime };
 
 const REDACTED_USAGE_QUERY_SECRET_DISPLAY = "••••••••";
 
+export function applyProviderModelDraft(
+  models: ProviderModelConfig[],
+  draft: ProviderModelConfig,
+  contextWindow: number | null,
+  maxOutputToken: number | null,
+): ProviderModelConfig[] | null {
+  if (contextWindow === null || maxOutputToken === null) return null;
+  const limitsChanged =
+    contextWindow !== draft.contextWindow || maxOutputToken !== draft.maxOutputToken;
+  const nextModel: ProviderModelConfig = {
+    ...draft,
+    contextWindow,
+    maxOutputToken,
+    limitsSource: limitsChanged ? "user" : draft.limitsSource,
+  };
+  return models.map((model) => (model.id === draft.id ? nextModel : model));
+}
+
 export type ModelInputModalitiesMode = "auto" | "text" | "text-image";
 
 export function providerSupportsModelInputModalitiesOverride(providerId: ProviderId): boolean {
@@ -613,6 +631,9 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
     const inputModalities = normalizeInputModalities(obj.inputModalities);
     out.push({
       id,
+      ...(typeof obj.displayName === "string" && obj.displayName.trim()
+        ? { displayName: obj.displayName.trim() }
+        : {}),
       ...(ownedBy ? { ownedBy } : {}),
       contextWindow: contextWindow ?? draft.contextWindow,
       maxOutputToken: maxOutputToken ?? draft.maxOutputToken,
@@ -659,6 +680,7 @@ export function mergeFetchedModels(
                   limitsSource: "provider",
                 }
               : {}),
+            ...(model.displayName ? { displayName: model.displayName } : {}),
             ...(model.ownedBy ? { ownedBy: model.ownedBy } : {}),
           }
         : model,

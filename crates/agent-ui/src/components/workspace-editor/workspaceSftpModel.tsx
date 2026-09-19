@@ -1,8 +1,8 @@
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import type { SftpEntry, SftpSide, SftpTransfer } from "@liveagent/ui/lib/sftp/types";
 
-const FILE_ICON_CLASS = "h-4 w-4 shrink-0";
-const FOLDER_ICON_CLASS = "h-4 w-4 shrink-0";
+const FILE_ICON_CLASS = "size-4 shrink-0";
+const FOLDER_ICON_CLASS = "size-4 shrink-0";
 
 export type DragPayloadItem = {
   path: string;

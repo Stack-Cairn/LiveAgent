@@ -25,7 +25,9 @@ test("memory settings use shared form and navigation primitives", () => {
   assert.match(memoryPanel, /<Textarea/);
   assert.doesNotMatch(memoryPanel, /<(?:button|select|option|textarea)\b/);
 
-  assert.match(memorySettingsDrawer, /<SheetClose/);
+  assert.match(memorySettingsDrawer, /<DialogContent/);
+  assert.match(memorySettingsDrawer, /<DialogBody/);
+  assert.doesNotMatch(memorySettingsDrawer, /<Sheet/);
   assert.match(memorySettingsDrawer, /<Input\b/);
   assert.doesNotMatch(memorySettingsDrawer, /<(?:button|input)\b/);
 

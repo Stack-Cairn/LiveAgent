@@ -12,7 +12,6 @@ import {
   type ProviderRetryPolicy,
 } from "@liveagent/app/lib/settings";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
-import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   applyCliIdentity,
@@ -35,6 +34,7 @@ import {
 import {
   applyModelInputModalitiesMode,
   applyModelsActiveState,
+  applyProviderModelDraft,
   applyUsageQueryModePreset,
   buildProviderModelsFetchKey,
   clampUsageQueryTimeoutSecs,
@@ -52,7 +52,7 @@ import {
   requiresCustomUsageQueryConfirmation,
   serializeUsageQueryDraft,
 } from "@liveagent/ui/pages/settings/providerUtils";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProviderModalView } from "./ProviderModalView";
 import {
   customHeaderIssueMessage,
@@ -88,16 +88,9 @@ type ModelEditDraft = {
 
 type NewModelPhase = "visible" | "fading";
 
-type PendingModelLayout = {
-  topById: Map<string, number>;
-  scrollContainer: HTMLDivElement | null;
-  scrollTop: number | null;
-};
-
 const NEW_MODEL_SORT_DELAY_MS = 1_200;
 const NEW_MODEL_BADGE_DURATION_MS = 3_200;
 const NEW_MODEL_BADGE_FADE_MS = 500;
-const MODEL_FLIP_DURATION_MS = 420;
 
 const REDACTED_API_KEY_DISPLAY = "API Key";
 
@@ -126,7 +119,15 @@ function reconcileModelOrder(
   return next;
 }
 
-function useProviderModalController({ providerType, initialData, onSave, onClose }: ModalProps) {
+function useProviderModalController({
+  providerType: defaultProviderType,
+  initialData,
+  onSave,
+  onClose,
+}: ModalProps) {
+  const [providerType, setProviderType] = useState<ProviderId>(
+    initialData?.type ?? defaultProviderType,
+  );
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
   const initialApiKey = initialData?.apiKey ?? "";
@@ -195,8 +196,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     ),
   );
   const [promptCachingEnabled, setPromptCachingEnabled] = useState(
-    initialData?.promptCachingEnabled ??
-      (providerType !== "gemini" && providerType !== "xai" && providerType !== "deepseek"),
+    initialData?.promptCachingEnabled ?? true,
   );
   const [promptCacheHintMode, setPromptCacheHintMode] = useState<PromptCacheHintMode>(
     initialData?.promptCacheHintMode ??
@@ -225,11 +225,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const [showApiKey, setShowApiKey] = useState(false);
   const [activePanel, setActivePanel] = useState<ProviderDialogPanel>("general");
   const [headerValidationSubmitted, setHeaderValidationSubmitted] = useState(false);
-  const [headerSuggest, setHeaderSuggest] = useState<{
-    index: number;
-    rect: { left: number; top: number; width: number };
-  } | null>(null);
-  const [headerSuggestActive, setHeaderSuggestActive] = useState(0);
+
   const [dialogOpen, setDialogOpen] = useState(true);
   const requestClose = useCallback(() => setDialogOpen(false), []);
 
@@ -237,8 +233,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const prevFetchKey = useRef("");
   const headerKeyRefs = useRef<Array<HTMLInputElement | null>>([]);
   const headerValueRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const modelListRef = useRef<HTMLDivElement | null>(null);
-  const pendingModelLayoutRef = useRef<PendingModelLayout | null>(null);
   const modelSortTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modelBadgeTimersRef = useRef(new Map<string, Array<ReturnType<typeof setTimeout>>>());
   const modelsRef = useRef(models);
@@ -313,41 +307,53 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     return undefined;
   }
 
+  const modelFetchGeneration = useRef(0);
+
   const doFetch = useCallback(
     async (url: string, key: string) => {
+      const generation = ++modelFetchGeneration.current;
       setFetchingModels(true);
       setFetchError(null);
       try {
         const list = await fetchModelsFromApi(providerType, url, key, {
           useSystemProxy,
           isFullUrl,
-          modelsUrl,
+          modelsUrl: providerType === "gemini" ? "" : modelsUrl,
           providerId: initialData?.id,
           customHeaders: effectiveCustomHeaders,
         });
+        if (generation !== modelFetchGeneration.current) return;
         const mergedModels = mergeFetchedModels(list, modelsRef.current);
         commitModelsWithNewRowsRef.current(mergedModels);
       } catch (err) {
-        setFetchError(err instanceof Error ? err.message : String(err));
+        if (generation === modelFetchGeneration.current) {
+          setFetchError(err instanceof Error ? err.message : String(err));
+        }
       } finally {
-        setFetchingModels(false);
+        if (generation === modelFetchGeneration.current) setFetchingModels(false);
       }
     },
     [effectiveCustomHeaders, initialData?.id, isFullUrl, modelsUrl, providerType, useSystemProxy],
   );
 
   useEffect(() => {
+    modelFetchGeneration.current += 1;
+    setFetchingModels(false);
+    setFetchError(null);
     const trimUrl = baseUrl.trim();
-    const trimModelsUrl = modelsUrl.trim();
+    const trimModelsUrl = providerType === "gemini" ? "" : modelsUrl.trim();
     const trimKey = apiKeyForRequest;
-    const key = buildProviderModelsFetchKey(
-      trimUrl,
-      trimKey,
-      useSystemProxy,
-      isFullUrl,
-      trimModelsUrl,
-      effectiveCustomHeaders,
-    );
+    const key =
+      providerType +
+      ":" +
+      buildProviderModelsFetchKey(
+        trimUrl,
+        trimKey,
+        useSystemProxy,
+        isFullUrl,
+        trimModelsUrl,
+        effectiveCustomHeaders,
+      );
     if ((!trimUrl && !trimModelsUrl) || !trimKey) return;
     if (key === prevFetchKey.current) return;
 
@@ -358,11 +364,14 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     }, 900);
 
     return () => {
+      modelFetchGeneration.current += 1;
+      prevFetchKey.current = "";
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [
     apiKeyForRequest,
     baseUrl,
+    providerType,
     doFetch,
     effectiveCustomHeaders,
     isFullUrl,
@@ -392,6 +401,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
 
   useEffect(
     () => () => {
+      modelFetchGeneration.current += 1;
       if (modelSortTimerRef.current) clearTimeout(modelSortTimerRef.current);
       for (const timers of modelBadgeTimersRef.current.values()) {
         for (const timer of timers) clearTimeout(timer);
@@ -400,22 +410,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     },
     [],
   );
-
-  function captureModelLayout() {
-    const rows = modelListRef.current?.querySelectorAll<HTMLElement>("[data-model-row-id]");
-    const topById = new Map<string, number>();
-    for (const row of rows ?? []) {
-      for (const animation of row.getAnimations()) animation.cancel();
-      const id = row.dataset.modelRowId;
-      if (id) topById.set(id, row.getBoundingClientRect().top);
-    }
-    const scrollContainer = modelScrollContainerRef.current;
-    pendingModelLayoutRef.current = {
-      topById,
-      scrollContainer,
-      scrollTop: scrollContainer?.scrollTop ?? null,
-    };
-  }
 
   function markModelAsNew(modelId: string) {
     for (const timer of modelBadgeTimersRef.current.get(modelId) ?? []) clearTimeout(timer);
@@ -449,7 +443,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       modelSortTimerRef.current = setTimeout(settleNewModels, 200);
       return;
     }
-    captureModelLayout();
     setModelDisplayOrder(
       createModelOrderSnapshot(modelsRef.current, modelOrderRef.current, activeModelsRef.current),
     );
@@ -468,7 +461,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       return;
     }
 
-    captureModelLayout();
     const nextIds = new Set(nextModels.map((model) => model.id));
     const newIdSet = new Set(newModelIds);
     setModels(nextModels);
@@ -502,12 +494,20 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   }
 
   function handleAddModel() {
-    const model = newModelName.trim();
-    if (!model) return;
-    if (!modelsRef.current.some((item) => item.id === model)) {
-      commitModelsWithNewRows([...modelsRef.current, createDraftModelConfig(providerType, model)]);
-    }
-    setActiveModels((prev) => new Set([...prev, model]));
+    const modelId = newModelName.trim();
+    if (!modelId) return;
+    const nextModels = modelsWithEditingDraft();
+    if (!nextModels) return;
+    const existing = nextModels.find((item) => item.id === modelId);
+    const model = existing ?? createDraftModelConfig(providerType, modelId);
+    commitModelsWithNewRows(existing ? nextModels : [...nextModels, model]);
+    setActiveModels((prev) => new Set([...prev, modelId]));
+    setEditingModel({
+      model,
+      contextWindow: String(model.contextWindow),
+      maxOutputToken: String(model.maxOutputToken),
+    });
+    setModelSearch("");
     setNewModelName("");
     setAddingModel(false);
   }
@@ -531,17 +531,17 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   }
 
   function openModelSettings(modelId: string) {
-    const target = models.find((item) => item.id === modelId);
+    if (editingModel?.model.id === modelId) return;
+    const nextModels = modelsWithEditingDraft();
+    if (!nextModels) return;
+    const target = nextModels.find((item) => item.id === modelId);
     if (!target) return;
-    setEditingModel((prev) =>
-      prev?.model.id === target.id
-        ? null
-        : {
-            model: target,
-            contextWindow: String(target.contextWindow),
-            maxOutputToken: String(target.maxOutputToken),
-          },
-    );
+    setModels(nextModels);
+    setEditingModel({
+      model: target,
+      contextWindow: String(target.contextWindow),
+      maxOutputToken: String(target.maxOutputToken),
+    });
   }
 
   const editingModelContextWindow = editingModel
@@ -569,21 +569,20 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     );
   }
 
+  function modelsWithEditingDraft(): ProviderModelConfig[] | null {
+    if (!editingModel) return models;
+    return applyProviderModelDraft(
+      models,
+      editingModel.model,
+      editingModelContextWindow,
+      editingModelMaxOutputToken,
+    );
+  }
+
   function saveInlineModelSettings() {
-    if (
-      !editingModel ||
-      editingModelContextWindow === null ||
-      editingModelMaxOutputToken === null
-    ) {
-      return;
-    }
-    const nextModel: ProviderModelConfig = {
-      ...editingModel.model,
-      contextWindow: editingModelContextWindow,
-      maxOutputToken: editingModelMaxOutputToken,
-      limitsSource: "user",
-    };
-    setModels((prev) => prev.map((item) => (item.id === nextModel.id ? nextModel : item)));
+    const nextModels = modelsWithEditingDraft();
+    if (!nextModels) return;
+    setModels(nextModels);
     setEditingModel(null);
   }
   function updateCustomHeader(index: number, field: "key" | "value", value: string) {
@@ -615,24 +614,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setHeaderValidationSubmitted(false);
   }
 
-  function openHeaderSuggest(index: number) {
-    const input = headerKeyRefs.current[index];
-    if (!input) return;
-    const rect = input.getBoundingClientRect();
-    setHeaderSuggest({
-      index,
-      rect: { left: rect.left, top: rect.bottom + 4, width: rect.width },
-    });
-    setHeaderSuggestActive(0);
-  }
-
-  function applyHeaderSuggestion(preset: string) {
-    if (!headerSuggest) return;
-    updateCustomHeader(headerSuggest.index, "key", preset);
-    setHeaderSuggest(null);
-    focusCustomHeader(headerSuggest.index, "value");
-  }
-
   function cancelCustomHeaderImport() {
     setHeaderImportOpen(false);
     setHeaderImportText("");
@@ -645,7 +626,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   function applyCliIdentityHeaders(identity: CliIdentityProviderId) {
     const result = applyCliIdentity(customHeaders, identity);
     setCustomHeaders(result.headers);
-    setHeaderSuggest(null);
+
     setHeaderValidationSubmitted(false);
     setHeaderImportOpen(false);
     setHeaderImportError(null);
@@ -673,7 +654,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       }
       const merged = mergeImportedCustomHeaders(customHeaders, parsed.headers);
       setCustomHeaders(merged.headers);
-      setHeaderSuggest(null);
+
       setHeaderValidationSubmitted(false);
       setHeaderImportSummary({
         importedCount: merged.importedCount,
@@ -688,6 +669,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   }
   async function handleSave() {
     if (!name.trim()) return;
+    const nextModels = modelsWithEditingDraft();
+    if (!nextModels) return;
     const invalidHeaderIndex = customHeaders.findIndex(
       (header) => getCustomHeaderIssue(header, true) !== null,
     );
@@ -728,7 +711,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
         apiKeyIsRedactedDisplay ||
         (isGatewayWebui && initialData?.apiKeyConfigured === true),
       customHeaders,
-      models,
+      models: nextModels,
       modelOrder,
       activeModels: Array.from(activeModels),
       requestFormat:
@@ -791,29 +774,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     () => applyModelOrderSnapshot(models, modelDisplayOrder),
     [models, modelDisplayOrder],
   );
-  useLayoutEffect(() => {
-    // The rendered row order is the commit boundary for restoring scroll and running FLIP.
-    void orderedModels;
-    const pending = pendingModelLayoutRef.current;
-    if (!pending) return;
-    pendingModelLayoutRef.current = null;
-    if (pending.scrollTop !== null && pending.scrollContainer) {
-      pending.scrollContainer.scrollTop = pending.scrollTop;
-    }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const rows = modelListRef.current?.querySelectorAll<HTMLElement>("[data-model-row-id]");
-    for (const row of rows ?? []) {
-      const id = row.dataset.modelRowId;
-      const previousTop = id ? pending.topById.get(id) : undefined;
-      if (previousTop === undefined) continue;
-      const delta = previousTop - row.getBoundingClientRect().top;
-      if (Math.abs(delta) < 1) continue;
-      row.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }], {
-        duration: MODEL_FLIP_DURATION_MS,
-        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
-      });
-    }
-  }, [orderedModels]);
   const modelSearchQuery = modelSearch.trim().toLowerCase();
   const visibleModels = useMemo(
     () =>
@@ -851,44 +811,10 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setModelOrder(nextIds);
     setModelDisplayOrder(nextIds);
   }, []);
-  const {
-    draggingItemId: draggingModelId,
-    getItemProps: getModelReorderProps,
-    renderDragHandle: renderModelDragHandle,
-    scrollContainerRef: modelScrollContainerRef,
-  } = useVerticalListReorder({
-    itemIds: orderedModels.map((model) => model.id),
-    canReorder: !modelSearchQuery,
-    reorderLabel: t("settings.reorderModel"),
-    reorderHint: t("settings.reorderVerticalHint"),
-    disabledHint: modelReorderDisabledHint,
-    onReorder: handleModelReorder,
-  });
-  draggingModelIdRef.current = draggingModelId;
-  const headerSuggestQuery = headerSuggest
-    ? (customHeaders[headerSuggest.index]?.key ?? "").trim().toLowerCase()
-    : "";
-  const headerSuggestUsed = new Set(
-    headerSuggest
-      ? customHeaders
-          .filter((_, index) => index !== headerSuggest.index)
-          .map((header) => header.key.trim().toLowerCase())
-          .filter(Boolean)
-      : [],
-  );
-  const headerSuggestItems = headerSuggest
-    ? headerSuggestQuery
-      ? getCustomHeaderKeyPresets(providerType).filter((preset) => {
-          const lower = preset.toLowerCase();
-          if (headerSuggestUsed.has(lower)) return false;
-          return lower.includes(headerSuggestQuery) && lower !== headerSuggestQuery;
-        })
-      : []
-    : [];
-  const headerSuggestActiveIndex = Math.min(
-    headerSuggestActive,
-    Math.max(0, headerSuggestItems.length - 1),
-  );
+  const handleModelDraggingChange = useCallback((itemId: string | null) => {
+    draggingModelIdRef.current = itemId;
+  }, []);
+
   const headerImportErrorMessage = headerImportError
     ? t(`settings.customHeaderImportError.${headerImportError}`)
     : null;
@@ -899,7 +825,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
           " " +
           headerImportSummary.overwrittenCount,
         (headerImportSummary.removedCount ?? 0) > 0
-          ? t("settings.customHeaderImportSummary.removed") + " " + headerImportSummary.removedCount
+          ? `${t("settings.customHeaderImportSummary.removed")} ${headerImportSummary.removedCount}`
           : null,
         headerImportSummary.issues.length > 0
           ? t("settings.customHeaderImportSummary.skipped") +
@@ -929,13 +855,13 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     activeCodingPlanProvider,
     activeModels,
     activePanel,
+    setProviderType,
     addCustomHeader,
     addingModel,
     allVisibleModelsActive,
     apiKey,
     apiKeyForRequest,
     apiKeyIsRedactedDisplay,
-    applyHeaderSuggestion,
     applyCliIdentityHeaders,
     baseUrl,
     canSaveEditingModel,
@@ -943,7 +869,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     cancelCustomHeaderImport,
     commitUsageTimeoutInput,
     customHeaders,
-    draggingModelId,
     editingModel,
     editingModelContextWindow,
     editingModelInputModalitiesMode,
@@ -951,9 +876,10 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     fetchError,
     fetchingModels,
     focusCustomHeader,
-    getModelReorderProps,
     handleAddModel,
     handleImportCustomHeaders,
+    handleModelDraggingChange,
+    handleModelReorder,
     handleRefresh,
     handleSave,
     handleTestUsageQuery,
@@ -962,10 +888,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     headerImportSummaryMessage,
     headerImportText,
     headerIssueMessage,
+    headerKeyPresets: getCustomHeaderKeyPresets(providerType),
     headerKeyRefs,
-    headerSuggest,
-    headerSuggestActiveIndex,
-    headerSuggestItems,
     headerValidationSubmitted,
     headerValueRefs,
     dialogOpen,
@@ -973,8 +897,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     isFullUrl,
     isGatewayWebui,
     matchedBalanceProviders,
-    modelListRef,
-    modelScrollContainerRef,
+    modelReorderDisabledHint,
     modelSearch,
     modelSearchQuery,
     models,
@@ -983,7 +906,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     newModelName,
     newModelPhases,
     onClose,
-    openHeaderSuggest,
     openModelSettings,
     persistedUsageQueryProviderId,
     promptCacheHintMode,
@@ -992,7 +914,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     providerType,
     removeCustomHeader,
     removeModel,
-    renderModelDragHandle,
     requestClose,
     requestFormat,
     saveInlineModelSettings,
@@ -1006,8 +927,6 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setHeaderImportOpen,
     setHeaderImportSummary,
     setHeaderImportText,
-    setHeaderSuggest,
-    setHeaderSuggestActive,
     setIsFullUrl,
     setModelSearch,
     setModelsUrl,

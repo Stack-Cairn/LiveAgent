@@ -26,6 +26,7 @@ import {
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
 } from "@liveagent/ui/lib/chat/mentionReferences";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { mentionChipClassName } from "./mentionChipStyles";
 
 export {
@@ -62,9 +63,6 @@ import {
   COMPOSER_CLIPBOARD_HTML_ATTR,
   COMPOSER_CLIPBOARD_MIME,
   COMPOSER_CLIPBOARD_VERSION,
-  COMPOSER_CONTEXT_MENU_HEIGHT,
-  COMPOSER_CONTEXT_MENU_MARGIN,
-  COMPOSER_CONTEXT_MENU_WIDTH,
   CONVERSATION_MENTION_CWD_ATTR,
   CONVERSATION_MENTION_ID_ATTR,
   CONVERSATION_MENTION_TITLE_ATTR,
@@ -489,22 +487,6 @@ export function selectComposerContents(root: HTMLElement) {
   selection?.addRange(range);
 }
 
-export function clampComposerContextMenuPosition(x: number, y: number) {
-  const maxLeft = Math.max(
-    COMPOSER_CONTEXT_MENU_MARGIN,
-    window.innerWidth - COMPOSER_CONTEXT_MENU_WIDTH - COMPOSER_CONTEXT_MENU_MARGIN,
-  );
-  const maxTop = Math.max(
-    COMPOSER_CONTEXT_MENU_MARGIN,
-    window.innerHeight - COMPOSER_CONTEXT_MENU_HEIGHT - COMPOSER_CONTEXT_MENU_MARGIN,
-  );
-
-  return {
-    left: Math.min(Math.max(COMPOSER_CONTEXT_MENU_MARGIN, x), maxLeft),
-    top: Math.min(Math.max(COMPOSER_CONTEXT_MENU_MARGIN, y), maxTop),
-  };
-}
-
 export function normalizeMentionQuery(query: string) {
   return removeCaretAnchors(query).trim().replace(/\\/g, "/").toLowerCase();
 }
@@ -620,28 +602,7 @@ export function extractClipboardFiles(data: DataTransfer) {
 
 export function writeTextToClipboard(text: string) {
   if (!text) return;
-
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => {
-      fallbackWriteTextToClipboard(text);
-    });
-    return;
-  }
-
-  fallbackWriteTextToClipboard(text);
-}
-
-export function fallbackWriteTextToClipboard(text: string) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
+  void copyTextToClipboard(text);
 }
 
 export function parseCommitMentionNumber(value: string | null) {
@@ -1692,7 +1653,7 @@ export function createGitFileMentionChip(fileInput: MentionComposerGitFileMentio
   const fileName = file.path.split("/").pop() || file.path;
   chip.appendChild(document.createTextNode(fileName));
   const ref = document.createElement("span");
-  ref.className = "max-w-[8rem] truncate text-[calc(10px*var(--zone-font-scale,1))] opacity-70";
+  ref.className = "max-w-32 truncate text-tiny opacity-70";
   ref.textContent = `@${file.refName || file.shortSha}`;
   chip.appendChild(ref);
   return chip;

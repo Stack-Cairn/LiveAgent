@@ -1,0 +1,30 @@
+/* Git history owns its palette; these variables stay on graph rows. */
+.git-review-history-row {
+  /* Lanes cycle through this palette; indices are not branch states. */
+  --git-review-graph-lane-1: #ffb000;
+  --git-review-graph-lane-2: #dc267f;
+  --git-review-graph-lane-3: #994f00;
+  --git-review-graph-lane-4: #40b0a6;
+  --git-review-graph-lane-5: #b66dff;
+  --git-review-graph-ref-local: #0063d3;
+  --git-review-graph-ref-remote: #652d90;
+  --git-review-graph-ref-base: #ea5c00;
+  --git-review-graph-background: hsl(var(--background));
+}
+
+.dark .git-review-history-row {
+  --git-review-graph-ref-local: #59a4f9;
+  --git-review-graph-ref-remote: #b180d7;
+}
+
+.git-review-history-row:hover:not([data-selected="true"]):not([data-context-open="true"]) {
+  --git-review-graph-background: hsl(var(--muted) / 0.38);
+}
+
+.git-review-history-row[data-selected="true"] {
+  --git-review-graph-background: hsl(var(--accent) / 0.8);
+}
+
+.git-review-history-row[data-context-open="true"] {
+  --git-review-graph-background: hsl(var(--primary) / 0.1);
+}

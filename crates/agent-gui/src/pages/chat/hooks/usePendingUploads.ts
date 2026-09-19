@@ -1,5 +1,5 @@
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
-import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
+import type { ToastTone } from "@liveagent/ui/components/ui/toast-manager";
 import {
   mergePendingUploadedFilesWithStats,
   type PendingUploadedFile,
@@ -48,7 +48,7 @@ type UsePendingUploadsParams = {
   currentConversationIdRef: MutableRefObject<string>;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   setErrorMessage: (message: string | null) => void;
-  addNotify: (type: NotifyItem["type"], message: string) => void;
+  addNotify: (type: ToastTone, message: string) => void;
 };
 
 export const MAX_UPLOAD_FILES = 9;

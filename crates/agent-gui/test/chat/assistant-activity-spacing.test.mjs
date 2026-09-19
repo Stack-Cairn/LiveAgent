@@ -1,6 +1,8 @@
+import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const roundContentSource = fs.readFileSync(
   new URL(
@@ -35,8 +37,8 @@ const markdownSource = fs.readFileSync(
   new URL("../../../agent-ui/src/components/Markdown.tsx", import.meta.url),
   "utf8",
 );
-const chatStylesSource = fs.readFileSync(
-  new URL("../../../agent-ui/src/styles/common-components.css", import.meta.url),
+const markdownStylesSource = fs.readFileSync(
+  new URL("../../../agent-ui/src/components/markdown/markdownStyles.ts", import.meta.url),
   "utf8",
 );
 
@@ -55,28 +57,24 @@ test("operation components defer outer spacing to the shared block wrapper", () 
 });
 
 test("chat typography keeps body copy substantial and emphasis at weight 500", () => {
-  assert.match(chatStylesSource, /\.chat-markdown \{[\s\S]*?font-weight: 450;/);
-  assert.match(chatStylesSource, /\.chat-markdown p \{[\s\S]*?font-weight: 450;/);
-  assert.match(
-    chatStylesSource,
-    /\.chat-markdown strong,[\s\S]*?\[data-streamdown="strong"\][\s\S]*?@apply font-medium/,
-  );
-  assert.match(markdownSource, /\[&_strong\]:font-medium/);
+  assert.match(markdownStylesSource, /font-\[450\]/);
+  assert.match(markdownStylesSource, /\[&_p\]:font-\[450\]/);
+  assert.match(markdownStylesSource, /\[&_strong\]:font-medium/);
+  assert.match(markdownSource, /CHAT_MARKDOWN_CLASS/);
 });
 
 test("inline code uses the higher-contrast transcript treatment", () => {
-  assert.match(chatStylesSource, /bg-foreground\/\[0\.085\]/);
-  assert.match(chatStylesSource, /rounded-xs/);
-  assert.match(markdownSource, /bg-foreground\/\[0\.085\]/);
+  assert.match(markdownStylesSource, /bg-foreground\/\[0\.085\]/);
+  assert.match(markdownStylesSource, /rounded-xs/);
 });
 
 test("operation rows use compact icons and reveal disclosure chevrons on intent", () => {
-  assert.match(hostedSearchSource, /Globe className="h-3 w-3/);
-  assert.match(toolTraceSource, /BatchIcon className="h-3 w-3/);
-  assert.match(toolCallSource, /ToolIcon className="h-3 w-3/);
+  assertJsxDimensions(hostedSearchSource, "Globe", { width: "3", height: "3" });
+  assertJsxDimensions(toolTraceSource, "BatchIcon", { width: "3", height: "3" });
+  assertJsxDimensions(toolCallSource, "ToolIcon", { width: "3", height: "3" });
 
-  assert.match(workTraceSource, /opacity-0[^"\n]*group-hover\/work-trace:opacity-100/);
-  assert.match(hostedSearchSource, /opacity-0[^"\n]*group-hover\/search-trace:opacity-100/);
-  assert.match(toolTraceSource, /opacity-0[^"\n]*group-hover\/tool-trace:opacity-100/);
-  assert.match(toolCallSource, /opacity-0[^"\n]*group-hover\/tool:opacity-100/);
+  assert.match(normalizeClassGroups(workTraceSource), /opacity-0[^"\n]*group-hover\/work-trace:opacity-100/);
+  assert.match(normalizeClassGroups(hostedSearchSource), /opacity-0[^"\n]*group-hover\/search-trace:opacity-100/);
+  assert.match(normalizeClassGroups(toolTraceSource), /opacity-0[^"\n]*group-hover\/tool-trace:opacity-100/);
+  assert.match(normalizeClassGroups(toolCallSource), /opacity-0[^"\n]*group-hover\/tool:opacity-100/);
 });

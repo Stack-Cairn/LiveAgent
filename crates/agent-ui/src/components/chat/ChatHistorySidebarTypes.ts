@@ -148,7 +148,6 @@ export type ChatHistorySidebarProps = {
     options?: SidebarBatchDeleteOptions,
   ) => Promise<SidebarBatchDeleteResult>;
   onLoadMore: () => void;
-  onCloseSidebar: () => void;
   sidebarShortcuts?: SidebarShortcuts;
   onOpenSettings: () => void;
   onOpenResourceHub: (resource: SidebarShortcutId) => void;
@@ -227,7 +226,6 @@ export type ChatHistorySidebarContainerSource = Required<
     | "sharedConversationCount"
     | "onShareConversation"
     | "onOpenSharedConversations"
-    | "onCloseSidebar"
     | "sidebarShortcuts"
     | "onOpenSettings"
   > &
@@ -243,7 +241,6 @@ type ChatHistorySidebarConversationSource = Pick<
   | "sharedConversationCount"
   | "onShareConversation"
   | "onOpenSharedConversations"
-  | "onCloseSidebar"
   | "sidebarShortcuts"
   | "onOpenSettings"
   | "onOpenResourceHub"
@@ -326,7 +323,6 @@ export function buildChatHistorySidebarConversationProps(
     sharedConversationCount: source.sharedConversationCount,
     onShareConversation: source.onShareConversation,
     onOpenSharedConversations: source.onOpenSharedConversations,
-    onCloseSidebar: source.onCloseSidebar,
     onOpenSettings: source.onOpenSettings,
     sidebarShortcuts: source.sidebarShortcuts,
     onOpenResourceHub: source.onOpenResourceHub,

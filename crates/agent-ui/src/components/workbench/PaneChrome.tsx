@@ -59,7 +59,10 @@ export function PaneChrome(props: PaneChromeProps) {
     <div
       data-workbench-pane-chrome={paneId}
       data-workbench-pane-chrome-compact={isCompact ? "true" : undefined}
-      className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-5 items-center justify-center"
+      className={cn(
+        "pointer-events-none absolute inset-x-0 top-0 z-30 flex h-5 items-center",
+        "justify-center",
+      )}
     >
       <button
         type="button"
@@ -81,8 +84,8 @@ export function PaneChrome(props: PaneChromeProps) {
             isCompact ? "w-6" : "w-9",
             isFocused ? "bg-muted-foreground/45" : "bg-muted-foreground/25",
             isCompact
-              ? "group-hover/pane-grip:h-[6px] group-hover/pane-grip:w-7 group-hover/pane-grip:bg-muted-foreground/60"
-              : "group-hover/pane-grip:h-[6px] group-hover/pane-grip:w-11 group-hover/pane-grip:bg-muted-foreground/60",
+              ? "group-hover/pane-grip:h-6px group-hover/pane-grip:w-7 group-hover/pane-grip:bg-muted-foreground/60"
+              : "group-hover/pane-grip:h-6px group-hover/pane-grip:w-11 group-hover/pane-grip:bg-muted-foreground/60",
             "group-focus-visible/pane-grip:bg-ring",
             // The pill is the drag handle's only focus indicator (the button
             // suppresses its outline), so it needs a system colour to survive
@@ -101,16 +104,17 @@ export function PaneChrome(props: PaneChromeProps) {
           onClick={trajectoryToggle.onToggle}
           className={cn(
             revealClass,
-            "absolute left-1.5 top-1/2 flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center rounded-full",
+            "absolute left-1.5 top-1/2 flex size-3.5 -translate-y-1/2 items-center justify-center",
+            "rounded-full",
             "bg-muted-foreground/25 text-background",
             "hover:bg-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           )}
         >
           {/* Icon previews the view the click switches to, not the current one. */}
           {trajectoryToggle.isTrajectory ? (
-            <MessageSquareText className="h-2 w-2" />
+            <MessageSquareText className="size-2" />
           ) : (
-            <Waypoints className="h-2 w-2" />
+            <Waypoints className="size-2" />
           )}
         </button>
       ) : null}
@@ -123,12 +127,13 @@ export function PaneChrome(props: PaneChromeProps) {
           onClick={onClose}
           className={cn(
             revealClass,
-            "absolute right-1.5 top-1/2 flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center rounded-full",
+            "absolute right-1.5 top-1/2 flex size-3.5 -translate-y-1/2 items-center justify-center",
+            "rounded-full",
             "bg-muted-foreground/25 text-background",
             "hover:bg-muted-foreground/55 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           )}
         >
-          <X className="h-2 w-2" />
+          <X className="size-2" />
         </button>
       ) : null}
     </div>
