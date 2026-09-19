@@ -944,3 +944,15 @@ export type GatewayProviderCheckModelPayload = {
   auth_prefix?: string;
   timeout_ms?: number;
 };
+
+// --- image generation (begin) -----------------------------------------------
+/** 图像生成（WebUI → 桌面端）：形参与模型连通测试完全一致，只是打生图接口。 */
+export type GatewayProviderGenerateImagePayload = GatewayProviderCheckModelPayload;
+
+/** 下载生图结果里的远端图片（dall-e 等只回 url 的响应）；不带鉴权。 */
+export type GatewayProviderDownloadImagePayload = {
+  url: string;
+  use_system_proxy: boolean;
+  timeout_ms?: number;
+};
+// --- image generation (end) -------------------------------------------------
