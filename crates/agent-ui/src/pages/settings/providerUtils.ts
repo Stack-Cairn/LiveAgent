@@ -18,6 +18,9 @@ import {
   type UsageQueryMode,
 } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
+// --- image generation (begin) ---
+import { isImageGenerationModel } from "../../lib/models/modelType";
+// --- image generation (end) ---
 import { type CustomHeader, mergeCustomHeaders } from "../../lib/providers/customHeaders";
 import {
   aggregateModelCheck,
@@ -919,6 +922,13 @@ export async function checkProviderModel(
   const credentials = getProviderCredentials(provider);
   const credential = credentials.find((item) => item.id === route.credentialId) ?? credentials[0];
   const base = { credentialId: credential.id, credentialLabel: credential.label };
+  // --- image generation (begin) ---------------------------------------------
+  // 生图模型不测：最小生成请求在 Images / generateContent 上等于真出一张图，
+  // 要花钱，而且它们本来就不走这条聊天路由。直接报"已跳过"。
+  if (isImageGenerationModel(provider, modelId)) {
+    return { ...base, ok: undefined, skipped: "generation_cost", latencyMs: 0 };
+  }
+  // --- image generation (end) -----------------------------------------------
   const apiKey = credential.apiKey.trim();
   const webui = isGatewayWebuiRuntime();
   const configured = credential.apiKeyConfigured === true || apiKey.length > 0;
