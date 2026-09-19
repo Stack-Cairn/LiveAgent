@@ -1709,6 +1709,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             },
             agentTemplates: settings.agents,
             getMcpSettings: getEffectiveMcpSettings,
+            // --- image generation ---：生图模型列表与默认模型（轮级快照即可，
+            // 与 currentChatModel 同一口径）。
+            getImageGenerationSettings: () => ({
+              customProviders: settings.customProviders,
+              ...(settings.imageGeneration ? { imageGeneration: settings.imageGeneration } : {}),
+            }),
             getToolPolicies,
             getCuaAllowSelfTargeting: () => settings.system.cuaAllowSelfTargeting === true,
             commandSafetyMode: effectiveCommandSafetyMode,

@@ -264,6 +264,18 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     isReadOnly: true,
     runtimeScopes: CHAT_ONLY,
   },
+  // --- image generation (begin) ---------------------------------------------
+  {
+    id: "generate_image",
+    toolName: "generate_image",
+    icon: "image",
+    categoryId: "intelligence",
+    isReadOnly: false,
+    runtimeScopes: CHAT_ONLY,
+    // 出网 + 写工作区；沙箱离线或没有生图模型时不注册。
+    conditional: true,
+  },
+  // --- image generation (end) -----------------------------------------------
   {
     id: "exit_plan_mode",
     toolName: "ExitPlanMode",
