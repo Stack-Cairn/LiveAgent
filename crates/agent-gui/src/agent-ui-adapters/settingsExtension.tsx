@@ -12,7 +12,7 @@ export function createSettingsExtension(props: SettingsPageProps): {
   slots: UiExtensionSlots;
   sections: SettingsSectionDefinition<void>[];
 } {
-  const { settings, setSettings, appUpdate, reloadSettings } = props;
+  const { settings, setSettings, appUpdate, releaseAnnouncement, reloadSettings } = props;
   return {
     surface: "desktop",
     iconClassName: "size-3.5",
@@ -55,7 +55,12 @@ export function createSettingsExtension(props: SettingsPageProps): {
         labelKey: "settings.navAbout",
         icon: <Info className="size-3.5" />,
         render: () => (
-          <AboutSection settings={settings} setSettings={setSettings} appUpdate={appUpdate} />
+          <AboutSection
+            settings={settings}
+            setSettings={setSettings}
+            appUpdate={appUpdate}
+            releaseAnnouncement={releaseAnnouncement}
+          />
         ),
       },
     ],

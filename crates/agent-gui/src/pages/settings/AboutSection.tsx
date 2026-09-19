@@ -21,49 +21,17 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useId } from "react";
-import type { AppUpdateCheckResult, AppUpdateController } from "../../lib/appUpdates";
+import type { AppUpdateController } from "../../lib/appUpdates";
+import type { ReleaseAnnouncementController } from "../../lib/releaseAnnouncement";
+import { releaseNotesBody, releaseTitle } from "../../lib/releaseNotes";
 import { updateUpdateSettings } from "../../lib/settings";
 import { formatReleaseDate } from "./aboutDate";
 import type { SettingsSectionProps } from "./types";
 
 type AboutSectionProps = SettingsSectionProps & {
   appUpdate: AppUpdateController;
+  releaseAnnouncement: ReleaseAnnouncementController;
 };
-
-function releaseTitle(result?: AppUpdateCheckResult) {
-  if (!result) return "";
-  return result.releaseName?.trim() || result.releaseTag?.trim() || result.version || "";
-}
-
-function normalizeTitle(value: string) {
-  return value
-    .replace(/^#+\s*/, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
-function releaseNotesBody(result?: AppUpdateCheckResult) {
-  const body = result?.body?.replace(/^\s*(?:<!--[\s\S]*?-->\s*)+/, "").trim();
-  if (!body) return "";
-
-  const title = normalizeTitle(releaseTitle(result));
-  if (!title) return body;
-
-  const lines = body.split(/\r?\n/);
-  const firstContentIndex = lines.findIndex((line) => line.trim());
-  if (firstContentIndex < 0) return "";
-
-  const firstContentLine = lines[firstContentIndex].trim();
-  if (/^#\s+/.test(firstContentLine) && normalizeTitle(firstContentLine) === title) {
-    return lines
-      .slice(firstContentIndex + 1)
-      .join("\n")
-      .trim();
-  }
-
-  return body;
-}
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message.trim();
@@ -71,7 +39,7 @@ function errorMessage(error: unknown) {
 }
 
 export function AboutSection(props: AboutSectionProps) {
-  const { settings, setSettings, appUpdate } = props;
+  const { settings, setSettings, appUpdate, releaseAnnouncement } = props;
   const { t } = useLocale();
   const toastScope = useId();
   const includePrereleases = settings.updates.includePrereleases;
@@ -130,6 +98,46 @@ export function AboutSection(props: AboutSectionProps) {
       }
     } catch (error) {
       showUpdateError(t("settings.aboutUpdateCheckFailed"), error);
+    }
+  }
+
+  async function handleOpenAnnouncement() {
+    try {
+      const announcement = await releaseAnnouncement.openAnnouncement();
+      if (!announcement) {
+        toast.warning(t("settings.aboutAnnouncementUnavailable"), {
+          id: `${toastScope}-announcement`,
+          appearance: "notice",
+          description: t("settings.aboutAnnouncementUnavailableDesc"),
+        });
+      }
+    } catch (error) {
+      const description = errorMessage(error);
+      toast.error(t("settings.aboutAnnouncementLoadFailed"), {
+        id: `${toastScope}-announcement`,
+        appearance: "notice",
+        ...(description ? { description } : {}),
+      });
+    }
+  }
+
+  async function handlePreviewAnnouncement() {
+    try {
+      const announcement = await releaseAnnouncement.openPreviewAnnouncement();
+      if (!announcement) {
+        toast.warning(t("settings.aboutAnnouncementUnavailable"), {
+          id: `${toastScope}-announcement-preview`,
+          appearance: "notice",
+          description: t("settings.aboutDebugAnnouncementUnavailableDesc"),
+        });
+      }
+    } catch (error) {
+      const description = errorMessage(error);
+      toast.error(t("settings.aboutAnnouncementLoadFailed"), {
+        id: `${toastScope}-announcement-preview`,
+        appearance: "notice",
+        ...(description ? { description } : {}),
+      });
     }
   }
 
@@ -308,6 +316,44 @@ export function AboutSection(props: AboutSectionProps) {
               </div>
             }
           />
+
+          <SettingsRow
+            title={t("settings.aboutUpdateAnnouncement")}
+            description={t("settings.aboutUpdateAnnouncementDesc")}
+            control={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleOpenAnnouncement()}
+                disabled={releaseAnnouncement.loading}
+              >
+                {releaseAnnouncement.loading ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                {t("settings.aboutOpenAnnouncement")}
+              </Button>
+            }
+          />
+
+          {import.meta.env.DEV ? (
+            <SettingsRow
+              title={t("settings.aboutDebugMode")}
+              description={t("settings.aboutDebugModeDesc")}
+              control={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handlePreviewAnnouncement()}
+                  disabled={releaseAnnouncement.loading}
+                >
+                  {releaseAnnouncement.loading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  {t("settings.aboutPreviewAnnouncement")}
+                </Button>
+              }
+            />
+          ) : null}
 
           <SettingsRow
             title={t("settings.aboutPrereleaseTitle")}

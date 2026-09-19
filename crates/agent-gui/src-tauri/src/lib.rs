@@ -183,6 +183,8 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_backup_download,
             commands::update::app_update_check,
             commands::update::app_update_install,
+            commands::update::app_release_announcement,
+            commands::update::app_release_announcement_preview,
             commands::update::app_restart,
             commands::app::app_runtime_platform,
             commands::app::app_frontend_ready,

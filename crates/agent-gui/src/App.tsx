@@ -26,9 +26,11 @@ import {
 } from "react";
 import { AppBootShell } from "./components/app/AppBootShell";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
+import { ReleaseAnnouncementDialog } from "./components/ReleaseAnnouncementDialog";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
 import { setRetryErrorExtension } from "./lib/providers/runtime/streamRetry";
+import { useReleaseAnnouncementController } from "./lib/releaseAnnouncement";
 import {
   type AppSettings,
   getDefaultSettings,
@@ -646,6 +648,10 @@ export default function App() {
     messages: appUpdateMessages,
     beforeRestart: beforeAppRestart,
   });
+  const releaseAnnouncement = useReleaseAnnouncementController({
+    enabled: settingsReady,
+    currentVersion: __LIVEAGENT_APP_VERSION__,
+  });
   // 托盘「检查更新」动作：controller 在监听 effect 之后创建，经 ref 回填。
   runUpdateCheckRef.current = () => {
     void appUpdate.runCheck().catch(() => undefined);
@@ -766,6 +772,7 @@ export default function App() {
                   initialSection={settingsSection}
                   initialProviderId={settingsProviderId}
                   appUpdate={appUpdate}
+                  releaseAnnouncement={releaseAnnouncement}
                   sttSettingsService={desktopSttSettingsService}
                   onSttProviderChange={setSttProviderOverride}
                   reloadSettings={reloadPersistedSettings}
@@ -791,6 +798,7 @@ export default function App() {
             {translate("app.windowPinned", settings.locale)}
           </button>
         )}
+        <ReleaseAnnouncementDialog controller={releaseAnnouncement} />
         {restartConfirmDialog}
       </AppChrome>
     </LocaleContext.Provider>
