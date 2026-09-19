@@ -1,3 +1,4 @@
+import { isImageGenerationModel } from "@liveagent/ui/lib/models/modelType";
 import type { AppSettings, ProviderId, SelectedModel } from "../../../lib/settings";
 import {
   type GatewaySelectedModelEvent,
@@ -11,12 +12,22 @@ export type EffectiveChatModelSelection = {
   model: string;
 };
 
-/** 模型可用 = 供应商未停用且模型在启用列表内；两种失效对调用方同一处理。 */
+/**
+ * 模型可用 = 供应商未停用且模型在启用列表内；两种失效对调用方同一处理。
+ * 生图模型（modelType === "image"）不能进聊天：它们走 generate_image 工具的
+ * 图像生成接口，聊天流拿不到图片输出。
+ */
 export function isProviderModelAvailable(
-  provider: Pick<AppSettings["customProviders"][number], "enabled" | "activeModels">,
+  provider: Pick<
+    AppSettings["customProviders"][number],
+    "enabled" | "activeModels" | "type" | "presetId" | "models"
+  >,
   model: string,
 ): boolean {
-  return provider.enabled !== false && provider.activeModels.includes(model);
+  if (provider.enabled === false || !provider.activeModels.includes(model)) return false;
+  // --- image generation (begin) ---------------------------------------------
+  return !isImageGenerationModel(provider, model);
+  // --- image generation (end) -----------------------------------------------
 }
 
 export function resolveActiveModelSelection(

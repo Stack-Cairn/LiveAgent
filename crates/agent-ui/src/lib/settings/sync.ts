@@ -67,6 +67,9 @@ export type GatewaySettingsSyncPayload = {
   skills: AppSettings["skills"];
   chatRuntimeControls: AppSettings["chatRuntimeControls"];
   selectedModel: AppSettings["selectedModel"] | null;
+  // --- image generation (begin) ---
+  imageGeneration?: AppSettings["imageGeneration"] | null;
+  // --- image generation (end) ---
   theme: AppSettings["theme"];
   locale: AppSettings["locale"];
   sshPatch?: GatewaySshSyncPatch;
@@ -95,6 +98,9 @@ const GATEWAY_SETTINGS_SYNC_FIELDS = [
   "skills",
   "chatRuntimeControls",
   "selectedModel",
+  // --- image generation (begin) ---
+  "imageGeneration",
+  // --- image generation (end) ---
   "theme",
   "locale",
 ] as const satisfies readonly (keyof GatewaySettingsSyncPayload)[];

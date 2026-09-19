@@ -682,33 +682,54 @@ function extractSection(section, upstream, codexModels) {
         console.error(`skip ${label} (aggregator-prefixed id)`);
         continue;
       }
-      const contextWindow = model?.limit?.context;
+      const rawContext = model?.limit?.context;
       const rawOutput = model?.limit?.output;
-      if (!model?.modalities?.output?.includes?.("text")) {
+      const upstreamOutput = model?.modalities?.output;
+      const emitsText = upstreamOutput?.includes?.("text") === true;
+      // --- image generation (begin) -----------------------------------------
+      // Image-generating models are catalogued even though they never emit
+      // text: the app routes them to the Images / generateContent endpoints
+      // rather than the chat stream (see resolveModelType / imageGeneration.ts).
+      const emitsImage = upstreamOutput?.includes?.("image") === true;
+      // --- image generation (end) -------------------------------------------
+      if (!emitsText && !emitsImage) {
         console.error(`skip ${label} (non-text output)`);
         continue;
       }
-      if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
+      // --- image generation (begin) -----------------------------------------
+      // models.dev publishes limit.context = limit.output = 0 for pure image
+      // models (gpt-image-*, dall-e, flux, …): they have no context-window
+      // semantics at all. Keep them with explicit zeros instead of dropping
+      // them; consumers treat 0 as "no budget accounting" (normalizeModelLimits
+      // passes zeros through, and image-type models skip compaction budgets).
+      const hasValidContext = Number.isInteger(rawContext) && rawContext > 0;
+      const hasValidOutput = Number.isInteger(rawOutput) && rawOutput > 0;
+      const zeroLimitImageModel = emitsImage && !(hasValidContext && hasValidOutput);
+      // --- image generation (end) -------------------------------------------
+      if (!zeroLimitImageModel && !hasValidContext) {
         console.error(`skip ${label} (invalid limit.context)`);
         continue;
       }
-      if (!Number.isInteger(rawOutput) || rawOutput <= 0) {
+      if (!zeroLimitImageModel && !hasValidOutput) {
         console.error(`skip ${label} (invalid limit.output)`);
         continue;
       }
+      const contextWindow = zeroLimitImageModel ? 0 : rawContext;
       const lower = id.toLowerCase();
       if (claimedLower.has(lower)) continue; // CN/global union overlap: first source wins.
       claimedLower.add(lower);
       const thinking = normalizeThinking(model, id, label, section.key);
       const inputModalities = normalizeModalities(model?.modalities?.input, label);
       const outputModalities = normalizeOutputModalities(model?.modalities?.output, label);
-      const maxInputTokens = normalizeMaxInputTokens(model, contextWindow, label);
+      const maxInputTokens = zeroLimitImageModel
+        ? undefined
+        : normalizeMaxInputTokens(model, contextWindow, label);
       const pricing = normalizePricing(model, label);
       entries.push({
         id,
         contextWindow,
         ...(maxInputTokens ? { maxInputTokens } : {}),
-        maxOutputToken: normalizeMaxOutputToken(contextWindow, rawOutput),
+        maxOutputToken: zeroLimitImageModel ? 0 : normalizeMaxOutputToken(contextWindow, rawOutput),
         ...(inputModalities ? { inputModalities } : {}),
         ...(outputModalities ? { outputModalities } : {}),
         ...(thinking ? { thinking } : {}),

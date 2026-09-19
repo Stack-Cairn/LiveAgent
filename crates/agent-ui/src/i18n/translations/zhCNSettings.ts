@@ -369,6 +369,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.ask_user_question.desc": "以选项卡片向你提问并等待选择",
   "settings.builtinTool.ask_user_question.detail":
     "模型在需要你决策时发起选择题（一次最多 4 个问题，每题 2-6 个选项且各题数量一致，推荐项排在首位）。卡片暂停执行等待作答，3 分钟内未作答自动按推荐项继续执行；桌面端与 WebUI 均可作答，点击停止可跳过。仅在对话场景注册。",
+  "settings.builtinTool.generate_image.name": "生成图片",
+  "settings.builtinTool.generate_image.desc": "按提示词生成图片并存进工作区",
+  "settings.builtinTool.generate_image.detail":
+    "用已启用的生图模型按提示词出图：OpenAI 兼容渠道走 /images/generations，Gemini 渠道走 generateContent。生成的图片直接返回给模型，同时按 generated-images/<时间戳>-<序号>.<扩展名> 存进当前工作区（可用 save_to 换目录，不得越出工作区）。一次最多 4 张；size 与 quality 只对 OpenAI 渠道生效。用哪个模型：工具参数 model > 图像生成设置里的默认模型 > 第一个启用的生图模型。需要出网，沙箱离线模式下不注册。仅在对话场景注册。",
   "settings.builtinTool.cron_task_manager.name": "定时任务",
   "settings.builtinTool.cron_task_manager.desc": "创建与管理定时自动任务",
   "settings.builtinTool.cron_task_manager.detail":
@@ -1656,6 +1660,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.modelCapability.nativeWebSearch": "原生搜索",
   "settings.modelCapability.fileInput": "文件输入",
   "settings.modelCapability.imageUnderstanding": "视觉理解",
+  "settings.modelCapability.imageGeneration": "图像生成",
   "settings.modelRouting": "路由",
   "settings.modelChatProtocol": "接口",
   "settings.modelChatProtocolsHint":

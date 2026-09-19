@@ -120,10 +120,22 @@ test("generated catalog upholds the data invariants", () => {
     );
     for (const entry of entries) {
       const label = `${providerId}/${entry.id}`;
-      assert.ok(Number.isInteger(entry.contextWindow) && entry.contextWindow > 0, label);
-      assert.ok(Number.isInteger(entry.maxOutputToken) && entry.maxOutputToken > 0, label);
-      // 生成期已应用统一语义规则：输出永远小于窗口，且运行时规则视其为不动点。
-      assert.ok(entry.maxOutputToken < entry.contextWindow, `${label}: output must be < context`);
+      // --- image generation (begin) ---------------------------------------
+      // 生图模型没有上下文语义（models.dev 对 gpt-image-* 等直接写 limit 0），
+      // 生成期允许成对写 0；这类条目只走图像生成链路，不参与预算计算。
+      const zeroLimitImageEntry =
+        entry.contextWindow === 0 &&
+        entry.maxOutputToken === 0 &&
+        entry.outputModalities?.includes("image") === true;
+      // --- image generation (end) -----------------------------------------
+      if (zeroLimitImageEntry) {
+        assert.equal(entry.maxInputTokens, undefined, `${label}: zero-limit entry keeps no input budget`);
+      } else {
+        assert.ok(Number.isInteger(entry.contextWindow) && entry.contextWindow > 0, label);
+        assert.ok(Number.isInteger(entry.maxOutputToken) && entry.maxOutputToken > 0, label);
+        // 生成期已应用统一语义规则：输出永远小于窗口，且运行时规则视其为不动点。
+        assert.ok(entry.maxOutputToken < entry.contextWindow, `${label}: output must be < context`);
+      }
       const limits = { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
       assert.deepEqual(catalog.normalizeModelLimits(limits), limits, label);
       if (entry.maxInputTokens !== undefined) {

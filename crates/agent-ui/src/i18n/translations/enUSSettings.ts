@@ -386,6 +386,11 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Ask you multiple-choice questions in a card and wait for your selections",
   "settings.builtinTool.ask_user_question.detail":
     "Lets the model ask you multiple-choice questions when a decision is yours to make (up to 4 questions per call, 2-6 options each with the same count across questions, recommended option shown first). Execution pauses on an interactive card until you answer — from the desktop or the WebUI; after 3 minutes without an answer the recommended options are auto-selected, and pressing Stop skips the question. Chat sessions only.",
+  "settings.builtinTool.generate_image.name": "Generate Image",
+  "settings.builtinTool.generate_image.desc":
+    "Generate images from a prompt and save them to the workspace",
+  "settings.builtinTool.generate_image.detail":
+    "Generates images with an enabled image model: OpenAI-compatible channels use /images/generations, Gemini channels use generateContent. The images are returned to the model inline and saved into the current workspace as generated-images/<timestamp>-<n>.<ext> (use save_to for another directory; it must stay inside the workspace). Up to 4 images per call; size and quality only apply to OpenAI channels. Model selection: the model argument > the default image model in settings > the first enabled image model. Needs network access, so it is not registered in offline sandbox mode. Chat sessions only.",
   "settings.builtinTool.cron_task_manager.name": "Scheduled Tasks",
   "settings.builtinTool.cron_task_manager.desc": "Create and manage scheduled automations",
   "settings.builtinTool.cron_task_manager.detail":
@@ -1745,6 +1750,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelCapability.nativeWebSearch": "Native search",
   "settings.modelCapability.fileInput": "File input",
   "settings.modelCapability.imageUnderstanding": "Vision",
+  "settings.modelCapability.imageGeneration": "Image generation",
   "settings.modelRouting": "Routing",
   "settings.modelChatProtocol": "Interface",
   "settings.modelChatProtocolsHint":

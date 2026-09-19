@@ -15,6 +15,8 @@ const ALL = [
   "promptCaching",
   "fileInput",
   "imageUnderstanding",
+  // --- image generation ---
+  "imageGeneration",
 ];
 
 function makeProvider(overrides = {}) {
@@ -58,6 +60,12 @@ test("catalog hit resolves capabilities from models.dev flags and modalities", (
   assert.equal(image.imageUnderstanding.state, "supported");
   // attachment:true → fileInput 即使输入模态无 pdf 也算支持。
   assert.deepEqual(image.fileInput, { state: "supported", source: "catalog" });
+  // --- image generation ---：outputModalities 含 image → 支持出图。
+  assert.deepEqual(image.imageGeneration, { state: "supported", source: "catalog" });
+  assert.deepEqual(
+    capabilities.resolveModelCapabilities(provider, "gpt-5.2").imageGeneration,
+    { state: "unsupported", source: "catalog" },
+  );
 });
 
 test("catalog miss leaves everything unknown except heuristic reasoning and provider search", () => {
