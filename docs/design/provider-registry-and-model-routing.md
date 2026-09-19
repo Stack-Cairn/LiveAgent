@@ -480,15 +480,17 @@ WebUI 发起的探测经现有 `gateway_provider_models` 命令转到桌面执�
 type CapabilityState = "supported" | "unsupported" | "unknown";
 type ModelModality = "text" | "image" | "audio" | "video" | "file";
 type ChatCapabilityName =
-  | "reasoning" | "tools" | "parallelTools" | "structuredOutput"
+  | "reasoning" | "tools" | "structuredOutput"
   | "nativeWebSearch" | "promptCaching" | "fileInput" | "imageUnderstanding";
 ```
 
 有效能力是三方交集：模型声明、所选接口适配器的实现范围、供应商级开关。适配器不支持的能力模型声明也无效，界面标"当前适配器不支持"；模型声明不支持的能力供应商开关不能打开；`unknown` 按能力处理，`tools` / `reasoning` / `promptCaching` 沿用启发式并标来源，`imageUnderstanding` / `fileInput` 未知时不自动开启附件。
 
-能力的默认值来自模型目录（6.6）：`tools` ← tool_call，`structuredOutput` ← structured_output，`reasoning` ← 目录有思考描述，`fileInput` ← attachment 或输入模态含 pdf，`imageUnderstanding` ← 输入模态含 image。目录命中但字段缺省的按 unsupported 处理（models.dev 对这些布尔字段缺省即 false）；目录未命中的才是 unknown。界面每个芯片都带来源（用户 / 目录 / 供应商 / 启发式 / 未知），不再出现"目录已收录却全部显示未知"的情况。
+能力的默认值来自模型目录（6.6）：`tools` ← tool_call，`structuredOutput` ← structured_output，`reasoning` ← 目录有思考描述，`fileInput` ← attachment 或输入模态含 pdf，`imageUnderstanding` ← 输入模态含 image。目录命中但字段缺省的按 unsupported 处理（models.dev 对这些布尔字段缺省即 false）；目录未命中的落到适配器声明（6.2），再没有才是 unknown。界面每个芯片都带来源（用户 / 目录 / 供应商 / 适配器 / 启发式 / 未知），不再出现"目录已收录却全部显示未知"的情况。
 
-运行时消费：`tools` 为 unsupported 时不下发工具定义（纯文本回合）；`imageUnderstanding` / `fileInput` 参与输入模态推导；`reasoning` 决定思考档位是否可选；`nativeWebSearch` 与供应商开关求交。`parallelTools`、`promptCaching` 保留字段，无消费者，界面不开放。
+运行时消费（已实现）：`tools` 为 unsupported 时不下发工具定义（纯文本回合）；`imageUnderstanding` / `fileInput` 参与输入模态推导；`reasoning` 决定思考档位是否可选；`nativeWebSearch` 与供应商开关求交；`promptCaching` 为 unsupported 时 `resolveProviderCacheRetention` 返回 `"none"`，聊天与文本两条链路都不再下缓存断点（Anthropic Messages 与 OpenAI Responses 在适配器层默认 supported，其余接口 unknown）。
+
+`parallelTools` 已从能力位里删除：四类接口在 pi-ai 0.84.2 上都没有 `parallel_tool_calls` 可透传（唯一写死该字段的 `openai-codex-responses` 与有映射的 `mistral-conversations` 本应用都不使用），既无运行时消费者也无界面入口；旧存档里的该键在归一化时静默丢弃。
 
 ### 6.2 逐字段来源
 
@@ -497,7 +499,14 @@ type FieldSource = "user" | "catalog" | "provider" | "adapter" | "heuristic" | "
 type FieldValue<T> = { value: T; source: FieldSource; updatedAt?: number; candidates?: { value: T; source: Exclude<FieldSource, "user"> }[] };
 ```
 
-合并顺序：用户覆盖 > 内置目录 > 供应商元数据 > 适配器声明 > 启发式 > unknown。供应商元数据更新不自动覆盖目录值，显示冲突与采纳入口。现有 `limitsSource` 是迁移起点。运行观测单独保存，不参与合并，不自动改写用户值。界面把 `provider` / `heuristic` 来源统一显示为"自动"。
+合并顺序：用户覆盖 > 内置目录 > 供应商元数据 > 适配器声明 > 启发式 > unknown。已实现：`resolveModelCapabilities` / `resolveModelInputModalitiesResolved` 与设置页的 `modelLimitFieldInfos` 都返回"有效值 + 来源 + `candidates`"，候选按上述顺序排列且不含 user。
+
+- **适配器来源**：`tools` 与 `structuredOutput` 在四类接口上都可用——pi-ai 0.84.2 的四个适配器都会把工具定义转成各自的 wire 形态，而它们都不发 `response_format` / `responseSchema`（只有本应用不使用的 `mistral-conversations` 有该字段），结构化输出一律由工具调用模拟，因此接口层面的结论与 `tools` 一致。`nativeWebSearch` 的接口规则（`protocolSupportsNativeWebSearch`）同样记 `adapter`；供应商总开关关闭时先出 `provider` 候选（排在 adapter 之前）。
+- **供应商来源**：探测拉回的 `/models` 元数据（`context_length` / `top_provider.max_completion_tokens` / `max_input_tokens` / `architecture.input_modalities` / `supports_image_in`，Gemini 则是 `inputTokenLimit` / `outputTokenLimit`）保留在 `ProviderModelConfig.providerMeta`（带 `fetchedAt`），归一化、备份与同步都原样透传。只认上游的 snake_case 字段——本地的 `inputModalities` 是用户覆盖，不得被当成供应商声明。
+- **冲突**：目录值与供应商值都存在且不同，该行显示 warn 芯片"冲突"，hover 列出两个候选，旁边"采纳供应商值"把供应商值写成用户覆盖（限额写 `limitsSource: "user"`，能力写 `capabilities[name]`）。供应商元数据更新**不**自动覆盖目录值。
+- **界面**：编辑模型抽屉能力表与限额表的"目录值"列默认仍显示目录值，存在其它候选时在右侧加一个极小的数量标记（"+N"，冲突时琥珀色），hover 给完整列表、点击在该行下方展开"来源 值"。列数与列宽不变。
+
+现有 `limitsSource` 是迁移起点。运行观测单独保存，不参与合并，不自动改写用户值。
 
 ### 6.3 限制与上下文预算
 
@@ -506,7 +515,25 @@ budget = max(0, min(maxInputTokens ?? ∞, contextWindow − outputReserve))
 outputReserve = min(maxOutputToken, 用户请求的输出上限)
 ```
 
-缺失项不参与约束；目录未命中时使用按协议家族标注 heuristic 的默认值，不生成无限预算。压缩阈值读这个预算。模型级参数覆盖只能落在适配器 schema 之内，未知字段拒绝。
+缺失项不参与约束；目录未命中时使用按协议家族标注 heuristic 的默认值，不生成无限预算。压缩阈值读这个预算。
+
+**模型级参数覆盖（已实现）。** 只允许落在适配器 schema 之内，未知字段拒绝：
+
+```ts
+type ModelParameterOverrides = { temperature?: number; maxTokens?: number; topP?: number };
+```
+
+| 参数 | 透传路径（pi-ai 0.84.2） | 可用接口 |
+| --- | --- | --- |
+| `temperature` | `StreamOptions.temperature` | 四类全部（Anthropic 额外要求未开思考且 `compat.supportsTemperature`） |
+| `maxTokens` | `StreamOptions.maxTokens` → `max_tokens` / `max_completion_tokens` / `max_output_tokens` / `generationConfig.maxOutputTokens` | 四类全部 |
+| `topP` | 无具名字段，经 `StreamOptions.samplingParams` 合并成请求体的 `top_p` | 只有 OpenAI Completions / Responses——`samplingParams` 只被 OpenAI 兼容适配器读取 |
+
+不收录 `stopSequences`：pi-ai 0.84.2 在这四类接口上没有任何 stop 序列通路，加了也不会发出去。
+
+归一化（`normalizeModelParameters`）：未知键丢弃并在 dev 下 `console.warn`；`temperature` 落库按最宽的 0–2 校验、`topP` 按 0–1、`maxTokens` 须为正整数且不超过模型 `maxOutputToken`。请求期 `resolveModelParametersForProtocol` 按 `PROTOCOL_PARAMETER_KEYS` 过滤、按接口范围钳制 `temperature`（Anthropic Messages 0–1，OpenAI 两类与 Gemini 0–2），`parameters.maxTokens` 与 `maxOutputToken` 取小——它只能更小，是本模型的请求上限。结果写进 `ProviderRuntimeConfig.parameters`，`agentRunner` 与 `textOnlyRuntime` 在进入 payload 中间件链之前用 `applyModelParameterOverrides` 落到 stream options；调用方已显式给出的 `temperature`（辅助请求）优先。
+
+界面：编辑模型抽屉限额表下方的"请求参数"小节，三个数字输入各带来源标签（用户 / 未设置）与"还原"，当前接口不透传的参数禁用并说明原因。
 
 ### 6.4 模型发现
 
@@ -722,3 +749,4 @@ P2 与 P3 的任务清单在各自阶段开始前补充。
 | 界面 | 再加一个实例预填自定义实例的地址与方言；停用端点上的"设为默认"不可用；编辑模型抽屉显示三层故障转移候选；窄屏换行；quirks 只在 OpenAI 家族卡片显示；`{origin}` 模板按输入实时展开；未知原因直接显示；最终请求头预览复用运行时合并规则；限额与推理来源徽标正确；管理密钥的差异只在两把 Key 都拉取过后显示，刷新不再覆盖探测期间的修改；取消探测仍写回观测；删除端点与 Key 需确认；添加渠道非自建必填 Key，非法请求头行可见；模型分组内拖拽排序写回 `modelOrder`；模型行记忆化；停用供应商显示提示条；清理无消费者的 i18n 键 |
 | 测试 | 新增/改写：注册表主机归属、隐式端点、故障转移家族与迁移、探测严格模式、网关桥凭据与主机、运行时方言映射与 quirks、辅助模型选择、WebUI 源码契约（改按三栏结构锁定） |
 | 多源地址 | 供应商级 `origins[]` + 端点 `{origin}` 模板；路由按源展开并输出 `originId` / `originUrl`；故障转移在凭据层与端点层之间插入源层（鉴权失败不换源，熔断键带源主机）；探测按源 × 接口展开；旧实例可一键转为源地址模式 |
+| 6.1 / 6.2 / 6.3 补齐 | `FieldSource` 补 `adapter`，能力与限额解析返回 `candidates`（目录 > 供应商 > 适配器 > 启发式）；探测拉回的 `/models` 限额与模态存进 `ProviderModelConfig.providerMeta` 作 `provider` 候选，目录与供应商冲突时抽屉显示 warn 芯片与"采纳供应商值"（写成用户覆盖，不自动改目录值）；新增 `ProviderModelConfig.parameters`（`temperature` / `maxTokens` / `topP`，按 `PROTOCOL_PARAMETER_KEYS` 过滤并钳制）并在 `agentRunner` / `textOnlyRuntime` 落到 stream options；`promptCaching` 接进 `resolveProviderCacheRetention`（unsupported → `none`）；删除无消费者的 `parallelTools` 能力位 |
