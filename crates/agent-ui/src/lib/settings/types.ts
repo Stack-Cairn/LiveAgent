@@ -659,10 +659,13 @@ export type ModelInputModalitiesOverride = ["text"] | ["text", "image"];
 
 export type CapabilityState = "supported" | "unsupported" | "unknown";
 
+// parallelTools 曾占一位，但四类接口（Anthropic Messages / OpenAI Completions /
+// OpenAI Responses / Gemini）在 pi-ai 0.84.2 里都没有 parallel_tool_calls 选项可
+// 透传（仅未使用的 openai-codex-responses 写死 true、mistral-conversations 有映射），
+// 没有任何消费者，故移除；旧存档里的该键由 normalizeModelCapabilities 静默丢弃。
 export const CHAT_CAPABILITY_NAMES = [
   "reasoning",
   "tools",
-  "parallelTools",
   "structuredOutput",
   "nativeWebSearch",
   "promptCaching",
@@ -671,6 +674,37 @@ export const CHAT_CAPABILITY_NAMES = [
 ] as const;
 
 export type ChatCapabilityName = (typeof CHAT_CAPABILITY_NAMES)[number];
+
+// ---------------------------------------------------------------------------
+// 设计 §6.2 / §6.3 新增：供应商声明的模型元数据与模型级请求参数覆盖
+// ---------------------------------------------------------------------------
+
+/**
+ * 探测 / 刷新模型列表时上游 `/models` 自带的声明（OpenRouter 的 context_length、
+ * top_provider.max_completion_tokens、architecture.input_modalities 等）。
+ * 只作为 §6.2 的 `provider` 候选参与展示与冲突提示，不自动覆盖目录值。
+ */
+export type ProviderDeclaredModelMeta = {
+  contextWindow?: number;
+  maxOutputToken?: number;
+  maxInputTokens?: number;
+  inputModalities?: ModelInputModalitiesOverride;
+  /** 这份声明是哪次拉取写下的（毫秒时间戳） */
+  fetchedAt?: number;
+};
+
+/**
+ * 模型级请求参数覆盖（设计 §6.3）。只收录运行时真的会透传给上游的字段：
+ * `temperature` / `maxTokens` 是 pi-ai `StreamOptions` 的具名字段；`topP` 经
+ * `StreamOptions.samplingParams` 落到 OpenAI 兼容请求体的 `top_p`，因此只在
+ * OpenAI 两类接口上可用（见 PROTOCOL_PARAMETER_KEYS）。
+ * pi-ai 0.84.2 没有任何 stop sequences 通路，故不设该字段。
+ */
+export type ModelParameterOverrides = {
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+};
 
 export type ProviderModelConfig = {
   /** 本地稳定 ID：目录匹配、熔断 key、选择器都用它 */
@@ -716,6 +750,12 @@ export type ProviderModelConfig = {
   nativeWebSearch?: boolean;
   /** 用户对能力的显式覆盖；缺失项由目录、适配器与启发式决定 */
   capabilities?: Partial<Record<ChatCapabilityName, CapabilityState>>;
+  // --- 设计 §6.2 / §6.3 新增字段（其余字段位置不变）---
+  /** 上游 /models 自带的限额与模态声明；只作 provider 候选，不自动覆盖目录值 */
+  providerMeta?: ProviderDeclaredModelMeta;
+  /** 模型级请求参数覆盖；范围限定在适配器 schema 之内 */
+  parameters?: ModelParameterOverrides;
+  // --- §6.2 / §6.3 新增结束 ---
   /** 值来源：auto = 发现或目录得出；user = 手动添加或修改 */
   source?: "auto" | "user";
 };

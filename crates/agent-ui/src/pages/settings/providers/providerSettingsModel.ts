@@ -36,12 +36,20 @@ import {
   resolveProviderEndpoint,
 } from "@liveagent/app/lib/settings";
 import {
+  type FieldCandidate,
+  findFieldCandidateConflict,
+  orderFieldCandidates,
   type ResolvedCapability,
   resolveModelCapabilities,
   resolveModelCatalogInfo,
   resolveModelInputModalitiesResolved,
 } from "@liveagent/ui/lib/models/modelCapabilities";
 import type { CatalogModelEntry, CatalogProviderId } from "@liveagent/ui/lib/models/modelCatalog";
+import {
+  type ModelParameterKey,
+  normalizeModelParameters,
+  PROTOCOL_PARAMETER_KEYS,
+} from "@liveagent/ui/lib/models/modelParameters";
 import {
   CUSTOM_PRESET_ID,
   findProviderPreset,
@@ -727,7 +735,11 @@ export function capabilityChipView(resolved: ResolvedCapability): CapabilityChip
   return {
     state: resolved.state,
     overridden: resolved.source === "user",
-    muted: resolved.source === "heuristic" || resolved.source === "provider",
+    // 推断出来的来源（启发式 / 供应商规则 / 适配器声明）都弱化显示，与目录 / 用户区分。
+    muted:
+      resolved.source === "heuristic" ||
+      resolved.source === "provider" ||
+      resolved.source === "adapter",
   };
 }
 
@@ -772,6 +784,12 @@ export type ModelCapabilityRow = {
   override: ModelCapabilityOverride | undefined;
   /** 音频 / 视频运行时不支持覆盖 */
   editable: boolean;
+  // --- 设计 §6.2 新增：候选与冲突 ---
+  /** 非用户来源的全部候选（目录 / 供应商 / 适配器 / 启发式），按合并顺序 */
+  candidates: readonly FieldCandidate<CapabilityState>[];
+  /** 目录值与供应商值都在且不同 */
+  conflict: { catalog: CapabilityState; provider: CapabilityState } | undefined;
+  // --- §6.2 新增结束 ---
 };
 
 const CAPABILITY_ROW_TO_NAME: Partial<Record<ModelCapabilityRowKey, ChatCapabilityName>> = {
@@ -855,6 +873,7 @@ export function modelCapabilityRows(
             ? "supported"
             : "unsupported",
           source: input.source,
+          candidates: [],
         };
     return {
       key,
@@ -862,6 +881,8 @@ export function modelCapabilityRows(
       effective,
       override: model ? modelCapabilityOverride(model, key) : undefined,
       editable: name !== undefined,
+      candidates: effective.candidates,
+      conflict: findFieldCandidateConflict(effective.candidates),
     };
   });
 }
@@ -949,6 +970,99 @@ export function modelLimitFieldSources(
   };
 }
 
+// ---------------------------------------------------------------------------
+// 设计 §6.2：限额字段的候选与冲突采纳
+// ---------------------------------------------------------------------------
+// 候选来源：catalog（目录解析出的默认值）、provider（探测拉回的 providerMeta）、
+// heuristic（供应商兜底常量）。适配器不声明限额，故没有 adapter 候选。
+// 目录值与供应商值都在且不同 = 冲突：界面给 warn 芯片 + "采纳供应商值"，
+// 采纳写成用户覆盖（limitsSource: "user"），供应商元数据本身不自动覆盖目录值。
+
+export type ModelLimitFieldInfo = {
+  /** 当前值的来源徽标；maxInputTokens 未设置且目录也没给时为 undefined */
+  source: ModelLimitFieldSource | undefined;
+  value: number | undefined;
+  candidates: readonly FieldCandidate<number>[];
+  conflict: { catalog: number; provider: number } | undefined;
+};
+
+export function modelLimitFieldInfos(
+  model: Pick<ProviderModelConfig, ModelLimitField | "limitsSource" | "providerMeta">,
+  defaults: ProviderModelDefaults,
+): Record<ModelLimitField, ModelLimitFieldInfo> {
+  const sources = modelLimitFieldSources(model, defaults);
+  const build = (field: ModelLimitField): ModelLimitFieldInfo => {
+    const candidates = orderFieldCandidates<number>({
+      catalog: defaults.source === "catalog" ? (defaults[field] ?? undefined) : undefined,
+      provider: model.providerMeta?.[field],
+      heuristic: defaults.source === "fallback" ? (defaults[field] ?? undefined) : undefined,
+    });
+    return {
+      source: sources[field],
+      value: model[field],
+      candidates,
+      conflict: findFieldCandidateConflict(candidates),
+    };
+  };
+  return {
+    contextWindow: build("contextWindow"),
+    maxInputTokens: build("maxInputTokens"),
+    maxOutputToken: build("maxOutputToken"),
+  };
+}
+
+/** 采纳某个候选值为用户覆盖（"采纳供应商值"按钮）。 */
+export function adoptModelLimitCandidate(
+  model: ProviderModelConfig,
+  field: ModelLimitField,
+  value: number,
+): ProviderModelConfig {
+  return { ...model, [field]: value, limitsSource: "user" };
+}
+
+/** 能力行的"采纳供应商值"：写成用户覆盖，与手选三态同一条写入路径。 */
+export function adoptModelCapabilityCandidate(
+  model: ProviderModelConfig,
+  key: ModelCapabilityRowKey,
+  state: CapabilityState,
+): ProviderModelConfig {
+  return state === "supported" || state === "unsupported"
+    ? setModelCapabilityOverride(model, key, state)
+    : model;
+}
+// --- §6.2 限额候选与冲突结束 ---
+
+// ---------------------------------------------------------------------------
+// 设计 §6.3：模型级请求参数覆盖的读写
+// ---------------------------------------------------------------------------
+
+/** 写入 / 清除单个参数；全部清空后整键删除。 */
+export function setModelParameter(
+  model: ProviderModelConfig,
+  key: ModelParameterKey,
+  value: number | undefined,
+): ProviderModelConfig {
+  const next: ProviderModelConfig = { ...model };
+  const parameters = { ...model.parameters };
+  if (value === undefined) delete parameters[key];
+  else parameters[key] = value;
+  const normalized = normalizeModelParameters(parameters, {
+    maxOutputToken: model.maxOutputToken,
+  });
+  if (normalized) next.parameters = normalized;
+  else delete next.parameters;
+  return next;
+}
+
+/** 该接口上这个参数是否会被透传（不会透传的输入在界面上禁用并说明原因）。 */
+export function modelParameterApplies(
+  protocol: ProviderChatProtocol,
+  key: ModelParameterKey,
+): boolean {
+  return PROTOCOL_PARAMETER_KEYS[protocol].includes(key);
+}
+// --- §6.3 模型级参数结束 ---
+
 /** 单项还原为默认值；全部回到默认值后 limitsSource 也回到默认值来源。 */
 export function resetModelLimitField(
   model: ProviderModelConfig,
@@ -994,7 +1108,9 @@ export function modelCapabilityFlags(
     vision: allows(capabilities.imageUnderstanding, "image"),
     file: allows(capabilities.fileInput, "pdf"),
     reasoning: capabilities.reasoning.state === "supported",
-    tools: capabilities.tools.state === "supported",
+    // 行图标只认模型级证据：适配器层的"这个接口能走工具"是接口事实，
+    // 对每个模型都成立，点亮了就失去区分度（能力表的有效值列仍会显示它）。
+    tools: capabilities.tools.state === "supported" && capabilities.tools.source !== "adapter",
     search:
       capabilities.nativeWebSearch.source === "user" &&
       capabilities.nativeWebSearch.state === "supported",

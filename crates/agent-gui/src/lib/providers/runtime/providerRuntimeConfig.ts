@@ -2,6 +2,7 @@ import {
   resolveModelCapabilities,
   resolveModelInputModalitiesResolved,
 } from "@liveagent/ui/lib/models/modelCapabilities";
+import { resolveModelParametersForProtocol } from "@liveagent/ui/lib/models/modelParameters";
 import {
   clampThinkingLevelToList,
   type ThinkingLevel,
@@ -109,5 +110,15 @@ export function createProviderRuntimeConfig(
     modelConfig,
     capabilities: resolveModelCapabilities(provider, model, route),
     inputModalities: resolveModelInputModalitiesResolved(provider, model, route),
+    // --- 设计 §6.3：模型级参数按本次路由的接口过滤与钳制后带上 ---
+    ...(() => {
+      const parameters = resolveModelParametersForProtocol(
+        route.protocol,
+        modelConfig.parameters,
+        modelConfig.maxOutputToken,
+      );
+      return parameters ? { parameters } : {};
+    })(),
+    // --- §6.3 结束 ---
   } as ProviderRuntimeConfig;
 }

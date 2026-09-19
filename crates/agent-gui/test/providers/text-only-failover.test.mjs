@@ -37,6 +37,8 @@ const loader = createTsModuleLoader({
       buildProviderRequestMetadata: () => undefined,
       resolveProviderCacheRetention: () => undefined,
       toSimpleStreamReasoning: () => undefined,
+      // 设计 §6.3：本用例不配模型级参数，恒等透传即可。
+      applyModelParameterOverrides: (options) => options,
     },
     [abs("src/lib/providers/runtime/modelFactory.ts")]: {
       // Deterministic identity carrying baseUrl so tests can tell targets apart.

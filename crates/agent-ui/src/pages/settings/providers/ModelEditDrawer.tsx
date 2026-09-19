@@ -35,8 +35,16 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { resolveModelCatalogInfo } from "@liveagent/ui/lib/models/modelCapabilities";
+import {
+  type FieldCandidateSource,
+  resolveModelCatalogInfo,
+} from "@liveagent/ui/lib/models/modelCapabilities";
 import type { CatalogProviderId } from "@liveagent/ui/lib/models/modelCatalog";
+import {
+  MODEL_PARAMETER_KEYS,
+  type ModelParameterKey,
+  PROTOCOL_TEMPERATURE_RANGE,
+} from "@liveagent/ui/lib/models/modelParameters";
 import {
   resolveModelThinking,
   THINKING_LEVEL_LADDER,
@@ -49,7 +57,7 @@ import {
 import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
-import { type ReactNode, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useMemo, useState } from "react";
 import { DrawerGroupLabel, HintTip, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
 import { ModelCatalogSummary } from "./ModelCatalogInfoPanel";
 import { originHostLabel } from "./ProviderOriginList";
@@ -63,6 +71,8 @@ import {
   StateChip,
 } from "./providerChips";
 import {
+  adoptModelCapabilityCandidate,
+  adoptModelLimitCandidate,
   capabilityChipView,
   credentialsCoveringModel,
   hasModelCapabilityOverrides,
@@ -73,12 +83,14 @@ import {
   modelFailoverCandidates,
   modelGroupIsUser,
   modelGroupKey,
-  modelLimitFieldSources,
+  modelLimitFieldInfos,
+  modelParameterApplies,
   providerCredentials,
   providerUsesOrigins,
   resetModelCapabilityOverrides,
   resetModelLimitField,
   setModelCapabilityOverride,
+  setModelParameter,
   updateProviderModel,
 } from "./providerSettingsModel";
 
@@ -202,6 +214,150 @@ function CatalogMark(props: { value: ModelCapabilityOverride | undefined }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 设计 §6.2：候选展示。"目录值"列保持原样显示目录值，有其它来源的候选时在右侧
+// 加一个极小的数量标记（"+1"），hover 给出完整列表（title），点击在该行下方展开
+// 一行"来源 值"。列数与列宽不变，展开行是表内的普通行。
+// ---------------------------------------------------------------------------
+
+type CandidateEntry = { source: FieldCandidateSource; label: string };
+
+function CandidateMark(props: {
+  primary: ReactNode;
+  /** 除目录之外的候选（目录值已由 primary 呈现） */
+  extras: readonly CandidateEntry[];
+  conflict: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  summary: string;
+  label: string;
+}) {
+  if (props.extras.length === 0) return <>{props.primary}</>;
+  return (
+    <button
+      type="button"
+      title={props.summary}
+      aria-expanded={props.expanded}
+      aria-label={props.label}
+      onClick={props.onToggle}
+      className="inline-flex min-w-0 items-baseline gap-0.5 text-left"
+    >
+      {props.primary}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "text-[9px] leading-none",
+          props.conflict
+            ? "font-semibold text-amber-600 dark:text-amber-400"
+            : "text-muted-foreground/70",
+        )}
+      >
+        +{props.extras.length}
+      </span>
+    </button>
+  );
+}
+
+/** 候选展开行：与表格其它行同宽，不进四列网格。 */
+function CandidateDetailRow(props: { entries: readonly CandidateEntry[] }) {
+  const { t } = useLocale();
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/30 px-3 py-1.5 text-[10.5px]">
+      {props.entries.map((entry) => (
+        <span key={entry.source} className="inline-flex items-center gap-1">
+          <span className="text-muted-foreground/70">
+            {t(`settings.modelCapabilitySource.${entry.source}`)}
+          </span>
+          <span className="tabular-nums text-foreground/85">{entry.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function candidateSummary(
+  entries: readonly CandidateEntry[],
+  translate: (key: string) => string,
+): string {
+  return entries
+    .map((entry) => `${translate(`settings.modelCapabilitySource.${entry.source}`)} ${entry.label}`)
+    .join(" · ");
+}
+
+// ---------------------------------------------------------------------------
+// 设计 §6.3：请求参数。只有运行时真的会透传的字段，按接口白名单启停。
+// ---------------------------------------------------------------------------
+
+const PARAMETER_LABEL_KEYS: Record<ModelParameterKey, string> = {
+  temperature: "settings.modelParameterTemperature",
+  maxTokens: "settings.modelParameterMaxTokens",
+  topP: "settings.modelParameterTopP",
+};
+
+function parseParameterInput(key: ModelParameterKey, input: string): number | null | undefined {
+  const raw = input.trim();
+  if (!raw) return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  return key === "maxTokens" ? Math.floor(value) : value;
+}
+
+function ModelParameterFields(props: {
+  model: ProviderModelConfig;
+  protocol: ProviderChatProtocol;
+  onChange: (key: ModelParameterKey, value: number | undefined) => void;
+}) {
+  const { t } = useLocale();
+  const { model, protocol } = props;
+  const range = PROTOCOL_TEMPERATURE_RANGE[protocol];
+  const hint: Record<ModelParameterKey, string> = {
+    temperature: `${range.min}–${range.max}`,
+    maxTokens: `≤ ${formatTokenCount(model.maxOutputToken)}`,
+    topP: "0–1",
+  };
+  return (
+    <div className="space-y-2 pt-1">
+      <DrawerGroupLabel
+        label={t("settings.modelParameters")}
+        hint={t("settings.modelParametersHint")}
+      />
+      <div className="grid grid-cols-3 gap-3 max-[720px]:grid-cols-1">
+        {MODEL_PARAMETER_KEYS.map((key) => {
+          const applies = modelParameterApplies(protocol, key);
+          const value = model.parameters?.[key];
+          return (
+            <Field
+              key={key}
+              label={t(PARAMETER_LABEL_KEYS[key])}
+              hint={applies ? hint[key] : t("settings.modelParameterUnsupported")}
+              source={
+                <SourceTag
+                  source={value === undefined ? "auto" : "user"}
+                  onReset={() => props.onChange(key, undefined)}
+                />
+              }
+            >
+              <CommittedInput
+                value={value === undefined ? "" : String(value)}
+                inputMode="decimal"
+                disabled={!applies}
+                className="h-7 w-full text-xs shadow-none"
+                placeholder={t("settings.modelParameterUnset")}
+                aria-label={t(PARAMETER_LABEL_KEYS[key])}
+                onCommit={(input) => {
+                  const parsed = parseParameterInput(key, input);
+                  if (parsed === null) return;
+                  props.onChange(key, parsed);
+                }}
+              />
+            </Field>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** 三态覆盖：继承 / 支持 / 不支持，小型分段控件。 */
 function OverrideSegment(props: {
   value: ModelCapabilityOverride | undefined;
@@ -296,6 +452,8 @@ export function ModelEditDrawer(props: {
     [settings, provider, modelId, route],
   );
   const credentials = providerCredentials(provider);
+  // §6.2：当前展开候选列表的行（"能力行键" / "限额字段键"），同一时刻只展开一行。
+  const [openCandidates, setOpenCandidates] = useState<string | undefined>(undefined);
   const coveringCredentials = credentialsCoveringModel(provider, modelId);
 
   function patch(updater: (current: ProviderModelConfig) => ProviderModelConfig) {
@@ -327,7 +485,7 @@ export function ModelEditDrawer(props: {
     endpoint: provider.endpointConfigs?.[route.protocol],
   });
   const defaults = getProviderModelDefaults(adapterId, model.id, route.baseUrl);
-  const limitSources = modelLimitFieldSources(model, defaults);
+  const limitInfos = modelLimitFieldInfos(model, defaults);
   const credential = credentials.find((item) => item.id === route.credentialId);
   // 与运行时同一份合并规则：鉴权头打底，用户头（供应商级 + 端点级，已按大小写去重）
   // 覆盖；键为空 / 不合法 / 保留键的行不进入预览。
@@ -486,42 +644,90 @@ export function ModelEditDrawer(props: {
                 {capabilityRows.map((row) => {
                   const label = t(CAPABILITY_ROW_LABEL_KEYS[row.key]);
                   const view = capabilityChipView(row.effective);
+                  // §6.2：目录之外的候选（供应商 / 适配器 / 启发式）。
+                  const extras: CandidateEntry[] = row.candidates
+                    .filter((item) => item.source !== "catalog")
+                    .map((item) => ({
+                      source: item.source,
+                      label: t(`settings.modelCapabilityState.${item.value}`),
+                    }));
+                  const all: CandidateEntry[] = row.candidates.map((item) => ({
+                    source: item.source,
+                    label: t(`settings.modelCapabilityState.${item.value}`),
+                  }));
+                  const expanded = openCandidates === `capability:${row.key}`;
                   return (
-                    <div key={row.key} className={CAPABILITY_ROW_CLASS}>
-                      <span className="text-foreground/90">{label}</span>
-                      <Cell column={columnCatalog}>
-                        <CatalogMark value={row.catalog} />
-                      </Cell>
-                      <Cell column={t("settings.modelPropertyColumn.effective")}>
-                        <StateChip state={view.state} overridden={view.overridden}>
-                          {t(`settings.modelCapabilityState.${row.effective.state}`)}
-                        </StateChip>
-                        <span className="text-[10.5px] text-muted-foreground">
-                          {t(`settings.modelCapabilitySource.${row.effective.source}`)}
-                        </span>
-                      </Cell>
-                      <Cell
-                        column={t("settings.modelPropertyColumn.override")}
-                        className="justify-self-end @max-[500px]:justify-self-start"
-                      >
-                        {row.editable ? (
-                          <OverrideSegment
-                            value={row.override}
-                            label={`${label} · ${t("settings.modelPropertyColumn.override")}`}
-                            onChange={(next) =>
-                              patch((current) => setModelCapabilityOverride(current, row.key, next))
+                    <Fragment key={row.key}>
+                      <div className={CAPABILITY_ROW_CLASS}>
+                        <span className="text-foreground/90">{label}</span>
+                        <Cell column={columnCatalog}>
+                          <CandidateMark
+                            primary={<CatalogMark value={row.catalog} />}
+                            extras={extras}
+                            conflict={row.conflict !== undefined}
+                            expanded={expanded}
+                            onToggle={() =>
+                              setOpenCandidates(expanded ? undefined : `capability:${row.key}`)
                             }
+                            summary={candidateSummary(all, t)}
+                            label={`${label} · ${t("settings.modelPropertyColumn.candidates")}`}
                           />
-                        ) : (
-                          <span
-                            className="text-muted-foreground/60"
-                            title={t("settings.modelCapabilityOverrideReadonly")}
-                          >
-                            —
+                        </Cell>
+                        <Cell column={t("settings.modelPropertyColumn.effective")}>
+                          <StateChip state={view.state} overridden={view.overridden}>
+                            {t(`settings.modelCapabilityState.${row.effective.state}`)}
+                          </StateChip>
+                          <span className="text-[10.5px] text-muted-foreground">
+                            {t(`settings.modelCapabilitySource.${row.effective.source}`)}
                           </span>
-                        )}
-                      </Cell>
-                    </div>
+                          {row.conflict && row.editable ? (
+                            <>
+                              <Chip tone="warn" title={candidateSummary(all, t)}>
+                                {t("settings.modelFieldConflict")}
+                              </Chip>
+                              <ChipButton
+                                onClick={() =>
+                                  patch((current) =>
+                                    adoptModelCapabilityCandidate(
+                                      current,
+                                      row.key,
+                                      // biome-ignore lint/style/noNonNullAssertion: conflict 存在即有 provider 候选
+                                      row.conflict!.provider,
+                                    ),
+                                  )
+                                }
+                              >
+                                {t("settings.modelFieldAdoptProvider")}
+                              </ChipButton>
+                            </>
+                          ) : null}
+                        </Cell>
+                        <Cell
+                          column={t("settings.modelPropertyColumn.override")}
+                          className="justify-self-end @max-[500px]:justify-self-start"
+                        >
+                          {row.editable ? (
+                            <OverrideSegment
+                              value={row.override}
+                              label={`${label} · ${t("settings.modelPropertyColumn.override")}`}
+                              onChange={(next) =>
+                                patch((current) =>
+                                  setModelCapabilityOverride(current, row.key, next),
+                                )
+                              }
+                            />
+                          ) : (
+                            <span
+                              className="text-muted-foreground/60"
+                              title={t("settings.modelCapabilityOverrideReadonly")}
+                            >
+                              —
+                            </span>
+                          )}
+                        </Cell>
+                      </div>
+                      {expanded ? <CandidateDetailRow entries={all} /> : null}
+                    </Fragment>
                   );
                 })}
                 <div className="flex items-center justify-between gap-2 px-3 py-1.5">
@@ -555,60 +761,110 @@ export function ModelEditDrawer(props: {
               >
                 {LIMIT_FIELDS.map((field) => {
                   const label = t(LIMIT_FIELD_LABEL_KEYS[field]);
-                  const source = limitSources[field];
+                  const info = limitInfos[field];
+                  const source = info.source;
                   const value = model[field];
+                  // §6.2：目录之外的候选（供应商声明 / 兜底常量）。
+                  const all: CandidateEntry[] = info.candidates.map((item) => ({
+                    source: item.source,
+                    label: formatTokenCount(item.value),
+                  }));
+                  const extras = all.filter((item) => item.source !== "catalog");
+                  const expanded = openCandidates === `limit:${field}`;
                   return (
-                    <div key={field} className={LIMIT_ROW_CLASS}>
-                      <span className="text-foreground/90">{label}</span>
-                      <Cell column={columnCatalog}>
-                        <span className="tabular-nums text-muted-foreground">
-                          {catalogLimit(field)}
-                        </span>
-                      </Cell>
-                      <Cell column={t("settings.modelPropertyColumn.current")}>
-                        <CommittedInput
-                          value={value === undefined ? "" : String(value)}
-                          inputMode="numeric"
-                          className="h-7 w-full max-w-[160px] text-xs shadow-none"
-                          placeholder={
-                            field === "maxInputTokens"
-                              ? t("settings.modelMaxInputTokensUnset")
-                              : undefined
-                          }
-                          aria-label={label}
-                          onCommit={(input) => {
-                            const parsed =
-                              field === "maxInputTokens" && !input.trim()
-                                ? undefined
-                                : parsePositiveInteger(input);
-                            if (parsed === null) return;
-                            patch((current) => ({
-                              ...current,
-                              [field]: parsed,
-                              limitsSource: "user",
-                            }));
-                          }}
-                        />
-                      </Cell>
-                      <Cell
-                        column={t("settings.modelPropertyColumn.source")}
-                        className="justify-self-end @max-[500px]:justify-self-start"
-                      >
-                        {source ? (
-                          <SourceTag
-                            source={source}
-                            onReset={() =>
-                              patch((current) => resetModelLimitField(current, defaults, field))
+                    <Fragment key={field}>
+                      <div className={LIMIT_ROW_CLASS}>
+                        <span className="text-foreground/90">{label}</span>
+                        <Cell column={columnCatalog}>
+                          <CandidateMark
+                            primary={
+                              <span className="tabular-nums text-muted-foreground">
+                                {catalogLimit(field)}
+                              </span>
                             }
+                            extras={extras}
+                            conflict={info.conflict !== undefined}
+                            expanded={expanded}
+                            onToggle={() =>
+                              setOpenCandidates(expanded ? undefined : `limit:${field}`)
+                            }
+                            summary={candidateSummary(all, t)}
+                            label={`${label} · ${t("settings.modelPropertyColumn.candidates")}`}
                           />
-                        ) : (
-                          <span className="text-muted-foreground/60">—</span>
-                        )}
-                      </Cell>
-                    </div>
+                        </Cell>
+                        <Cell column={t("settings.modelPropertyColumn.current")}>
+                          <CommittedInput
+                            value={value === undefined ? "" : String(value)}
+                            inputMode="numeric"
+                            className="h-7 w-full max-w-[160px] text-xs shadow-none"
+                            placeholder={
+                              field === "maxInputTokens"
+                                ? t("settings.modelMaxInputTokensUnset")
+                                : undefined
+                            }
+                            aria-label={label}
+                            onCommit={(input) => {
+                              const parsed =
+                                field === "maxInputTokens" && !input.trim()
+                                  ? undefined
+                                  : parsePositiveInteger(input);
+                              if (parsed === null) return;
+                              patch((current) => ({
+                                ...current,
+                                [field]: parsed,
+                                limitsSource: "user",
+                              }));
+                            }}
+                          />
+                          {info.conflict ? (
+                            <>
+                              <Chip tone="warn" title={candidateSummary(all, t)}>
+                                {t("settings.modelFieldConflict")}
+                              </Chip>
+                              <ChipButton
+                                onClick={() =>
+                                  patch((current) =>
+                                    adoptModelLimitCandidate(
+                                      current,
+                                      field,
+                                      // biome-ignore lint/style/noNonNullAssertion: conflict 存在即有 provider 候选
+                                      info.conflict!.provider,
+                                    ),
+                                  )
+                                }
+                              >
+                                {t("settings.modelFieldAdoptProvider")}
+                              </ChipButton>
+                            </>
+                          ) : null}
+                        </Cell>
+                        <Cell
+                          column={t("settings.modelPropertyColumn.source")}
+                          className="justify-self-end @max-[500px]:justify-self-start"
+                        >
+                          {source ? (
+                            <SourceTag
+                              source={source}
+                              onReset={() =>
+                                patch((current) => resetModelLimitField(current, defaults, field))
+                              }
+                            />
+                          ) : (
+                            <span className="text-muted-foreground/60">—</span>
+                          )}
+                        </Cell>
+                      </div>
+                      {expanded ? <CandidateDetailRow entries={all} /> : null}
+                    </Fragment>
                   );
                 })}
               </PropertyTable>
+              {/* 设计 §6.3：请求参数（限适配器 schema 之内） */}
+              <ModelParameterFields
+                model={model}
+                protocol={route.protocol}
+                onChange={(key, next) => patch((current) => setModelParameter(current, key, next))}
+              />
             </section>
 
             {/* 5. 思考 */}

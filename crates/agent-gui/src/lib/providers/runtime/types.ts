@@ -8,6 +8,7 @@ import type { EndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders
 import type {
   CodexRequestFormat,
   CustomProvider,
+  ModelParameterOverrides,
   PromptCacheHintMode,
   ProviderChatProtocol,
   ProviderEndpointAuth,
@@ -86,6 +87,14 @@ export type ProviderRuntimeConfig = {
   capabilities?: ResolvedModelCapabilities;
   /** 有效输入模态（用户覆盖 > 目录 > 能力反推 > 仅文本）；模型工厂据此决定 Model.input。 */
   inputModalities?: ResolvedModelInputModalities;
+  // --- 设计 §6.3 新增 ---
+  /**
+   * 模型级请求参数覆盖，已按本次路由的接口过滤与钳制
+   * （resolveModelParametersForProtocol）。agentRunner / textOnlyRuntime 装配
+   * stream options 时直接应用，缺省表示本次请求不带模型级参数。
+   */
+  parameters?: ModelParameterOverrides;
+  // --- §6.3 新增结束 ---
 };
 
 export type ToolChoice =

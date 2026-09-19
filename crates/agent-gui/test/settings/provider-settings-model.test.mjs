@@ -498,9 +498,10 @@ test("catalog hits render chips as catalog values instead of the old always-unkn
   assert.equal(model.capabilityChipView(resolved.tools).state, "supported");
   assert.equal(model.capabilityChipView(resolved.structuredOutput).state, "supported");
   assert.equal(model.capabilityChipView(resolved.imageUnderstanding).state, "supported");
-  // 目录未收录：工具 / 结构化输出未知，推理按启发式弱化。
+  // 目录未收录：工具退到适配器声明（§6.2），弱化显示；推理按启发式弱化。
   const miss = capabilities.resolveModelCapabilities(provider, "my-finetune");
-  assert.equal(model.capabilityChipView(miss.tools).state, "unknown");
+  assert.equal(model.capabilityChipView(miss.tools).state, "supported");
+  assert.equal(model.capabilityChipView(miss.tools).muted, true);
   assert.equal(model.capabilityChipView(miss.reasoning).muted, true);
 });
 
@@ -550,7 +551,10 @@ test("capability table rows pair catalog value, effective value and user overrid
   const byKey = Object.fromEntries(rows.map((row) => [row.key, row]));
   // 目录值 = 条目原始值；有效值 = 用户覆盖优先；覆盖列读 capabilities / inputModalities。
   assert.equal(byKey.tools.catalog, "supported");
-  assert.deepEqual(byKey.tools.effective, { state: "unsupported", source: "user" });
+  assert.deepEqual(
+    { state: byKey.tools.effective.state, source: byKey.tools.effective.source },
+    { state: "unsupported", source: "user" },
+  );
   assert.equal(byKey.tools.override, "unsupported");
   assert.equal(byKey.imageUnderstanding.catalog, "supported");
   assert.equal(byKey.imageUnderstanding.override, "unsupported");
@@ -561,17 +565,22 @@ test("capability table rows pair catalog value, effective value and user overrid
   assert.equal(byKey.audioInput.override, undefined);
   // 原生搜索目录不收录：目录值为空，有效值走供应商规则。
   assert.equal(byKey.nativeWebSearch.catalog, undefined);
-  assert.equal(byKey.nativeWebSearch.effective.source, "provider");
+  assert.equal(byKey.nativeWebSearch.effective.source, "adapter");
   assert.equal(model.hasModelCapabilityOverrides(provider.models[0]), true);
 
-  // 目录未收录：目录值整列为空，有效值按启发式 / 未知。
+  // 目录未收录：目录值整列为空，有效值退到适配器 / 启发式 / 未知（§6.2）。
   const miss = model.modelCapabilityRows(
     provider,
     "my-finetune",
     settings.resolveProviderChatRoute(provider, "my-finetune"),
   );
   assert.ok(miss.every((row) => row.catalog === undefined));
-  assert.equal(miss.find((row) => row.key === "tools").effective.state, "unknown");
+  const missTools = miss.find((row) => row.key === "tools");
+  assert.equal(missTools.effective.state, "supported");
+  assert.equal(missTools.effective.source, "adapter");
+  assert.deepEqual(missTools.candidates, [{ value: "supported", source: "adapter" }]);
+  assert.equal(missTools.conflict, undefined);
+  assert.equal(miss.find((row) => row.key === "imageUnderstanding").effective.state, "unknown");
   assert.equal(model.hasModelCapabilityOverrides(provider.models[1]), false);
 });
 
