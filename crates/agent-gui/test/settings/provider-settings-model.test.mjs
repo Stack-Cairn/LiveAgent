@@ -546,6 +546,7 @@ test("capability table rows pair catalog value, effective value and user overrid
       "tools",
       "structuredOutput",
       "nativeWebSearch",
+      "imageGeneration",
     ],
   );
   const byKey = Object.fromEntries(rows.map((row) => [row.key, row]));

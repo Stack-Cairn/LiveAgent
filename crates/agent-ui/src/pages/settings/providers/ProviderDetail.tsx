@@ -34,6 +34,7 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { isImageGenerationModel } from "@liveagent/ui/lib/models/modelType";
 import type { ModelCheckAggregate, ModelCheckResult } from "@liveagent/ui/lib/providers/modelCheck";
 import { CUSTOM_PRESET_ID, resolveEndpointRequestBase } from "@liveagent/ui/lib/providers/registry";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -90,6 +91,7 @@ import {
   removeProviderModel,
   removeProviderModels,
   reorderProviderModels,
+  setImageGenerationDefaultModel,
   setProviderModelActive,
   writeEndpoint,
 } from "./providerSettingsModel";
@@ -156,6 +158,9 @@ function ModelCheckChip(props: {
       </Chip>
     );
   }
+  if (check.state === "skipped") {
+    return <Chip tone="default">{t("settings.modelCheckState.skipped")}</Chip>;
+  }
   const first = check.results.find((result) => !result.ok);
   return (
     <Chip tone="bad" title={title} className="max-w-[40cqw] overflow-hidden">
@@ -198,12 +203,17 @@ type ModelRowInfo = {
   dialect: ProviderWireDialect;
   /** null = 不需要提示；labels 为空 = 无匹配 Key */
   keyLabels: string[] | null;
+  /** 生图模型：不走聊天接口，由 generate_image 工具调用 */
+  image: boolean;
+  /** 是否为全局生图默认模型 */
+  imageDefault: boolean;
 };
 
 function computeModelRowInfo(
   provider: CustomProvider,
   model: ProviderModelConfig,
   enabledKeyCount: number,
+  imageDefault: { customProviderId: string; model: string } | undefined,
 ): ModelRowInfo {
   const route = resolveProviderChatRoute(provider, model.id);
   // 能力图标与编辑抽屉同源：有效能力（用户覆盖 > 目录 > 规则 / 启发式）+ 有效输入模态。
@@ -221,6 +231,9 @@ function computeModelRowInfo(
     hasEndpoint: Boolean(readEndpoint(provider, route.protocol)),
     dialect: route.dialect,
     keyLabels,
+    image: isImageGenerationModel(provider, model.id),
+    imageDefault:
+      imageDefault?.customProviderId === provider.id && imageDefault?.model === model.id,
   };
 }
 
@@ -233,6 +246,7 @@ const ModelRow = memo(function ModelRow(props: {
   onChange: ProviderUpdater;
   onOpenDrawer: (drawer: ProviderDrawerState) => void;
   onCheck: (modelId: string) => void;
+  onToggleImageDefault: (modelId: string, next: boolean) => void;
   renderDragHandle: (itemId: string, label: string) => ReactNode;
   getItemProps: (itemId: string) => {
     "data-vertical-reorder-id": string;
@@ -248,6 +262,7 @@ const ModelRow = memo(function ModelRow(props: {
     onChange,
     onOpenDrawer,
     onCheck,
+    onToggleImageDefault,
     renderDragHandle,
     getItemProps,
   } = props;
@@ -343,7 +358,24 @@ const ModelRow = memo(function ModelRow(props: {
           </span>
         ) : null}
       </span>
-      {info.hasEndpoint ? (
+      {info.image ? (
+        <>
+          <Chip tone="on" title={t("settings.modelTypeImageHint")}>
+            {t("settings.modelTypeImage")}
+          </Chip>
+          <ChipButton
+            tone={info.imageDefault ? "ok" : "default"}
+            title={t(
+              info.imageDefault
+                ? "settings.modelImageUnsetDefault"
+                : "settings.modelImageSetDefault",
+            )}
+            onClick={() => onToggleImageDefault(model.id, !info.imageDefault)}
+          >
+            {t(info.imageDefault ? "settings.modelImageDefault" : "settings.modelImageSetDefault")}
+          </ChipButton>
+        </>
+      ) : info.hasEndpoint ? (
         <Chip
           tone={info.protocolExplicit ? "on" : "default"}
           className="max-w-[40cqw] shrink overflow-hidden"
@@ -430,6 +462,7 @@ function ModelGroup(props: {
   onChange: ProviderUpdater;
   onOpenDrawer: (drawer: ProviderDrawerState) => void;
   onCheck: (modelId: string) => void;
+  onToggleImageDefault: (modelId: string, next: boolean) => void;
 }) {
   const {
     group,
@@ -442,6 +475,7 @@ function ModelGroup(props: {
     onChange,
     onOpenDrawer,
     onCheck,
+    onToggleImageDefault,
   } = props;
   const { t } = useLocale();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
@@ -533,6 +567,7 @@ function ModelGroup(props: {
                 onChange={onChange}
                 onOpenDrawer={onOpenDrawer}
                 onCheck={onCheck}
+                onToggleImageDefault={onToggleImageDefault}
                 renderDragHandle={renderDragHandle}
                 getItemProps={getItemProps}
               />
@@ -576,15 +611,31 @@ export function ProviderDetail(props: ProviderDetailProps) {
     () => new Map(providerCredentials(provider).map((credential, index) => [credential.id, index])),
     [provider],
   );
+  const imageDefaultModel = settings.imageGeneration?.defaultModel;
+  const toggleImageDefault = useCallback(
+    (modelId: string, next: boolean) =>
+      setSettings((current) =>
+        next
+          ? setImageGenerationDefaultModel(current, {
+              customProviderId: provider.id,
+              model: modelId,
+            })
+          : setImageGenerationDefaultModel(current, null, {
+              customProviderId: provider.id,
+              model: modelId,
+            }),
+      ),
+    [setSettings, provider.id],
+  );
   const infoById = useMemo(() => {
     const enabledKeyCount = enabledCredentials(provider).length;
     return new Map(
       provider.models.map((model) => [
         model.id,
-        computeModelRowInfo(provider, model, enabledKeyCount),
+        computeModelRowInfo(provider, model, enabledKeyCount, imageDefaultModel),
       ]),
     );
-  }, [provider]);
+  }, [provider, imageDefaultModel]);
   // 搜索 / 过滤只在内存里：切换供应商（父组件按 id 重挂）即复位。生效时无匹配的分组
   // 整组隐藏，"全部测试"也只测可见的已启用模型。
   const [listFilter, setListFilter] = useState<ModelListFilter>(EMPTY_MODEL_LIST_FILTER);
@@ -1070,6 +1121,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
                 onChange={onChange}
                 onOpenDrawer={onOpenDrawer}
                 onCheck={checkOne}
+                onToggleImageDefault={toggleImageDefault}
               />
             ))
           )}

@@ -699,6 +699,42 @@ export function removeProviderModels(
   });
 }
 
+/** 生图默认模型：设为该模型，或传 null 清除（只在当前就是它时才清）。 */
+export function setImageGenerationDefaultModel(
+  settings: AppSettings,
+  target: { customProviderId: string; model: string } | null,
+  clearOnlyIfMatches?: { customProviderId: string; model: string },
+): AppSettings {
+  const current = settings.imageGeneration?.defaultModel;
+  if (target === null) {
+    if (
+      clearOnlyIfMatches &&
+      (current?.customProviderId !== clearOnlyIfMatches.customProviderId ||
+        current?.model !== clearOnlyIfMatches.model)
+    ) {
+      return settings;
+    }
+    if (!current) return settings;
+    const { defaultModel: _dropped, ...rest } = settings.imageGeneration ?? {};
+    return {
+      ...settings,
+      ...(Object.keys(rest).length > 0
+        ? { imageGeneration: rest }
+        : { imageGeneration: undefined }),
+    };
+  }
+  return { ...settings, imageGeneration: { ...settings.imageGeneration, defaultModel: target } };
+}
+
+export function isImageGenerationDefaultModel(
+  settings: Pick<AppSettings, "imageGeneration">,
+  customProviderId: string,
+  model: string,
+): boolean {
+  const current = settings.imageGeneration?.defaultModel;
+  return current?.customProviderId === customProviderId && current?.model === model;
+}
+
 export function setProviderModelActive(
   provider: CustomProvider,
   modelId: string,
@@ -758,7 +794,8 @@ export type ModelCapabilityRowKey =
   | "reasoning"
   | "tools"
   | "structuredOutput"
-  | "nativeWebSearch";
+  | "nativeWebSearch"
+  | "imageGeneration";
 
 export const MODEL_CAPABILITY_ROWS: readonly ModelCapabilityRowKey[] = [
   "imageUnderstanding",
@@ -769,6 +806,7 @@ export const MODEL_CAPABILITY_ROWS: readonly ModelCapabilityRowKey[] = [
   "tools",
   "structuredOutput",
   "nativeWebSearch",
+  "imageGeneration",
 ];
 
 /** 用户覆盖只有两态；undefined = 继承（目录 / 规则 / 启发式）。 */
@@ -799,6 +837,7 @@ const CAPABILITY_ROW_TO_NAME: Partial<Record<ModelCapabilityRowKey, ChatCapabili
   tools: "tools",
   structuredOutput: "structuredOutput",
   nativeWebSearch: "nativeWebSearch",
+  imageGeneration: "imageGeneration",
 };
 
 function toOverride(state: CapabilityState | undefined): ModelCapabilityOverride | undefined {

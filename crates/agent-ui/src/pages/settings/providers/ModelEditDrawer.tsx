@@ -49,6 +49,7 @@ import {
   resolveModelThinking,
   THINKING_LEVEL_LADDER,
 } from "@liveagent/ui/lib/models/modelThinking";
+import { resolveModelType } from "@liveagent/ui/lib/models/modelType";
 import { mergeCustomHeaders } from "@liveagent/ui/lib/providers/customHeaders";
 import {
   PROVIDER_PROTOCOL_DIALECTS,
@@ -115,6 +116,7 @@ const CAPABILITY_ROW_LABEL_KEYS: Record<ModelCapabilityRow["key"], string> = {
   tools: "settings.modelCapability.tools",
   structuredOutput: "settings.modelCapability.structuredOutput",
   nativeWebSearch: "settings.modelCapability.nativeWebSearch",
+  imageGeneration: "settings.modelCapability.imageGeneration",
 };
 
 function parsePositiveInteger(input: string): number | null {
@@ -469,6 +471,7 @@ export function ModelEditDrawer(props: {
   }
 
   if (!model || !route) return null;
+  const modelType = resolveModelType(provider, model.id);
 
   const adapterId = route.adapterProviderId;
   const thinking = resolveModelThinking(adapterId, model.id);
@@ -601,6 +604,55 @@ export function ModelEditDrawer(props: {
                   />
                 </Field>
               </div>
+              {/* 模型类型：对话 / 生图。生图模型不走四类聊天接口，由 generate_image 工具调用。 */}
+              <Field
+                label={t("settings.modelType")}
+                hint={t("settings.modelTypeHint")}
+                source={
+                  <SourceTag
+                    source={model.modelType ? "user" : "auto"}
+                    onReset={() => drop("modelType")}
+                  />
+                }
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <fieldset className="inline-flex h-[22px] items-stretch overflow-hidden rounded-md border border-border/70 p-0">
+                    {(["chat", "image"] as const).map((value) => {
+                      const active = modelType.type === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={active}
+                          className={cn(
+                            "px-2 text-[11px] leading-none transition-colors first:rounded-l-md last:rounded-r-md",
+                            active
+                              ? "bg-primary/10 font-medium text-primary"
+                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                          )}
+                          onClick={() =>
+                            patch((current) => ({
+                              ...current,
+                              modelType:
+                                value === resolveModelType(provider, current.id).type &&
+                                !current.modelType
+                                  ? undefined
+                                  : value,
+                            }))
+                          }
+                        >
+                          {t(
+                            value === "chat" ? "settings.modelTypeChat" : "settings.modelTypeImage",
+                          )}
+                        </button>
+                      );
+                    })}
+                  </fieldset>
+                  <span className="text-[10.5px] text-muted-foreground">
+                    {t(`settings.modelCapabilitySource.${modelType.source}`)}
+                  </span>
+                </div>
+              </Field>
             </section>
 
             {/* 2. 目录 */}

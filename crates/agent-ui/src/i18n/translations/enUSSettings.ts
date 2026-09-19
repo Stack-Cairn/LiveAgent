@@ -1662,6 +1662,18 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.modelPropertyColumn.current": "Current",
   "settings.modelPropertyColumn.source": "Source",
   "settings.modelPropertyColumn.candidates": "Candidates",
+  "settings.modelCapabilityRow.imageGeneration": "Image generation",
+  "settings.modelType": "Model type",
+  "settings.modelTypeHint":
+    "Chat models use the four chat interfaces; image models are hidden from the chat picker and invoked by the built-in “Generate image” tool over OpenAI Images or Gemini generateContent. Defaults to the catalog's output modalities; can be overridden.",
+  "settings.modelTypeChat": "Chat",
+  "settings.modelTypeImage": "Image",
+  "settings.modelTypeImageHint":
+    "Image model: not routed through chat; invoked by the Generate image tool",
+  "settings.modelImageDefault": "Default for images",
+  "settings.modelImageSetDefault": "Set as image default",
+  "settings.modelImageUnsetDefault": "Clear image default model",
+  "settings.modelCheckState.skipped": "Skipped · generation costs money",
   "settings.modelCapabilityRow.imageUnderstanding": "Vision (image input)",
   "settings.modelCapabilityRow.fileInput": "Files (PDF)",
   "settings.modelCapabilityRow.audioInput": "Audio input",
