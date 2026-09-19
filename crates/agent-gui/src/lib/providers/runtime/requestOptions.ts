@@ -7,7 +7,9 @@ import { type PreparedProxyRequest, prepareProxyRequest } from "@liveagent/ui/li
 import { buildProtocolAuthHeaders } from "@liveagent/ui/lib/providers/registry/protocols";
 import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
 import type {
+  CapabilityState,
   CodexRequestFormat,
+  ModelParameterOverrides,
   ProviderChatProtocol,
   ProviderEndpointAuth,
   ProviderId,
@@ -120,10 +122,20 @@ export function resolveProviderCacheRetention(
   promptCachingEnabled?: boolean,
   requestOverride?: CacheRetention,
   providerPreference?: CacheRetention,
+  // --- 设计 §6.1：模型有效能力参与判定 ---
+  /**
+   * 该模型 promptCaching 的有效状态（resolveModelCapabilities 的结果）。
+   * unsupported（用户显式标记，或将来目录/适配器判定不支持）直接返回 "none"，
+   * 不给上游下缓存断点；unknown / supported 沿用原有供应商级规则。
+   */
+  modelCapability?: CapabilityState,
+  // --- §6.1 结束 ---
 ): CacheRetention | undefined {
   // Codex 的 wire 策略由 promptCacheHintMode 处理；这里保留 short 让供应商级
   // none 仍可被单模型覆盖。请求级 none 则始终优先，供标题/压缩等辅助请求禁用。
   if (providerId !== "claude_code" && providerId !== "codex") return undefined;
+  // 模型有效能力优先于供应商级偏好：标记不支持就不再下缓存断点。
+  if (modelCapability === "unsupported") return "none";
   if (providerId === "codex") return requestOverride ?? "short";
   if (promptCachingEnabled === false) return "none";
   // 请求级 override 优先（压缩/标题等辅助请求强制 none）。
@@ -132,6 +144,36 @@ export function resolveProviderCacheRetention(
   if (providerId === "claude_code" && providerPreference === "long") return "long";
   return "short";
 }
+
+// ---------------------------------------------------------------------------
+// 设计 §6.3：把模型级参数覆盖落到 pi-ai 的 stream options
+// ---------------------------------------------------------------------------
+// runtime.parameters 已由 createProviderRuntimeConfig 按接口过滤并钳制过，这里
+// 只负责映射：temperature / maxTokens 是 StreamOptions 的具名字段；topP 只能经
+// samplingParams 落到 OpenAI 兼容请求体的 top_p（其它适配器会忽略 samplingParams，
+// 所以白名单已在 PROTOCOL_PARAMETER_KEYS 里挡掉）。
+// maxTokens 与既有 maxOutputToken 的关系：参数覆盖只能更小，作为本模型的请求上限。
+
+export function applyModelParameterOverrides<T extends SimpleStreamOptions>(
+  options: T,
+  parameters: ModelParameterOverrides | undefined,
+  maxOutputToken?: number,
+): T {
+  if (!parameters) return options;
+  const next = { ...options };
+  if (parameters.temperature !== undefined && next.temperature === undefined) {
+    next.temperature = parameters.temperature;
+  }
+  if (parameters.maxTokens !== undefined) {
+    const ceiling = maxOutputToken ?? next.maxTokens;
+    next.maxTokens = ceiling ? Math.min(ceiling, parameters.maxTokens) : parameters.maxTokens;
+  }
+  if (parameters.topP !== undefined) {
+    next.samplingParams = { ...next.samplingParams, top_p: parameters.topP };
+  }
+  return next;
+}
+// --- §6.3 结束 ---
 
 export function buildProviderRequestMetadata(
   providerId: ProviderId,

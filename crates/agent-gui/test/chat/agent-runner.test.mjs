@@ -281,6 +281,22 @@ const llmMock = {
   finalizeProviderStreamOptions({ options }) {
     return options;
   },
+  // 设计 §6.3：模型级参数覆盖（真实实现在 runtime/requestOptions.ts）。
+  applyModelParameterOverrides(options, parameters, maxOutputToken) {
+    if (!parameters) return options;
+    const next = { ...options };
+    if (parameters.temperature !== undefined && next.temperature === undefined) {
+      next.temperature = parameters.temperature;
+    }
+    if (parameters.maxTokens !== undefined) {
+      const ceiling = maxOutputToken ?? next.maxTokens;
+      next.maxTokens = ceiling ? Math.min(ceiling, parameters.maxTokens) : parameters.maxTokens;
+    }
+    if (parameters.topP !== undefined) {
+      next.samplingParams = { ...next.samplingParams, top_p: parameters.topP };
+    }
+    return next;
+  },
   normalizeErrorMessage(value, fallback = "Request failed") {
     return typeof value === "string" && value.trim() ? value.trim() : fallback;
   },

@@ -627,14 +627,16 @@ test("gemini model list normalization uses models array metadata", () => {
     "gemini",
   );
 
-  assert.deepEqual(models, [
-    {
-      id: "gemini-3.5-flash",
-      contextWindow: 1_048_576,
-      maxOutputToken: 65_536,
-      limitsSource: "provider",
-    },
-  ]);
+  assert.equal(models.length, 1);
+  const [flash] = models;
+  assert.equal(flash.id, "gemini-3.5-flash");
+  assert.equal(flash.contextWindow, 1_048_576);
+  assert.equal(flash.maxOutputToken, 65_536);
+  assert.equal(flash.limitsSource, "provider");
+  // 设计 §6.2：供应商声明同时留一份 providerMeta 作候选（fetchedAt 随拉取时间）。
+  assert.equal(flash.providerMeta.contextWindow, 1_048_576);
+  assert.equal(flash.providerMeta.maxOutputToken, 65_536);
+  assert.ok(flash.providerMeta.fetchedAt > 0);
 });
 
 test("payload middleware composer preserves previous-hook-first order", async () => {
@@ -1242,6 +1244,15 @@ test("resolveProviderCacheRetention maps provider settings and per-request overr
   // long 档位仅对 Anthropic 生效。
   assert.equal(resolve("codex", true, undefined, "long"), "short");
   assert.equal(resolve("gemini", true), undefined);
+
+  // 设计 §6.1：模型有效能力参与判定——标为不支持就不下缓存断点，
+  // 优先于供应商偏好与请求级 override；supported / unknown 不改变原有行为。
+  assert.equal(resolve("claude_code", true, undefined, "long", "unsupported"), "none");
+  assert.equal(resolve("codex", true, undefined, undefined, "unsupported"), "none");
+  assert.equal(resolve("claude_code", true, "long", "long", "supported"), "long");
+  assert.equal(resolve("claude_code", true, undefined, undefined, "unknown"), "short");
+  // 本就没有缓存通路的接口不受影响，仍返回 undefined。
+  assert.equal(resolve("gemini", true, undefined, undefined, "unsupported"), undefined);
 });
 
 test("codex automatic cache hint resolution follows request format before endpoint hints", () => {

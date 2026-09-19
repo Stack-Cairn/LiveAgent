@@ -24,6 +24,7 @@ import {
   withHostedSearchProbeHeader,
 } from "../../providers/hostedSearchEvents";
 import {
+  applyModelParameterOverrides,
   buildProviderRequestMetadata,
   createModelFromRuntime,
   createStreamingTextReconciler,
@@ -1304,6 +1305,8 @@ export async function runAssistantWithTools(params: {
           primaryRoundTarget.runtime.promptCachingEnabled,
           undefined,
           primaryRoundTarget.runtime.promptCacheRetention,
+          // 设计 §6.1：缓存归因口径与实际请求一致。
+          primaryRoundTarget.runtime.capabilities?.promptCaching?.state,
         );
       const roundSessionId = options?.sessionId ?? params.sessionId;
       const prefixShape = capturePrefixShape({
@@ -1376,6 +1379,8 @@ export async function runAssistantWithTools(params: {
               target.runtime.promptCachingEnabled,
               undefined,
               target.runtime.promptCacheRetention,
+              // 设计 §6.1：模型 promptCaching 标为不支持时不下缓存断点。
+              target.runtime.capabilities?.promptCaching?.state,
             ),
           metadata: buildProviderRequestMetadata(transportProviderId, params.sessionId),
           toolChoice:
@@ -1404,6 +1409,13 @@ export async function runAssistantWithTools(params: {
             },
           },
         };
+
+        // 设计 §6.3：模型级参数覆盖在进入 payload 中间件链之前应用。
+        streamOptions = applyModelParameterOverrides(
+          streamOptions,
+          target.runtime.parameters,
+          target.runtime.modelConfig?.maxOutputToken,
+        );
 
         streamOptions = finalizeProviderStreamOptions({
           providerId: transportProviderId,

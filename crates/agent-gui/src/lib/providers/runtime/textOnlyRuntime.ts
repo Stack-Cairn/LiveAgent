@@ -29,6 +29,7 @@ import {
   withProviderFailover,
 } from "./providerFailover";
 import {
+  applyModelParameterOverrides,
   buildProviderRequestMetadata,
   prepareProviderRequest,
   resolveProviderCacheRetention,
@@ -138,6 +139,8 @@ function buildTextOnlyStreamOptions(params: {
       params.runtime.promptCachingEnabled,
       params.cacheRetention,
       params.runtime.promptCacheRetention,
+      // 设计 §6.1：模型 promptCaching 标为不支持时不下缓存断点。
+      params.runtime.capabilities?.promptCaching?.state,
     ),
     metadata: buildProviderRequestMetadata(transportProviderId, sessionId),
     reasoning: reasoningApplies ? toSimpleStreamReasoning(params.runtime.reasoning) : undefined,
@@ -158,11 +161,17 @@ function buildTextOnlyStreamOptions(params: {
       onRetryRecovered: params.onRetryRecovered,
     },
   };
+  // 设计 §6.3：模型级参数覆盖在进入 payload 中间件链之前应用。
+  const withParameters = applyModelParameterOverrides(
+    options,
+    params.runtime.parameters,
+    params.runtime.modelConfig?.maxOutputToken,
+  );
   return finalizeProviderStreamOptions({
     providerId: transportProviderId,
     ...runtimeRouteParams(params.runtime, params.providerId),
     baseUrl: params.runtime.baseUrl,
-    options,
+    options: withParameters,
     context: params.context,
     model: params.model,
     workdir: params.workdir,

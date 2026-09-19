@@ -42,6 +42,7 @@ export {
   createProviderRuntimeConfig,
 } from "./runtime/providerRuntimeConfig";
 export {
+  applyModelParameterOverrides,
   buildAnthropicAuthHeaders,
   buildGeminiAuthHeaders,
   buildOpenAIAuthHeaders,

@@ -16,6 +16,7 @@ import {
   resolveModelLimits,
   resolveModelLimitsAcrossProviders,
 } from "@liveagent/ui/lib/models/modelCatalog";
+import { normalizeModelParameters } from "@liveagent/ui/lib/models/modelParameters";
 import {
   clampThinkingLevelToList,
   resolveModelThinking,
@@ -110,6 +111,7 @@ import type {
   ProviderChatProtocol,
   ProviderCredential,
   ProviderCredentialScope,
+  ProviderDeclaredModelMeta,
   ProviderEndpointAuth,
   ProviderEndpointConfig,
   ProviderEndpointProbe,
@@ -1304,6 +1306,79 @@ function normalizeLimitsSource(value: unknown): ModelLimitsSource | undefined {
     : undefined;
 }
 
+// ---------------------------------------------------------------------------
+// 设计 §6.2：供应商声明的模型元数据（provider 候选）
+// ---------------------------------------------------------------------------
+// 来源有两处，形状不同但都进同一个 providerMeta：
+//   1. 刷新模型列表时上游 /models 的原始条目（context_length、top_provider.*、
+//      architecture.input_modalities、supports_image_in 等），过去只被
+//      extractProviderDeclaredLimits 读走限额就丢掉；
+//   2. 已落库的 providerMeta（存量读回，不因加载而丢失）。
+// 只保留声明本身，不参与"有效值"的自动覆盖——冲突由界面提示并由用户采纳。
+
+function extractProviderDeclaredMeta(
+  obj: Record<string, unknown>,
+  fetchedAt?: number,
+): ProviderDeclaredModelMeta | undefined {
+  const stored = obj.providerMeta;
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+    const source = stored as Record<string, unknown>;
+    const out: ProviderDeclaredModelMeta = {};
+    const contextWindow = normalizePositiveInteger(source.contextWindow, 0);
+    const maxOutputToken = normalizePositiveInteger(source.maxOutputToken, 0);
+    const maxInputTokens = normalizePositiveInteger(source.maxInputTokens, 0);
+    const modalities = normalizeInputModalities(source.inputModalities);
+    const at = normalizePositiveInteger(source.fetchedAt, 0);
+    if (contextWindow > 0) out.contextWindow = contextWindow;
+    if (maxOutputToken > 0) out.maxOutputToken = maxOutputToken;
+    if (maxInputTokens > 0) out.maxInputTokens = maxInputTokens;
+    if (modalities) out.inputModalities = modalities;
+    if (at > 0) out.fetchedAt = at;
+    return Object.keys(out).length > 0 ? out : undefined;
+  }
+
+  const topProvider =
+    obj.top_provider && typeof obj.top_provider === "object"
+      ? (obj.top_provider as Record<string, unknown>)
+      : undefined;
+  const architecture =
+    obj.architecture && typeof obj.architecture === "object"
+      ? (obj.architecture as Record<string, unknown>)
+      : undefined;
+
+  const contextWindow =
+    normalizePositiveInteger(obj.context_length, 0) ||
+    normalizePositiveInteger(topProvider?.context_length, 0);
+  const maxOutputToken =
+    normalizePositiveInteger(topProvider?.max_completion_tokens, 0) ||
+    normalizePositiveInteger(obj.max_completion_tokens, 0);
+  const maxInputTokens =
+    normalizePositiveInteger(obj.max_input_tokens, 0) ||
+    normalizePositiveInteger(topProvider?.max_input_tokens, 0);
+  // 模态声明：OpenRouter 用 architecture.input_modalities，部分中转用
+  // supports_image_in 布尔位。本应用的模态覆盖只有 text / text+image 两形态。
+  // 只认上游的 snake_case 字段——camelCase 的 inputModalities 是本地的用户覆盖，
+  // 读回存档时绝不能被当成供应商声明。
+  const declaredModalities = architecture?.input_modalities ?? obj.input_modalities;
+  const modalityList = Array.isArray(declaredModalities)
+    ? declaredModalities.filter((item): item is string => typeof item === "string")
+    : undefined;
+  const supportsImage =
+    modalityList?.includes("image") ??
+    (typeof obj.supports_image_in === "boolean" ? obj.supports_image_in : undefined);
+
+  const out: ProviderDeclaredModelMeta = {};
+  if (contextWindow > 0) out.contextWindow = contextWindow;
+  if (maxOutputToken > 0) out.maxOutputToken = maxOutputToken;
+  if (maxInputTokens > 0) out.maxInputTokens = maxInputTokens;
+  if (supportsImage !== undefined)
+    out.inputModalities = supportsImage ? ["text", "image"] : ["text"];
+  if (Object.keys(out).length === 0) return undefined;
+  out.fetchedAt = fetchedAt ?? Date.now();
+  return out;
+}
+// --- §6.2 供应商元数据结束 ---
+
 export function normalizeProviderModelConfig(
   input: unknown,
   providerId: ProviderId,
@@ -1405,6 +1480,12 @@ export function normalizeProviderModelConfig(
   const reasoning =
     obj.reasoning === undefined ? undefined : normalizeReasoningLevel(obj.reasoning);
   const capabilities = normalizeModelCapabilities(obj.capabilities);
+  // --- 设计 §6.2 / §6.3 新增：供应商声明与模型级参数覆盖 ---
+  const providerMeta = extractProviderDeclaredMeta(obj);
+  const parameters = normalizeModelParameters(obj.parameters, {
+    maxOutputToken: limits.maxOutputToken,
+  });
+  // --- §6.2 / §6.3 新增结束 ---
   return {
     id,
     ...(wireModelId && wireModelId !== id ? { wireModelId } : {}),
@@ -1426,6 +1507,10 @@ export function normalizeProviderModelConfig(
     ...(reasoning ? { reasoning } : {}),
     ...(typeof obj.nativeWebSearch === "boolean" ? { nativeWebSearch: obj.nativeWebSearch } : {}),
     ...(capabilities ? { capabilities } : {}),
+    // --- 设计 §6.2 / §6.3 新增字段 ---
+    ...(providerMeta ? { providerMeta } : {}),
+    ...(parameters ? { parameters } : {}),
+    // --- §6.2 / §6.3 新增结束 ---
     ...(obj.source === "user"
       ? { source: "user" as const }
       : obj.source === "auto"

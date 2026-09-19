@@ -644,6 +644,16 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
       maxOutputToken: maxOutputToken ?? draft.maxOutputToken,
       limitsSource: contextWindow && maxOutputToken ? "provider" : draft.limitsSource,
       ...(inputModalities ? { inputModalities } : {}),
+      // 设计 §6.2：Gemini 的 inputTokenLimit / outputTokenLimit 也作 provider 候选留存。
+      ...(contextWindow || maxOutputToken
+        ? {
+            providerMeta: {
+              ...(contextWindow ? { contextWindow } : {}),
+              ...(maxOutputToken ? { maxOutputToken } : {}),
+              fetchedAt: Date.now(),
+            },
+          }
+        : {}),
     });
   }
 
@@ -686,6 +696,9 @@ export function mergeFetchedModels(
                 }
               : {}),
             ...(model.ownedBy ? { ownedBy: model.ownedBy } : {}),
+            // 设计 §6.2：本次拉回的供应商声明始终更新（它只是候选与冲突提示的
+            // 数据源，不改有效值，因此不受 limitsSource 的保护规则约束）。
+            ...(model.providerMeta ? { providerMeta: model.providerMeta } : {}),
           }
         : model,
     );
