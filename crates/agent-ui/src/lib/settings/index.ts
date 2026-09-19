@@ -22,6 +22,9 @@ import {
   resolveModelThinking,
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
+// --- image generation (begin) -----------------------------------------------
+import { isImageGenerationModel } from "@liveagent/ui/lib/models/modelType";
+// --- image generation (end) -------------------------------------------------
 import { isEndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders";
 import {
   CUSTOM_PRESET_ID,
@@ -98,6 +101,8 @@ import type {
   EffectivePromptSettings,
   EffectiveWorkspaceResources,
   ExecutionMode,
+  // --- image generation (begin) ---
+  ImageGenerationSettings,
   McpAuthConfig,
   McpServerConfig,
   McpSettings,
@@ -106,6 +111,8 @@ import type {
   ModelInputModalitiesOverride,
   ModelInputModality,
   ModelLimitsSource,
+  ModelType,
+  // --- image generation (end) ---
   ProjectPromptStrategy,
   PromptCacheHintMode,
   ProviderChatProtocol,
@@ -167,6 +174,9 @@ import {
   getProviderPrimaryOrigin,
   isProviderChatProtocolEnabled,
   MODEL_INPUT_MODALITIES,
+  // --- image generation (begin) ---
+  MODEL_TYPES,
+  // --- image generation (end) ---
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_CHAT_PROTOCOLS,
   PROVIDER_PROTOCOL_FAMILY,
@@ -1486,6 +1496,9 @@ export function normalizeProviderModelConfig(
     maxOutputToken: limits.maxOutputToken,
   });
   // --- §6.2 / §6.3 新增结束 ---
+  // --- image generation (begin) ---------------------------------------------
+  const modelType = normalizeModelType(obj.modelType);
+  // --- image generation (end) -----------------------------------------------
   return {
     id,
     ...(wireModelId && wireModelId !== id ? { wireModelId } : {}),
@@ -1511,6 +1524,9 @@ export function normalizeProviderModelConfig(
     ...(providerMeta ? { providerMeta } : {}),
     ...(parameters ? { parameters } : {}),
     // --- §6.2 / §6.3 新增结束 ---
+    // --- image generation (begin) -------------------------------------------
+    ...(modelType ? { modelType } : {}),
+    // --- image generation (end) ---------------------------------------------
     ...(obj.source === "user"
       ? { source: "user" as const }
       : obj.source === "auto"
@@ -1546,6 +1562,13 @@ function normalizeModelCapabilities(
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
+
+// --- image generation (begin) -----------------------------------------------
+/** 模型用途覆盖：只认 "chat" / "image"，其余（含缺省）返回 undefined 走推断。 */
+export function normalizeModelType(input: unknown): ModelType | undefined {
+  return MODEL_TYPES.find((value) => value === input);
+}
+// --- image generation (end) -------------------------------------------------
 
 /**
  * 输入模态覆盖的运行时归一化（设置加载与 modelFactory 共用的唯一校验）：
@@ -2587,6 +2610,26 @@ export function normalizeSelectedModelForProviders(
   return provider.activeModels.includes(selectedModel.model) ? selectedModel : undefined;
 }
 
+// --- image generation (begin) -----------------------------------------------
+/**
+ * 图像生成设置的归一化：默认生图模型必须指向一个仍然存在、仍被启用、
+ * 且确实是 image 类型的模型，否则整条丢弃（回落到"第一个可用生图模型"）。
+ */
+export function normalizeImageGenerationSettings(
+  input: unknown,
+  customProviders: CustomProvider[],
+): ImageGenerationSettings | undefined {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const selected = normalizeSelectedModel(obj.defaultModel);
+  if (!selected) return undefined;
+  const provider = customProviders.find((item) => item.id === selected.customProviderId);
+  if (!provider || provider.enabled === false) return undefined;
+  if (!provider.activeModels.includes(selected.model)) return undefined;
+  if (!isImageGenerationModel(provider, selected.model)) return undefined;
+  return { defaultModel: selected };
+}
+// --- image generation (end) -------------------------------------------------
+
 export function normalizeMemorySettings(
   input: unknown,
   customProviders: CustomProvider[],
@@ -2770,6 +2813,15 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
       obj.chatRuntimeControls ?? defaults.chatRuntimeControls,
     ),
     selectedModel,
+    // --- image generation (begin) -------------------------------------------
+    ...(() => {
+      const imageGeneration = normalizeImageGenerationSettings(
+        obj.imageGeneration,
+        customProviders,
+      );
+      return imageGeneration ? { imageGeneration } : {};
+    })(),
+    // --- image generation (end) ---------------------------------------------
     theme: normalizeTheme(obj.theme),
     locale: normalizeLocale(locale),
     closeWindowBehavior: normalizeCloseWindowBehavior(obj.closeWindowBehavior),

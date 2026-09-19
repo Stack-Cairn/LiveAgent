@@ -28,6 +28,12 @@ import { createConversationTools } from "./conversationTools";
 import { createCronTools } from "./cronTools";
 import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
+// --- image generation (begin) ---
+import {
+  createImageGenerationTools,
+  type ImageGenerationToolSettings,
+} from "./imageGenerationTools";
+// --- image generation (end) ---
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
@@ -183,6 +189,10 @@ type BuildBuiltinBaseToolRegistryParams = {
     customProviderId: string;
     model: string;
   };
+  // --- image generation (begin) ---
+  /** 实时读供应商列表与默认生图模型；缺省时不注册 generate_image。 */
+  getImageGenerationSettings?: () => ImageGenerationToolSettings;
+  // --- image generation (end) ---
   /** Live read of the authoritative MCP settings (never a turn-level snapshot). */
   getMcpSettings: () => McpSettings;
   /** Id-keyed merge commit into the authoritative settings; absent in read-only scopes. */
@@ -266,6 +276,21 @@ async function buildBaseBuiltinToolBundles(
       workdir: params.workdir,
       mode: params.memoryToolMode ?? "rw",
     }),
+    // --- image generation (begin) -------------------------------------------
+    // 生图要出网。与 browser bundle 同一条 fail-closed 规则：sandboxOffline
+    // （enabled 且 !allowNetwork）下整个 bundle 不注册，模型工具表内不可见。
+    // 没有设置读取入口（Cron 等场景）时同样不注册。
+    ...(params.getImageGenerationSettings &&
+    !(params.sandbox?.enabled === true && !params.sandbox.allowNetwork)
+      ? [
+          createImageGenerationTools({
+            workdir: params.workdir,
+            getSettings: params.getImageGenerationSettings,
+            resolveHomeDir,
+          }),
+        ]
+      : []),
+    // --- image generation (end) ---------------------------------------------
     createTunnelManagerTools({
       enabled: params.remoteWebTunnelsEnabled === true && params.runtimeScope === "chat",
       runtimeScope: params.runtimeScope,

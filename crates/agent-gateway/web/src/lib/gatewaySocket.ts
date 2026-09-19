@@ -56,6 +56,9 @@ import type {
   FsWriteTextResponse,
   GatewayChatCommandInput,
   GatewayProviderCheckModelPayload,
+  // --- image generation ---
+  GatewayProviderDownloadImagePayload,
+  GatewayProviderGenerateImagePayload,
   GatewayWorkspaceRootGrant,
   GatewayWorkspaceRootGrantDraft,
   HistoryGetOptions,
@@ -108,6 +111,9 @@ export type {
   ChatFileOpenResponse,
   GatewayChatCommandInput,
   GatewayProviderCheckModelPayload,
+  // --- image generation ---
+  GatewayProviderDownloadImagePayload,
+  GatewayProviderGenerateImagePayload,
   GatewayWorkspaceRootGrant,
   GatewayWorkspaceRootGrantDraft,
   ManagedProcessLogPayload,
@@ -420,6 +426,10 @@ export type GatewayWebSocketClientLike = {
     credentialId?: string,
   ): Promise<unknown>;
   checkProviderModel(payload: GatewayProviderCheckModelPayload): Promise<unknown>;
+  // --- image generation (begin) ---
+  generateProviderImage(payload: GatewayProviderGenerateImagePayload): Promise<unknown>;
+  downloadProviderImage(payload: GatewayProviderDownloadImagePayload): Promise<unknown>;
+  // --- image generation (end) ---
   providerUsageQuery<T = unknown>(providerId: string, refresh: boolean): Promise<T>;
   providerUsageTest<T = unknown>(providerId: string, configJson: string): Promise<T>;
   dispose(): void;

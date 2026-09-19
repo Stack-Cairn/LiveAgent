@@ -1007,6 +1007,84 @@ pub async fn handle_provider_check_model(
     Ok(proto::ProviderCheckModelResponse { result_json })
 }
 
+// --- image generation (begin) -----------------------------------------------
+// 图像生成（WebUI 走网关桥）：脱敏态补 Key、主机白名单与超时钳制全部复用模型
+// 连通测试那一套（resolve_stored_provider_check_headers），只是改打生图服务。
+pub async fn handle_provider_generate_image(
+    request: proto::ProviderGenerateImageRequest,
+) -> Result<proto::ProviderGenerateImageResponse, String> {
+    let body = if request.body_json.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str::<Value>(&request.body_json)
+            .map_err(|_| "请求体不是有效 JSON".to_string())?
+    };
+    let headers: Vec<(String, String)> = request
+        .headers
+        .iter()
+        .map(|header| (header.name.clone(), header.value.clone()))
+        .collect();
+    let protocol = request.protocol.trim().to_string();
+    let auth = ProviderCheckAuthOverride {
+        header_name: request.auth_header_name.trim().to_string(),
+        prefix: request.auth_prefix.clone(),
+    };
+    let headers = if provider_check_has_auth_header(&headers, &protocol, &auth) {
+        headers
+    } else {
+        let provider_id = request.provider_id.clone();
+        let credential_id = request.credential_id.clone();
+        let url = request.url.clone();
+        let protocol = protocol.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let conn = open_db()?;
+            resolve_stored_provider_check_headers(
+                load_providers(&conn)?,
+                &provider_id,
+                &credential_id,
+                &url,
+                &protocol,
+                &auth,
+                headers,
+            )
+        })
+        .await
+        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
+    };
+    let result = crate::services::image_generation::generate_provider_image(
+        crate::services::image_generation::ProviderGenerateImageRequest {
+            url: request.url,
+            headers,
+            body,
+            use_system_proxy: request.use_system_proxy,
+            timeout_ms: request.timeout_ms,
+        },
+    )
+    .await?;
+    let result_json =
+        serde_json::to_string(&result).map_err(|error| format!("序列化图像生成结果失败：{error}"))?;
+    Ok(proto::ProviderGenerateImageResponse { result_json })
+}
+
+// 下载远端生图结果：不带鉴权头，也不查落库供应商——URL 是供应商刚在响应里发回
+// 的一次性地址，桌面端只做 http(s) 与体积校验。
+pub async fn handle_provider_download_image(
+    request: proto::ProviderDownloadImageRequest,
+) -> Result<proto::ProviderDownloadImageResponse, String> {
+    let result = crate::services::image_generation::download_provider_image(
+        crate::services::image_generation::ProviderDownloadImageRequest {
+            url: request.url,
+            use_system_proxy: request.use_system_proxy,
+            timeout_ms: request.timeout_ms,
+        },
+    )
+    .await?;
+    let result_json =
+        serde_json::to_string(&result).map_err(|error| format!("序列化图片下载结果失败：{error}"))?;
+    Ok(proto::ProviderDownloadImageResponse { result_json })
+}
+// --- image generation (end) -------------------------------------------------
+
 pub async fn handle_skill_files_list() -> Result<proto::SkillFilesListResponse, String> {
     tauri::async_runtime::spawn_blocking(system_list_skill_files_sync)
         .await
@@ -1370,6 +1448,8 @@ pub async fn handle_fs_write_text(
             expected_content_hash,
             // WebUI 文件管理器的直接写入,不属于对话轮,不做检查点捕获。
             None,
+            // --- image generation ---：base64 供生图工具把图片存进工作区。
+            Some(request.encoding),
         )
     })
     .await
@@ -1853,6 +1933,8 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "Delete"
             | "Edit"
             | "ExitPlanMode"
+            // --- image generation ---
+            | "generate_image"
             | "Glob"
             | "Grep"
             | "Image"
@@ -2646,6 +2728,56 @@ mod tests {
         assert_eq!(header_value(&relay, "x-api-key"), Some("sk-primary"));
         assert_eq!(header_value(&relay, "authorization"), None);
     }
+
+    // --- image generation (begin) -------------------------------------------
+    // 生图走网关桥时复用同一个解析器：这里锁住"生图地址同样受主机白名单约束、
+    // 鉴权头按借道的接口生成"这两条，避免以后给生图开后门。
+    #[test]
+    fn provider_generate_image_reuses_the_check_credential_and_host_rules() {
+        let base_headers = vec![("content-type".to_string(), "application/json".to_string())];
+        // 借 OpenAI 家族端点打 /images/generations：主机已知，补 Bearer。
+        let images = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "backup",
+            "https://stored.example.com/v1/images/generations",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("images endpoint on a known host");
+        assert_eq!(
+            header_value(&images, "authorization"),
+            Some("Bearer sk-backup")
+        );
+
+        // 借 Gemini 端点打 :generateContent：鉴权头换成 x-goog-api-key。
+        let gemini = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://stored.example.com/v1beta/models/gemini-3-pro-image:generateContent",
+            "google-generative-ai",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("gemini endpoint on a known host");
+        assert_eq!(header_value(&gemini, "x-goog-api-key"), Some("sk-primary"));
+        assert_eq!(header_value(&gemini, "authorization"), None);
+
+        // 陌生主机一样被拒：生图请求不得把 Key 送去没保存过的地址。
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://evil.example.com/v1/images/generations",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            base_headers,
+        )
+        .is_err());
+    }
+    // --- image generation (end) ---------------------------------------------
 
     #[test]
     fn provider_check_rejects_unknown_hosts_and_missing_provider() {

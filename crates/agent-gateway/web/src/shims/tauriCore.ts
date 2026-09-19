@@ -193,6 +193,8 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
           typeof args?.expected_mtime_ms === "number" ? args.expected_mtime_ms : undefined,
         expectedContentHash:
           typeof args?.expected_content_hash === "string" ? args.expected_content_hash : undefined,
+        // --- image generation ---：base64 让生图工具把图片写进工作区。
+        encoding: typeof args?.encoding === "string" ? args.encoding : undefined,
       })) as T;
     case "fs_read_editable_text":
       return (await getGatewayWebSocketClient(loadToken().trim()).readEditableTextFile(
@@ -307,6 +309,31 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         ...(typeof args?.auth_prefix === "string" ? { auth_prefix: args.auth_prefix } : {}),
         ...(typeof args?.timeout_ms === "number" ? { timeout_ms: args.timeout_ms } : {}),
       })) as T;
+    // --- image generation (begin) -------------------------------------------
+    case "gateway_provider_generate_image":
+      return (await getGatewayWebSocketClient(loadToken().trim()).generateProviderImage({
+        url: String(args?.url ?? ""),
+        headers: Array.isArray(args?.headers)
+          ? (args.headers as { key: string; value: string }[])
+          : [],
+        body: args?.body,
+        use_system_proxy: args?.use_system_proxy === true,
+        provider_id: String(args?.provider_id ?? ""),
+        credential_id: String(args?.credential_id ?? ""),
+        protocol: String(args?.protocol ?? ""),
+        ...(typeof args?.auth_header_name === "string"
+          ? { auth_header_name: args.auth_header_name }
+          : {}),
+        ...(typeof args?.auth_prefix === "string" ? { auth_prefix: args.auth_prefix } : {}),
+        ...(typeof args?.timeout_ms === "number" ? { timeout_ms: args.timeout_ms } : {}),
+      })) as T;
+    case "gateway_provider_download_image":
+      return (await getGatewayWebSocketClient(loadToken().trim()).downloadProviderImage({
+        url: String(args?.url ?? ""),
+        use_system_proxy: args?.use_system_proxy === true,
+        ...(typeof args?.timeout_ms === "number" ? { timeout_ms: args.timeout_ms } : {}),
+      })) as T;
+    // --- image generation (end) ---------------------------------------------
     case "settings_reset_ssh_known_host": {
       const host = String(args?.host ?? "").trim();
       const port = typeof args?.port === "number" ? args.port : Number(args?.port ?? 0);

@@ -70,6 +70,9 @@ message GatewayEnvelope {
     ClarifyTurnRequest clarify_turn = 101;
     CuaDriverRequest cua_driver = 102;
     ProviderCheckModelRequest provider_check_model = 103;
+    // 图像生成（设计文档 §6.7）：与 provider_check_model 同一套脱敏 / 补 Key 规则。
+    ProviderGenerateImageRequest provider_generate_image = 104;
+    ProviderDownloadImageRequest provider_download_image = 105;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -154,6 +157,8 @@ message AgentEnvelope {
     CuaDriverResponse cua_driver_resp = 107;
     ClarifyTurnDelta clarify_turn_delta = 108;
     ProviderCheckModelResponse provider_check_model_resp = 109;
+    ProviderGenerateImageResponse provider_generate_image_resp = 110;
+    ProviderDownloadImageResponse provider_download_image_resp = 111;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1288,6 +1293,9 @@ message FsWriteTextRequest {
   string expected_content_hash = 6;
   bool has_expected_mtime_ms = 7;
   bool has_expected_content_hash = 8;
+  // content 的编码："" / "utf8" = 文本原样落盘；"base64" = 解码后按字节写。
+  // 生图工具用 base64 把 PNG / WebP 存进工作区，复用同一套路径边界与检查点。
+  string encoding = 9;
 }
 
 message FsWriteTextResponse {
@@ -1402,6 +1410,42 @@ message ProviderCheckModelRequest {
 
 // result_json：`{"status":200,"latency_ms":320,"body":"..."}`（body 截断到 4KB）。
 message ProviderCheckModelResponse {
+  string result_json = 1;
+}
+
+// 图像生成（WebUI → 桌面端）：字段与 ProviderCheckModelRequest 一一对应，鉴权
+// 与主机白名单规则完全相同；差别只在桌面端的超时缺省（120 秒）与响应体上限
+// （64MB，且不截断——截断会切坏 base64 图片）。
+message ProviderGenerateImageRequest {
+  string url = 1;
+  repeated ProviderCustomHeader headers = 2;
+  // 请求体 JSON 文本（POST）。
+  string body_json = 3;
+  bool use_system_proxy = 4;
+  string provider_id = 5;
+  string credential_id = 6;
+  // 借道的聊天接口字面量（openai-completions / openai-responses / google-generative-ai）。
+  string protocol = 7;
+  string auth_header_name = 8;
+  optional string auth_prefix = 9;
+  optional uint64 timeout_ms = 10;
+}
+
+// result_json：`{"status":200,"latency_ms":31200,"body":"..."}`（body 不截断）。
+message ProviderGenerateImageResponse {
+  string result_json = 1;
+}
+
+// 下载生图结果里的远端图片（dall-e 等只回 url 的响应）。不带鉴权头：URL 是
+// 供应商刚发回的一次性签名地址，桌面端只校验 http(s) 与 32MB 上限。
+message ProviderDownloadImageRequest {
+  string url = 1;
+  bool use_system_proxy = 2;
+  optional uint64 timeout_ms = 3;
+}
+
+// result_json：`{"mime_type":"image/png","data":"<base64>"}`。
+message ProviderDownloadImageResponse {
   string result_json = 1;
 }
 

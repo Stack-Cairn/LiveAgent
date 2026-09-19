@@ -671,6 +671,11 @@ export const CHAT_CAPABILITY_NAMES = [
   "promptCaching",
   "fileInput",
   "imageUnderstanding",
+  // --- image generation (begin) ---------------------------------------------
+  // 图像生成：不经四类聊天接口，由内置 generate_image 工具走 OpenAI Images 或
+  // Gemini generateContent（docs/design 附录 §6.7）。
+  "imageGeneration",
+  // --- image generation (end) -----------------------------------------------
 ] as const;
 
 export type ChatCapabilityName = (typeof CHAT_CAPABILITY_NAMES)[number];
@@ -758,7 +763,29 @@ export type ProviderModelConfig = {
   // --- §6.2 / §6.3 新增结束 ---
   /** 值来源：auto = 发现或目录得出；user = 手动添加或修改 */
   source?: "auto" | "user";
+  // --- image generation (begin) ---------------------------------------------
+  /**
+   * 该模型走聊天流还是图像生成链路。缺省不写，由 resolveModelType 按
+   * 目录 outputModalities → id 启发式推断；写了就是用户显式覆盖。
+   * image 类型的模型不进聊天选择器，也不做连通性测试（生成一张图要花钱）。
+   */
+  modelType?: ModelType;
+  // --- image generation (end) -----------------------------------------------
 };
+
+// --- image generation (begin) -----------------------------------------------
+/** 模型用途的合法值全集（运行时校验与类型的单一来源）。 */
+export const MODEL_TYPES = ["chat", "image"] as const;
+
+/** chat = 四类聊天接口；image = 图像生成接口（Images / generateContent）。 */
+export type ModelType = (typeof MODEL_TYPES)[number];
+
+/** 图像生成设置：目前只有"默认生图模型"。 */
+export type ImageGenerationSettings = {
+  /** 内置 generate_image 工具未显式指定 model 时用哪个；必须是 image 类型模型。 */
+  defaultModel?: SelectedModel;
+};
+// --- image generation (end) -------------------------------------------------
 
 export type ChatRuntimeControls = {
   thinkingEnabled: boolean;
@@ -1079,6 +1106,9 @@ export type AppSettings = {
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;
   selectedModel?: SelectedModel;
+  // --- image generation (begin) ---------------------------------------------
+  imageGeneration?: ImageGenerationSettings;
+  // --- image generation (end) -----------------------------------------------
   theme: Theme;
   locale: Locale;
   /** Desktop-only: close title-bar X to hide to tray or exit the application. */

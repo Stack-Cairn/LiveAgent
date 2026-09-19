@@ -4,6 +4,7 @@ pub mod chat_run_ledger;
 pub mod cua_driver;
 pub mod gateway;
 pub mod gateway_bridge;
+pub mod image_generation;
 pub mod mcp_oauth;
 pub mod memory;
 pub mod power_activity;

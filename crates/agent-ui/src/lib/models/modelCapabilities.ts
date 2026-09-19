@@ -289,6 +289,19 @@ export function resolveModelCapabilities(
           : undefined,
       }),
     ),
+    // --- image generation (begin) -------------------------------------------
+    // 目录的 outputModalities 含 "image" 即支持出图；目录没命中时留 unknown
+    // （id 启发式只用于 resolveModelType 的路由判定，不冒充能力事实）。
+    imageGeneration: resolveFromCandidates(
+      orderFieldCandidates<CapabilityState>({
+        catalog: catalog
+          ? catalog.outputModalities?.includes("image")
+            ? "supported"
+            : "unsupported"
+          : undefined,
+      }),
+    ),
+    // --- image generation (end) ---------------------------------------------
   };
 
   const out = { ...defaults };

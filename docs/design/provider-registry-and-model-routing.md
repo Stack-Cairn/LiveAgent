@@ -144,7 +144,7 @@ type ProviderModelConfig = {
   wireModelId?: string;             // 发给远端的模型名，缺省等于 id
   displayName?: string;
   group?: string;                   // 列表分组，缺省由模型家族推导
-  modelType?: "chat";               // image / embedding / rerank 保留，暂不可选
+  modelType?: "chat" | "image";     // 缺省按目录与 id 推断（6.7）；embedding / rerank 保留，暂不可选
   chatProtocol?: ProviderChatProtocol;      // 显式选用的接口；可选范围见 4.3
   dialect?: ProviderWireDialect;
   ownedBy?: string;
@@ -586,6 +586,40 @@ type ModelParameterOverrides = { temperature?: number; maxTokens?: number; topP?
 
 **术语。** "接口家族"（Anthropic / OpenAI / Gemini）只用于故障转移分组与路由；"模型系列"（claude / gpt / gemini / deepseek / glm …）只用于列表分组、默认接口偏好与原生搜索资格。界面文案分别使用这两个词，不再混用"家族"。
 
+### 6.7 图像生成
+
+**为什么不走聊天流。** pi-ai 0.84.2 的 `AssistantMessage.content` 只有 text / thinking / toolCall 三种块，Gemini 的 `inlineData` 只存在于输入侧，Responses 也没有 `image_generation` 工具。四类聊天接口因此拿不到图片输出。生图做成**内置工具 + 独立 HTTP 调用**：工具结果用 `ImageContent { type:"image", data(base64), mimeType }` 回给模型，与 `fsTools` 的读图、`Image` 展示工具同形。
+
+**两条 API。** 按借道的端点决定：
+
+| kind | 地址 | 请求体 | 响应 |
+| --- | --- | --- | --- |
+| `openai-images` | `POST {OpenAI 家族端点 base}/images/generations` | `{ model, prompt, n, size?, quality?, response_format? }` | `{ data: [{ b64_json \| url, revised_prompt? }] }` |
+| `gemini` | `POST {Gemini 端点 base}/models/{wireModelId}:generateContent` | `{ contents:[{parts:[{text}]}], generationConfig:{ responseModalities:["TEXT","IMAGE"] } }` | `candidates[0].content.parts[]` 里的 `inlineData { mimeType, data }` 与 `text` |
+
+`response_format: "b64_json"` 只对非 gpt-image-* 模型发送：gpt-image 系列恒返回 b64，官方对该参数直接回 400；dall-e 与多数中转反过来需要它。
+
+**路由选择（`resolveImageGenerationRoute`）。** Gemini 系列模型（`resolveModelFamily(id).key === "gemini"` 或 id 含 `imagen`）且供应商有已启用的 `google-generative-ai` 端点 → `gemini`；否则取已启用的 OpenAI 家族端点（Completions 或 Responses 任一）→ `openai-images`；都没有 → 不可用。地址、Key、请求头、`{origin}` 展开与版本段规则全部复用 `resolveProviderChatRoute` + `buildBuiltinRequestHeaders`，与聊天链路"所见即所发"一致。中转上挂的 Gemini 生图模型因此会正确地走 Images 接口。
+
+**模型类型（`resolveModelType`）。** 优先级：用户显式 `model.modelType` > 目录 `outputModalities` 含 `"image"` > id 启发式（`gpt-image` / `dall-e` / `imagen` / `flux` / `stable-diffusion` / `sd3` / `kolors` / `cogview` / `wanx` / `hunyuan-image` / `seedream` / 结尾 `-image`）> `chat`。image 类型的模型不进聊天选择器（`buildModelOptions` / `isProviderModelAvailable` 都排除），因为聊天流发不出也收不到它们。
+
+**目录。** 生成器不再跳过输出模态不含 text 的模型。生图模型在 models.dev 里普遍 `limit.context = limit.output = 0`（没有上下文语义），这类条目成对写 `contextWindow: 0, maxOutputToken: 0`；`normalizeModelLimits` 对 `contextWindow <= 0` 原样放行，上下文用量环与压缩预算本来就按 `contextWindow > 0` 门控，因此 0 天然等于"不做预算计算"。
+
+**内置工具 `generate_image`。** category `intelligence`，非只读，`defaultPolicy` 缺省 allow，仅对话场景注册；沙箱离线模式（`enabled && !allowNetwork`）下与 Browser 一样整个 bundle 不注册。参数：`prompt`（必填）、`count`（1–4，缺省 1）、`size`（如 `1024x1024`，Gemini 忽略）、`quality`（low/medium/high，仅 OpenAI）、`model`（`"<providerId>:<modelId>"`）、`save_to`（工作区相对目录，缺省 `generated-images/`）。
+
+选模型优先级：工具参数 > `settings.imageGeneration.defaultModel` > 第一个启用供应商里第一个启用的 image 类型模型；都没有则报错并指引用户去供应商页启用生图模型。
+
+**落盘。** 每张图存为 `save_to/<yyyyMMdd-HHmmss>-<n>.<ext>`，路径经 `ToolPathResolver.resolvePath(intent: "write")` 与 Rust 侧 `resolve_scoped_fs_path` 双重校验，不绕过工作区边界。写入复用 `fs_write_text`，新增 `encoding: "base64"`（`""` / `"utf8"` 保持原语义），因此检查点前像捕获、符号链接解析与越界拒绝全部沿用既有实现。`url` 形式的结果（dall-e）先经 `provider_download_image` 下载成 base64 再落盘。
+
+**发送链路。** 桌面端 `provider_generate_image`（缺省超时 120 秒、上限 300 秒、响应上限 64MB 且**不截断**——截断会切坏 base64）与 `provider_download_image`（32MB、只允许 http(s)）；WebUI 走网关桥 `gateway_provider_generate_image` / `gateway_provider_download_image`，脱敏态由桌面端按 `provider_id + credential_id` 补 Key 并做主机白名单，与模型连通测试共用 `resolve_stored_provider_check_headers`。响应体原样回传、解析留在 TS 侧（`parseImageGenerationResponse`），避免图片抽取规则出现两份实现。
+
+**限制。**
+
+- 生图不进聊天流：模型只能通过工具调用出图，不能在回复里"直接画"。
+- Anthropic 没有图像生成接口；只有 Anthropic 端点的供应商上 `generate_image` 不可用。
+- 连通性测试对 image 类型模型直接跳过（`checkProviderModel` 返回 `{ ok: undefined, skipped: "generation_cost" }`，聚合状态 `"skipped"`）：最小生成请求在这两条接口上等于真出一张图，要花钱。
+- Gemini 的 generateContent 一次只回一张图，`count` / `size` / `quality` 对它无效。
+
 ## 7. 设置界面
 
 三栏结构，替换现在的"五个 Tab + 一个大对话框"。
@@ -748,5 +782,6 @@ P2 与 P3 的任务清单在各自阶段开始前补充。
 | 网关桥 | WebUI 复用落库 Key 探测时按 `credential_id` 选凭据（proto 新增字段）；草稿地址主机必须属于该供应商已保存的地址集合，否则拒绝；协议沿用请求值，回填按命中的端点而不是主地址 |
 | 界面 | 再加一个实例预填自定义实例的地址与方言；停用端点上的"设为默认"不可用；编辑模型抽屉显示三层故障转移候选；窄屏换行；quirks 只在 OpenAI 家族卡片显示；`{origin}` 模板按输入实时展开；未知原因直接显示；最终请求头预览复用运行时合并规则；限额与推理来源徽标正确；管理密钥的差异只在两把 Key 都拉取过后显示，刷新不再覆盖探测期间的修改；取消探测仍写回观测；删除端点与 Key 需确认；添加渠道非自建必填 Key，非法请求头行可见；模型分组内拖拽排序写回 `modelOrder`；模型行记忆化；停用供应商显示提示条；清理无消费者的 i18n 键 |
 | 测试 | 新增/改写：注册表主机归属、隐式端点、故障转移家族与迁移、探测严格模式、网关桥凭据与主机、运行时方言映射与 quirks、辅助模型选择、WebUI 源码契约（改按三栏结构锁定） |
+| 图像生成 | 目录不再跳过纯图片输出模型（新增 16 条：openai 5 / xai 3 / alibaba-token-plan(-cn) 各 4），生图模型限额成对写 0；新增 `ProviderModelConfig.modelType` 与 `resolveModelType`、能力位 `imageGeneration`、`AppSettings.imageGeneration.defaultModel`；生图模型排除出聊天选择器并跳过连通性测试；新增 `lib/providers/imageGeneration.ts`（两条 API 的装配与解析）、内置工具 `generate_image`、Rust `provider_generate_image` / `provider_download_image` 与对应网关桥；`fs_write_text` 增加 `encoding: "base64"` 以复用工作区写入边界 |
 | 多源地址 | 供应商级 `origins[]` + 端点 `{origin}` 模板；路由按源展开并输出 `originId` / `originUrl`；故障转移在凭据层与端点层之间插入源层（鉴权失败不换源，熔断键带源主机）；探测按源 × 接口展开；旧实例可一键转为源地址模式 |
 | 6.1 / 6.2 / 6.3 补齐 | `FieldSource` 补 `adapter`，能力与限额解析返回 `candidates`（目录 > 供应商 > 适配器 > 启发式）；探测拉回的 `/models` 限额与模态存进 `ProviderModelConfig.providerMeta` 作 `provider` 候选，目录与供应商冲突时抽屉显示 warn 芯片与"采纳供应商值"（写成用户覆盖，不自动改目录值）；新增 `ProviderModelConfig.parameters`（`temperature` / `maxTokens` / `topP`，按 `PROTOCOL_PARAMETER_KEYS` 过滤并钳制）并在 `agentRunner` / `textOnlyRuntime` 落到 stream options；`promptCaching` 接进 `resolveProviderCacheRetention`（unsupported → `none`）；删除无消费者的 `parallelTools` 能力位 |

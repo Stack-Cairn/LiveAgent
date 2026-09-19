@@ -13,6 +13,34 @@ use crate::services::workspace_watch::WatchSource;
 
 use super::*;
 
+// --- image generation (begin) -----------------------------------------------
+pub(super) fn provider_generate_image_agent_envelope(
+    request_id: String,
+    response: proto::ProviderGenerateImageResponse,
+) -> proto::AgentEnvelope {
+    proto::AgentEnvelope {
+        request_id,
+        timestamp: now_unix_seconds(),
+        payload: Some(proto::agent_envelope::Payload::ProviderGenerateImageResp(
+            response,
+        )),
+    }
+}
+
+pub(super) fn provider_download_image_agent_envelope(
+    request_id: String,
+    response: proto::ProviderDownloadImageResponse,
+) -> proto::AgentEnvelope {
+    proto::AgentEnvelope {
+        request_id,
+        timestamp: now_unix_seconds(),
+        payload: Some(proto::agent_envelope::Payload::ProviderDownloadImageResp(
+            response,
+        )),
+    }
+}
+// --- image generation (end) -------------------------------------------------
+
 pub(super) fn provider_usage_agent_envelope(
     request_id: String,
     response: proto::ProviderUsageResponse,
@@ -600,6 +628,39 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 502, error).await,
                 }
             }
+            // --- image generation (begin) ---------------------------------
+            // 出图慢（几十秒起），和用量查询一样挪到独立任务上，别占住 socket。
+            Some(proto::gateway_envelope::Payload::ProviderGenerateImage(request)) => {
+                let sender = self.current_outbound_sender()?;
+                tauri::async_runtime::spawn(async move {
+                    let envelope = match gateway_bridge::handle_provider_generate_image(request)
+                        .await
+                    {
+                        Ok(response) => provider_generate_image_agent_envelope(request_id, response),
+                        Err(error) => build_error_response_envelope(request_id, 502, error),
+                    };
+                    if let Err(error) = send_agent_envelope_to(sender, envelope).await {
+                        eprintln!("gateway provider generate image handler failed: {error}");
+                    }
+                });
+                Ok(())
+            }
+            Some(proto::gateway_envelope::Payload::ProviderDownloadImage(request)) => {
+                let sender = self.current_outbound_sender()?;
+                tauri::async_runtime::spawn(async move {
+                    let envelope = match gateway_bridge::handle_provider_download_image(request)
+                        .await
+                    {
+                        Ok(response) => provider_download_image_agent_envelope(request_id, response),
+                        Err(error) => build_error_response_envelope(request_id, 502, error),
+                    };
+                    if let Err(error) = send_agent_envelope_to(sender, envelope).await {
+                        eprintln!("gateway provider download image handler failed: {error}");
+                    }
+                });
+                Ok(())
+            }
+            // --- image generation (end) -----------------------------------
             Some(proto::gateway_envelope::Payload::SettingsGet(_request)) => {
                 match self.current_settings_snapshot().await {
                     Ok(snapshot) => {

@@ -55,6 +55,8 @@ export function buildToolsSuffix(
   }
   if (has("ManagedProcess")) toolGroups.push("managed local processes (ManagedProcess)");
   if (has("Browser")) toolGroups.push("browser automation (Browser)");
+  // --- image generation ---
+  if (has("generate_image")) toolGroups.push("image generation (generate_image)");
   if (taskTools.length > 0) {
     toolGroups.push(`durable task planning (${taskTools.join(" / ")})`);
   }

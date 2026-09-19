@@ -75,6 +75,9 @@ import {
   ProviderCheckModelRequestSchema,
   ProviderCustomHeaderSchema,
   ProviderCustomHeadersSchema,
+  // --- image generation ---
+  ProviderDownloadImageRequestSchema,
+  ProviderGenerateImageRequestSchema,
   ProviderListRequestSchema,
   ProviderModelsRequestSchema,
   ProviderUsageRequestSchema,
@@ -663,6 +666,45 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
               : undefined,
         }),
       };
+    // --- image generation (begin) -------------------------------------------
+    // 形参与 provider.check_model 完全相同（桌面端复用同一套补 Key 与白名单）。
+    case "provider.generate_image":
+      return {
+        case: "providerGenerateImage",
+        value: create(ProviderGenerateImageRequestSchema, {
+          url: trimStr(body.url),
+          headers: (Array.isArray(body.headers) ? body.headers : []).map((header) =>
+            create(ProviderCustomHeaderSchema, {
+              name: trimStr((header as { key?: unknown } | null)?.key),
+              value: str((header as { value?: unknown } | null)?.value),
+            }),
+          ),
+          bodyJson: body.body === undefined ? "" : JSON.stringify(body.body),
+          useSystemProxy: bool(body.use_system_proxy),
+          providerId: trimStr(body.provider_id),
+          credentialId: trimStr(body.credential_id),
+          protocol: trimStr(body.protocol),
+          authHeaderName: trimStr(body.auth_header_name),
+          authPrefix: typeof body.auth_prefix === "string" ? body.auth_prefix : undefined,
+          timeoutMs:
+            typeof body.timeout_ms === "number" && Number.isFinite(body.timeout_ms)
+              ? BigInt(Math.max(0, Math.floor(body.timeout_ms)))
+              : undefined,
+        }),
+      };
+    case "provider.download_image":
+      return {
+        case: "providerDownloadImage",
+        value: create(ProviderDownloadImageRequestSchema, {
+          url: trimStr(body.url),
+          useSystemProxy: bool(body.use_system_proxy),
+          timeoutMs:
+            typeof body.timeout_ms === "number" && Number.isFinite(body.timeout_ms)
+              ? BigInt(Math.max(0, Math.floor(body.timeout_ms)))
+              : undefined,
+        }),
+      };
+    // --- image generation (end) ---------------------------------------------
     case "provider.usage.query":
       return {
         case: "providerUsage",
@@ -856,6 +898,8 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           expectedContentHash: trimStr(body.expected_content_hash),
           hasExpectedMtimeMs: body.expected_mtime_ms !== undefined,
           hasExpectedContentHash: body.expected_content_hash !== undefined,
+          // --- image generation ---：base64 时按字节落盘。
+          encoding: trimStr(body.encoding),
         }),
       };
     case "fs.create_dir":
@@ -1270,6 +1314,22 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
         frameError("provider check response is not valid JSON");
       }
       break;
+    // --- image generation (begin) -------------------------------------------
+    case "providerGenerateImageResp":
+      try {
+        return parseJson(payload.value.resultJson);
+      } catch {
+        frameError("provider image generation response is not valid JSON");
+      }
+      break;
+    case "providerDownloadImageResp":
+      try {
+        return parseJson(payload.value.resultJson);
+      } catch {
+        frameError("provider image download response is not valid JSON");
+      }
+      break;
+    // --- image generation (end) ---------------------------------------------
     case "settingsGetResp": {
       const raw = payload.value.settingsJson.trim();
       if (!raw) return {};

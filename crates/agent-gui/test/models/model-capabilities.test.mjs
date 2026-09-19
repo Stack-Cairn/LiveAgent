@@ -14,6 +14,8 @@ const ALL = [
   "promptCaching",
   "fileInput",
   "imageUnderstanding",
+  // --- image generation ---
+  "imageGeneration",
 ];
 
 /** 只比"有效值 + 来源"；候选列表（设计 §6.2）单独断言。 */
@@ -80,6 +82,12 @@ test("catalog hit resolves capabilities from models.dev flags and modalities", (
   assert.deepEqual(effective(image.fileInput), { state: "supported", source: "catalog" });
   // Gemini generateContent 没有缓存通路，promptCaching 保持 unknown。
   assert.deepEqual(effective(image.promptCaching), { state: "unknown", source: "unknown" });
+  // --- image generation ---：outputModalities 含 image → 支持出图。
+  assert.deepEqual(effective(image.imageGeneration), { state: "supported", source: "catalog" });
+  assert.deepEqual(
+    effective(capabilities.resolveModelCapabilities(provider, "gpt-5.2").imageGeneration),
+    { state: "unsupported", source: "catalog" },
+  );
 });
 
 test("catalog miss falls through to adapter and heuristic sources", () => {

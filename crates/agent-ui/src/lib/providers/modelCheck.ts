@@ -30,8 +30,14 @@ export type ModelCheckErrorKind =
   | "network"
   | "noKey";
 
+// --- image generation (begin) -----------------------------------------------
+/** 跳过连通测试的原因；generation_cost = 生图模型，测一次就要出一张图的钱。 */
+export type ModelCheckSkipReason = "generation_cost";
+// --- image generation (end) -------------------------------------------------
+
 export type ModelCheckSummary = {
-  ok: boolean;
+  /** 跳过时为 undefined（既不算通过也不算失败）。 */
+  ok: boolean | undefined;
   /** 失败归类；界面按它取文案，`error` 是原始细节 */
   kind?: ModelCheckErrorKind;
   error?: string;
@@ -39,13 +45,26 @@ export type ModelCheckSummary = {
 };
 
 export type ModelCheckResult = ModelCheckSummary & {
+  // --- image generation (begin) ---------------------------------------------
+  /** 有值 = 本次没发请求，界面按"已跳过"显示，不计入通过/失败。 */
+  skipped?: ModelCheckSkipReason;
+  // --- image generation (end) -----------------------------------------------
   latencyMs: number;
   status?: number;
   credentialId: string;
   credentialLabel: string;
 };
 
-export type ModelCheckState = "ok" | "failed" | "partial" | "checking" | "idle";
+export type ModelCheckState =
+  | "ok"
+  | "failed"
+  | "partial"
+  | "checking"
+  | "idle"
+  // --- image generation (begin) ---
+  /** 该模型按类型跳过了测试（生图模型）。 */
+  | "skipped";
+// --- image generation (end) ---
 
 export type ModelCheckAggregate = {
   state: ModelCheckState;
@@ -315,6 +334,10 @@ export function summarizeModelCheckResponse(
 /** 多把 Key 的聚合：任一通过即可用；有通过也有失败为 partial。 */
 export function aggregateModelCheck(results: readonly ModelCheckResult[]): ModelCheckAggregate {
   if (results.length === 0) return { state: "idle", results: [] };
+  // --- image generation (begin) ---------------------------------------------
+  // 全部因模型类型被跳过（生图模型）：既不是通过也不是失败，单独一个状态。
+  if (results.every((result) => result.skipped)) return { state: "skipped", results: [...results] };
+  // --- image generation (end) -----------------------------------------------
   const passed = results.filter((result) => result.ok);
   const latencyMs =
     passed.length > 0 ? Math.min(...passed.map((result) => result.latencyMs)) : undefined;
