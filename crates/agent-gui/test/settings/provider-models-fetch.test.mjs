@@ -46,6 +46,17 @@ function withFetchStub(responder, run) {
     });
 }
 
+test("a trailing # on the base URL is stripped for models-url derivation", () => {
+  assert.equal(
+    providerUtils.normalizeProviderModelsBaseUrl("codex", "https://relay.example.com/#"),
+    "https://relay.example.com",
+  );
+  assert.equal(
+    providerUtils.normalizeProviderModelsBaseUrl("claude_code", "https://relay.example.com#"),
+    "https://relay.example.com",
+  );
+});
+
 test("buildProviderModelsUrl defaults to /v1/models and falls back to official endpoints", () => {
   assert.equal(
     providerUtils.buildProviderModelsUrl("gemini", "https://relay.example.com", "default"),

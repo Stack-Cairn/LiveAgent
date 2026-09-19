@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use reqwest::{Client, StatusCode, Url};
 use serde_json::Value;
 
-const ANTHROPIC_API_VERSION: &str = "2023-06-01";
+pub(crate) const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const MAX_PROVIDER_MODELS_RESPONSE_BYTES: usize = 2 << 20;
 const PROVIDER_MODELS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const PROVIDER_MODELS_TIMEOUT_MESSAGE: &str = "供应商模型列表请求超时（10 秒）";
@@ -54,7 +54,7 @@ pub async fn fetch_provider_models(
     .await
 }
 
-fn direct_client() -> Result<Client, String> {
+pub(crate) fn direct_client() -> Result<Client, String> {
     static CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
     if let Some(client) = CLIENT.get() {
         return Ok(client.clone());
@@ -171,7 +171,7 @@ async fn read_limited_response(response: reqwest::Response) -> Result<Vec<u8>, S
     Ok(body)
 }
 
-fn parse_http_url(raw: &str, label: &str) -> Result<Url, String> {
+pub(crate) fn parse_http_url(raw: &str, label: &str) -> Result<Url, String> {
     let url = Url::parse(raw.trim()).map_err(|_| format!("{label} 必须是绝对 URL"))?;
     if !matches!(url.scheme(), "http" | "https")
         || !url.has_host()
@@ -243,6 +243,13 @@ fn build_provider_models_url(provider_type: &str, base_url: &Url, official: bool
     if api_root.to_ascii_lowercase().ends_with("/models") {
         api_root.truncate(api_root.len() - "/models".len());
     }
+    // 与前端 buildVersionedModelsUrl 一致：只改写 v1 / v1beta 这一层；地址已带其它
+    // 版本段（智谱 /api/paas/v4、火山 /api/v3）时原样保留，直接追加 /models。
+    if is_api_version_path(&api_root) && !is_v1_version_path(&api_root) {
+        let next_path = format!("{api_root}/models");
+        url.set_path(&next_path);
+        return url;
+    }
     if is_api_version_path(&api_root) {
         api_root.truncate(api_root.rfind('/').unwrap_or(0));
     }
@@ -256,6 +263,15 @@ fn build_provider_models_url(provider_type: &str, base_url: &Url, official: bool
     url
 }
 
+fn is_v1_version_path(path: &str) -> bool {
+    let lower = path
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(lower.as_str(), "v1" | "v1beta" | "v1alpha")
+}
+
 fn is_api_version_path(path: &str) -> bool {
     let lower = path
         .rsplit('/')
@@ -265,7 +281,10 @@ fn is_api_version_path(path: &str) -> bool {
     let Some(version) = lower.strip_prefix('v') else {
         return false;
     };
-    let digits = version.strip_suffix("beta").unwrap_or(version);
+    let digits = version
+        .strip_suffix("beta")
+        .or_else(|| version.strip_suffix("alpha"))
+        .unwrap_or(version);
     !digits.is_empty() && digits.chars().all(|character| character.is_ascii_digit())
 }
 

@@ -9,7 +9,7 @@ export function ProviderCopyConfigButton(_props: {
 }
 
 export function ProviderSettingsExtension(_props: {
-  activeTab: ProviderId;
+  activeTab?: ProviderId;
   settings: AppSettings;
   setSettings: SettingsSectionProps["setSettings"];
   triggerClassName?: string;

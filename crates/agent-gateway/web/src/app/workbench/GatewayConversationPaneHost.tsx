@@ -74,6 +74,7 @@ import {
   getChatRuntimeReasoningLevelsForProvider,
   isThinkingAlwaysOnForModel,
   normalizeChatRuntimeControlsForProvider,
+  resolveProviderChatRoute,
   type SelectedModel,
 } from "@/lib/settings";
 import {
@@ -457,32 +458,46 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const selectedProvider = selection
     ? context.settings.customProviders.find((item) => item.id === selection.customProviderId)
     : undefined;
+  const selectedModelId = selection?.model;
+  // 路由解析按供应商对象与模型 id memo：Pane 随流式更新高频重渲染，
+  // 不能每帧都重跑一遍 resolveProviderChatRoute。
+  const selectedRoute = useMemo(
+    () =>
+      selectedProvider && selectedModelId
+        ? resolveProviderChatRoute(selectedProvider, selectedModelId)
+        : undefined,
+    [selectedProvider, selectedModelId],
+  );
   const paneRuntimeControls = useMemo(
     () =>
       normalizeChatRuntimeControlsForProvider(context.settings.chatRuntimeControls, {
-        providerId: selectedProvider?.type,
-        requestFormat: selectedProvider?.requestFormat,
+        providerId: selectedRoute?.adapterProviderId,
+        requestFormat: selectedRoute?.requestFormat,
         modelId: selection?.model,
       }),
     [
       context.settings.chatRuntimeControls,
-      selectedProvider?.requestFormat,
-      selectedProvider?.type,
+      selectedRoute?.adapterProviderId,
+      selectedRoute?.requestFormat,
       selection?.model,
     ],
   );
   const paneReasoningOptions = useMemo(
     () =>
       getChatRuntimeReasoningLevelsForProvider({
-        providerId: selectedProvider?.type,
-        requestFormat: selectedProvider?.requestFormat,
+        providerId: selectedRoute?.adapterProviderId,
+        requestFormat: selectedRoute?.requestFormat,
         modelId: selection?.model,
       }),
-    [selectedProvider?.requestFormat, selectedProvider?.type, selection?.model],
+    [selectedRoute?.adapterProviderId, selectedRoute?.requestFormat, selection?.model],
   );
   const paneThinkingAlwaysOn = useMemo(
-    () => isThinkingAlwaysOnForModel(selectedProvider?.type ?? "claude_code", selection?.model),
-    [selectedProvider?.type, selection?.model],
+    () =>
+      isThinkingAlwaysOnForModel(
+        selectedRoute?.adapterProviderId ?? "claude_code",
+        selection?.model,
+      ),
+    [selectedRoute?.adapterProviderId, selection?.model],
   );
 
   // 提示词澄清执行器（桌面端背景 Pane 口径）：模型覆盖/回退/错误拍平在

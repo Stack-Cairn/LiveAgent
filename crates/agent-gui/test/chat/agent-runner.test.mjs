@@ -274,8 +274,28 @@ const llmMock = {
       maxTokens: 4096,
     };
   },
+  // 运行时改为按 runtime 路由构造模型；测试桩沿用旧推导（adapterProviderId 兜底）。
+  createModelFromRuntime(providerId, runtime, modelId, baseUrl) {
+    return llmMock.createModelFromConfig(runtime.adapterProviderId ?? providerId, modelId, baseUrl);
+  },
   finalizeProviderStreamOptions({ options }) {
     return options;
+  },
+  // 设计 §6.3：模型级参数覆盖（真实实现在 runtime/requestOptions.ts）。
+  applyModelParameterOverrides(options, parameters, maxOutputToken) {
+    if (!parameters) return options;
+    const next = { ...options };
+    if (parameters.temperature !== undefined && next.temperature === undefined) {
+      next.temperature = parameters.temperature;
+    }
+    if (parameters.maxTokens !== undefined) {
+      const ceiling = maxOutputToken ?? next.maxTokens;
+      next.maxTokens = ceiling ? Math.min(ceiling, parameters.maxTokens) : parameters.maxTokens;
+    }
+    if (parameters.topP !== undefined) {
+      next.samplingParams = { ...next.samplingParams, top_p: parameters.topP };
+    }
+    return next;
   },
   normalizeErrorMessage(value, fallback = "Request failed") {
     return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -2752,6 +2772,48 @@ test("resolveToolChoice drives per-round tool_choice on the outbound request", a
   // undefined falls through to the default (auto with tools present).
   assert.equal(observedStreamOptions[0].toolChoice, "auto");
   assert.deepEqual(observedStreamOptions[1].toolChoice, { type: "tool", name: "Read" });
+});
+
+test("tools capability unsupported withholds tool definitions for the run while the tool switch stays on", async () => {
+  resetFakeStreams(createTextAssistant("no tools here"));
+  const { params } = createBaseParams();
+  params.runtime = {
+    ...params.runtime,
+    capabilities: { tools: { state: "unsupported", source: "user" } },
+  };
+  const requestContexts = [];
+  params.onRequestStart = ({ context }) => requestContexts.push(context);
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(result.assistant.stopReason, "stop");
+  assert.equal(observedStreamContexts.length, 1);
+  assert.equal(observedStreamContexts[0].tools, undefined, "no tool definitions on the wire");
+  assert.equal(observedStreamOptions[0].toolChoice, undefined);
+  assert.equal(requestContexts[0].tools, undefined);
+  assert.equal(
+    observedStreamContexts[0].systemPrompt.includes("Read"),
+    false,
+    "tool rules suffix does not advertise tools that were not sent",
+  );
+});
+
+test("tools capability supported or unknown keeps the tool definitions", async () => {
+  for (const capabilities of [
+    undefined,
+    { tools: { state: "supported", source: "catalog" } },
+    { tools: { state: "unknown", source: "unknown" } },
+  ]) {
+    resetFakeStreams(createTextAssistant("done"));
+    const { params } = createBaseParams();
+    params.runtime = { ...params.runtime, ...(capabilities ? { capabilities } : {}) };
+    await runAssistantWithTools(params);
+    assert.deepEqual(
+      observedStreamContexts[0].tools.map((tool) => tool.name),
+      ["Read"],
+    );
+    assert.equal(observedStreamOptions[0].toolChoice, "auto");
+  }
 });
 
 test("without resolveToolChoice the runner keeps toolChoice auto", async () => {

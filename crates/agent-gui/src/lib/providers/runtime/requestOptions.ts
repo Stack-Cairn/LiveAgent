@@ -1,24 +1,28 @@
 import type { CacheRetention, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import {
-  ANTHROPIC_DEFAULT_REQUEST_HEADERS,
-  CLAUDE_SESSION_ID_HEADER,
-  CLIENT_REQUEST_ID_HEADER,
-  CODEX_CONVERSATION_ID_HEADER,
-  CODEX_OFFICIAL_SESSION_ID_HEADER,
-  CODEX_SESSION_ID_HEADER,
-  CODEX_THREAD_ID_HEADER,
-  isAnthropicOAuthApiKey,
+  type EndpointIdentity,
   mergeCustomHeaders,
 } from "@liveagent/ui/lib/providers/customHeaders";
 import { type PreparedProxyRequest, prepareProxyRequest } from "@liveagent/ui/lib/providers/proxy";
-import { createUuid } from "@liveagent/ui/lib/shared/id";
-import type { CodexRequestFormat, ProviderId, ReasoningLevel } from "../../settings";
+import { buildProtocolAuthHeaders } from "@liveagent/ui/lib/providers/registry/protocols";
+import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
+import type {
+  CapabilityState,
+  CodexRequestFormat,
+  ModelParameterOverrides,
+  ProviderChatProtocol,
+  ProviderEndpointAuth,
+  ProviderId,
+  ProviderWireDialect,
+  ReasoningLevel,
+} from "../../settings";
 import {
   normalizeDeepSeekResponsesBaseUrl,
   normalizeDeepSeekResponsesEndpoint,
 } from "../deepSeekNative";
 import { normalizeSessionId } from "./common";
 import type { ProviderRuntimeConfig } from "./types";
+import { resolveLegacyWireRoute, resolveRuntimeWireRoute } from "./wireRoute";
 
 export { isValidCustomHeaderKey } from "@liveagent/ui/lib/providers/customHeaders";
 
@@ -30,58 +34,42 @@ export function buildAnthropicAuthHeaders(apiKey: string): Record<string, string
 }
 
 export function buildOpenAIAuthHeaders(apiKey: string): Record<string, string> {
-  return {
-    Authorization: `Bearer ${apiKey}`,
-  };
+  return buildProtocolAuthHeaders("openai-completions", apiKey);
 }
 
 export function buildGeminiAuthHeaders(apiKey: string): Record<string, string> {
-  return {
-    "x-goog-api-key": apiKey,
-  };
+  return buildProtocolAuthHeaders("google-generative-ai", apiKey);
 }
 
-function buildProviderAuthHeaders(providerId: ProviderId, apiKey: string): Record<string, string> {
-  if (providerId === "gemini") return buildGeminiAuthHeaders(apiKey);
-  if (providerId === "claude_code") return buildAnthropicAuthHeaders(apiKey);
-  return buildOpenAIAuthHeaders(apiKey);
+/**
+ * 内置头装配：协议头档 < 方言头档 < 端点身份档（共享层 requestHeaders.ts，与设置页
+ * 的"最终请求头"预览同一份实现）。
+ */
+export function buildProtocolRequestHeaders(params: {
+  protocol: ProviderChatProtocol;
+  dialect: ProviderWireDialect;
+  apiKey: string;
+  sessionId?: string;
+  auth?: ProviderEndpointAuth;
+  identity?: EndpointIdentity;
+}): Record<string, string> {
+  return buildBuiltinRequestHeaders(params);
 }
 
+/** 旧签名：按 ProviderId + requestFormat 推导 (protocol, dialect) 后查表。 */
 export function buildProviderRequestHeaders(
   providerId: ProviderId,
   apiKey: string,
   sessionId?: string,
   requestFormat?: CodexRequestFormat,
 ): Record<string, string> {
-  const authHeaders = buildProviderAuthHeaders(providerId, apiKey);
-  if (providerId === "claude_code") {
-    if (isAnthropicOAuthApiKey(apiKey)) return {};
-    const requestSessionId = normalizeSessionId(sessionId);
-    return {
-      ...authHeaders,
-      ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
-      // 官方 CLI 每请求都带 X-Claude-Code-Session-Id（client.ts:108）。
-      ...(requestSessionId ? { [CLAUDE_SESSION_ID_HEADER]: requestSessionId } : {}),
-    };
-  }
-  if (providerId === "codex") {
-    // 标准 Chat Completions 是无状态协议，只需 Authorization——
-    // 会话身份头是 Responses（Codex CLI）链路专属，不得泄漏进 completions。
-    if (requestFormat === "openai-completions") return authHeaders;
-    const requestSessionId = normalizeSessionId(sessionId) ?? createUuid();
-    return {
-      ...authHeaders,
-      // 现行 Codex CLI（codex-api responses.rs）：session-id / thread-id /
-      // x-client-request-id。下划线旧名留给既有中转与 LiveAgent 存量链路。
-      [CODEX_OFFICIAL_SESSION_ID_HEADER]: requestSessionId,
-      [CODEX_THREAD_ID_HEADER]: requestSessionId,
-      [CLIENT_REQUEST_ID_HEADER]: requestSessionId,
-      [CODEX_SESSION_ID_HEADER]: requestSessionId,
-      [CODEX_CONVERSATION_ID_HEADER]: requestSessionId,
-    };
-  }
-  // 其它 OpenAI 兼容端：仅 Bearer。
-  return authHeaders;
+  const wire = resolveLegacyWireRoute(providerId, requestFormat);
+  return buildProtocolRequestHeaders({
+    protocol: wire.protocol,
+    dialect: wire.dialect,
+    apiKey,
+    sessionId,
+  });
 }
 
 /**
@@ -93,22 +81,27 @@ export async function prepareProviderRequest(
   runtime: ProviderRuntimeConfig,
   options?: { sessionId?: string },
 ): Promise<PreparedProxyRequest> {
+  const wire = resolveRuntimeWireRoute(providerId, runtime);
+  const transportProviderId = wire.adapterProviderId;
+  // DeepSeek Responses 方言：官方域名去 /v1、中转补 /v1，完整 URL 改写到 /responses。
   const upstreamBaseUrl =
-    providerId === "deepseek"
+    wire.dialect === "deepseek" && wire.protocol === "openai-responses"
       ? runtime.isFullUrl
         ? normalizeDeepSeekResponsesEndpoint(runtime.baseUrl)
         : normalizeDeepSeekResponsesBaseUrl(runtime.baseUrl)
       : runtime.baseUrl;
   return prepareProxyRequest(
-    providerId,
+    transportProviderId,
     upstreamBaseUrl.trim(),
     mergeCustomHeaders(
-      buildProviderRequestHeaders(
-        providerId,
-        runtime.apiKey,
-        options?.sessionId,
-        runtime.requestFormat,
-      ),
+      buildProtocolRequestHeaders({
+        protocol: wire.protocol,
+        dialect: wire.dialect,
+        apiKey: runtime.apiKey,
+        sessionId: options?.sessionId,
+        auth: runtime.authOverride,
+        identity: runtime.identity,
+      }),
       runtime.customHeaders,
     ),
     {
@@ -129,10 +122,20 @@ export function resolveProviderCacheRetention(
   promptCachingEnabled?: boolean,
   requestOverride?: CacheRetention,
   providerPreference?: CacheRetention,
+  // --- 设计 §6.1：模型有效能力参与判定 ---
+  /**
+   * 该模型 promptCaching 的有效状态（resolveModelCapabilities 的结果）。
+   * unsupported（用户显式标记，或将来目录/适配器判定不支持）直接返回 "none"，
+   * 不给上游下缓存断点；unknown / supported 沿用原有供应商级规则。
+   */
+  modelCapability?: CapabilityState,
+  // --- §6.1 结束 ---
 ): CacheRetention | undefined {
   // Codex 的 wire 策略由 promptCacheHintMode 处理；这里保留 short 让供应商级
   // none 仍可被单模型覆盖。请求级 none 则始终优先，供标题/压缩等辅助请求禁用。
   if (providerId !== "claude_code" && providerId !== "codex") return undefined;
+  // 模型有效能力优先于供应商级偏好：标记不支持就不再下缓存断点。
+  if (modelCapability === "unsupported") return "none";
   if (providerId === "codex") return requestOverride ?? "short";
   if (promptCachingEnabled === false) return "none";
   // 请求级 override 优先（压缩/标题等辅助请求强制 none）。
@@ -141,6 +144,36 @@ export function resolveProviderCacheRetention(
   if (providerId === "claude_code" && providerPreference === "long") return "long";
   return "short";
 }
+
+// ---------------------------------------------------------------------------
+// 设计 §6.3：把模型级参数覆盖落到 pi-ai 的 stream options
+// ---------------------------------------------------------------------------
+// runtime.parameters 已由 createProviderRuntimeConfig 按接口过滤并钳制过，这里
+// 只负责映射：temperature / maxTokens 是 StreamOptions 的具名字段；topP 只能经
+// samplingParams 落到 OpenAI 兼容请求体的 top_p（其它适配器会忽略 samplingParams，
+// 所以白名单已在 PROTOCOL_PARAMETER_KEYS 里挡掉）。
+// maxTokens 与既有 maxOutputToken 的关系：参数覆盖只能更小，作为本模型的请求上限。
+
+export function applyModelParameterOverrides<T extends SimpleStreamOptions>(
+  options: T,
+  parameters: ModelParameterOverrides | undefined,
+  maxOutputToken?: number,
+): T {
+  if (!parameters) return options;
+  const next = { ...options };
+  if (parameters.temperature !== undefined && next.temperature === undefined) {
+    next.temperature = parameters.temperature;
+  }
+  if (parameters.maxTokens !== undefined) {
+    const ceiling = maxOutputToken ?? next.maxTokens;
+    next.maxTokens = ceiling ? Math.min(ceiling, parameters.maxTokens) : parameters.maxTokens;
+  }
+  if (parameters.topP !== undefined) {
+    next.samplingParams = { ...next.samplingParams, top_p: parameters.topP };
+  }
+  return next;
+}
+// --- §6.3 结束 ---
 
 export function buildProviderRequestMetadata(
   providerId: ProviderId,

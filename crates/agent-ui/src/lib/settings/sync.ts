@@ -67,6 +67,9 @@ export type GatewaySettingsSyncPayload = {
   skills: AppSettings["skills"];
   chatRuntimeControls: AppSettings["chatRuntimeControls"];
   selectedModel: AppSettings["selectedModel"] | null;
+  // --- image generation (begin) ---
+  imageGeneration?: AppSettings["imageGeneration"] | null;
+  // --- image generation (end) ---
   theme: AppSettings["theme"];
   locale: AppSettings["locale"];
   sshPatch?: GatewaySshSyncPatch;
@@ -95,6 +98,9 @@ const GATEWAY_SETTINGS_SYNC_FIELDS = [
   "skills",
   "chatRuntimeControls",
   "selectedModel",
+  // --- image generation (begin) ---
+  "imageGeneration",
+  // --- image generation (end) ---
   "theme",
   "locale",
 ] as const satisfies readonly (keyof GatewaySettingsSyncPayload)[];
@@ -107,6 +113,23 @@ function asObject(value: unknown): Record<string, unknown> {
 
 function apiKeyConfiguredForProvider(provider: AppSettings["customProviders"][number]) {
   return provider.apiKey.trim().length > 0 || provider.apiKeyConfigured === true;
+}
+
+/** 多 Key：每把凭据的 Key 值都不出桌面；只带 configured 标记。 */
+function redactProviderCredentials(
+  credentials: AppSettings["customProviders"][number]["credentials"],
+): AppSettings["customProviders"][number]["credentials"] {
+  if (!credentials) return credentials;
+  return credentials.map((credential) => ({
+    ...credential,
+    apiKey: "",
+    apiKeyConfigured: credential.apiKey.trim().length > 0 || credential.apiKeyConfigured === true,
+  }));
+}
+
+/** 凭据 Key 更新的键：主 Key 用供应商 id，其余用 `providerId::credentialId`。 */
+function credentialUpdateKey(providerId: string, credentialId: string): string {
+  return `${providerId}::${credentialId}`;
 }
 
 const DEFAULT_USAGE_QUERY_CONFIG: AppSettings["customProviders"][number]["usageQuery"] = {
@@ -159,6 +182,9 @@ export function redactCustomProvidersForGateway(
     const { apiKey: _apiKey, ...rest } = provider;
     return {
       ...rest,
+      ...(provider.credentials
+        ? { credentials: redactProviderCredentials(provider.credentials) }
+        : {}),
       usageQuery: redactUsageQueryConfig(provider.usageQuery),
       apiKeyConfigured: apiKeyConfiguredForProvider(provider),
     };
@@ -171,6 +197,9 @@ export function redactCustomProvidersForWebStorage(
   return customProviders.map((provider) => ({
     ...provider,
     apiKey: "",
+    ...(provider.credentials
+      ? { credentials: redactProviderCredentials(provider.credentials) }
+      : {}),
     usageQuery: redactUsageQueryConfig(provider.usageQuery),
     apiKeyConfigured: apiKeyConfiguredForProvider(provider),
   }));
@@ -265,6 +294,14 @@ function collectProviderApiKeyUpdates(
     if (provider.id.trim() && apiKey) {
       updates[provider.id] = apiKey;
     }
+    (provider.credentials ?? []).forEach((credential, index) => {
+      const key = credential.apiKey.trim();
+      // 首把凭据就是 apiKey 本身，已由供应商 id 承载，不重复发。
+      if (index === 0 && key === apiKey) return;
+      if (provider.id.trim() && credential.id.trim() && key) {
+        updates[credentialUpdateKey(provider.id, credential.id)] = key;
+      }
+    });
   }
   return Object.keys(updates).length > 0 ? updates : undefined;
 }
@@ -835,6 +872,38 @@ function mergeSyncedCustomProviders(
     const sourceApiKey = typeof source.apiKey === "string" ? source.apiKey.trim() : "";
     const apiKey = (apiKeyUpdate ?? sourceApiKey) || currentProvider?.apiKey || "";
     const sourceHasConfiguredFlag = Object.hasOwn(source, "apiKeyConfigured");
+    // 凭据列表：Key 值按 credential id 从更新包或本地记录恢复，公开字段照收。
+    const currentCredentials = new Map(
+      (currentProvider?.credentials ?? []).map((credential) => [credential.id, credential]),
+    );
+    const credentials = Array.isArray(source.credentials)
+      ? source.credentials.map((raw, index) => {
+          const item = asObject(raw);
+          const credentialId = typeof item.id === "string" ? item.id.trim() : "";
+          const update =
+            id && credentialId
+              ? (apiKeyUpdates[credentialUpdateKey(id, credentialId)] ??
+                (index === 0 ? apiKeyUpdate : undefined))
+              : undefined;
+          const itemKey = typeof item.apiKey === "string" ? item.apiKey.trim() : "";
+          const local = credentialId ? currentCredentials.get(credentialId) : undefined;
+          const credentialKey =
+            (update ?? itemKey) || local?.apiKey || (index === 0 ? apiKey : "") || "";
+          return {
+            ...item,
+            apiKey: credentialKey,
+            apiKeyConfigured:
+              credentialKey.length > 0 ||
+              item.apiKeyConfigured === true ||
+              (!Object.hasOwn(item, "apiKeyConfigured") && local?.apiKeyConfigured === true),
+          };
+        })
+      : // 旧版 WebUI 只发 apiKey：保留本地凭据列表，首把与解析后的默认 Key 同步。
+        currentProvider?.credentials?.map((credential, index) =>
+          index === 0 && apiKey && credential.apiKey !== apiKey
+            ? { ...credential, apiKey, apiKeyConfigured: true }
+            : credential,
+        );
     const usageQuery = Object.hasOwn(source, "usageQuery")
       ? mergeSyncedUsageQuery(
           currentProvider?.usageQuery,
@@ -850,6 +919,7 @@ function mergeSyncedCustomProviders(
         apiKey.length > 0 ||
         source.apiKeyConfigured === true ||
         (!sourceHasConfiguredFlag && currentProvider?.apiKeyConfigured === true),
+      ...(credentials ? { credentials } : {}),
       ...(usageQuery ? { usageQuery } : {}),
     };
   }) as AppSettings["customProviders"];

@@ -21,7 +21,12 @@ export {
   createStreamingTextReconciler,
   sanitizeAssistantMessage,
 } from "./runtime/messageUtils";
-export { createModelFromConfig } from "./runtime/modelFactory";
+export {
+  createModelFromConfig,
+  createModelFromRoute,
+  createModelFromRuntime,
+  type ModelFactoryRoute,
+} from "./runtime/modelFactory";
 export { parseModelValue, toModelValue } from "./runtime/modelValue";
 export { attachProviderNativeWebSearch } from "./runtime/nativeSearchPayload";
 export {
@@ -32,11 +37,16 @@ export {
   type ProviderPayloadMiddleware,
 } from "./runtime/payloadPipeline";
 export { describeProviderCacheShape } from "./runtime/providerCacheShape";
-export { createProviderRuntimeConfig } from "./runtime/providerRuntimeConfig";
 export {
+  type CreateProviderRuntimeConfigOptions,
+  createProviderRuntimeConfig,
+} from "./runtime/providerRuntimeConfig";
+export {
+  applyModelParameterOverrides,
   buildAnthropicAuthHeaders,
   buildGeminiAuthHeaders,
   buildOpenAIAuthHeaders,
+  buildProtocolRequestHeaders,
   buildProviderRequestHeaders,
   buildProviderRequestMetadata,
   isValidCustomHeaderKey,
@@ -52,5 +62,12 @@ export type {
   StreamOptionsEx,
   ToolChoice,
 } from "./runtime/types";
+export {
+  type RuntimeWireRoute,
+  resolveLegacyWireRoute,
+  resolveRuntimeLocalModelId,
+  resolveRuntimeWireModelId,
+  resolveRuntimeWireRoute,
+} from "./runtime/wireRoute";
 export { llm, llmStream } from "./service/llmService";
 export type { LlmAdapter, LlmStreamRequest } from "./service/types";

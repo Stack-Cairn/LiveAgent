@@ -22,6 +22,56 @@ func TestVetAgentRequestAllowsProviderUsage(t *testing.T) {
 	}
 }
 
+func TestVetAgentRequestAllowsProviderCheckModel(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_ProviderCheckModel{
+			ProviderCheckModel: &gatewayv2.ProviderCheckModelRequest{
+				Url:          "https://api.example.com/v1/chat/completions",
+				BodyJson:     `{"model":"gpt-test"}`,
+				ProviderId:   "provider-1",
+				CredentialId: "default",
+				Protocol:     "openai-completions",
+			},
+		},
+	}
+
+	if err := vetAgentRequest(session.AgentView{}, env); err != nil {
+		t.Fatalf("vetAgentRequest() error = %v", err)
+	}
+}
+
+func TestVetAgentRequestAllowsProviderGenerateImage(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_ProviderGenerateImage{
+			ProviderGenerateImage: &gatewayv2.ProviderGenerateImageRequest{
+				Url:          "https://api.example.com/v1/images/generations",
+				BodyJson:     `{"model":"gpt-image-1","prompt":"hi","n":1}`,
+				ProviderId:   "provider-1",
+				CredentialId: "default",
+				Protocol:     "openai-completions",
+			},
+		},
+	}
+
+	if err := vetAgentRequest(session.AgentView{}, env); err != nil {
+		t.Fatalf("vetAgentRequest() error = %v", err)
+	}
+}
+
+func TestVetAgentRequestAllowsProviderDownloadImage(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_ProviderDownloadImage{
+			ProviderDownloadImage: &gatewayv2.ProviderDownloadImageRequest{
+				Url: "https://cdn.example.com/generated.png",
+			},
+		},
+	}
+
+	if err := vetAgentRequest(session.AgentView{}, env); err != nil {
+		t.Fatalf("vetAgentRequest() error = %v", err)
+	}
+}
+
 func TestVetAgentRequestAllowsInstalledAppsList(t *testing.T) {
 	env := &gatewayv2.GatewayEnvelope{
 		Payload: &gatewayv2.GatewayEnvelope_InstalledAppsList{

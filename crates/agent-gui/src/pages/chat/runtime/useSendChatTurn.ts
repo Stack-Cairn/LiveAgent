@@ -54,7 +54,7 @@ import {
 } from "../../../lib/chat/page/chatPageHelpers";
 import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
-import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
+import { createModelFromRuntime, createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import {
   type AppSettings,
   applyMcpOpsToAppSettings,
@@ -555,12 +555,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       t(`chat.memoryExtraction.${key}`)
         .replace("{accepted}", String(counts.accepted))
         .replace("{rejected}", String(counts.rejected));
-    const runtimeModel = createModelFromConfig(
+    const runtimeModel = createModelFromRuntime(
       providerId,
+      providerConfig,
       model,
-      provider.baseUrl.trim(),
-      provider.requestFormat,
-      providerConfig.modelConfig,
+      providerConfig.baseUrl.trim(),
     );
 
     const textOverride =
@@ -1710,6 +1709,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             },
             agentTemplates: settings.agents,
             getMcpSettings: getEffectiveMcpSettings,
+            // --- image generation ---：生图模型列表与默认模型（轮级快照即可，
+            // 与 currentChatModel 同一口径）。
+            getImageGenerationSettings: () => ({
+              customProviders: settings.customProviders,
+              ...(settings.imageGeneration ? { imageGeneration: settings.imageGeneration } : {}),
+            }),
             getToolPolicies,
             getCuaAllowSelfTargeting: () => settings.system.cuaAllowSelfTargeting === true,
             commandSafetyMode: effectiveCommandSafetyMode,

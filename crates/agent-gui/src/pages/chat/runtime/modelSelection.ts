@@ -1,3 +1,4 @@
+import { isImageGenerationModel } from "@liveagent/ui/lib/models/modelType";
 import type { AppSettings, ProviderId, SelectedModel } from "../../../lib/settings";
 import {
   type GatewaySelectedModelEvent,
@@ -10,6 +11,24 @@ export type EffectiveChatModelSelection = {
   providerId: ProviderId;
   model: string;
 };
+
+/**
+ * 模型可用 = 供应商未停用且模型在启用列表内；两种失效对调用方同一处理。
+ * 生图模型（modelType === "image"）不能进聊天：它们走 generate_image 工具的
+ * 图像生成接口，聊天流拿不到图片输出。
+ */
+export function isProviderModelAvailable(
+  provider: Pick<
+    AppSettings["customProviders"][number],
+    "enabled" | "activeModels" | "type" | "presetId" | "models"
+  >,
+  model: string,
+): boolean {
+  if (provider.enabled === false || !provider.activeModels.includes(model)) return false;
+  // --- image generation (begin) ---------------------------------------------
+  return !isImageGenerationModel(provider, model);
+  // --- image generation (end) -----------------------------------------------
+}
 
 export function resolveActiveModelSelection(
   settings: AppSettings,
@@ -42,7 +61,9 @@ export function resolveEffectiveChatModelSelection(params: {
     if (!provider) {
       throw new Error("所选供应商不存在，请重新选择模型。");
     }
-    if (!provider.activeModels.includes(model)) {
+    // 供应商总开关关闭等同于模型未启用：模型列表（buildModelOptions）已不再
+    // 列出它，残留的会话 / 全局选择也不能绕过开关继续发请求。
+    if (!isProviderModelAvailable(provider, model)) {
       throw new Error("所选模型未启用，请重新选择模型。");
     }
 
@@ -76,7 +97,7 @@ export function resolveEffectiveChatModelSelection(params: {
       "远程请求所选模型的供应商类型与桌面端配置不一致，请同步桌面端设置后在 WebUI 重新选择模型。",
     );
   }
-  if (!provider.activeModels.includes(model)) {
+  if (!isProviderModelAvailable(provider, model)) {
     throw new Error("远程请求所选模型未在桌面端启用，请同步桌面端设置后在 WebUI 重新选择模型。");
   }
 

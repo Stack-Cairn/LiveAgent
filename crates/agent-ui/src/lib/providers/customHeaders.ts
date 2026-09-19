@@ -1,4 +1,9 @@
 import type { CustomProvider } from "@liveagent/app/lib/settings";
+import type {
+  ProviderChatProtocol,
+  ProviderWireDialect,
+} from "@liveagent/ui/lib/providers/registry/protocols";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 
 const RESERVED_CUSTOM_HEADER_KEYS = new Set([
   "authorization",
@@ -297,6 +302,67 @@ export function applyCliIdentity(
   const kept = current.filter((header) => !foreign.has(header.key.toLowerCase()));
   const merged = mergeImportedCustomHeaders(kept, buildCliIdentityHeaders(identity));
   return { ...merged, removedCount: current.length - kept.length };
+}
+
+/** 端点级"身份模拟"取值：某家 CLI，或 "none" = 连内置方言头都不带（纯协议头）。 */
+export type EndpointIdentity = CliIdentityProviderId | "none";
+
+export function isEndpointIdentity(value: unknown): value is EndpointIdentity {
+  return value === "none" || (typeof value === "string" && isCliIdentityProviderId(value));
+}
+
+/** 按端点自己的接口与方言给推荐身份：Messages → Claude Code，xAI 方言 → Grok，其余 OpenAI 家族 → Codex；Gemini 无对应 CLI。 */
+export function recommendedIdentityForEndpoint(
+  protocol: ProviderChatProtocol,
+  dialect: ProviderWireDialect,
+): CliIdentityProviderId | undefined {
+  if (protocol === "anthropic-messages") return "claude_code";
+  if (protocol === "google-generative-ai") return undefined;
+  return dialect === "xai" ? "xai" : "codex";
+}
+
+/**
+ * 端点身份档（设计文档 4.4）：所选 CLI 的 UA + 静态身份头 + 该 CLI 的每会话动态头。
+ * 动态头按 sessionId 填；Grok 的每回合头（conv/req/turn）没有稳定来源，不伪造。
+ */
+export function buildIdentityRequestHeaders(
+  identity: CliIdentityProviderId,
+  sessionId: string | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const header of buildCliIdentityHeaders(identity)) out[header.key] = header.value;
+  const session = sessionId?.trim();
+  if (identity === "claude_code" && session) {
+    out[CLAUDE_SESSION_ID_HEADER] = session;
+  } else if (identity === "codex") {
+    const id = session || createUuid();
+    out[CODEX_OFFICIAL_SESSION_ID_HEADER] = id;
+    out[CODEX_THREAD_ID_HEADER] = id;
+    out[CLIENT_REQUEST_ID_HEADER] = id;
+    out[CODEX_SESSION_ID_HEADER] = id;
+    out[CODEX_CONVERSATION_ID_HEADER] = id;
+  }
+  return out;
+}
+
+/** 供应商级请求头里残留的 CLI 身份（按 UA 识别），用于提示"身份应按端点设置"。 */
+export function detectCliIdentityInHeaders(
+  headers: readonly CustomHeader[] | undefined,
+): CliIdentityProviderId | undefined {
+  const ua = headers?.find((header) => header.key.toLowerCase() === "user-agent")?.value ?? "";
+  if (/^claude-cli\//i.test(ua)) return "claude_code";
+  if (/^codex_cli_rs\//i.test(ua)) return "codex";
+  if (/^grok-shell\//i.test(ua)) return "xai";
+  return undefined;
+}
+
+/** 剥掉所有 CLI 家族名下的头（UA、静态身份头、动态头），业务头原样保留。 */
+export function stripCliIdentityHeaders(current: readonly CustomHeader[]): CustomHeader[] {
+  const family = new Set<string>();
+  for (const id of CLI_IDENTITY_PROVIDER_IDS) {
+    for (const key of CLI_IDENTITY_HEADER_FAMILIES[id]) family.add(key.toLowerCase());
+  }
+  return current.filter((header) => !family.has(header.key.toLowerCase()));
 }
 
 function findHeaderKey(

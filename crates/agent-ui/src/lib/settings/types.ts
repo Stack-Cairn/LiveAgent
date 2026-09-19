@@ -1,5 +1,6 @@
 import type { Locale } from "@liveagent/app/i18n/config";
 import type { ThinkingLevel } from "@liveagent/ui/lib/models/modelThinking";
+import type { EndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders";
 import type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
 
 import type { SidebarShortcuts } from "./sidebarShortcuts";
@@ -9,6 +10,215 @@ export type ProviderId = "codex" | "claude_code" | "gemini" | "xai" | "deepseek"
 export type ExecutionMode = "text" | "tools" | "agent-dev";
 
 export type CodexRequestFormat = "openai-completions" | "openai-responses";
+
+import {
+  PROVIDER_PROTOCOL_FAMILIES,
+  type ProviderChatProtocol,
+  type ProviderProtocolFamily,
+  type ProviderWireDialect,
+} from "@liveagent/ui/lib/providers/registry/protocols";
+
+export type {
+  ProviderChatProtocol,
+  ProviderProtocolFamily,
+  ProviderWireDialect,
+} from "@liveagent/ui/lib/providers/registry/protocols";
+// 四类接口、方言与家族的唯一定义在 lib/providers/registry；这里只做再导出，
+// 让设置层与运行时共用同一份字面量。
+export {
+  PROVIDER_CHAT_PROTOCOL_LABELS,
+  PROVIDER_CHAT_PROTOCOLS,
+  PROVIDER_PROTOCOL_FAMILIES,
+  PROVIDER_PROTOCOL_FAMILY,
+  PROVIDER_PROTOCOL_FAMILY_LABELS,
+  PROVIDER_WIRE_DIALECT_LABELS,
+  PROVIDER_WIRE_DIALECTS,
+} from "@liveagent/ui/lib/providers/registry/protocols";
+
+export type ProviderEndpointQuirks = {
+  /** = pi-ai compat.supportsUsageInStreaming */
+  supportsUsageInStreaming?: boolean;
+  /** = pi-ai compat.supportsDeveloperRole */
+  supportsDeveloperRole?: boolean;
+  /** = pi-ai compat.supportsReasoningEffort */
+  supportsReasoningEffort?: boolean;
+  /** = pi-ai compat.supportsStore */
+  supportsStore?: boolean;
+  /** = pi-ai compat.thinkingFormat（Completions 思考参数写法） */
+  thinkingFormat?: ProviderThinkingFormat;
+  /** = pi-ai compat.maxTokensField */
+  maxTokensField?: "max_completion_tokens" | "max_tokens";
+};
+
+export const PROVIDER_THINKING_FORMATS = [
+  "openai",
+  "openrouter",
+  "deepseek",
+  "together",
+  "zai",
+  "qwen",
+] as const;
+
+export type ProviderThinkingFormat = (typeof PROVIDER_THINKING_FORMATS)[number];
+
+export type ProviderEndpointAuth = {
+  /** 覆盖协议头档的鉴权头名；缺省由协议决定 */
+  headerName?: string;
+  /** 覆盖鉴权值前缀（例如 "Bearer "）；缺省由协议决定 */
+  prefix?: string;
+};
+
+/**
+ * 端点观测状态。`catalog` = 该渠道的模型列表随应用内置（厂商自营渠道），本次没有
+ * 发请求，端点按预设声明启用；它与 `ok` 一样算"可用"，只是没有延迟可言。
+ */
+export type ProviderEndpointProbeStatus = "ok" | "catalog" | "missing" | "unauthorized" | "unknown";
+
+export type ProviderEndpointProbe = {
+  at: number;
+  status: ProviderEndpointProbeStatus;
+  latencyMs?: number;
+  error?: string;
+};
+
+/**
+ * 供应商内按接口分键的渠道配置（设计文档 2.3）。主连接（baseUrl / isFullUrl /
+ * modelsUrl / customHeaders / 默认凭据）是未覆盖接口的缺省端点。
+ */
+export type ProviderEndpointConfig = {
+  /** 渠道开关；缺省 true。关闭后不参与路由、模型发现与故障转移 */
+  enabled?: boolean;
+  /** Protocol-specific API root. */
+  baseUrl: string;
+  isFullUrl?: boolean;
+  modelsUrl?: string;
+  dialect?: ProviderWireDialect;
+  quirks?: ProviderEndpointQuirks;
+  auth?: ProviderEndpointAuth;
+  /** 引用 credentials[].id；缺省用默认凭据 */
+  credentialId?: string;
+  headers?: { key: string; value: string }[];
+  /**
+   * 身份模拟（按端点）：某家 CLI 的 UA、静态身份头与会话头叠在方言头档之上；
+   * "none" = 只带协议头；缺省 = 只有内置协议头档 + 方言头档。
+   */
+  identity?: EndpointIdentity;
+  /** 观测值，不参与路由；备份与同步时剥离 */
+  lastProbe?: ProviderEndpointProbe;
+  /** 值来源：auto = 预设或探测得出；user = 手动修改 */
+  source?: "auto" | "user";
+};
+
+/**
+ * 供应商级源地址（设计文档 2.3 / 4.2）：同一 Key、同一套接口，只有主机不同。
+ * 第一个启用的源即主源；端点地址用 `{origin}` 占位时按选中的源展开。
+ */
+export type ProviderOrigin = {
+  id: string;
+  /** 已按 normalizeOrigin 规范化：scheme + host(+port) + 可选前缀路径，无尾斜杠 */
+  url: string;
+  /** 缺省 true；关闭后不参与路由、探测与故障转移 */
+  enabled?: boolean;
+  /** 观测值：该源上次探测的最差状态；备份与同步时剥离 */
+  lastProbe?: ProviderEndpointProbe;
+};
+
+export const PROVIDER_ORIGIN_PLACEHOLDER = "{origin}";
+
+/** 地址是否以 `{origin}` 占位（相对源地址书写）。 */
+export function endpointUsesOrigin(url: string | undefined): boolean {
+  return typeof url === "string" && url.includes(PROVIDER_ORIGIN_PLACEHOLDER);
+}
+
+type ProviderOriginOwner = Partial<Pick<CustomProvider, "origins">>;
+
+/** 已启用的源（保持存档顺序；第一项即主源）。 */
+export function getProviderEnabledOrigins(provider: ProviderOriginOwner): ProviderOrigin[] {
+  return (provider.origins ?? []).filter((origin) => origin.enabled !== false);
+}
+
+/**
+ * 路由用的源：指定 originId 时取该源（须已启用），否则取主源。指定的源不存在或
+ * 已停用时退回主源，避免故障转移候选悬空。
+ */
+export function getProviderPrimaryOrigin(
+  provider: ProviderOriginOwner,
+  originId?: string,
+): ProviderOrigin | undefined {
+  const enabled = getProviderEnabledOrigins(provider);
+  if (originId) {
+    const hit = enabled.find((origin) => origin.id === originId);
+    if (hit) return hit;
+  }
+  return enabled[0];
+}
+
+/**
+ * 展开 `{origin}` 占位。模板但没有可用的源时返回空串（视为未配置）；绝对地址原样返回。
+ */
+export function expandProviderOriginUrl(
+  url: string | undefined,
+  origin: Pick<ProviderOrigin, "url"> | undefined,
+): string {
+  const value = url ?? "";
+  if (!endpointUsesOrigin(value)) return value;
+  if (!origin?.url) return "";
+  return value.split(PROVIDER_ORIGIN_PLACEHOLDER).join(origin.url);
+}
+
+export type ProviderCredentialScope =
+  | { mode: "all" }
+  | { mode: "auto" }
+  | { mode: "manual"; models: string[] };
+
+export type ProviderCredential = {
+  id: string;
+  label: string;
+  apiKey: string;
+  apiKeyConfigured?: boolean;
+  enabled: boolean;
+  /** 该 Key 能用哪些模型；缺省 auto（以探测到的列表为准） */
+  modelScope?: ProviderCredentialScope;
+  /** 观测值：上次用此 Key 拉到的模型列表（去重、上限 1000） */
+  lastModels?: { at: number; models: string[] };
+};
+
+export type ProviderRouteProtocolSource = "model" | "preset" | "family" | "provider" | "legacy";
+export type ProviderRouteCredentialSource = "endpoint" | "model" | "scope" | "fallback";
+
+export type ResolvedProviderChatRoute = {
+  protocol: ProviderChatProtocol;
+  /** 接口的决定来源，供界面显示"自动"或"显式" */
+  protocolSource: ProviderRouteProtocolSource;
+  family: ProviderProtocolFamily;
+  dialect: ProviderWireDialect;
+  /**
+   * 过渡期派生值：旧适配器家族（鉴权、payload 策略、模型工厂仍按它分支）。
+   * 新读取点应改读 protocol 与 dialect。
+   */
+  adapterProviderId: ProviderId;
+  /** 已按接口版本段规则规范化的请求根地址（resolveEndpointRequestBase）；存档原值不改。 */
+  baseUrl: string;
+  isFullUrl: boolean;
+  /** 用户以 # 结尾要求原样使用：运行时不得再补版本段。 */
+  baseUrlVerbatim?: true;
+  modelsUrl?: string;
+  /** 端点地址由哪个源展开（端点用 `{origin}` 占位时才有）；故障转移源层据此换源。 */
+  originId?: string;
+  /** 该源的规范化地址；界面"实际请求预览"显示展开后的地址。 */
+  originUrl?: string;
+  requestFormat?: CodexRequestFormat;
+  /** 发给远端的模型名；缺省等于本地模型 ID */
+  wireModelId: string;
+  credentialId: string;
+  credentialSource: ProviderRouteCredentialSource;
+  /** 供应商级与端点级用户头合并后的结果（不含协议头档与方言头档） */
+  headers: { key: string; value: string }[];
+  quirks: ProviderEndpointQuirks;
+  auth?: ProviderEndpointAuth;
+  /** 端点身份模拟；缺省 = 只有内置协议头档 + 方言头档 */
+  identity?: EndpointIdentity;
+};
 
 export type ReasoningLevel = "off" | ThinkingLevel;
 
@@ -219,18 +429,26 @@ export type ProviderFailoverSettings = {
   cooldownSeconds: number;
 };
 
-/** Per-vendor failover settings, keyed by the provider tab type. */
-export type ModelFailoverSettings = Record<ProviderId, ProviderFailoverSettings>;
+/**
+ * 故障转移设置按接口家族分组（设计文档 8.2）：Anthropic / OpenAI（Completions 与
+ * Responses 同组）/ Gemini。旧版按 ProviderId 分五组的存档在归一化时合并迁移。
+ */
+export type ModelFailoverSettings = Record<ProviderProtocolFamily, ProviderFailoverSettings>;
 
 export const MODEL_FAILOVER_QUEUE_LIMIT = 8;
 
-export const PROVIDER_FAILOVER_TYPES: readonly ProviderId[] = [
-  "claude_code",
-  "codex",
-  "gemini",
-  "xai",
-  "deepseek",
-];
+/** 家族分组键：就是 PROVIDER_PROTOCOL_FAMILIES，保留旧名再导出供设置层引用。 */
+export const PROVIDER_FAILOVER_FAMILIES: readonly ProviderProtocolFamily[] =
+  PROVIDER_PROTOCOL_FAMILIES;
+
+/** 旧存档的五个 ProviderId 分组 → 家族；合并时按此顺序追加去重。 */
+export const LEGACY_FAILOVER_TYPE_FAMILY: Record<ProviderId, ProviderProtocolFamily> = {
+  claude_code: "anthropic",
+  codex: "openai",
+  xai: "openai",
+  deepseek: "openai",
+  gemini: "gemini",
+};
 
 export const DEFAULT_PROVIDER_FAILOVER_SETTINGS: ProviderFailoverSettings = {
   enabled: false,
@@ -242,11 +460,9 @@ export const DEFAULT_PROVIDER_FAILOVER_SETTINGS: ProviderFailoverSettings = {
 
 export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
   return {
-    claude_code: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
-    codex: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    anthropic: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    openai: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
     gemini: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
-    xai: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
-    deepseek: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
   };
 }
 
@@ -441,11 +657,72 @@ export type ModelInputModality = (typeof MODEL_INPUT_MODALITIES)[number];
  */
 export type ModelInputModalitiesOverride = ["text"] | ["text", "image"];
 
+export type CapabilityState = "supported" | "unsupported" | "unknown";
+
+// parallelTools 曾占一位，但四类接口（Anthropic Messages / OpenAI Completions /
+// OpenAI Responses / Gemini）在 pi-ai 0.84.2 里都没有 parallel_tool_calls 选项可
+// 透传（仅未使用的 openai-codex-responses 写死 true、mistral-conversations 有映射），
+// 没有任何消费者，故移除；旧存档里的该键由 normalizeModelCapabilities 静默丢弃。
+export const CHAT_CAPABILITY_NAMES = [
+  "reasoning",
+  "tools",
+  "structuredOutput",
+  "nativeWebSearch",
+  "promptCaching",
+  "fileInput",
+  "imageUnderstanding",
+  // --- image generation (begin) ---------------------------------------------
+  // 图像生成：不经四类聊天接口，由内置 generate_image 工具走 OpenAI Images 或
+  // Gemini generateContent（docs/design 附录 §6.7）。
+  "imageGeneration",
+  // --- image generation (end) -----------------------------------------------
+] as const;
+
+export type ChatCapabilityName = (typeof CHAT_CAPABILITY_NAMES)[number];
+
+// ---------------------------------------------------------------------------
+// 设计 §6.2 / §6.3 新增：供应商声明的模型元数据与模型级请求参数覆盖
+// ---------------------------------------------------------------------------
+
+/**
+ * 探测 / 刷新模型列表时上游 `/models` 自带的声明（OpenRouter 的 context_length、
+ * top_provider.max_completion_tokens、architecture.input_modalities 等）。
+ * 只作为 §6.2 的 `provider` 候选参与展示与冲突提示，不自动覆盖目录值。
+ */
+export type ProviderDeclaredModelMeta = {
+  contextWindow?: number;
+  maxOutputToken?: number;
+  maxInputTokens?: number;
+  inputModalities?: ModelInputModalitiesOverride;
+  /** 这份声明是哪次拉取写下的（毫秒时间戳） */
+  fetchedAt?: number;
+};
+
+/**
+ * 模型级请求参数覆盖（设计 §6.3）。只收录运行时真的会透传给上游的字段：
+ * `temperature` / `maxTokens` 是 pi-ai `StreamOptions` 的具名字段；`topP` 经
+ * `StreamOptions.samplingParams` 落到 OpenAI 兼容请求体的 `top_p`，因此只在
+ * OpenAI 两类接口上可用（见 PROTOCOL_PARAMETER_KEYS）。
+ * pi-ai 0.84.2 没有任何 stop sequences 通路，故不设该字段。
+ */
+export type ModelParameterOverrides = {
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+};
+
 export type ProviderModelConfig = {
+  /** 本地稳定 ID：目录匹配、熔断 key、选择器都用它 */
   id: string;
+  /** 发给远端的模型名；缺省等于 id（网关前缀场景） */
+  wireModelId?: string;
+  displayName?: string;
+  /** 列表分组；缺省由模型家族推导 */
+  group?: string;
   /** /models 元数据；缺失时保持旧设置格式兼容。 */
   ownedBy?: string;
   contextWindow: number;
+  maxInputTokens?: number;
   maxOutputToken: number;
   limitsSource?: ModelLimitsSource;
   /** OpenAI 兼容端点的缓存提示协议；缺失时继承供应商设置。 */
@@ -459,7 +736,56 @@ export type ProviderModelConfig = {
    * 读取前须经 normalizeInputModalities 归一化。
    */
   inputModalities?: ModelInputModalitiesOverride;
+  /**
+   * 该模型可走的接口，有序：首项即路由，其余为端点层故障转移候选。
+   * 缺省按预设规则 / 模型家族 / 供应商默认推断。
+   */
+  /**
+   * 该模型在此渠道显式选用的接口；缺省按预设规则 → 模型系列 → 供应商默认推断。
+   * 可选范围由 modelSelectableProtocols 决定（原生渠道 = 预设声明的接口；其它渠道 =
+   * OpenAI 两类 + Anthropic Messages，Gemini 系列模型再加 v1beta）。
+   */
+  chatProtocol?: ProviderChatProtocol;
+  dialect?: ProviderWireDialect;
+  /** 指定凭据（覆盖按范围与顺序的自动选择） */
+  credentialId?: string;
+  /** 默认使用哪一档；可选档位来自模型目录，不在此配置 */
+  reasoning?: ReasoningLevel;
+  /** 模型级原生搜索覆盖；缺省继承供应商 */
+  nativeWebSearch?: boolean;
+  /** 用户对能力的显式覆盖；缺失项由目录、适配器与启发式决定 */
+  capabilities?: Partial<Record<ChatCapabilityName, CapabilityState>>;
+  // --- 设计 §6.2 / §6.3 新增字段（其余字段位置不变）---
+  /** 上游 /models 自带的限额与模态声明；只作 provider 候选，不自动覆盖目录值 */
+  providerMeta?: ProviderDeclaredModelMeta;
+  /** 模型级请求参数覆盖；范围限定在适配器 schema 之内 */
+  parameters?: ModelParameterOverrides;
+  // --- §6.2 / §6.3 新增结束 ---
+  /** 值来源：auto = 发现或目录得出；user = 手动添加或修改 */
+  source?: "auto" | "user";
+  // --- image generation (begin) ---------------------------------------------
+  /**
+   * 该模型走聊天流还是图像生成链路。缺省不写，由 resolveModelType 按
+   * 目录 outputModalities → id 启发式推断；写了就是用户显式覆盖。
+   * image 类型的模型不进聊天选择器，也不做连通性测试（生成一张图要花钱）。
+   */
+  modelType?: ModelType;
+  // --- image generation (end) -----------------------------------------------
 };
+
+// --- image generation (begin) -----------------------------------------------
+/** 模型用途的合法值全集（运行时校验与类型的单一来源）。 */
+export const MODEL_TYPES = ["chat", "image"] as const;
+
+/** chat = 四类聊天接口；image = 图像生成接口（Images / generateContent）。 */
+export type ModelType = (typeof MODEL_TYPES)[number];
+
+/** 图像生成设置：目前只有"默认生图模型"。 */
+export type ImageGenerationSettings = {
+  /** 内置 generate_image 工具未显式指定 model 时用哪个；必须是 image 类型模型。 */
+  defaultModel?: SelectedModel;
+};
+// --- image generation (end) -------------------------------------------------
 
 export type ChatRuntimeControls = {
   thinkingEnabled: boolean;
@@ -594,19 +920,40 @@ export function getDefaultUsageQueryConfig(): UsageQueryConfig {
 export type CustomProvider = {
   id: string;
   name: string;
+  /** 旧字段：旧路由推导来源与旧读取点的兼容值；不再新增取值 */
   type: ProviderId;
+  /** 预设注册表 ID；自定义渠道为 "custom" */
+  presetId?: string;
+  /** 供应商启用开关；缺省 true */
+  enabled?: boolean;
   baseUrl: string;
   /** 将 baseUrl 作为最终请求地址，本地反代不再追加协议端点路径。 */
   isFullUrl: boolean;
   /** 可选的模型列表完整地址；留空时从 baseUrl 自动推导。 */
   modelsUrl?: string;
+  /** 模型文档页地址（仅 http(s)）；覆盖预设的 doc，留空时用预设值。 */
+  docUrl?: string;
+  /**
+   * 源地址列表；第一个启用的即主源。端点地址可用 `{origin}` 占位相对源地址书写。
+   * 缺省（旧存档）等价单源：所有端点按绝对地址解析。
+   */
+  origins?: ProviderOrigin[];
+  /** 默认凭据；始终等于 credentials[0].apiKey，保证旧读者可用 */
   apiKey: string;
   apiKeyConfigured?: boolean;
+  /** 多 Key；缺省为 [默认凭据]。有序备用，见设计文档 5.6 */
+  credentials?: ProviderCredential[];
   customHeaders?: { key: string; value: string }[];
   models: ProviderModelConfig[];
   modelOrder?: string[];
   activeModels: string[];
   requestFormat?: CodexRequestFormat;
+  /** Default wire override. Missing preserves the legacy provider-type routing. */
+  defaultChatProtocol?: ProviderChatProtocol;
+  /** 供应商级方言；端点与模型可覆盖 */
+  dialect?: ProviderWireDialect;
+  /** 按接口分键的渠道配置 */
+  endpointConfigs?: Partial<Record<ProviderChatProtocol, ProviderEndpointConfig>>;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
   /** OpenAI 兼容端点的缓存提示协议；旧配置由 promptCachingEnabled 迁移。 */
@@ -620,17 +967,54 @@ export type CustomProvider = {
   usageQuery: UsageQueryConfig;
 };
 
-/**
- * 供应商级流内重试策略。
- *
- * - default：沿用全局默认（5 次重试，即 DEFAULT_STREAM_RETRY_MAX_ATTEMPTS-1）
- *   ——与未配置等价，归一化时直接省略字段，保证旧配置零迁移；
- * - off：禁用流内重试（不影响跨供应商 failover）；
- * - custom：使用 maxRetries——首次失败后的重试次数，不含首次请求（钳位
- *   1..10；0 次重试请直接选 off）。与重试状态提示"正在重试 (n/m)"的 m
- *   同一口径。
- */
 export type ProviderRetryPolicy = { mode: "off" } | { mode: "custom"; maxRetries: number };
+
+export function getLegacyProviderChatProtocol(
+  providerId: ProviderId,
+  requestFormat?: CodexRequestFormat,
+): ProviderChatProtocol {
+  if (providerId === "claude_code") return "anthropic-messages";
+  if (providerId === "gemini") return "google-generative-ai";
+  if (providerId === "deepseek") return "openai-responses";
+  if (providerId === "xai") return "openai-responses";
+  return requestFormat === "openai-completions" ? "openai-completions" : "openai-responses";
+}
+
+type ProviderEndpointOwner = Pick<CustomProvider, "type"> &
+  Partial<
+    Pick<CustomProvider, "defaultChatProtocol" | "requestFormat" | "endpointConfigs" | "origins">
+  >;
+
+/**
+ * 主连接（baseUrl / isFullUrl / modelsUrl）充当隐式端点的那个接口：`defaultChatProtocol`，
+ * 缺省由旧 `type` / `requestFormat` 推导。界面、路由与故障转移分组共用这一个判定键。
+ */
+export function getProviderImplicitChatProtocol(
+  provider: ProviderEndpointOwner,
+): ProviderChatProtocol {
+  return (
+    provider.defaultChatProtocol ??
+    getLegacyProviderChatProtocol(provider.type, provider.requestFormat)
+  );
+}
+
+/**
+ * 某接口在该供应商上是否已启用：有显式端点时看它的开关；没有时只有隐式端点
+ * （主连接）对应的接口算启用。端点地址以 `{origin}` 占位而供应商没有任何启用的源时
+ * 视为未配置。
+ */
+export function isProviderChatProtocolEnabled(
+  provider: ProviderEndpointOwner,
+  protocol: ProviderChatProtocol,
+  implicitProtocol: ProviderChatProtocol = getProviderImplicitChatProtocol(provider),
+): boolean {
+  const config = provider.endpointConfigs?.[protocol];
+  if (config) {
+    if (config.enabled === false) return false;
+    return !endpointUsesOrigin(config.baseUrl) || getProviderPrimaryOrigin(provider) !== undefined;
+  }
+  return protocol === implicitProtocol;
+}
 
 export const PROVIDER_RETRY_MAX_RETRIES_LIMITS = {
   min: 1,
@@ -722,6 +1106,9 @@ export type AppSettings = {
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;
   selectedModel?: SelectedModel;
+  // --- image generation (begin) ---------------------------------------------
+  imageGeneration?: ImageGenerationSettings;
+  // --- image generation (end) -----------------------------------------------
   theme: Theme;
   locale: Locale;
   /** Desktop-only: close title-bar X to hide to tray or exit the application. */

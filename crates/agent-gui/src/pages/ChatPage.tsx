@@ -234,6 +234,7 @@ import {
   useManualCompaction,
 } from "./chat/runtime/useManualCompaction";
 import { useProjectToolTextGenerationClient } from "./chat/runtime/useProjectToolTextGenerationClient";
+import { useProviderChatRouteMemo } from "./chat/runtime/useProviderChatRouteMemo";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import {
@@ -3272,6 +3273,9 @@ export function ChatPage(props: ChatPageProps) {
     [],
   );
 
+  // 背景 Pane 的路由解析按（供应商对象，模型 id）memo：绑定在每次渲染按 Pane
+  // 重建，不能每帧都重跑 resolveProviderChatRoute。
+  const resolveMemoizedProviderChatRoute = useProviderChatRouteMemo();
   // Read-and-interact binding for panes not hosting the current conversation.
   // Attach/send/stop/chip-remove route by this pane's conversationId. Other
   // interactions that still go through page-level current-conversation
@@ -3294,21 +3298,25 @@ export function ChatPage(props: ChatPageProps) {
     const paneProvider = paneSelectedModel
       ? settings.customProviders.find((entry) => entry.id === paneSelectedModel.customProviderId)
       : undefined;
+    const paneRoute =
+      paneProvider && paneSelectedModel
+        ? resolveMemoizedProviderChatRoute(paneProvider, paneSelectedModel.model)
+        : undefined;
     const paneRuntimeControls = normalizeChatRuntimeControlsForProvider(
       settings.chatRuntimeControls,
       {
-        providerId: paneProvider?.type,
-        requestFormat: paneProvider?.requestFormat,
+        providerId: paneRoute?.adapterProviderId,
+        requestFormat: paneRoute?.requestFormat,
         modelId: paneSelectedModel?.model,
       },
     );
     const paneReasoningOptions = getChatRuntimeReasoningLevelsForProvider({
-      providerId: paneProvider?.type,
-      requestFormat: paneProvider?.requestFormat,
+      providerId: paneRoute?.adapterProviderId,
+      requestFormat: paneRoute?.requestFormat,
       modelId: paneSelectedModel?.model,
     });
     const paneThinkingAlwaysOn = isThinkingAlwaysOnForModel(
-      paneProvider?.type ?? "claude_code",
+      paneRoute?.adapterProviderId ?? "claude_code",
       paneSelectedModel?.model,
     );
     const paneModelLabel = (() => {

@@ -15,6 +15,7 @@ type RuntimeDebugInput = {
   promptCachingEnabled?: boolean;
   nativeWebSearchEnabled?: boolean;
   useSystemProxy?: boolean;
+  capabilities?: { tools?: { state: string; source: string } };
 };
 
 export type StreamDebugLogger = {
@@ -209,6 +210,10 @@ export function buildRuntimeDebugInfo(runtime: RuntimeDebugInput) {
     // 只记 key：取值继续整体脱敏。这是端到端确认「自定义请求头是否真的走到了
     // 这条链路」的唯一低成本手段——配置一旦在中途被丢弃，这里就是空数组。
     customHeaderKeys: (runtime.customHeaders ?? []).map((header) => header.key),
+    // 能力门控留痕：tools 为 unsupported 时 runner 本回合不下发工具定义。
+    toolsCapability: runtime.capabilities?.tools
+      ? `${runtime.capabilities.tools.state}/${runtime.capabilities.tools.source}`
+      : undefined,
   };
 }
 

@@ -1,16 +1,17 @@
 #!/usr/bin/env node
-// Generates the model metadata catalog (context window / max output /
-// thinking capability / input modalities) consumed by both frontends through the shared UI package. OpenAI model metadata is
-// merged Codex-first from openai/codex models.json, then supplemented by the
-// models.dev open database; every other section comes from models.dev. The
-// output is written once to:
-//   crates/agent-ui/src/lib/models/catalog.generated.ts
+// Generates the model metadata catalog and the provider preset facts consumed
+// by both frontends through the shared UI package. models.dev is fetched once;
+// OpenAI model metadata is merged Codex-first from openai/codex models.json,
+// then supplemented by models.dev; every other section comes from models.dev.
+// Two files are written from the same snapshot:
+//   crates/agent-ui/src/lib/models/catalog.generated.ts        (MODEL_CATALOG)
+//   crates/agent-ui/src/lib/providers/registry/presets.generated.ts (provider facts)
 //
 // Usage: node scripts/generate-model-catalog.mjs
 //          [--source <url|file>] [--codex-source <url|file>] [--check]
 //   --source        alternate models.dev api.json URL or local file path
 //   --codex-source  alternate Codex models.json URL or local file path
-//   --check         compare against the checked-in snapshot without writing;
+//   --check         compare against the checked-in snapshots without writing;
 //                   exits 1 when the data differs
 //
 // Automated refresh: .github/workflows/update-model-catalog.yml
@@ -20,9 +21,25 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT_PATHS = [
-  join(repoRoot, "crates", "agent-ui", "src", "lib", "models", "catalog.generated.ts"),
-];
+const CATALOG_OUTPUT = join(
+  repoRoot,
+  "crates",
+  "agent-ui",
+  "src",
+  "lib",
+  "models",
+  "catalog.generated.ts",
+);
+const PRESETS_OUTPUT = join(
+  repoRoot,
+  "crates",
+  "agent-ui",
+  "src",
+  "lib",
+  "providers",
+  "registry",
+  "presets.generated.ts",
+);
 
 const DEFAULT_SOURCE = "https://models.dev/api.json";
 const DEFAULT_CODEX_SOURCE =
@@ -30,11 +47,11 @@ const DEFAULT_CODEX_SOURCE =
 const MIN_CODEX_MODELS = 5;
 
 // Catalog sections. Each section unions one or more upstream models.dev
-// provider keys (first source wins on a same-id conflict — used to prefer the
-// China endpoint's limits for vendors that publish both). The openai section
-// is subsequently overlaid with same-id Codex metadata; models.dev-only models
-// remain as supplements, while newly listed Codex models receive conservative
-// defaults for fields models.json does not publish yet.
+// provider keys (first source wins on a same-id conflict inside the section).
+// The openai section is subsequently overlaid with same-id Codex metadata;
+// models.dev-only models remain as supplements, while newly listed Codex
+// models receive conservative defaults for fields models.json does not
+// publish yet.
 //
 // Codex context_window semantics: models.json publishes the *input-side*
 // session budget (GPT-5 family: 272k documented max input), while every other
@@ -42,22 +59,32 @@ const MIN_CODEX_MODELS = 5;
 // 272k input + 128k output). The merge converts Codex entries to total-window
 // semantics (context_window + resolved maxOutputToken) so the whole catalog —
 // and every consumer (usage ring, buffered-reserve compaction thresholds) —
-// shares one meaning of contextWindow. Cross-check: gpt-5.2 converts to
-// exactly the 400k total that models.dev/OpenAI document for it.
+// shares one meaning of contextWindow; the input budget is preserved as
+// maxInputTokens. Cross-check: gpt-5.2 converts to exactly the 400k total that
+// models.dev/OpenAI document for it.
 //
-// The first four sections are the native catalogs behind the app's provider
-// types (claude_code→anthropic, gemini→google, codex→openai, xai); scoped
-// lookup (findCatalogModel) only ever reads these. The remaining sections are
-// mainland-China vendors with no app provider type of their own: they are
-// consumed exclusively through findCatalogModelAcrossProviders, so models
-// served through claude_code/codex-compatible relays resolve real limits.
+// Every section keeps its own complete list — provider presets list models per
+// channel through MODEL_CATALOG[preset.sourceId], so a model deployed on two
+// channels (qwen-max on Bailian CN and intl) appears in both sections. Ids
+// are only deduplicated case-insensitively *within* a section.
 //
-// Section order is also the adjudication order for duplicate ids across
-// sections: ids are deduplicated case-insensitively, first section wins.
-// Pure vendor-official catalogs therefore come first; "alibaba" (Bailian) and
-// "tencent" (coding plan) host third-party models (glm/kimi/MiniMax/deepseek
-// deployments with platform-clamped limits), so they come last and their
-// copies of another vendor's models are dropped in favor of the official ones.
+// Section order is the lookup order of findCatalogModelAcrossProviders (first
+// hit wins for ids present in several sections). Official vendor catalogs
+// come first (CN endpoints before their international twins so a bare id
+// resolves to the CN limits, as before); platforms that host third-party
+// models with platform-clamped limits (volcengine, alibaba/Bailian, tencent)
+// come next; aggregators and local runtimes (siliconflow, groq, openrouter,
+// lmstudio) come last so an aggregator copy never shadows the vendor entry.
+//
+// Plan channels (Coding / Token / Step Plan) have their own API root and their
+// own model list and limits upstream, so each is its own section (keyed by the
+// models.dev id) placed right after the vendor's official section(s); the
+// preset is a separate channel entry so users pick the plan explicitly.
+//
+// `namespaced`: keep "vendor/model" ids. Aggregators and local runtimes serve
+// those ids verbatim; for vendor catalogs such ids are third-party deployments
+// (Bailian's "siliconflow/…", "kimi/…") that relays never serve verbatim and
+// are skipped.
 const SECTIONS = [
   { key: "anthropic", sources: ["anthropic"], min: 8 },
   { key: "google", sources: ["google"], min: 15 },
@@ -67,24 +94,147 @@ const SECTIONS = [
   // zai (Z.AI, international brand) is a superset of zhipuai with identical
   // ids and limits for the overlap; keep the domestic brand as the key.
   { key: "zhipuai", sources: ["zai", "zhipuai"], min: 10 },
-  { key: "moonshotai", sources: ["moonshotai-cn", "moonshotai"], min: 8 },
-  { key: "minimax", sources: ["minimax-cn", "minimax"], min: 5 },
+  { key: "zhipuai-coding-plan", sources: ["zhipuai-coding-plan"], min: 6 },
+  { key: "moonshotai-cn", sources: ["moonshotai-cn"], min: 2 },
+  { key: "moonshotai", sources: ["moonshotai"], min: 2 },
+  { key: "kimi-for-coding", sources: ["kimi-for-coding"], min: 2 },
+  { key: "minimax-cn", sources: ["minimax-cn"], min: 3 },
+  { key: "minimax", sources: ["minimax"], min: 3 },
+  // models.dev 的 id 仍叫 coding-plan；官方套餐名已改为 Token Plan（预设 id 用后者）。
+  { key: "minimax-cn-coding-plan", sources: ["minimax-cn-coding-plan"], min: 4 },
+  { key: "minimax-coding-plan", sources: ["minimax-coding-plan"], min: 4 },
   { key: "stepfun", sources: ["stepfun"], min: 4 },
+  { key: "stepfun-ai", sources: ["stepfun-ai"], min: 4 },
+  { key: "stepfun-step-plan", sources: ["stepfun-step-plan"], min: 2 },
+  { key: "stepfun-ai-step-plan", sources: ["stepfun-ai-step-plan"], min: 2 },
   { key: "xiaomi", sources: ["xiaomi"], min: 4 },
+  { key: "xiaomi-token-plan-cn", sources: ["xiaomi-token-plan-cn"], min: 2 },
+  { key: "xiaomi-token-plan-ams", sources: ["xiaomi-token-plan-ams"], min: 2 },
+  { key: "xiaomi-token-plan-sgp", sources: ["xiaomi-token-plan-sgp"], min: 2 },
   { key: "longcat", sources: ["longcat"], min: 1 },
-  { key: "alibaba", sources: ["alibaba-cn", "alibaba"], min: 40 },
-  { key: "tencent", sources: ["tencent-coding-plan"], min: 4 },
+  { key: "sensenova", sources: ["sensenova"], min: 3 },
+  { key: "volcengine", sources: ["volcengine"], min: 6 },
+  { key: "volcengine-coding-plan", sources: ["volcengine-coding-plan"], min: 5 },
+  { key: "alibaba-cn", sources: ["alibaba-cn"], min: 40 },
+  { key: "alibaba", sources: ["alibaba"], min: 20 },
+  { key: "alibaba-coding-plan-cn", sources: ["alibaba-coding-plan-cn"], min: 6 },
+  { key: "alibaba-coding-plan", sources: ["alibaba-coding-plan"], min: 6 },
+  { key: "alibaba-token-plan-cn", sources: ["alibaba-token-plan-cn"], min: 10 },
+  { key: "alibaba-token-plan", sources: ["alibaba-token-plan"], min: 10 },
+  // 混元官方（TokenHub）；Coding / Token Plan 各自成区。
+  { key: "tencent", sources: ["tencent-tokenhub"], min: 2 },
+  { key: "tencent-coding-plan", sources: ["tencent-coding-plan"], min: 4 },
+  { key: "tencent-token-plan", sources: ["tencent-token-plan"], min: 1 },
+  { key: "modelscope", sources: ["modelscope"], min: 3, namespaced: true },
+  { key: "siliconflow-cn", sources: ["siliconflow-cn"], min: 20, namespaced: true },
+  { key: "siliconflow", sources: ["siliconflow"], min: 20, namespaced: true },
+  { key: "groq", sources: ["groq"], min: 8, namespaced: true },
+  { key: "openrouter", sources: ["openrouter"], min: 100, namespaced: true },
+  { key: "lmstudio", sources: ["lmstudio"], min: 1, namespaced: true },
 ];
 
-// Models that must exist (with the expected thinking shape); their absence
-// signals an upstream schema change (or, for unioned sections, a source-key
-// rename). `level` must be present in the extracted thinking levels; `off`
-// must match when specified. `inputModality` must be present in the extracted
-// input modalities — it guards against upstream renaming modalities.input,
-// which would otherwise silently strip modality data from every entry.
+// A single channel's list is capped so an aggregator cannot balloon the
+// bundle; truncation is recorded in the generated file header.
+const MODEL_CAP = 400;
+
+// Provider presets derived from models.dev provider facts (display name, docs
+// URL, API root, adapter). `section` is the catalog section that lists the
+// channel's models (GeneratedPreset.sourceId); `source` picks the models.dev
+// provider whose facts are used when the section unions several providers.
+// Order is the default catalog display order. Everything models.dev does not
+// know (extra protocol endpoints, dialects, per-model protocol rules, identity
+// presets, local services) lives in presets.overlay.ts.
+const PRESETS = [
+  { id: "anthropic", section: "anthropic" },
+  { id: "openai", section: "openai" },
+  { id: "gemini", section: "google" },
+  { id: "xai", section: "xai" },
+  { id: "deepseek", section: "deepseek" },
+  { id: "zhipu", section: "zhipuai", source: "zhipuai" },
+  { id: "zhipu-intl", section: "zhipuai", source: "zai" },
+  { id: "zhipu-coding-plan", section: "zhipuai-coding-plan" },
+  { id: "minimax", section: "minimax" },
+  { id: "minimax-cn", section: "minimax-cn" },
+  { id: "minimax-token-plan", section: "minimax-coding-plan" },
+  { id: "minimax-cn-token-plan", section: "minimax-cn-coding-plan" },
+  { id: "moonshot", section: "moonshotai" },
+  { id: "moonshot-cn", section: "moonshotai-cn" },
+  { id: "kimi-for-coding", section: "kimi-for-coding" },
+  { id: "dashscope", section: "alibaba" },
+  { id: "dashscope-cn", section: "alibaba-cn" },
+  { id: "dashscope-coding-plan", section: "alibaba-coding-plan" },
+  { id: "dashscope-cn-coding-plan", section: "alibaba-coding-plan-cn" },
+  { id: "dashscope-token-plan", section: "alibaba-token-plan" },
+  { id: "dashscope-cn-token-plan", section: "alibaba-token-plan-cn" },
+  { id: "volcengine", section: "volcengine" },
+  { id: "volcengine-coding-plan", section: "volcengine-coding-plan" },
+  { id: "stepfun", section: "stepfun-ai" },
+  { id: "stepfun-cn", section: "stepfun" },
+  { id: "stepfun-step-plan", section: "stepfun-ai-step-plan" },
+  { id: "stepfun-cn-step-plan", section: "stepfun-step-plan" },
+  { id: "tencent", section: "tencent" },
+  { id: "tencent-coding-plan", section: "tencent-coding-plan" },
+  { id: "tencent-token-plan", section: "tencent-token-plan" },
+  { id: "xiaomi", section: "xiaomi" },
+  { id: "xiaomi-token-plan-cn", section: "xiaomi-token-plan-cn" },
+  { id: "xiaomi-token-plan-eu", section: "xiaomi-token-plan-ams" },
+  { id: "xiaomi-token-plan-sg", section: "xiaomi-token-plan-sgp" },
+  { id: "longcat", section: "longcat" },
+  { id: "sensenova", section: "sensenova" },
+  { id: "modelscope", section: "modelscope" },
+  { id: "siliconflow", section: "siliconflow" },
+  { id: "siliconflow-cn", section: "siliconflow-cn" },
+  { id: "groq", section: "groq" },
+  { id: "openrouter", section: "openrouter" },
+  { id: "lmstudio", section: "lmstudio" },
+];
+
+// `npm` adapter package → the wire protocols that adapter speaks.
+const NPM_PROTOCOLS = {
+  "@ai-sdk/anthropic": ["anthropic-messages"],
+  "@ai-sdk/openai": ["openai-responses", "openai-completions"],
+  "@ai-sdk/google": ["google-generative-ai"],
+  // xAI 原生渠道只走 Responses（xai 方言）；Completions 不作为渠道接口提供。
+  "@ai-sdk/xai": ["openai-responses"],
+  "@ai-sdk/openai-compatible": ["openai-completions"],
+  "@openrouter/ai-sdk-provider": ["openai-completions"],
+  "@ai-sdk/groq": ["openai-completions"],
+};
+
+// Official API roots for adapters whose models.dev entry has no `api` field.
+const DEFAULT_API = {
+  "@ai-sdk/anthropic": "https://api.anthropic.com/v1",
+  "@ai-sdk/openai": "https://api.openai.com/v1",
+  "@ai-sdk/google": "https://generativelanguage.googleapis.com/v1beta",
+  "@ai-sdk/xai": "https://api.x.ai/v1",
+  "@ai-sdk/groq": "https://api.groq.com/openai/v1",
+};
+
+// Models that must exist (with the expected shape); their absence signals an
+// upstream schema change (or, for unioned sections, a source-key rename).
+// `level` must be present in the extracted thinking levels; `off` must match
+// when specified. `inputModality` must be present in the extracted input
+// modalities — it guards against upstream renaming modalities.input, which
+// would otherwise silently strip modality data from every entry. `fields`
+// lists boolean capability fields that must be extracted as true — guarding
+// against upstream renaming tool_call / structured_output / attachment.
 const SENTINELS = [
-  { section: "anthropic", id: "claude-sonnet-4-6", level: "high", off: true, inputModality: "image" },
+  {
+    section: "anthropic",
+    id: "claude-sonnet-4-6",
+    level: "high",
+    off: true,
+    inputModality: "image",
+    fields: ["toolCall", "attachment"],
+  },
   { section: "openai", id: "gpt-5", level: "minimal" },
+  {
+    section: "openai",
+    id: "gpt-5.2",
+    contextWindow: 400_000,
+    maxInputTokens: 272_000,
+    fields: ["toolCall", "structuredOutput", "attachment"],
+  },
   // 272k Codex input budget + 128k models.dev output = 400k total window.
   // Fails when either upstream changes semantics or Codex lifts the default
   // session budget — both require re-evaluating the merge conversion above.
@@ -92,7 +242,9 @@ const SENTINELS = [
   { section: "deepseek", id: "deepseek-v4-flash", level: "low", off: true },
   { section: "deepseek", id: "deepseek-v4-pro", level: "high", off: true },
   { section: "zhipuai", id: "glm-4.6", off: true },
+  { section: "alibaba-cn", id: "qwen-max" },
   { section: "alibaba", id: "qwen-max" },
+  { section: "openrouter", id: "anthropic/claude-sonnet-4.5", fields: ["toolCall"] },
 ];
 
 // Single semantic rule shared with lib/models/modelCatalog.ts (bound together
@@ -108,27 +260,35 @@ function normalizeMaxOutputToken(contextWindow, maxOutputToken) {
 }
 
 // ---------------------------------------------------------------------------
-// Input modality extraction
+// Modality extraction
 // ---------------------------------------------------------------------------
-// Canonical order for the catalog's inputModalities field. models.dev
-// publishes modalities.input and Codex models.json publishes input_modalities
+// Canonical order for the catalog's modality fields. models.dev publishes
+// modalities.input/output and Codex models.json publishes input_modalities
 // with the same vocabulary; unknown future values are dropped with a note
 // rather than failing the refresh — modality data must never block a limits
 // update.
-const INPUT_MODALITIES = ["text", "image", "audio", "video", "pdf"];
+const MODALITIES = ["text", "image", "audio", "video", "pdf"];
 
-function normalizeInputModalities(values, label) {
+function normalizeModalities(values, label) {
   if (!Array.isArray(values)) return undefined;
   const seen = new Set();
   for (const value of values) {
-    if (INPUT_MODALITIES.includes(value)) {
+    if (MODALITIES.includes(value)) {
       seen.add(value);
     } else {
-      console.error(`note ${label}: unknown input modality "${value}" dropped`);
+      console.error(`note ${label}: unknown modality "${value}" dropped`);
     }
   }
   if (seen.size === 0) return undefined;
-  return INPUT_MODALITIES.filter((modality) => seen.has(modality));
+  return MODALITIES.filter((modality) => seen.has(modality));
+}
+
+// Output modalities are only recorded when the model emits more than text
+// (every catalog entry emits text — non-text-output models are filtered out).
+function normalizeOutputModalities(values, label) {
+  const modalities = normalizeModalities(values, label);
+  if (!modalities || (modalities.length === 1 && modalities[0] === "text")) return undefined;
+  return modalities;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +391,127 @@ function normalizeCodexThinking(model, supplementalThinking, label) {
   return { levels: THINKING_LEVELS.filter((level) => values.has(level)), off };
 }
 
+// ---------------------------------------------------------------------------
+// Descriptive fields
+// ---------------------------------------------------------------------------
+// models.dev treats its boolean capability fields as "absent == false"; only
+// `true` is recorded so the generated file stays compact and consumers can
+// read "catalog hit + field absent" as unsupported.
+const STATUSES = new Set(["beta", "deprecated"]);
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function descriptiveFields(model, id, label) {
+  const name = nonEmptyString(model?.name);
+  const status = nonEmptyString(model?.status);
+  if (status && status !== "active" && !STATUSES.has(status)) {
+    console.error(`note ${label}: unknown status "${status}" dropped`);
+  }
+  return {
+    ...(name && name !== id ? { name } : {}),
+    ...(nonEmptyString(model?.family) ? { family: model.family.trim() } : {}),
+    ...(model?.tool_call === true ? { toolCall: true } : {}),
+    ...(model?.structured_output === true ? { structuredOutput: true } : {}),
+    ...(model?.attachment === true ? { attachment: true } : {}),
+    ...(model?.temperature === true ? { temperature: true } : {}),
+    ...(nonEmptyString(model?.knowledge) ? { knowledge: model.knowledge.trim() } : {}),
+    ...(nonEmptyString(model?.release_date) ? { releaseDate: model.release_date.trim() } : {}),
+    ...(nonEmptyString(model?.last_updated) ? { lastUpdated: model.last_updated.trim() } : {}),
+    ...(status && STATUSES.has(status) ? { status } : {}),
+    ...(model?.open_weights === true ? { openWeights: true } : {}),
+    // interleaved thinking is published either as `true` or as the
+    // { field } descriptor naming the stream field; both mean supported.
+    ...(model?.interleaved === true ||
+    (model?.interleaved && typeof model.interleaved === "object")
+      ? { interleaved: true }
+      : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Pricing (display-only)
+// ---------------------------------------------------------------------------
+// models.dev `cost` publishes USD per 1M tokens: flat rates (input / output /
+// cache_read / cache_write / reasoning / input_audio / output_audio), an
+// optional `tiers` ladder ({ tier: { type: "context", size }, ...rates }) for
+// long-context surcharges, and the legacy `context_over_200k` block. Values
+// are copied verbatim (no rounding); the app has no billing — the runtime
+// still feeds zero cost to the streaming layer — so this is catalog metadata
+// for the info panel and the catalog browser only. Codex models.json publishes
+// no prices; the openai merge keeps the models.dev rate for the same id.
+const PRICE_RATE_FIELDS = [
+  ["input", "input"],
+  ["output", "output"],
+  ["cache_read", "cacheRead"],
+  ["cache_write", "cacheWrite"],
+  ["reasoning", "reasoning"],
+  ["input_audio", "inputAudio"],
+  ["output_audio", "outputAudio"],
+];
+const PRICE_TIER_RATE_FIELDS = PRICE_RATE_FIELDS.slice(0, 4);
+
+function normalizePriceRates(raw, fields, label) {
+  if (!raw || typeof raw !== "object") return undefined;
+  const rates = {};
+  for (const [upstreamKey, key] of fields) {
+    const value = raw[upstreamKey];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      console.error(`note ${label}: invalid cost.${upstreamKey} ${JSON.stringify(value)} dropped`);
+      continue;
+    }
+    rates[key] = value;
+  }
+  return Object.keys(rates).length > 0 ? rates : undefined;
+}
+
+function normalizePricing(model, label) {
+  const cost = model?.cost;
+  if (!cost || typeof cost !== "object") return undefined;
+  const pricing = normalizePriceRates(cost, PRICE_RATE_FIELDS, label) ?? {};
+  const contextOver200k = normalizePriceRates(
+    cost.context_over_200k,
+    PRICE_TIER_RATE_FIELDS,
+    `${label} context_over_200k`,
+  );
+  if (contextOver200k) pricing.contextOver200k = contextOver200k;
+  if (Array.isArray(cost.tiers)) {
+    const tiers = [];
+    for (const tier of cost.tiers) {
+      const size = tier?.tier?.size;
+      if (tier?.tier?.type !== "context" || !Number.isInteger(size) || size <= 0) {
+        console.error(`note ${label}: unknown cost tier ${JSON.stringify(tier?.tier)} dropped`);
+        continue;
+      }
+      const rates = normalizePriceRates(tier, PRICE_TIER_RATE_FIELDS, `${label} tier ${size}`);
+      if (!rates) continue;
+      tiers.push({ contextOver: size, ...rates });
+    }
+    tiers.sort((a, b) => a.contextOver - b.contextOver);
+    for (let i = 1; i < tiers.length; i += 1) {
+      if (tiers[i].contextOver === tiers[i - 1].contextOver) {
+        console.error(`note ${label}: duplicate cost tier ${tiers[i].contextOver} dropped`);
+        tiers.splice(i, 1);
+        i -= 1;
+      }
+    }
+    if (tiers.length > 0) pricing.tiers = tiers;
+  }
+  return Object.keys(pricing).length > 0 ? pricing : undefined;
+}
+
+function normalizeMaxInputTokens(model, contextWindow, label) {
+  const input = model?.limit?.input;
+  if (input === undefined || input === null) return undefined;
+  if (!Number.isInteger(input) || input <= 0 || input > contextWindow) {
+    console.error(`note ${label}: invalid limit.input ${JSON.stringify(input)} dropped`);
+    return undefined;
+  }
+  return input;
+}
+
 function fail(message) {
   console.error(`generate-model-catalog: ${message}`);
   process.exit(1);
@@ -306,37 +587,47 @@ function extractCodexOpenAIModels(upstream) {
   return models;
 }
 
-function mergeCodexOpenAIEntries(entries, codexModels, claimedLower) {
+function mergeCodexOpenAIEntries(entries, codexModels) {
   const mergedByLower = new Map(entries.map((entry) => [entry.id.toLowerCase(), entry]));
 
   for (const codexModel of codexModels.values()) {
     const lower = codexModel.id.toLowerCase();
     const supplemental = mergedByLower.get(lower);
-    const thinking = normalizeCodexThinking(
-      codexModel.raw,
-      supplemental?.thinking,
-      `openai/codex/${codexModel.id}`,
-    );
+    const label = `openai/codex/${codexModel.id}`;
+    const thinking = normalizeCodexThinking(codexModel.raw, supplemental?.thinking, label);
     // Codex-first like the rest of the merge; models.dev fills the gap when
     // models.json stops publishing input_modalities.
     const inputModalities =
-      normalizeInputModalities(codexModel.raw?.input_modalities, `openai/codex/${codexModel.id}`) ??
+      normalizeModalities(codexModel.raw?.input_modalities, label) ??
       supplemental?.inputModalities;
 
     if (supplemental) {
       // Codex context_window is the input-side budget; add the resolved output
       // cap to express the same total-window semantics as the rest of the
-      // catalog (see the section comment above SECTIONS).
+      // catalog (see the section comment above SECTIONS). The budget itself is
+      // kept as maxInputTokens — Codex-first like the window, so a models.dev
+      // limit.input published for a larger tier (gpt-5.4: 922k) cannot exceed
+      // the converted window.
       const maxOutputToken = normalizeMaxOutputToken(
         codexModel.contextWindow,
         supplemental.maxOutputToken,
       );
+      const {
+        contextWindow: _context,
+        maxInputTokens: _input,
+        maxOutputToken: _output,
+        inputModalities: _modalities,
+        thinking: _thinking,
+        ...descriptive
+      } = supplemental;
       mergedByLower.set(lower, {
         id: codexModel.id,
         contextWindow: codexModel.contextWindow + maxOutputToken,
+        maxInputTokens: codexModel.contextWindow,
         maxOutputToken,
         ...(inputModalities ? { inputModalities } : {}),
         ...(thinking ? { thinking } : {}),
+        ...descriptive,
       });
       continue;
     }
@@ -348,16 +639,13 @@ function mergeCodexOpenAIEntries(entries, codexModels, claimedLower) {
     if (codexModel.raw?.visibility !== "list" || codexModel.raw?.supported_in_api === false) {
       continue;
     }
-    const claimedBy = claimedLower.get(lower);
-    if (claimedBy) {
-      console.error(`skip openai/codex/${codexModel.id} (id claimed by section ${claimedBy})`);
-      continue;
-    }
-    claimedLower.set(lower, "openai");
     const maxOutputToken = normalizeMaxOutputToken(codexModel.contextWindow, MAX_OUTPUT_TOKEN_CAP);
+    const name = nonEmptyString(codexModel.raw?.display_name);
     mergedByLower.set(lower, {
       id: codexModel.id,
+      ...(name && name !== codexModel.id ? { name } : {}),
       contextWindow: codexModel.contextWindow + maxOutputToken,
+      maxInputTokens: codexModel.contextWindow,
       maxOutputToken,
       ...(inputModalities ? { inputModalities } : {}),
       ...(thinking ? { thinking } : {}),
@@ -367,12 +655,12 @@ function mergeCodexOpenAIEntries(entries, codexModels, claimedLower) {
   return [...mergedByLower.values()];
 }
 
-// claimedLower: lowercased id -> owning section key. Lowercase-unique ids
-// across the whole catalog are what make cross-provider lookup unambiguous
-// and let the runtime index add case-insensitive aliases; the invariant is
-// re-asserted by test/models/model-catalog.test.mjs.
-function extractSection(section, upstream, claimedLower, codexModels) {
+// Lowercase-unique ids inside a section are what let the runtime index add
+// case-insensitive aliases without ambiguity; the invariant is re-asserted by
+// test/models/model-catalog.test.mjs.
+function extractSection(section, upstream, codexModels) {
   const entries = [];
+  const claimedLower = new Set();
   for (const source of section.sources) {
     const providerData = upstream?.[source];
     if (!providerData) fail(`section ${section.key}: source ${source} missing from upstream data`);
@@ -381,91 +669,191 @@ function extractSection(section, upstream, claimedLower, codexModels) {
       fail(`section ${section.key}: source ${source} missing models map`);
     }
     for (const [id, model] of Object.entries(rawModels)) {
+      const label = `${source}/${id}`;
       // The formal DeepSeek provider uses the native Responses API. Keep its
       // catalog aligned with the models that DeepSeek documents for that API;
       // retired Chat Completions aliases remain available through custom relay
       // configurations, but must not reappear as official provider choices.
       if (section.key === "deepseek" && !DEEPSEEK_RESPONSES_MODELS.has(id.toLowerCase())) {
-        console.error(`skip ${source}/${id} (not supported by DeepSeek Responses)`);
+        console.error(`skip ${label} (not supported by DeepSeek Responses)`);
         continue;
       }
-      // Aggregator-namespaced deployments (e.g. Bailian's "siliconflow/…",
-      // "kimi/…") are not vendor model ids; relays never serve them verbatim.
-      if (id.includes("/")) {
-        console.error(`skip ${source}/${id} (aggregator-prefixed id)`);
+      if (id.includes("/") && !section.namespaced) {
+        console.error(`skip ${label} (aggregator-prefixed id)`);
         continue;
       }
-      const contextWindow = model?.limit?.context;
+      const rawContext = model?.limit?.context;
       const rawOutput = model?.limit?.output;
-      if (!model?.modalities?.output?.includes?.("text")) {
-        console.error(`skip ${source}/${id} (non-text output)`);
+      const upstreamOutput = model?.modalities?.output;
+      const emitsText = upstreamOutput?.includes?.("text") === true;
+      // --- image generation (begin) -----------------------------------------
+      // Image-generating models are catalogued even though they never emit
+      // text: the app routes them to the Images / generateContent endpoints
+      // rather than the chat stream (see resolveModelType / imageGeneration.ts).
+      const emitsImage = upstreamOutput?.includes?.("image") === true;
+      // --- image generation (end) -------------------------------------------
+      if (!emitsText && !emitsImage) {
+        console.error(`skip ${label} (non-text output)`);
         continue;
       }
-      if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
-        console.error(`skip ${source}/${id} (invalid limit.context)`);
+      // --- image generation (begin) -----------------------------------------
+      // models.dev publishes limit.context = limit.output = 0 for pure image
+      // models (gpt-image-*, dall-e, flux, …): they have no context-window
+      // semantics at all. Keep them with explicit zeros instead of dropping
+      // them; consumers treat 0 as "no budget accounting" (normalizeModelLimits
+      // passes zeros through, and image-type models skip compaction budgets).
+      const hasValidContext = Number.isInteger(rawContext) && rawContext > 0;
+      const hasValidOutput = Number.isInteger(rawOutput) && rawOutput > 0;
+      const zeroLimitImageModel = emitsImage && !(hasValidContext && hasValidOutput);
+      // --- image generation (end) -------------------------------------------
+      if (!zeroLimitImageModel && !hasValidContext) {
+        console.error(`skip ${label} (invalid limit.context)`);
         continue;
       }
-      if (!Number.isInteger(rawOutput) || rawOutput <= 0) {
-        console.error(`skip ${source}/${id} (invalid limit.output)`);
+      if (!zeroLimitImageModel && !hasValidOutput) {
+        console.error(`skip ${label} (invalid limit.output)`);
         continue;
       }
+      const contextWindow = zeroLimitImageModel ? 0 : rawContext;
       const lower = id.toLowerCase();
-      const claimedBy = claimedLower.get(lower);
-      if (claimedBy === section.key) continue; // CN/global union overlap: first source wins.
-      if (claimedBy) {
-        console.error(`skip ${source}/${id} (id claimed by section ${claimedBy})`);
-        continue;
-      }
-      claimedLower.set(lower, section.key);
-      const thinking = normalizeThinking(model, id, `${source}/${id}`, section.key);
-      const inputModalities = normalizeInputModalities(model?.modalities?.input, `${source}/${id}`);
+      if (claimedLower.has(lower)) continue; // CN/global union overlap: first source wins.
+      claimedLower.add(lower);
+      const thinking = normalizeThinking(model, id, label, section.key);
+      const inputModalities = normalizeModalities(model?.modalities?.input, label);
+      const outputModalities = normalizeOutputModalities(model?.modalities?.output, label);
+      const maxInputTokens = zeroLimitImageModel
+        ? undefined
+        : normalizeMaxInputTokens(model, contextWindow, label);
+      const pricing = normalizePricing(model, label);
       entries.push({
         id,
         contextWindow,
-        maxOutputToken: normalizeMaxOutputToken(contextWindow, rawOutput),
+        ...(maxInputTokens ? { maxInputTokens } : {}),
+        maxOutputToken: zeroLimitImageModel ? 0 : normalizeMaxOutputToken(contextWindow, rawOutput),
         ...(inputModalities ? { inputModalities } : {}),
+        ...(outputModalities ? { outputModalities } : {}),
         ...(thinking ? { thinking } : {}),
+        ...descriptiveFields(model, id, label),
+        ...(pricing ? { pricing } : {}),
       });
     }
   }
   const mergedEntries =
-    section.key === "openai"
-      ? mergeCodexOpenAIEntries(entries, codexModels, claimedLower)
-      : entries;
+    section.key === "openai" ? mergeCodexOpenAIEntries(entries, codexModels) : entries;
   mergedEntries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return mergedEntries;
 }
 
+// ---------------------------------------------------------------------------
+// Provider presets
+// ---------------------------------------------------------------------------
+function extractPreset(preset, upstream) {
+  const section = SECTIONS.find((candidate) => candidate.key === preset.section);
+  if (!section) fail(`preset ${preset.id}: unknown section ${preset.section}`);
+  const source = preset.source ?? section.sources[0];
+  const raw = upstream?.[source];
+  if (!raw) fail(`preset ${preset.id}: source ${source} missing from upstream data`);
+  const protocols = NPM_PROTOCOLS[raw.npm];
+  if (!protocols) fail(`preset ${preset.id}: unsupported adapter ${raw.npm}`);
+  const baseUrl = (nonEmptyString(raw.api) ?? DEFAULT_API[raw.npm] ?? "").replace(/\/+$/, "");
+  if (!baseUrl) fail(`preset ${preset.id}: no api base url`);
+  return {
+    id: preset.id,
+    sourceId: preset.section,
+    name: nonEmptyString(raw.name) ?? preset.id,
+    ...(nonEmptyString(raw.doc) ? { doc: raw.doc.trim() } : {}),
+    envKeys: Array.isArray(raw.env) ? raw.env.filter((key) => typeof key === "string") : [],
+    adapter: raw.npm,
+    protocols,
+    baseUrl,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+const ENTRY_FIELD_ORDER = [
+  "id",
+  "name",
+  "family",
+  "contextWindow",
+  "maxInputTokens",
+  "maxOutputToken",
+  "inputModalities",
+  "outputModalities",
+  "thinking",
+  "toolCall",
+  "structuredOutput",
+  "attachment",
+  "temperature",
+  "knowledge",
+  "releaseDate",
+  "lastUpdated",
+  "status",
+  "openWeights",
+  "interleaved",
+  "pricing",
+];
+
+// Nested plain objects (pricing) render with bare keys like the entries
+// themselves; numbers go through JSON.stringify so the exact upstream value
+// survives the round trip.
+function renderObject(value) {
+  if (Array.isArray(value)) return `[${value.map((item) => renderObject(item)).join(", ")}]`;
+  if (value && typeof value === "object") {
+    const parts = Object.entries(value).map(([key, item]) => `${key}: ${renderObject(item)}`);
+    return `{ ${parts.join(", ")} }`;
+  }
+  return JSON.stringify(value);
+}
+
+function renderValue(key, value) {
+  if (key === "thinking") {
+    const levels = value.levels.map((level) => JSON.stringify(level)).join(", ");
+    return `{ levels: [${levels}], off: ${value.off} }`;
+  }
+  if (key === "pricing") return renderObject(value);
+  if (Array.isArray(value)) return `[${value.map((item) => JSON.stringify(item)).join(", ")}]`;
+  return JSON.stringify(value);
+}
+
 function renderEntry(entry) {
-  const parts = [
-    `id: ${JSON.stringify(entry.id)}`,
-    `contextWindow: ${entry.contextWindow}`,
-    `maxOutputToken: ${entry.maxOutputToken}`,
-  ];
-  if (entry.inputModalities) {
-    const modalities = entry.inputModalities
-      .map((modality) => JSON.stringify(modality))
-      .join(", ");
-    parts.push(`inputModalities: [${modalities}]`);
-  }
-  if (entry.thinking) {
-    const levels = entry.thinking.levels.map((level) => JSON.stringify(level)).join(", ");
-    parts.push(`thinking: { levels: [${levels}], off: ${entry.thinking.off} }`);
-  }
+  const unknown = Object.keys(entry).filter((key) => !ENTRY_FIELD_ORDER.includes(key));
+  if (unknown.length > 0) fail(`entry ${entry.id}: unexpected fields ${unknown.join(", ")}`);
+  const parts = ENTRY_FIELD_ORDER.filter((key) => entry[key] !== undefined).map(
+    (key) => `${key}: ${renderValue(key, entry[key])}`,
+  );
   return `    { ${parts.join(", ")} },`;
 }
 
-function renderCatalog(catalog, snapshotDate) {
+function renderCatalog(catalog, truncated, snapshotDate) {
   const keys = SECTIONS.map((section) => section.key);
   const lines = [
     "// Generated by scripts/generate-model-catalog.mjs — DO NOT EDIT.",
     `// Sources: ${DEFAULT_CODEX_SOURCE} (openai primary);`,
     `//          ${DEFAULT_SOURCE} (openai supplement; sections: ${keys.join(", ")})`,
     "// Automated refresh: .github/workflows/update-model-catalog.yml",
+    "//",
+    "// Section order is the lookup order of findCatalogModelAcrossProviders; every",
+    "// section keeps its own full list (presets list models per channel), so the",
+    "// same id may appear under several sections. Boolean capability fields are",
+    "// only written when true (models.dev semantics: absent == false). Pricing is",
+    "// models.dev `cost` verbatim (USD per 1M tokens) for display only — the app",
+    "// does no billing.",
+  ];
+  if (truncated.length > 0) {
+    lines.push(`// Sections truncated to the first ${MODEL_CAP} ids (sorted):`);
+    for (const note of truncated) lines.push(`//   ${note.key}: ${note.kept} of ${note.total}`);
+  }
+  lines.push(
     "",
     'export type CatalogThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";',
     "",
-    `export type CatalogInputModality = ${INPUT_MODALITIES.map((modality) => JSON.stringify(modality)).join(" | ")};`,
+    `export type CatalogModality = ${MODALITIES.map((modality) => JSON.stringify(modality)).join(" | ")};`,
+    "",
+    "export type CatalogInputModality = CatalogModality;",
+    "",
+    'export type CatalogModelStatus = "beta" | "deprecated";',
     "",
     "export type CatalogModelThinking = {",
     "  /** Selectable levels, ascending; [] = thinking is always on and not tunable. */",
@@ -474,14 +862,62 @@ function renderCatalog(catalog, snapshotDate) {
     "  off: boolean;",
     "};",
     "",
+    "/** USD per 1M tokens; each rate is absent when upstream publishes none. */",
+    "export type CatalogPriceRates = {",
+    "  input?: number;",
+    "  output?: number;",
+    "  cacheRead?: number;",
+    "  cacheWrite?: number;",
+    "};",
+    "",
+    "export type CatalogPriceTier = CatalogPriceRates & {",
+    "  /** Rates apply once the context exceeds this many tokens. */",
+    "  contextOver: number;",
+    "};",
+    "",
+    "export type CatalogModelPricing = CatalogPriceRates & {",
+    "  reasoning?: number;",
+    "  inputAudio?: number;",
+    "  outputAudio?: number;",
+    "  /** Legacy long-context block (models.dev cost.context_over_200k). */",
+    "  contextOver200k?: CatalogPriceRates;",
+    "  /** Long-context surcharges, ascending by contextOver (models.dev cost.tiers). */",
+    "  tiers?: readonly CatalogPriceTier[];",
+    "};",
+    "",
     "export type CatalogModelEntry = {",
     "  id: string;",
+    "  /** Display name; absent = same as id. */",
+    "  name?: string;",
+    "  family?: string;",
+    "  /** Total window including output. */",
     "  contextWindow: number;",
+    "  /** Input-side budget when the provider publishes one (models.dev limit.input). */",
+    "  maxInputTokens?: number;",
     "  maxOutputToken: number;",
     "  /** Accepted input modalities, canonical order; absent = upstream published none. */",
     "  inputModalities?: readonly CatalogInputModality[];",
+    "  /** Output modalities beyond text, canonical order; absent = text only. */",
+    "  outputModalities?: readonly CatalogModality[];",
     "  /** Absent = the model does not reason. */",
     "  thinking?: CatalogModelThinking;",
+    "  toolCall?: true;",
+    "  structuredOutput?: true;",
+    "  /** Accepts file attachments (documents). */",
+    "  attachment?: true;",
+    "  /** Honors the temperature parameter. */",
+    "  temperature?: true;",
+    "  /** Knowledge cutoff (YYYY-MM or YYYY-MM-DD). */",
+    "  knowledge?: string;",
+    "  releaseDate?: string;",
+    "  lastUpdated?: string;",
+    "  /** Absent = active. */",
+    "  status?: CatalogModelStatus;",
+    "  openWeights?: true;",
+    "  /** Supports interleaved thinking between tool calls. */",
+    "  interleaved?: true;",
+    "  /** Published list price (models.dev cost), display only; absent = not published. */",
+    "  pricing?: CatalogModelPricing;",
     "};",
     "",
     `export type CatalogProviderId = ${keys.map((key) => JSON.stringify(key)).join(" | ")};`,
@@ -489,13 +925,52 @@ function renderCatalog(catalog, snapshotDate) {
     `export const MODEL_CATALOG_SNAPSHOT_DATE = "${snapshotDate}";`,
     "",
     "export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {",
-  ];
+  );
   for (const key of keys) {
-    lines.push(`  ${key}: [`);
+    lines.push(`  ${JSON.stringify(key)}: [`);
     for (const entry of catalog[key]) lines.push(renderEntry(entry));
     lines.push("  ],");
   }
   lines.push("};", "");
+  return lines.join("\n");
+}
+
+function renderPresets(presets) {
+  const lines = [
+    "// Generated by scripts/generate-model-catalog.mjs — DO NOT EDIT.",
+    `// Source: ${DEFAULT_SOURCE} (provider facts only)`,
+    "// Automated refresh: .github/workflows/update-model-catalog.yml",
+    "//",
+    "// Facts models.dev publishes per provider: name, docs URL, API root, env keys",
+    "// and wire adapter. The channel's model list is MODEL_CATALOG[sourceId] in",
+    "// lib/models/catalog.generated.ts (same snapshot). Endpoint variants, dialects,",
+    "// per-model protocol rules and local services live in presets.overlay.ts.",
+    'import type { CatalogProviderId } from "../../models/catalog.generated";',
+    'import type { ProviderChatProtocol } from "./protocols";',
+    "",
+    'export { MODEL_CATALOG_SNAPSHOT_DATE } from "../../models/catalog.generated";',
+    "",
+    "export type GeneratedPreset = {",
+    "  id: string;",
+    "  /** Catalog section listing this channel's models: MODEL_CATALOG[sourceId]. */",
+    "  sourceId: CatalogProviderId;",
+    "  name: string;",
+    "  doc?: string;",
+    "  envKeys: readonly string[];",
+    "  adapter: string;",
+    "  protocols: readonly ProviderChatProtocol[];",
+    "  baseUrl: string;",
+    "};",
+    "",
+    "export const GENERATED_PRESETS: readonly GeneratedPreset[] = [",
+  ];
+  for (const preset of presets) {
+    const parts = Object.entries(preset).map(
+      ([key, value]) => `${key}: ${Array.isArray(value) ? renderValue(key, value) : JSON.stringify(value)}`,
+    );
+    lines.push(`  { ${parts.join(", ")} },`);
+  }
+  lines.push("];", "");
   return lines.join("\n");
 }
 
@@ -511,6 +986,9 @@ function readExisting(path) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 const args = parseArgs(process.argv);
 const [upstream, codexUpstream] = await Promise.all([
   loadUpstream(args.source, "models.dev"),
@@ -519,60 +997,73 @@ const [upstream, codexUpstream] = await Promise.all([
 const codexModels = extractCodexOpenAIModels(codexUpstream);
 
 const catalog = {};
-const claimedLower = new Map();
+const truncated = [];
 for (const section of SECTIONS) {
-  const entries = extractSection(section, upstream, claimedLower, codexModels);
+  const entries = extractSection(section, upstream, codexModels);
   if (entries.length < section.min) {
     fail(
       `section ${section.key}: only ${entries.length} models after filtering ` +
         `(expected >= ${section.min}); upstream data looks truncated`,
     );
   }
-  catalog[section.key] = entries;
+  if (entries.length > MODEL_CAP) {
+    truncated.push({ key: section.key, kept: MODEL_CAP, total: entries.length });
+    console.error(`note section ${section.key}: truncated to ${MODEL_CAP} of ${entries.length}`);
+  }
+  catalog[section.key] = entries.slice(0, MODEL_CAP);
 }
 for (const sentinel of SENTINELS) {
   const entry = catalog[sentinel.section].find((candidate) => candidate.id === sentinel.id);
-  if (!entry) {
-    fail(
-      `sentinel model ${sentinel.section}/${sentinel.id} missing; upstream schema may have changed`,
-    );
-  }
+  const label = `sentinel ${sentinel.section}/${sentinel.id}`;
+  if (!entry) fail(`${label} missing; upstream schema may have changed`);
   if (sentinel.level && !entry.thinking?.levels.includes(sentinel.level)) {
     fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected thinking level "${sentinel.level}"; ` +
+      `${label}: expected thinking level "${sentinel.level}"; ` +
         "upstream reasoning_options schema may have changed",
     );
   }
   if (sentinel.off !== undefined && entry.thinking?.off !== sentinel.off) {
     fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected thinking.off=${sentinel.off}; ` +
+      `${label}: expected thinking.off=${sentinel.off}; ` +
         "upstream reasoning_options schema may have changed",
     );
   }
   if (sentinel.inputModality && !entry.inputModalities?.includes(sentinel.inputModality)) {
     fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected input modality ` +
-        `"${sentinel.inputModality}"; upstream modalities schema may have changed`,
+      `${label}: expected input modality "${sentinel.inputModality}"; ` +
+        "upstream modalities schema may have changed",
     );
   }
-  if (
-    sentinel.contextWindow !== undefined &&
-    entry.contextWindow !== sentinel.contextWindow
-  ) {
+  if (sentinel.contextWindow !== undefined && entry.contextWindow !== sentinel.contextWindow) {
     fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected contextWindow=` +
-        `${sentinel.contextWindow}, got ${entry.contextWindow}; Codex precedence may have changed`,
+      `${label}: expected contextWindow=${sentinel.contextWindow}, got ${entry.contextWindow}; ` +
+        "Codex precedence may have changed",
     );
+  }
+  if (sentinel.maxInputTokens !== undefined && entry.maxInputTokens !== sentinel.maxInputTokens) {
+    fail(
+      `${label}: expected maxInputTokens=${sentinel.maxInputTokens}, got ${entry.maxInputTokens}; ` +
+        "upstream limit.input schema may have changed",
+    );
+  }
+  for (const field of sentinel.fields ?? []) {
+    if (entry[field] !== true) {
+      fail(`${label}: expected ${field}=true; upstream capability field schema may have changed`);
+    }
   }
 }
 
-const existingContents = OUTPUT_PATHS.map(readExisting);
-const today = new Date().toISOString().slice(0, 10);
-const nextContent = renderCatalog(catalog, today);
+const presets = PRESETS.map((preset) => extractPreset(preset, upstream));
 
-const unchanged =
-  existingContents.every((content) => content !== null) &&
-  existingContents.every((content) => stripSnapshotDate(content) === stripSnapshotDate(nextContent));
+const today = new Date().toISOString().slice(0, 10);
+const outputs = [
+  { path: CATALOG_OUTPUT, next: renderCatalog(catalog, truncated, today) },
+  { path: PRESETS_OUTPUT, next: renderPresets(presets) },
+];
+const unchanged = outputs.every(({ path, next }) => {
+  const existing = readExisting(path);
+  return existing !== null && stripSnapshotDate(existing) === stripSnapshotDate(next);
+});
 
 if (args.check) {
   if (!unchanged) {
@@ -588,6 +1079,8 @@ if (unchanged) {
   process.exit(0);
 }
 
-for (const path of OUTPUT_PATHS) writeFileSync(path, nextContent);
+for (const { path, next } of outputs) writeFileSync(path, next);
 const total = SECTIONS.reduce((sum, section) => sum + catalog[section.key].length, 0);
-console.log(`catalog updated (${total} models, snapshot ${today})`);
+console.log(
+  `catalog updated (${SECTIONS.length} sections, ${total} models, ${presets.length} presets, snapshot ${today})`,
+);

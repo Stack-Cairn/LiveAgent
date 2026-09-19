@@ -206,3 +206,17 @@ test("prune-first fires on recent compaction or raised pressure; advisory at max
     true,
   );
 });
+
+test("maxInputTokens caps the effective context window used for compaction", () => {
+  const policy = loader.loadModule("src/lib/chat/compaction/policy.ts");
+  assert.equal(policy.effectiveContextWindow({ contextWindow: 400000, maxOutputToken: 128000 }), 400000);
+  assert.equal(
+    policy.effectiveContextWindow({ contextWindow: 400000, maxInputTokens: 200000, maxOutputToken: 128000 }),
+    328000,
+  );
+  assert.equal(
+    policy.effectiveContextWindow({ contextWindow: 100000, maxInputTokens: 200000, maxOutputToken: 8000 }),
+    100000,
+  );
+  assert.equal(policy.effectiveContextWindow(undefined), 0);
+});

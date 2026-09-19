@@ -16,11 +16,35 @@ import {
   resolveModelLimits,
   resolveModelLimitsAcrossProviders,
 } from "@liveagent/ui/lib/models/modelCatalog";
+import { normalizeModelParameters } from "@liveagent/ui/lib/models/modelParameters";
 import {
   clampThinkingLevelToList,
   resolveModelThinking,
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
+// --- image generation (begin) -----------------------------------------------
+import { isImageGenerationModel } from "@liveagent/ui/lib/models/modelType";
+// --- image generation (end) -------------------------------------------------
+import { isEndpointIdentity } from "@liveagent/ui/lib/providers/customHeaders";
+import {
+  CUSTOM_PRESET_ID,
+  coerceDialectForProtocol,
+  findProviderPreset,
+  inferDialectFromBaseUrl,
+  inferEndpointQuirksFromBaseUrl,
+  isProviderChatProtocol,
+  isProviderWireDialect,
+  legacyTypeForPreset,
+  matchPresetModelRule,
+  normalizeOrigin,
+  type PresetModelRule,
+  type ProviderPreset,
+  presetIdForLegacyProvider,
+  presetMatchesBaseUrl,
+  resolveEndpointRequestBase,
+  resolveModelFamily,
+  stripModelVendorPrefix,
+} from "@liveagent/ui/lib/providers/registry";
 import {
   normalizeApiKey,
   normalizeBaseUrl,
@@ -65,6 +89,8 @@ import type {
   AgentPromptTemplate,
   AppSettings,
   BrowserAutomationMode,
+  CapabilityState,
+  ChatCapabilityName,
   ChatRuntimeControls,
   ChatRuntimeReasoningProviderKey,
   CloseWindowBehavior,
@@ -75,6 +101,8 @@ import type {
   EffectivePromptSettings,
   EffectiveWorkspaceResources,
   ExecutionMode,
+  // --- image generation (begin) ---
+  ImageGenerationSettings,
   McpAuthConfig,
   McpServerConfig,
   McpSettings,
@@ -83,14 +111,31 @@ import type {
   ModelInputModalitiesOverride,
   ModelInputModality,
   ModelLimitsSource,
+  ModelType,
+  // --- image generation (end) ---
   ProjectPromptStrategy,
   PromptCacheHintMode,
+  ProviderChatProtocol,
+  ProviderCredential,
+  ProviderCredentialScope,
+  ProviderDeclaredModelMeta,
+  ProviderEndpointAuth,
+  ProviderEndpointConfig,
+  ProviderEndpointProbe,
+  ProviderEndpointQuirks,
   ProviderFailoverSettings,
   ProviderId,
   ProviderModelConfig,
+  ProviderOrigin,
+  ProviderProtocolFamily,
   ProviderRetryPolicy,
+  ProviderRouteCredentialSource,
+  ProviderRouteProtocolSource,
+  ProviderThinkingFormat,
+  ProviderWireDialect,
   ReasoningLevel,
   RemoteSettings,
+  ResolvedProviderChatRoute,
   RightDockFileTreeState,
   RightDockFileTreeStatePatch,
   RightDockProjectState,
@@ -118,12 +163,25 @@ import type {
 } from "./types";
 import {
   BROWSER_AUTOMATION_MODES,
+  CHAT_CAPABILITY_NAMES,
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
+  endpointUsesOrigin,
+  expandProviderOriginUrl,
   getDefaultUsageQueryConfig,
+  getLegacyProviderChatProtocol,
+  getProviderImplicitChatProtocol,
+  getProviderPrimaryOrigin,
+  isProviderChatProtocolEnabled,
   MODEL_INPUT_MODALITIES,
+  // --- image generation (begin) ---
+  MODEL_TYPES,
+  // --- image generation (end) ---
   PROMPT_CACHE_HINT_MODES,
+  PROVIDER_CHAT_PROTOCOLS,
+  PROVIDER_PROTOCOL_FAMILY,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
+  PROVIDER_THINKING_FORMATS,
   RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
   RIGHT_DOCK_TOOL_KINDS,
   USAGE_QUERY_TIMEOUT_DEFAULT_SECS,
@@ -150,6 +208,7 @@ export {
   hasProviderFailoverConfiguration,
   normalizeModelFailoverSettings,
   normalizeProviderFailoverSettings,
+  providerFailoverFamilies,
 } from "./modelFailover";
 export {
   normalizeChatTranscriptSettings,
@@ -211,6 +270,467 @@ function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undef
     default:
       return undefined;
   }
+}
+
+export function normalizeProviderChatProtocol(input: unknown): ProviderChatProtocol | undefined {
+  return normalizeLegacyProtocolInput(input)?.protocol;
+}
+
+/**
+ * 接口取值归一化。开发分支曾用 "deepseek-responses" 表示"Responses + DeepSeek 方言"，
+ * 现在改写为四类接口之一并带出方言。
+ */
+export function normalizeLegacyProtocolInput(
+  input: unknown,
+): { protocol: ProviderChatProtocol; dialect?: ProviderWireDialect } | undefined {
+  if (input === "deepseek-responses") return { protocol: "openai-responses", dialect: "deepseek" };
+  return isProviderChatProtocol(input) ? { protocol: input } : undefined;
+}
+
+export function normalizeProviderWireDialect(input: unknown): ProviderWireDialect | undefined {
+  return isProviderWireDialect(input) ? input : undefined;
+}
+
+/** 旧供应商类型隐含的方言（xAI / DeepSeek 原生渠道、Codex 分组的 OpenAI 官方语义）。 */
+export function getLegacyProviderDialect(providerId: ProviderId): ProviderWireDialect | undefined {
+  if (providerId === "xai") return "xai";
+  if (providerId === "deepseek") return "deepseek";
+  if (providerId === "codex") return "openai";
+  return undefined;
+}
+
+/**
+ * （协议, 方言）→ 旧适配器家族。过渡期运行时仍按 ProviderId 分支选择鉴权、payload
+ * 策略与模型工厂；新读取点应改读 protocol 与 dialect。
+ */
+export function getProviderChatProtocolAdapter(
+  protocol: ProviderChatProtocol,
+  dialect: ProviderWireDialect,
+): ProviderId {
+  switch (protocol) {
+    case "anthropic-messages":
+      return "claude_code";
+    case "google-generative-ai":
+      return "gemini";
+    case "openai-responses":
+      if (dialect === "xai") return "xai";
+      if (dialect === "deepseek") return "deepseek";
+      return "codex";
+    case "openai-completions":
+      return "codex";
+  }
+}
+
+type RouteProvider = Pick<CustomProvider, "type" | "baseUrl" | "isFullUrl"> &
+  Partial<
+    Pick<
+      CustomProvider,
+      | "presetId"
+      | "modelsUrl"
+      | "requestFormat"
+      | "models"
+      | "defaultChatProtocol"
+      | "dialect"
+      | "endpointConfigs"
+      | "customHeaders"
+      | "apiKey"
+      | "apiKeyConfigured"
+      | "credentials"
+      | "origins"
+    >
+  >;
+
+export type ResolvedProviderEndpoint = {
+  protocol: ProviderChatProtocol;
+  /** false = 主连接充当该协议的隐式端点（config 由 baseUrl / isFullUrl / modelsUrl 物化） */
+  explicit: boolean;
+  /** 地址已按源展开（`{origin}` 占位替换成选中源的地址）；存档里的模板不变。 */
+  config: ProviderEndpointConfig;
+  /** 端点地址由哪个源展开；绝对地址的端点没有。 */
+  originId?: string;
+  originUrl?: string;
+};
+
+/**
+ * 端点地址按源展开。地址不含 `{origin}` 时原样返回（不带源）；含占位而没有可用的源时
+ * 返回 undefined（端点不可用）。
+ */
+function expandEndpointConfigOrigin(
+  provider: Pick<RouteProvider, "origins">,
+  config: ProviderEndpointConfig,
+  originId?: string,
+): { config: ProviderEndpointConfig; origin?: ProviderOrigin } | undefined {
+  if (!endpointUsesOrigin(config.baseUrl) && !endpointUsesOrigin(config.modelsUrl)) {
+    return { config };
+  }
+  const origin = getProviderPrimaryOrigin(provider, originId);
+  if (!origin) return undefined;
+  const baseUrl = expandProviderOriginUrl(config.baseUrl, origin);
+  const modelsUrl = expandProviderOriginUrl(config.modelsUrl, origin);
+  return {
+    config: { ...config, baseUrl, ...(modelsUrl ? { modelsUrl } : { modelsUrl: undefined }) },
+    origin,
+  };
+}
+
+function providerLegacyProtocol(provider: RouteProvider): ProviderChatProtocol {
+  return getLegacyProviderChatProtocol(provider.type, provider.requestFormat);
+}
+
+/**
+ * 主连接物化成一条端点配置。隐式端点与显式端点从此走同一条读取路径，界面与路由
+ * 不再各自拼接主连接字段。
+ */
+function primaryConnectionEndpoint(
+  provider: RouteProvider,
+  isFullUrl: boolean = provider.isFullUrl,
+): ProviderEndpointConfig {
+  // 主连接归一化后总是绝对地址；这里再展开一次只为容错未归一化的快照。
+  const origin = getProviderPrimaryOrigin(provider);
+  const modelsUrl = expandProviderOriginUrl(provider.modelsUrl, origin);
+  return {
+    baseUrl: expandProviderOriginUrl(provider.baseUrl, origin),
+    ...(isFullUrl ? { isFullUrl: true } : {}),
+    ...(modelsUrl ? { modelsUrl } : {}),
+    source: "user",
+  };
+}
+
+/**
+ * 某协议在该供应商上的端点：显式端点未关闭时返回它；没有显式端点但它是隐式接口
+ * （`defaultChatProtocol ?? 旧推导`）时返回由主连接物化的配置；否则不可用。
+ */
+export function resolveProviderEndpoint(
+  provider: RouteProvider,
+  protocol: ProviderChatProtocol,
+  implicitProtocol: ProviderChatProtocol = getProviderImplicitChatProtocol(provider),
+  options?: { originId?: string },
+): ResolvedProviderEndpoint | undefined {
+  if (!isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)) return undefined;
+  const stored = provider.endpointConfigs?.[protocol];
+  const expanded = expandEndpointConfigOrigin(
+    provider,
+    stored ?? primaryConnectionEndpoint(provider),
+    options?.originId,
+  );
+  if (!expanded) return undefined;
+  return {
+    protocol,
+    explicit: stored !== undefined,
+    config: expanded.config,
+    ...(expanded.origin ? { originId: expanded.origin.id, originUrl: expanded.origin.url } : {}),
+  };
+}
+
+/** 供应商已启用的接口（有序：默认接口在前，其余按四类固定顺序）。 */
+export function getProviderEnabledProtocols(provider: RouteProvider): ProviderChatProtocol[] {
+  const implicitProtocol = getProviderImplicitChatProtocol(provider);
+  const out: ProviderChatProtocol[] = [];
+  for (const protocol of [implicitProtocol, ...PROVIDER_CHAT_PROTOCOLS]) {
+    if (out.includes(protocol)) continue;
+    if (isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)) out.push(protocol);
+  }
+  return out;
+}
+
+export type ProtocolDecision = {
+  protocol: ProviderChatProtocol;
+  source: ProviderRouteProtocolSource;
+};
+
+/** 路由各步骤共用的上下文：预设、模型规则、旧推导与隐式接口在入口只算一次。 */
+export type ProviderRouteContext = {
+  preset: ProviderPreset | undefined;
+  rule: PresetModelRule | undefined;
+  legacyProtocol: ProviderChatProtocol;
+  implicitProtocol: ProviderChatProtocol;
+};
+
+export function buildProviderRouteContext(
+  provider: RouteProvider,
+  modelId: string,
+): ProviderRouteContext {
+  const preset = findProviderPreset(provider.presetId);
+  const legacyProtocol = providerLegacyProtocol(provider);
+  return {
+    preset,
+    rule: matchPresetModelRule(preset, modelId),
+    legacyProtocol,
+    implicitProtocol: provider.defaultChatProtocol ?? legacyProtocol,
+  };
+}
+
+/**
+ * 接口的决定顺序（设计文档 4.2）：模型显式列表 > 预设按模型规则 > 模型家族偏好 ∩
+ * 已启用渠道 > 供应商默认接口 > 旧推导。每一步都跳过被关闭的渠道。
+ */
+export function resolveModelRouteProtocol(
+  provider: RouteProvider,
+  modelId: string,
+  model?: Pick<ProviderModelConfig, "chatProtocol">,
+  context: ProviderRouteContext = buildProviderRouteContext(provider, modelId),
+): ProtocolDecision {
+  const { implicitProtocol } = context;
+  const available = (protocol: ProviderChatProtocol | undefined) =>
+    protocol && isProviderChatProtocolEnabled(provider, protocol, implicitProtocol)
+      ? protocol
+      : undefined;
+  const firstAvailable = (list: readonly ProviderChatProtocol[] | undefined) =>
+    list?.map((item) => available(item)).find((item) => item !== undefined);
+
+  const explicit = available(model?.chatProtocol);
+  if (explicit) return { protocol: explicit, source: "model" };
+
+  const fromPreset = firstAvailable(context.rule?.chatProtocols);
+  if (fromPreset) return { protocol: fromPreset, source: "preset" };
+
+  const fromFamily = firstAvailable(resolveModelFamily(modelId).prefer);
+  if (fromFamily) return { protocol: fromFamily, source: "family" };
+
+  const fromProvider = available(provider.defaultChatProtocol);
+  if (fromProvider) return { protocol: fromProvider, source: "provider" };
+
+  const legacy = context.legacyProtocol;
+  return { protocol: available(legacy) ?? legacy, source: "legacy" };
+}
+
+/**
+ * 模型在该渠道可显式选用的接口集合（设计文档 4.10）：
+ * - 原生渠道（Anthropic / OpenAI / Gemini / xAI / DeepSeek）：预设声明的接口。Anthropic 与
+ *   Gemini 各只有一个，OpenAI 与 xAI 在 Completions / Responses 之间切换。
+ * - 其它渠道（厂商、中转、自建、自定义）：OpenAI 两类 + Anthropic Messages；只有 Gemini
+ *   系列模型再加 google-generative-ai。
+ * 返回顺序与 PROVIDER_CHAT_PROTOCOLS 一致；是否已配置地址由调用方另行判断。
+ */
+export function modelSelectableProtocols(
+  provider: Pick<CustomProvider, "presetId">,
+  modelId: string,
+): ProviderChatProtocol[] {
+  const preset = findProviderPreset(provider.presetId);
+  if (preset?.native) {
+    const declared = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => preset.endpoints[protocol]);
+    if (declared.length > 0) return declared;
+  }
+  const gemini = resolveModelFamily(modelId).key === "gemini";
+  return PROVIDER_CHAT_PROTOCOLS.filter((protocol) =>
+    protocol === "google-generative-ai" ? gemini : true,
+  );
+}
+
+export function resolveProviderDialect(
+  provider: RouteProvider,
+  protocol: ProviderChatProtocol,
+  options?: {
+    model?: Pick<ProviderModelConfig, "dialect">;
+    endpoint?: Pick<ProviderEndpointConfig, "dialect" | "baseUrl">;
+    /** 调用方已算好的路由上下文；缺省按 presetId 查一次预设 */
+    context?: Pick<ProviderRouteContext, "preset">;
+  },
+): ProviderWireDialect {
+  const preset = options?.context ? options.context.preset : findProviderPreset(provider.presetId);
+  // Codex 分组的"OpenAI 官方语义"只是缺省：直连 api.x.ai / api.deepseek.com 的旧配置
+  // 仍按域名取 xai / deepseek 方言（与改造前 isXaiProviderTarget 的行为一致）。
+  // 旧分组方言只对原生渠道与自定义 / 中转实例有意义；厂商预设（智谱、Kimi 等）
+  // 的 codex 分组只是历史遗留，不该被当成"OpenAI 官方"语义。
+  const legacyApplies = !preset || preset.native || preset.id === CUSTOM_PRESET_ID;
+  const legacyDialect = legacyApplies ? getLegacyProviderDialect(provider.type) : undefined;
+  const inferredDialect = inferDialectFromBaseUrl(
+    protocol,
+    options?.endpoint?.baseUrl || provider.baseUrl,
+  );
+  // "openai" 只表示 OpenAI 官方语义的缺省：预设或旧分组给出 openai 时，端点域名
+  // 若明确是 xAI / DeepSeek 官方，以域名为准。
+  // 只有 xAI 保留"域名推翻 openai 缺省"的旧行为（改造前 isXaiProviderTarget 就按
+  // api.x.ai 识别）；DeepSeek 官方地址挂在 OpenAI 分组下时维持标准 OpenAI 链路，
+  // 避免存量会话的 provider 身份变化。
+  const softOpenAI = (dialect: ProviderWireDialect | undefined) =>
+    dialect === "openai" && inferredDialect === "xai" ? inferredDialect : dialect;
+  const candidate =
+    options?.model?.dialect ??
+    options?.endpoint?.dialect ??
+    provider.dialect ??
+    softOpenAI(preset?.dialect) ??
+    softOpenAI(legacyDialect) ??
+    inferredDialect ??
+    "generic";
+  return coerceDialectForProtocol(protocol, candidate);
+}
+
+const DEFAULT_CREDENTIAL_ID = "default";
+
+/** 凭据列表；旧存档只有 apiKey 时视为单把默认凭据。 */
+export function getProviderCredentials(
+  provider: Partial<Pick<CustomProvider, "apiKey" | "apiKeyConfigured" | "credentials">>,
+): ProviderCredential[] {
+  if (provider.credentials && provider.credentials.length > 0) return provider.credentials;
+  return [
+    {
+      id: DEFAULT_CREDENTIAL_ID,
+      label: "",
+      apiKey: provider.apiKey ?? "",
+      apiKeyConfigured: provider.apiKeyConfigured === true || Boolean(provider.apiKey),
+      enabled: true,
+    },
+  ];
+}
+
+function credentialScopeMatches(pattern: string, id: string, stripped: string): boolean {
+  if (pattern.endsWith("*")) {
+    const prefix = pattern.slice(0, -1);
+    return id.startsWith(prefix) || stripped.startsWith(prefix);
+  }
+  return id === pattern || stripped === pattern;
+}
+
+/** auto 范围的 lastModels 是精确 ID 集合：按对象缓存 Set，避免每次线性扫描。 */
+const CREDENTIAL_LAST_MODELS_SETS = new WeakMap<
+  NonNullable<ProviderCredential["lastModels"]>,
+  ReadonlySet<string>
+>();
+
+function credentialLastModelSet(
+  lastModels: NonNullable<ProviderCredential["lastModels"]>,
+): ReadonlySet<string> {
+  let set = CREDENTIAL_LAST_MODELS_SETS.get(lastModels);
+  if (!set) {
+    set = new Set(lastModels.models);
+    CREDENTIAL_LAST_MODELS_SETS.set(lastModels, set);
+  }
+  return set;
+}
+
+/** 该 Key 的模型范围是否包含该模型（设计文档 5.6）。 */
+export function credentialCoversModel(credential: ProviderCredential, modelId: string): boolean {
+  const scope = credential.modelScope ?? { mode: "auto" };
+  if (scope.mode === "all") return true;
+  const id = modelId.trim();
+  const stripped = stripModelVendorPrefix(id);
+  if (scope.mode === "manual") {
+    return scope.models.some((pattern) => credentialScopeMatches(pattern, id, stripped));
+  }
+  const lastModels = credential.lastModels;
+  if (!lastModels || lastModels.models.length === 0) return true;
+  const known = credentialLastModelSet(lastModels);
+  return known.has(id) || known.has(stripped);
+}
+
+export function selectProviderCredential(
+  provider: Partial<Pick<CustomProvider, "apiKey" | "apiKeyConfigured" | "credentials">>,
+  modelId: string,
+  preferred?: { credentialId?: string; source: ProviderRouteCredentialSource }[],
+): { credential: ProviderCredential; source: ProviderRouteCredentialSource } {
+  const all = getProviderCredentials(provider);
+  const enabled = all.filter((credential) => credential.enabled);
+  if (enabled.length === 0) {
+    // 全部 Key 都被停用：不能拿被停用的 Key 发请求，交给运行时按"未配置 Key"报错。
+    return {
+      credential: { ...all[0], apiKey: "", apiKeyConfigured: false },
+      source: "fallback",
+    };
+  }
+  for (const item of preferred ?? []) {
+    if (!item.credentialId) continue;
+    const hit = enabled.find((credential) => credential.id === item.credentialId);
+    if (hit && credentialCoversModel(hit, modelId)) return { credential: hit, source: item.source };
+  }
+  const inScope = enabled.find((credential) => credentialCoversModel(credential, modelId));
+  if (inScope) return { credential: inScope, source: "scope" };
+  return { credential: enabled[0], source: "fallback" };
+}
+
+function mergeHeaderLists(
+  ...layers: (readonly { key: string; value: string }[] | undefined)[]
+): { key: string; value: string }[] {
+  const out: { key: string; value: string }[] = [];
+  for (const layer of layers) {
+    for (const header of layer ?? []) {
+      const key = header.key.trim();
+      if (!key) continue;
+      const index = out.findIndex((item) => item.key.toLowerCase() === key.toLowerCase());
+      if (index >= 0) out.splice(index, 1);
+      out.push({ key, value: header.value });
+    }
+  }
+  return out;
+}
+
+/**
+ * 解析一个模型的唯一路由（设计文档 4.1）。纯函数：输出协议、方言、地址、远端模型 ID、
+ * 凭据与合并后的用户头；凭据值不进入结果，运行时按 credentialId 取值。
+ * 在 createProviderRuntimeConfig 构造运行时配置时调用一次；界面侧只读
+ * protocol / dialect / protocolSource。
+ */
+export function resolveProviderChatRoute(
+  provider: RouteProvider,
+  modelId: string,
+  options?: {
+    protocol?: ProviderChatProtocol;
+    credentialId?: string;
+    /** 故障转移源层：强制用指定的源展开 `{origin}` 端点；缺省主源 */
+    originId?: string;
+  },
+): ResolvedProviderChatRoute {
+  // Some gateway call sites can still receive a pre-normalization provider
+  // snapshot (and older snapshots did not require `models`). Keep this
+  // resolver tolerant at that boundary.
+  const model = provider.models?.find((item) => item.id === modelId);
+  const context = buildProviderRouteContext(provider, modelId);
+  const decision = options?.protocol
+    ? { protocol: options.protocol, source: "model" as const }
+    : resolveModelRouteProtocol(provider, modelId, model, context);
+  const protocol = decision.protocol;
+  // 端点是唯一真相：显式端点或由主连接物化的隐式端点。被强制指定的接口未配置 /
+  // 渠道全部关闭时退回主连接，完整 URL 模式只对主连接自己的接口有意义。
+  const endpoint = resolveProviderEndpoint(provider, protocol, context.implicitProtocol, {
+    originId: options?.originId,
+  });
+  const config =
+    endpoint?.config ??
+    primaryConnectionEndpoint(
+      provider,
+      protocol === context.implicitProtocol && provider.isFullUrl,
+    );
+  const dialect = resolveProviderDialect(provider, protocol, { model, endpoint: config, context });
+  const presetEndpoint = context.preset?.endpoints[protocol];
+  const credential = selectProviderCredential(provider, modelId, [
+    { credentialId: options?.credentialId, source: "model" },
+    { credentialId: model?.credentialId, source: "model" },
+    { credentialId: config.credentialId, source: "endpoint" },
+  ]);
+  // 存档保留用户原值；路由结果给出已按接口补齐版本段（或按 # 原样）的请求根地址。
+  const requestBase = resolveEndpointRequestBase(
+    protocol,
+    config.baseUrl,
+    config.isFullUrl === true,
+  );
+  return {
+    protocol,
+    protocolSource: decision.source,
+    family: PROVIDER_PROTOCOL_FAMILY[protocol],
+    dialect,
+    adapterProviderId: getProviderChatProtocolAdapter(protocol, dialect),
+    baseUrl: requestBase.base,
+    isFullUrl: config.isFullUrl === true,
+    ...(requestBase.verbatim ? { baseUrlVerbatim: true as const } : {}),
+    ...(config.modelsUrl ? { modelsUrl: config.modelsUrl } : {}),
+    ...(endpoint?.originId ? { originId: endpoint.originId, originUrl: endpoint.originUrl } : {}),
+    ...(protocol === "openai-completions" || protocol === "openai-responses"
+      ? { requestFormat: protocol }
+      : {}),
+    wireModelId: model?.wireModelId?.trim() || context.rule?.wireModelId || modelId,
+    credentialId: credential.credential.id,
+    credentialSource: credential.source,
+    headers: mergeHeaderLists(provider.customHeaders, config.headers),
+    quirks: {
+      ...inferEndpointQuirksFromBaseUrl(protocol, config.baseUrl),
+      ...presetEndpoint?.quirks,
+      ...config.quirks,
+    },
+    ...((config.auth ?? presetEndpoint?.auth)
+      ? { auth: { ...presetEndpoint?.auth, ...config.auth } }
+      : {}),
+    ...(config.identity ? { identity: config.identity } : {}),
+  };
 }
 
 function normalizePromptCacheHintMode(input: unknown): PromptCacheHintMode | undefined {
@@ -712,7 +1232,7 @@ function getKnownModelLimits(
   providerId: ProviderId,
   modelId: string | undefined,
   baseUrl?: string,
-): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> | undefined {
+): Pick<ProviderModelConfig, "contextWindow" | "maxInputTokens" | "maxOutputToken"> | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
   // Anthropic 的有效窗口叠加了 1M beta/adaptive 世代的请求侧策略
@@ -724,11 +1244,21 @@ function getKnownModelLimits(
   return resolveModelLimits(providerId, trimmedId);
 }
 
+export type ProviderModelDefaults = Pick<
+  ProviderModelConfig,
+  "contextWindow" | "maxInputTokens" | "maxOutputToken"
+> & { source: ModelLimitsSource };
+
+/**
+ * 模型限额初值：目录（供应商作用域 → 跨分区回查）→ 供应商兜底。目录命中时带
+ * 上目录发布的输入侧预算 maxInputTokens（models.dev limit.input / Codex 输入
+ * 预算）；目录未发布时不伪造。
+ */
 export function getProviderModelDefaults(
   providerId: ProviderId,
   modelId?: string,
   baseUrl?: string,
-): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> & { source: ModelLimitsSource } {
+): ProviderModelDefaults {
   const known = getKnownModelLimits(providerId, modelId, baseUrl);
   if (known) return { ...known, source: "catalog" };
 
@@ -767,6 +1297,7 @@ export function createProviderModelConfig(
   return {
     id,
     contextWindow: defaults.contextWindow,
+    ...(defaults.maxInputTokens ? { maxInputTokens: defaults.maxInputTokens } : {}),
     maxOutputToken: defaults.maxOutputToken,
     limitsSource: defaults.source,
   };
@@ -784,6 +1315,79 @@ function normalizeLimitsSource(value: unknown): ModelLimitsSource | undefined {
     ? (value as ModelLimitsSource)
     : undefined;
 }
+
+// ---------------------------------------------------------------------------
+// 设计 §6.2：供应商声明的模型元数据（provider 候选）
+// ---------------------------------------------------------------------------
+// 来源有两处，形状不同但都进同一个 providerMeta：
+//   1. 刷新模型列表时上游 /models 的原始条目（context_length、top_provider.*、
+//      architecture.input_modalities、supports_image_in 等），过去只被
+//      extractProviderDeclaredLimits 读走限额就丢掉；
+//   2. 已落库的 providerMeta（存量读回，不因加载而丢失）。
+// 只保留声明本身，不参与"有效值"的自动覆盖——冲突由界面提示并由用户采纳。
+
+function extractProviderDeclaredMeta(
+  obj: Record<string, unknown>,
+  fetchedAt?: number,
+): ProviderDeclaredModelMeta | undefined {
+  const stored = obj.providerMeta;
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+    const source = stored as Record<string, unknown>;
+    const out: ProviderDeclaredModelMeta = {};
+    const contextWindow = normalizePositiveInteger(source.contextWindow, 0);
+    const maxOutputToken = normalizePositiveInteger(source.maxOutputToken, 0);
+    const maxInputTokens = normalizePositiveInteger(source.maxInputTokens, 0);
+    const modalities = normalizeInputModalities(source.inputModalities);
+    const at = normalizePositiveInteger(source.fetchedAt, 0);
+    if (contextWindow > 0) out.contextWindow = contextWindow;
+    if (maxOutputToken > 0) out.maxOutputToken = maxOutputToken;
+    if (maxInputTokens > 0) out.maxInputTokens = maxInputTokens;
+    if (modalities) out.inputModalities = modalities;
+    if (at > 0) out.fetchedAt = at;
+    return Object.keys(out).length > 0 ? out : undefined;
+  }
+
+  const topProvider =
+    obj.top_provider && typeof obj.top_provider === "object"
+      ? (obj.top_provider as Record<string, unknown>)
+      : undefined;
+  const architecture =
+    obj.architecture && typeof obj.architecture === "object"
+      ? (obj.architecture as Record<string, unknown>)
+      : undefined;
+
+  const contextWindow =
+    normalizePositiveInteger(obj.context_length, 0) ||
+    normalizePositiveInteger(topProvider?.context_length, 0);
+  const maxOutputToken =
+    normalizePositiveInteger(topProvider?.max_completion_tokens, 0) ||
+    normalizePositiveInteger(obj.max_completion_tokens, 0);
+  const maxInputTokens =
+    normalizePositiveInteger(obj.max_input_tokens, 0) ||
+    normalizePositiveInteger(topProvider?.max_input_tokens, 0);
+  // 模态声明：OpenRouter 用 architecture.input_modalities，部分中转用
+  // supports_image_in 布尔位。本应用的模态覆盖只有 text / text+image 两形态。
+  // 只认上游的 snake_case 字段——camelCase 的 inputModalities 是本地的用户覆盖，
+  // 读回存档时绝不能被当成供应商声明。
+  const declaredModalities = architecture?.input_modalities ?? obj.input_modalities;
+  const modalityList = Array.isArray(declaredModalities)
+    ? declaredModalities.filter((item): item is string => typeof item === "string")
+    : undefined;
+  const supportsImage =
+    modalityList?.includes("image") ??
+    (typeof obj.supports_image_in === "boolean" ? obj.supports_image_in : undefined);
+
+  const out: ProviderDeclaredModelMeta = {};
+  if (contextWindow > 0) out.contextWindow = contextWindow;
+  if (maxOutputToken > 0) out.maxOutputToken = maxOutputToken;
+  if (maxInputTokens > 0) out.maxInputTokens = maxInputTokens;
+  if (supportsImage !== undefined)
+    out.inputModalities = supportsImage ? ["text", "image"] : ["text"];
+  if (Object.keys(out).length === 0) return undefined;
+  out.fetchedAt = fetchedAt ?? Date.now();
+  return out;
+}
+// --- §6.2 供应商元数据结束 ---
 
 export function normalizeProviderModelConfig(
   input: unknown,
@@ -868,10 +1472,41 @@ export function normalizeProviderModelConfig(
   const promptCacheHintMode =
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   const inputModalities = normalizeInputModalities(obj.inputModalities);
+  const legacyProtocol = normalizeLegacyProtocolInput(obj.chatProtocol);
+  // 旧存档的有序 chatProtocols 只取首项：模型只显式选一个接口，端点层故障转移候选
+  // 改为按供应商已启用的同家族接口自动展开。
+  const chatProtocol =
+    legacyProtocol?.protocol ?? normalizeModelChatProtocols(obj.chatProtocols, undefined)?.[0];
+  const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyProtocol?.dialect;
+  const wireModelId = typeof obj.wireModelId === "string" ? obj.wireModelId.trim() : "";
+  const displayName = typeof obj.displayName === "string" ? obj.displayName.trim() : "";
+  const group = typeof obj.group === "string" ? obj.group.trim() : "";
+  const credentialId = typeof obj.credentialId === "string" ? obj.credentialId.trim() : "";
+  // 输入侧预算：落库值优先；限额来自目录时按目录补齐（目录更新自动传导），
+  // provider/user 来源不触碰，目录未发布则保持缺省。
+  const maxInputTokens =
+    normalizePositiveInteger(obj.maxInputTokens, 0) ||
+    (limitsSource === "catalog" ? (catalogDefaults.maxInputTokens ?? 0) : 0);
+  const reasoning =
+    obj.reasoning === undefined ? undefined : normalizeReasoningLevel(obj.reasoning);
+  const capabilities = normalizeModelCapabilities(obj.capabilities);
+  // --- 设计 §6.2 / §6.3 新增：供应商声明与模型级参数覆盖 ---
+  const providerMeta = extractProviderDeclaredMeta(obj);
+  const parameters = normalizeModelParameters(obj.parameters, {
+    maxOutputToken: limits.maxOutputToken,
+  });
+  // --- §6.2 / §6.3 新增结束 ---
+  // --- image generation (begin) ---------------------------------------------
+  const modelType = normalizeModelType(obj.modelType);
+  // --- image generation (end) -----------------------------------------------
   return {
     id,
+    ...(wireModelId && wireModelId !== id ? { wireModelId } : {}),
+    ...(displayName ? { displayName } : {}),
+    ...(group ? { group } : {}),
     ...(ownedBy ? { ownedBy } : {}),
     contextWindow: limits.contextWindow,
+    ...(maxInputTokens > 0 ? { maxInputTokens } : {}),
     maxOutputToken: limits.maxOutputToken,
     limitsSource,
     ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
@@ -879,8 +1514,61 @@ export function normalizeProviderModelConfig(
     // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
     // 重排顺序），合法覆盖永不被自动删除。
     ...(inputModalities ? { inputModalities } : {}),
+    ...(chatProtocol ? { chatProtocol } : {}),
+    ...(dialect ? { dialect } : {}),
+    ...(credentialId ? { credentialId } : {}),
+    ...(reasoning ? { reasoning } : {}),
+    ...(typeof obj.nativeWebSearch === "boolean" ? { nativeWebSearch: obj.nativeWebSearch } : {}),
+    ...(capabilities ? { capabilities } : {}),
+    // --- 设计 §6.2 / §6.3 新增字段 ---
+    ...(providerMeta ? { providerMeta } : {}),
+    ...(parameters ? { parameters } : {}),
+    // --- §6.2 / §6.3 新增结束 ---
+    // --- image generation (begin) -------------------------------------------
+    ...(modelType ? { modelType } : {}),
+    // --- image generation (end) ---------------------------------------------
+    ...(obj.source === "user"
+      ? { source: "user" as const }
+      : obj.source === "auto"
+        ? { source: "auto" as const }
+        : {}),
   };
 }
+
+function normalizeModelChatProtocols(
+  input: unknown,
+  legacySingle: ProviderChatProtocol | undefined,
+): ProviderChatProtocol[] | undefined {
+  const out: ProviderChatProtocol[] = [];
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const legacy = normalizeLegacyProtocolInput(item);
+      if (legacy && !out.includes(legacy.protocol)) out.push(legacy.protocol);
+    }
+  }
+  if (out.length === 0 && legacySingle) out.push(legacySingle);
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeModelCapabilities(
+  input: unknown,
+): Partial<Record<ChatCapabilityName, CapabilityState>> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const out: Partial<Record<ChatCapabilityName, CapabilityState>> = {};
+  for (const name of CHAT_CAPABILITY_NAMES) {
+    const value = source[name];
+    if (value === "supported" || value === "unsupported" || value === "unknown") out[name] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+// --- image generation (begin) -----------------------------------------------
+/** 模型用途覆盖：只认 "chat" / "image"，其余（含缺省）返回 undefined 走推断。 */
+export function normalizeModelType(input: unknown): ModelType | undefined {
+  return MODEL_TYPES.find((value) => value === input);
+}
+// --- image generation (end) -------------------------------------------------
 
 /**
  * 输入模态覆盖的运行时归一化（设置加载与 modelFactory 共用的唯一校验）：
@@ -930,6 +1618,7 @@ export function findProviderModelConfig(
     return {
       id: normalizedId,
       contextWindow: defaults.contextWindow,
+      ...(defaults.maxInputTokens ? { maxInputTokens: defaults.maxInputTokens } : {}),
       maxOutputToken: defaults.maxOutputToken,
       limitsSource: defaults.source,
     };
@@ -943,6 +1632,16 @@ export function findProviderModelConfig(
       provider.baseUrl,
     ),
   };
+}
+
+function isProviderId(input: unknown): input is ProviderId {
+  return (
+    input === "codex" ||
+    input === "claude_code" ||
+    input === "gemini" ||
+    input === "xai" ||
+    input === "deepseek"
+  );
 }
 
 function normalizeProviderId(input: unknown): ProviderId {
@@ -1100,14 +1799,312 @@ export function normalizeProviderRetryPolicy(input: unknown): ProviderRetryPolic
   return undefined;
 }
 
+function normalizeEndpointHeaders(input: unknown): { key: string; value: string }[] | undefined {
+  const headers = normalizeCustomHeaders(input);
+  return headers.length > 0 ? headers : undefined;
+}
+
+function normalizeEndpointQuirks(input: unknown): ProviderEndpointQuirks | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const quirks: ProviderEndpointQuirks = {};
+  for (const key of [
+    "supportsUsageInStreaming",
+    "supportsDeveloperRole",
+    "supportsReasoningEffort",
+    "supportsStore",
+  ] as const) {
+    if (typeof source[key] === "boolean") quirks[key] = source[key] as boolean;
+  }
+  if (
+    typeof source.thinkingFormat === "string" &&
+    (PROVIDER_THINKING_FORMATS as readonly string[]).includes(source.thinkingFormat)
+  ) {
+    quirks.thinkingFormat = source.thinkingFormat as ProviderThinkingFormat;
+  }
+  if (source.maxTokensField === "max_tokens" || source.maxTokensField === "max_completion_tokens") {
+    quirks.maxTokensField = source.maxTokensField;
+  }
+  return Object.keys(quirks).length > 0 ? quirks : undefined;
+}
+
+function normalizeEndpointAuth(input: unknown): ProviderEndpointAuth | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const headerName = typeof source.headerName === "string" ? source.headerName.trim() : "";
+  const prefix = typeof source.prefix === "string" ? source.prefix : undefined;
+  if (!headerName && prefix === undefined) return undefined;
+  return { ...(headerName ? { headerName } : {}), ...(prefix !== undefined ? { prefix } : {}) };
+}
+
+/** 探测错误文本的落盘上限；超出部分截断并标注。 */
+const PROBE_ERROR_MAX_LENGTH = 400;
+
+export function truncateProbeError(message: string): string {
+  const trimmed = message.trim();
+  if (trimmed.length <= PROBE_ERROR_MAX_LENGTH) return trimmed;
+  return `${trimmed.slice(0, PROBE_ERROR_MAX_LENGTH)}…`;
+}
+
+function normalizeEndpointProbe(input: unknown): ProviderEndpointProbe | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  const status = source.status;
+  if (
+    status !== "ok" &&
+    status !== "catalog" &&
+    status !== "missing" &&
+    status !== "unauthorized" &&
+    status !== "unknown"
+  ) {
+    return undefined;
+  }
+  const at = typeof source.at === "number" && Number.isFinite(source.at) ? source.at : 0;
+  const latencyMs =
+    typeof source.latencyMs === "number" && Number.isFinite(source.latencyMs)
+      ? Math.max(0, Math.round(source.latencyMs))
+      : undefined;
+  // 上游失败时常回整页 HTML（Cloudflare 拦截页等）。观测值只用于界面提示，截断到
+  // PROBE_ERROR_MAX_LENGTH，避免把几 KB 的页面源码写进配置库与同步负载。
+  const rawError = typeof source.error === "string" ? source.error.trim() : "";
+  const error = rawError ? truncateProbeError(rawError) : undefined;
+  return {
+    at,
+    status,
+    ...(latencyMs !== undefined ? { latencyMs } : {}),
+    ...(error ? { error } : {}),
+  };
+}
+
+export function normalizeProviderEndpointConfig(
+  protocol: ProviderChatProtocol,
+  input: unknown,
+  credentialIds?: ReadonlySet<string>,
+): ProviderEndpointConfig | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const raw = input as Record<string, unknown>;
+  const baseUrl = normalizeBaseUrl(typeof raw.baseUrl === "string" ? raw.baseUrl : "");
+  if (!baseUrl) return undefined;
+  const dialect = normalizeProviderWireDialect(raw.dialect);
+  const modelsUrl = typeof raw.modelsUrl === "string" ? raw.modelsUrl.trim() : "";
+  const credentialId = typeof raw.credentialId === "string" ? raw.credentialId.trim() : "";
+  const quirks = normalizeEndpointQuirks(raw.quirks);
+  const auth = normalizeEndpointAuth(raw.auth);
+  const headers = normalizeEndpointHeaders(raw.headers);
+  const identity = isEndpointIdentity(raw.identity) ? raw.identity : undefined;
+  const lastProbe = normalizeEndpointProbe(raw.lastProbe);
+  return {
+    ...(raw.enabled === false ? { enabled: false } : {}),
+    baseUrl,
+    ...(raw.isFullUrl === true ? { isFullUrl: true } : {}),
+    ...(modelsUrl ? { modelsUrl } : {}),
+    ...(dialect ? { dialect: coerceDialectForProtocol(protocol, dialect) } : {}),
+    ...(quirks ? { quirks } : {}),
+    ...(auth ? { auth } : {}),
+    ...(credentialId && (!credentialIds || credentialIds.has(credentialId))
+      ? { credentialId }
+      : {}),
+    ...(headers ? { headers } : {}),
+    ...(identity ? { identity } : {}),
+    ...(lastProbe ? { lastProbe } : {}),
+    ...(raw.source === "user"
+      ? { source: "user" as const }
+      : raw.source === "auto"
+        ? { source: "auto" as const }
+        : {}),
+  };
+}
+
+/**
+ * 端点表归一化。返回保留下来的端点，以及"声明过但因地址为空等原因被丢弃"的接口，
+ * 供默认接口守卫判断默认接口是否已不复存在。
+ */
+function normalizeProviderEndpointConfigs(
+  input: unknown,
+  credentialIds?: ReadonlySet<string>,
+): { configs: CustomProvider["endpointConfigs"] | undefined; dropped: Set<ProviderChatProtocol> } {
+  const dropped = new Set<ProviderChatProtocol>();
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return { configs: undefined, dropped };
+  }
+  const source = input as Record<string, unknown>;
+  const configs: NonNullable<CustomProvider["endpointConfigs"]> = {};
+  for (const [key, raw] of Object.entries(source)) {
+    const legacy = normalizeLegacyProtocolInput(key);
+    if (!legacy) continue;
+    const config = normalizeProviderEndpointConfig(legacy.protocol, raw, credentialIds);
+    if (!config) {
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) dropped.add(legacy.protocol);
+      continue;
+    }
+    if (legacy.dialect && !config.dialect) config.dialect = legacy.dialect;
+    // 旧键与新键同时存在时保留新键。
+    if (!configs[legacy.protocol] || key === legacy.protocol) configs[legacy.protocol] = config;
+  }
+  for (const protocol of Object.keys(configs) as ProviderChatProtocol[]) dropped.delete(protocol);
+  return { configs: Object.keys(configs).length > 0 ? configs : undefined, dropped };
+}
+
+const CREDENTIAL_MODELS_LIMIT = 1000;
+
+function normalizeCredentialScope(input: unknown): ProviderCredentialScope | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  if (source.mode === "all") return { mode: "all" };
+  if (source.mode === "auto") return { mode: "auto" };
+  if (source.mode === "manual") {
+    const models = normalizeStringArray(source.models)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return { mode: "manual", models: [...new Set(models)] };
+  }
+  return undefined;
+}
+
+export function normalizeProviderCredential(input: unknown): ProviderCredential | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const source = input as Record<string, unknown>;
+  const apiKey = normalizeApiKey(typeof source.apiKey === "string" ? source.apiKey : "");
+  const id = typeof source.id === "string" && source.id.trim() ? source.id.trim() : createUuid();
+  const modelScope = normalizeCredentialScope(source.modelScope);
+  const lastModelsRaw =
+    source.lastModels && typeof source.lastModels === "object" && !Array.isArray(source.lastModels)
+      ? (source.lastModels as Record<string, unknown>)
+      : undefined;
+  const lastModels = lastModelsRaw
+    ? {
+        at:
+          typeof lastModelsRaw.at === "number" && Number.isFinite(lastModelsRaw.at)
+            ? lastModelsRaw.at
+            : 0,
+        models: [
+          ...new Set(
+            normalizeStringArray(lastModelsRaw.models)
+              .map((item) => item.trim())
+              .filter(Boolean),
+          ),
+        ].slice(0, CREDENTIAL_MODELS_LIMIT),
+      }
+    : undefined;
+  return {
+    id,
+    label: typeof source.label === "string" ? source.label.trim() : "",
+    apiKey,
+    apiKeyConfigured: apiKey.length > 0 || source.apiKeyConfigured === true,
+    enabled: source.enabled !== false,
+    ...(modelScope ? { modelScope } : {}),
+    ...(lastModels ? { lastModels } : {}),
+  };
+}
+
+/**
+ * 凭据列表归一化：首把即旧字段 apiKey。旧存档只有 apiKey → 单把默认凭据；
+ * 新存档 credentials[0].apiKey 与 apiKey 双向同步，谁非空用谁。
+ */
+function normalizeProviderCredentials(
+  input: unknown,
+  apiKey: string,
+  apiKeyConfigured: boolean,
+): ProviderCredential[] {
+  const list: ProviderCredential[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const credential = normalizeProviderCredential(item);
+      if (!credential || seen.has(credential.id)) continue;
+      seen.add(credential.id);
+      list.push(credential);
+    }
+  }
+  if (list.length === 0) {
+    return [
+      {
+        id: DEFAULT_CREDENTIAL_ID,
+        label: "",
+        apiKey,
+        apiKeyConfigured: apiKeyConfigured || apiKey.length > 0,
+        enabled: true,
+      },
+    ];
+  }
+  const primary = list[0];
+  if (!primary.apiKey && apiKey) {
+    primary.apiKey = apiKey;
+    primary.apiKeyConfigured = true;
+  } else if (apiKeyConfigured && !primary.apiKey) {
+    primary.apiKeyConfigured = true;
+  }
+  return list;
+}
+
+/** 只接受 http(s) 绝对地址的可选字段（文档页等外链）：其它值一律丢弃。 */
+export function normalizeHttpUrl(input: unknown): string | undefined {
+  if (typeof input !== "string") return undefined;
+  const value = input.trim();
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+  } catch {
+    return undefined;
+  }
+  return value;
+}
+
+/**
+ * 源地址列表归一化：地址按 normalizeOrigin 规范化（补 scheme、去 query 与尾部版本段），
+ * 空或非法丢弃，按规范化值去重（保留先出现的），enabled 只在显式 false 时落盘。
+ * 一条都没有时返回 undefined（等价旧存档的单源）。
+ */
+export function normalizeProviderOrigins(input: unknown): ProviderOrigin[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const out: ProviderOrigin[] = [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const source = raw as Record<string, unknown>;
+    const url = normalizeOrigin(typeof source.url === "string" ? source.url : "");
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const id = typeof source.id === "string" && source.id.trim() ? source.id.trim() : createUuid();
+    const lastProbe = normalizeEndpointProbe(source.lastProbe);
+    out.push({
+      id,
+      url,
+      ...(source.enabled === false ? { enabled: false } : {}),
+      ...(lastProbe ? { lastProbe } : {}),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const type = normalizeProviderId(obj.type);
+  const origins = normalizeProviderOrigins(obj.origins);
+  // 主连接始终落绝对地址（旧读取点直接读 baseUrl）：模板按主源展开；没有可用的源时为空。
+  const primaryOrigin = origins ? getProviderPrimaryOrigin({ origins }) : undefined;
+  const baseUrlInput = expandProviderOriginUrl(
+    typeof obj.baseUrl === "string" ? obj.baseUrl : "",
+    primaryOrigin,
+  );
+  const modelsUrlInput = expandProviderOriginUrl(
+    typeof obj.modelsUrl === "string" ? obj.modelsUrl : "",
+    primaryOrigin,
+  );
+  const legacyDefault = normalizeLegacyProtocolInput(obj.defaultChatProtocol);
+  const presetIdInput = typeof obj.presetId === "string" ? obj.presetId.trim() : "";
+  const presetFromInput = findProviderPreset(presetIdInput);
+  // 新建的非原生渠道实例可能没有 type：按默认接口家族回填，保证旧读取点行为不变。
+  const type = isProviderId(obj.type)
+    ? obj.type
+    : legacyDefault
+      ? legacyTypeForPreset(presetFromInput, legacyDefault.protocol)
+      : normalizeProviderId(obj.type);
   const isFullUrl = obj.isFullUrl === true;
   const codexRouting =
     type === "codex" || type === "xai"
       ? normalizeCodexRouting(
-          obj.baseUrl,
+          baseUrlInput,
           // xAI / Grok 固定走 Responses；忽略历史配置中的 completions。
           type === "xai" ? "openai-responses" : obj.requestFormat,
           isFullUrl,
@@ -1123,27 +2120,76 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       ? (normalizePromptCacheHintMode(obj.promptCacheHintMode) ??
         (obj.promptCachingEnabled === false ? "none" : "auto"))
       : undefined;
+  const credentials = normalizeProviderCredentials(
+    obj.credentials,
+    apiKey,
+    obj.apiKeyConfigured === true,
+  );
+  const credentialIds = new Set(credentials.map((credential) => credential.id));
+  const { configs: endpointConfigs, dropped: droppedEndpoints } = normalizeProviderEndpointConfigs(
+    obj.endpointConfigs,
+    credentialIds,
+  );
+  // 默认接口不能是被关闭的渠道，也不能是刚被丢弃（空地址）的端点：自动切到第一个
+  // 已启用的显式端点；一个都没有时保留原值，由主连接充当隐式端点（设计文档 5.4 / 9）。
+  const defaultChatProtocol = (() => {
+    const requested = legacyDefault?.protocol;
+    if (!requested) return undefined;
+    const requestedUsable = endpointConfigs?.[requested]
+      ? endpointConfigs[requested]?.enabled !== false
+      : !droppedEndpoints.has(requested);
+    if (requestedUsable) return requested;
+    const fallback = PROVIDER_CHAT_PROTOCOLS.find(
+      (protocol) => endpointConfigs?.[protocol] && endpointConfigs[protocol]?.enabled !== false,
+    );
+    return fallback ?? requested;
+  })();
+  const dialect = normalizeProviderWireDialect(obj.dialect) ?? legacyDefault?.dialect;
+  const primaryBaseUrl = codexRouting ? codexRouting.baseUrl : normalizeBaseUrl(baseUrlInput);
+  // 预设归属以地址为准：声明了绝对官方主机的预设，地址不在其主机内时降级为自定义，
+  // 避免把中转的 Key 发到官方地址。
+  const presetId =
+    presetFromInput && presetMatchesBaseUrl(presetFromInput, primaryBaseUrl)
+      ? presetFromInput.id
+      : presetIdForLegacyProvider(type, primaryBaseUrl);
+  const primaryKey = credentials[0]?.apiKey ?? apiKey;
 
   return {
     id,
     name: normalizeProviderName(id, obj.name),
     type,
-    baseUrl: codexRouting
-      ? codexRouting.baseUrl
-      : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : ""),
+    presetId,
+    ...(obj.enabled === false ? { enabled: false } : {}),
+    baseUrl: primaryBaseUrl,
     isFullUrl,
-    ...(type !== "gemini" && typeof obj.modelsUrl === "string" && obj.modelsUrl.trim()
-      ? { modelsUrl: obj.modelsUrl.trim() }
-      : {}),
-    apiKey,
-    apiKeyConfigured: apiKey.length > 0 || obj.apiKeyConfigured === true,
+    ...(type !== "gemini" && modelsUrlInput.trim() ? { modelsUrl: modelsUrlInput.trim() } : {}),
+    ...(origins ? { origins } : {}),
+    ...((): { docUrl?: string } => {
+      const docUrl = normalizeHttpUrl(obj.docUrl);
+      return docUrl ? { docUrl } : {};
+    })(),
+    apiKey: primaryKey,
+    apiKeyConfigured: primaryKey.length > 0 || credentials[0]?.apiKeyConfigured === true,
+    credentials,
     customHeaders: normalizeCustomHeaders(obj.customHeaders),
     models,
     ...(modelOrder ? { modelOrder } : {}),
     activeModels: normalizeModels(normalizeStringArray(obj.activeModels)).filter((modelId) =>
       validModelIds.has(modelId),
     ),
-    requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
+    // requestFormat 是 codex 分组的旧字段，必须与默认接口同步：默认接口是 OpenAI 家族
+    // 时就取它（xAI 固定 Responses），否则沿用地址后缀推导；其它类型不落这个字段。
+    requestFormat:
+      type === "xai"
+        ? "openai-responses"
+        : type === "codex" &&
+            defaultChatProtocol &&
+            PROVIDER_PROTOCOL_FAMILY[defaultChatProtocol] === "openai"
+          ? (defaultChatProtocol as CodexRequestFormat)
+          : codexRouting?.requestFormat,
+    ...(defaultChatProtocol ? { defaultChatProtocol } : {}),
+    ...(dialect ? { dialect } : {}),
+    ...(endpointConfigs ? { endpointConfigs } : {}),
     reasoning: normalizeReasoningLevel(obj.reasoning),
     // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
     // 行为由 promptCacheHintMode 决定。Gemini / xAI / DeepSeek 不使用这里的缓存控制。
@@ -1557,12 +2603,32 @@ export function normalizeSelectedModelForProviders(
   }
 
   const provider = customProviders.find((item) => item.id === selectedModel.customProviderId);
-  if (!provider) {
+  if (!provider || provider.enabled === false) {
     return undefined;
   }
 
   return provider.activeModels.includes(selectedModel.model) ? selectedModel : undefined;
 }
+
+// --- image generation (begin) -----------------------------------------------
+/**
+ * 图像生成设置的归一化：默认生图模型必须指向一个仍然存在、仍被启用、
+ * 且确实是 image 类型的模型，否则整条丢弃（回落到"第一个可用生图模型"）。
+ */
+export function normalizeImageGenerationSettings(
+  input: unknown,
+  customProviders: CustomProvider[],
+): ImageGenerationSettings | undefined {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const selected = normalizeSelectedModel(obj.defaultModel);
+  if (!selected) return undefined;
+  const provider = customProviders.find((item) => item.id === selected.customProviderId);
+  if (!provider || provider.enabled === false) return undefined;
+  if (!provider.activeModels.includes(selected.model)) return undefined;
+  if (!isImageGenerationModel(provider, selected.model)) return undefined;
+  return { defaultModel: selected };
+}
+// --- image generation (end) -------------------------------------------------
 
 export function normalizeMemorySettings(
   input: unknown,
@@ -1747,6 +2813,15 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
       obj.chatRuntimeControls ?? defaults.chatRuntimeControls,
     ),
     selectedModel,
+    // --- image generation (begin) -------------------------------------------
+    ...(() => {
+      const imageGeneration = normalizeImageGenerationSettings(
+        obj.imageGeneration,
+        customProviders,
+      );
+      return imageGeneration ? { imageGeneration } : {};
+    })(),
+    // --- image generation (end) ---------------------------------------------
     theme: normalizeTheme(obj.theme),
     locale: normalizeLocale(locale),
     closeWindowBehavior: normalizeCloseWindowBehavior(obj.closeWindowBehavior),
@@ -2093,15 +3168,15 @@ export function resolvePromptClarifyModel(
 
 export function updateModelFailover(
   prev: AppSettings,
-  providerType: ProviderId,
+  family: ProviderProtocolFamily,
   patch: Partial<ProviderFailoverSettings>,
 ): AppSettings {
   return normalizeSettings({
     ...prev,
     modelFailover: {
       ...prev.modelFailover,
-      [providerType]: {
-        ...prev.modelFailover[providerType],
+      [family]: {
+        ...prev.modelFailover[family],
         ...patch,
       },
     },

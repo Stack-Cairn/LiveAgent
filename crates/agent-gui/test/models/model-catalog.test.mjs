@@ -7,7 +7,8 @@ const catalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 
 // 与 scripts/generate-model-catalog.mjs 的 SECTIONS 同值（键、序、质量门）：
 // 上游被截断时刷新会硬错，这里锁住已入库快照的完整性。前四家是应用供应商
-// 类型的原生目录；其余为国内厂商分区，只经跨供应商回查消费。
+// 类型的原生目录；其余分区经预设 sourceId（渠道模型列表）与跨供应商回查消费。
+// 分区顺序即跨供应商回查的裁决序：官方在前，平台/聚合站在后。
 const MIN_MODELS_PER_PROVIDER = {
   anthropic: 8,
   google: 15,
@@ -15,18 +16,84 @@ const MIN_MODELS_PER_PROVIDER = {
   xai: 3,
   deepseek: 2,
   zhipuai: 10,
-  moonshotai: 8,
-  minimax: 5,
+  "zhipuai-coding-plan": 6,
+  "moonshotai-cn": 2,
+  moonshotai: 2,
+  "kimi-for-coding": 2,
+  "minimax-cn": 3,
+  minimax: 3,
+  "minimax-cn-coding-plan": 4,
+  "minimax-coding-plan": 4,
   stepfun: 4,
+  "stepfun-ai": 4,
+  "stepfun-step-plan": 2,
+  "stepfun-ai-step-plan": 2,
   xiaomi: 4,
+  "xiaomi-token-plan-cn": 2,
+  "xiaomi-token-plan-ams": 2,
+  "xiaomi-token-plan-sgp": 2,
   longcat: 1,
-  alibaba: 40,
-  tencent: 4,
+  sensenova: 3,
+  volcengine: 6,
+  "volcengine-coding-plan": 5,
+  "alibaba-cn": 40,
+  alibaba: 20,
+  "alibaba-coding-plan-cn": 6,
+  "alibaba-coding-plan": 6,
+  "alibaba-token-plan-cn": 10,
+  "alibaba-token-plan": 10,
+  tencent: 2,
+  "tencent-coding-plan": 4,
+  "tencent-token-plan": 1,
+  modelscope: 3,
+  "siliconflow-cn": 20,
+  siliconflow: 20,
+  groq: 8,
+  openrouter: 100,
+  lmstudio: 1,
 };
 const PROVIDERS = Object.keys(MIN_MODELS_PER_PROVIDER);
+const MODEL_CAP = 400;
 
-// 与生成脚本 INPUT_MODALITIES 同值：inputModalities 的合法值全集兼规范顺序。
+// 与生成脚本 MODALITIES 同值：模态字段的合法值全集兼规范顺序。
 const INPUT_MODALITIES = ["text", "image", "audio", "video", "pdf"];
+
+// 与生成脚本 ENTRY_FIELD_ORDER 同值：目录条目允许的全部字段。
+const ENTRY_FIELDS = new Set([
+  "id",
+  "name",
+  "family",
+  "contextWindow",
+  "maxInputTokens",
+  "maxOutputToken",
+  "inputModalities",
+  "outputModalities",
+  "thinking",
+  "toolCall",
+  "structuredOutput",
+  "attachment",
+  "temperature",
+  "knowledge",
+  "releaseDate",
+  "lastUpdated",
+  "status",
+  "openWeights",
+  "interleaved",
+  "pricing",
+]);
+// 与生成脚本 PRICE_RATE_FIELDS / PRICE_TIER_RATE_FIELDS 同值。
+const PRICE_RATE_FIELDS = new Set([
+  "input",
+  "output",
+  "cacheRead",
+  "cacheWrite",
+  "reasoning",
+  "inputAudio",
+  "outputAudio",
+]);
+const PRICE_TIER_RATE_FIELDS = new Set(["input", "output", "cacheRead", "cacheWrite"]);
+const FLAG_FIELDS = ["toolCall", "structuredOutput", "attachment", "temperature", "openWeights", "interleaved"];
+const DATE_FIELDS = ["knowledge", "releaseDate", "lastUpdated"];
 
 test("generated catalog upholds the data invariants", () => {
   assert.deepEqual(
@@ -34,48 +101,203 @@ test("generated catalog upholds the data invariants", () => {
     PROVIDERS,
     "catalog sections must match the generator's SECTIONS (keys and order)",
   );
-  // 跨供应商回查（findCatalogModelAcrossProviders）与索引的小写别名依赖
-  // id 全目录按小写唯一，否则同名模型在不同分区下会产生歧义命中。
-  const allIds = PROVIDERS.flatMap((providerId) =>
-    catalog.MODEL_CATALOG[providerId].map((entry) => entry.id.toLowerCase()),
-  );
-  assert.equal(new Set(allIds).size, allIds.length, "ids must be lowercase-unique across sections");
   for (const providerId of PROVIDERS) {
     const entries = catalog.MODEL_CATALOG[providerId];
     assert.ok(
       entries.length >= MIN_MODELS_PER_PROVIDER[providerId],
       `${providerId}: expected >= ${MIN_MODELS_PER_PROVIDER[providerId]} models, got ${entries.length}`,
     );
+    assert.ok(entries.length <= MODEL_CAP, `${providerId}: section must respect MODEL_CAP`);
     const ids = entries.map((entry) => entry.id);
     assert.deepEqual(ids, [...ids].sort(), `${providerId}: ids must be sorted`);
-    assert.equal(new Set(ids).size, ids.length, `${providerId}: ids must be unique`);
+    // 分区索引的小写别名依赖 id 在分区内按小写唯一（同一 id 允许出现在多个
+    // 分区——CN/国际双渠道、聚合站转售——由分区顺序裁决）。
+    const lowerIds = ids.map((id) => id.toLowerCase());
+    assert.equal(
+      new Set(lowerIds).size,
+      lowerIds.length,
+      `${providerId}: ids must be lowercase-unique within the section`,
+    );
     for (const entry of entries) {
       const label = `${providerId}/${entry.id}`;
-      assert.ok(Number.isInteger(entry.contextWindow) && entry.contextWindow > 0, label);
-      assert.ok(Number.isInteger(entry.maxOutputToken) && entry.maxOutputToken > 0, label);
-      // 生成期已应用统一语义规则：输出永远小于窗口，且运行时规则视其为不动点。
-      assert.ok(entry.maxOutputToken < entry.contextWindow, `${label}: output must be < context`);
+      // --- image generation (begin) ---------------------------------------
+      // 生图模型没有上下文语义（models.dev 对 gpt-image-* 等直接写 limit 0），
+      // 生成期允许成对写 0；这类条目只走图像生成链路，不参与预算计算。
+      const zeroLimitImageEntry =
+        entry.contextWindow === 0 &&
+        entry.maxOutputToken === 0 &&
+        entry.outputModalities?.includes("image") === true;
+      // --- image generation (end) -----------------------------------------
+      if (zeroLimitImageEntry) {
+        assert.equal(entry.maxInputTokens, undefined, `${label}: zero-limit entry keeps no input budget`);
+      } else {
+        assert.ok(Number.isInteger(entry.contextWindow) && entry.contextWindow > 0, label);
+        assert.ok(Number.isInteger(entry.maxOutputToken) && entry.maxOutputToken > 0, label);
+        // 生成期已应用统一语义规则：输出永远小于窗口，且运行时规则视其为不动点。
+        assert.ok(entry.maxOutputToken < entry.contextWindow, `${label}: output must be < context`);
+      }
       const limits = { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
       assert.deepEqual(catalog.normalizeModelLimits(limits), limits, label);
-      // 计费功能已移除：目录条目只承载限额、输入模态与思考能力。
-      const expectedKeys = ["contextWindow", "id", "maxOutputToken"];
-      if (entry.inputModalities) expectedKeys.push("inputModalities");
-      if (entry.thinking) expectedKeys.push("thinking");
-      assert.deepEqual(Object.keys(entry).sort(), expectedKeys.sort(), label);
-      if (entry.inputModalities) {
-        assert.ok(entry.inputModalities.length > 0, `${label}: input modalities must be non-empty`);
+      if (entry.maxInputTokens !== undefined) {
+        assert.ok(
+          Number.isInteger(entry.maxInputTokens) &&
+            entry.maxInputTokens > 0 &&
+            entry.maxInputTokens <= entry.contextWindow,
+          `${label}: maxInputTokens must be a positive integer within the window`,
+        );
+      }
+      // 目录条目只承载限额、模态、思考能力、描述性事实与展示用的原生价格。
+      for (const key of Object.keys(entry)) {
+        assert.ok(ENTRY_FIELDS.has(key), `${label}: unexpected field ${key}`);
+      }
+      // 布尔能力字段只在 true 时写出（models.dev 缺省即 false）。
+      for (const key of FLAG_FIELDS) {
+        if (key in entry) assert.equal(entry[key], true, `${label}: ${key} must be true when present`);
+      }
+      for (const key of DATE_FIELDS) {
+        if (key in entry) {
+          assert.match(entry[key], /^\d{4}(-\d{2}){1,2}$/, `${label}: ${key} must be YYYY-MM[-DD]`);
+        }
+      }
+      if (entry.name !== undefined) assert.notEqual(entry.name, entry.id, `${label}: name == id`);
+      if (entry.status !== undefined) {
+        assert.ok(["beta", "deprecated"].includes(entry.status), `${label}: status ${entry.status}`);
+      }
+      for (const field of ["inputModalities", "outputModalities"]) {
+        if (!entry[field]) continue;
+        assert.ok(entry[field].length > 0, `${label}: ${field} must be non-empty`);
         // 同一断言覆盖三个不变量：值都在合法全集内、无重复、按规范顺序排列。
         assert.deepEqual(
-          entry.inputModalities,
-          INPUT_MODALITIES.filter((modality) => entry.inputModalities.includes(modality)),
-          `${label}: input modalities must be known values in canonical order`,
+          entry[field],
+          INPUT_MODALITIES.filter((modality) => entry[field].includes(modality)),
+          `${label}: ${field} must be known values in canonical order`,
         );
+      }
+      if (entry.outputModalities) {
+        assert.notDeepEqual(entry.outputModalities, ["text"], `${label}: text-only output is implicit`);
       }
       if (entry.thinking) {
         assert.deepEqual(Object.keys(entry.thinking).sort(), ["levels", "off"], label);
       }
+      if (entry.pricing) assertPricingInvariants(entry.pricing, label);
     }
   }
+});
+
+// 价格是展示用元数据（USD / 1M tokens，models.dev 原值）：费率非负有限数，
+// 分层按 contextOver 严格递增且不含未知字段。
+function assertRates(rates, allowed, label) {
+  assert.ok(rates && typeof rates === "object", `${label}: rates must be an object`);
+  const keys = Object.keys(rates).filter((key) => key !== "contextOver");
+  assert.ok(keys.length > 0, `${label}: empty rates`);
+  for (const key of keys) {
+    assert.ok(allowed.has(key), `${label}: unexpected rate ${key}`);
+    const value = rates[key];
+    assert.ok(
+      typeof value === "number" && Number.isFinite(value) && value >= 0,
+      `${label}: ${key} must be a non-negative number, got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+function assertPricingInvariants(pricing, label) {
+  const { contextOver200k, tiers, ...rates } = pricing;
+  assertRates(rates, PRICE_RATE_FIELDS, `${label}: pricing`);
+  assert.ok(
+    rates.input !== undefined && rates.output !== undefined,
+    `${label}: pricing must carry input and output`,
+  );
+  if (contextOver200k !== undefined) {
+    assertRates(contextOver200k, PRICE_TIER_RATE_FIELDS, `${label}: pricing.contextOver200k`);
+  }
+  if (tiers !== undefined) {
+    assert.ok(Array.isArray(tiers) && tiers.length > 0, `${label}: pricing.tiers must be non-empty`);
+    let previous = 0;
+    for (const tier of tiers) {
+      assert.ok(
+        Number.isInteger(tier.contextOver) && tier.contextOver > previous,
+        `${label}: pricing.tiers must be strictly ascending by contextOver`,
+      );
+      previous = tier.contextOver;
+      assertRates(tier, PRICE_TIER_RATE_FIELDS, `${label}: pricing.tiers ${tier.contextOver}`);
+    }
+  }
+}
+
+test("catalog keeps models.dev list prices verbatim as display-only metadata", () => {
+  // gpt-5.2 是 Codex 主源合并条目：Codex models.json 不发价格，沿用 models.dev 同 id 的标价。
+  assert.deepEqual(catalog.findCatalogModel("codex", "gpt-5.2").pricing, {
+    input: 1.75,
+    output: 14,
+    cacheRead: 0.175,
+  });
+  assert.deepEqual(catalog.findCatalogModel("claude_code", "claude-opus-4-6").pricing, {
+    input: 5,
+    output: 25,
+    cacheRead: 0.5,
+    cacheWrite: 6.25,
+  });
+  // 绝大多数条目带价格；未公布的（本地运行时等）保持字段缺席而不是伪造 0。
+  const entries = Object.values(catalog.MODEL_CATALOG).flat();
+  const priced = entries.filter((entry) => entry.pricing !== undefined).length;
+  assert.ok(priced > entries.length * 0.9, `only ${priced} of ${entries.length} entries are priced`);
+  assert.ok(entries.some((entry) => entry.pricing?.tiers !== undefined), "tiers must be extracted");
+  assert.ok(entries.some((entry) => entry.pricing === undefined), "unpriced entries stay unpriced");
+});
+
+test("formatCatalogPrice and catalogEntryIsFree are display helpers over the raw rates", () => {
+  assert.equal(catalog.formatCatalogPrice(0.15), "$0.15");
+  assert.equal(catalog.formatCatalogPrice(1.75), "$1.75");
+  assert.equal(catalog.formatCatalogPrice(14), "$14");
+  assert.equal(catalog.formatCatalogPrice(0.175), "$0.175");
+  assert.equal(catalog.formatCatalogPrice(0.11875), "$0.11875");
+  assert.equal(catalog.formatCatalogPrice(1000), "$1000");
+  assert.equal(catalog.formatCatalogPrice(0), "免费");
+  assert.equal(catalog.formatCatalogPrice(0, "Free"), "Free");
+  assert.equal(catalog.formatCatalogPrice(-1), "—");
+  assert.equal(catalog.formatCatalogPrice(Number.NaN), "—");
+  assert.equal(catalog.catalogEntryIsFree({ pricing: { input: 0, output: 0 } }), true);
+  assert.equal(catalog.catalogEntryIsFree({ pricing: { input: 0, output: 0.5 } }), false);
+  assert.equal(catalog.catalogEntryIsFree({ pricing: { input: 0 } }), false);
+  assert.equal(catalog.catalogEntryIsFree({}), false);
+  assert.equal(catalog.catalogEntryIsFree(catalog.findCatalogModel("codex", "gpt-5.2")), false);
+  assert.equal(
+    catalog.catalogEntryIsFree(catalog.findCatalogModelInSection("zhipuai", "glm-4.7-flash").entry),
+    true,
+  );
+});
+
+test("catalog carries the capability, limit and lifecycle facts models.dev publishes", () => {
+  const gpt52 = catalog.findCatalogModel("codex", "gpt-5.2");
+  assert.equal(gpt52.toolCall, true);
+  assert.equal(gpt52.structuredOutput, true);
+  assert.equal(gpt52.attachment, true);
+  assert.equal(gpt52.temperature, true);
+  assert.equal(gpt52.maxInputTokens, 272_000);
+  assert.equal(gpt52.name, "GPT-5.2");
+  assert.equal(gpt52.family, "gpt");
+  assert.match(gpt52.releaseDate, /^2025-12/);
+  assert.match(gpt52.knowledge, /^2025-/);
+  assert.deepEqual(catalog.catalogEntryLimits(gpt52), {
+    contextWindow: 400_000,
+    maxInputTokens: 272_000,
+    maxOutputToken: 128_000,
+  });
+  // limit.input 未发布时不伪造。
+  const sonnet = catalog.findCatalogModel("claude_code", "claude-sonnet-4-6");
+  assert.equal(sonnet.maxInputTokens, undefined);
+  assert.equal("maxInputTokens" in catalog.catalogEntryLimits(sonnet), false);
+  // 聚合站分区保留 vendor/model 形态的 id；命中结果带分区与命中形态。
+  const viaOpenRouter = catalog.findCatalogModelInSection("openrouter", "anthropic/claude-sonnet-4.5");
+  assert.equal(viaOpenRouter.catalogProviderId, "openrouter");
+  assert.equal(viaOpenRouter.matchedId, "anthropic/claude-sonnet-4.5");
+  // 跨分区回查：官方分区先于聚合站；剥聚合商前缀后命中官方条目。
+  const match = catalog.findCatalogModelMatchAcrossProviders("openrouter/anthropic/claude-sonnet-4-6");
+  assert.equal(match.catalogProviderId, "anthropic");
+  assert.equal(match.matchedId, "claude-sonnet-4-6");
+  // 双渠道同 id：CN 分区在前。
+  assert.equal(catalog.findCatalogModelMatchAcrossProviders("qwen-max").catalogProviderId, "alibaba-cn");
+  assert.equal(catalog.findCatalogModelInSection("alibaba", "qwen-max").catalogProviderId, "alibaba");
 });
 
 test("openai catalog prefers Codex metadata and keeps models.dev supplements", () => {

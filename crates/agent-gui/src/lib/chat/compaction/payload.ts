@@ -1,5 +1,4 @@
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
-
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import { assistantMessageToText } from "../../providers/llm";
 import type { ProviderModelConfig } from "../../settings";
@@ -12,6 +11,7 @@ import {
   getActiveSegment,
   type StoredSummaryMessage,
 } from "../conversation/conversationState";
+import { effectiveContextWindow } from "./policy";
 import { estimateTextTokens } from "./tokenLedger";
 import type { CompactionIntent } from "./types";
 
@@ -341,7 +341,7 @@ export function shrinkCompactionPayload(payload: CompactionPayload): CompactionP
 }
 
 function resolveCompactionPayloadBudget(modelConfig?: ProviderModelConfig) {
-  const contextWindow = Math.max(0, Math.floor(modelConfig?.contextWindow ?? 0));
+  const contextWindow = effectiveContextWindow(modelConfig);
   const maxOutputToken = Math.max(0, Math.floor(modelConfig?.maxOutputToken ?? 0));
   if (contextWindow <= 0 || maxOutputToken <= 0) {
     return COMPACTION_PAYLOAD_TOKEN_CAP;

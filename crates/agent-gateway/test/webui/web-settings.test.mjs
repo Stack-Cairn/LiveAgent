@@ -1945,9 +1945,10 @@ test("webui model failover round-trips through gateway settings sync", () => {
       activeModels: ["claude-fable-5"],
     },
   ];
+  // 故障转移按接口家族分组（anthropic / openai / gemini），不再按旧供应商类型。
   const edited = settings.updateModelFailover(
     settings.normalizeSettings({ customProviders: providers }),
-    "claude_code",
+    "anthropic",
     { enabled: true, queue: ["provider-backup"], cooldownSeconds: 120 },
   );
 
@@ -1956,7 +1957,9 @@ test("webui model failover round-trips through gateway settings sync", () => {
     settings.normalizeSettings({ customProviders: providers }),
     edited,
   );
-  assert.equal(update.modelFailover?.claude_code.enabled, true);
+  assert.equal(update.modelFailover?.anthropic.enabled, true);
+  assert.deepEqual(update.modelFailover?.anthropic.queue, ["provider-backup"]);
+  assert.equal(update.modelFailover?.claude_code, undefined);
 
   // ...and a receiver applying the full payload converges on the same config.
   const received = settingsSync.applyGatewaySettingsSyncPayload(

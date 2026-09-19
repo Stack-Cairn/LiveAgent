@@ -930,3 +930,29 @@ export function persistActiveAgent(agentId: string) {
     // 隐私模式等场景不可写：选择只在本页生命周期内生效。
   }
 }
+
+/** 模型连通测试（WebUI → 桌面端）：与 tauriCore 的 gateway_provider_check_model 形参一致。 */
+export type GatewayProviderCheckModelPayload = {
+  url: string;
+  headers: readonly { key: string; value: string }[];
+  body: unknown;
+  use_system_proxy: boolean;
+  provider_id: string;
+  credential_id: string;
+  protocol: string;
+  auth_header_name?: string;
+  auth_prefix?: string;
+  timeout_ms?: number;
+};
+
+// --- image generation (begin) -----------------------------------------------
+/** 图像生成（WebUI → 桌面端）：形参与模型连通测试完全一致，只是打生图接口。 */
+export type GatewayProviderGenerateImagePayload = GatewayProviderCheckModelPayload;
+
+/** 下载生图结果里的远端图片（dall-e 等只回 url 的响应）；不带鉴权。 */
+export type GatewayProviderDownloadImagePayload = {
+  url: string;
+  use_system_proxy: boolean;
+  timeout_ms?: number;
+};
+// --- image generation (end) -------------------------------------------------

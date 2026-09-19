@@ -96,6 +96,21 @@ export function resolvePruneOptions(pressure: CompactionPressure): PruneOptions 
 // 预算已在目录生成期换算），因此"窗口 − 输出预留"对所有供应商一致成立。
 // OpenAI 系"输入上限 = 总窗口 − 输出上限"（GPT-5：400K = 272K + 128K），
 // factor ≥ 1 保证阈值恒不超过真实输入上限。
+/**
+ * 参与预算的上下文窗口：目录/用户给出 `maxInputTokens` 时，输入侧上限取
+ * min(maxInputTokens + maxOutputToken, contextWindow)，与"窗口 − 输出预留"的
+ * 口径保持一致（设计文档 6.3）。缺失项不参与约束。
+ */
+export function effectiveContextWindow(
+  modelConfig?: Pick<ProviderModelConfig, "contextWindow" | "maxInputTokens" | "maxOutputToken">,
+): number {
+  const contextWindow = Math.max(0, Math.floor(modelConfig?.contextWindow ?? 0));
+  const maxInputTokens = Math.max(0, Math.floor(modelConfig?.maxInputTokens ?? 0));
+  const maxOutputToken = Math.max(0, Math.floor(modelConfig?.maxOutputToken ?? 0));
+  if (contextWindow <= 0 || maxInputTokens <= 0) return contextWindow;
+  return Math.min(contextWindow, maxInputTokens + maxOutputToken);
+}
+
 export function resolveCompactionThreshold(params: {
   intent: CompactionIntent;
   contextWindow: number;
@@ -124,7 +139,7 @@ export function decideCompaction(params: {
   // no-active-messages / in-flight 硬守卫仍然生效。
   bypassThresholdAndCooldown?: boolean;
 }): CompactionDecision {
-  const contextWindow = Math.max(0, Math.floor(params.modelConfig?.contextWindow ?? 0));
+  const contextWindow = effectiveContextWindow(params.modelConfig);
   const maxOutputToken = Math.max(0, Math.floor(params.modelConfig?.maxOutputToken ?? 0));
 
   const base = {

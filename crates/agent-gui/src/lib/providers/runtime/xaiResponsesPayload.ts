@@ -1,4 +1,4 @@
-import type { ProviderId } from "../../settings";
+import type { ProviderChatProtocol, ProviderId, ProviderWireDialect } from "../../settings";
 import { isRecord } from "./common";
 import type { StreamOptionsEx } from "./types";
 
@@ -120,18 +120,35 @@ function applyXaiReasoningField(
   }
 }
 
+/**
+ * 是否按 xAI 方言剥离 Responses 请求体：路由给出方言时以方言为准；旧调用方
+ * （无路由）退回"正式 xai 供应商，或 Codex 直连 api.x.ai"的推导。
+ */
+export function isXaiResponsesDialect(params: {
+  providerId: ProviderId;
+  baseUrl?: string;
+  protocol?: ProviderChatProtocol;
+  dialect?: ProviderWireDialect;
+}): boolean {
+  if (params.dialect !== undefined) {
+    return (
+      params.dialect === "xai" && (params.protocol ?? "openai-responses") === "openai-responses"
+    );
+  }
+  if (params.providerId === "xai") return true;
+  return params.providerId === "codex" && isXaiDirectBaseUrl(params.baseUrl);
+}
+
 export function attachXaiResponsesPayloadCompat(
   options: StreamOptionsEx,
   params: {
     providerId: ProviderId;
     baseUrl?: string;
+    protocol?: ProviderChatProtocol;
+    dialect?: ProviderWireDialect;
   },
 ): StreamOptionsEx {
-  // 正式 xai 供应商，或 Codex 直连 api.x.ai 的兼容路径。
-  if (params.providerId !== "xai" && params.providerId !== "codex") {
-    return options;
-  }
-  if (params.providerId === "codex" && !isXaiDirectBaseUrl(params.baseUrl)) {
+  if (!isXaiResponsesDialect(params)) {
     return options;
   }
 

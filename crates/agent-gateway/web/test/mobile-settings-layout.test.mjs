@@ -18,6 +18,17 @@ const providersSource = readFileSync(
   new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
   "utf8",
 );
+const providerDetailSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/providers/ProviderDetail.tsx", import.meta.url),
+  "utf8",
+);
+const customSettingsDrawerSource = readFileSync(
+  new URL(
+    "../../../agent-ui/src/pages/settings/providers/ProviderCustomSettingsDrawer.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const responsiveStylesSource = readFileSync(
   new URL("../src/styles/responsive.css", import.meta.url),
   "utf8",
@@ -61,24 +72,28 @@ test("mobile cron details give configuration more room and compact log summaries
   );
 });
 
-test("mobile provider toolbar stacks tabs above a full-width action group", () => {
-  assert.match(providersSource, /settings-provider-section/);
-  assert.match(providersSource, /settings-provider-action-group/);
-  assert.match(providersSource, /settings-provider-empty-add/);
+test("mobile provider page collapses the two columns into list → detail and keeps the custom sheet full-screen", () => {
+  // 三栏结构：窄屏两栏塌成一栏，列表与详情二选一显示，详情顶部有返回按钮。
+  assert.match(providersSource, /settings-provider-section flex min-h-0 flex-1 flex-col/);
   assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-tabs-wrap\s*\{[\s\S]*flex-direction:\s*column;/,
+    providersSource,
+    /settings-provider-columns grid min-h-0 flex-1 grid-cols-\[264px_minmax\(0,1fr\)\] gap-5 max-\[720px\]:grid-cols-1/,
   );
+  assert.match(providersSource, /settings-provider-column-list[^"]*max-\[720px\]:border-r-0/);
+  assert.match(providersSource, /mobileDetailOpen && "max-\[720px\]:hidden"/);
+  assert.match(providersSource, /!mobileDetailOpen && "max-\[720px\]:hidden"/);
   assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-action-group\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*42px;/,
+    providerDetailSource,
+    /settings-provider-back hidden h-8 w-8 max-\[720px\]:inline-flex/,
   );
+  // 网关壳：页面容器允许收缩，自定义设置抽屉在手机上全屏。
   assert.match(
     responsiveStylesSource,
-    /\.settings-provider-action-label\s*\{[\s\S]*display:\s*inline;/,
+    /\.settings-provider-section\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?min-height:\s*0;/,
   );
   assert.match(
     responsiveStylesSource,
     /\.settings-provider-custom-sheet\s*\{[\s\S]*inset:\s*0;/,
   );
+  assert.match(customSettingsDrawerSource, /settings-provider-custom-sheet /);
 });

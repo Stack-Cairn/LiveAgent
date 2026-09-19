@@ -24,8 +24,9 @@ import {
   withHostedSearchProbeHeader,
 } from "../../providers/hostedSearchEvents";
 import {
+  applyModelParameterOverrides,
   buildProviderRequestMetadata,
-  createModelFromConfig,
+  createModelFromRuntime,
   createStreamingTextReconciler,
   describeProviderCacheShape,
   finalizeProviderStreamOptions,
@@ -51,6 +52,7 @@ import {
   failoverBreakerKey,
   type ModelFailoverRuntimeConfig,
   type ProviderFailoverCandidate,
+  type ProviderFailoverLayer,
   withProviderFailover,
 } from "../../providers/runtime/providerFailover";
 import { resolveStreamRetryConfig } from "../../providers/runtime/retryPolicy";
@@ -59,6 +61,7 @@ import {
   captureTransportSnapshot,
   type TransportSnapshot,
 } from "../../providers/runtime/transportSnapshot";
+import { type RuntimeWireRoute, resolveRuntimeWireRoute } from "../../providers/runtime/wireRoute";
 import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
@@ -406,6 +409,8 @@ export type AgentRunnerFailoverTarget = {
   /** Display label, e.g. "PackyCode · claude-sonnet-4-5". */
   label: string;
   runtime: ProviderRuntimeConfig;
+  /** 候选所属层；源层候选在鉴权类失败后被跳过。 */
+  layer?: ProviderFailoverLayer;
 };
 
 export type AgentRunnerFailoverSwitchEvent = {
@@ -539,16 +544,17 @@ export async function runAssistantWithTools(params: {
       sessionId: params.sessionId,
     });
 
-    const model = createModelFromConfig(
+    // 路由结果（协议、方言、适配器家族）随 runtime 而来；远端模型名进 Model.id，
+    // 本地模型 id 继续用于目录、熔断与状态展示。
+    const primaryWire = resolveRuntimeWireRoute(params.providerId, params.runtime);
+    const model = createModelFromRuntime(
       params.providerId,
+      params.runtime,
       modelId,
       proxyRequest.baseUrl,
-      params.runtime.requestFormat,
-      params.runtime.modelConfig,
-      params.runtime.baseUrl.trim(),
     );
     const nativeWebSearchStatus = resolveProviderNativeWebSearchStatus({
-      providerId: params.providerId,
+      providerId: primaryWire.adapterProviderId,
       api: model.api,
       enabled: params.nativeWebSearch,
       baseUrl: params.runtime.baseUrl,
@@ -560,7 +566,7 @@ export async function runAssistantWithTools(params: {
     });
 
     const thinkingLevel = toAssistantThinkingLevel({
-      providerId: params.providerId,
+      providerId: primaryWire.adapterProviderId,
       reasoning: params.runtime.reasoning,
       api: model.api,
     });
@@ -577,9 +583,22 @@ export async function runAssistantWithTools(params: {
       providerId: ProviderId;
       modelId: string;
       runtime: ProviderRuntimeConfig;
+      wire: RuntimeWireRoute;
       proxyRequest: PreparedProxyRequest;
-      model: ReturnType<typeof createModelFromConfig>;
+      model: ReturnType<typeof createModelFromRuntime>;
     };
+
+    // 熔断 key 按 provider::credential::protocol::model 分表：凭据层与端点层候选
+    // 各自独立计数。接口取路由视图（resolveRuntimeWireRoute），手写 runtime 缺
+    // protocol 时与 wire 层同一条回退链推导，不再各读各的。
+    const failoverScope = (runtime: ProviderRuntimeConfig, providerId: ProviderId) => ({
+      credentialId: runtime.credentialId,
+      origin: runtime.originUrl,
+      protocol: resolveRuntimeWireRoute(providerId, runtime).protocol,
+    });
+    /** 路由结果只在工厂构造的 runtime 上存在；手写 runtime 让中间件退回旧推导。 */
+    const runtimeRouteParams = (runtime: ProviderRuntimeConfig, wire: RuntimeWireRoute) =>
+      runtime.dialect === undefined ? {} : { protocol: wire.protocol, dialect: wire.dialect };
 
     const failoverParams = params.failover;
     const primaryTarget: PreparedFailoverTarget = {
@@ -588,13 +607,19 @@ export async function runAssistantWithTools(params: {
         ? failoverBreakerKey(
             failoverParams.primary.selectedModel.customProviderId,
             failoverParams.primary.selectedModel.model,
+            failoverScope(params.runtime, params.providerId),
           )
-        : failoverBreakerKey(params.providerId, modelId),
+        : failoverBreakerKey(
+            params.providerId,
+            modelId,
+            failoverScope(params.runtime, params.providerId),
+          ),
       label: failoverParams?.primary.label ?? `${params.providerId} · ${modelId}`,
       selectedModel: failoverParams?.primary.selectedModel,
       providerId: params.providerId,
       modelId,
       runtime: params.runtime,
+      wire: primaryWire,
       proxyRequest,
       model,
     };
@@ -618,20 +643,20 @@ export async function runAssistantWithTools(params: {
           key: failoverBreakerKey(
             fallback.selectedModel.customProviderId,
             fallback.selectedModel.model,
+            failoverScope(fallback.runtime, fallback.providerId),
           ),
           label: fallback.label,
           selectedModel: fallback.selectedModel,
           providerId: fallback.providerId,
           modelId: fallback.model,
           runtime: fallback.runtime,
+          wire: resolveRuntimeWireRoute(fallback.providerId, fallback.runtime),
           proxyRequest: fallbackProxyRequest,
-          model: createModelFromConfig(
+          model: createModelFromRuntime(
             fallback.providerId,
+            fallback.runtime,
             fallback.model,
             fallbackProxyRequest.baseUrl,
-            fallback.runtime.requestFormat,
-            fallback.runtime.modelConfig,
-            fallback.runtime.baseUrl.trim(),
           ),
         } satisfies PreparedFailoverTarget;
       })();
@@ -649,13 +674,11 @@ export async function runAssistantWithTools(params: {
     /** Cheap, IO-free model identity for failover bookkeeping/synthesis. */
     const fallbackTargetIdentity = (index: number) => {
       const fallback = failoverParams?.fallbacks[index - 1];
-      if (!fallback) return { api: model.api, provider: model.provider, id: modelId };
-      const identity = createModelFromConfig(
+      if (!fallback) return { api: model.api, provider: model.provider, id: model.id };
+      const identity = createModelFromRuntime(
         fallback.providerId,
+        fallback.runtime,
         fallback.model,
-        fallback.runtime.baseUrl.trim(),
-        fallback.runtime.requestFormat,
-        fallback.runtime.modelConfig,
         fallback.runtime.baseUrl.trim(),
       );
       return { api: identity.api, provider: identity.provider, id: identity.id };
@@ -836,15 +859,29 @@ export async function runAssistantWithTools(params: {
     const shouldSilenceProviderNativeToolCall = (toolCall: ToolCall) =>
       shouldSilenceProviderNativeWebSearchToolCall(toolCall) ||
       shouldSilenceProviderNativeWebFetchToolCall(toolCall);
+    // 模型能力门控（设计文档 6.1）：tools 的有效状态为 unsupported（用户覆盖或
+    // 目录声明）时，本回合不下发任何工具定义——会话里的工具开关照旧，执行层
+    // 快照也照旧保留（历史里已有的调用仍能校验），只是请求不带 tools。
+    const toolsCapability = params.runtime.capabilities?.tools;
+    const toolsWithheld = toolsCapability?.state === "unsupported";
+    if (toolsWithheld && llmTools.length > 0) {
+      console.info(
+        `[agent-runner] tools withheld for ${params.providerId}:${params.model}: ` +
+          `capability tools=unsupported (source: ${toolsCapability.source}); ` +
+          `${llmTools.length} tool definition(s) not sent this run`,
+      );
+    }
     const filterRequestTools = (
       tools: Context["tools"] | undefined,
     ): Context["tools"] | undefined =>
-      tools?.filter(
-        (tool) =>
-          !hiddenProviderNativeWebSearchToolNames.has(tool.name) &&
-          !hiddenProviderNativeWebFetchToolNames.has(tool.name) &&
-          (params.requestToolFilter?.(tool.name) ?? true),
-      );
+      toolsWithheld
+        ? undefined
+        : tools?.filter(
+            (tool) =>
+              !hiddenProviderNativeWebSearchToolNames.has(tool.name) &&
+              !hiddenProviderNativeWebFetchToolNames.has(tool.name) &&
+              (params.requestToolFilter?.(tool.name) ?? true),
+          );
 
     const assistantVisibleAnswerText = (assistant: AssistantMessage) =>
       stripSeedToolCallMarkup(
@@ -886,7 +923,7 @@ export async function runAssistantWithTools(params: {
     };
     const toolsSuffix = buildToolsSuffix(
       params.workdir,
-      llmTools.map((tool) => tool.name),
+      toolsWithheld ? [] : llmTools.map((tool) => tool.name),
       params.runtimePlatform,
       params.additionalRoots,
     );
@@ -1264,17 +1301,20 @@ export async function runAssistantWithTools(params: {
       const roundCacheRetention =
         options?.cacheRetention ??
         resolveProviderCacheRetention(
-          primaryRoundTarget.providerId,
+          primaryRoundTarget.wire.adapterProviderId,
           primaryRoundTarget.runtime.promptCachingEnabled,
           undefined,
           primaryRoundTarget.runtime.promptCacheRetention,
+          // 设计 §6.1：缓存归因口径与实际请求一致。
+          primaryRoundTarget.runtime.capabilities?.promptCaching?.state,
         );
       const roundSessionId = options?.sessionId ?? params.sessionId;
       const prefixShape = capturePrefixShape({
         systemPrompt: effectiveContext.systemPrompt,
         tools: effectiveContext.tools,
         cacheControl: describeProviderCacheShape({
-          providerId: primaryRoundTarget.providerId,
+          providerId: primaryRoundTarget.wire.adapterProviderId,
+          ...runtimeRouteParams(primaryRoundTarget.runtime, primaryRoundTarget.wire),
           baseUrl: primaryRoundTarget.runtime.baseUrl,
           promptCacheHintMode:
             primaryRoundTarget.runtime.modelConfig?.promptCacheHintMode ??
@@ -1297,10 +1337,11 @@ export async function runAssistantWithTools(params: {
 
       const buildTargetRoundStream = (target: PreparedFailoverTarget) => {
         const targetModel = target.model;
+        const transportProviderId = target.wire.adapterProviderId;
         const fallbackReasoning =
-          target.providerId === "claude_code" ||
-          target.providerId === "gemini" ||
-          target.providerId === "deepseek" ||
+          target.wire.protocol === "anthropic-messages" ||
+          target.wire.protocol === "google-generative-ai" ||
+          (target.wire.protocol === "openai-responses" && target.wire.dialect === "deepseek") ||
           targetModel.api === "openai-responses" ||
           targetModel.api === "openai-completions"
             ? toSimpleStreamReasoning(target.runtime.reasoning)
@@ -1309,7 +1350,7 @@ export async function runAssistantWithTools(params: {
           target.index === 0
             ? nativeWebSearchStatus
             : resolveProviderNativeWebSearchStatus({
-                providerId: target.providerId,
+                providerId: transportProviderId,
                 api: targetModel.api,
                 enabled: params.nativeWebSearch,
                 baseUrl: target.runtime.baseUrl,
@@ -1317,7 +1358,7 @@ export async function runAssistantWithTools(params: {
               });
         const shouldProbeHostedSearch = Boolean(targetNativeWebSearchStatus);
         const hostedSearchProbeId = shouldProbeHostedSearch
-          ? createHostedSearchProbeId(target.providerId)
+          ? createHostedSearchProbeId(transportProviderId)
           : undefined;
         let streamOptions: StreamOptionsEx = {
           ...(options ?? {}),
@@ -1334,12 +1375,14 @@ export async function runAssistantWithTools(params: {
           cacheRetention:
             options?.cacheRetention ??
             resolveProviderCacheRetention(
-              target.providerId,
+              transportProviderId,
               target.runtime.promptCachingEnabled,
               undefined,
               target.runtime.promptCacheRetention,
+              // 设计 §6.1：模型 promptCaching 标为不支持时不下缓存断点。
+              target.runtime.capabilities?.promptCaching?.state,
             ),
-          metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
+          metadata: buildProviderRequestMetadata(transportProviderId, params.sessionId),
           toolChoice:
             params.resolveToolChoice?.(round) ??
             options?.toolChoice ??
@@ -1367,8 +1410,16 @@ export async function runAssistantWithTools(params: {
           },
         };
 
+        // 设计 §6.3：模型级参数覆盖在进入 payload 中间件链之前应用。
+        streamOptions = applyModelParameterOverrides(
+          streamOptions,
+          target.runtime.parameters,
+          target.runtime.modelConfig?.maxOutputToken,
+        );
+
         streamOptions = finalizeProviderStreamOptions({
-          providerId: target.providerId,
+          providerId: transportProviderId,
+          ...runtimeRouteParams(target.runtime, target.wire),
           baseUrl: target.runtime.baseUrl,
           options: streamOptions,
           context: effectiveContext,
@@ -1410,7 +1461,7 @@ export async function runAssistantWithTools(params: {
         }
 
         const hostedSearchAggregator = createHostedSearchEventAggregator({
-          providerId: target.providerId,
+          providerId: transportProviderId,
           onHostedSearch: (hostedSearch) => {
             if (hostedSearch.status === "searching") {
               nativeWebSearchStatusController.schedule();
@@ -1423,7 +1474,7 @@ export async function runAssistantWithTools(params: {
           },
         });
         const hostedSearchProbe = startHostedSearchFetchProbe({
-          providerId: target.providerId,
+          providerId: transportProviderId,
           sessionId: params.sessionId,
           requestId: hostedSearchProbeId,
           enabled: shouldProbeHostedSearch,
@@ -1481,8 +1532,10 @@ export async function runAssistantWithTools(params: {
               : failoverBreakerKey(
                   fallback?.selectedModel.customProviderId ?? "",
                   fallback?.selectedModel.model ?? "",
+                  fallback ? failoverScope(fallback.runtime, fallback.providerId) : undefined,
                 ),
           label: targetIndex === 0 ? primaryTarget.label : (fallback?.label ?? ""),
+          ...(fallback?.layer ? { layer: fallback.layer } : {}),
           model:
             targetIndex === 0
               ? { api: model.api, provider: model.provider, id: model.id }

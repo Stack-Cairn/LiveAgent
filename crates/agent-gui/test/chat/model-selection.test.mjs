@@ -47,6 +47,74 @@ test("local chat model selection resolves only an enabled selected model", () =>
   });
 });
 
+test("a disabled provider makes its models unavailable for the local selection", () => {
+  // 选择先于停用落盘：模拟用户在已有全局 / 会话选择之后再关掉供应商总开关
+  // （normalizeSettings 会把指向停用供应商的全局默认清掉，会话级选择不会）。
+  const enabledApp = appSettings([provider({ id: "openai-main", models: ["gpt-5"] })], {
+    customProviderId: "openai-main",
+    model: "gpt-5",
+  });
+  const app = {
+    ...enabledApp,
+    customProviders: enabledApp.customProviders.map((item) => ({ ...item, enabled: false })),
+  };
+  assert.equal(app.customProviders[0].enabled, false);
+  assert.deepEqual(app.selectedModel, { customProviderId: "openai-main", model: "gpt-5" });
+
+  // 与 activeModels 不含模型同一处理：残留的全局 / 会话选择不能绕过总开关。
+  assert.throws(
+    () => modelSelection.resolveEffectiveChatModelSelection({ settings: app }),
+    /所选模型未启用/,
+  );
+  assert.throws(
+    () =>
+      modelSelection.resolveEffectiveChatModelSelection({
+        settings: app,
+        conversationSelectedModel: { customProviderId: "openai-main", model: "gpt-5" },
+      }),
+    /所选模型未启用/,
+  );
+});
+
+test("a disabled provider rejects the gateway-selected model like an inactive model", () => {
+  const app = appSettings(
+    [{ ...provider({ id: "openai-main", models: ["gpt-5"] }), enabled: false }],
+    { customProviderId: "openai-main", model: "gpt-5" },
+  );
+
+  assert.throws(
+    () =>
+      modelSelection.resolveEffectiveChatModelSelection({
+        settings: app,
+        gatewaySelectedModel: {
+          customProviderId: "openai-main",
+          model: "gpt-5",
+          providerType: "codex",
+        },
+      }),
+    /未在桌面端启用/,
+  );
+});
+
+test("isProviderModelAvailable requires both the provider switch and the active list", () => {
+  assert.equal(
+    modelSelection.isProviderModelAvailable({ activeModels: ["m"] }, "m"),
+    true,
+  );
+  assert.equal(
+    modelSelection.isProviderModelAvailable({ enabled: true, activeModels: ["m"] }, "m"),
+    true,
+  );
+  assert.equal(
+    modelSelection.isProviderModelAvailable({ enabled: false, activeModels: ["m"] }, "m"),
+    false,
+  );
+  assert.equal(
+    modelSelection.isProviderModelAvailable({ activeModels: ["other"] }, "m"),
+    false,
+  );
+});
+
 test("missing local model selection points to the composer control", () => {
   const app = appSettings([provider({ id: "openai-main", models: ["gpt-5"] })]);
 

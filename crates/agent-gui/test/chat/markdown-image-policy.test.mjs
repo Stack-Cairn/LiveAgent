@@ -67,6 +67,7 @@ const loader = createTsModuleLoader({
     "../providers/llm": {
       buildProviderRequestMetadata() {},
       createModelFromConfig() {},
+      createModelFromRuntime() {},
       finalizeProviderStreamOptions() {},
       normalizeErrorMessage(message, fallback) {
         return message || fallback;

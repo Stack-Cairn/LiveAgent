@@ -627,14 +627,16 @@ test("gemini model list normalization uses models array metadata", () => {
     "gemini",
   );
 
-  assert.deepEqual(models, [
-    {
-      id: "gemini-3.5-flash",
-      contextWindow: 1_048_576,
-      maxOutputToken: 65_536,
-      limitsSource: "provider",
-    },
-  ]);
+  assert.equal(models.length, 1);
+  const [flash] = models;
+  assert.equal(flash.id, "gemini-3.5-flash");
+  assert.equal(flash.contextWindow, 1_048_576);
+  assert.equal(flash.maxOutputToken, 65_536);
+  assert.equal(flash.limitsSource, "provider");
+  // 设计 §6.2：供应商声明同时留一份 providerMeta 作候选（fetchedAt 随拉取时间）。
+  assert.equal(flash.providerMeta.contextWindow, 1_048_576);
+  assert.equal(flash.providerMeta.maxOutputToken, 65_536);
+  assert.ok(flash.providerMeta.fetchedAt > 0);
 });
 
 test("payload middleware composer preserves previous-hook-first order", async () => {
@@ -802,6 +804,35 @@ test("DeepSeek full URL requests normalize legacy endpoints to /responses", asyn
     "https://relay.example.com/custom/v1/responses?region=cn",
   );
   assert.equal(prepared.headers["x-liveagent-upstream-origin"], "https://relay.example.com");
+});
+
+test("resolved protocol adapter controls auth and proxy routing", async () => {
+  const localLoader = createTsModuleLoader({
+    mocks: {
+      "@liveagent/app/shims/tauriCore": {
+        async invoke(command) {
+          assert.equal(command, "proxy_get_server_info");
+          return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
+        },
+      },
+    },
+  });
+  const localProviders = localLoader.loadModule("src/lib/providers/llm.ts");
+  const prepared = await localProviders.prepareProviderRequest("codex", {
+    baseUrl: "https://gateway.example/anthropic/v1",
+    isFullUrl: false,
+    adapterProviderId: "claude_code",
+    chatProtocol: "anthropic-messages",
+    apiKey: "secret",
+  });
+
+  assert.equal(
+    prepared.baseUrl,
+    "http://127.0.0.1:18080/proxy/claude_code/anthropic/v1",
+  );
+  assert.equal(prepared.headers["x-api-key"], "secret");
+  assert.equal(prepared.headers.Authorization, undefined);
+  assert.equal(prepared.headers["anthropic-version"], "2023-06-01");
 });
 
 test("DeepSeek relay base URLs append /v1 while official DeepSeek stays at the root", async () => {
@@ -1213,6 +1244,15 @@ test("resolveProviderCacheRetention maps provider settings and per-request overr
   // long 档位仅对 Anthropic 生效。
   assert.equal(resolve("codex", true, undefined, "long"), "short");
   assert.equal(resolve("gemini", true), undefined);
+
+  // 设计 §6.1：模型有效能力参与判定——标为不支持就不下缓存断点，
+  // 优先于供应商偏好与请求级 override；supported / unknown 不改变原有行为。
+  assert.equal(resolve("claude_code", true, undefined, "long", "unsupported"), "none");
+  assert.equal(resolve("codex", true, undefined, undefined, "unsupported"), "none");
+  assert.equal(resolve("claude_code", true, "long", "long", "supported"), "long");
+  assert.equal(resolve("claude_code", true, undefined, undefined, "unknown"), "short");
+  // 本就没有缓存通路的接口不受影响，仍返回 undefined。
+  assert.equal(resolve("gemini", true, undefined, undefined, "unsupported"), undefined);
 });
 
 test("codex automatic cache hint resolution follows request format before endpoint hints", () => {
@@ -1486,4 +1526,61 @@ test("runtime models always carry zero pricing (billing removed)", () => {
     { id: "claude-sonnet-4-6", contextWindow: 1_000_000, maxOutputToken: 128_000 },
   );
   assert.deepEqual(claudeModel.cost, zeroCost);
+});
+
+test("endpoint identity layer sits above the dialect layer and follows the endpoint, not the provider", () => {
+  const requestHeaders = loader.loadModule("@liveagent/ui/lib/providers/requestHeaders.ts");
+  // Responses 端点在通用方言下选 Codex：UA + originator/version + 完整 Codex 会话头。
+  const codex = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "openai-responses",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+    identity: "codex",
+  });
+  assert.equal(codex.Authorization, "Bearer secret");
+  assert.match(codex["User-Agent"], /^codex_cli_rs\//);
+  assert.equal(codex.originator, "codex_cli_rs");
+  assert.equal(codex["session-id"], "conv-1");
+  assert.equal(codex["thread-id"], "conv-1");
+  assert.equal(codex["x-client-request-id"], "conv-1");
+  // 不选身份：通用方言的 Responses 只有协议头。
+  const plain = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "openai-responses",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+  });
+  assert.deepEqual(Object.keys(plain), ["Authorization"]);
+  // Messages 端点选 Claude Code：SDK 指纹头 + claude-cli UA + 会话头。
+  const claude = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "anthropic-messages",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+    identity: "claude_code",
+  });
+  assert.match(claude["User-Agent"], /^claude-cli\//);
+  assert.equal(claude["x-api-key"], "secret");
+  assert.equal(claude["X-Claude-Code-Session-Id"], "conv-1");
+  assert.ok(Object.keys(claude).some((key) => key.toLowerCase().startsWith("x-stainless")));
+  // "none"：连方言头都不带，只剩协议头档。
+  const none = requestHeaders.buildBuiltinRequestHeaders({
+    protocol: "anthropic-messages",
+    dialect: "generic",
+    apiKey: "secret",
+    sessionId: "conv-1",
+    identity: "none",
+  });
+  assert.deepEqual(Object.keys(none).sort(), ["anthropic-version", "x-api-key"]);
+  // 运行时入口与共享层同一份实现。
+  assert.deepEqual(
+    providers.buildProviderRequestHeaders("claude_code", "secret", "conversation-1"),
+    requestHeaders.buildBuiltinRequestHeaders({
+      protocol: "anthropic-messages",
+      dialect: "generic",
+      apiKey: "secret",
+      sessionId: "conversation-1",
+    }),
+  );
 });

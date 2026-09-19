@@ -75,6 +75,11 @@ import {
   type FsRootsResponse,
   type FsWriteTextResponse,
   type GatewayChatCommandInput,
+  type GatewayProviderCheckModelPayload,
+  // --- image generation (begin) ---
+  type GatewayProviderDownloadImagePayload,
+  type GatewayProviderGenerateImagePayload,
+  // --- image generation (end) ---
   type GatewaySettingsUpdateResponse,
   type GatewayWorkspaceRootGrant,
   type GatewayWorkspaceRootGrantDraft,
@@ -1286,6 +1291,8 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     mode?: string;
     expectedMtimeMs?: number;
     expectedContentHash?: string;
+    // --- image generation ---："base64" 时 content 是图片字节的 base64。
+    encoding?: string;
   }): Promise<FsWriteTextResponse> {
     return this.request<FsWriteTextResponse>("fs.write_text", {
       workdir: params.workdir,
@@ -1294,6 +1301,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       mode: params.mode ?? "rewrite",
       expected_mtime_ms: params.expectedMtimeMs,
       expected_content_hash: params.expectedContentHash,
+      encoding: params.encoding,
     });
   }
 
@@ -1383,6 +1391,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     providerId = "",
     isFullUrl?: boolean,
     customHeaders?: readonly { key: string; value: string }[],
+    credentialId = "",
   ): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
@@ -1391,10 +1400,25 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       use_system_proxy: useSystemProxy,
       models_url: modelsUrl,
       provider_id: providerId,
+      credential_id: credentialId,
       is_full_url: isFullUrl,
       custom_headers: customHeaders,
     });
   }
+
+  async checkProviderModel(payload: GatewayProviderCheckModelPayload): Promise<unknown> {
+    return this.requestWithRecovery("provider.check_model", payload);
+  }
+
+  // --- image generation (begin) ---------------------------------------------
+  async generateProviderImage(payload: GatewayProviderGenerateImagePayload): Promise<unknown> {
+    return this.requestWithRecovery("provider.generate_image", payload);
+  }
+
+  async downloadProviderImage(payload: GatewayProviderDownloadImagePayload): Promise<unknown> {
+    return this.requestWithRecovery("provider.download_image", payload);
+  }
+  // --- image generation (end) -----------------------------------------------
 
   async providerUsageQuery<T = unknown>(providerId: string, refresh: boolean): Promise<T> {
     return this.requestWithRecovery<T>("provider.usage.query", {

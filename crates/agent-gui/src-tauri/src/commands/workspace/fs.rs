@@ -3046,6 +3046,10 @@ pub(crate) fn fs_write_text_sync(
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
     checkpoint: Option<CheckpointCtx>,
+    // --- image generation (begin) ---
+    // "" / "utf8" = 文本原样落盘；"base64" = 解码后按字节写（生图工具存 PNG）。
+    encoding: Option<String>,
+    // --- image generation (end) ---
 ) -> Result<WriteTextResponse, FsCommandError> {
     let target = resolve_scoped_fs_path(&workdir, &path)?;
     fs_write_text_impl(
@@ -3055,6 +3059,7 @@ pub(crate) fn fs_write_text_sync(
         expected_mtime_ms,
         expected_content_hash,
         checkpoint,
+        encoding,
     )
     .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
@@ -3066,7 +3071,13 @@ fn fs_write_text_impl(
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
     checkpoint: Option<CheckpointCtx>,
+    encoding: Option<String>,
 ) -> Result<WriteTextResponse, FsError> {
+    // --- image generation (begin) ---
+    // 二进制写入：base64 在这里解成字节，其余步骤（路径边界、版本校验、检查点
+    // 前像捕获）与文本写入完全共用，不另开一条绕过边界检查的通路。
+    let payload = decode_write_payload(&content, encoding.as_deref())?;
+    // --- image generation (end) ---
     let logical_path = path.logical_path.clone();
     let raw_target = path.root.join(&path.relative_path);
     let expected = parse_expected_version(expected_mtime_ms, expected_content_hash)?;
@@ -3124,7 +3135,7 @@ fn fs_write_text_impl(
         },
     );
 
-    fs::write(&target, content.as_bytes())?;
+    fs::write(&target, &payload)?;
     let canon = fs::canonicalize(&target)?;
     let md = fs::metadata(&canon)?;
 
@@ -3132,13 +3143,32 @@ fn fs_write_text_impl(
         path: logical_path,
         mode,
         existed_before,
-        bytes_written: content.len(),
+        bytes_written: payload.len(),
         mtime_ms: metadata_mtime_ms(&md),
-        content_hash: hash_bytes(content.as_bytes()),
-        total_lines: count_text_lines(&content),
+        content_hash: hash_bytes(&payload),
+        // 二进制内容没有"行"的概念：base64 写入一律记 0。
+        total_lines: match std::str::from_utf8(&payload) {
+            Ok(text) => count_text_lines(text),
+            Err(_) => 0,
+        },
         file_id: Some(file_identity(&md, &canon)),
     })
 }
+
+// --- image generation (begin) -----------------------------------------------
+/// 把请求里的 content 还原成要落盘的字节。未知编码直接报错，不静默当文本写。
+fn decode_write_payload(content: &str, encoding: Option<&str>) -> Result<Vec<u8>, FsError> {
+    match encoding.map(str::trim).unwrap_or("") {
+        "" | "utf8" | "utf-8" => Ok(content.as_bytes().to_vec()),
+        "base64" => BASE64_STANDARD
+            .decode(compact_base64(content).as_bytes())
+            .map_err(|e| FsError::Other(format!("Write.content is not valid base64: {e}"))),
+        other => Err(FsError::Other(format!(
+            "Write.encoding only supports utf8 or base64, got {other}"
+        ))),
+    }
+}
+// --- image generation (end) -------------------------------------------------
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fs_write_text(
@@ -3149,6 +3179,7 @@ pub async fn fs_write_text(
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
     checkpoint: Option<CheckpointCtx>,
+    encoding: Option<String>,
 ) -> Result<WriteTextResponse, FsCommandError> {
     run_blocking_fs("fs_write_text", move || {
         fs_write_text_sync(
@@ -3159,6 +3190,7 @@ pub async fn fs_write_text(
             expected_mtime_ms,
             expected_content_hash,
             checkpoint,
+            encoding,
         )
     })
     .await
@@ -5394,6 +5426,7 @@ mod tests {
             Some(read.mtime_ms),
             Some(read.content_hash),
             None,
+            None,
         )
         .expect("skill text should save");
         assert_eq!(write.path, "skill://demo/SKILL.md");
@@ -6208,6 +6241,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("write through symlinked parent should succeed");
         assert!(write.file_id.is_some());
@@ -6236,9 +6270,53 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("write should succeed");
         assert!(write.file_id.is_some());
+
+        // --- image generation (begin) ---
+        // base64 编码走同一条写入路径：解码后按字节落盘，行数记 0。
+        let png = [0x89u8, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        let binary = fs_write_text_sync(
+            workdir.display().to_string(),
+            "shot.png".to_string(),
+            BASE64_STANDARD.encode(png),
+            "rewrite".to_string(),
+            None,
+            None,
+            None,
+            Some("base64".to_string()),
+        )
+        .expect("base64 write should succeed");
+        assert_eq!(binary.bytes_written, png.len());
+        assert_eq!(binary.total_lines, 0);
+        assert_eq!(fs::read(workdir.join("shot.png")).expect("read png"), png);
+        // 越界路径仍然被拒：二进制写入不绕过工作区边界。
+        assert!(fs_write_text_sync(
+            workdir.display().to_string(),
+            "../escape.png".to_string(),
+            BASE64_STANDARD.encode(png),
+            "rewrite".to_string(),
+            None,
+            None,
+            None,
+            Some("base64".to_string()),
+        )
+        .is_err());
+        // 未知编码不静默当文本写。
+        assert!(fs_write_text_sync(
+            workdir.display().to_string(),
+            "bad.bin".to_string(),
+            "zz".to_string(),
+            "rewrite".to_string(),
+            None,
+            None,
+            None,
+            Some("hex".to_string()),
+        )
+        .is_err());
+        // --- image generation (end) ---
 
         let status = fs_path_status_sync(workdir.display().to_string(), "notes.txt".to_string())
             .expect("status should succeed");

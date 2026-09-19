@@ -521,19 +521,18 @@ pub async fn handle_provider_models(
             .collect::<Vec<_>>()
     });
     let config = if request_api_key.is_empty() {
-        let provider_id = request.provider_id.trim().to_string();
-        let expected_provider_type = provider_type.clone();
-        let is_full_url = request.is_full_url;
-        let custom_headers = request_custom_headers.clone();
+        let draft = ProviderModelsDraft {
+            provider_id: request.provider_id.trim().to_string(),
+            provider_type,
+            credential_id: request.credential_id.trim().to_string(),
+            base_url: request.base_url.trim().to_string(),
+            models_url: request.models_url.trim().to_string(),
+            is_full_url: request.is_full_url,
+            custom_headers: request_custom_headers,
+        };
         tauri::async_runtime::spawn_blocking(move || {
             let conn = open_db()?;
-            resolve_stored_provider_models_config(
-                &provider_id,
-                &expected_provider_type,
-                is_full_url,
-                custom_headers,
-                load_providers(&conn)?,
-            )
+            resolve_stored_provider_models_config(draft, load_providers(&conn)?)
         })
         .await
         .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
@@ -573,14 +572,179 @@ struct ProviderModelsRequestConfig {
     custom_headers: Vec<(String, String)>,
 }
 
-fn resolve_stored_provider_models_config(
-    provider_id: &str,
-    expected_provider_type: &str,
+/// WebUI 探测草稿里不含 Key 的那部分。api_key 为空时桌面端按 provider_id 从落库
+/// 配置补 Key；地址与协议以草稿为准，草稿没给的字段再按落库端点回填。
+#[derive(Debug, Default)]
+struct ProviderModelsDraft {
+    provider_id: String,
+    provider_type: String,
+    /// `credentials[].id`；为空或找不到时退回供应商默认 Key。
+    credential_id: String,
+    base_url: String,
+    models_url: String,
     is_full_url: Option<bool>,
     custom_headers: Option<Vec<(String, String)>>,
+}
+
+/// 落库供应商的一个已知端点：主地址或 `endpointConfigs[*]`（`{origin}` 模板已按源展开）。
+#[derive(Debug)]
+struct StoredProviderEndpoint {
+    base_url: String,
+    models_url: Option<String>,
+    is_full_url: bool,
+}
+
+/// 端点地址里的源地址占位；与 TS `PROVIDER_ORIGIN_PLACEHOLDER` 同一字面量。
+const PROVIDER_ORIGIN_PLACEHOLDER: &str = "{origin}";
+
+impl StoredProviderEndpoint {
+    fn from_value(value: &Value) -> Self {
+        Self {
+            base_url: trimmed_string_field(value, "baseUrl").unwrap_or_default(),
+            models_url: trimmed_string_field(value, "modelsUrl"),
+            is_full_url: value
+                .get("isFullUrl")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        }
+    }
+
+    /// 地址含 `{origin}` 时按每个启用的源各展开一份；绝对地址原样一份。
+    fn expand_origins(self, origins: &[String]) -> Vec<Self> {
+        let templated = self.base_url.contains(PROVIDER_ORIGIN_PLACEHOLDER)
+            || self
+                .models_url
+                .as_deref()
+                .is_some_and(|url| url.contains(PROVIDER_ORIGIN_PLACEHOLDER));
+        if !templated {
+            return vec![self];
+        }
+        origins
+            .iter()
+            .map(|origin| Self {
+                base_url: self.base_url.replace(PROVIDER_ORIGIN_PLACEHOLDER, origin),
+                models_url: self
+                    .models_url
+                    .as_deref()
+                    .map(|url| url.replace(PROVIDER_ORIGIN_PLACEHOLDER, origin)),
+                is_full_url: self.is_full_url,
+            })
+            .collect()
+    }
+}
+
+/// 供应商已启用的源地址（`origins[*].url`；跳过 `enabled == false` 与非对象条目）。
+fn stored_provider_origins(provider: &Value) -> Vec<String> {
+    provider
+        .get("origins")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter(|origin| origin.is_object())
+                .filter(|origin| origin.get("enabled").and_then(Value::as_bool) != Some(false))
+                .filter_map(|origin| trimmed_string_field(origin, "url"))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn trimmed_string_field(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+}
+
+/// 主地址排在首位，随后是每个渠道端点（跳过非对象条目，交给 TS 归一化丢弃），
+/// `{origin}` 模板按启用的源展开；源地址本身也算已知主机（端点全是绝对地址时
+/// 备用源同样能通过主机校验）。
+fn stored_provider_endpoints(provider: &Value) -> Vec<StoredProviderEndpoint> {
+    let origins = stored_provider_origins(provider);
+    let mut endpoints = StoredProviderEndpoint::from_value(provider).expand_origins(&origins);
+    if let Some(configs) = provider.get("endpointConfigs").and_then(Value::as_object) {
+        endpoints.extend(
+            configs
+                .values()
+                .filter(|endpoint| endpoint.is_object())
+                .flat_map(|endpoint| {
+                    StoredProviderEndpoint::from_value(endpoint).expand_origins(&origins)
+                }),
+        );
+    }
+    endpoints.extend(origins.into_iter().map(|origin| StoredProviderEndpoint {
+        base_url: origin,
+        models_url: None,
+        is_full_url: false,
+    }));
+    endpoints
+}
+
+/// `host:port` 形式的地址归属键；解析失败（非绝对 URL 等）返回 None，由后续
+/// 真正发请求的地方报格式错误。
+fn url_host_key(raw: &str) -> Option<String> {
+    let url = reqwest::Url::parse(raw.trim()).ok()?;
+    let host = url.host_str()?.to_ascii_lowercase();
+    Some(match url.port_or_known_default() {
+        Some(port) => format!("{host}:{port}"),
+        None => host,
+    })
+}
+
+fn same_endpoint_url(left: &str, right: &str) -> bool {
+    left.trim().trim_end_matches('/') == right.trim().trim_end_matches('/')
+}
+
+/// 草稿地址只能落在该供应商已知的主机上：落库 Key 不能被一次改地址的探测
+/// 请求带去任意主机。
+fn ensure_known_provider_host(
+    raw: &str,
+    known_hosts: &HashSet<String>,
+    label: &str,
+) -> Result<(), String> {
+    match url_host_key(raw) {
+        Some(host) if known_hosts.contains(&host) => Ok(()),
+        _ => Err(format!(
+            "{label} 的主机不在该供应商已保存的地址范围内，请先保存供应商配置或直接填写 API Key"
+        )),
+    }
+}
+
+/// 按 `credential_id` 从 `credentials[]` 取 Key；未指定或找不到时退回默认
+/// Key（供应商 `apiKey`，缺省再看 `credentials[0]`）。指定的凭据存在但没配 Key
+/// 时直接报错，不能悄悄换成别的 Key 去探测。
+fn resolve_stored_provider_api_key(
+    provider: &Value,
+    credential_id: &str,
+) -> Result<String, String> {
+    let credentials = provider.get("credentials").and_then(Value::as_array);
+    if !credential_id.is_empty() {
+        let matched = credentials.and_then(|items| {
+            items.iter().find(|credential| {
+                credential.get("id").and_then(Value::as_str).map(str::trim) == Some(credential_id)
+            })
+        });
+        if let Some(credential) = matched {
+            return trimmed_string_field(credential, "apiKey")
+                .ok_or_else(|| "所选凭据未配置 API Key".to_string());
+        }
+    }
+    trimmed_string_field(provider, "apiKey")
+        .or_else(|| {
+            credentials
+                .and_then(|items| items.first())
+                .and_then(|credential| trimmed_string_field(credential, "apiKey"))
+        })
+        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())
+}
+
+fn resolve_stored_provider_models_config(
+    draft: ProviderModelsDraft,
     providers: Option<Value>,
 ) -> Result<ProviderModelsRequestConfig, String> {
-    let provider_id = provider_id.trim();
+    let provider_id = draft.provider_id.trim();
     if provider_id.is_empty() {
         return Err("请先填写 API Key".to_string());
     }
@@ -591,35 +755,62 @@ fn resolve_stored_provider_models_config(
         .into_iter()
         .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
         .ok_or_else(|| "未找到已保存的供应商".to_string())?;
-    let stored_provider_type = provider
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
-    if stored_provider_type != expected_provider_type.trim() {
-        return Err("供应商类型与已保存配置不匹配".to_string());
-    }
-    let api_key = provider
-        .get("apiKey")
-        .and_then(Value::as_str)
-        .map(str::trim)
+
+    // 协议以草稿为准：探测同一供应商的其它渠道时草稿带的是该渠道的协议类型，
+    // 它只影响路径拼接与鉴权头名，不改变 Key 会发往哪台主机。
+    let provider_type = Some(draft.provider_type.trim())
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())?;
-    let base_url = provider
-        .get("baseUrl")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let models_url = provider
-        .get("modelsUrl")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
+        .or_else(|| trimmed_string_field(&provider, "type"))
+        .unwrap_or_default();
+    let api_key = resolve_stored_provider_api_key(&provider, draft.credential_id.trim())?;
+
+    let endpoints = stored_provider_endpoints(&provider);
+    let known_hosts: HashSet<String> = endpoints
+        .iter()
+        .flat_map(|endpoint| {
+            [
+                Some(endpoint.base_url.as_str()),
+                endpoint.models_url.as_deref(),
+            ]
+        })
+        .flatten()
+        .filter_map(url_host_key)
+        .collect();
+
+    let draft_base_url = draft.base_url.trim();
+    let draft_models_url = draft.models_url.trim();
+    // 草稿没带 Base URL → 主地址；带了 → 主机必须已知，再按完整地址找到对应端点，
+    // 让 modelsUrl / isFullUrl 从同一个端点回填而不是串到主地址上。
+    let matched_endpoint = if draft_base_url.is_empty() {
+        endpoints.first()
+    } else {
+        ensure_known_provider_host(draft_base_url, &known_hosts, "Base URL")?;
+        endpoints
+            .iter()
+            .find(|endpoint| same_endpoint_url(&endpoint.base_url, draft_base_url))
+    };
+    if !draft_models_url.is_empty() {
+        ensure_known_provider_host(draft_models_url, &known_hosts, "模型列表地址")?;
+    }
+    let base_url = if draft_base_url.is_empty() {
+        matched_endpoint
+            .map(|endpoint| endpoint.base_url.clone())
+            .unwrap_or_default()
+    } else {
+        draft_base_url.to_string()
+    };
+    let models_url = if draft_models_url.is_empty() {
+        matched_endpoint.and_then(|endpoint| endpoint.models_url.clone())
+    } else {
+        Some(draft_models_url.to_string())
+    };
+    let is_full_url = draft
+        .is_full_url
+        .unwrap_or_else(|| matched_endpoint.is_some_and(|endpoint| endpoint.is_full_url));
+
     Ok(ProviderModelsRequestConfig {
-        provider_type: stored_provider_type.to_string(),
+        provider_type,
         base_url,
         api_key,
         use_system_proxy: provider
@@ -627,13 +818,8 @@ fn resolve_stored_provider_models_config(
             .and_then(Value::as_bool)
             .unwrap_or(false),
         models_url,
-        is_full_url: is_full_url.unwrap_or_else(|| {
-            provider
-                .get("isFullUrl")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        }),
-        custom_headers: custom_headers.unwrap_or_else(|| {
+        is_full_url,
+        custom_headers: draft.custom_headers.unwrap_or_else(|| {
             provider
                 .get("customHeaders")
                 .and_then(Value::as_array)
@@ -651,6 +837,253 @@ fn resolve_stored_provider_models_config(
         }),
     })
 }
+
+// ---------------------------------------------------------------------------
+// 模型连通测试（WebUI 走网关桥）
+// ---------------------------------------------------------------------------
+
+/// 端点级鉴权头覆盖；与前端 buildProtocolAuthHeaders 同一语义。
+#[derive(Debug, Default, Clone, PartialEq)]
+struct ProviderCheckAuthOverride {
+    header_name: String,
+    prefix: Option<String>,
+}
+
+/// 协议缺省的鉴权头名与前缀。KEEP IN SYNC: crates/agent-ui/src/lib/providers/
+/// registry/protocols.ts 的 PROVIDER_PROTOCOL_AUTH_HEADER。
+fn protocol_default_auth(protocol: &str) -> (&'static str, &'static str) {
+    match protocol {
+        "anthropic-messages" => ("x-api-key", ""),
+        "google-generative-ai" => ("x-goog-api-key", ""),
+        _ => ("Authorization", "Bearer "),
+    }
+}
+
+/// 该请求应携带的鉴权头名：端点覆盖优先，否则协议缺省。
+fn provider_check_auth_header_name(protocol: &str, auth: &ProviderCheckAuthOverride) -> String {
+    let name = auth.header_name.trim();
+    if name.is_empty() {
+        protocol_default_auth(protocol).0.to_string()
+    } else {
+        name.to_string()
+    }
+}
+
+fn provider_check_has_auth_header(
+    headers: &[(String, String)],
+    protocol: &str,
+    auth: &ProviderCheckAuthOverride,
+) -> bool {
+    let expected = provider_check_auth_header_name(protocol, auth);
+    headers
+        .iter()
+        .any(|(name, value)| name.eq_ignore_ascii_case(&expected) && !value.trim().is_empty())
+}
+
+/// 按协议与端点覆盖生成鉴权头；改了头名却没给前缀时按无前缀处理（api-key 类头
+/// 不带 Bearer），沿用协议缺省头名时才继承缺省前缀。
+fn build_provider_check_auth_headers(
+    protocol: &str,
+    auth: &ProviderCheckAuthOverride,
+    api_key: &str,
+) -> Vec<(String, String)> {
+    let (default_name, default_prefix) = protocol_default_auth(protocol);
+    let header_name = provider_check_auth_header_name(protocol, auth);
+    let renamed = !header_name.eq_ignore_ascii_case(default_name);
+    let prefix = auth.prefix.clone().unwrap_or_else(|| {
+        if renamed {
+            String::new()
+        } else {
+            default_prefix.to_string()
+        }
+    });
+    let mut out = vec![(header_name, format!("{prefix}{api_key}"))];
+    if protocol == "anthropic-messages" {
+        out.push((
+            "anthropic-version".to_string(),
+            crate::services::provider_models::ANTHROPIC_API_VERSION.to_string(),
+        ));
+    }
+    out
+}
+
+/// WebUI 脱敏态：请求没带鉴权头时按 `provider_id` + `credential_id` 从落库供应商
+/// 取 Key，并把鉴权头补进去。与模型列表拉取同一条红线：请求地址的主机必须属于
+/// 该供应商已保存的地址集合，落库 Key 不能被一次改地址的测试带去任意主机。
+fn resolve_stored_provider_check_headers(
+    providers: Option<Value>,
+    provider_id: &str,
+    credential_id: &str,
+    url: &str,
+    protocol: &str,
+    auth: &ProviderCheckAuthOverride,
+    mut headers: Vec<(String, String)>,
+) -> Result<Vec<(String, String)>, String> {
+    let provider_id = provider_id.trim();
+    if provider_id.is_empty() {
+        return Err("请先填写 API Key".to_string());
+    }
+    let providers = providers
+        .and_then(|value| value.as_array().cloned())
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let provider = providers
+        .into_iter()
+        .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let api_key = resolve_stored_provider_api_key(&provider, credential_id.trim())?;
+    let known_hosts: HashSet<String> = stored_provider_endpoints(&provider)
+        .iter()
+        .flat_map(|endpoint| {
+            [
+                Some(endpoint.base_url.as_str()),
+                endpoint.models_url.as_deref(),
+            ]
+        })
+        .flatten()
+        .filter_map(url_host_key)
+        .collect();
+    ensure_known_provider_host(url, &known_hosts, "请求地址")?;
+
+    for (name, value) in build_provider_check_auth_headers(protocol, auth, &api_key) {
+        headers.retain(|(existing, _)| !existing.eq_ignore_ascii_case(&name));
+        headers.push((name, value));
+    }
+    Ok(headers)
+}
+
+pub async fn handle_provider_check_model(
+    request: proto::ProviderCheckModelRequest,
+) -> Result<proto::ProviderCheckModelResponse, String> {
+    let body = if request.body_json.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str::<Value>(&request.body_json)
+            .map_err(|_| "请求体不是有效 JSON".to_string())?
+    };
+    let headers: Vec<(String, String)> = request
+        .headers
+        .iter()
+        .map(|header| (header.name.clone(), header.value.clone()))
+        .collect();
+    let protocol = request.protocol.trim().to_string();
+    let auth = ProviderCheckAuthOverride {
+        header_name: request.auth_header_name.trim().to_string(),
+        prefix: request.auth_prefix.clone(),
+    };
+    let headers = if provider_check_has_auth_header(&headers, &protocol, &auth) {
+        headers
+    } else {
+        let provider_id = request.provider_id.clone();
+        let credential_id = request.credential_id.clone();
+        let url = request.url.clone();
+        let protocol = protocol.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let conn = open_db()?;
+            resolve_stored_provider_check_headers(
+                load_providers(&conn)?,
+                &provider_id,
+                &credential_id,
+                &url,
+                &protocol,
+                &auth,
+                headers,
+            )
+        })
+        .await
+        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
+    };
+    let result = crate::services::provider_check::check_provider_model(
+        crate::services::provider_check::ProviderCheckRequest {
+            url: request.url,
+            headers,
+            body,
+            use_system_proxy: request.use_system_proxy,
+            timeout_ms: request.timeout_ms,
+        },
+    )
+    .await?;
+    let result_json = serde_json::to_string(&result)
+        .map_err(|error| format!("序列化模型连通测试结果失败：{error}"))?;
+    Ok(proto::ProviderCheckModelResponse { result_json })
+}
+
+// --- image generation (begin) -----------------------------------------------
+// 图像生成（WebUI 走网关桥）：脱敏态补 Key、主机白名单与超时钳制全部复用模型
+// 连通测试那一套（resolve_stored_provider_check_headers），只是改打生图服务。
+pub async fn handle_provider_generate_image(
+    request: proto::ProviderGenerateImageRequest,
+) -> Result<proto::ProviderGenerateImageResponse, String> {
+    let body = if request.body_json.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str::<Value>(&request.body_json)
+            .map_err(|_| "请求体不是有效 JSON".to_string())?
+    };
+    let headers: Vec<(String, String)> = request
+        .headers
+        .iter()
+        .map(|header| (header.name.clone(), header.value.clone()))
+        .collect();
+    let protocol = request.protocol.trim().to_string();
+    let auth = ProviderCheckAuthOverride {
+        header_name: request.auth_header_name.trim().to_string(),
+        prefix: request.auth_prefix.clone(),
+    };
+    let headers = if provider_check_has_auth_header(&headers, &protocol, &auth) {
+        headers
+    } else {
+        let provider_id = request.provider_id.clone();
+        let credential_id = request.credential_id.clone();
+        let url = request.url.clone();
+        let protocol = protocol.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let conn = open_db()?;
+            resolve_stored_provider_check_headers(
+                load_providers(&conn)?,
+                &provider_id,
+                &credential_id,
+                &url,
+                &protocol,
+                &auth,
+                headers,
+            )
+        })
+        .await
+        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
+    };
+    let result = crate::services::image_generation::generate_provider_image(
+        crate::services::image_generation::ProviderGenerateImageRequest {
+            url: request.url,
+            headers,
+            body,
+            use_system_proxy: request.use_system_proxy,
+            timeout_ms: request.timeout_ms,
+        },
+    )
+    .await?;
+    let result_json =
+        serde_json::to_string(&result).map_err(|error| format!("序列化图像生成结果失败：{error}"))?;
+    Ok(proto::ProviderGenerateImageResponse { result_json })
+}
+
+// 下载远端生图结果：不带鉴权头，也不查落库供应商——URL 是供应商刚在响应里发回
+// 的一次性地址，桌面端只做 http(s) 与体积校验。
+pub async fn handle_provider_download_image(
+    request: proto::ProviderDownloadImageRequest,
+) -> Result<proto::ProviderDownloadImageResponse, String> {
+    let result = crate::services::image_generation::download_provider_image(
+        crate::services::image_generation::ProviderDownloadImageRequest {
+            url: request.url,
+            use_system_proxy: request.use_system_proxy,
+            timeout_ms: request.timeout_ms,
+        },
+    )
+    .await?;
+    let result_json =
+        serde_json::to_string(&result).map_err(|error| format!("序列化图片下载结果失败：{error}"))?;
+    Ok(proto::ProviderDownloadImageResponse { result_json })
+}
+// --- image generation (end) -------------------------------------------------
 
 pub async fn handle_skill_files_list() -> Result<proto::SkillFilesListResponse, String> {
     tauri::async_runtime::spawn_blocking(system_list_skill_files_sync)
@@ -1015,6 +1448,8 @@ pub async fn handle_fs_write_text(
             expected_content_hash,
             // WebUI 文件管理器的直接写入,不属于对话轮,不做检查点捕获。
             None,
+            // --- image generation ---：base64 供生图工具把图片存进工作区。
+            Some(request.encoding),
         )
     })
     .await
@@ -1498,6 +1933,8 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "Delete"
             | "Edit"
             | "ExitPlanMode"
+            // --- image generation ---
+            | "generate_image"
             | "Glob"
             | "Grep"
             | "Image"
@@ -1847,7 +2284,12 @@ fn sanitize_provider_summary(provider: &Value) -> Result<Value, String> {
         "id",
         "name",
         "type",
+        "presetId",
+        "enabled",
+        "dialect",
+        "defaultChatProtocol",
         "models",
+        "modelOrder",
         "activeModels",
         "requestFormat",
         "reasoning",
@@ -1859,6 +2301,42 @@ fn sanitize_provider_summary(provider: &Value) -> Result<Value, String> {
             payload.insert(key.to_string(), value.clone());
         }
     }
+    // 渠道配置只带路由相关的公开字段：地址、请求头、观测值与凭据引用一律不进摘要，
+    // 凭据列表（含 Key）整体不进摘要。
+    if let Some(Value::Object(endpoints)) = source.get("endpointConfigs") {
+        let sanitized = endpoints
+            .iter()
+            .map(|(protocol, config)| {
+                let mut summary = serde_json::Map::new();
+                if let Some(config) = config.as_object() {
+                    for key in ["enabled", "dialect", "quirks", "source"] {
+                        if let Some(value) = config.get(key) {
+                            summary.insert(key.to_string(), value.clone());
+                        }
+                    }
+                }
+                (protocol.clone(), Value::Object(summary))
+            })
+            .collect::<serde_json::Map<_, _>>();
+        payload.insert("endpointConfigs".to_string(), Value::Object(sanitized));
+    }
+    // 源地址只带 id 与启停：地址与观测值同端点一样不进摘要。
+    if let Some(Value::Array(origins)) = source.get("origins") {
+        let sanitized = origins
+            .iter()
+            .filter_map(Value::as_object)
+            .map(|origin| {
+                let mut summary = serde_json::Map::new();
+                for key in ["id", "enabled"] {
+                    if let Some(value) = origin.get(key) {
+                        summary.insert(key.to_string(), value.clone());
+                    }
+                }
+                Value::Object(summary)
+            })
+            .collect();
+        payload.insert("origins".to_string(), Value::Array(sanitized));
+    }
 
     Ok(Value::Object(payload))
 }
@@ -1868,9 +2346,12 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::{
-        flatten_history_messages_json, flatten_history_messages_json_window,
-        is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
-        resolve_stored_provider_models_config, sanitize_provider_summaries,
+        build_provider_check_auth_headers, flatten_history_messages_json,
+        flatten_history_messages_json_window, is_builtin_share_tool_name, parse_runs_limit,
+        provider_check_has_auth_header, redact_builtin_tool_content_json,
+        resolve_stored_provider_check_headers, resolve_stored_provider_models_config,
+        sanitize_provider_summaries, stored_provider_endpoints, url_host_key,
+        ProviderCheckAuthOverride, ProviderModelsDraft,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -1942,6 +2423,410 @@ mod tests {
     }
 
     #[test]
+    fn provider_summaries_carry_registry_fields_without_credentials_or_endpoint_secrets() {
+        let result = sanitize_provider_summaries(Some(json!([
+            {
+                "id": "provider-a",
+                "name": "A",
+                "type": "codex",
+                "presetId": "openai",
+                "enabled": false,
+                "dialect": "openai",
+                "defaultChatProtocol": "openai-responses",
+                "modelOrder": ["gpt-5"],
+                "credentials": [
+                    { "id": "default", "label": "主 Key", "apiKey": "secret-key", "enabled": true }
+                ],
+                "endpointConfigs": {
+                    "openai-responses": {
+                        "enabled": true,
+                        "baseUrl": "https://relay.example.com/v1",
+                        "dialect": "openai",
+                        "quirks": { "supportsStore": false },
+                        "auth": { "headerName": "X-Token" },
+                        "credentialId": "default",
+                        "headers": [{ "key": "X-Secret", "value": "leak" }],
+                        "lastProbe": { "at": 1, "status": "ok" },
+                        "source": "user"
+                    }
+                }
+            }
+        ])))
+        .expect("sanitize provider summaries");
+
+        assert_eq!(result[0]["presetId"], "openai");
+        assert_eq!(result[0]["enabled"], false);
+        assert_eq!(result[0]["dialect"], "openai");
+        assert_eq!(result[0]["defaultChatProtocol"], "openai-responses");
+        assert_eq!(result[0]["modelOrder"], json!(["gpt-5"]));
+        assert_eq!(result[0]["credentials"], Value::Null);
+        assert_eq!(
+            result[0]["endpointConfigs"],
+            json!({
+                "openai-responses": {
+                    "enabled": true,
+                    "dialect": "openai",
+                    "quirks": { "supportsStore": false },
+                    "source": "user"
+                }
+            })
+        );
+        let serialized = serde_json::to_string(&result).expect("serialize");
+        assert!(!serialized.contains("secret-key"));
+        assert!(!serialized.contains("leak"));
+        assert!(!serialized.contains("relay.example.com"));
+    }
+
+    #[test]
+    fn provider_summary_keeps_origin_ids_but_not_addresses() {
+        let result = sanitize_provider_summaries(Some(json!([
+            {
+                "id": "provider-a",
+                "name": "A",
+                "origins": [
+                    { "id": "o1", "url": "https://packyapi.com", "lastProbe": { "at": 1, "status": "ok" } },
+                    { "id": "o2", "url": "https://packy.ai", "enabled": false },
+                    "malformed"
+                ]
+            }
+        ])))
+        .expect("sanitize provider summaries");
+        assert_eq!(
+            result[0]["origins"],
+            json!([{ "id": "o1" }, { "id": "o2", "enabled": false }])
+        );
+        let serialized = serde_json::to_string(&result).expect("serialize");
+        assert!(!serialized.contains("packyapi.com"));
+        assert!(!serialized.contains("lastProbe"));
+    }
+
+    /// 源地址模式的落库供应商：端点以 `{origin}` 占位，两个源，其中一个停用。
+    fn origin_mode_provider() -> Value {
+        json!([{
+            "id": "provider-o",
+            "type": "codex",
+            "baseUrl": "https://packyapi.com/v1",
+            "apiKey": "sk-origin",
+            "origins": [
+                { "id": "o1", "url": "https://packyapi.com" },
+                { "id": "o2", "url": "https://packy.ai" },
+                { "id": "o3", "url": "https://disabled.example.com", "enabled": false }
+            ],
+            "endpointConfigs": {
+                "openai-completions": {
+                    "baseUrl": "{origin}/v1",
+                    "modelsUrl": "{origin}/v1/models"
+                },
+                "anthropic-messages": { "baseUrl": "https://relay.example.com/anthropic" }
+            }
+        }])
+    }
+
+    #[test]
+    fn provider_known_hosts_include_expanded_origins() {
+        let hosts: std::collections::HashSet<String> = stored_provider_endpoints(&origin_mode_provider()[0])
+            .iter()
+            .flat_map(|endpoint| {
+                [
+                    Some(endpoint.base_url.as_str()),
+                    endpoint.models_url.as_deref(),
+                ]
+            })
+            .flatten()
+            .filter_map(url_host_key)
+            .collect();
+        assert!(hosts.contains("packyapi.com:443"));
+        assert!(hosts.contains("packy.ai:443"));
+        assert!(hosts.contains("relay.example.com:443"));
+        assert!(!hosts.contains("disabled.example.com:443"));
+
+        // 备用源上的草稿地址通过主机校验；停用的源与未知主机仍被拒绝。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://packy.ai/v1".to_string(),
+                ..stored_draft("provider-o", "codex")
+            },
+            Some(origin_mode_provider()),
+        )
+        .expect("backup origin is a known host");
+        assert_eq!(config.base_url, "https://packy.ai/v1");
+        assert_eq!(config.api_key, "sk-origin");
+        assert_eq!(
+            config.models_url.as_deref(),
+            Some("https://packy.ai/v1/models")
+        );
+        assert!(resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://disabled.example.com/v1".to_string(),
+                ..stored_draft("provider-o", "codex")
+            },
+            Some(origin_mode_provider()),
+        )
+        .is_err());
+        assert!(resolve_stored_provider_check_headers(
+            Some(origin_mode_provider()),
+            "provider-o",
+            "",
+            "https://packy.ai/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_ok());
+    }
+
+    fn stored_draft(provider_id: &str, provider_type: &str) -> ProviderModelsDraft {
+        ProviderModelsDraft {
+            provider_id: provider_id.to_string(),
+            provider_type: provider_type.to_string(),
+            ..ProviderModelsDraft::default()
+        }
+    }
+
+    /// 多 Key + 多渠道的落库供应商：主地址在 stored.example.com，另有一个
+    /// anthropic 渠道落在 relay.example.com。
+    fn multi_endpoint_provider() -> Value {
+        json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1",
+            "apiKey": "sk-primary",
+            "modelsUrl": "https://stored.example.com/v1/models",
+            "credentials": [
+                { "id": "default", "label": "", "apiKey": "sk-primary", "enabled": true },
+                { "id": "backup", "label": "备用", "apiKey": "sk-backup", "enabled": true },
+                { "id": "empty", "label": "空", "apiKey": "", "apiKeyConfigured": false, "enabled": true }
+            ],
+            "endpointConfigs": {
+                "anthropic-messages": {
+                    "enabled": true,
+                    "baseUrl": "https://relay.example.com/anthropic",
+                    "modelsUrl": "https://relay.example.com/anthropic/v1/models",
+                    "isFullUrl": true
+                },
+                "openai-completions": "malformed-entry"
+            }
+        }])
+    }
+
+    fn header_value<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+
+    #[test]
+    fn provider_check_auth_headers_follow_protocol_and_endpoint_override() {
+        let none = ProviderCheckAuthOverride::default();
+        let completions = build_provider_check_auth_headers("openai-completions", &none, "k");
+        assert_eq!(
+            header_value(&completions, "authorization"),
+            Some("Bearer k")
+        );
+        let messages = build_provider_check_auth_headers("anthropic-messages", &none, "k");
+        assert_eq!(header_value(&messages, "x-api-key"), Some("k"));
+        assert_eq!(
+            header_value(&messages, "anthropic-version"),
+            Some(crate::services::provider_models::ANTHROPIC_API_VERSION)
+        );
+        let gemini = build_provider_check_auth_headers("google-generative-ai", &none, "k");
+        assert_eq!(header_value(&gemini, "x-goog-api-key"), Some("k"));
+
+        // 改了头名却没给前缀：按无前缀处理；显式给前缀时照用。
+        let renamed = ProviderCheckAuthOverride {
+            header_name: "api-key".to_string(),
+            prefix: None,
+        };
+        let azure = build_provider_check_auth_headers("openai-completions", &renamed, "k");
+        assert_eq!(header_value(&azure, "api-key"), Some("k"));
+        let prefixed = ProviderCheckAuthOverride {
+            header_name: "X-Token".to_string(),
+            prefix: Some("Token ".to_string()),
+        };
+        let custom = build_provider_check_auth_headers("openai-responses", &prefixed, "k");
+        assert_eq!(header_value(&custom, "x-token"), Some("Token k"));
+
+        assert!(provider_check_has_auth_header(
+            &completions,
+            "openai-completions",
+            &none
+        ));
+        assert!(!provider_check_has_auth_header(
+            &completions,
+            "anthropic-messages",
+            &none
+        ));
+        assert!(!provider_check_has_auth_header(
+            &[("Authorization".to_string(), "".to_string())],
+            "openai-completions",
+            &none
+        ));
+    }
+
+    #[test]
+    fn provider_check_resolves_stored_credential_by_id_and_injects_auth_header() {
+        let base_headers = vec![("content-type".to_string(), "application/json".to_string())];
+        let headers = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "backup",
+            "https://stored.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("backup credential");
+        assert_eq!(
+            header_value(&headers, "authorization"),
+            Some("Bearer sk-backup")
+        );
+        assert_eq!(
+            header_value(&headers, "content-type"),
+            Some("application/json")
+        );
+
+        // 未指定 / 未知凭据退回默认 Key；指定了但没配 Key 的凭据直接报错。
+        for credential_id in ["", "missing"] {
+            let headers = resolve_stored_provider_check_headers(
+                Some(multi_endpoint_provider()),
+                "provider-a",
+                credential_id,
+                "https://stored.example.com/v1/responses",
+                "openai-responses",
+                &ProviderCheckAuthOverride::default(),
+                base_headers.clone(),
+            )
+            .expect("default credential");
+            assert_eq!(
+                header_value(&headers, "authorization"),
+                Some("Bearer sk-primary")
+            );
+        }
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "empty",
+            "https://stored.example.com/v1/responses",
+            "openai-responses",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .is_err());
+
+        // 次级渠道主机（anthropic 端点）也算已知主机，鉴权头按该协议生成。
+        let relay = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://relay.example.com/anthropic/v1/messages",
+            "anthropic-messages",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("relay host is known");
+        assert_eq!(header_value(&relay, "x-api-key"), Some("sk-primary"));
+        assert_eq!(header_value(&relay, "authorization"), None);
+    }
+
+    // --- image generation (begin) -------------------------------------------
+    // 生图走网关桥时复用同一个解析器：这里锁住"生图地址同样受主机白名单约束、
+    // 鉴权头按借道的接口生成"这两条，避免以后给生图开后门。
+    #[test]
+    fn provider_generate_image_reuses_the_check_credential_and_host_rules() {
+        let base_headers = vec![("content-type".to_string(), "application/json".to_string())];
+        // 借 OpenAI 家族端点打 /images/generations：主机已知，补 Bearer。
+        let images = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "backup",
+            "https://stored.example.com/v1/images/generations",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("images endpoint on a known host");
+        assert_eq!(
+            header_value(&images, "authorization"),
+            Some("Bearer sk-backup")
+        );
+
+        // 借 Gemini 端点打 :generateContent：鉴权头换成 x-goog-api-key。
+        let gemini = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://stored.example.com/v1beta/models/gemini-3-pro-image:generateContent",
+            "google-generative-ai",
+            &ProviderCheckAuthOverride::default(),
+            base_headers.clone(),
+        )
+        .expect("gemini endpoint on a known host");
+        assert_eq!(header_value(&gemini, "x-goog-api-key"), Some("sk-primary"));
+        assert_eq!(header_value(&gemini, "authorization"), None);
+
+        // 陌生主机一样被拒：生图请求不得把 Key 送去没保存过的地址。
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://evil.example.com/v1/images/generations",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            base_headers,
+        )
+        .is_err());
+    }
+    // --- image generation (end) ---------------------------------------------
+
+    #[test]
+    fn provider_check_rejects_unknown_hosts_and_missing_provider() {
+        let error = resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://evil.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .expect_err("unknown host must be rejected");
+        assert!(!error.contains("sk-primary"));
+
+        // 端口不同即视为另一台主机。
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-a",
+            "default",
+            "https://stored.example.com:8443/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_err());
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "",
+            "default",
+            "https://stored.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_err());
+        assert!(resolve_stored_provider_check_headers(
+            Some(multi_endpoint_provider()),
+            "provider-z",
+            "default",
+            "https://stored.example.com/v1/chat/completions",
+            "openai-completions",
+            &ProviderCheckAuthOverride::default(),
+            vec![],
+        )
+        .is_err());
+    }
+
+    #[test]
     fn provider_models_resolves_redacted_webui_config_from_matching_provider() {
         let providers = json!([{
             "id": "provider-a",
@@ -1952,12 +2837,10 @@ mod tests {
             "modelsUrl": "https://stored.example.com/models",
             "useSystemProxy": true
         }]);
+        // 旧请求：只带 provider_id / type，其余全部回填落库值。
         assert_eq!(
             resolve_stored_provider_models_config(
-                "provider-a",
-                "codex",
-                None,
-                None,
+                stored_draft("provider-a", "codex"),
                 Some(providers),
             )
             .expect("stored provider config"),
@@ -1974,6 +2857,149 @@ mod tests {
     }
 
     #[test]
+    fn provider_models_picks_stored_credential_by_id() {
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                credential_id: "backup".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.api_key, "sk-backup");
+        assert_eq!(config.base_url, "https://stored.example.com/v1");
+    }
+
+    #[test]
+    fn provider_models_falls_back_to_default_key_for_unknown_or_missing_credential_id() {
+        for credential_id in ["", "  ", "not-a-credential"] {
+            let config = resolve_stored_provider_models_config(
+                ProviderModelsDraft {
+                    credential_id: credential_id.to_string(),
+                    ..stored_draft("provider-a", "codex")
+                },
+                Some(multi_endpoint_provider()),
+            )
+            .expect("stored provider config");
+            assert_eq!(
+                config.api_key, "sk-primary",
+                "credential_id={credential_id:?}"
+            );
+        }
+
+        // 供应商默认 Key 缺失时退回 credentials[0]。
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1",
+            "credentials": [{ "id": "first", "apiKey": "sk-first" }]
+        }]);
+        let config = resolve_stored_provider_models_config(
+            stored_draft("provider-a", "codex"),
+            Some(providers),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.api_key, "sk-first");
+    }
+
+    #[test]
+    fn provider_models_rejects_selected_credential_without_key() {
+        assert_eq!(
+            resolve_stored_provider_models_config(
+                ProviderModelsDraft {
+                    credential_id: "empty".to_string(),
+                    ..stored_draft("provider-a", "codex")
+                },
+                Some(multi_endpoint_provider()),
+            )
+            .expect_err("credential without key"),
+            "所选凭据未配置 API Key"
+        );
+    }
+
+    #[test]
+    fn provider_models_keeps_draft_endpoint_on_known_secondary_host() {
+        // 探测 anthropic 渠道：草稿带该渠道的协议类型与地址，主机在 endpointConfigs 里。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://relay.example.com/anthropic".to_string(),
+                credential_id: "backup".to_string(),
+                ..stored_draft("provider-a", "claude_code")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.provider_type, "claude_code");
+        assert_eq!(config.base_url, "https://relay.example.com/anthropic");
+        assert_eq!(config.api_key, "sk-backup");
+        // modelsUrl / isFullUrl 从同一个渠道端点回填，而不是串到主地址的配置上。
+        assert_eq!(
+            config.models_url.as_deref(),
+            Some("https://relay.example.com/anthropic/v1/models")
+        );
+        assert!(config.is_full_url);
+
+        // 同主机但不是已保存的完整地址：沿用草稿地址，modelsUrl 不再从别的端点回填。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                base_url: "https://relay.example.com/other".to_string(),
+                ..stored_draft("provider-a", "claude_code")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.base_url, "https://relay.example.com/other");
+        assert_eq!(config.models_url, None);
+        assert!(!config.is_full_url);
+
+        // 草稿显式给出的 models_url 也只要求主机已知。
+        let config = resolve_stored_provider_models_config(
+            ProviderModelsDraft {
+                models_url: "https://stored.example.com/custom/models".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            Some(multi_endpoint_provider()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.base_url, "https://stored.example.com/v1");
+        assert_eq!(
+            config.models_url.as_deref(),
+            Some("https://stored.example.com/custom/models")
+        );
+    }
+
+    #[test]
+    fn provider_models_rejects_draft_urls_on_unknown_hosts() {
+        let providers = multi_endpoint_provider();
+        for draft in [
+            ProviderModelsDraft {
+                base_url: "https://evil.example.net/v1".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            // 同主机不同端口也视为陌生主机。
+            ProviderModelsDraft {
+                base_url: "https://stored.example.com:8443/v1".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            ProviderModelsDraft {
+                models_url: "https://evil.example.net/models".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+            ProviderModelsDraft {
+                base_url: "not a url".to_string(),
+                ..stored_draft("provider-a", "codex")
+            },
+        ] {
+            let error = resolve_stored_provider_models_config(draft, Some(providers.clone()))
+                .expect_err("unknown host must be rejected");
+            assert!(
+                error.contains("不在该供应商已保存的地址范围内"),
+                "unexpected error: {error}"
+            );
+        }
+    }
+
+    #[test]
     fn provider_models_custom_headers_fall_back_to_stored_only_when_draft_omits_them() {
         let providers = json!([{
             "id": "provider-a",
@@ -1985,10 +3011,7 @@ mod tests {
 
         // 草稿没带请求头（proto 的 custom_headers 缺省）→ 沿用落库配置。
         let inherited = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            None,
+            stored_draft("provider-a", "codex"),
             Some(providers.clone()),
         )
         .expect("stored provider config");
@@ -1999,10 +3022,10 @@ mod tests {
 
         // 草稿把请求头清空了 → 按空集发，绝不回落到落库配置（否则用户删不掉伪装头）。
         let cleared = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            Some(Vec::new()),
+            ProviderModelsDraft {
+                custom_headers: Some(Vec::new()),
+                ..stored_draft("provider-a", "codex")
+            },
             Some(providers.clone()),
         )
         .expect("stored provider config");
@@ -2010,10 +3033,13 @@ mod tests {
 
         // 草稿显式给了头 → 覆盖落库配置。
         let overridden = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            Some(vec![("User-Agent".to_string(), "draft-cli/2.0".to_string())]),
+            ProviderModelsDraft {
+                custom_headers: Some(vec![(
+                    "User-Agent".to_string(),
+                    "draft-cli/2.0".to_string(),
+                )]),
+                ..stored_draft("provider-a", "codex")
+            },
             Some(providers),
         )
         .expect("stored provider config");
@@ -2033,10 +3059,10 @@ mod tests {
             "isFullUrl": false
         }]);
         let config = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            Some(true),
-            None,
+            ProviderModelsDraft {
+                is_full_url: Some(true),
+                ..stored_draft("provider-a", "codex")
+            },
             Some(providers),
         )
         .expect("stored provider config with draft full URL mode");
@@ -2047,22 +3073,41 @@ mod tests {
     }
 
     #[test]
-    fn provider_models_rejects_mismatched_stored_provider_type() {
+    fn provider_models_uses_draft_protocol_and_falls_back_to_stored_type() {
         let providers = json!([{
             "id": "provider-a",
             "type": "claude_code",
+            "baseUrl": "https://stored.example.com",
             "apiKey": "stored-secret"
         }]);
+        // 草稿带的协议类型优先：同一供应商的其它渠道会带不同的 legacy type。
+        let config = resolve_stored_provider_models_config(
+            stored_draft("provider-a", "codex"),
+            Some(providers.clone()),
+        )
+        .expect("stored provider config");
+        assert_eq!(config.provider_type, "codex");
+        // 草稿没带类型时退回落库类型。
+        let config =
+            resolve_stored_provider_models_config(stored_draft("provider-a", ""), Some(providers))
+                .expect("stored provider config");
+        assert_eq!(config.provider_type, "claude_code");
+    }
+
+    #[test]
+    fn provider_models_requires_provider_id_or_saved_provider() {
+        assert_eq!(
+            resolve_stored_provider_models_config(stored_draft("", "codex"), None)
+                .expect_err("missing provider id"),
+            "请先填写 API Key"
+        );
         assert_eq!(
             resolve_stored_provider_models_config(
-                "provider-a",
-                "codex",
-                None,
-                None,
-                Some(providers),
+                stored_draft("provider-b", "codex"),
+                Some(multi_endpoint_provider()),
             )
-            .expect_err("provider type mismatch"),
-            "供应商类型与已保存配置不匹配"
+            .expect_err("unknown provider"),
+            "未找到已保存的供应商"
         );
     }
 

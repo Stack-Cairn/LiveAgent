@@ -78,13 +78,14 @@ export function resolveAnthropicContextWindow(
 export function resolveAnthropicKnownModelLimits(
   modelId: string | undefined,
   baseUrl?: string,
-): { contextWindow: number; maxOutputToken: number } | undefined {
+): { contextWindow: number; maxInputTokens?: number; maxOutputToken: number } | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
   const known = findCatalogModel("claude_code", trimmedId);
   if (!known) return undefined;
   return {
     contextWindow: resolveAnthropicContextWindow(trimmedId, known.contextWindow, baseUrl),
+    ...(known.maxInputTokens ? { maxInputTokens: known.maxInputTokens } : {}),
     maxOutputToken: known.maxOutputToken,
   };
 }

@@ -13,6 +13,7 @@ import {
   normalizeChatRuntimeControlsForProvider,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
+  resolveProviderChatRoute,
   type SelectedModel,
   serializeSelectedModelJson,
   setSelectedModel,
@@ -91,6 +92,15 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     ? settings.customProviders.find((item) => item.id === activeSelectedModel.customProviderId)
     : undefined;
   const currentChatModelId = activeSelectedModel?.model;
+  // 路由解析只在供应商对象或模型 id 变化时重算：它在每次渲染都跑会随流式
+  // 更新的高频重渲染放大（供应商对象随 settings 整体替换，身份即失效依据）。
+  const currentChatRoute = useMemo(
+    () =>
+      currentChatProvider && currentChatModelId
+        ? resolveProviderChatRoute(currentChatProvider, currentChatModelId)
+        : undefined,
+    [currentChatProvider, currentChatModelId],
+  );
 
   const handleSelectModel = useCallback(
     (selection: SelectedModel) => {
@@ -144,11 +154,11 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
 
   const chatRuntimeReasoningParams = useMemo(
     () => ({
-      providerId: currentChatProvider?.type,
-      requestFormat: currentChatProvider?.requestFormat,
+      providerId: currentChatRoute?.adapterProviderId,
+      requestFormat: currentChatRoute?.requestFormat,
       modelId: currentChatModelId,
     }),
-    [currentChatModelId, currentChatProvider?.requestFormat, currentChatProvider?.type],
+    [currentChatModelId, currentChatRoute?.adapterProviderId, currentChatRoute?.requestFormat],
   );
   const chatRuntimeReasoningOptions = useMemo(
     () => getChatRuntimeReasoningLevelsForProvider(chatRuntimeReasoningParams),
@@ -156,8 +166,11 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
   );
   const chatRuntimeThinkingAlwaysOn = useMemo(
     () =>
-      isThinkingAlwaysOnForModel(currentChatProvider?.type ?? "claude_code", currentChatModelId),
-    [currentChatModelId, currentChatProvider?.type],
+      isThinkingAlwaysOnForModel(
+        currentChatRoute?.adapterProviderId ?? "claude_code",
+        currentChatModelId,
+      ),
+    [currentChatModelId, currentChatRoute?.adapterProviderId],
   );
   const chatRuntimeControlsForCurrentProvider = useMemo(
     () =>

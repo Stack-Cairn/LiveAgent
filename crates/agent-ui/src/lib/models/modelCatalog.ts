@@ -1,6 +1,12 @@
 import {
   type CatalogInputModality,
+  type CatalogModality,
   type CatalogModelEntry,
+  type CatalogModelPricing,
+  type CatalogModelStatus,
+  type CatalogModelThinking,
+  type CatalogPriceRates,
+  type CatalogPriceTier,
   type CatalogProviderId,
   MODEL_CATALOG,
 } from "./catalog.generated";
@@ -10,17 +16,65 @@ import {
 // ---------------------------------------------------------------------------
 // 数据来自 catalog.generated.ts（构建期由 scripts/generate-model-catalog.mjs
 // 对 OpenAI 采用 Codex models.json 优先、models.dev 补充，其余供应商来自
-// models.dev；由 update-model-catalog.yml 定时刷新）。本文件与生成文件均由共享包提供。
+// models.dev；由 update-model-catalog.yml 定时刷新）。同一份快照也派生了
+// 预设注册表的供应商事实（presets.generated.ts），预设按 sourceId 直接读
+// MODEL_CATALOG 的分区作为渠道模型列表。本文件与生成文件均由共享包提供。
 // 思考档位/API 选择/compat 等请求路径行为不归这里管——那些是流式运行时
-// （pi-ai）的领域；这里只回答"这个模型的窗口/输出上限与输入模态是什么"。
+// （pi-ai）的领域；这里只回答"这个模型的窗口/输出上限、模态与目录事实是什么"。
+// 能力默认值（工具/结构化输出/图片/文件/推理）的解析见 modelCapabilities.ts。
 
 export { MODEL_CATALOG, MODEL_CATALOG_SNAPSHOT_DATE } from "./catalog.generated";
-export type { CatalogInputModality, CatalogModelEntry, CatalogProviderId };
+export type {
+  CatalogInputModality,
+  CatalogModality,
+  CatalogModelEntry,
+  CatalogModelPricing,
+  CatalogModelStatus,
+  CatalogModelThinking,
+  CatalogPriceRates,
+  CatalogPriceTier,
+  CatalogProviderId,
+};
 
 // 与 settings 的 ProviderId 结构相同；本模块不 import settings（避免环）。
 export type CatalogAppProviderId = "claude_code" | "codex" | "gemini" | "xai" | "deepseek";
 
 export type ModelLimits = { contextWindow: number; maxOutputToken: number };
+
+/** 目录限额：在 ModelLimits 之上带可选的输入侧预算（models.dev limit.input）。 */
+export type CatalogModelLimits = ModelLimits & { maxInputTokens?: number };
+
+/** 一次目录命中：条目、所在分区与实际命中的 id 形态（候选链归一化后）。 */
+export type CatalogModelMatch = {
+  entry: CatalogModelEntry;
+  catalogProviderId: CatalogProviderId;
+  /** 命中索引的键：可能是小写、去 @版本/[1m]/日期后缀、剥聚合商前缀后的形态 */
+  matchedId: string;
+};
+
+export function catalogEntryLimits(entry: CatalogModelEntry): CatalogModelLimits {
+  return {
+    contextWindow: entry.contextWindow,
+    maxOutputToken: entry.maxOutputToken,
+    ...(entry.maxInputTokens ? { maxInputTokens: entry.maxInputTokens } : {}),
+  };
+}
+
+// 价格只是目录的展示元数据（models.dev 公布的原生标价，USD / 1M tokens）：
+// 项目不做计费，运行时喂给流式层的 Model.cost 仍为零，这里不参与任何计算。
+
+/** 展示用价格格式：`$0.15`、`$1.75`、`$14`；0 显示为 freeLabel（默认"免费"）。 */
+export function formatCatalogPrice(value: number, freeLabel = "免费"): string {
+  if (!Number.isFinite(value) || value < 0) return "—";
+  if (value === 0) return freeLabel;
+  // 目录里最多 6 位小数（models.dev 原值），去掉尾零后原样展示，不做四舍五入到分。
+  return `$${value.toFixed(6).replace(/\.?0+$/, "")}`;
+}
+
+/** 目录条目是否免费：输入与输出都公布为 0（未公布价格不算免费）。 */
+export function catalogEntryIsFree(entry: Pick<CatalogModelEntry, "pricing">): boolean {
+  return entry.pricing?.input === 0 && entry.pricing?.output === 0;
+}
 
 /** 应用供应商类型 → 目录 provider 的唯一映射点。 */
 export const CATALOG_PROVIDER_BY_APP_PROVIDER: Record<CatalogAppProviderId, CatalogProviderId> = {
@@ -109,41 +163,56 @@ function getCatalogIndex(catalogProvider: CatalogProviderId): Map<string, Catalo
   return index;
 }
 
-export function findCatalogModel(
-  providerId: CatalogAppProviderId,
+/** 在单个目录分区内按候选链查找（预设按 sourceId 列模型时的查找入口）。 */
+export function findCatalogModelInSection(
+  catalogProvider: CatalogProviderId,
   modelId: string | undefined,
-): CatalogModelEntry | undefined {
+): CatalogModelMatch | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
-  const index = getCatalogIndex(CATALOG_PROVIDER_BY_APP_PROVIDER[providerId]);
+  const index = getCatalogIndex(catalogProvider);
   for (const candidate of normalizeModelIdCandidates(trimmedId)) {
     const entry = index.get(candidate);
-    if (entry) return entry;
+    if (entry) return { entry, catalogProviderId: catalogProvider, matchedId: candidate };
   }
   return undefined;
 }
 
-// 中转聚合常把 A 家模型挂在 B 家供应商类型下（grok/deepseek/glm/qwen 等挂在
-// Anthropic/OpenAI 兼容中转），供应商作用域查不到时按 id 跨供应商回查，避免
-// 真实限额被本供应商兜底值顶掉。国内厂商分区（deepseek/zhipuai/alibaba 等）
-// 没有对应的应用供应商类型，只经这里消费。目录 id 全局小写唯一（生成期跨
-// 分区去重+目录不变量测试锁死）；候选链放外层——更精确的 id 形态优先于
-// 供应商声明序。已有正式应用供应商的模型也允许出现在通用中转端点中，因此仍可
-// 经这条协议无关的元数据回查路径命中。
-const CATALOG_PROVIDER_IDS = Object.keys(MODEL_CATALOG) as CatalogProviderId[];
-
-export function findCatalogModelAcrossProviders(
+export function findCatalogModel(
+  providerId: CatalogAppProviderId,
   modelId: string | undefined,
 ): CatalogModelEntry | undefined {
+  return findCatalogModelInSection(CATALOG_PROVIDER_BY_APP_PROVIDER[providerId], modelId)?.entry;
+}
+
+// 中转聚合常把 A 家模型挂在 B 家供应商类型下（grok/deepseek/glm/qwen 等挂在
+// Anthropic/OpenAI 兼容中转），供应商作用域查不到时按 id 跨供应商回查，避免
+// 真实限额被本供应商兜底值顶掉。国内厂商与聚合站分区没有对应的应用供应商
+// 类型，只经这里与预设 sourceId 消费。同一 id 可能出现在多个分区（CN/国际
+// 双渠道、聚合站转售），分区顺序即生成脚本 SECTIONS 的裁决序：官方分区在前、
+// 平台与聚合站在后；候选链放外层——更精确的 id 形态优先于分区声明序。已有
+// 正式应用供应商的模型也允许出现在通用中转端点中，因此仍可经这条协议无关的
+// 元数据回查路径命中。
+const CATALOG_PROVIDER_IDS = Object.keys(MODEL_CATALOG) as CatalogProviderId[];
+
+export function findCatalogModelMatchAcrossProviders(
+  modelId: string | undefined,
+): CatalogModelMatch | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
   for (const candidate of normalizeModelIdCandidates(trimmedId)) {
     for (const catalogProvider of CATALOG_PROVIDER_IDS) {
       const entry = getCatalogIndex(catalogProvider).get(candidate);
-      if (entry) return entry;
+      if (entry) return { entry, catalogProviderId: catalogProvider, matchedId: candidate };
     }
   }
   return undefined;
+}
+
+export function findCatalogModelAcrossProviders(
+  modelId: string | undefined,
+): CatalogModelEntry | undefined {
+  return findCatalogModelMatchAcrossProviders(modelId)?.entry;
 }
 
 // 展示用的输入模态查询：先按供应商作用域查，未命中再跨供应商回查（与限额
@@ -160,20 +229,19 @@ export function resolveModelInputModalities(
 
 export function resolveModelLimitsAcrossProviders(
   modelId: string | undefined,
-): ModelLimits | undefined {
+): CatalogModelLimits | undefined {
   const entry = findCatalogModelAcrossProviders(modelId);
-  if (!entry) return undefined;
-  return { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
+  return entry ? catalogEntryLimits(entry) : undefined;
 }
 
 export function resolveModelLimits(
   providerId: CatalogAppProviderId,
   modelId: string | undefined,
-): ModelLimits | undefined {
+): CatalogModelLimits | undefined {
   const entry = findCatalogModel(providerId, modelId);
-  if (!entry) return undefined;
-  // 目录数据在生成期已过 normalizeModelLimits，直接透传。
-  return { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
+  // 目录数据在生成期已过 normalizeModelLimits，直接透传；limit.input 缺省
+  // 时不伪造 maxInputTokens。
+  return entry ? catalogEntryLimits(entry) : undefined;
 }
 
 export function getProviderFallbackLimits(providerId: CatalogAppProviderId): ModelLimits {

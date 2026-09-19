@@ -1,6 +1,11 @@
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
-import type { PromptCacheHintMode, ProviderId } from "../../settings";
+import type {
+  PromptCacheHintMode,
+  ProviderChatProtocol,
+  ProviderId,
+  ProviderWireDialect,
+} from "../../settings";
 import {
   attachAnthropicMessagesNativeAttachments,
   attachGeminiGenerativeAINativeAttachments,
@@ -28,7 +33,14 @@ export type ProviderPayloadMiddleware = (
 ) => StreamOptionsEx;
 
 export type FinalizeProviderStreamOptionsParams = {
+  /** 旧适配器家族：缓存 / 附件 / 存储等按家族分支的中间件仍读它。 */
   providerId: ProviderId;
+  /**
+   * 路由结果。厂商方言中间件（xai / deepseek Responses 剥离、原生搜索注入）优先
+   * 读它们；缺省（旧调用方）退回按 providerId 与 Base URL 推导。
+   */
+  protocol?: ProviderChatProtocol;
+  dialect?: ProviderWireDialect;
   baseUrl: string;
   options: StreamOptionsEx;
   context?: Context;
@@ -131,6 +143,8 @@ const DEFAULT_PAYLOAD_INTERCEPTORS: readonly PayloadInterceptor[] = [
     intercept: (options, params) =>
       attachProviderNativeWebSearch(params.providerId, options, params.nativeWebSearch, {
         baseUrl: params.baseUrl,
+        protocol: params.protocol,
+        dialect: params.dialect,
       }),
   },
   {
@@ -139,6 +153,8 @@ const DEFAULT_PAYLOAD_INTERCEPTORS: readonly PayloadInterceptor[] = [
       attachXaiResponsesPayloadCompat(options, {
         providerId: params.providerId,
         baseUrl: params.baseUrl,
+        protocol: params.protocol,
+        dialect: params.dialect,
       }),
   },
   {
@@ -146,6 +162,8 @@ const DEFAULT_PAYLOAD_INTERCEPTORS: readonly PayloadInterceptor[] = [
     intercept: (options, params) =>
       attachDeepSeekResponsesPayloadCompat(options, {
         providerId: params.providerId,
+        protocol: params.protocol,
+        dialect: params.dialect,
         model: params.model,
         context: params.context,
       }),
