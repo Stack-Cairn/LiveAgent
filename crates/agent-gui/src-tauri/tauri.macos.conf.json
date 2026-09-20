@@ -6,7 +6,7 @@
         "title": "",
         "width": 1400,
         "height": 800,
-        "minWidth": 960,
+        "minWidth": 480,
         "minHeight": 600,
         "visible": false,
         "backgroundThrottling": "disabled",

@@ -6,7 +6,7 @@
         "title": "LiveAgent",
         "width": 1400,
         "height": 800,
-        "minWidth": 960,
+        "minWidth": 480,
         "minHeight": 600,
         "backgroundThrottling": "disabled",
         "decorations": false

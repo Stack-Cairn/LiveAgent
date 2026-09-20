@@ -90,6 +90,15 @@ function SidebarProvider({
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
   }, [isMobile, setOpen]);
 
+  // Leaving the compact layout must also drop the mobile sheet. `openMobile`
+  // is not read while the pinned sidebar is mounted, so a sheet left open
+  // before widening survives as a stale `true` and re-opens itself — scrim and
+  // all — the next time the window narrows past the breakpoint. That reads as
+  // the sidebar popping open on its own while the user is only resizing.
+  React.useEffect(() => {
+    if (!isMobile) setOpenMobile(false);
+  }, [isMobile]);
+
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
