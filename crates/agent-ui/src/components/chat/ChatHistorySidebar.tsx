@@ -4,6 +4,7 @@ import {
   Blend,
   Brain,
   Cable,
+  Check,
   ChevronRight,
   CirclePlus,
   Clock3,
@@ -29,6 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
+import { Input } from "@liveagent/ui/components/ui/input";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -82,7 +84,11 @@ import {
   SidebarTrigger,
 } from "../ui/sidebar";
 import { HistoryRow, ProjectGroupHeader, ProjectRow } from "./ChatHistorySidebarRows";
-import { PROJECT_ICON_BUTTON_CLASS, SIDEBAR_CONTEXT_MENU_CLASS } from "./ChatHistorySidebarStyles";
+import {
+  HISTORY_RENAME_INPUT_CLASS,
+  PROJECT_ICON_BUTTON_CLASS,
+  SIDEBAR_CONTEXT_MENU_CLASS,
+} from "./ChatHistorySidebarStyles";
 import type {
   ChatHistorySidebarProps,
   WorkspaceProjectRemoveOptions,
@@ -212,6 +218,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onProjectsCollapsedChange,
     onRecentCollapsedChange,
     onCreateProject,
+    onCreateWorkspaceGroup,
     onRenameWorkspaceGroup,
     onDeleteWorkspaceGroup,
     onMoveProjectToGroup,
@@ -821,9 +828,41 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   // Archiving must always leave at least one active workspace behind.
   const canArchiveProjects = Boolean(onArchiveProject) && activeProjects.length > 1;
   const [archivedGroupOpen, setArchivedGroupOpen] = useState(false);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupDraft, setGroupDraft] = useState("");
+  // Base UI resolves the "+" menu's return-focus target synchronously while the
+  // menu unmounts — the same commit that mounts the draft input — so the trigger
+  // would take focus straight back and the empty-draft blur would silently close
+  // the row again ("new group does nothing"). The menu's finalFocus consumes this
+  // one-shot flag and the effect below owns focus placement, which is why the
+  // input has no autoFocus.
+  const suppressAddMenuReturnFocusRef = useRef(false);
+  const groupDraftInputRef = useRef<HTMLInputElement | null>(null);
+  // Enter/Escape mark the blur as handled so onBlur commits exactly once —
+  // without it, committing on Enter unmounts a focused input and the trailing
+  // focusout creates the group a second time.
+  const skipNextGroupBlurCommitRef = useRef(false);
+
+  useEffect(() => {
+    if (!creatingGroup) return;
+    skipNextGroupBlurCommitRef.current = false;
+    groupDraftInputRef.current?.focus();
+  }, [creatingGroup]);
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [groupRenameDraft, setGroupRenameDraft] = useState("");
   const { confirm: requestGroupDeleteConfirm, dialog: groupDeleteDialog } = useConfirmDialog();
+
+  const commitNewGroup = useCallback(() => {
+    const name = groupDraft.trim();
+    if (name) onCreateWorkspaceGroup?.(name);
+    setCreatingGroup(false);
+    setGroupDraft("");
+  }, [groupDraft, onCreateWorkspaceGroup]);
+
+  const cancelNewGroup = useCallback(() => {
+    setCreatingGroup(false);
+    setGroupDraft("");
+  }, []);
 
   const commitGroupRename = useCallback(() => {
     const name = groupRenameDraft.trim();
@@ -1556,18 +1595,65 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           <Share2 className="size-3.5" />
                         </Button>
                       )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className={cn(PROJECT_ICON_BUTTON_CLASS, "hover:!bg-transparent")}
-                        title={t("chat.workspaceCreate")}
-                        aria-label={t("chat.workspaceCreate")}
-                        disabled={sectionsDisabled || !onCreateProject}
-                        onClick={() => onCreateProject?.()}
-                      >
-                        <Plus className="size-3.5" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className={cn(PROJECT_ICON_BUTTON_CLASS, "hover:!bg-transparent")}
+                              title={t("chat.workspaceAdd")}
+                              aria-label={t("chat.workspaceAdd")}
+                              disabled={
+                                sectionsDisabled || (!onCreateProject && !onCreateWorkspaceGroup)
+                              }
+                            />
+                          }
+                        >
+                          <Plus className="size-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          side="right"
+                          align="start"
+                          sideOffset={6}
+                          className={SIDEBAR_CONTEXT_MENU_CLASS}
+                          finalFocus={() => {
+                            if (suppressAddMenuReturnFocusRef.current) {
+                              suppressAddMenuReturnFocusRef.current = false;
+                              return false;
+                            }
+                            return true;
+                          }}
+                        >
+                          <DropdownMenuItem
+                            disabled={sectionsDisabled || !onCreateProject}
+                            onSelect={() => onCreateProject?.()}
+                            className="gap-2 text-xs"
+                          >
+                            <Plus className="size-3.5" />
+                            <span>{t("chat.workspaceCreate")}</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={sectionsDisabled || !onCreateWorkspaceGroup}
+                            onSelect={() => {
+                              // Only this item mounts an input in the same commit that
+                              // unmounts the menu, so only this item opts out of Base
+                              // UI's return-focus. "New workspace" opens a dialog that
+                              // owns its own focus and still wants the trigger back.
+                              suppressAddMenuReturnFocusRef.current = true;
+                              onProjectsCollapsedChange?.(false);
+                              if (hiddenProjectCount > 0) setShowAllProjects(true);
+                              setCreatingGroup(true);
+                              setGroupDraft("");
+                            }}
+                            className="gap-2 text-xs"
+                          >
+                            <Folder className="size-3.5" />
+                            <span>{t("chat.workspaceGroupCreate")}</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                   {actionErrorMessage && (
@@ -1603,6 +1689,81 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                         >
                           <FolderOpen className="size-4 shrink-0" />
                           <span className="truncate">{t("chat.workspaceDropFolder")}</span>
+                        </div>
+                      ) : null}
+                      {creatingGroup ? (
+                        // Same geometry as ProjectGroupHeader and ProjectRow —
+                        // pl-1 + px-2 + a 16px icon slot + gap-2 puts the draft name
+                        // at 36px, the shared left edge for every row in this list.
+                        // Committing the name must not shift it.
+                        <div className="flex sidebar-list-row items-center rounded-lg pl-1">
+                          <div className="flex sidebar-list-row min-w-0 flex-1 items-center gap-2 px-2">
+                            <Folder
+                              aria-hidden="true"
+                              className="size-4 shrink-0 text-muted-foreground"
+                            />
+                            <Input
+                              ref={groupDraftInputRef}
+                              value={groupDraft}
+                              onChange={(event) => setGroupDraft(event.currentTarget.value)}
+                              onBlur={() => {
+                                if (skipNextGroupBlurCommitRef.current) {
+                                  skipNextGroupBlurCommitRef.current = false;
+                                  return;
+                                }
+                                commitNewGroup();
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  skipNextGroupBlurCommitRef.current = true;
+                                  commitNewGroup();
+                                } else if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  skipNextGroupBlurCommitRef.current = true;
+                                  cancelNewGroup();
+                                }
+                              }}
+                              aria-label={t("chat.workspaceGroupNamePlaceholder")}
+                              placeholder={t("chat.workspaceGroupNamePlaceholder")}
+                              className={HISTORY_RENAME_INPUT_CLASS}
+                            />
+                          </div>
+                          {/* Mirrors ProjectRow's action column: gap-0.5 between
+                          28px hit targets, 14px glyphs, flush to the row's
+                          right edge. Both buttons preventDefault on mousedown so
+                          focus stays in the input — otherwise the blur lands
+                          first, commits the draft, and the row unmounts before
+                          the click reaches its handler (pressing ✕ would create
+                          the group). Arming the skip flag then covers the blur
+                          that the unmount itself dispatches. */}
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <button
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                skipNextGroupBlurCommitRef.current = true;
+                              }}
+                              onClick={commitNewGroup}
+                              className="flex size-7 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
+                              aria-label={t("chat.workspaceGroupCreate")}
+                            >
+                              <Check className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                skipNextGroupBlurCommitRef.current = true;
+                              }}
+                              onClick={cancelNewGroup}
+                              className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+                              aria-label={t("chat.cancel")}
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ) : null}
                       {renderedSections.grouped.map((section) => {

@@ -37,23 +37,9 @@ const icons = [
 const env = await createDomTestEnv({
   mocks: {
     "@liveagent/ui/components/IconSet": Object.fromEntries(icons.map((name) => [name, () => null])),
-    "@liveagent/ui/components/ui/button": {
-      Button: ({ children, onClick, ...props }) =>
-        React.createElement(
-          "button",
-          { onClick, disabled: props.disabled, "aria-expanded": props["aria-expanded"], "aria-label": props["aria-label"], "aria-pressed": props["aria-pressed"], "data-testid": props["data-testid"] },
-          children,
-        ),
-    },
     "@liveagent/ui/components/ui/confirm-dialog": {
       useConfirmDialog: () => ({ requestConfirmDialog: async () => false }),
     },
-    "@liveagent/ui/components/ui/dropdown-menu": Object.fromEntries(
-      ["DropdownMenu", "DropdownMenuContent", "DropdownMenuItem", "DropdownMenuTrigger"].map(
-        (name) => [name, ({ children }) => React.createElement("div", null, children)],
-      ),
-    ),
-    "@liveagent/ui/components/ui/input": { Input: (props) => React.createElement("input", props) },
     "@liveagent/ui/i18n/index": { useLocale: () => ({ t: (key) => key, locale: "en" }) },
     "@tanstack/react-virtual": { useVirtualizer: () => virtualizer },
     "./ChatHistorySidebarRows": {
@@ -64,7 +50,7 @@ const env = await createDomTestEnv({
         "data-project-id": project.id, "aria-expanded": expanded,
         onClick: () => { onToggleExpanded?.(project); onSelectProject(project); },
       }, project.name),
-      ProjectGroupHeader: () => null,
+      ProjectGroupHeader: ({ group, memberCount }) => React.createElement("div", { "data-group-id": group.id }, `${group.name} (${memberCount})`),
     },
     "./ConversationSearchDialog": {
       ConversationSearchDialog: (props) => {
@@ -205,16 +191,6 @@ test("search reveals a workspace hidden beyond the collapsed workspace limit", a
   } finally { await act(async () => root.unmount()); }
 });
 
-test("workspace plus opens creation directly without a group menu", async () => {
-  const container = document.createElement("div"), root = createRoot(container);
-  let creations = 0;
-  try {
-    await act(async () => root.render(React.createElement(ChatHistorySidebar, { ...baseProps, onCreateProject: () => { creations++; } })));
-    await click(container.querySelector('[aria-label="chat.workspaceCreate"]'));
-    assert.equal(creations, 1);
-    assert.equal(container.querySelector('[aria-label="chat.workspaceAdd"]'), null);
-  } finally { await act(async () => root.unmount()); }
-});
 
 
 test("an expanded inactive workspace collapses on the first click even when it becomes active", async () => {
@@ -244,4 +220,157 @@ test("an expanded inactive workspace collapses on the first click even when it b
     await act(async () => { props = { ...props, activeProjectId: "a" }; render(); });
     assert.equal(row("a").getAttribute("aria-expanded"), "true");
   } finally { await act(async () => root.unmount()); }
+});
+
+
+// Use real Base UI menus and inputs to exercise portal closing and return focus.
+function menuItem(label) {
+  return [...document.querySelectorAll('[role="menuitem"]')]
+    .find((element) => element.textContent === label);
+}
+async function mountGroupSidebar(overrides = {}) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const groups = [], projects = [];
+  function Harness() {
+    const [collapsed, setCollapsed] = React.useState(overrides.projectsCollapsed ?? false);
+    const [workspaceProjectGroups, setGroups] = React.useState(overrides.workspaceProjectGroups ?? []);
+    return React.createElement(ChatHistorySidebar, {
+      ...baseProps, ...overrides, projectsCollapsed: collapsed, workspaceProjectGroups,
+      onProjectsCollapsedChange: setCollapsed,
+      onCreateProject: () => projects.push("created"),
+      onCreateWorkspaceGroup: (name) => {
+        groups.push(name);
+        setGroups((current) => [...current, { id: `new-${groups.length}`, name, projectPaths: [], createdAt: 1, updatedAt: 1 }]);
+      },
+      ...overrides.callbacks,
+    });
+  }
+  await act(async () => root.render(React.createElement(Harness)));
+  return {
+    container, groups, projects,
+    async start() {
+      await click(container.querySelector('[aria-label="chat.workspaceAdd"]'));
+      await click(menuItem("chat.workspaceGroupCreate"));
+      const input = container.querySelector('[aria-label="chat.workspaceGroupNamePlaceholder"]');
+      assert.ok(input, "new-group input is reachable through the plus menu");
+      assert.equal(document.activeElement, input, "closing the menu must not steal draft focus");
+      return input;
+    },
+    async cleanup() { await act(async () => root.unmount()); container.remove(); },
+  };
+}
+async function typeName(input, value) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+async function key(input, key, options = {}) {
+  await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...options })));
+}
+async function pointerClick(button) {
+  await act(async () => button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
+  await click(button);
+}
+
+test("workspace plus retains workspace creation alongside group creation", async () => {
+  const sidebar = await mountGroupSidebar();
+  try {
+    await click(sidebar.container.querySelector('[aria-label="chat.workspaceAdd"]'));
+    assert.ok(menuItem("chat.workspaceGroupCreate"));
+    await click(menuItem("chat.workspaceCreate"));
+    assert.deepEqual(sidebar.projects, ["created"]);
+    assert.deepEqual(sidebar.groups, []);
+  } finally { await sidebar.cleanup(); }
+});
+
+test("new group expands collapsed workspaces and commits a trimmed name once on Enter", async () => {
+  const sidebar = await mountGroupSidebar({ projectsCollapsed: true });
+  try {
+    const input = await sidebar.start();
+    assert.equal(sidebar.container.querySelector('[data-slot="sidebar-group"][aria-label="chat.workspaceSection"] button[aria-expanded]').getAttribute("aria-expanded"), "true");
+    await typeName(input, "  中文分组  ");
+    await key(input, "Enter");
+    assert.deepEqual(sidebar.groups, ["中文分组"]);
+    assert.equal(sidebar.container.contains(input), false);
+  } finally { await sidebar.cleanup(); }
+});
+
+test("new group supports blur and confirm, rejects blank names, and cancels by Escape or button", async () => {
+  const sidebar = await mountGroupSidebar();
+  try {
+    let input = await sidebar.start();
+    await typeName(input, "Blur group");
+    await act(async () => input.blur());
+    input = await sidebar.start();
+    await typeName(input, "Confirm group");
+    await pointerClick(sidebar.container.querySelector('[aria-label="chat.workspaceGroupCreate"]'));
+    input = await sidebar.start();
+    await typeName(input, "   ");
+    await key(input, "Enter");
+    input = await sidebar.start();
+    await typeName(input, "Cancel by key");
+    await key(input, "Escape");
+    input = await sidebar.start();
+    await typeName(input, "Cancel by button");
+    await pointerClick(sidebar.container.querySelector('[aria-label="chat.cancel"]'));
+    assert.deepEqual(sidebar.groups, ["Blur group", "Confirm group"]);
+    assert.equal(sidebar.container.contains(input), false);
+  } finally { await sidebar.cleanup(); }
+});
+
+test("Chinese IME confirmation does not prematurely create or cancel a group", async () => {
+  const sidebar = await mountGroupSidebar();
+  try {
+    const input = await sidebar.start();
+    await typeName(input, "中文");
+    await key(input, "Enter", { isComposing: true });
+    await key(input, "Escape", { isComposing: true });
+    await key(input, "Enter", { keyCode: 229 });
+    assert.deepEqual(sidebar.groups, []);
+    assert.ok(sidebar.container.contains(input));
+    await key(input, "Enter");
+    assert.deepEqual(sidebar.groups, ["中文"]);
+  } finally { await sidebar.cleanup(); }
+});
+
+test("workspace add respects disabled state and independent creation capabilities", async () => {
+  for (const overrides of [
+    { sectionsDisabled: true },
+    { callbacks: { onCreateProject: undefined, onCreateWorkspaceGroup: undefined } },
+  ]) {
+    const sidebar = await mountGroupSidebar(overrides);
+    try {
+      assert.equal(sidebar.container.querySelector('[aria-label="chat.workspaceAdd"]').disabled, true);
+    } finally { await sidebar.cleanup(); }
+  }
+  const sidebar = await mountGroupSidebar({ callbacks: { onCreateProject: undefined } });
+  try {
+    await click(sidebar.container.querySelector('[aria-label="chat.workspaceAdd"]'));
+    assert.equal(menuItem("chat.workspaceCreate").getAttribute("aria-disabled"), "true");
+    assert.notEqual(menuItem("chat.workspaceGroupCreate").getAttribute("aria-disabled"), "true");
+  } finally { await sidebar.cleanup(); }
+});
+
+
+test("created empty groups remain visible in empty and truncated workspace lists", async () => {
+  const manyProjects = Array.from({ length: 31 }, (_, index) => ({
+    id: `project-${index}`, name: `Project ${index}`, path: `/repo/${index}`,
+  }));
+  for (const projects of [[], manyProjects]) {
+    const sidebar = await mountGroupSidebar({
+      projects,
+      workspaceProjectGroups: projects.length ? [{
+        id: "large", name: "Large group", projectPaths: projects.map((project) => project.path), createdAt: 1, updatedAt: 1,
+      }] : [],
+    });
+    try {
+      const input = await sidebar.start();
+      await typeName(input, "New empty group");
+      await key(input, "Enter");
+      assert.equal(sidebar.container.querySelector('[data-group-id="new-1"]').textContent, "New empty group (0)");
+    } finally { await sidebar.cleanup(); }
+  }
 });
