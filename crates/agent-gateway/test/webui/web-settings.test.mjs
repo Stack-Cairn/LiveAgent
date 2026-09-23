@@ -486,6 +486,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
       xai: "high",
       deepseek: "high",
     },
+    reasoningByModel: {},
   });
 
   assert.deepEqual(settings.getChatRuntimeReasoningLevelsForProvider({}), []);
@@ -614,15 +615,17 @@ test("web chat runtime controls default and follow model-aware reasoning support
       thinkingEnabled: false,
       nativeWebSearchEnabled: false,
       planModeEnabled: false,
+      // 读路径只钳展示值(reasoning),存储桶原样透传,绝不把表外档从存储里抹掉。
       reasoning: "high",
       reasoningByProvider: {
         claude_code: "xhigh",
         codex_openai_responses: "xhigh",
         codex_openai_completions: "xhigh",
-        gemini: "high",
+        gemini: "xhigh",
         xai: "xhigh",
         deepseek: "xhigh",
       },
+      reasoningByModel: {},
     },
   );
   assert.deepEqual(
@@ -641,20 +644,21 @@ test("web chat runtime controls default and follow model-aware reasoning support
       thinkingEnabled: true,
       nativeWebSearchEnabled: true,
       planModeEnabled: false,
+      // gpt-5.2 的表含 xhigh:表内档原样展示,存储桶透传。
       reasoning: "xhigh",
       reasoningByProvider: {
         claude_code: "xhigh",
         codex_openai_responses: "xhigh",
         codex_openai_completions: "xhigh",
-        // gemini / xai 未在 reasoningByProvider 输入里显式给出，也未参与本次调用
-        // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
         gemini: "xhigh",
         xai: "xhigh",
         deepseek: "xhigh",
       },
+      reasoningByModel: {},
     },
   );
 
+  // 档位写入按 (供应商类型, 模型) 落模型桶,供应商桶保持默认不动。
   assert.deepEqual(
     settings.updateChatRuntimeControlsForProvider(
       defaults.chatRuntimeControls,
@@ -668,11 +672,14 @@ test("web chat runtime controls default and follow model-aware reasoning support
       reasoning: "xhigh",
       reasoningByProvider: {
         claude_code: "high",
-        codex_openai_responses: "xhigh",
+        codex_openai_responses: "high",
         codex_openai_completions: "high",
         gemini: "high",
         xai: "high",
         deepseek: "high",
+      },
+      reasoningByModel: {
+        codex_openai_responses: { "gpt-5.2": "xhigh" },
       },
     },
   );

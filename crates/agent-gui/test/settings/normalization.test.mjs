@@ -647,6 +647,7 @@ test("chat runtime controls default and follow provider model reasoning support"
       xai: "high",
       deepseek: "high",
     },
+    reasoningByModel: {},
   });
 
   // 没有 modelId 就无法解析目录，拿不到任何档位。
@@ -767,15 +768,18 @@ test("chat runtime controls default and follow provider model reasoning support"
       thinkingEnabled: false,
       nativeWebSearchEnabled: false,
       planModeEnabled: false,
+      // 读路径只钳展示值(reasoning):窄表模型的钳制绝不回写存储桶,否则会
+      // 抹掉宽表模型选的表外档(旧实现正是「档位被重置」的元凶)。
       reasoning: "high",
       reasoningByProvider: {
         claude_code: "xhigh",
         codex_openai_responses: "xhigh",
         codex_openai_completions: "xhigh",
-        gemini: "high",
+        gemini: "xhigh",
         xai: "xhigh",
         deepseek: "xhigh",
       },
+      reasoningByModel: {},
     },
   );
   assert.deepEqual(
@@ -799,21 +803,22 @@ test("chat runtime controls default and follow provider model reasoning support"
       thinkingEnabled: true,
       nativeWebSearchEnabled: true,
       planModeEnabled: false,
-      // 目录未命中（聚合命名）走标准四档兜底：存量 xhigh 钳回默认 high。
+      // 目录未命中（聚合命名）走标准四档兜底：存量 xhigh 只在展示值上钳回
+      // 默认 high,reasoningByProvider 原样透传。
       reasoning: "high",
       reasoningByProvider: {
         claude_code: "xhigh",
         codex_openai_responses: "xhigh",
-        codex_openai_completions: "high",
-        // gemini / xai 未在 reasoningByProvider 输入里显式给出，也未参与本次调用
-        // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
+        codex_openai_completions: "xhigh",
         gemini: "xhigh",
         xai: "xhigh",
         deepseek: "xhigh",
       },
+      reasoningByModel: {},
     },
   );
 
+  // 档位写入按 (供应商类型, 模型) 落模型桶,供应商桶保持默认不动。
   assert.deepEqual(
     settings.updateChatRuntimeControlsForProvider(
       defaults.chatRuntimeControls,
@@ -832,11 +837,14 @@ test("chat runtime controls default and follow provider model reasoning support"
       reasoning: "xhigh",
       reasoningByProvider: {
         claude_code: "high",
-        codex_openai_responses: "xhigh",
+        codex_openai_responses: "high",
         codex_openai_completions: "high",
         gemini: "high",
         xai: "high",
         deepseek: "high",
+      },
+      reasoningByModel: {
+        codex_openai_responses: { "gpt-5.2": "xhigh" },
       },
     },
   );
@@ -897,7 +905,149 @@ test("chat runtime controls default and follow provider model reasoning support"
       xai: "high",
       deepseek: "high",
     },
+    reasoningByModel: {},
   });
+});
+
+test("chat reasoning levels are stored per model and never bleed across models", () => {
+  const defaults = settings.getDefaultSettings();
+
+  // 场景还原:glm-5.3-flash(表 [low,high,max] 恒开)与 claude-sonnet-5
+  // (表含 xhigh)同属不同供应商桶;旧单桶方案里一边设 max/xhigh,另一边
+  // 显示钳成 high 且会被回写,表现为「切会话/分屏另一栏被重置」。
+  const withGlmMax = settings.updateChatRuntimeControlsForProvider(
+    defaults.chatRuntimeControls,
+    { reasoning: "max" },
+    { providerId: "deepseek", modelId: "glm-5.3-flash" },
+  );
+  assert.deepEqual(withGlmMax.reasoningByModel, {
+    deepseek: { "glm-5.3-flash": "max" },
+  });
+  // 本模型读回 max(表内档原样展示)。
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(withGlmMax, {
+      providerId: "deepseek",
+      modelId: "glm-5.3-flash",
+    }).reasoning,
+    "max",
+  );
+  // 同供应商类型下的其他模型不串档:回落供应商桶默认 high。
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(withGlmMax, {
+      providerId: "deepseek",
+      modelId: "deepseek-v4-flash",
+    }).reasoning,
+    "high",
+  );
+  // 另一供应商类型再写一档,互不影响。
+  const withClaudeXhigh = settings.updateChatRuntimeControlsForProvider(withGlmMax, {
+    reasoning: "xhigh",
+  }, { providerId: "claude_code", modelId: "claude-sonnet-5" });
+  assert.deepEqual(withClaudeXhigh.reasoningByModel, {
+    deepseek: { "glm-5.3-flash": "max" },
+    claude_code: { "claude-sonnet-5": "xhigh" },
+  });
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(withClaudeXhigh, {
+      providerId: "claude_code",
+      modelId: "claude-sonnet-5",
+    }).reasoning,
+    "xhigh",
+  );
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(withClaudeXhigh, {
+      providerId: "deepseek",
+      modelId: "glm-5.3-flash",
+    }).reasoning,
+    "max",
+  );
+
+  // 回归锁定(粘性重置):在窄表模型上只改非 reasoning 控件(如联网开关),
+  // 不得触碰任何档位桶——旧实现会把当前模型表外档钳平回写。
+  const webSearchToggled = settings.updateChatRuntimeControlsForProvider(
+    withClaudeXhigh,
+    { nativeWebSearchEnabled: false },
+    { providerId: "gemini", modelId: "gemini-2.5-flash" },
+  );
+  assert.deepEqual(webSearchToggled.reasoningByModel, withClaudeXhigh.reasoningByModel);
+  assert.equal(webSearchToggled.nativeWebSearchEnabled, false);
+
+  // 写时钳制:菜单只会提供表内档,这里兜住过期表单——glm 表没有 xhigh,
+  // 落桶值钳为默认 high,而不是存进一个永远展示不出的档。
+  const clampedWrite = settings.updateChatRuntimeControlsForProvider(
+    defaults.chatRuntimeControls,
+    { reasoning: "xhigh" },
+    { providerId: "deepseek", modelId: "glm-5.3-flash" },
+  );
+  assert.deepEqual(clampedWrite.reasoningByModel, {
+    deepseek: { "glm-5.3-flash": "high" },
+  });
+
+  // 读取优先级:模型桶 > 供应商桶 > 全局默认。
+  const withLegacyBucket = settings.normalizeChatRuntimeControlsForProvider(
+    {
+      ...defaults.chatRuntimeControls,
+      reasoningByProvider: {
+        ...defaults.chatRuntimeControls.reasoningByProvider,
+        deepseek: "low",
+      },
+      reasoningByModel: { deepseek: { "glm-5.3-flash": "max" } },
+    },
+    { providerId: "deepseek", modelId: "glm-5.3-flash" },
+  );
+  assert.equal(withLegacyBucket.reasoning, "max");
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(
+      {
+        ...defaults.chatRuntimeControls,
+        reasoningByProvider: {
+          ...defaults.chatRuntimeControls.reasoningByProvider,
+          deepseek: "low",
+        },
+        reasoningByModel: { deepseek: { "glm-5.3-flash": "max" } },
+      },
+      { providerId: "deepseek", modelId: "deepseek-v4-flash" },
+    ).reasoning,
+    "low",
+  );
+
+  // 写入的 modelId 会 trim 后落桶,读取同样按 trim 后的 id 命中。
+  const trimmedWrite = settings.updateChatRuntimeControlsForProvider(
+    defaults.chatRuntimeControls,
+    { reasoning: "low" },
+    { providerId: "deepseek", modelId: "  glm-5.3-flash  " },
+  );
+  assert.deepEqual(trimmedWrite.reasoningByModel, {
+    deepseek: { "glm-5.3-flash": "low" },
+  });
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(trimmedWrite, {
+      providerId: "deepseek",
+      modelId: "glm-5.3-flash",
+    }).reasoning,
+    "low",
+  );
+
+  // 归一化清洗:未知供应商 key、空模型 id、非法档位值一律丢弃;modelId trim。
+  assert.deepEqual(
+    settings.normalizeChatRuntimeControls({
+      reasoningByModel: {
+        deepseek: { " glm-5.3-flash ": "max", "": "low", broken: "nonsense" },
+        not_a_provider: { "some-model": "high" },
+      },
+    }).reasoningByModel,
+    { deepseek: { "glm-5.3-flash": "max" } },
+  );
+
+  // 无 modelId 的极端兜底:退回旧语义写供应商桶。此时无档位表(解析不到
+  // 目录),写时钳制与读路径同规则回落默认档 high。
+  const noModelFallback = settings.updateChatRuntimeControlsForProvider(
+    defaults.chatRuntimeControls,
+    { reasoning: "low" },
+    { providerId: "deepseek" },
+  );
+  assert.deepEqual(noModelFallback.reasoningByModel, {});
+  assert.equal(noModelFallback.reasoningByProvider.deepseek, "high");
 });
 
 test("memory model settings only keep enabled provider models", () => {
