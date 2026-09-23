@@ -128,6 +128,17 @@ function isGemini3ProModel(modelId: string) {
   return /gemini-3(?:\.\d+)?-pro/.test(modelId.toLowerCase());
 }
 
+// 档位折叠只针对 3.0 世代 Pro（官方 id 不带小数点：gemini-3-pro-preview /
+// gemini-3-pro-image），其 thinking_level 仅 LOW/HIGH 两档。3.1 起 Pro 官方新增
+// MEDIUM 并把 HIGH 重定义为更深的档位，必须按目录档位直传——沿用两档折叠会让
+// 用户选 medium 实际按 HIGH 计费。pi-ai 0.84.2 的 getThinkingLevel 仍把 3.x Pro
+// 全系折两档（其目录也把 3.1 Pro 的 medium 标为 null），此处有意偏离：档位可用性
+// 的单一真源是本地目录（3.1 Pro 为 low/medium/high），clampThinkingLevel 已把请求
+// 钳进目录档位表，直传即正确。
+function isLegacyGemini3ProModel(modelId: string) {
+  return /gemini-3(?:\.0)?-pro/.test(modelId.toLowerCase());
+}
+
 function isGemini3FlashModel(modelId: string) {
   const id = modelId.toLowerCase();
   return (
@@ -145,10 +156,12 @@ function usesGeminiThinkingLevelField(modelId: string) {
   return isGemini3ProModel(modelId) || isGemini3FlashModel(modelId) || isGemma4Model(modelId);
 }
 
-// 与 pi-ai getThinkingLevel 同源：Gemini 3 Pro 只有 LOW/HIGH 两档，Gemma 4 只有
-// MINIMAL/HIGH 两档，其余（含 Gemini 3 Flash）为完整四档。
+// 目录命中的模型，effort 已被 clampThinkingLevel 钳进目录档位表，直传大写即为正确
+// wire 值；家族折叠只是目录未命中（三方改名 id 走四档兜底）时的安全网：3.0 世代
+// Pro 只有 LOW/HIGH，Gemma 4 只有 MINIMAL/HIGH（与 pi-ai getThinkingLevel 同源），
+// 其余（Gemini 3 Flash、3.1+ Pro）为完整档位直传。
 function mapGeminiThinkingLevel(modelId: string, effort: GeminiEffort): GeminiThinkingLevel {
-  if (isGemini3ProModel(modelId)) {
+  if (isLegacyGemini3ProModel(modelId)) {
     return effort === "minimal" || effort === "low" ? "LOW" : "HIGH";
   }
   if (isGemma4Model(modelId)) {
@@ -187,8 +200,9 @@ export function resolveGeminiThinkingRuntime(
 ): GoogleOptions["thinking"] {
   if (!reasoning) return { enabled: false };
 
-  // 档位可用性交给目录 thinkingLevelMap（clampThinkingLevel）决定，例如 gemini-3-pro-preview
-  // 会被裁剪到只剩 low/high；xhigh/max 目前没有任何 Gemini 目录条目声明支持，一律降到 high。
+  // 档位可用性交给目录 thinkingLevelMap（clampThinkingLevel）决定，例如 gemini-3.1-pro-preview
+  // 会被裁剪到 low/medium/high、gemini-3-pro-image 只剩 low/high；xhigh/max 目前没有任何
+  // Gemini 目录条目声明支持，一律降到 high。
   const clamped = clampThinkingLevel(model, reasoning);
   const effort: GeminiEffort =
     clamped === "minimal" || clamped === "low" || clamped === "medium" ? clamped : "high";

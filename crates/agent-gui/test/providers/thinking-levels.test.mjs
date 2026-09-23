@@ -158,14 +158,29 @@ test("openai: clampOpenAIReasoningEffort returns undefined for non-reasoning mod
   assert.equal(clampOpenAIReasoningEffort(createOpenAIModel("gpt-5.2"), undefined), undefined);
 });
 
-test("gemini: 3 pro stays two-tier LOW/HIGH regardless of minor version", () => {
+test("gemini: 3.0 pro folds to two-tier LOW/HIGH", () => {
   const pro3 = createGoogleModel("gemini-3-pro-preview");
   assert.deepEqual(resolveGeminiThinkingRuntime(pro3, "minimal"), { enabled: true, level: "LOW" });
   assert.deepEqual(resolveGeminiThinkingRuntime(pro3, "medium"), { enabled: true, level: "HIGH" });
+});
 
-  const pro31 = createGoogleModel("gemini-3.1-pro-preview");
+test("gemini: 3.1+ pro passes catalog levels through, medium stays MEDIUM", () => {
+  // 目录命中形态：3.1 Pro levels=[low,medium,high]、恒开（off:null）、无 minimal。
+  const pro31 = createGoogleModel("gemini-3.1-pro-preview", {
+    thinkingLevelMap: { off: null, minimal: null },
+  });
   assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "low"), { enabled: true, level: "LOW" });
+  // 塌档回归锁：官方 3.1 Pro 有独立 MEDIUM 档，绝不能折到 HIGH（计费/深度都不同）。
+  assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "medium"), {
+    enabled: true,
+    level: "MEDIUM",
+  });
   assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "high"), { enabled: true, level: "HIGH" });
+  // minimal 被目录禁用，clamp 向上取 low。
+  assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "minimal"), {
+    enabled: true,
+    level: "LOW",
+  });
   // xhigh/max 未在任何 Gemini 目录条目中声明，一律降到 high。
   assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "xhigh"), { enabled: true, level: "HIGH" });
 });
