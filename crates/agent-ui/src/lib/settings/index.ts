@@ -439,6 +439,57 @@ function normalizeChatRuntimeReasoningByProvider(
   return normalized;
 }
 
+/**
+ * 模型级档位桶的结构化归一:只保留已知供应商 key、非空 model id、合法档位值
+ * (含 "off" 的原始串一律视为非法丢弃,与会话写入只落非 off 档位的约定一致)。
+ * 空桶不落键,保证存量设置升级后对象保持最小形态。
+ */
+function normalizeChatRuntimeReasoningByModel(
+  input: unknown,
+): ChatRuntimeControls["reasoningByModel"] {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const normalized: ChatRuntimeControls["reasoningByModel"] = {};
+  for (const key of CHAT_RUNTIME_REASONING_PROVIDER_KEYS) {
+    const rawBucket = obj[key];
+    if (!rawBucket || typeof rawBucket !== "object") continue;
+    const entries: Record<string, ReasoningLevel> = {};
+    for (const [rawModelId, rawLevel] of Object.entries(rawBucket as Record<string, unknown>)) {
+      const modelId = rawModelId.trim();
+      if (
+        !modelId ||
+        Object.hasOwn(entries, modelId) ||
+        typeof rawLevel !== "string" ||
+        !(REASONING_LEVELS as string[]).includes(rawLevel)
+      ) {
+        continue;
+      }
+      entries[modelId] = rawLevel as ReasoningLevel;
+    }
+    if (Object.keys(entries).length > 0) {
+      normalized[key] = entries;
+    }
+  }
+  return normalized;
+}
+
+/**
+ * 档位的存储解析顺序:模型桶 → 供应商桶 → 全局默认。供应商桶保留为「迁移前
+ * 存量值/供应商级默认」,会话内写入只落模型桶,因此在某模型上改档位永远不会
+ * 影响其他模型(旧单桶方案的全部串档路径都从这里切断)。
+ */
+function resolveChatRuntimeReasoning(
+  controls: ChatRuntimeControls,
+  key: ChatRuntimeReasoningProviderKey,
+  modelId: string | undefined,
+): ReasoningLevel {
+  const trimmedModelId = modelId?.trim();
+  if (trimmedModelId) {
+    const level = controls.reasoningByModel[key]?.[trimmedModelId];
+    if (level) return level;
+  }
+  return controls.reasoningByProvider[key] ?? controls.reasoning;
+}
+
 export function normalizeChatRuntimeControls(input: unknown): ChatRuntimeControls {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const reasoning = normalizeChatRuntimeReasoning(obj.reasoning);
@@ -453,6 +504,7 @@ export function normalizeChatRuntimeControls(input: unknown): ChatRuntimeControl
       obj.reasoningByProvider,
       reasoning,
     ),
+    reasoningByModel: normalizeChatRuntimeReasoningByModel(obj.reasoningByModel),
   };
 }
 
@@ -471,6 +523,13 @@ export function getKnownModelThinkingLevels(
   return resolveModelThinking(providerId, modelId).levels;
 }
 
+/**
+ * 纯读路径:按 (供应商类型, 模型) 解析出当前应展示/下发的档位,只推导
+ * `reasoning` 展示值,**绝不回写任何桶**。旧实现在这里把钳制结果写回
+ * reasoningByProvider 再被 update 持久化——narrow 表模型一碰任何控件就把
+ * wide 表模型选的表外档抹掉,是「切会话/另一栏档位被重置」的元凶之一。
+ * 桶的迁移与写入只发生在 updateChatRuntimeControlsForProvider。
+ */
 export function normalizeChatRuntimeControlsForProvider(
   input: unknown,
   params: {
@@ -482,22 +541,11 @@ export function normalizeChatRuntimeControlsForProvider(
   const controls = normalizeChatRuntimeControls(input);
   const key = getChatRuntimeReasoningProviderKey(params);
   const levels = getChatRuntimeReasoningLevelsForProvider(params);
-  const reasoningByProvider = {
-    ...DEFAULT_CHAT_RUNTIME_CONTROLS.reasoningByProvider,
-    ...controls.reasoningByProvider,
-  };
   const reasoning = normalizeChatRuntimeReasoningForLevels(
-    reasoningByProvider[key] ?? controls.reasoning,
+    resolveChatRuntimeReasoning(controls, key, params.modelId),
     levels,
   );
-  return {
-    ...controls,
-    reasoning,
-    reasoningByProvider: {
-      ...reasoningByProvider,
-      [key]: reasoning,
-    },
-  };
+  return { ...controls, reasoning };
 }
 
 export function updateChatRuntimeControlsForProvider(
@@ -515,20 +563,32 @@ export function updateChatRuntimeControlsForProvider(
     ...normalizeChatRuntimeControls(input),
     ...patch,
   });
-  const reasoningByProvider = {
-    ...DEFAULT_CHAT_RUNTIME_CONTROLS.reasoningByProvider,
-    ...controls.reasoningByProvider,
-  };
-  if (patch.reasoning !== undefined) {
-    reasoningByProvider[key] = normalizeChatRuntimeReasoningForLevels(patch.reasoning, levels);
+  if (patch.reasoning === undefined) {
+    // 非 reasoning 字段的更新不得触碰任何档位桶(含展示值钳制),否则存储值
+    // 会被当前模型的窄表钳平——按模型记忆在「只改联网/Plan 开关」时丢档。
+    return controls;
   }
-  return normalizeChatRuntimeControlsForProvider(
-    {
+  const reasoning = normalizeChatRuntimeReasoningForLevels(patch.reasoning, levels);
+  const trimmedModelId = params.modelId?.trim();
+  if (trimmedModelId) {
+    // 正常路径:按模型落桶,写时按该模型档位表钳制(菜单只会提供表内档,
+    // 这里兜住过期表单/竞态)。供应商桶保持不动,继续充当供应商级默认。
+    return {
       ...controls,
-      reasoningByProvider,
-    },
-    params,
-  );
+      reasoning,
+      reasoningByModel: {
+        ...controls.reasoningByModel,
+        [key]: { ...(controls.reasoningByModel[key] ?? {}), [trimmedModelId]: reasoning },
+      },
+    };
+  }
+  // 无 modelId 的极端兜底(会话尚未选定模型):退回旧语义写供应商桶,
+  // 保证用户选择不静默丢失。
+  return {
+    ...controls,
+    reasoning,
+    reasoningByProvider: { ...controls.reasoningByProvider, [key]: reasoning },
+  };
 }
 
 function normalizeOptionalText(input: unknown): string {
