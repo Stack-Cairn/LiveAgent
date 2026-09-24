@@ -11,6 +11,9 @@ use tauri::Manager;
 use tauri::WindowEvent;
 
 const MAIN_WINDOW_LABEL: &str = "main";
+/// 等待原生全屏退出完成的兜底时长;超时仍未收到通知就直接隐藏。
+#[cfg(target_os = "macos")]
+const FULLSCREEN_EXIT_HIDE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 // Only size + maximized are persisted: POSITION would fight multi-monitor
 // layouts we don't manage, VISIBLE would re-show a tray-hidden window on
 // startup, and DECORATIONS would override the per-platform window chrome
@@ -628,6 +631,79 @@ fn run_shortcut_action(app: &tauri::AppHandle, action: &str) {
     dispatch_app_action(app, action);
 }
 
+/// 关闭按钮默认隐藏到托盘。macOS 原生全屏下直接隐藏会在独立 Space 留下一块黑屏,
+/// 所以先退出全屏,等 AppKit 发出 `NSWindowDidExitFullScreenNotification` 再隐藏
+/// (见 [`install_fullscreen_exit_observer`])。
+fn hide_main_window_on_close(window: &tauri::Window, hide_after_fullscreen_exit: &Arc<AtomicBool>) {
+    #[cfg(target_os = "macos")]
+    if window.is_fullscreen().unwrap_or(false) {
+        if hide_after_fullscreen_exit.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        if let Err(error) = window.set_fullscreen(false) {
+            eprintln!("failed to leave fullscreen before hiding LiveAgent window: {error}");
+            hide_after_fullscreen_exit.store(false, Ordering::SeqCst);
+        } else {
+            // 兜底:退出通知没到(过渡被打断等)时,也不能让关闭按钮失效。
+            let window = window.clone();
+            let pending = Arc::clone(hide_after_fullscreen_exit);
+            std::thread::spawn(move || {
+                std::thread::sleep(FULLSCREEN_EXIT_HIDE_TIMEOUT);
+                if pending.swap(false, Ordering::SeqCst) {
+                    let _ = window.hide();
+                }
+            });
+            return;
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = hide_after_fullscreen_exit;
+
+    if let Err(error) = window.hide() {
+        eprintln!("failed to hide LiveAgent window on close: {error}");
+    }
+}
+
+/// tao 在 `set_fullscreen(false)` 调用后立刻清掉自身的全屏状态,NSWindow 的
+/// styleMask 也在过渡开始时就去掉 FullScreen 位;而 AppKit 在过渡结束、切回原
+/// Space 时会重新显示窗口,在那之前隐藏会被撤销。只有 didExit 通知代表真正结束。
+#[cfg(target_os = "macos")]
+fn install_fullscreen_exit_observer(
+    app: &tauri::App,
+    hide_after_fullscreen_exit: Arc<AtomicBool>,
+) -> tauri::Result<()> {
+    use objc2_app_kit::{NSWindow, NSWindowDidExitFullScreenNotification};
+    use objc2_foundation::{NSNotification, NSNotificationCenter};
+
+    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+        return Ok(());
+    };
+    let ns_window_ptr = window.ns_window()?;
+    if ns_window_ptr.is_null() {
+        return Ok(());
+    }
+    let ns_window: &NSWindow = unsafe { &*ns_window_ptr.cast::<NSWindow>() };
+
+    let block = block2::RcBlock::new(move |_: std::ptr::NonNull<NSNotification>| {
+        if hide_after_fullscreen_exit.swap(false, Ordering::SeqCst) {
+            if let Err(error) = window.hide() {
+                eprintln!("failed to hide LiveAgent window after leaving fullscreen: {error}");
+            }
+        }
+    });
+    let observer = unsafe {
+        NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(
+            Some(NSWindowDidExitFullScreenNotification),
+            Some(ns_window),
+            None,
+            &block,
+        )
+    };
+    // 主窗口与应用同生命周期,观察者无需注销。
+    std::mem::forget(observer);
+    Ok(())
+}
+
 fn request_app_exit(
     app: &tauri::AppHandle,
     allow_exit: &AtomicBool,
@@ -762,6 +838,7 @@ pub fn run() {
         &terminal_registry,
     )));
     let allow_exit = Arc::new(AtomicBool::new(false));
+    let hide_after_fullscreen_exit = Arc::new(AtomicBool::new(false));
     let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
@@ -841,11 +918,15 @@ pub fn run() {
             let managed_process_registry = Arc::clone(&managed_process_registry);
             let git_clone_task_registry = Arc::clone(&git_clone_task_registry);
             let provider_usage_service = Arc::clone(&provider_usage_service);
+            #[cfg(target_os = "macos")]
+            let hide_after_fullscreen_exit = Arc::clone(&hide_after_fullscreen_exit);
             move |app| {
                 commands::history_db::initialize_history_db()?;
                 configure_system_tray(app)?;
                 #[cfg(target_os = "windows")]
                 configure_windows_window_chrome(app)?;
+                #[cfg(target_os = "macos")]
+                install_fullscreen_exit_observer(app, hide_after_fullscreen_exit)?;
                 if let Err(error) = commands::settings::initialize_system_proxy_from_db() {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }
@@ -918,8 +999,8 @@ pub fn run() {
                     api.prevent_close();
                     if commands::app::is_close_window_exit(&close_window_behavior) {
                         request_app_exit(window.app_handle(), &allow_exit, &terminal_registry);
-                    } else if let Err(error) = window.hide() {
-                        eprintln!("failed to hide LiveAgent window on close: {error}");
+                    } else {
+                        hide_main_window_on_close(window, &hide_after_fullscreen_exit);
                     }
                 }
             }

@@ -39,23 +39,28 @@ function isValidMetrics(
   );
 }
 
-/**
- * `undefined` = not read yet (or the read failed): callers use the fallback geometry.
- * `null` = AppKit reports no traffic lights in the main window — native fullscreen
- * moves them into a separate auto-hiding titlebar, so there is nothing to clear.
- */
-type TrafficLightState = MacOsTrafficLightMetrics | null | undefined;
+type TrafficLightState = {
+  /** Last geometry AppKit reported while the buttons sat in the main window. */
+  metrics: MacOsTrafficLightMetrics | null;
+  /**
+   * AppKit reports no traffic lights in the main window: native fullscreen moves
+   * them into a separate auto-hiding titlebar that slides over the content on hover.
+   */
+  hidden: boolean;
+};
+
+const INITIAL_TRAFFIC_LIGHT_STATE: TrafficLightState = { metrics: null, hidden: false };
 
 // Fullscreen enter/exit animates for ~0.5s and the last `resize` can fire before
 // AppKit has moved the buttons back, so re-read once the window settles.
 const TRAFFIC_LIGHT_SETTLE_DELAY_MS = 800;
 
 function useMacOsTrafficLightMetrics(enabled: boolean) {
-  const [metrics, setMetrics] = useState<TrafficLightState>(undefined);
+  const [state, setState] = useState<TrafficLightState>(INITIAL_TRAFFIC_LIGHT_STATE);
 
   useEffect(() => {
     if (!enabled) {
-      setMetrics(undefined);
+      setState(INITIAL_TRAFFIC_LIGHT_STATE);
       return undefined;
     }
 
@@ -68,16 +73,22 @@ function useMacOsTrafficLightMetrics(enabled: boolean) {
           "app_macos_traffic_light_metrics",
         );
         if (cancelled) return;
-        setMetrics(next === null ? null : isValidMetrics(next) ? next : undefined);
+        if (next === null) {
+          // Keep the last geometry: the buttons come back to the same spot on hover
+          // and after leaving fullscreen, so controls must keep clearing them.
+          setState((prev) => (prev.hidden ? prev : { ...prev, hidden: true }));
+        } else if (isValidMetrics(next)) {
+          setState({ metrics: next, hidden: false });
+        }
       } catch (error) {
         if (!cancelled) {
           console.warn("failed to read macOS traffic light metrics", error);
-          setMetrics(undefined);
+          setState((prev) => (prev.hidden ? { ...prev, hidden: false } : prev));
         }
       }
     };
 
-    const onResize = () => {
+    const scheduleRefresh = () => {
       void refresh();
       if (settleTimer !== undefined) clearTimeout(settleTimer);
       settleTimer = setTimeout(() => {
@@ -85,18 +96,27 @@ function useMacOsTrafficLightMetrics(enabled: boolean) {
         void refresh();
       }, TRAFFIC_LIGHT_SETTLE_DELAY_MS);
     };
+    // A window hidden right after leaving fullscreen may not get another `resize`
+    // before it is shown again, so also re-read when it regains focus/visibility.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") scheduleRefresh();
+    };
 
     void refresh();
-    window.addEventListener("resize", onResize);
+    window.addEventListener("resize", scheduleRefresh);
+    window.addEventListener("focus", scheduleRefresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       cancelled = true;
       if (settleTimer !== undefined) clearTimeout(settleTimer);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", scheduleRefresh);
+      window.removeEventListener("focus", scheduleRefresh);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [enabled]);
 
-  return metrics;
+  return state;
 }
 
 export function isMacOsTauri(): boolean {
@@ -122,10 +142,12 @@ export function MacOsTitleBarSpacer({ className }: { className?: string }) {
  */
 export function useMacOsAppHeaderHeight() {
   const enabled = isMacOsTauri();
-  const trafficLightMetrics = useMacOsTrafficLightMetrics(enabled);
+  const { metrics: trafficLightMetrics, hidden: trafficLightsHidden } =
+    useMacOsTrafficLightMetrics(enabled);
   useEffect(() => {
     if (!enabled) return;
-    if (trafficLightMetrics === null) {
+    // Fullscreen titlebar overlays the content on hover instead of sitting in it.
+    if (trafficLightsHidden) {
       document.documentElement.style.setProperty("--app-header-height", APP_HEADER_HEIGHT_FALLBACK);
       return;
     }
@@ -136,7 +158,7 @@ export function useMacOsAppHeaderHeight() {
     return () => {
       document.documentElement.style.setProperty("--app-header-height", APP_HEADER_HEIGHT_FALLBACK);
     };
-  }, [enabled, trafficLightMetrics]);
+  }, [enabled, trafficLightMetrics, trafficLightsHidden]);
 }
 
 /**
@@ -156,15 +178,16 @@ export function MacOsTitleBarToggle({
 }) {
   const { t } = useLocale();
   const [show] = useState(isMacOsTauri);
-  const trafficLightMetrics = useMacOsTrafficLightMetrics(show);
+  const { metrics: trafficLightMetrics, hidden: trafficLightsHidden } =
+    useMacOsTrafficLightMetrics(show);
   if (!show) return null;
   const trafficLightLeft = trafficLightMetrics?.left ?? MAC_OS_TRAFFIC_LIGHT_LEFT;
   const trafficLightWidth = trafficLightMetrics?.width ?? MAC_OS_TRAFFIC_LIGHT_GROUP_WIDTH;
-  // No traffic lights to clear (native fullscreen): sit where the group would start.
-  const toggleLeft =
-    trafficLightMetrics === null
-      ? MAC_OS_TRAFFIC_LIGHT_LEFT
-      : trafficLightLeft + trafficLightWidth + MAC_OS_TITLEBAR_TOGGLE_GAP;
+  // Native fullscreen hides the traffic lights (they only slide over the content
+  // on hover), so there is nothing to clear: sit where the group would start.
+  const toggleLeft = trafficLightsHidden
+    ? MAC_OS_TRAFFIC_LIGHT_LEFT
+    : trafficLightLeft + trafficLightWidth + MAC_OS_TITLEBAR_TOGGLE_GAP;
   return (
     <div
       className="flex shrink-0 items-center gap-0.5 [-webkit-app-region:no-drag]"
