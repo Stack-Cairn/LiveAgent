@@ -39,39 +39,60 @@ function isValidMetrics(
   );
 }
 
+/**
+ * `undefined` = not read yet (or the read failed): callers use the fallback geometry.
+ * `null` = AppKit reports no traffic lights in the main window — native fullscreen
+ * moves them into a separate auto-hiding titlebar, so there is nothing to clear.
+ */
+type TrafficLightState = MacOsTrafficLightMetrics | null | undefined;
+
+// Fullscreen enter/exit animates for ~0.5s and the last `resize` can fire before
+// AppKit has moved the buttons back, so re-read once the window settles.
+const TRAFFIC_LIGHT_SETTLE_DELAY_MS = 800;
+
 function useMacOsTrafficLightMetrics(enabled: boolean) {
-  const [metrics, setMetrics] = useState<MacOsTrafficLightMetrics | null>(null);
+  const [metrics, setMetrics] = useState<TrafficLightState>(undefined);
 
   useEffect(() => {
     if (!enabled) {
-      setMetrics(null);
+      setMetrics(undefined);
       return undefined;
     }
 
     let cancelled = false;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
     const refresh = async () => {
       try {
         const next = await invoke<MacOsTrafficLightMetrics | null>(
           "app_macos_traffic_light_metrics",
         );
-        if (!cancelled && isValidMetrics(next)) {
-          setMetrics(next);
-        }
+        if (cancelled) return;
+        setMetrics(next === null ? null : isValidMetrics(next) ? next : undefined);
       } catch (error) {
         if (!cancelled) {
           console.warn("failed to read macOS traffic light metrics", error);
-          setMetrics(null);
+          setMetrics(undefined);
         }
       }
     };
 
+    const onResize = () => {
+      void refresh();
+      if (settleTimer !== undefined) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = undefined;
+        void refresh();
+      }, TRAFFIC_LIGHT_SETTLE_DELAY_MS);
+    };
+
     void refresh();
-    window.addEventListener("resize", refresh);
+    window.addEventListener("resize", onResize);
 
     return () => {
       cancelled = true;
-      window.removeEventListener("resize", refresh);
+      if (settleTimer !== undefined) clearTimeout(settleTimer);
+      window.removeEventListener("resize", onResize);
     };
   }, [enabled]);
 
@@ -104,6 +125,10 @@ export function useMacOsAppHeaderHeight() {
   const trafficLightMetrics = useMacOsTrafficLightMetrics(enabled);
   useEffect(() => {
     if (!enabled) return;
+    if (trafficLightMetrics === null) {
+      document.documentElement.style.setProperty("--app-header-height", APP_HEADER_HEIGHT_FALLBACK);
+      return;
+    }
     const center =
       (trafficLightMetrics?.top ?? MAC_OS_TRAFFIC_LIGHT_TOP) +
       (trafficLightMetrics?.height ?? MAC_OS_TRAFFIC_LIGHT_GROUP_HEIGHT) / 2;
@@ -135,7 +160,11 @@ export function MacOsTitleBarToggle({
   if (!show) return null;
   const trafficLightLeft = trafficLightMetrics?.left ?? MAC_OS_TRAFFIC_LIGHT_LEFT;
   const trafficLightWidth = trafficLightMetrics?.width ?? MAC_OS_TRAFFIC_LIGHT_GROUP_WIDTH;
-  const toggleLeft = trafficLightLeft + trafficLightWidth + MAC_OS_TITLEBAR_TOGGLE_GAP;
+  // No traffic lights to clear (native fullscreen): sit where the group would start.
+  const toggleLeft =
+    trafficLightMetrics === null
+      ? MAC_OS_TRAFFIC_LIGHT_LEFT
+      : trafficLightLeft + trafficLightWidth + MAC_OS_TITLEBAR_TOGGLE_GAP;
   return (
     <div
       className="flex shrink-0 items-center gap-0.5 [-webkit-app-region:no-drag]"
