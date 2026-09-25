@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -11,7 +12,10 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-const maxReadableUploadBytes int64 = 100 << 20 // 100 MiB
+const (
+	maxReadableUploadBytes int64 = 100 << 20 // 100 MiB total
+	maxPerFileUploadBytes  int64 = 20 << 20  // 20 MiB per individual file
+)
 
 func ImportReadableFiles(
 	sm *session.Manager,
@@ -63,7 +67,7 @@ func ImportReadableFiles(
 				return
 			}
 
-			content, readErr := io.ReadAll(file)
+			content, readErr := io.ReadAll(io.LimitReader(file, maxPerFileUploadBytes+1))
 			closeErr := file.Close()
 			if readErr != nil {
 				writeError(w, http.StatusBadRequest, "failed to read uploaded files")
@@ -71,6 +75,11 @@ func ImportReadableFiles(
 			}
 			if closeErr != nil {
 				writeError(w, http.StatusBadRequest, "failed to finalize uploaded files")
+				return
+			}
+			if int64(len(content)) > maxPerFileUploadBytes {
+				writeError(w, http.StatusRequestEntityTooLarge,
+					fmt.Sprintf("individual file %q exceeds %d MiB limit", header.Filename, maxPerFileUploadBytes>>20))
 				return
 			}
 

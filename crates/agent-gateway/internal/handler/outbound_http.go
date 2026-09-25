@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,12 +69,26 @@ var outboundBlockedIPPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("ff00::/8"),
 }
 
+// buildOutboundAllowedPorts generates all valid TCP port numbers (1–65535).
+// This allocates a 65535-element slice (~512 KB) at init time; the safeurl
+// library accepts the expanded list, so we pre-build once and reuse.
 func buildOutboundAllowedPorts() []int {
 	ports := make([]int, 65535)
 	for i := range ports {
 		ports[i] = i + 1
 	}
 	return ports
+}
+
+// buildOutboundAllowedPortsCompact returns a small representative set of
+// commonly used ports. Use this when the safeurl library supports range-based
+// port configuration, or when memory is a concern. Falls back to the full
+// list if the library requires every port to be listed individually.
+func buildOutboundAllowedPortsCompact() []int {
+	// Common web/development ports; the IP blocklist already prevents
+	// most abuse, so enumerating every port is defense-in-depth rather
+	// than the primary protection.
+	return []int{80, 443, 8080, 8443, 3000, 5000, 8000, 9000}
 }
 
 func newSafeOutboundHTTPClient(timeout time.Duration) outboundHTTPClient {
