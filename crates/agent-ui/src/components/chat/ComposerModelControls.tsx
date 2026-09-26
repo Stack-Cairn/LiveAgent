@@ -177,26 +177,14 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     setProviderFilter("");
   }, [isModelPickerOpen]);
 
+  // 恒开模型的 thinkingEnabled 纠偏。注意不得在此回写 reasoning:档位展示值
+  // 由共享层按「模型桶 → 供应商桶 → 默认」解析并钳制,旧的「档位不在选项表
+  // 就重置为默认档」自愈会把其他模型选的表外档从全局存储里抹掉,是跨会话
+  // 串档/重置的写入口(按模型存储改造后已移除,见 ChatRuntimeControls)。
   useEffect(() => {
-    const reasoningNeedsReset =
-      !(reasoningOptions.length > 0 && reasoningOptions.includes(chatRuntimeControls.reasoning)) &&
-      !(
-        reasoningOptions.length === 0 &&
-        chatRuntimeControls.reasoning === DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning
-      );
-    const thinkingNeedsEnable = thinkingAlwaysOn && !chatRuntimeControls.thinkingEnabled;
-    if (!reasoningNeedsReset && !thinkingNeedsEnable) return;
-    onChatRuntimeControlsChange({
-      ...(reasoningNeedsReset ? { reasoning: DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning } : {}),
-      ...(thinkingNeedsEnable ? { thinkingEnabled: true } : {}),
-    });
-  }, [
-    chatRuntimeControls.reasoning,
-    chatRuntimeControls.thinkingEnabled,
-    onChatRuntimeControlsChange,
-    reasoningOptions,
-    thinkingAlwaysOn,
-  ]);
+    if (!(thinkingAlwaysOn && !chatRuntimeControls.thinkingEnabled)) return;
+    onChatRuntimeControlsChange({ thinkingEnabled: true });
+  }, [chatRuntimeControls.thinkingEnabled, onChatRuntimeControlsChange, thinkingAlwaysOn]);
 
   const normalizedSearch = modelSearch.trim().toLowerCase();
   const groups = sortModelOptionGroups(groupModelOptionsByProvider(modelOptions), providerSortMode);
