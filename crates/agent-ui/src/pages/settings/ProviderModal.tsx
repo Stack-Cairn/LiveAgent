@@ -257,7 +257,7 @@ function useProviderModalController({
     modelsUrl.trim() === (providerType === "gemini" ? "" : (initialData.modelsUrl ?? "").trim()) &&
     useSystemProxy === (initialData.useSystemProxy ?? false);
   const persistedUsageQueryProviderId = getPersistedUsageQueryProviderId(initialData);
-  const { confirm: requestUsageQueryConfirm, dialog: usageQueryConfirmDialog } = useConfirmDialog();
+  const { confirm: requestConfirm, dialog: confirmDialog } = useConfirmDialog();
   const [usageQueryTest, setUsageQueryTest] = useState<{
     status: "idle" | "running" | "success" | "error";
     data: UsageData[];
@@ -520,21 +520,29 @@ function useProviderModalController({
   }
 
   function removeModel(model: string) {
-    for (const timer of modelBadgeTimersRef.current.get(model) ?? []) clearTimeout(timer);
-    modelBadgeTimersRef.current.delete(model);
+    removeModels([model]);
+  }
+
+  function removeModels(modelIds: readonly string[]) {
+    if (modelIds.length === 0) return;
+    const removed = new Set(modelIds);
+    for (const model of removed) {
+      for (const timer of modelBadgeTimersRef.current.get(model) ?? []) clearTimeout(timer);
+      modelBadgeTimersRef.current.delete(model);
+    }
     setNewModelPhases((current) => {
-      if (!current.has(model)) return current;
+      if (![...removed].some((model) => current.has(model))) return current;
       const next = new Map(current);
-      next.delete(model);
+      for (const model of removed) next.delete(model);
       return next;
     });
-    setModels((prev) => prev.filter((item) => item.id !== model));
+    setModels((prev) => prev.filter((item) => !removed.has(item.id)));
     setActiveModels((prev) => {
       const next = new Set(prev);
-      next.delete(model);
+      for (const model of removed) next.delete(model);
       return next;
     });
-    setEditingModel((prev) => (prev?.model.id === model ? null : prev));
+    setEditingModel((prev) => (prev && removed.has(prev.model.id) ? null : prev));
   }
 
   function openModelSettings(modelId: string) {
@@ -695,7 +703,7 @@ function useProviderModalController({
       return;
     }
     if (requiresCustomUsageQueryConfirmation(usageQuery, customUsageQueryConfirmed)) {
-      const confirmed = await requestUsageQueryConfirm({
+      const confirmed = await requestConfirm({
         title: t("settings.providerUsageCustomConfirmTitle"),
         description: t("settings.providerUsageCustomConfirmDescription"),
         detail: t("settings.providerUsageCustomConfirmDetail"),
@@ -806,6 +814,23 @@ function useProviderModalController({
       ),
     );
   }
+  // 表头清空按钮：与总开关同一作用域，搜索时只删除匹配项。
+  async function clearVisibleModels() {
+    const modelIds = visibleModels.map((model) => model.id);
+    if (modelIds.length === 0) return;
+    const confirmed = await requestConfirm({
+      title: t("settings.clearModelsConfirmTitle"),
+      description: t(
+        modelSearchQuery
+          ? "settings.clearMatchedModelsConfirmDescription"
+          : "settings.clearAllModelsConfirmDescription",
+      ).replace("{count}", String(modelIds.length)),
+      confirmLabel: t("settings.clearModelsConfirmAction"),
+      cancelLabel: t("settings.cancel"),
+    });
+    if (!confirmed) return;
+    removeModels(modelIds);
+  }
   const modelReorderDisabledHint = modelSearchQuery
     ? t("settings.modelReorderDisabledSearch")
     : t("settings.reorderNeedsTwoItems");
@@ -874,6 +899,7 @@ function useProviderModalController({
     canSaveEditingModel,
     canOverrideModelInputModalities,
     cancelCustomHeaderImport,
+    clearVisibleModels,
     commitUsageTimeoutInput,
     customHeaders,
     editingModel,
@@ -961,7 +987,7 @@ function useProviderModalController({
     typeLabel,
     updateCustomHeader,
     usageQuery,
-    usageQueryConfirmDialog,
+    confirmDialog,
     usageQueryTest,
     usageTimeoutInput,
     usageVariableApiKey,

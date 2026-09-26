@@ -658,6 +658,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.reorderNeedsTwoItems": "至少需要两项才能排序",
   "settings.enableAllModels": "启用全部模型",
   "settings.disableAllModels": "禁用全部模型",
+  "settings.clearAllModels": "清空",
+  "settings.clearMatchedModels": "清除匹配项",
+  "settings.clearModelsConfirmTitle": "删除模型？",
+  "settings.clearAllModelsConfirmDescription": "将删除该供应商下全部 {count} 个模型，保存后生效。",
+  "settings.clearMatchedModelsConfirmDescription":
+    "将删除当前搜索匹配的 {count} 个模型，保存后生效。",
+  "settings.clearModelsConfirmAction": "删除",
   "settings.modelsEnabledCount": "已启用 {enabled} / {total} 个模型",
   "settings.matchedModelsEnabledCount": "匹配的模型已启用 {enabled} / {total} 个",
   "settings.fetching": "获取中…",

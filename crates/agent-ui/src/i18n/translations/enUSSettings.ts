@@ -690,6 +690,14 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.reorderNeedsTwoItems": "At least two items are required to reorder",
   "settings.enableAllModels": "Enable all models",
   "settings.disableAllModels": "Disable all models",
+  "settings.clearAllModels": "Clear all",
+  "settings.clearMatchedModels": "Clear matches",
+  "settings.clearModelsConfirmTitle": "Remove models?",
+  "settings.clearAllModelsConfirmDescription":
+    "All {count} models will be removed from this provider. Changes take effect after you save.",
+  "settings.clearMatchedModelsConfirmDescription":
+    "{count} models matching the current search will be removed. Changes take effect after you save.",
+  "settings.clearModelsConfirmAction": "Remove",
   "settings.modelsEnabledCount": "{enabled} / {total} models enabled",
   "settings.matchedModelsEnabledCount": "{enabled} / {total} matched models enabled",
   "settings.fetching": "Fetching…",
