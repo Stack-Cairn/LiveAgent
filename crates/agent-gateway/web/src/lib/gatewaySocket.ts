@@ -162,6 +162,8 @@ export type GatewayWebSocketClientLike = {
     uploadedFilesJson: string;
   }): Promise<ChatQueueResponse>;
   chatQueueEditCancel(conversationId: string, itemId: string): Promise<ChatQueueResponse>;
+  planningManage<T = unknown>(action: string, input?: unknown): Promise<T>;
+  subscribePlanning(listener: (seq: number) => void): () => void;
   cronManage(payload: CronManagePayload): Promise<CronManageResponse>;
   memoryManage<T = unknown>(payload: MemoryManagePayload): Promise<T>;
   /** 轨迹按需拉取：事件窗口、Prompt 分段和子代理 run 使用彼此独立的 ID 字段。 */

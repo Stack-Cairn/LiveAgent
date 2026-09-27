@@ -72,6 +72,7 @@ import {
   InstalledAppsListRequestSchema,
   ManagedProcessRequestSchema,
   MemoryManageRequestSchema,
+  PlanningRequestSchema,
   ProviderCustomHeaderSchema,
   ProviderCustomHeadersSchema,
   ProviderListRequestSchema,
@@ -722,6 +723,14 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           argsJson: body.args === undefined ? "{}" : JSON.stringify(body.args),
         }),
       };
+    case "planning.manage":
+      return {
+        case: "planning",
+        value: create(PlanningRequestSchema, {
+          action: str(body.action),
+          inputJson: JSON.stringify(body.input ?? {}),
+        }),
+      };
     case "cron.manage":
       return {
         case: "cronManage",
@@ -1141,6 +1150,13 @@ export function decodeServerFrame(
         agentId,
         payload: { agents: payload.value.agents.map(statusPayload) },
       };
+    case "planningChanged":
+      return {
+        kind: "event",
+        type: "planning.changed",
+        agentId,
+        payload: { seq: num(payload.value.seq) },
+      };
     case "workspaceActivity":
       return {
         kind: "event",
@@ -1320,6 +1336,8 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
       if (payload.value.errorMessage) result.error_message = payload.value.errorMessage;
       return result;
     }
+    case "planningResp":
+      return JSON.parse(payload.value.resultJson);
     case "cronManageResp":
       return { action: payload.value.action, result_json: payload.value.resultJson };
     case "fsRootsResp":

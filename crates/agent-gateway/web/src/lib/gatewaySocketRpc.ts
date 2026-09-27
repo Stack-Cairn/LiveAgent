@@ -459,6 +459,10 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     };
   }
 
+  async planningManage<T = unknown>(action: string, input?: unknown): Promise<T> {
+    return this.request<T>("planning.manage", { action, input });
+  }
+
   async cronManage(payload: CronManagePayload): Promise<CronManageResponse> {
     return this.request<CronManageResponse>("cron.manage", payload);
   }

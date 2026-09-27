@@ -86,6 +86,7 @@ export class GatewayWebSocketTransport {
   protected disposed = false;
   protected statusListeners = new Set<StatusListener>();
   protected historyListeners = new Set<HistoryListener>();
+  protected planningListeners = new Set<(seq: number) => void>();
   protected settingsListeners = new Set<SettingsListener>();
   protected terminalListeners = new Set<TerminalListener>();
   protected sftpTransferListeners = new Set<SftpTransferListener>();
@@ -328,6 +329,13 @@ export class GatewayWebSocketTransport {
       this.scheduleReconnectNotice();
     }
     this.scheduleReconnect(0);
+  }
+
+  subscribePlanning(listener: (seq: number) => void): () => void {
+    this.planningListeners.add(listener);
+    return () => {
+      this.planningListeners.delete(listener);
+    };
   }
 
   async getStatus(): Promise<AgentStatus> {
@@ -641,6 +649,7 @@ export class GatewayWebSocketTransport {
         this.statusListeners.size > 0 ||
         this.historyListeners.size > 0 ||
         this.settingsListeners.size > 0 ||
+        this.planningListeners.size > 0 ||
         this.terminalListeners.size > 0 ||
         this.sftpTransferListeners.size > 0 ||
         this.chatActivityListeners.size > 0 ||
@@ -1167,6 +1176,11 @@ export class GatewayWebSocketTransport {
 
   // 分发广播事件；payload 已由适配层还原为既有归一化器需要的对象形状。
   protected handleEvent(type: string, payload: unknown) {
+    if (type === "planning.changed") {
+      const seq = (payload as { seq?: number }).seq;
+      if (typeof seq === "number") for (const listener of this.planningListeners) listener(seq);
+      return;
+    }
     if (type === "history.event") {
       const event = payload as GatewayHistoryEvent;
       if (event?.kind === "upsert" || event?.kind === "delete") {
