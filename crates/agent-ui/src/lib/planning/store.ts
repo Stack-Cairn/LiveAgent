@@ -116,6 +116,16 @@ export function createPlanningStore(transport: PlanningBackend) {
       if (response.status === "conflict") throw new PlanningConflictError(response.item);
       return response.item;
     },
+    /** Non-mutation backend actions (e.g. `subscription.*`), followed by a refresh. */
+    async command<T>(action: string, input: unknown): Promise<T> {
+      try {
+        const result = await transport.call<T>(action, input);
+        await refresh();
+        return result;
+      } catch (error) {
+        throw new Error(localizePlanningError(error));
+      }
+    },
     dispose() {
       unsubscribe?.();
       unsubscribe = null;

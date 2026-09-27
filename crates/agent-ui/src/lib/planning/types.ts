@@ -92,6 +92,15 @@ export interface PlanningSourceLink {
   title: string;
   revision: number;
 }
+/** iCal subscription status; the feed URL stays in the desktop backend. */
+export interface PlanningSubscription {
+  calendarId: string;
+  host: string;
+  refreshMinutes: number;
+  nextAt: number;
+  lastSyncedAt?: number | null;
+  lastError?: string | null;
+}
 export interface PlanningSnapshot {
   seq: number;
   timeZone: string;
@@ -104,6 +113,7 @@ export interface PlanningSnapshot {
   todoSchedules?: { todoId: string; count: number; minutes: number; hasFuture: boolean }[];
   reminders: PlanningReminder[];
   sources: PlanningSourceLink[];
+  subscriptions?: PlanningSubscription[];
 }
 export interface PlanningQuery {
   from?: number;

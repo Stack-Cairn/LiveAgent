@@ -14,6 +14,8 @@ export const backend: PlanningBackend = {
       case "import":
         return invoke("planning_import", { snapshot: input });
       default:
+        if (action.startsWith("subscription."))
+          return invoke("planning_subscription", { action, input: input ?? {} });
         return Promise.reject(new Error("E:unknown_request"));
     }
   },
