@@ -12,12 +12,24 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
-import { type ImportPreview, readCalendarFile } from "../../lib/planning/calendarImport";
+import {
+  IMPORT_BATCH,
+  type ImportPreview,
+  readCalendarFile,
+} from "../../lib/planning/calendarImport";
 import { calendarName, localizePlanningError, translate } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
 import { addDays, timeLabel, zonedParts } from "../../lib/planning/time";
 import type { PlanningSnapshot } from "../../lib/planning/types";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
+
+const PREVIEW_ROWS = 100;
+function chunks<T>(items: T[]) {
+  return Array.from({ length: Math.ceil(items.length / IMPORT_BATCH) }, (_, i) =>
+    items.slice(i * IMPORT_BATCH, (i + 1) * IMPORT_BATCH),
+  );
+}
+
 export function CalendarImport({
   snapshot,
   onClose,
@@ -34,7 +46,8 @@ export function CalendarImport({
     [to, setTo] = useState(addDays(from, 90));
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [result, setResult] = useState("");
+    [result, setResult] = useState(""),
+    [progress, setProgress] = useState("");
   const review = async () => {
     if (!file) return;
     setBusy(true);
@@ -49,29 +62,47 @@ export function CalendarImport({
       setBusy(false);
     }
   };
+  const total = (preview?.entries.length ?? 0) + (preview?.tasks.length ?? 0);
+  // The backend accepts 200 items per request; larger exports are sent in ordered batches
+  // (task parents precede subtasks, so later batches can attach to earlier ones).
   const save = async () => {
-    if (!preview?.entries.length) return;
+    if (!preview || !total) return;
     setBusy(true);
     setError("");
+    const done = { events: 0, tasks: 0, skipped: 0 };
     try {
       const calendar = snapshot.calendars.find((c) => c.id === calendarId);
-      if (!calendar) throw Error(translate("planner.import.needCalendar"));
-      const saved = await planningStore.mutate<{ imported: number; skipped: number }>({
-        action: "calendar.import",
-        id: calendar.id,
-        expectedRevision: calendar.revision,
-        data: { entries: preview.entries },
-      });
-      setResult(
-        translate("planner.import.done", {
-          imported: saved?.imported ?? 0,
-          skipped: saved?.skipped ?? 0,
-        }),
-      );
+      if (preview.entries.length && !calendar)
+        throw Error(translate("planner.import.needCalendar"));
+      const batches = [
+        ...chunks(preview.entries).map((entries) => ({ kind: "events" as const, entries })),
+        ...chunks(preview.tasks).map((entries) => ({ kind: "tasks" as const, entries })),
+      ];
+      for (const [index, batch] of batches.entries()) {
+        setProgress(
+          translate("planner.import.progress", { current: index + 1, total: batches.length }),
+        );
+        const saved = await planningStore.mutate<{ imported: number; skipped: number }>(
+          batch.kind === "events"
+            ? {
+                action: "calendar.import",
+                id: calendar?.id,
+                expectedRevision: calendar?.revision,
+                data: { entries: batch.entries },
+              }
+            : { action: "todo.import", data: { entries: batch.entries } },
+        );
+        done[batch.kind] += saved?.imported ?? 0;
+        done.skipped += saved?.skipped ?? 0;
+      }
       setPreview(null);
     } catch (e) {
       setError(localizePlanningError(e));
     } finally {
+      setResult(
+        done.events || done.tasks || done.skipped ? translate("planner.import.doneAll", done) : "",
+      );
+      setProgress("");
       setBusy(false);
     }
   };
@@ -135,7 +166,7 @@ export function CalendarImport({
           >
             <Input
               type="file"
-              accept=".ics,.eml,text/calendar,message/rfc822"
+              accept=".ics,.eml,.zip,.json,text/calendar,message/rfc822,application/zip,application/json"
               disabled={busy}
               onChange={(e) => {
                 setFile(e.target.files?.[0] ?? null);
@@ -157,7 +188,10 @@ export function CalendarImport({
           {preview && (
             <div className="space-y-3">
               <p className="text-sm font-medium">
-                {translate("planner.import.previewCount", { count: preview.entries.length })}
+                {translate("planner.import.previewCounts", {
+                  events: preview.entries.length,
+                  tasks: preview.tasks.length,
+                })}
               </p>
               {preview.warnings.length > 0 && (
                 <SettingsNotice variant="warning" role="status">
@@ -170,7 +204,7 @@ export function CalendarImport({
                 </SettingsNotice>
               )}
               <ul className="divide-y divide-border">
-                {preview.entries.map((entry) => (
+                {preview.entries.slice(0, PREVIEW_ROWS).map((entry) => (
                   <li key={entry.uid} className="py-2">
                     <p className="text-sm">{entry.title}</p>
                     <p className="text-xs text-muted-foreground">
@@ -181,8 +215,37 @@ export function CalendarImport({
                     </p>
                   </li>
                 ))}
+                {preview.tasks.slice(0, PREVIEW_ROWS).map((task) => (
+                  <li key={task.uid} className="py-2">
+                    <p className="text-sm">
+                      {task.parentUid ? "↳ " : ""}
+                      {task.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {[
+                        translate("planner.import.taskList", {
+                          name: task.list || translate("planner.myTasks"),
+                        }),
+                        task.dueDate,
+                        task.status === "completed" ? translate("planner.status.completed") : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </li>
+                ))}
               </ul>
+              {total > PREVIEW_ROWS * 2 && (
+                <p className="text-xs text-muted-foreground">
+                  {translate("planner.import.previewTruncated")}
+                </p>
+              )}
             </div>
+          )}
+          {progress && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {progress}
+            </p>
           )}
         </DialogBody>
         <DialogFooter>
@@ -194,8 +257,8 @@ export function CalendarImport({
             >
               {busy ? translate("planner.import.processing") : translate("planner.import.preview")}
             </Button>
-            <Button disabled={busy || !preview?.entries.length} onClick={() => void save()}>
-              {translate("planner.import.submit", { count: preview?.entries.length ?? 0 })}
+            <Button disabled={busy || !total} onClick={() => void save()}>
+              {translate("planner.import.submit", { count: total })}
             </Button>
           </DialogActions>
         </DialogFooter>

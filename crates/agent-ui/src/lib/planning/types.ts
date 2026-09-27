@@ -118,6 +118,7 @@ export type PlanningAction =
   | "calendar.delete"
   | "calendar.import"
   | "todo.create"
+  | "todo.import"
   | "todo.update"
   | "todo.delete"
   | "todo.restore"

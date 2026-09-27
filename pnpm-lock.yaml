@@ -361,6 +361,9 @@ importers:
       ical.js:
         specifier: ^2.2.1
         version: 2.2.1
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       monaco-editor:
         specifier: 0.56.0
         version: 0.56.0
