@@ -118,7 +118,6 @@ export function PlanningEditor({
     event?.calendarId ?? draft?.calendarId ?? snapshot.calendars.find((c) => c.isDefault)?.id ?? "",
   );
   const [groupId, setGroupId] = useState(todo?.groupId ?? draft?.groupId ?? homeTaskList(snapshot));
-  const [tagIds, setTagIds] = useState(event?.tagIds ?? todo?.tagIds ?? []);
   const [priority, setPriority] = useState(todo?.priority ?? "medium");
   const [reminderMinutes, setReminderMinutes] = useState(todo?.reminderMinutes ?? 0);
   const [estimate, setEstimate] = useState(todo?.estimateMinutes?.toString() ?? "60");
@@ -179,7 +178,6 @@ export function PlanningEditor({
           dueTimeZone: dueDate ? timeZone : null,
           dueReminder,
           groupId: groupId || null,
-          tagIds,
           priority,
           reminderMinutes,
         };
@@ -220,7 +218,6 @@ export function PlanningEditor({
             data: {
               title: title.trim(),
               notes,
-              tagIds,
               calendarId,
               time,
               ...(synthetic || todo
@@ -533,32 +530,6 @@ export function PlanningEditor({
                   )}
                 </>
               )}
-              {!synthetic &&
-                !(target.kind === "event" && todo && !event) &&
-                !!snapshot.tags?.length && (
-                  <div className="space-y-2 text-sm text-muted-foreground [&>div]:flex [&>div]:flex-wrap [&>div]:gap-3 [&_i]:size-2 [&_i]:rounded-full">
-                    <span>{t("planner.editor.tags")}</span>
-                    <div>
-                      {snapshot.tags.map((tag) => (
-                        <Label className="flex items-center gap-2 text-sm font-normal" key={tag.id}>
-                          <Checkbox
-                            disabled={busy || !!readOnly}
-                            checked={tagIds.includes(tag.id)}
-                            onCheckedChange={(checked) =>
-                              setTagIds(
-                                checked
-                                  ? [...tagIds, tag.id]
-                                  : tagIds.filter((id) => id !== tag.id),
-                              )
-                            }
-                          />
-                          <i style={{ background: tag.color }} />
-                          {tag.name}
-                        </Label>
-                      ))}
-                    </div>
-                  </div>
-                )}
             </fieldset>
             {error && (
               <SettingsNotice role="alert" variant="action-error">
