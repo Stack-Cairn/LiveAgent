@@ -46,12 +46,26 @@ export function TaskListMenu({
         t.status === "open" &&
         (id === "starred" ? t.priority === "high" : (t.groupId ?? "") === id),
     ).length;
+  const myTasks = value === "" && !snapshot.defaultGroupId;
+  // Deleting a list moves its tasks to the default list; deleting the default brings back My Tasks.
+  const fallback = (list: { id: string }) =>
+    (list.id !== snapshot.defaultGroupId &&
+      snapshot.groups?.find((g) => g.id === snapshot.defaultGroupId)?.name) ||
+    translate("planner.myTasks");
+  const deleteCurrent = () =>
+    currentList
+      ? setAction({ kind: "delete", list: currentList, fallback: fallback(currentList) })
+      : setAction({
+          kind: "deleteMyTasks",
+          lists: snapshot.groups ?? [],
+          taskCount: snapshot.todos.filter((t) => !t.groupId && !t.deletedAt).length,
+        });
   const dialog = action && (
     <TaskListDialog action={action} onClose={() => setAction(null)} onSelect={onChange} />
   );
-  // The default list (My Tasks) and Starred are built in: nothing to rename or delete.
+  // Starred is a filter, not a list; My Tasks can only be deleted, not renamed.
   if (actionsOnly) {
-    if (!currentList) return null;
+    if (!currentList && !myTasks) return null;
     return (
       <>
         <DropdownMenu>
@@ -62,14 +76,13 @@ export function TaskListMenu({
             <MoreHorizontal className="size-4 rotate-90" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setAction({ kind: "rename", list: currentList })}>
-              <SquarePen className="size-4" />
-              {translate("planner.list.rename")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => setAction({ kind: "delete", list: currentList })}
-            >
+            {currentList && (
+              <DropdownMenuItem onClick={() => setAction({ kind: "rename", list: currentList })}>
+                <SquarePen className="size-4" />
+                {translate("planner.list.rename")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem className="text-destructive" onClick={deleteCurrent}>
               <Trash2 className="size-4" />
               {translate("planner.list.delete")}
             </DropdownMenuItem>
@@ -115,17 +128,16 @@ export function TaskListMenu({
             <Plus className="size-4" />
             {translate("planner.list.new")}
           </DropdownMenuItem>
-          {currentList && (
+          {(currentList || myTasks) && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setAction({ kind: "rename", list: currentList })}>
-                <SquarePen className="size-4" />
-                {translate("planner.list.renameCurrent")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setAction({ kind: "delete", list: currentList })}
-              >
+              {currentList && (
+                <DropdownMenuItem onClick={() => setAction({ kind: "rename", list: currentList })}>
+                  <SquarePen className="size-4" />
+                  {translate("planner.list.renameCurrent")}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem className="text-destructive" onClick={deleteCurrent}>
                 <Trash2 className="size-4" />
                 {translate("planner.list.deleteCurrent")}
               </DropdownMenuItem>

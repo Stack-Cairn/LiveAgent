@@ -2,11 +2,18 @@ import { translate } from "./i18n";
 import type { PlanningSnapshot, Todo } from "./types";
 
 export const DEFAULT_TASK_COLOR = "#6366f1";
-export function taskLists(snapshot: Pick<PlanningSnapshot, "groups">) {
+/** All task lists; the built-in "My Tasks" (id "") disappears once it has been deleted. */
+export function taskLists(snapshot: Pick<PlanningSnapshot, "groups" | "defaultGroupId">) {
   return [
-    { id: "", name: translate("planner.myTasks"), color: DEFAULT_TASK_COLOR },
+    ...(snapshot.defaultGroupId
+      ? []
+      : [{ id: "", name: translate("planner.myTasks"), color: DEFAULT_TASK_COLOR }]),
     ...(snapshot.groups ?? []),
   ];
+}
+/** The list new tasks go to when none is chosen. */
+export function homeTaskList(snapshot: Pick<PlanningSnapshot, "defaultGroupId">) {
+  return snapshot.defaultGroupId ?? "";
 }
 export function taskListLayer(groupId?: string | null) {
   return groupId ? `planning:tasks:${groupId}` : "planning:tasks";

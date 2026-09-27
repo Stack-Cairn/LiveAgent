@@ -52,7 +52,8 @@ export function TaskRow({
   dragging?: boolean;
   dropEdge?: "before" | "after";
   todo: Todo;
-  lists: PlanningCategory[];
+  /** Destination lists, including the built-in My Tasks (id "") while it exists. */
+  lists: Pick<PlanningCategory, "id" | "name">[];
   zone: string;
   busy: boolean;
   scheduleLabel?: string;
@@ -238,7 +239,7 @@ export function TaskRow({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel>{t("planner.task.moveToList")}</DropdownMenuLabel>
-            {[{ id: "", name: t("planner.myTasks") }, ...lists].map((list) => (
+            {lists.map((list) => (
               <DropdownMenuItem
                 key={list.id}
                 disabled={(todo.groupId ?? "") === list.id}

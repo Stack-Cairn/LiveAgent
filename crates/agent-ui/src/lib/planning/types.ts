@@ -114,6 +114,8 @@ export interface PlanningSnapshot {
   reminders: PlanningReminder[];
   sources: PlanningSourceLink[];
   subscriptions?: PlanningSubscription[];
+  /** Set once the built-in "My Tasks" list is deleted; list-less tasks land here. */
+  defaultGroupId?: string;
 }
 export interface PlanningQuery {
   from?: number;
@@ -123,6 +125,7 @@ export type PlanningAction =
   | `group.${"create" | "update" | "delete"}`
   | `tag.${"create" | "update" | "delete"}`
   | "timezone.set"
+  | "mytasks.delete"
   | "calendar.create"
   | "calendar.update"
   | "calendar.delete"

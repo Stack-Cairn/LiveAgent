@@ -18,6 +18,7 @@ import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { calendarName, localizePlanningError } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
+import { homeTaskList, taskLists } from "../../lib/planning/taskLists";
 import { addDays, eventTitle, localEpoch, timeLabel, zonedParts } from "../../lib/planning/time";
 import type { EventTime, PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
@@ -73,7 +74,7 @@ export function PlanningEditor({
   const [calendarId, setCalendarId] = useState(
     event?.calendarId ?? snapshot.calendars.find((c) => c.isDefault)?.id ?? "",
   );
-  const [groupId, setGroupId] = useState(todo?.groupId ?? "");
+  const [groupId, setGroupId] = useState(todo?.groupId ?? homeTaskList(snapshot));
   const [tagIds, setTagIds] = useState(event?.tagIds ?? todo?.tagIds ?? []);
   const [priority, setPriority] = useState(todo?.priority ?? "medium");
   const [reminderMinutes, setReminderMinutes] = useState(todo?.reminderMinutes ?? 0);
@@ -301,10 +302,10 @@ export function PlanningEditor({
                         disabled={busy || !!readOnly}
                         value={groupId}
                         onValueChange={(value) => setGroupId(value)}
-                        options={[
-                          { value: "", label: t("planner.myTasks") },
-                          ...(snapshot.groups?.map((g) => ({ value: g.id, label: g.name })) ?? []),
-                        ]}
+                        options={taskLists(snapshot).map((list) => ({
+                          value: list.id,
+                          label: list.name,
+                        }))}
                       />
                     </PlanningField>
                     <PlanningField label={t("planner.editor.priority")}>

@@ -4,7 +4,13 @@ import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
 import { planningDateLocale, translate } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
-import { compareTaskOrder, type TaskNode, taskTree } from "../../lib/planning/taskLists";
+import {
+  compareTaskOrder,
+  homeTaskList,
+  type TaskNode,
+  taskLists,
+  taskTree,
+} from "../../lib/planning/taskLists";
 import { timeBounds, zonedParts } from "../../lib/planning/time";
 import type { PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
 import { TaskComposer } from "./TaskComposer";
@@ -50,7 +56,9 @@ export function TaskPanel({
   const lists = snapshot.groups ?? [];
   const current = fixedList ?? list;
   const selectedList =
-    lists.some((l) => l.id === current) || ["", "starred"].includes(current) ? current : "";
+    taskLists(snapshot).some((l) => l.id === current) || current === "starred"
+      ? current
+      : homeTaskList(snapshot);
   const tasks = snapshot.todos.filter(
     (t) =>
       !t.deletedAt &&
@@ -124,7 +132,7 @@ export function TaskPanel({
       <TaskRow
         key={todo.id}
         todo={todo}
-        lists={lists}
+        lists={taskLists(snapshot)}
         zone={snapshot.timeZone}
         busy={busy}
         dragging={drag.dragged === todo.id}
