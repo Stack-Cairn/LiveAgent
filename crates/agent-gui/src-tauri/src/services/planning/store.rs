@@ -481,7 +481,7 @@ impl PlanningStore {
 
 fn lookup(s: &Snapshot, input: &Mutation) -> Result<Option<Value>, String> {
     let action = input.action.as_str();
-    if action.ends_with(".create") || action == "timezone.set" {
+    if action.ends_with(".create") || action == "timezone.set" || action == "todo.import" {
         return Ok(None);
     }
     let key = input.id.as_deref().ok_or("E:field_required:id")?;
@@ -544,6 +544,9 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
     }
     if m.action == "calendar.import" {
         return super::calendar_import::apply(s, m, now);
+    }
+    if m.action == "todo.import" {
+        return super::task_import::apply(s, m, now);
     }
     if m.action.starts_with("todo.")
         && m.action != "todo.purge"

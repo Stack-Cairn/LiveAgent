@@ -1,6 +1,7 @@
 mod calendar_import;
 mod hierarchy;
 pub mod store;
+mod task_import;
 #[cfg(test)]
 mod tests;
 pub mod time;
