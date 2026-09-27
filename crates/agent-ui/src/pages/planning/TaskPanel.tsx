@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Maximize2, X } from "../../components/IconSet";
+import { ChevronDown } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
 import { planningDateLocale, translate } from "../../lib/planning/i18n";
@@ -24,14 +24,10 @@ export function TaskPanel({
   onDragEnd,
   list: fixedList,
   variant = "panel",
-  onClose,
-  onExpand,
 }: {
   /** Pin the panel to one list (Tasks board cards); otherwise the header switches lists. */
   list?: string;
   variant?: "panel" | "card";
-  onClose?(): void;
-  onExpand?(): void;
   snapshot: PlanningSnapshot;
   busy: boolean;
   run(fn: () => Promise<unknown>): Promise<void>;
@@ -266,28 +262,6 @@ export function TaskPanel({
               }}
             />
           </div>
-          {onExpand && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="rounded-full"
-              aria-label={translate("planner.panel.expand")}
-              onClick={onExpand}
-            >
-              <Maximize2 className="size-4" />
-            </Button>
-          )}
-          {onClose && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="rounded-full"
-              aria-label={translate("planner.panel.close")}
-              onClick={onClose}
-            >
-              <X className="size-4" />
-            </Button>
-          )}
         </div>
       ) : (
         <div className="flex shrink-0 items-center gap-1 px-4 pb-1 pt-3">

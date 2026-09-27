@@ -354,15 +354,7 @@ export function PlanningPage() {
       setInteraction(true);
     },
   };
-  const taskPanel = (
-    <TaskPanel
-      key={state.scope}
-      snapshot={snapshot}
-      {...panelProps}
-      onExpand={() => setMode("tasks")}
-      onClose={compact ? undefined : () => setPreferences({ taskPanelOpen: false })}
-    />
-  );
+  const taskPanel = <TaskPanel key={state.scope} snapshot={snapshot} {...panelProps} />;
   const toggleLayer = (id: string) =>
     setHidden((old) => {
       const next = new Set(old);
@@ -398,8 +390,9 @@ export function PlanningPage() {
       onTaskFilter={setTaskFilter}
     />
   );
-  const showSidebar = sidebarInline && preferences.sidebarOpen;
-  const showTaskPanel = !compact && mode === "calendar" && preferences.taskPanelOpen;
+  // Side panels are fixed parts of the layout; only narrow windows move them into sheets.
+  const showSidebar = sidebarInline;
+  const showTaskPanel = !compact && mode === "calendar";
   return (
     <section
       ref={setSurface}
@@ -427,7 +420,7 @@ export function PlanningPage() {
         }
         interaction={interaction}
         busy={busy}
-        taskPanelOpen={compact ? taskSheetOpen : preferences.taskPanelOpen}
+        sidebarSheet={!sidebarInline}
         onNavigate={navigate}
         onToday={() => {
           setDate(today);
@@ -435,16 +428,8 @@ export function PlanningPage() {
         }}
         onView={setView}
         onMode={setMode}
-        onSidebar={() =>
-          !sidebarInline
-            ? setSidebarSheet(true)
-            : setPreferences({ sidebarOpen: !preferences.sidebarOpen })
-        }
-        onTasks={() =>
-          compact
-            ? setTaskSheetOpen(true)
-            : setPreferences({ taskPanelOpen: !preferences.taskPanelOpen })
-        }
+        onSidebar={() => setSidebarSheet(true)}
+        onTasks={() => setTaskSheetOpen(true)}
         onCalendars={() => setCalendarsOpen(true)}
         onTrash={() => setTrashOpen(true)}
         onImport={() => setImportOpen(true)}
@@ -513,9 +498,7 @@ export function PlanningPage() {
               onInteractionChange={setInteraction}
               onSelectTodo={(todo) => setEditor({ kind: "todo", todo })}
               onOpenDay={openDay}
-              onOpenTasks={() =>
-                compact ? setTaskSheetOpen(true) : setPreferences({ taskPanelOpen: true })
-              }
+              onOpenTasks={() => (compact ? setTaskSheetOpen(true) : setMode("tasks"))}
               days={days}
               today={today}
               snapshot={snapshot}

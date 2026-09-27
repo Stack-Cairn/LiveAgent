@@ -68,7 +68,7 @@ export function PlanningToolbar({
   interaction,
   busy,
   compact,
-  taskPanelOpen,
+  sidebarSheet,
   onNavigate,
   onToday,
   onView,
@@ -90,7 +90,8 @@ export function PlanningToolbar({
   interaction: boolean;
   busy: boolean;
   compact: boolean;
-  taskPanelOpen: boolean;
+  /** Narrow windows move the sidebar into a sheet opened from the menu button. */
+  sidebarSheet: boolean;
   onNavigate(direction: number): void;
   onToday(): void;
   onView(view: PlanningView): void;
@@ -114,15 +115,17 @@ export function PlanningToolbar({
       : "";
   return (
     <header className="planning-topbar">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="rounded-full"
-        aria-label={t("planner.toolbar.toggleSidebar")}
-        onClick={onSidebar}
-      >
-        <Menu className="size-5" />
-      </Button>
+      {sidebarSheet && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          aria-label={t("planner.toolbar.toggleSidebar")}
+          onClick={onSidebar}
+        >
+          <Menu className="size-5" />
+        </Button>
+      )}
       <h1 className={`mr-4 text-xl font-normal ${mode === "calendar" ? "hidden md:block" : ""}`}>
         {t("settings.navPlanning")}
       </h1>
@@ -273,15 +276,12 @@ export function PlanningToolbar({
             </SettingsToggleGroupItem>
           ))}
         </SettingsToggleGroup>
-        {mode === "calendar" && (
+        {mode === "calendar" && compact && (
           <Button
             variant="ghost"
             size="icon"
             className="rounded-full"
-            aria-label={
-              taskPanelOpen ? t("planner.toolbar.hideTasks") : t("planner.toolbar.showTasks")
-            }
-            aria-pressed={!compact && taskPanelOpen}
+            aria-label={t("planner.toolbar.showTasks")}
             onClick={onTasks}
           >
             <ListChecks className="size-5" />

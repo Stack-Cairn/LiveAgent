@@ -24,8 +24,6 @@ export interface CalendarPreferences {
   weekStartsOn: "monday" | "sunday";
   hourHeight: number;
   view: "day" | "week" | "month" | "agenda";
-  sidebarOpen: boolean;
-  taskPanelOpen: boolean;
   /** Only render working hours in day/week views. */
   workHoursOnly: boolean;
   workStart: number;
@@ -40,8 +38,6 @@ const defaults: CalendarPreferences = {
   weekStartsOn: "monday",
   hourHeight: 48,
   view: "week",
-  sidebarOpen: true,
-  taskPanelOpen: true,
   workHoursOnly: false,
   workStart: 9,
   workEnd: 18,
@@ -72,8 +68,6 @@ function loadPreferences(): CalendarPreferences {
       weekStartsOn: saved.weekStartsOn === "sunday" ? "sunday" : "monday",
       hourHeight: HOUR_HEIGHTS.includes(saved.hourHeight) ? saved.hourHeight : defaults.hourHeight,
       view: ["day", "week", "month", "agenda"].includes(saved.view) ? saved.view : defaults.view,
-      sidebarOpen: saved.sidebarOpen !== false,
-      taskPanelOpen: saved.taskPanelOpen !== false,
       ...workHours(saved.workStart, saved.workEnd),
       workHoursOnly: saved.workHoursOnly === true,
     };
