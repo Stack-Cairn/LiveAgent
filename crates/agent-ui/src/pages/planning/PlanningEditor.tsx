@@ -67,6 +67,8 @@ export interface EditorDraft {
   groupId?: string;
   frequency?: "" | "daily" | "weekly" | "monthly";
   due?: { date: string; time: string };
+  /** A new task's time block chosen in quick create; created together with the task. */
+  schedule?: { calendarId: string; time: EventTime };
 }
 export type EditorTarget =
   | { kind: "todo"; todo?: Todo; draft?: EditorDraft }
@@ -185,7 +187,7 @@ export function PlanningEditor({
           action: todo ? "todo.update" : "todo.create",
           id: todo?.id,
           expectedRevision: todo?.revision,
-          data,
+          data: !todo && draft?.schedule ? { ...data, schedule: draft.schedule } : data,
         });
       } else {
         const time: EventTime = allDay
@@ -348,6 +350,17 @@ export function PlanningEditor({
               </PlanningField>
               {target.kind === "todo" ? (
                 <>
+                  {!todo && draft?.schedule && (
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">
+                        {t("planner.editor.scheduledTimes")}
+                      </span>{" "}
+                      {draft.schedule.time.kind === "timed"
+                        ? zonedParts(draft.schedule.time.startAt, zone).date
+                        : draft.schedule.time.startDate}{" "}
+                      · {timeLabel(draft.schedule.time, zone)}
+                    </p>
+                  )}
                   <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
                     <PlanningField label={t("planner.taskList")}>
                       <PlanningSelect

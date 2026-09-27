@@ -44,6 +44,12 @@ export function MonthGrid({
   onCreate(time: EventTime, anchor: Element): void;
 }) {
   const now = Date.now();
+  const allDay = (day: string): EventTime => ({
+    kind: "allDay",
+    startDate: day,
+    endDateExclusive: addDays(day, 1),
+    timeZone: zone,
+  });
   const completed = (todoId?: string | null) =>
     snapshot.todos.some((t) => t.id === todoId && t.status === "completed");
   const weeks = Array.from({ length: days.length / 7 }, (_, i) => days.slice(i * 7, i * 7 + 7));
@@ -110,25 +116,29 @@ export function MonthGrid({
             timeZone: "UTC",
           }).format(new Date(`${day}T12:00:00Z`));
           return (
+            // A single click on empty cell space starts quick create, as in Google's month view;
+            // keyboard users get the equivalent visually hidden button inside the cell.
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the sr-only button is the keyboard path
             <fieldset
               key={day}
               aria-label={translate("planner.month.cell", { day })}
               data-planning-all-day={day}
               className={`planning-month-cell ${hoverDay === day ? "planning-all-day-target" : ""} ${day === today ? "is-today" : ""} ${day.slice(0, 7) !== date.slice(0, 7) ? "is-outside" : ""}`}
-              onDoubleClick={(e) => {
-                if (e.target === e.currentTarget)
-                  onCreate(
-                    {
-                      kind: "allDay",
-                      startDate: day,
-                      endDateExclusive: addDays(day, 1),
-                      timeZone: zone,
-                    },
-                    e.currentTarget,
-                  );
+              onClick={(e) => {
+                if (e.target === e.currentTarget) onCreate(allDay(day), e.currentTarget);
               }}
             >
               {row === 0 && <small className="planning-month-weekday">{weekday}</small>}
+              <button
+                type="button"
+                className="sr-only focus:not-sr-only"
+                onClick={(e) => {
+                  const cell = e.currentTarget.parentElement;
+                  if (cell) onCreate(allDay(day), cell);
+                }}
+              >
+                {translate("planner.grid.newAllDayOf", { day })}
+              </button>
               <button
                 type="button"
                 aria-label={translate("planner.grid.openDay", { day })}

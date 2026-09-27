@@ -56,7 +56,7 @@ export function PlanningPage() {
     observer.observe(surface);
     return () => observer.disconnect();
   }, [surface]);
-  // Below these widths the panels become sheets so the calendar keeps its minimum width.
+  // Below these widths the side panels are left out so the calendar keeps its minimum width.
   const compact = width < 900;
   const sidebarInline = width >= 1180;
   const state = usePlanning();
@@ -121,10 +121,20 @@ export function PlanningPage() {
   // "Create" (button or C) starts a quick-create draft at the current time, like dragging on
   // the grid. Day/week views show the draft block; other views anchor the card elsewhere.
   const pendingCreate = useRef<QuickKind | null>(null);
+  const quickClosedAt = useRef(0);
   const nowDraft = (kind: QuickKind) => {
     const startAt = Math.floor(Date.now() / (15 * MINUTE)) * 15 * MINUTE;
     const time: EventTime = { kind: "timed", startAt, endAt: startAt + HOUR, timeZone: zone };
-    const grid = mode === "calendar" && (view === "day" || view === "week") && days.includes(today);
+    // With "working hours only" the current time may sit outside the drawn range; then there is
+    // no draft block to anchor to, so fall back to the Create button like other views.
+    const hour = Number(zonedParts(startAt, zone).time.slice(0, 2));
+    const visibleHour =
+      !preferences.workHoursOnly || (hour >= preferences.workStart && hour < preferences.workEnd);
+    const grid =
+      mode === "calendar" &&
+      (view === "day" || view === "week") &&
+      days.includes(today) &&
+      visibleHour;
     const anchor = grid
       ? undefined
       : ((mode === "calendar" && view === "month"
@@ -148,6 +158,8 @@ export function PlanningPage() {
     const kind = pendingCreate.current;
     pendingCreate.current = null;
     setQuick(kind ? nowDraft(kind) : null);
+    // The preview's anchor block is gone after navigating.
+    setPreview(null);
   }, [days, mode]);
   useEffect(() => {
     void planningStore.refresh({
@@ -504,7 +516,11 @@ export function PlanningPage() {
               onSelect={(event, anchor) => setPreview({ event, anchor })}
               onSelectTodo={(todo) => setEditor({ kind: "todo", todo })}
               onOpenDay={openDay}
-              onCreate={(time, anchor) => setQuick({ kind: "event", time, title: "", anchor })}
+              onCreate={(time, anchor) => {
+                // The click that dismissed an open card must not immediately start another one.
+                if (Date.now() - quickClosedAt.current < 400) return;
+                setQuick({ kind: "event", time, title: "", anchor });
+              }}
             />
           ) : view === "agenda" ? (
             <AgendaView
@@ -626,7 +642,10 @@ export function PlanningPage() {
           onKind={(kind) => setQuick({ ...quick, kind })}
           onTitleChange={(title) => setQuick((current) => current && { ...current, title })}
           onTimeChange={(time) => setQuick((current) => current && { ...current, time })}
-          onClose={() => setQuick(null)}
+          onClose={() => {
+            quickClosedAt.current = Date.now();
+            setQuick(null);
+          }}
           onMore={(target) => {
             setQuick(null);
             setEditor(target);

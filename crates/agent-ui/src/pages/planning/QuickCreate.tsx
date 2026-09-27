@@ -93,7 +93,8 @@ export function QuickCreate({
     calendarId,
     groupId,
     frequency,
-    due: due.date ? due : { date: start.date, time: start.time },
+    due: due.date ? due : undefined,
+    schedule: { calendarId, time },
   });
   const save = async () => {
     setBusy(true);
