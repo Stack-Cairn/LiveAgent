@@ -68,6 +68,12 @@ function afterClick(run: () => void) {
   setTimeout(fire, 120);
 }
 
+/** The same local time `days` calendar days later (not a fixed 24 hours across DST). */
+function shiftDays(epoch: number, days: number, zone: string) {
+  const { date, time } = zonedParts(epoch, zone);
+  return localCandidates(addDays(date, days), time, zone)[0] ?? epoch + days * 24 * HOUR;
+}
+
 export interface PlanningDragStart {
   todo: Todo;
   pointerId: number;
@@ -381,7 +387,8 @@ export function TimeGrid({
       document.removeEventListener("pointercancel", cancel);
       document.removeEventListener("keydown", key);
       window.removeEventListener("blur", cancel);
-      drag.current = null;
+      // Re-running mid-drag (e.g. the hour height changed) must not leave the page "interacting".
+      if (drag.current) clear();
     };
   }, [zone, hourHeight]);
   const start = (
@@ -461,7 +468,7 @@ export function TimeGrid({
         }}
       >
         <small className="planning-zone-label" title={zone}>
-          {zoneOffset(days[0], zone).replace("GMT", "GMT")}
+          {zoneOffset(days[0], zone)}
         </small>
         {days.map((day) => (
           <fieldset
@@ -764,7 +771,10 @@ export function TimeGrid({
                         >
                           <Circle className="planning-task-mark" aria-hidden />
                           <span className="planning-deadline-title">{todo.title}</span>
-                          <span className="planning-deadline-time">，{time}</span>
+                          <span className="planning-deadline-time">
+                            {translate("planner.grid.inlineSeparator")}
+                            {time}
+                          </span>
                         </button>
                       );
                     }
@@ -830,13 +840,13 @@ export function TimeGrid({
                             )
                               return;
                             e.preventDefault();
-                            const delta =
-                              {
-                                ArrowUp: -15 * MINUTE,
-                                ArrowDown: 15 * MINUTE,
-                                ArrowLeft: -24 * HOUR,
-                                ArrowRight: 24 * HOUR,
-                              }[e.key] ?? 0;
+                            // Days move by calendar date so the wall-clock time survives DST.
+                            const dayStep = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+                            const delta = dayStep
+                              ? shiftDays(event.time.startAt, dayStep, zone) - event.time.startAt
+                              : e.key === "ArrowUp"
+                                ? -15 * MINUTE
+                                : 15 * MINUTE;
                             void onCommit(event, undefined, {
                               ...event.time,
                               startAt: event.time.startAt + delta,
@@ -852,7 +862,7 @@ export function TimeGrid({
                               {eventTitle(event, snapshot.todos)}
                             </span>
                             <span className="planning-inline-time">
-                              ，
+                              {translate("planner.grid.inlineSeparator")}
                               {timeLabel(event.time, zone).split(" · ")[0].split(/[–-]/)[0].trim()}
                             </span>
                           </strong>

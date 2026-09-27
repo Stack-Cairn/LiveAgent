@@ -223,9 +223,12 @@ export function TaskRow({
                 {t("planner.task.moveDown")}
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem className="gap-2" onClick={onSchedule}>
-              {t("planner.editor.schedule")}
-            </DropdownMenuItem>
+            {/* Completed tasks cannot get new time blocks (the backend rejects them). */}
+            {todo.status !== "completed" && (
+              <DropdownMenuItem className="gap-2" onClick={onSchedule}>
+                {t("planner.editor.schedule")}
+              </DropdownMenuItem>
+            )}
             {onAddSubtask && (
               <DropdownMenuItem className="gap-2" onClick={onAddSubtask}>
                 {t("planner.task.addSubtask")}

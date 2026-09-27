@@ -104,8 +104,8 @@ export function createPlanningStore(transport: PlanningBackend) {
         try {
           response = await transport.call("mutate", request);
         } catch (error) {
-          // 只重试同一请求；网络层超时是否已提交由 requestId 判定。
-          if (scope !== transport.scope()) throw error;
+          // 只重试同一请求；网络层超时是否已提交由 requestId 判定。后端校验错误（E:）重试无意义。
+          if (scope !== transport.scope() || String(error).includes("E:")) throw error;
           response = await transport.call("mutate", request);
         }
       } catch (error) {
