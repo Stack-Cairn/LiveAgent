@@ -26,7 +26,7 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | [design/planning-calendar.md](design/planning-calendar.md) | 日历管理、Todo 排期、提醒/Agent 闭环与后续扩展的产品设计 | Planning 产品与开发 |
 | [design/planning-calendar-implementation.md](design/planning-calendar-implementation.md) | Planning 主线迁移、实现范围、验证结果与限制 | Planning 开发 |
 | [design/planning-google-benchmark.md](design/planning-google-benchmark.md) | Google Calendar / Tasks 实测数据与 Planning 对标映射 | Planning 前端开发 |
-| [ui-refactor/planning-design-alignment.md](ui-refactor/planning-design-alignment.md) | 最新 main 前端设计规范分析与 Planning 对齐方式 | Planning 与共享 UI 开发 |
+| [design/planning-design-alignment.md](design/planning-design-alignment.md) | 最新 main 前端设计规范分析与 Planning 对齐方式 | Planning 与共享 UI 开发 |
 | [design/proma-planning-reproduction.md](design/proma-planning-reproduction.md) | Proma 日程、Todo、提醒与自动化的源码分析及 LiveAgent 能力对照 | Planning 调研与开发 |
 | [operations/development.md](operations/development.md) | 本地开发、构建、测试、端口、运行路径 | 日常开发 |
 | [operations/deployment.md](operations/deployment.md) | CI/CD、Gateway Docker、用户自部署、桌面 Release 自动化 | 发布维护 |

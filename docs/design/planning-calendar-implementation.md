@@ -3,7 +3,7 @@
 更新：2026-09-27。功能从 `feat/planning-calendar` 的 `2e1bb64e` 迁入主工作目录；
 `feat/planning-calendar-main` 基于已更新的 `main`（`341b005d`）。原功能分支保留作对照。
 产品背景见 [Planning 产品设计](planning-calendar.md)，当前实现与验收以本文为准。
-设计规范依据见 [主线 UI 对齐分析](../ui-refactor/planning-design-alignment.md)。
+设计规范依据见 [主线 UI 对齐分析](planning-design-alignment.md)。
 
 ## 页面与交互
 
