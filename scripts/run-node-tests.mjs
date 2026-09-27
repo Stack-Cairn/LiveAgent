@@ -65,7 +65,34 @@ export async function discoverTestFiles(options, cwd = process.cwd()) {
   return [...new Set(files)].sort((left, right) => left.localeCompare(right));
 }
 
-async function runTests(files) {
+const WINDOWS_COMMAND_LENGTH_LIMIT = 8_000;
+
+export function splitTestFilesIntoBatches(
+  files,
+  maxCommandLength = process.platform === "win32"
+    ? WINDOWS_COMMAND_LENGTH_LIMIT
+    : Number.POSITIVE_INFINITY,
+) {
+  const batches = [];
+  let batch = [];
+  let commandLength = 0;
+
+  for (const file of files) {
+    const argumentLength = file.length + 1;
+    if (batch.length > 0 && commandLength + argumentLength > maxCommandLength) {
+      batches.push(batch);
+      batch = [];
+      commandLength = 0;
+    }
+    batch.push(file);
+    commandLength += argumentLength;
+  }
+
+  if (batch.length > 0) batches.push(batch);
+  return batches;
+}
+
+async function runTestBatch(files) {
   return await new Promise((resolveExitCode) => {
     const child = spawn(process.execPath, ["--test", ...files], {
       shell: false,
@@ -77,6 +104,14 @@ async function runTests(files) {
     });
     child.once("close", (code) => resolveExitCode(code ?? 1));
   });
+}
+
+async function runTests(files) {
+  for (const batch of splitTestFilesIntoBatches(files)) {
+    const exitCode = await runTestBatch(batch);
+    if (exitCode !== 0) return exitCode;
+  }
+  return 0;
 }
 
 async function main() {

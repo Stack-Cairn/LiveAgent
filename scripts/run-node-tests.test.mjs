@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { discoverTestFiles, parseArguments } from "./run-node-tests.mjs";
+import {
+  discoverTestFiles,
+  parseArguments,
+  splitTestFilesIntoBatches,
+} from "./run-node-tests.mjs";
 
 test("parseArguments accepts repeatable excludes and a prefix", () => {
   const options = parseArguments([
@@ -54,4 +58,19 @@ test("discoverTestFiles applies basename prefixes", async (context) => {
   );
 
   assert.deepEqual(files, [join(root, "test", "release-one.test.mjs")]);
+});
+
+test("splitTestFilesIntoBatches keeps every batch under the command limit", () => {
+  const files = ["a.test.mjs", "b.test.mjs", "c.test.mjs", "d.test.mjs"];
+
+  assert.deepEqual(splitTestFilesIntoBatches(files, 20), [
+    ["a.test.mjs"],
+    ["b.test.mjs"],
+    ["c.test.mjs"],
+    ["d.test.mjs"],
+  ]);
+  assert.deepEqual(splitTestFilesIntoBatches(files, 24), [
+    ["a.test.mjs", "b.test.mjs"],
+    ["c.test.mjs", "d.test.mjs"],
+  ]);
 });
