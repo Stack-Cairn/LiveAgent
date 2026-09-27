@@ -924,6 +924,8 @@ export function isBuiltinShareToolName(name: string) {
     "ProcessWait",
     "McpManager",
     "MemoryManager",
+    "PlanningMutate",
+    "PlanningQuery",
     "Read",
     "ReadConversation",
     "ReadTerminal",

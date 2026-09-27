@@ -32,6 +32,7 @@ import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
 import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
+import { createPlanningTools } from "./planningTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
@@ -248,6 +249,7 @@ async function buildBaseBuiltinToolBundles(
           }),
         ]
       : []),
+    createPlanningTools(),
     createCronTools({
       currentChatModel: params.currentChatModel,
       workdir: params.workdir,

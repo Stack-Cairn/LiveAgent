@@ -74,6 +74,22 @@ const CHAT_AND_CRON: readonly SystemToolRuntimeScope[] = ["chat", "cron_auto_pro
 const CHAT_ONLY: readonly SystemToolRuntimeScope[] = ["chat"];
 
 export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
+  {
+    id: "planning_query",
+    toolName: "PlanningQuery",
+    icon: "clock",
+    categoryId: "automation",
+    isReadOnly: true,
+    runtimeScopes: CHAT_AND_CRON,
+  },
+  {
+    id: "planning_mutate",
+    toolName: "PlanningMutate",
+    icon: "clock",
+    categoryId: "automation",
+    isReadOnly: false,
+    runtimeScopes: CHAT_AND_CRON,
+  },
   /* ── File system ── */
   {
     id: "read",
