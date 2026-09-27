@@ -1,4 +1,6 @@
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { useState } from "react";
+import { ExternalLink } from "../../components/IconSet";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";
 import { Button } from "../../components/ui/button";
 import {
@@ -28,6 +30,28 @@ export function intervalLabel(
     : minutes < 1440
       ? t("planner.subscription.everyHours", { count: minutes / 60 })
       : t("planner.subscription.daily");
+}
+
+/** Google Calendar settings, where each calendar's "Integrate calendar" shows its iCal address. */
+export const GOOGLE_CALENDAR_SETTINGS_URL = "https://calendar.google.com/calendar/r/settings";
+
+/** Opens Google Calendar settings in the system browser (new tab on the web). */
+export function GoogleCalendarLink({ className }: { className?: string }) {
+  const { t } = usePlanningT();
+  return (
+    <button
+      type="button"
+      className={`inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline ${className ?? ""}`}
+      onClick={() =>
+        void openUrl(GOOGLE_CALENDAR_SETTINGS_URL).catch(() =>
+          window.open(GOOGLE_CALENDAR_SETTINGS_URL, "_blank", "noreferrer"),
+        )
+      }
+    >
+      {t("planner.subscription.openGoogle")}
+      <ExternalLink className="size-3.5" />
+    </button>
+  );
 }
 
 /** Add an iCal subscription (Google "secret address", Outlook, Apple, Feishu…). */
@@ -83,7 +107,11 @@ export function SubscriptionDialog({ onClose }: { onClose(): void }) {
           >
             <PlanningField
               label={t("planner.subscription.url")}
-              description={t("planner.subscription.urlHint")}
+              description={
+                <>
+                  {t("planner.subscription.urlHint")} <GoogleCalendarLink />
+                </>
+              }
             >
               <Input
                 variant="plain"

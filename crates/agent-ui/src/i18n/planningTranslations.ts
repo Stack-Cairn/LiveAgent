@@ -395,6 +395,7 @@ export const PLANNING_TRANSLATIONS = {
     "planner.subscription.tag": "订阅",
     "planner.subscription.title": "订阅日历",
     "planner.subscription.url": "iCal 链接",
+    "planner.subscription.openGoogle": "打开 Google 日历设置",
     "planner.subscription.urlHint":
       "Google 日历：设置 → 选择日历 → 集成日历 → “iCal 格式的私密地址”。支持 https:// 与 webcal://；私密链接相当于密码，请勿分享。",
     "planner.task.addSubtask": "添加子任务",
@@ -863,6 +864,7 @@ export const PLANNING_TRANSLATIONS = {
     "planner.subscription.tag": "subscribed",
     "planner.subscription.title": "Subscribed calendars",
     "planner.subscription.url": "iCal link",
+    "planner.subscription.openGoogle": "Open Google Calendar settings",
     "planner.subscription.urlHint":
       "Google Calendar: Settings → pick the calendar → Integrate calendar → “Secret address in iCal format”. https:// and webcal:// are supported; treat private links like a password.",
     "planner.task.addSubtask": "Add subtask",

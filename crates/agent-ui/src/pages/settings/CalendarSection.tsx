@@ -27,6 +27,7 @@ import { CalendarManager } from "../planning/CalendarManager";
 import { type CalendarPreferences, useCalendarPreferences } from "../planning/calendarDisplay";
 import { PlanningTrash } from "../planning/PlanningTrash";
 import {
+  GoogleCalendarLink,
   intervalLabel,
   SUBSCRIPTION_INTERVALS,
   SubscriptionDialog,
@@ -363,15 +364,18 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
           title={t("planner.subscription.add")}
           description={t("planner.subscription.hint")}
           control={
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!snapshot}
-              onClick={() => setDialog("subscribe")}
-            >
-              <Plus className="size-4" />
-              {t("planner.subscription.add")}
-            </Button>
+            <div className="flex items-center gap-3">
+              <GoogleCalendarLink className="text-sm" />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!snapshot}
+                onClick={() => setDialog("subscribe")}
+              >
+                <Plus className="size-4" />
+                {t("planner.subscription.add")}
+              </Button>
+            </div>
           }
         />
       </SettingsGroup>
