@@ -118,7 +118,7 @@ export function SubscriptionDialog({ onClose }: { onClose(): void }) {
                 autoFocus
                 value={url}
                 disabled={busy}
-                placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+                placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics"
                 autoComplete="off"
                 spellCheck={false}
                 onChange={(e) => setUrl(e.target.value)}

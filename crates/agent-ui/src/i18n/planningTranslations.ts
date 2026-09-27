@@ -234,7 +234,7 @@ export const PLANNING_TRANSLATIONS = {
     "planner.import.needCalendar": "请选择目标日历",
     "planner.import.noInvitation": "邮件中没有 ICS 日历邀请附件。",
     "planner.import.htmlNotIcs":
-      "返回的是网页而不是 iCal 数据。Google 日历请使用「设置 → 集成日历」中的「iCal 格式的私密地址」。",
+      "返回的是网页而不是 iCal 数据。Google 日历请在该日历的「集成日历」中复制「以 iCal 格式显示的非公开网址」。",
     "planner.import.invalidIcs": "iCal 数据格式有误：{detail}",
     "planner.import.notIcs": "文件不是有效的 ICS 日历。",
     "planner.import.notTasks": "文件不是有效的 Google Tasks 导出（Tasks.json）",
@@ -397,7 +397,7 @@ export const PLANNING_TRANSLATIONS = {
     "planner.subscription.url": "iCal 链接",
     "planner.subscription.openGoogle": "打开 Google 日历设置",
     "planner.subscription.urlHint":
-      "Google 日历：设置 → 选择日历 → 集成日历 → “iCal 格式的私密地址”。支持 https:// 与 webcal://；私密链接相当于密码，请勿分享。",
+      "Google 日历：设置 → 左侧「我的日历设置」中选中日历 → 集成日历 → 复制「以 iCal 格式显示的非公开网址」（右侧复制按钮）。不要用「公开网址」，日历未公开时无法访问。私密链接相当于密码，请勿分享。",
     "planner.task.addSubtask": "添加子任务",
     "planner.task.collapseSubtasks": "收起 {title} 的子任务",
     "planner.task.complete": "完成：{title}",
@@ -866,7 +866,7 @@ export const PLANNING_TRANSLATIONS = {
     "planner.subscription.url": "iCal link",
     "planner.subscription.openGoogle": "Open Google Calendar settings",
     "planner.subscription.urlHint":
-      "Google Calendar: Settings → pick the calendar → Integrate calendar → “Secret address in iCal format”. https:// and webcal:// are supported; treat private links like a password.",
+      "Google Calendar: Settings → pick the calendar under “Settings for my calendars” → Integrate calendar → copy “Secret address in iCal format”. Don't use the public address; it only works for public calendars. Treat the secret link like a password.",
     "planner.task.addSubtask": "Add subtask",
     "planner.task.collapseSubtasks": "Collapse subtasks of {title}",
     "planner.task.complete": "Complete: {title}",
