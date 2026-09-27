@@ -19,6 +19,8 @@ type SettingsComboboxProps = {
   searchPlaceholder: string;
   emptyLabel: string;
   triggerClassName?: string;
+  /** Lets an external <label htmlFor> target the trigger. */
+  id?: string;
 };
 
 export function SettingsCombobox({
@@ -29,6 +31,7 @@ export function SettingsCombobox({
   searchPlaceholder,
   emptyLabel,
   triggerClassName,
+  id,
 }: SettingsComboboxProps) {
   const zoneStyle = useZoneFontScaleStyle();
   const selectedOption = options.find((option) => option.value === value) ?? null;
@@ -45,6 +48,7 @@ export function SettingsCombobox({
       }}
     >
       <Combobox.Trigger
+        id={id}
         aria-label={ariaLabel}
         className={cn(
           SETTINGS_PICKER_TRIGGER_CLASS,
