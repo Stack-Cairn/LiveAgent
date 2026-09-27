@@ -58,6 +58,9 @@ ignore = "0.4.27"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 leveldb-core = "0.1.0"
 chrono = "0.4.45"
+chrono-tz = "0.10.4"
+iana-time-zone = "0.1"
+tauri-plugin-notification = "2"
 tokio-cron-scheduler = "0.15.1"
 rustls = { version = "0.23.41", default-features = false, features = ["ring", "std"] }
 prost = "0.14.4"
