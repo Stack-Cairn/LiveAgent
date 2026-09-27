@@ -308,10 +308,18 @@
 .planning-time-event.is-dragging {
   opacity: 0.4;
 }
-.planning-time-event.is-past,
 .planning-all-day-event.is-past,
 .planning-month-event.is-past {
   opacity: 0.55;
+}
+/* Grid blocks may cascade over each other, so fade them with an opaque veil, not opacity. */
+.planning-time-event.is-past::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: hsl(var(--card) / 0.45);
+  pointer-events: none;
 }
 :is(.planning-month-event, .planning-agenda-row):not(.is-filled).is-past {
   opacity: 1;
@@ -738,8 +746,13 @@ hr.planning-agenda-now {
 .planning-time-event.is-task .planning-event-body {
   padding-left: 0.375rem;
 }
-.planning-time-event.is-task.is-completed {
-  opacity: 0.45;
+.planning-time-event.is-task.is-completed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: hsl(var(--card) / 0.55);
+  pointer-events: none;
 }
 .planning-deadline {
   display: flex;
@@ -794,7 +807,4 @@ hr.planning-agenda-now {
 .planning-agenda-dot.is-task .planning-task-mark {
   width: 0.875rem;
   height: 0.875rem;
-}
-.planning-deadline.is-past {
-  opacity: 0.55;
 }

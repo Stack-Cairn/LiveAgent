@@ -28,6 +28,9 @@ const GUTTER = 56;
 const DEADLINE_PREFIX = "deadline:";
 /** Text line height inside blocks (text-xs / 1rem) plus vertical padding. */
 const LINE_HEIGHT = 16;
+/** Below this width per overlapping block, blocks cascade (Google-style) instead of splitting. */
+const MIN_SPLIT_WIDTH = 64;
+const CASCADE_OFFSET = 14;
 const BLOCK_PADDING = 8;
 /** How many wrapped title lines fit, leaving one line for the time when there is room. */
 function titleLines(height: number, reserveTimeLine: boolean) {
@@ -155,12 +158,14 @@ export function TimeGrid({
     : preferredHourHeight;
   // Header rows must reserve exactly the scroll area's scrollbar width, which varies by platform.
   const [scrollbar, setScrollbar] = useState(0);
+  const [viewWidth, setViewWidth] = useState(0);
   useEffect(() => {
     const view = viewport.current;
     if (!view) return;
     const measure = () => {
       setScrollbar(view.offsetWidth - view.clientWidth);
       setViewHeight(view.clientHeight);
+      setViewWidth(view.clientWidth);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -530,6 +535,7 @@ export function TimeGrid({
               ))}
           </div>
           {days.map((day) => {
+            const dayWidth = viewWidth ? (viewWidth - GUTTER) / days.length : 200;
             const [from, to] = rangeOf(day);
             const dayLength = dayStart(addDays(day, 1), zone) - dayStart(day, zone);
             const dayFrom = dayStart(day, zone),
@@ -619,12 +625,23 @@ export function TimeGrid({
                 )}
                 {placements.map(
                   ({ event, top, height, column, columns: count, span, startsHere, endsHere }) => {
-                    const geometry = {
-                      top,
-                      height: Math.max(16, height),
-                      left: `calc(${(column / count) * 100}% + 1px)`,
-                      width: `calc(${(span * 100) / count}% - ${column + span >= count ? 10 : 2}px)`,
-                    };
+                    // Equal columns while each block stays readable; otherwise cascade so every
+                    // block keeps most of the width and later blocks sit on top, offset right.
+                    const cascade = count > 1 && dayWidth / count < MIN_SPLIT_WIDTH;
+                    const geometry = cascade
+                      ? {
+                          top,
+                          height: Math.max(16, height),
+                          left: `${1 + column * CASCADE_OFFSET}px`,
+                          width: `calc(100% - ${column * CASCADE_OFFSET + 10}px)`,
+                          zIndex: 2 + column,
+                        }
+                      : {
+                          top,
+                          height: Math.max(16, height),
+                          left: `calc(${(column / count) * 100}% + 1px)`,
+                          width: `calc(${(span * 100) / count}% - ${column + span >= count ? 10 : 2}px)`,
+                        };
                     if (event.id.startsWith(DEADLINE_PREFIX)) {
                       const todo = dueTodos.find((t) => t.id === event.todoId);
                       if (!todo) return null;
