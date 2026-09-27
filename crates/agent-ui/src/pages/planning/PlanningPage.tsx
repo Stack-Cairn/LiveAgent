@@ -12,7 +12,11 @@ import {
 } from "../../components/ui/sheet";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
-import { localizePlanningError, planningLunarAvailable } from "../../lib/planning/i18n";
+import {
+  localizePlanningError,
+  planningDateLocale,
+  planningLunarAvailable,
+} from "../../lib/planning/i18n";
 import { planningStore, usePlanning } from "../../lib/planning/store";
 import {
   addDays,
@@ -37,6 +41,7 @@ import { TaskListDialog } from "./TaskListDialog";
 import { TaskPanel } from "./TaskPanel";
 import { TasksBoard } from "./TasksBoard";
 import { type PlanningDragStart, TimeGrid } from "./TimeGrid";
+import { preloadTimeZoneOptions } from "./TimeZonePicker";
 import { usePlanningT } from "./usePlanningT";
 import "./planning.css";
 
@@ -129,10 +134,16 @@ export function PlanningPage() {
       to: dayStart(addDays(days[days.length - 1], 1), zone),
     });
   }, [days, zone]);
+  // Re-rendering the whole page (grid layout, task panel) every second made every popover
+  // stutter. Tick per second only while the undo countdown shows; otherwise once a minute
+  // keeps the now line and past-item styling current.
+  const undoActive = undo !== null && undo.expiresAt > clock;
   useEffect(() => {
-    const timer = setInterval(() => setClock(Date.now()), 1000);
+    setClock(Date.now());
+    const timer = setInterval(() => setClock(Date.now()), undoActive ? 1000 : 60_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [undoActive]);
+  useEffect(() => preloadTimeZoneOptions(planningDateLocale(locale)), [locale]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching Agent scopes must reset drafts
   useEffect(() => {
     setEditor(null);

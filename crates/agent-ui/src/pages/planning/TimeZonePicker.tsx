@@ -78,30 +78,57 @@ function offsetMinutes(offset: string) {
   return match[1] === "-" ? -minutes : minutes;
 }
 
+// Building ~420 options creates two Intl formatters per zone, which takes hundreds of
+// milliseconds in WebKit. Cache per locale and day (offsets only change with DST) so opening
+// the display settings popover does not rebuild it every time.
+const optionCache = new Map<string, SettingsComboboxOption[]>();
+function timeZoneOptions(locale: string) {
+  const at = new Date();
+  const key = `${locale}|${at.toDateString()}`;
+  const cached = optionCache.get(key);
+  if (cached) return cached;
+  const zones = new Set<string>(
+    typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [],
+  );
+  zones.add("UTC");
+  const options = [...zones]
+    .map((zone) => {
+      const offset = zoneName(zone, "en-US", "shortOffset", at) || "GMT";
+      const name = zoneName(zone, locale, "longGeneric", at);
+      const city = locale === "zh-CN" ? ZH_CITIES[zone] : undefined;
+      return {
+        minutes: offsetMinutes(offset),
+        option: {
+          value: zone,
+          label: [offset, city, name, zone].filter(Boolean).join(" · "),
+        } satisfies SettingsComboboxOption,
+      };
+    })
+    .sort((a, b) => a.minutes - b.minutes || a.option.value.localeCompare(b.option.value))
+    .map(({ option }) => option);
+  optionCache.clear();
+  optionCache.set(key, options);
+  return options;
+}
+
+/** Warm the cache while the browser is idle, before the picker is first opened. */
+export function preloadTimeZoneOptions(locale: string) {
+  const run = () => timeZoneOptions(locale);
+  if (typeof requestIdleCallback === "function") {
+    const id = requestIdleCallback(run, { timeout: 3000 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(run, 500);
+  return () => clearTimeout(id);
+}
+
 /** Searchable IANA time zone list, ordered by current UTC offset. */
 function useTimeZoneOptions(current: string, locale: string) {
   return useMemo(() => {
-    const at = new Date();
-    const zones = new Set<string>(
-      typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [],
-    );
-    zones.add("UTC");
-    if (current) zones.add(current);
-    return [...zones]
-      .map((zone) => {
-        const offset = zoneName(zone, "en-US", "shortOffset", at) || "GMT";
-        const name = zoneName(zone, locale, "longGeneric", at);
-        const city = locale === "zh-CN" ? ZH_CITIES[zone] : undefined;
-        return {
-          minutes: offsetMinutes(offset),
-          option: {
-            value: zone,
-            label: [offset, city, name, zone].filter(Boolean).join(" · "),
-          } satisfies SettingsComboboxOption,
-        };
-      })
-      .sort((a, b) => a.minutes - b.minutes || a.option.value.localeCompare(b.option.value))
-      .map(({ option }) => option);
+    const options = timeZoneOptions(locale);
+    return !current || options.some((option) => option.value === current)
+      ? options
+      : [{ value: current, label: current }, ...options];
   }, [current, locale]);
 }
 
