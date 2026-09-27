@@ -23,6 +23,11 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | [features/history-compaction.md](features/history-compaction.md) | V3 历史分段、FTS、分享、上下文压缩 checkpoint | 历史与上下文开发 |
 | [features/config-backup-sync.md](features/config-backup-sync.md) | 配置快照、本地导入导出、WebDAV 同步与自动上传 | 设置与同步开发 |
 | [design/workbench-project-tool-panes.md](design/workbench-project-tool-panes.md) | 审查 / 内网穿透 / SSH / 后台任务脱离 Right Dock 成为可拖拽拼接的 Workbench Pane（桌面端与 Web 端共用实现） | Workbench 与项目工具开发 |
+| [design/planning-calendar.md](design/planning-calendar.md) | 日历管理、Todo 排期、提醒/Agent 闭环与后续扩展的产品设计 | Planning 产品与开发 |
+| [design/planning-calendar-implementation.md](design/planning-calendar-implementation.md) | Planning 主线迁移、实现范围、验证结果与限制 | Planning 开发 |
+| [design/planning-google-benchmark.md](design/planning-google-benchmark.md) | Google Calendar / Tasks 实测数据与 Planning 对标映射 | Planning 前端开发 |
+| [ui-refactor/planning-design-alignment.md](ui-refactor/planning-design-alignment.md) | 最新 main 前端设计规范分析与 Planning 对齐方式 | Planning 与共享 UI 开发 |
+| [design/proma-planning-reproduction.md](design/proma-planning-reproduction.md) | Proma 日程、Todo、提醒与自动化的源码分析及 LiveAgent 能力对照 | Planning 调研与开发 |
 | [operations/development.md](operations/development.md) | 本地开发、构建、测试、端口、运行路径 | 日常开发 |
 | [operations/deployment.md](operations/deployment.md) | CI/CD、Gateway Docker、用户自部署、桌面 Release 自动化 | 发布维护 |
 | [operations/multi-agent.md](operations/multi-agent.md) | 多桌面 Agent 部署、每 Agent 凭证签发/轮换/删除、安全模型 | 多设备部署 |
