@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   CalendarDays,
-  Clock3,
   List,
   ListChecks,
   MoreHorizontal,
@@ -197,17 +196,6 @@ export function EventPreview({
                   {calendar?.readOnly ? ` · ${t("planner.calendar.readOnly")}` : ""}
                   {event.seriesId || event.recurrence ? ` · ${t("planner.preview.recurring")}` : ""}
                 </dd>
-              </div>
-            )}
-            {!todo && (
-              <div className="flex items-center gap-3">
-                <dt>
-                  <Clock3
-                    className="size-4 text-muted-foreground"
-                    aria-label={t("planner.preview.timeZone")}
-                  />
-                </dt>
-                <dd>{snapshot.timeZone}</dd>
               </div>
             )}
             {(todo ? todo.notes : event.notes) && (
