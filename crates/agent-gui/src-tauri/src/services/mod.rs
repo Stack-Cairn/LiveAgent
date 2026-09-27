@@ -6,6 +6,7 @@ pub mod gateway;
 pub mod gateway_bridge;
 pub mod mcp_oauth;
 pub mod memory;
+pub mod planning;
 pub mod power_activity;
 pub mod provider_models;
 pub mod provider_usage;

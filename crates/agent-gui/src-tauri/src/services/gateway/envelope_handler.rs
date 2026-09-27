@@ -100,6 +100,21 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::ChatIngressAck(ack)) => {
                 self.handle_chat_ingress_ack(request_id, ack).await
             }
+            Some(proto::gateway_envelope::Payload::Planning(request)) => {
+                let result =
+                    crate::services::planning::handle_request(&self.app_handle, request).await;
+                match result {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::PlanningResp(response)),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 400, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::CronManage(request)) => {
                 // Successful apply actions broadcast their own snapshot via the
                 // AutomationStore notifier; no extra refresh is needed here.
@@ -1229,5 +1244,18 @@ impl GatewayController {
             }
             None => Ok(()),
         }
+    }
+}
+
+impl GatewayController {
+    pub(crate) async fn publish_planning_changed(&self, seq: u64) -> Result<(), String> {
+        self.send_agent_envelope(proto::AgentEnvelope {
+            request_id: String::new(),
+            timestamp: now_unix_seconds(),
+            payload: Some(proto::agent_envelope::Payload::PlanningChanged(
+                proto::PlanningChanged { seq },
+            )),
+        })
+        .await
     }
 }

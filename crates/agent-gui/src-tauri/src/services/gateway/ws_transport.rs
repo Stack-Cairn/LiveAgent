@@ -85,6 +85,7 @@ pub(crate) fn build_client_hello(
         capabilities: vec![
             CHAT_INGRESS_V1_CAPABILITY.to_string(),
             CONVERSATION_REFERENCES_V1_CAPABILITY.to_string(),
+            "planning_v1".to_string(),
         ],
     }
 }
@@ -430,6 +431,7 @@ mod tests {
                 [
                     CHAT_INGRESS_V1_CAPABILITY,
                     CONVERSATION_REFERENCES_V1_CAPABILITY,
+                    "planning_v1",
                 ]
             );
 
