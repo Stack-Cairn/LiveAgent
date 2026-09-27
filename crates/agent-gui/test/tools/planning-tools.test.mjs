@@ -21,7 +21,7 @@ test("Planning tools read related tasks and filter context", async () => {
 });
 test("Planning tools preserve revision conflicts, support classification and reject source side effects", async () => {
   const { bundle, calls } = harness();
-  const result = await bundle.executeToolCall({id:"m",name:"PlanningMutate",arguments:{requestId:"stable-123",action:"tag.update",id:"tag",expectedRevision:1,data:{name:"renamed"}}});
+  const result = await bundle.executeToolCall({id:"m",name:"PlanningMutate",arguments:{requestId:"stable-123",action:"group.update",id:"g",expectedRevision:1,data:{name:"renamed"}}});
   assert.equal(result.isError,true);assert.equal(JSON.parse(result.content[0].text).status,"conflict");
   assert.equal(calls[0].args.input.expectedRevision,1);
   const denied=await bundle.executeToolCall({id:"m2",name:"PlanningMutate",arguments:{action:"source.create",data:{}}});
@@ -54,4 +54,19 @@ test("Planning query mirrors the UI's starred list and overdue rollup", async ()
  const overdue=await bundle.executeToolCall({id:"o",name:"PlanningQuery",arguments:{overdue:true}});
  const value=JSON.parse(overdue.content[0].text);
  assert.deepEqual(value.todos.map(t=>t.id),["t"]);assert.deepEqual(value.events.map(e=>e.id),["e"]);
+});
+
+test("Agent tools do not expose Planning tags", async () => {
+ const {bundle,calls}=harness();
+ const value=JSON.parse((await bundle.executeToolCall({id:"q",name:"PlanningQuery",arguments:{}})).content[0].text);
+ assert.equal(value.tags,undefined);
+ assert.ok([...value.todos,...value.events].every(item=>item.tagIds===undefined));
+ for (const action of ["tag.create","tag.update","tag.delete"]) {
+  const denied=await bundle.executeToolCall({id:action,name:"PlanningMutate",arguments:{action,data:{name:"x"}}});
+  assert.equal(denied.isError,true);
+ }
+ const withTags=await bundle.executeToolCall({id:"t",name:"PlanningMutate",arguments:{action:"todo.create",data:{title:"x",tagIds:["tag"]}}});
+ assert.equal(withTags.isError,true);
+ assert.equal(calls.filter(c=>c.command==="planning_mutate").length,0);
+ assert.equal(bundle.tools.find(t=>t.name==="PlanningQuery").parameters.properties.tagId,undefined);
 });
