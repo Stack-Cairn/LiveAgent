@@ -48,7 +48,11 @@ pub(super) fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<V
         }
         Ok(Some(result))
     } else {
-        let e = s.events.iter().find(|e| e.id == key).ok_or("E:event_missing")?;
+        let e = s
+            .events
+            .iter()
+            .find(|e| e.id == key)
+            .ok_or("E:event_missing")?;
         writable(s, &e.calendar_id)?;
         if restore != e.deleted_at.is_some() {
             return Err("E:event_changed".into());

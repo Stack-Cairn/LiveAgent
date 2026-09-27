@@ -1,6 +1,7 @@
 mod calendar_import;
 mod hierarchy;
 pub mod store;
+pub mod subscription;
 mod task_import;
 #[cfg(test)]
 mod tests;
@@ -54,6 +55,11 @@ pub async fn handle_request(
                 )
                 .map_err(|e| e.to_string()),
                 "export" => serde_json::to_value(store.export()?).map_err(|e| e.to_string()),
+                action if action.starts_with("subscription.") => {
+                    let input: serde_json::Value =
+                        serde_json::from_str(input).map_err(|e| e.to_string())?;
+                    Ok(store.subscription(action, &input)?.0)
+                }
                 "import" => {
                     store.import(serde_json::from_str(input).map_err(|e| e.to_string())?)?;
                     Ok(serde_json::Value::Null)
@@ -63,7 +69,10 @@ pub async fn handle_request(
         })
         .await
         .map_err(|e| e.to_string())??;
-    if request.action == "mutate" || request.action == "import" {
+    if request.action == "mutate"
+        || request.action == "import"
+        || request.action.starts_with("subscription.")
+    {
         changed(
             app,
             app.state::<Arc<PlanningStore>>()

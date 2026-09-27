@@ -179,6 +179,18 @@ pub struct SourceLink {
     pub revision: u64,
 }
 
+/// Public state of an iCal subscription; the URL itself never leaves the backend.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionStatus {
+    pub calendar_id: String,
+    pub host: String,
+    pub refresh_minutes: i64,
+    pub next_at: i64,
+    pub last_synced_at: Option<i64>,
+    pub last_error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Snapshot {
@@ -201,6 +213,9 @@ pub struct Snapshot {
     #[allow(dead_code)]
     pub legacy_links: Vec<serde_json::Value>,
     pub sources: Vec<SourceLink>,
+    /// Derived from `planning_subscriptions`; ignored when importing a backup.
+    #[serde(default)]
+    pub subscriptions: Vec<SubscriptionStatus>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

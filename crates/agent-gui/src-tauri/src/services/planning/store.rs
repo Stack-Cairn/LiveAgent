@@ -10,7 +10,7 @@ use uuid::Uuid;
 pub struct PlanningStore {
     pub(crate) conn: Mutex<Connection>,
 }
-fn sql_error(e: impl std::fmt::Display) -> String {
+pub(super) fn sql_error(e: impl std::fmt::Display) -> String {
     format!("E:storage_failed:{e}")
 }
 fn id() -> String {
@@ -88,6 +88,7 @@ pub(super) fn snapshot(conn: &Connection) -> Result<Snapshot, String> {
         reminders: read(conn, "reminders")?,
         legacy_links: vec![],
         sources: read(conn, "sources")?,
+        subscriptions: super::subscription::statuses(conn)?,
     })
 }
 pub(super) fn persist(conn: &Connection, s: &Snapshot) -> Result<(), String> {
@@ -183,6 +184,7 @@ impl PlanningStore {
             CREATE INDEX IF NOT EXISTS planning_event_todo ON planning_events(json_extract(payload,'$.todoId'));
             CREATE INDEX IF NOT EXISTS planning_reminder_due ON planning_reminders(json_extract(payload,'$.triggerAt'));
             INSERT OR IGNORE INTO planning_meta VALUES('schema','1'); INSERT OR IGNORE INTO planning_meta VALUES('seq','0');").map_err(sql_error)?;
+        super::subscription::create_table(&tx)?;
         let tz = iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".into());
         tx.execute(
             "INSERT OR IGNORE INTO planning_meta VALUES('timeZone',?1)",
@@ -661,7 +663,10 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             } else {
                 &mut s.tags
             };
-            let c = list.iter_mut().find(|c| c.id == key).ok_or("E:category_missing")?;
+            let c = list
+                .iter_mut()
+                .find(|c| c.id == key)
+                .ok_or("E:category_missing")?;
             *c = patch(c, d, &["name", "color", "sortOrder"])?;
             c.revision += 1;
             result = Some(json!(c));
@@ -939,7 +944,11 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             s.events.push(e);
         }
         "event.update" => {
-            let old = s.events.iter().find(|e| e.id == key).ok_or("E:event_missing")?;
+            let old = s
+                .events
+                .iter()
+                .find(|e| e.id == key)
+                .ok_or("E:event_missing")?;
             writable(s, &old.calendar_id)?;
             if let Some(target) = d["calendarId"].as_str() {
                 writable(s, target)?;
@@ -1111,7 +1120,11 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             {
                 return Err("E:purge_event_not_trashed".into());
             }
-            let e = s.events.iter().find(|e| e.id == key).ok_or("E:event_missing")?;
+            let e = s
+                .events
+                .iter()
+                .find(|e| e.id == key)
+                .ok_or("E:event_missing")?;
             writable(s, &e.calendar_id)?;
             s.events
                 .retain(|e| e.id != key && e.series_id.as_deref() != Some(key));
@@ -1350,7 +1363,11 @@ fn sync_task_content(s: &mut Snapshot, task_id: &str, now: i64) {
         }
     }
 }
-fn reconcile_reminders(s: &mut Snapshot, now: i64, catch_up: bool) -> Result<(), String> {
+pub(super) fn reconcile_reminders(
+    s: &mut Snapshot,
+    now: i64,
+    catch_up: bool,
+) -> Result<(), String> {
     let mut desired: Vec<(String, String, String, String, i64, bool)> = vec![];
     for t in &s.todos {
         if !t.due_reminder || t.deleted_at.is_some() {
