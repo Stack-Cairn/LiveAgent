@@ -66,6 +66,10 @@ const ChatPage = lazy(async () => ({ default: (await loadChatPage()).ChatPage })
 const SettingsPage = lazy(async () => ({
   default: (await import("@liveagent/ui/pages/settings/SettingsPage")).SettingsPage,
 }));
+const PlanningSubscriptionRunner = lazy(async () => ({
+  default: (await import("./components/planning/PlanningSubscriptionRunner"))
+    .PlanningSubscriptionRunner,
+}));
 const CronPromptRunner = lazy(async () => ({
   default: (await import("./components/cron/CronPromptRunner")).CronPromptRunner,
 }));
@@ -749,6 +753,7 @@ export default function App() {
         {backgroundHostsReady ? (
           <Suspense fallback={null}>
             <CronPromptRunner settings={settings} />
+            <PlanningSubscriptionRunner />
             <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
           </Suspense>
         ) : null}
