@@ -80,3 +80,12 @@ test("Google Calendar export ZIP and Takeout ZIP are read without unpacking", as
  const json = await readCalendarFile(new File([takeout], "Tasks.json"), range);
  assert.equal(json.entries.length, 0); assert.equal(json.tasks.length, 3);
 });
+
+test("ICS tolerates a BOM or preamble and explains HTML responses", () => {
+ const source = ics(event(["UID:bom", "SUMMARY:BOM", "DTSTART:20260927T010000Z", "DTEND:20260927T020000Z"]));
+ assert.equal(parseCalendar(`\uFEFF${source}`, range).entries.length, 1);
+ assert.equal(parseCalendar(`\u200B\r\n${source}`, range).entries.length, 1);
+ assert.equal(parseCalendar(`X-PREAMBLE:1\r\n${source}`, range).entries.length, 1);
+ assert.throws(() => parseCalendar("<!DOCTYPE html><html><body>Sign in</body></html>", range), /iCal|网页|web page/);
+ assert.throws(() => parseCalendar("hello", range), /ICS/);
+});
