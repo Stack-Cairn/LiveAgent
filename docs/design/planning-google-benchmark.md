@@ -60,4 +60,3 @@ Planning 是把 Google Calendar 与 Google Tasks 合在一个页面里的实现�
 - 一次性导入：日历页或设置中的「导入」直接接受 Google 日历导出的 `.zip`，以及 Google Takeout 的 `Tasks.json` / Takeout `.zip`（任务、列表、子任务、完成状态、截止日期）。
 - 持续同步：设置中添加「订阅日历」，填入 Google「iCal 格式的私密地址」，作为只读日历定时刷新。
 - 双向同步（Google Calendar / Tasks API + OAuth）暂不实现；细节见 [实现记录](planning-calendar-implementation.md#ical-订阅)。
-
