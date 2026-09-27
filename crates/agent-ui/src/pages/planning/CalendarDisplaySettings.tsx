@@ -1,8 +1,6 @@
-import { Settings2 } from "../../components/IconSet";
-import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Popover, PopoverContent } from "../../components/ui/popover";
 import { planningLunarAvailable } from "../../lib/planning/i18n";
 import type { CalendarPreferences } from "./calendarDisplay";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
@@ -12,13 +10,18 @@ import { usePlanningT } from "./usePlanningT";
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const clock = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
+/** Opened from the toolbar's "more" menu and anchored to that button. */
 export function CalendarDisplaySettings({
+  anchor,
+  onClose,
   value,
   onChange,
   zone,
   onZoneChange,
   disabled,
 }: {
+  anchor: Element;
+  onClose(): void;
   value: CalendarPreferences;
   onChange(patch: Partial<CalendarPreferences>): void;
   zone: string;
@@ -27,14 +30,12 @@ export function CalendarDisplaySettings({
 }) {
   const { t, locale } = usePlanningT();
   return (
-    <Popover>
-      <PopoverTrigger
-        render={<Button variant="ghost" size="icon" className="rounded-full" />}
-        aria-label={t("planner.display.settings")}
+    <Popover open onOpenChange={(open) => !open && onClose()}>
+      <PopoverContent
+        anchor={anchor}
+        align="end"
+        className="max-h-[80dvh] w-72 space-y-4 overflow-y-auto"
       >
-        <Settings2 className="size-5" />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="max-h-[80dvh] w-72 space-y-4 overflow-y-auto">
         <h3 className="text-sm font-semibold">{t("planner.display.title")}</h3>
         <PlanningField label={t("planner.timeZone")}>
           <TimeZonePicker

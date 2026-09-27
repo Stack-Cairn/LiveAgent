@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -5,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   MoreHorizontal,
+  Settings2,
   Trash2,
   Upload,
 } from "../../components/IconSet";
@@ -90,6 +92,8 @@ export function PlanningToolbar({
   onImport(): void;
 }) {
   const { t, locale } = usePlanningT();
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [displayOpen, setDisplayOpen] = useState(false);
   const viewLabel = (v: PlanningView) => t(`planner.view.${v}`);
   const step = view === "day" ? "Day" : view === "month" ? "Month" : "Week";
   const lunar =
@@ -153,23 +157,25 @@ export function PlanningToolbar({
         </>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        {mode === "calendar" && (
-          <CalendarDisplaySettings
-            value={preferences}
-            onChange={onPreferences}
-            zone={zone}
-            onZoneChange={onZoneChange}
-            disabled={interaction || busy}
-          />
-        )}
+        {/* One menu for display settings and calendar management, like Google's settings menu. */}
         <DropdownMenu>
           <DropdownMenuTrigger
+            ref={(element: HTMLElement | null) => setMenuAnchor(element)}
             render={<Button variant="ghost" size="icon" className="rounded-full" />}
             aria-label={t("planner.toolbar.manage")}
           >
             <MoreHorizontal className="size-5 rotate-90" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {mode === "calendar" && (
+              <>
+                <DropdownMenuItem className="gap-2" onClick={() => setDisplayOpen(true)}>
+                  <Settings2 className="size-4" />
+                  {t("planner.display.settings")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuItem className="gap-2" onClick={onCalendars}>
               <CalendarDays className="size-4" />
               {t("planner.toolbar.manageCalendars")}
@@ -254,6 +260,17 @@ export function PlanningToolbar({
           ))}
         </SettingsToggleGroup>
       </div>
+      {displayOpen && menuAnchor && mode === "calendar" && (
+        <CalendarDisplaySettings
+          anchor={menuAnchor}
+          onClose={() => setDisplayOpen(false)}
+          value={preferences}
+          onChange={onPreferences}
+          zone={zone}
+          onZoneChange={onZoneChange}
+          disabled={interaction || busy}
+        />
+      )}
     </header>
   );
 }
