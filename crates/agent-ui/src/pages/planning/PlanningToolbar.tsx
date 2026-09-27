@@ -166,7 +166,11 @@ export function PlanningToolbar({
               <p className="truncate text-xl leading-7 tabular-nums">
                 {periodTitle(date, view, days, planningDateLocale(locale))}
               </p>
-              {lunar && <p className="text-tiny leading-4 text-muted-foreground">农历{lunar}</p>}
+              {lunar && (
+                <p className="text-xs text-muted-foreground">
+                  {t("planner.lunar.label", { date: lunar })}
+                </p>
+              )}
             </div>
             {preferences.showWeekNumbers && (view === "week" || view === "day") && (
               <span className="hidden shrink-0 rounded bg-muted px-1 text-xs font-medium leading-5 sm:inline">
@@ -194,15 +198,15 @@ export function PlanningToolbar({
             <MoreHorizontal className="size-5 rotate-90" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onCalendars}>
+            <DropdownMenuItem className="gap-2" onClick={onCalendars}>
               <CalendarDays className="size-4" />
               {t("planner.toolbar.manageCalendars")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onImport}>
+            <DropdownMenuItem className="gap-2" onClick={onImport}>
               <Upload className="size-4" />
               {t("planner.toolbar.import")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onTrash}>
+            <DropdownMenuItem className="gap-2" onClick={onTrash}>
               <Trash2 className="size-4" />
               {t("planner.trash")}
             </DropdownMenuItem>
@@ -238,6 +242,7 @@ export function PlanningToolbar({
                 ] as const
               ).map(([key, label]) => (
                 <DropdownMenuItem
+                  className="gap-2"
                   key={key}
                   closeOnClick={false}
                   onClick={() => onPreferences({ [key]: !preferences[key] })}

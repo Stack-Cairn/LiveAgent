@@ -571,7 +571,7 @@
 .planning-month-weekday {
   align-self: center;
   color: hsl(var(--muted-foreground));
-  font-size: var(--text-tiny);
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-medium);
   line-height: 1.25rem;
 }
@@ -662,7 +662,7 @@
 }
 .planning-agenda-meta {
   color: hsl(var(--muted-foreground));
-  font-size: var(--text-tiny);
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-medium);
   line-height: 1rem;
 }

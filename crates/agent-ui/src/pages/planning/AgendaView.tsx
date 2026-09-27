@@ -123,7 +123,7 @@ export function AgendaView({
                 const past = item.kind === "event" ? timeBounds(item.event.time)[1] < now : false;
                 const color =
                   item.kind === "event"
-                    ? (eventColor(item.event, snapshot) ?? "#2563eb")
+                    ? (eventColor(item.event, snapshot) ?? "hsl(var(--muted-foreground))")
                     : taskListColor(item.todo, snapshot);
                 const title =
                   item.kind === "event" ? eventTitle(item.event, snapshot.todos) : item.todo.title;

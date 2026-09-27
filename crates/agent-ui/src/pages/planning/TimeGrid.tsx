@@ -768,7 +768,8 @@ export function TimeGrid({
                         </button>
                       );
                     }
-                    const color = eventColor(event, snapshot) ?? "#2563eb";
+                    // Missing calendar colors fall back to theme surfaces inside the helpers.
+                    const color = eventColor(event, snapshot);
                     const readOnly = snapshot.calendars.find(
                       (c) => c.id === event.calendarId,
                     )?.readOnly;

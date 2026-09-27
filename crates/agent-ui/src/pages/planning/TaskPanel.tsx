@@ -257,7 +257,7 @@ export function TaskPanel({
       {variant === "panel" ? (
         <div className="flex shrink-0 items-start gap-1 px-4 pb-1 pt-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-tiny font-medium uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-xs font-medium text-muted-foreground">
               {translate("planner.mode.tasks")}
             </h2>
             <TaskListMenu
