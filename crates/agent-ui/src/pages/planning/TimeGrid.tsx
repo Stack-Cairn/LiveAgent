@@ -50,6 +50,24 @@ function TaskMark({ todo }: { todo?: Todo }) {
   );
 }
 
+/**
+ * Run after the click that follows this pointerup. A popover opened any earlier would treat
+ * that click as an outside press and close immediately (the quick-create card did).
+ */
+function afterClick(run: () => void) {
+  let done = false;
+  const fire = () => {
+    if (done) return;
+    done = true;
+    document.removeEventListener("click", onClick, true);
+    run();
+  };
+  const onClick = () => setTimeout(fire, 0);
+  document.addEventListener("click", onClick, true);
+  // A drag that ends outside where it started produces no click at all.
+  setTimeout(fire, 120);
+}
+
 export interface PlanningDragStart {
   todo: Todo;
   pointerId: number;
@@ -309,14 +327,16 @@ export function TimeGrid({
       if (d.kind === "todo") update(e.clientX, e.clientY);
       const time = previewRef.current;
       if (d.kind === "create") {
-        if (moved.current && time) callbacks.current.onCreate(time);
-        else
-          callbacks.current.onCreate({
-            kind: "timed",
-            startAt: d.grabOffsetMs,
-            endAt: d.grabOffsetMs + HOUR,
-            timeZone: zone,
-          });
+        const created: EventTime =
+          moved.current && time
+            ? time
+            : {
+                kind: "timed",
+                startAt: d.grabOffsetMs,
+                endAt: d.grabOffsetMs + HOUR,
+                timeZone: zone,
+              };
+        afterClick(() => callbacks.current.onCreate(created));
       } else if (moved.current && time) {
         setPending(true);
         void callbacks.current.onCommit(d.event, d.todoId, time).finally(() => setPending(false));
@@ -671,29 +691,27 @@ export function TimeGrid({
                   draftTime.endAt > from && (
                     <div
                       ref={day === draftDay ? onDraftElement : undefined}
-                      className={`planning-time-event planning-draft ${draft?.task ? "planning-deadline" : ""}`}
+                      className="planning-time-event planning-draft"
                       style={{
                         ...draftStyle,
                         top: ((Math.max(draftTime.startAt, from) - from) / HOUR) * hourHeight,
-                        height: draft?.task
-                          ? CHIP_HEIGHT
-                          : Math.max(
-                              16,
-                              ((Math.min(draftTime.endAt, to) - Math.max(draftTime.startAt, from)) /
-                                HOUR) *
-                                hourHeight,
-                            ),
+                        height: Math.max(
+                          16,
+                          ((Math.min(draftTime.endAt, to) - Math.max(draftTime.startAt, from)) /
+                            HOUR) *
+                            hourHeight,
+                        ),
                         left: 1,
                         width: "calc(100% - 10px)",
                         zIndex: 30,
                       }}
                     >
-                      {draft?.task && <Circle className="planning-task-mark" aria-hidden />}
-                      <span className="planning-draft-title">{draftTitle}</span>
+                      <span className="planning-draft-title">
+                        {draft?.task && <Circle className="planning-task-mark" aria-hidden />}
+                        {draftTitle}
+                      </span>
                       <small className="planning-draft-time">
-                        {draft?.task
-                          ? zonedParts(draftTime.startAt, zone).time
-                          : timeLabel(draftTime, zone).split(" · ")[0]}
+                        {timeLabel(draftTime, zone).split(" · ")[0]}
                       </small>
                     </div>
                   )}
