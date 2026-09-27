@@ -1507,6 +1507,8 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "ProcessWait"
             | "McpManager"
             | "MemoryManager"
+            | "PlanningMutate"
+            | "PlanningQuery"
             | "Read"
             | "ReadConversation"
             | "ReadTerminal"
