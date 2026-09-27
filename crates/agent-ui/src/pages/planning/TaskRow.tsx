@@ -207,33 +207,45 @@ export function TaskRow({
         )}
         {menu && (
           <ContextMenuPopup point={menu} onClose={() => setMenu(null)}>
-            <DropdownMenuItem onClick={onEdit}>{t("planner.task.edit")}</DropdownMenuItem>
-            <DropdownMenuItem onClick={onToggle}>
+            <DropdownMenuItem className="gap-2" onClick={onEdit}>
+              {t("planner.task.edit")}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2" onClick={onToggle}>
               {completed ? t("planner.task.markOpen") : t("planner.task.markDone")}
             </DropdownMenuItem>
             {onMoveUp && (
-              <DropdownMenuItem onClick={onMoveUp}>{t("planner.task.moveUp")}</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2" onClick={onMoveUp}>
+                {t("planner.task.moveUp")}
+              </DropdownMenuItem>
             )}
             {onMoveDown && (
-              <DropdownMenuItem onClick={onMoveDown}>{t("planner.task.moveDown")}</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2" onClick={onMoveDown}>
+                {t("planner.task.moveDown")}
+              </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={onSchedule}>{t("planner.editor.schedule")}</DropdownMenuItem>
+            <DropdownMenuItem className="gap-2" onClick={onSchedule}>
+              {t("planner.editor.schedule")}
+            </DropdownMenuItem>
             {onAddSubtask && (
-              <DropdownMenuItem onClick={onAddSubtask}>
+              <DropdownMenuItem className="gap-2" onClick={onAddSubtask}>
                 {t("planner.task.addSubtask")}
               </DropdownMenuItem>
             )}
             {onIndent && (
-              <DropdownMenuItem onClick={onIndent}>{t("planner.task.indent")}</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2" onClick={onIndent}>
+                {t("planner.task.indent")}
+              </DropdownMenuItem>
             )}
             {onOutdent && (
-              <DropdownMenuItem onClick={onOutdent}>{t("planner.task.outdent")}</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2" onClick={onOutdent}>
+                {t("planner.task.outdent")}
+              </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={onStar}>
+            <DropdownMenuItem className="gap-2" onClick={onStar}>
               <Star className="size-4" />
               {todo.priority === "high" ? t("planner.task.unstar") : t("planner.task.star")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onTrash} className="text-destructive">
+            <DropdownMenuItem onClick={onTrash} className="gap-2 text-destructive">
               <Trash2 className="size-4" />
               {t("planner.common.moveToTrash")}
             </DropdownMenuItem>
@@ -241,6 +253,7 @@ export function TaskRow({
             <DropdownMenuLabel>{t("planner.task.moveToList")}</DropdownMenuLabel>
             {lists.map((list) => (
               <DropdownMenuItem
+                className="gap-2"
                 key={list.id}
                 disabled={(todo.groupId ?? "") === list.id}
                 onClick={() => onMove(list.id || null)}

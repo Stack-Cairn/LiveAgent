@@ -179,11 +179,11 @@ export function PlanningSidebar({
           <ChevronDown className="size-4 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-36">
-          <DropdownMenuItem onClick={onCreateEvent}>
+          <DropdownMenuItem className="gap-2" onClick={onCreateEvent}>
             <CalendarDays className="size-4" />
             {translate("planner.kind.event")}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onCreateTask}>
+          <DropdownMenuItem className="gap-2" onClick={onCreateTask}>
             <CheckCircle2 className="size-4" />
             {translate("planner.kind.task")}
           </DropdownMenuItem>

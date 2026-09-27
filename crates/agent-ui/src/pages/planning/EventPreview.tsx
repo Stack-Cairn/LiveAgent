@@ -134,10 +134,14 @@ export function EventPreview({
                 <MoreHorizontal className="size-5 rotate-90" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onEdit({ kind: "todo", todo })}>
+                <DropdownMenuItem className="gap-2" onClick={() => onEdit({ kind: "todo", todo })}>
                   {t("planner.preview.editTask")}
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={calendar?.readOnly} onClick={() => void recycleEvent()}>
+                <DropdownMenuItem
+                  className="gap-2"
+                  disabled={calendar?.readOnly}
+                  onClick={() => void recycleEvent()}
+                >
                   {t("planner.preview.removeBlock")}
                 </DropdownMenuItem>
               </DropdownMenuContent>

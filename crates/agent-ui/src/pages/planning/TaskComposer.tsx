@@ -109,6 +109,7 @@ export function TaskComposer({
                 { id: "priority", name: t("planner.sort.starred") },
               ].map((item) => (
                 <DropdownMenuItem
+                  className="gap-2"
                   key={item.id}
                   disabled={sort === item.id}
                   onClick={() => onSort?.(item.id)}

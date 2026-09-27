@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -77,12 +77,15 @@ export function TaskListMenu({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {currentList && (
-              <DropdownMenuItem onClick={() => setAction({ kind: "rename", list: currentList })}>
+              <DropdownMenuItem
+                className="gap-2"
+                onClick={() => setAction({ kind: "rename", list: currentList })}
+              >
                 <SquarePen className="size-4" />
                 {translate("planner.list.rename")}
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem className="text-destructive" onClick={deleteCurrent}>
+            <DropdownMenuItem className="gap-2 text-destructive" onClick={deleteCurrent}>
               <Trash2 className="size-4" />
               {translate("planner.list.delete")}
             </DropdownMenuItem>
@@ -104,27 +107,34 @@ export function TaskListMenu({
           <ChevronDown className="size-4 shrink-0" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuItem onClick={() => onChange("starred")}>
-            <Star className="size-4" />
-            <span className="flex-1">{translate("planner.starred")}</span>
-            <span className="text-xs text-muted-foreground">{count("starred")}</span>
-          </DropdownMenuItem>
+          {[{ id: "starred", name: translate("planner.starred"), color: undefined }, ...lists].map(
+            (list, index) => (
+              <Fragment key={list.id}>
+                <DropdownMenuItem className="gap-2" onClick={() => onChange(list.id)}>
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {list.color ? (
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{ backgroundColor: list.color }}
+                      />
+                    ) : (
+                      <Star className="size-4" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{list.name}</span>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {count(list.id)}
+                  </span>
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {list.id === value && <Check className="size-4" />}
+                  </span>
+                </DropdownMenuItem>
+                {index === 0 && <DropdownMenuSeparator />}
+              </Fragment>
+            ),
+          )}
           <DropdownMenuSeparator />
-          {lists.map((list) => (
-            <DropdownMenuItem key={list.id} onClick={() => onChange(list.id)}>
-              <span className="w-4 shrink-0">
-                {list.id === value && <Check className="size-4" />}
-              </span>
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: list.color }}
-              />
-              <span className="min-w-0 flex-1 truncate">{list.name}</span>
-              <span className="text-xs tabular-nums text-muted-foreground">{count(list.id)}</span>
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setAction({ kind: "create" })}>
+          <DropdownMenuItem className="gap-2" onClick={() => setAction({ kind: "create" })}>
             <Plus className="size-4" />
             {translate("planner.list.new")}
           </DropdownMenuItem>
@@ -132,12 +142,15 @@ export function TaskListMenu({
             <>
               <DropdownMenuSeparator />
               {currentList && (
-                <DropdownMenuItem onClick={() => setAction({ kind: "rename", list: currentList })}>
+                <DropdownMenuItem
+                  className="gap-2"
+                  onClick={() => setAction({ kind: "rename", list: currentList })}
+                >
                   <SquarePen className="size-4" />
                   {translate("planner.list.renameCurrent")}
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem className="text-destructive" onClick={deleteCurrent}>
+              <DropdownMenuItem className="gap-2 text-destructive" onClick={deleteCurrent}>
                 <Trash2 className="size-4" />
                 {translate("planner.list.deleteCurrent")}
               </DropdownMenuItem>
