@@ -1406,6 +1406,7 @@ type WebServerFrame struct {
 	//	*WebServerFrame_TunnelState
 	//	*WebServerFrame_ProcessState
 	//	*WebServerFrame_WorkspaceActivity
+	//	*WebServerFrame_PlanningChanged
 	Payload       isWebServerFrame_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1669,6 +1670,15 @@ func (x *WebServerFrame) GetWorkspaceActivity() *WorkspaceActivityEvent {
 	return nil
 }
 
+func (x *WebServerFrame) GetPlanningChanged() *PlanningChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*WebServerFrame_PlanningChanged); ok {
+			return x.PlanningChanged
+		}
+	}
+	return nil
+}
+
 type isWebServerFrame_Payload interface {
 	isWebServerFrame_Payload()
 }
@@ -1769,6 +1779,10 @@ type WebServerFrame_WorkspaceActivity struct {
 	WorkspaceActivity *WorkspaceActivityEvent `protobuf:"bytes,27,opt,name=workspace_activity,json=workspaceActivity,proto3,oneof"`
 }
 
+type WebServerFrame_PlanningChanged struct {
+	PlanningChanged *PlanningChanged `protobuf:"bytes,28,opt,name=planning_changed,json=planningChanged,proto3,oneof"`
+}
+
 func (*WebServerFrame_Hello) isWebServerFrame_Payload() {}
 
 func (*WebServerFrame_AgentResponse) isWebServerFrame_Payload() {}
@@ -1814,6 +1828,8 @@ func (*WebServerFrame_TunnelState) isWebServerFrame_Payload() {}
 func (*WebServerFrame_ProcessState) isWebServerFrame_Payload() {}
 
 func (*WebServerFrame_WorkspaceActivity) isWebServerFrame_Payload() {}
+
+func (*WebServerFrame_PlanningChanged) isWebServerFrame_Payload() {}
 
 // AgentListRequest 查询 Agent 目录；响应为 AgentListResult。
 type AgentListRequest struct {
@@ -3551,7 +3567,7 @@ const file_proto_v2_gateway_ws_proto_rawDesc = "" +
 	"\x04pong\x18\f \x01(\v2\x1f.liveagent.gateway.v2.PongFrameH\x00R\x04pong\x12G\n" +
 	"\n" +
 	"agent_list\x18\x0e \x01(\v2&.liveagent.gateway.v2.AgentListRequestH\x00R\tagentListB\t\n" +
-	"\apayload\"\xc8\x0e\n" +
+	"\apayload\"\x9c\x0f\n" +
 	"\x0eWebServerFrame\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
@@ -3583,7 +3599,8 @@ const file_proto_v2_gateway_ws_proto_rawDesc = "" +
 	"\x10chat_queue_event\x18\x18 \x01(\v2$.liveagent.gateway.v2.ChatQueueEventH\x00R\x0echatQueueEvent\x12N\n" +
 	"\ftunnel_state\x18\x19 \x01(\v2).liveagent.gateway.v2.TunnelStateSnapshotH\x00R\vtunnelState\x12S\n" +
 	"\rprocess_state\x18\x1a \x01(\v2,.liveagent.gateway.v2.ManagedProcessSnapshotH\x00R\fprocessState\x12]\n" +
-	"\x12workspace_activity\x18\x1b \x01(\v2,.liveagent.gateway.v2.WorkspaceActivityEventH\x00R\x11workspaceActivityB\t\n" +
+	"\x12workspace_activity\x18\x1b \x01(\v2,.liveagent.gateway.v2.WorkspaceActivityEventH\x00R\x11workspaceActivity\x12R\n" +
+	"\x10planning_changed\x18\x1c \x01(\v2%.liveagent.gateway.v2.PlanningChangedH\x00R\x0fplanningChangedB\t\n" +
 	"\apayload\"\x12\n" +
 	"\x10AgentListRequest\"L\n" +
 	"\x0fAgentListResult\x129\n" +
@@ -3776,7 +3793,8 @@ var file_proto_v2_gateway_ws_proto_goTypes = []any{
 	(*TunnelStateSnapshot)(nil),         // 51: liveagent.gateway.v2.TunnelStateSnapshot
 	(*ManagedProcessSnapshot)(nil),      // 52: liveagent.gateway.v2.ManagedProcessSnapshot
 	(*WorkspaceActivityEvent)(nil),      // 53: liveagent.gateway.v2.WorkspaceActivityEvent
-	(*TerminalStreamFrame)(nil),         // 54: liveagent.gateway.v2.TerminalStreamFrame
+	(*PlanningChanged)(nil),             // 54: liveagent.gateway.v2.PlanningChanged
+	(*TerminalStreamFrame)(nil),         // 55: liveagent.gateway.v2.TerminalStreamFrame
 }
 var file_proto_v2_gateway_ws_proto_depIdxs = []int32{
 	0,  // 0: liveagent.gateway.v2.ClientHello.role:type_name -> liveagent.gateway.v2.ClientRole
@@ -3826,23 +3844,24 @@ var file_proto_v2_gateway_ws_proto_depIdxs = []int32{
 	51, // 44: liveagent.gateway.v2.WebServerFrame.tunnel_state:type_name -> liveagent.gateway.v2.TunnelStateSnapshot
 	52, // 45: liveagent.gateway.v2.WebServerFrame.process_state:type_name -> liveagent.gateway.v2.ManagedProcessSnapshot
 	53, // 46: liveagent.gateway.v2.WebServerFrame.workspace_activity:type_name -> liveagent.gateway.v2.WorkspaceActivityEvent
-	25, // 47: liveagent.gateway.v2.AgentListResult.agents:type_name -> liveagent.gateway.v2.StatusEvent
-	1,  // 48: liveagent.gateway.v2.AgentClientFrame.hello:type_name -> liveagent.gateway.v2.ClientHello
-	44, // 49: liveagent.gateway.v2.AgentClientFrame.envelope:type_name -> liveagent.gateway.v2.AgentEnvelope
-	2,  // 50: liveagent.gateway.v2.AgentServerFrame.hello:type_name -> liveagent.gateway.v2.ServerHello
-	42, // 51: liveagent.gateway.v2.AgentServerFrame.envelope:type_name -> liveagent.gateway.v2.GatewayEnvelope
-	1,  // 52: liveagent.gateway.v2.TerminalClientFrame.hello:type_name -> liveagent.gateway.v2.ClientHello
-	54, // 53: liveagent.gateway.v2.TerminalClientFrame.frame:type_name -> liveagent.gateway.v2.TerminalStreamFrame
-	2,  // 54: liveagent.gateway.v2.TerminalServerFrame.hello:type_name -> liveagent.gateway.v2.ServerHello
-	54, // 55: liveagent.gateway.v2.TerminalServerFrame.frame:type_name -> liveagent.gateway.v2.TerminalStreamFrame
-	28, // 56: liveagent.gateway.v2.ChatSubscribeResult.activity:type_name -> liveagent.gateway.v2.ChatRunActivity
-	29, // 57: liveagent.gateway.v2.ChatSubscribeResult.snapshot:type_name -> liveagent.gateway.v2.ChatRunSnapshot
-	28, // 58: liveagent.gateway.v2.ChatActivitiesResult.running_conversations:type_name -> liveagent.gateway.v2.ChatRunActivity
-	59, // [59:59] is the sub-list for method output_type
-	59, // [59:59] is the sub-list for method input_type
-	59, // [59:59] is the sub-list for extension type_name
-	59, // [59:59] is the sub-list for extension extendee
-	0,  // [0:59] is the sub-list for field type_name
+	54, // 47: liveagent.gateway.v2.WebServerFrame.planning_changed:type_name -> liveagent.gateway.v2.PlanningChanged
+	25, // 48: liveagent.gateway.v2.AgentListResult.agents:type_name -> liveagent.gateway.v2.StatusEvent
+	1,  // 49: liveagent.gateway.v2.AgentClientFrame.hello:type_name -> liveagent.gateway.v2.ClientHello
+	44, // 50: liveagent.gateway.v2.AgentClientFrame.envelope:type_name -> liveagent.gateway.v2.AgentEnvelope
+	2,  // 51: liveagent.gateway.v2.AgentServerFrame.hello:type_name -> liveagent.gateway.v2.ServerHello
+	42, // 52: liveagent.gateway.v2.AgentServerFrame.envelope:type_name -> liveagent.gateway.v2.GatewayEnvelope
+	1,  // 53: liveagent.gateway.v2.TerminalClientFrame.hello:type_name -> liveagent.gateway.v2.ClientHello
+	55, // 54: liveagent.gateway.v2.TerminalClientFrame.frame:type_name -> liveagent.gateway.v2.TerminalStreamFrame
+	2,  // 55: liveagent.gateway.v2.TerminalServerFrame.hello:type_name -> liveagent.gateway.v2.ServerHello
+	55, // 56: liveagent.gateway.v2.TerminalServerFrame.frame:type_name -> liveagent.gateway.v2.TerminalStreamFrame
+	28, // 57: liveagent.gateway.v2.ChatSubscribeResult.activity:type_name -> liveagent.gateway.v2.ChatRunActivity
+	29, // 58: liveagent.gateway.v2.ChatSubscribeResult.snapshot:type_name -> liveagent.gateway.v2.ChatRunSnapshot
+	28, // 59: liveagent.gateway.v2.ChatActivitiesResult.running_conversations:type_name -> liveagent.gateway.v2.ChatRunActivity
+	60, // [60:60] is the sub-list for method output_type
+	60, // [60:60] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_proto_v2_gateway_ws_proto_init() }
@@ -3904,6 +3923,7 @@ func file_proto_v2_gateway_ws_proto_init() {
 		(*WebServerFrame_TunnelState)(nil),
 		(*WebServerFrame_ProcessState)(nil),
 		(*WebServerFrame_WorkspaceActivity)(nil),
+		(*WebServerFrame_PlanningChanged)(nil),
 	}
 	file_proto_v2_gateway_ws_proto_msgTypes[19].OneofWrappers = []any{
 		(*AgentClientFrame_Hello)(nil),

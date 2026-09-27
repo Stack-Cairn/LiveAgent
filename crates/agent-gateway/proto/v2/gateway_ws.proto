@@ -203,6 +203,7 @@ message WebServerFrame {
     TunnelStateSnapshot tunnel_state = 25;
     ManagedProcessSnapshot process_state = 26;
     WorkspaceActivityEvent workspace_activity = 27;
+    PlanningChanged planning_changed = 28;
   }
 }
 
