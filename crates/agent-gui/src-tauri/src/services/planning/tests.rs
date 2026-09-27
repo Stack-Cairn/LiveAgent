@@ -1283,3 +1283,162 @@ fn planning_subscriptions_keep_the_url_private_and_mirror_the_feed() {
     assert!(s.events.iter().all(|e| e.calendar_id != id));
     assert!(s.subscriptions.is_empty());
 }
+
+#[test]
+fn planning_my_tasks_deletion_moves_or_recycles_and_sets_default_list() {
+    let store = store();
+    let create = |data: Value| {
+        store
+            .mutate(input("todo.create", None, None, data))
+            .unwrap()
+            .item
+            .unwrap()
+    };
+    let group = |name: &str| {
+        store
+            .mutate(input("group.create", None, None, json!({ "name": name })))
+            .unwrap()
+            .item
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let parent = create(json!({"title":"父任务"}));
+    let child = create(json!({"title":"子任务","parentId":parent["id"]}));
+    let work = group("工作");
+    let life = group("生活");
+    let bad = store.mutate(input(
+        "mytasks.delete",
+        None,
+        None,
+        json!({"defaultGroupId":"missing"}),
+    ));
+    assert_eq!(bad.unwrap_err(), "E:category_missing");
+    store
+        .mutate(input(
+            "mytasks.delete",
+            None,
+            None,
+            json!({"defaultGroupId":work}),
+        ))
+        .unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    assert_eq!(s.default_group_id.as_deref(), Some(work.as_str()));
+    for id in [&parent["id"], &child["id"]] {
+        let t = s.todos.iter().find(|t| json!(t.id) == *id).unwrap();
+        assert_eq!(t.group_id.as_deref(), Some(work.as_str()));
+        assert!(t.deleted_at.is_none());
+    }
+    assert_eq!(
+        s.todos
+            .iter()
+            .find(|t| json!(t.id) == child["id"])
+            .unwrap()
+            .parent_id,
+        parent["id"].as_str().map(str::to_string)
+    );
+    // Without a list, new and edited tasks land in the default list.
+    let added = create(json!({"title":"新任务"}));
+    assert_eq!(added["groupId"], json!(work));
+    let moved = store
+        .mutate(input(
+            "todo.update",
+            added["id"].as_str(),
+            Some(1),
+            json!({"groupId":null}),
+        ))
+        .unwrap()
+        .item
+        .unwrap();
+    assert_eq!(moved["groupId"], json!(work));
+    assert_eq!(
+        store
+            .mutate(input(
+                "mytasks.delete",
+                None,
+                None,
+                json!({"defaultGroupId":life}),
+            ))
+            .unwrap_err(),
+        "E:my_tasks_deleted"
+    );
+    // Deleting another list moves its tasks into the default list.
+    let errand = create(json!({"title":"买菜","groupId":life}));
+    let life_revision = store
+        .snapshot(Query::default())
+        .unwrap()
+        .groups
+        .iter()
+        .find(|g| g.id == life)
+        .unwrap()
+        .revision;
+    store
+        .mutate(input(
+            "group.delete",
+            Some(&life),
+            Some(life_revision),
+            json!({}),
+        ))
+        .unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    let t = s
+        .todos
+        .iter()
+        .find(|t| json!(t.id) == errand["id"])
+        .unwrap();
+    assert_eq!(t.group_id.as_deref(), Some(work.as_str()));
+    // Deleting the default list brings My Tasks back.
+    let work_revision = s.groups.iter().find(|g| g.id == work).unwrap().revision;
+    store
+        .mutate(input(
+            "group.delete",
+            Some(&work),
+            Some(work_revision),
+            json!({}),
+        ))
+        .unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    assert!(s.default_group_id.is_none());
+    assert!(s.todos.iter().all(|t| t.group_id.is_none()));
+}
+
+#[test]
+fn planning_my_tasks_deletion_can_recycle_tasks() {
+    let store = store();
+    let t = store
+        .mutate(input("todo.create", None, None, json!({"title":"旧任务"})))
+        .unwrap()
+        .item
+        .unwrap();
+    let list = store
+        .mutate(input("group.create", None, None, json!({"name":"收件箱"})))
+        .unwrap()
+        .item
+        .unwrap();
+    store
+        .mutate(input(
+            "mytasks.delete",
+            None,
+            None,
+            json!({"defaultGroupId":list["id"],"deleteTasks":true}),
+        ))
+        .unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    let old = s.todos.iter().find(|x| json!(x.id) == t["id"]).unwrap();
+    assert!(old.deleted_at.is_some());
+    assert_eq!(old.group_id.as_deref(), list["id"].as_str());
+    // Restoring from the trash keeps the task in the new default list.
+    store
+        .mutate(input(
+            "todo.restore",
+            t["id"].as_str(),
+            Some(old.revision),
+            json!({}),
+        ))
+        .unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    let back = s.todos.iter().find(|x| json!(x.id) == t["id"]).unwrap();
+    assert!(back.deleted_at.is_none());
+    assert_eq!(back.group_id.as_deref(), list["id"].as_str());
+}

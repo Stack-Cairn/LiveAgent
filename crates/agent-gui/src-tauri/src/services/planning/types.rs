@@ -216,6 +216,9 @@ pub struct Snapshot {
     /// Derived from `planning_subscriptions`; ignored when importing a backup.
     #[serde(default)]
     pub subscriptions: Vec<SubscriptionStatus>,
+    /// Set once the built-in "My Tasks" list is deleted: list-less tasks land in this list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_group_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

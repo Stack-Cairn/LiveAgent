@@ -89,6 +89,14 @@ pub(super) fn snapshot(conn: &Connection) -> Result<Snapshot, String> {
         legacy_links: vec![],
         sources: read(conn, "sources")?,
         subscriptions: super::subscription::statuses(conn)?,
+        default_group_id: conn
+            .query_row(
+                "SELECT value FROM planning_meta WHERE key='defaultGroupId'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(sql_error)?,
     })
 }
 pub(super) fn persist(conn: &Connection, s: &Snapshot) -> Result<(), String> {
@@ -108,6 +116,14 @@ pub(super) fn persist(conn: &Connection, s: &Snapshot) -> Result<(), String> {
         "UPDATE planning_meta SET value=?1 WHERE key='timeZone'",
         [&s.time_zone],
     )
+    .map_err(sql_error)?;
+    match &s.default_group_id {
+        Some(id) => conn.execute(
+            "INSERT OR REPLACE INTO planning_meta VALUES('defaultGroupId',?1)",
+            [id],
+        ),
+        None => conn.execute("DELETE FROM planning_meta WHERE key='defaultGroupId'", []),
+    }
     .map_err(sql_error)?;
     Ok(())
 }
@@ -483,7 +499,9 @@ impl PlanningStore {
 
 fn lookup(s: &Snapshot, input: &Mutation) -> Result<Option<Value>, String> {
     let action = input.action.as_str();
-    if action.ends_with(".create") || action == "timezone.set" || action == "todo.import" {
+    if action.ends_with(".create")
+        || ["timezone.set", "todo.import", "mytasks.delete"].contains(&action)
+    {
         return Ok(None);
     }
     let key = input.id.as_deref().ok_or("E:field_required:id")?;
@@ -531,7 +549,25 @@ fn lookup(s: &Snapshot, input: &Mutation) -> Result<Option<Value>, String> {
         .map_err(sql_error)
 }
 
+/// After "My Tasks" is deleted, a missing list means the default list.
+fn default_list_input(s: &Snapshot, m: &Mutation) -> Option<Mutation> {
+    let group = s.default_group_id.as_ref()?;
+    let explicit_none = m.data.get("groupId").is_some_and(Value::is_null);
+    let implicit = m.action == "todo.create" && m.data.get("groupId").is_none();
+    if !m.data.is_object()
+        || !["todo.create", "todo.update", "todo.move"].contains(&m.action.as_str())
+        || !(explicit_none || implicit)
+    {
+        return None;
+    }
+    let mut m = m.clone();
+    m.data["groupId"] = json!(group);
+    Some(m)
+}
+
 fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, String> {
+    let normalized = default_list_input(s, m);
+    let m = normalized.as_ref().unwrap_or(m);
     let key = m.id.as_deref().unwrap_or("");
     let d = &m.data;
     if [
@@ -571,6 +607,7 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             &["name", "color", "sortOrder"]
         }
         "group.delete" | "tag.delete" => &[],
+        "mytasks.delete" => &["defaultGroupId", "deleteTasks"],
         "timezone.set" => &["timeZone"],
         "calendar.create" => &["name", "color"],
         "calendar.update" => &["name", "color", "sortOrder", "isDefault", "reminderMinutes"],
@@ -673,9 +710,14 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
         }
         "group.delete" => {
             s.groups.retain(|c| c.id != key);
+            // Tasks fall back to the default list; deleting the default list brings back My Tasks.
+            if s.default_group_id.as_deref() == Some(key) {
+                s.default_group_id = None;
+            }
+            let fallback = s.default_group_id.clone();
             for t in &mut s.todos {
                 if t.group_id.as_deref() == Some(key) {
-                    t.group_id = None;
+                    t.group_id = fallback.clone();
                     t.revision += 1;
                     t.updated_at = now;
                 }
@@ -697,6 +739,30 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
                     e.updated_at = now;
                 }
             }
+        }
+        "mytasks.delete" => {
+            if s.default_group_id.is_some() {
+                return Err("E:my_tasks_deleted".into());
+            }
+            let target = required(d, "defaultGroupId")?.to_string();
+            if !s.groups.iter().any(|g| g.id == target) {
+                return Err("E:category_missing".into());
+            }
+            let trash = match &d["deleteTasks"] {
+                Value::Null => false,
+                Value::Bool(v) => *v,
+                _ => return Err("E:invalid_params:deleteTasks".into()),
+            };
+            // Tasks keep their hierarchy: the whole list moves, and is recycled when requested.
+            for t in s.todos.iter_mut().filter(|t| t.group_id.is_none()) {
+                t.group_id = Some(target.clone());
+                if trash && t.deleted_at.is_none() {
+                    t.deleted_at = Some(now);
+                }
+                t.revision += 1;
+                t.updated_at = now;
+            }
+            s.default_group_id = Some(target);
         }
         "timezone.set" => {
             time::zone(required(d, "timeZone")?)?;
@@ -1194,6 +1260,12 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
 
 pub(crate) fn validate(s: &Snapshot) -> Result<(), String> {
     super::hierarchy::validate(s)?;
+    if let Some(group) = &s.default_group_id {
+        if !s.groups.iter().any(|g| &g.id == group) || s.todos.iter().any(|t| t.group_id.is_none())
+        {
+            return Err("E:default_list_invalid".into());
+        }
+    }
     time::zone(&s.time_zone)?;
     for rows in [
         json!(s.groups),
