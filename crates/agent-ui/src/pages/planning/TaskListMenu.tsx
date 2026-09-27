@@ -49,7 +49,9 @@ export function TaskListMenu({
   const dialog = action && (
     <TaskListDialog action={action} onClose={() => setAction(null)} onSelect={onChange} />
   );
-  if (actionsOnly)
+  // The default list (My Tasks) and Starred are built in: nothing to rename or delete.
+  if (actionsOnly) {
+    if (!currentList) return null;
     return (
       <>
         <DropdownMenu>
@@ -60,17 +62,13 @@ export function TaskListMenu({
             <MoreHorizontal className="size-4 rotate-90" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              disabled={!currentList}
-              onClick={() => currentList && setAction({ kind: "rename", list: currentList })}
-            >
+            <DropdownMenuItem onClick={() => setAction({ kind: "rename", list: currentList })}>
               <SquarePen className="size-4" />
               {translate("planner.list.rename")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={!currentList}
               className="text-destructive"
-              onClick={() => currentList && setAction({ kind: "delete", list: currentList })}
+              onClick={() => setAction({ kind: "delete", list: currentList })}
             >
               <Trash2 className="size-4" />
               {translate("planner.list.delete")}
@@ -80,6 +78,7 @@ export function TaskListMenu({
         {dialog}
       </>
     );
+  }
   return (
     <>
       <DropdownMenu>
