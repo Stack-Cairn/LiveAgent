@@ -209,7 +209,7 @@
 .planning-time-labels small,
 .planning-dst {
   color: hsl(var(--muted-foreground));
-  font-size: var(--text-tiny);
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-medium);
   line-height: 1rem;
 }
@@ -523,7 +523,7 @@
   border-radius: 0.25rem;
   background: hsl(var(--muted));
   color: hsl(var(--muted-foreground));
-  font-size: var(--text-tiny);
+  font-size: var(--text-xs);
   line-height: 1rem;
   white-space: nowrap;
   text-overflow: ellipsis;

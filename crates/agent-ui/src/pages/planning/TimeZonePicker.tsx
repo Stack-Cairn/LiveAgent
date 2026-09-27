@@ -155,7 +155,8 @@ export function TimeZonePicker({
       ariaLabel={label}
       searchPlaceholder={t("planner.zone.search")}
       emptyLabel={t("planner.zone.empty")}
-      triggerClassName={`w-full max-w-none ${disabled ? "pointer-events-none opacity-50" : ""}`}
+      triggerClassName="w-full max-w-none"
+      disabled={disabled}
       id={id}
     />
   );

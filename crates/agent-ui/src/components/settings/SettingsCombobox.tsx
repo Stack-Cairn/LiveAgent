@@ -21,6 +21,7 @@ type SettingsComboboxProps = {
   triggerClassName?: string;
   /** Lets an external <label htmlFor> target the trigger. */
   id?: string;
+  disabled?: boolean;
 };
 
 export function SettingsCombobox({
@@ -32,6 +33,7 @@ export function SettingsCombobox({
   emptyLabel,
   triggerClassName,
   id,
+  disabled,
 }: SettingsComboboxProps) {
   const zoneStyle = useZoneFontScaleStyle();
   const selectedOption = options.find((option) => option.value === value) ?? null;
@@ -41,6 +43,7 @@ export function SettingsCombobox({
       items={options}
       value={selectedOption}
       autoHighlight
+      disabled={disabled}
       itemToStringLabel={(option) => option.label}
       isItemEqualToValue={(option, selected) => option.value === selected.value}
       onValueChange={(option) => {

@@ -11,6 +11,7 @@ import {
 } from "../../lib/planning/dateTime";
 import { localizePlanningError, planningDateLocale, weekdayNames } from "../../lib/planning/i18n";
 import { addDays, localEpoch, monthDays, zonedParts } from "../../lib/planning/time";
+import { useCalendarPreferences } from "./calendarDisplay";
 import { PlanningField } from "./PlanningControls";
 import { usePlanningT } from "./usePlanningT";
 
@@ -49,7 +50,8 @@ export function PlanningDateTimePicker({
   const [error, setError] = useState("");
   const daysRef = useRef(new Map<string, HTMLElement>());
   const first = `${month}-01`;
-  const days = monthDays(first);
+  const [{ weekStartsOn }] = useCalendarPreferences();
+  const days = monthDays(first, weekStartsOn);
   const active = endpoint === "start" ? draft.date : draft.endDate || draft.date;
   const shiftMonth = (by: number) => {
     const d = new Date(`${first}T12:00:00Z`);
@@ -171,7 +173,7 @@ export function PlanningDateTimePicker({
           </Button>
         </div>
         <fieldset className="grid grid-cols-7 gap-0.5" aria-label={t("planner.picker.chooseDate")}>
-          {weekdayNames().map(({ weekday, label: day }) => (
+          {weekdayNames(weekStartsOn).map(({ weekday, label: day }) => (
             <span key={weekday} className="py-1 text-center text-xs text-muted-foreground">
               {day}
             </span>

@@ -16,15 +16,6 @@ export interface DragState {
 export function snapDelta(milliseconds: number) {
   return Math.round(milliseconds / (SNAP_MINUTES * MINUTE)) * SNAP_MINUTES * MINUTE;
 }
-export function gridEpoch(
-  y: number,
-  top: number,
-  scrollTop: number,
-  hourHeight: number,
-  dayStart: number,
-) {
-  return dayStart + ((y - top + scrollTop) / hourHeight) * HOUR;
-}
 export function dragTime(
   drag: DragState,
   targetEpoch: number,

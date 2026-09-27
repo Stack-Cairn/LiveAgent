@@ -3,7 +3,7 @@ import { CalendarDays, MoreHorizontal, Trash2, Upload } from "../../components/I
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "../../components/ui/popover";
 import { planningLunarAvailable } from "../../lib/planning/i18n";
 import type { CalendarPreferences } from "./calendarDisplay";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
@@ -75,12 +75,18 @@ export function CalendarDisplaySettings({
       >
         <MoreHorizontal className="size-5 rotate-90" />
       </PopoverTrigger>
-      <PopoverContent align="end" className="max-h-[80dvh] w-72 space-y-4 overflow-y-auto">
+      <PopoverContent
+        align="end"
+        aria-label={t("planner.toolbar.manage")}
+        className="max-h-[80dvh] w-72 space-y-4 overflow-y-auto"
+      >
         {!showDisplay ? (
           actions
         ) : (
           <>
-            <h3 className="text-sm font-semibold">{t("planner.display.title")}</h3>
+            <PopoverTitle className="text-sm font-semibold">
+              {t("planner.display.title")}
+            </PopoverTitle>
             <PlanningField label={t("planner.timeZone")}>
               <TimeZonePicker
                 label={t("planner.timeZone")}

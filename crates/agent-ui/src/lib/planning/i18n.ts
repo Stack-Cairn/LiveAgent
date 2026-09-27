@@ -6,10 +6,6 @@ export type PlanningVars = Record<string, string | number>;
 // in sync with the UI locale on every render so they format in the same language.
 let currentLocale: Locale = DEFAULT_LOCALE;
 
-export function planningLocale(): Locale {
-  return currentLocale;
-}
-
 /** BCP-47 tag for Intl date/number formatting in the current UI language. */
 export function planningDateLocale(locale: Locale = currentLocale) {
   return locale === "en-US" ? "en-US" : "zh-CN";
@@ -42,10 +38,12 @@ const DEFAULT_CALENDARS: Record<string, string> = {
   个人: "planner.calendar.defaultPersonal",
 };
 
-/** Calendars seeded on first run keep their Chinese names in data; show them localized until renamed. */
-export function calendarName(calendar: { name: string; sourceKind: string; revision: number }) {
-  const key =
-    calendar.sourceKind === "local" && calendar.revision === 1 && DEFAULT_CALENDARS[calendar.name];
+/**
+ * Calendars seeded on first run keep their Chinese names in data; show them localized while
+ * the seeded name is unchanged (recoloring or making one default must not revert to Chinese).
+ */
+export function calendarName(calendar: { name: string; sourceKind: string }) {
+  const key = calendar.sourceKind === "local" && DEFAULT_CALENDARS[calendar.name];
   return key ? translate(key) : calendar.name;
 }
 

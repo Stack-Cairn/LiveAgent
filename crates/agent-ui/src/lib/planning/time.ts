@@ -125,8 +125,3 @@ export function timeLabel(time: EventTime, zone = time.timeZone) {
     end = zonedParts(time.endAt, zone);
   return `${start.time}–${start.date === end.date ? "" : `${end.date} `}${end.time} · ${durationLabel((time.endAt - time.startAt) / MINUTE)}`;
 }
-
-export function shiftTime(time: EventTime, deltaMs: number): EventTime {
-  if (time.kind !== "timed") throw new Error(translate("planner.time.allDayShift"));
-  return { ...time, startAt: time.startAt + deltaMs, endAt: time.endAt + deltaMs };
-}
