@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
+use crate::runtime::platform::strip_windows_verbatim_prefix;
 use crate::runtime::process::configure_child_process_group;
 
 fn git_command(cwd: &Path) -> Command {
@@ -1154,8 +1155,10 @@ pub async fn subagent_worktree_create(
             })?
         };
 
-        let worktree_root = fs::canonicalize(&target)
-            .map_err(|err| format!("failed to canonicalize worktree: {err}"))?;
+        let worktree_root = strip_windows_verbatim_prefix(
+            fs::canonicalize(&target)
+                .map_err(|err| format!("failed to canonicalize worktree: {err}"))?,
+        );
         let child_workdir = worktree_root.join(relative_workdir);
         let child_metadata = fs::metadata(&child_workdir).map_err(|_| {
             format!(

@@ -13,6 +13,7 @@ use tempfile::NamedTempFile;
 use wait_timeout::ChildExt;
 
 use crate::commands::system::validate_project_folder_name;
+use crate::runtime::platform::strip_windows_verbatim_prefix;
 use crate::runtime::process::{
     configure_child_process_group, kill_child_process_tree_best_effort, spawn_and_reap,
     terminate_process_tree_by_pid,
@@ -1995,10 +1996,12 @@ fn git_create_worktree_with_base(
     let response_state = git_status_sync(workdir)?;
     match result {
         Ok(output) => {
-            let worktree_path = fs::canonicalize(&target)
-                .map_err(|error| format!("无法解析 Worktree 路径：{error}"))?
-                .to_string_lossy()
-                .into_owned();
+            let worktree_path = strip_windows_verbatim_prefix(
+                fs::canonicalize(&target)
+                    .map_err(|error| format!("无法解析 Worktree 路径：{error}"))?,
+            )
+            .to_string_lossy()
+            .into_owned();
             Ok(GitWorktreeResponse {
                 ok: true,
                 state: response_state,

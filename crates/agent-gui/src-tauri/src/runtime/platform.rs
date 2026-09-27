@@ -32,6 +32,29 @@ pub(crate) fn strip_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
     path
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_windows_verbatim_prefix_strips_drive_prefix() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\worktree")),
+            PathBuf::from(r"C:\worktree")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_windows_verbatim_prefix_restores_unc_prefix() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(PathBuf::from(r"\\?\UNC\server\share\worktree")),
+            PathBuf::from(r"\\server\share\worktree")
+        );
+    }
+}
+
 pub(crate) fn maybe_augment_macos_path(command: &mut Command) {
     if !cfg!(target_os = "macos") {
         return;
