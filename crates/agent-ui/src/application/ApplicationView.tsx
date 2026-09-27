@@ -4,6 +4,7 @@ import type { SidebarShortcutId } from "../lib/settings/sidebarShortcuts";
 import { cn } from "../lib/shared/utils";
 import type { SkillSummary } from "../lib/skills/index";
 import { McpHubPage } from "../pages/mcp-hub/McpHubPage";
+import { PlanningPage } from "../pages/planning/PlanningPage";
 import { ResourceManagementPage } from "../pages/resources/ResourceManagementPage";
 import { SkillsHubPage } from "../pages/skills-hub/SkillsHubPage";
 
@@ -45,7 +46,9 @@ export function ApplicationView(props: ApplicationViewProps) {
   } = props;
 
   let content: ReactNode;
-  if (activeView === "skills-hub") {
+  if (activeView === "planning-hub") {
+    content = <PlanningPage />;
+  } else if (activeView === "skills-hub") {
     content = (
       <SkillsHubPage
         settings={settings}

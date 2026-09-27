@@ -25,6 +25,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.navCron": "定时任务",
   "settings.navRemote": "Remote",
   "settings.navSkills": "Skills",
+  "settings.navPlanning": "日历",
   "settings.navMemory": "记忆",
   "settings.groupGeneral": "通用",
   "settings.groupIntelligence": "智能",
@@ -403,6 +404,14 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.ask_user_question.desc": "以选项卡片向你提问并等待选择",
   "settings.builtinTool.ask_user_question.detail":
     "模型在需要你决策时发起选择题（一次最多 4 个问题，每题 2-6 个选项且各题数量一致，推荐项排在首位）。卡片暂停执行等待作答，3 分钟内未作答自动按推荐项继续执行；桌面端与 WebUI 均可作答，点击停止可跳过。仅在对话场景注册。",
+  "settings.builtinTool.planning_query.name": "PlanningQuery",
+  "settings.builtinTool.planning_query.desc": "读取日历、待办与排期",
+  "settings.builtinTool.planning_query.detail":
+    "按日期、列表、日历或父任务读取计划，支持完整子任务树、排序、排期和提醒；可在只读计划模式使用。",
+  "settings.builtinTool.planning_mutate.name": "PlanningMutate",
+  "settings.builtinTool.planning_mutate.desc": "管理日历、待办、时间块和提醒",
+  "settings.builtinTool.planning_mutate.detail":
+    "创建、编辑、移动与排序多层任务，管理日历、排期、提醒和导入；使用幂等请求与版本检查，写操作遵循工具权限。",
   "settings.builtinTool.cron_task_manager.name": "定时任务",
   "settings.builtinTool.cron_task_manager.desc": "创建与管理定时自动任务",
   "settings.builtinTool.cron_task_manager.detail":

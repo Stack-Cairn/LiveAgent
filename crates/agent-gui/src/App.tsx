@@ -628,6 +628,13 @@ export default function App() {
 
   const localeContextValue = useLocaleContextValue(settings.locale);
 
+  useEffect(() => {
+    // Calendar reminder notifications are shown by the backend, which has no UI locale.
+    void invoke("planning_set_labels", {
+      notificationTitle: translate("planner.notificationTitle", settings.locale),
+    }).catch(() => {});
+  }, [settings.locale]);
+
   const appUpdateMessages = useMemo(
     () => ({
       checkFailed: translate("settings.aboutUpdateCheckFailed", settings.locale),

@@ -25,6 +25,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.navCron": "Scheduled tasks",
   "settings.navRemote": "Remote",
   "settings.navSkills": "Skills",
+  "settings.navPlanning": "Calendar",
   "settings.navMemory": "Memory",
   "settings.groupGeneral": "General",
   "settings.groupIntelligence": "Intelligence",
@@ -424,6 +425,14 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Ask you multiple-choice questions in a card and wait for your selections",
   "settings.builtinTool.ask_user_question.detail":
     "Lets the model ask you multiple-choice questions when a decision is yours to make (up to 4 questions per call, 2-6 options each with the same count across questions, recommended option shown first). Execution pauses on an interactive card until you answer — from the desktop or the WebUI; after 3 minutes without an answer the recommended options are auto-selected, and pressing Stop skips the question. Chat sessions only.",
+  "settings.builtinTool.planning_query.name": "PlanningQuery",
+  "settings.builtinTool.planning_query.desc": "Read calendars, tasks and scheduled blocks",
+  "settings.builtinTool.planning_query.detail":
+    "Read calendars, task lists, nested task trees, ordering, schedules and reminders by date or ID. Available in read-only plan mode.",
+  "settings.builtinTool.planning_mutate.name": "PlanningMutate",
+  "settings.builtinTool.planning_mutate.desc": "Manage calendars, tasks, time blocks and reminders",
+  "settings.builtinTool.planning_mutate.detail":
+    "Create, edit, move and reorder nested tasks; manage calendars, schedules, reminders and imports. Writes follow tool permissions with idempotent requests and revision checks.",
   "settings.builtinTool.cron_task_manager.name": "Scheduled Tasks",
   "settings.builtinTool.cron_task_manager.desc": "Create and manage scheduled automations",
   "settings.builtinTool.cron_task_manager.detail":

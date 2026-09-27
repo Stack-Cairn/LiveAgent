@@ -4,6 +4,7 @@ import {
   Blend,
   Brain,
   Cable,
+  CalendarDays,
   Check,
   ChevronRight,
   CirclePlus,
@@ -1445,7 +1446,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               </SidebarMenuItem>
               {SIDEBAR_SHORTCUTS.filter(({ id }) => sidebarShortcuts[id]).map(
                 ({ id, labelKey }) => {
-                  const Icon = { skills: Blend, mcp: Cable, cron: Clock3, memory: Brain }[id];
+                  const Icon = {
+                    skills: Blend,
+                    mcp: Cable,
+                    cron: Clock3,
+                    planning: CalendarDays,
+                    memory: Brain,
+                  }[id];
                   const active = activeView === `${id}-hub`;
                   return (
                     <SidebarMenuItem key={id}>
