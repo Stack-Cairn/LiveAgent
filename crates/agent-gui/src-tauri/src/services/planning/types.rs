@@ -138,10 +138,17 @@ pub struct Event {
     pub series_id: Option<String>,
     #[serde(default)]
     pub original_date: Option<String>,
+    /// Google-style per-event notification: absent follows the calendar default,
+    /// `-1` turns notifications off, otherwise minutes before the start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reminder_minutes: Option<i64>,
     pub revision: u64,
     pub created_at: i64,
     pub updated_at: i64,
 }
+
+/// Sentinel for an event that opted out of its calendar's default notification.
+pub const EVENT_REMINDER_OFF: i64 = -1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

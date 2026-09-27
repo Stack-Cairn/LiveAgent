@@ -659,6 +659,7 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             "time",
             "recurrence",
             "tagIds",
+            "reminderMinutes",
         ],
         "event.exception" => &["date", "delete", "time", "title", "notes"],
         "event.restoreException" => &["date", "exceptionId", "exceptionRevision"],
@@ -1000,7 +1001,14 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             let calendar = required(d, "calendarId")?;
             writable(s, calendar)?;
             let mut value = json!({"id":id(),"calendarId":calendar,"title":required(d,"title")?,"time":d["time"],"revision":1,"createdAt":now,"updatedAt":now});
-            for field in ["todoId", "notes", "titleOverride", "recurrence", "tagIds"] {
+            for field in [
+                "todoId",
+                "notes",
+                "titleOverride",
+                "recurrence",
+                "tagIds",
+                "reminderMinutes",
+            ] {
                 if let Some(v) = d.get(field) {
                     value[field] = v.clone();
                 }
@@ -1032,6 +1040,7 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
                     "todoId",
                     "recurrence",
                     "tagIds",
+                    "reminderMinutes",
                 ],
             )?;
             e.revision += 1;
@@ -1384,6 +1393,11 @@ pub(crate) fn validate(s: &Snapshot) -> Result<(), String> {
         }
     }
     for e in &s.events {
+        if e.reminder_minutes
+            .is_some_and(|n| n != EVENT_REMINDER_OFF && !(0..=10080).contains(&n))
+        {
+            return Err("E:reminder_offset_invalid".into());
+        }
         validate_tags(s, &e.tag_ids)?;
         title(&e.title)?;
         time::bounds(&e.time)?;
@@ -1468,10 +1482,7 @@ pub(super) fn reconcile_reminders(
         if !super::trash::event_active(s, e) {
             continue;
         }
-        let Some(cal) = s.calendars.iter().find(|c| c.id == e.calendar_id) else {
-            continue;
-        };
-        let Some(minutes) = cal.reminder_minutes else {
+        let Some(minutes) = event_reminder(s, e) else {
             continue;
         };
         let complete = e.todo_id.as_ref().is_some_and(|tid| {
@@ -1551,6 +1562,12 @@ pub(super) fn reconcile_reminders(
         .filter(|e| !super::trash::event_active(s, e))
         .map(|e| e.id.clone())
         .collect();
+    let silent: std::collections::HashSet<String> = s
+        .events
+        .iter()
+        .filter(|e| event_reminder(s, e).is_none())
+        .map(|e| e.id.clone())
+        .collect();
     for r in &mut s.reminders {
         if r.origin == "manual" {
             let name = if r.target_type == "todo" {
@@ -1580,12 +1597,7 @@ pub(super) fn reconcile_reminders(
             && s.todos
                 .iter()
                 .any(|t| t.id == r.target_id && !t.due_reminder))
-            || (r.origin == "event_start"
-                && s.events
-                    .iter()
-                    .find(|e| e.id == r.target_id)
-                    .and_then(|e| s.calendars.iter().find(|c| c.id == e.calendar_id))
-                    .is_some_and(|c| c.reminder_minutes.is_none()));
+            || (r.origin == "event_start" && silent.contains(&r.target_id));
         if disabled && r.status == "pending" {
             r.status = "completed".into();
             r.lease_until = None;
@@ -1654,6 +1666,20 @@ fn target_exists_parts(todos: &[Todo], events: &[Event], kind: &str, id: &str) -
 fn target_exists(s: &Snapshot, kind: &str, id: &str) -> bool {
     target_exists_parts(&s.todos, &s.events, kind, id)
 }
+/// Minutes before an event's start to notify: its own setting, else the calendar default.
+fn event_reminder(s: &Snapshot, e: &Event) -> Option<i64> {
+    match e.reminder_minutes {
+        Some(EVENT_REMINDER_OFF) => None,
+        Some(minutes) => Some(minutes),
+        None => {
+            s.calendars
+                .iter()
+                .find(|c| c.id == e.calendar_id)?
+                .reminder_minutes
+        }
+    }
+}
+
 fn validate_tags(s: &Snapshot, ids: &[String]) -> Result<(), String> {
     let unique: std::collections::HashSet<_> = ids.iter().collect();
     if ids.len() > 30

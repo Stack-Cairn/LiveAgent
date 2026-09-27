@@ -1442,3 +1442,62 @@ fn planning_my_tasks_deletion_can_recycle_tasks() {
     assert!(back.deleted_at.is_none());
     assert_eq!(back.group_id.as_deref(), list["id"].as_str());
 }
+
+#[test]
+fn planning_event_notification_overrides_calendar_default() {
+    let store = store();
+    let s = store.snapshot(Query::default()).unwrap();
+    let at = store::now() + 2 * 3_600_000;
+    let pending = |store: &PlanningStore| {
+        store
+            .snapshot(Query::default())
+            .unwrap()
+            .reminders
+            .into_iter()
+            .filter(|r| r.status == "pending")
+            .map(|r| r.trigger_at)
+            .collect::<Vec<_>>()
+    };
+    let e = store
+        .mutate(input(
+            "event.create",
+            None,
+            None,
+            json!({"title":"评审","calendarId":s.calendars[0].id,"time":timed(at,at+3_600_000),"reminderMinutes":30}),
+        ))
+        .unwrap()
+        .item
+        .unwrap();
+    assert_eq!(pending(&store), vec![at - 30 * 60_000]);
+    let id = e["id"].as_str().unwrap();
+    store
+        .mutate(input(
+            "event.update",
+            Some(id),
+            Some(1),
+            json!({"reminderMinutes":-1}),
+        ))
+        .unwrap();
+    assert!(pending(&store).is_empty());
+    // Null follows the calendar default again (0 minutes for the built-in calendar).
+    store
+        .mutate(input(
+            "event.update",
+            Some(id),
+            Some(2),
+            json!({"reminderMinutes":null}),
+        ))
+        .unwrap();
+    assert_eq!(pending(&store), vec![at]);
+    assert_eq!(
+        store
+            .mutate(input(
+                "event.update",
+                Some(id),
+                Some(3),
+                json!({"reminderMinutes":20000}),
+            ))
+            .unwrap_err(),
+        "E:reminder_offset_invalid"
+    );
+}
