@@ -1,0 +1,732 @@
+/* Planning follows Google Calendar / Tasks layout and proportions, expressed with
+ * LiveAgent theme tokens. Only calendar geometry, calendar-specific surfaces and
+ * cross-element drag states live here; controls use the shared UI primitives. */
+
+/* ---------- Page shell ---------- */
+/* Canvas matches the app chrome; calendar/task surfaces are cards on top of it. */
+.planning-page {
+  background: hsl(var(--background));
+}
+.planning-topbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 4rem;
+  padding: 0.5rem 1rem 0.5rem 0.75rem;
+}
+.planning-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 0 0.75rem 0.75rem 0;
+}
+.planning-surface,
+.planning-task-surface,
+.planning-board-card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  box-shadow: 0 0 0 1px hsl(var(--border) / 0.6);
+}
+.planning-surface {
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 1.5rem;
+}
+.planning-page .planning-body > main:first-child {
+  margin-left: 0.75rem;
+}
+.planning-task-surface {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 20rem;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 1.5rem;
+}
+
+/* ---------- Sidebar ---------- */
+.planning-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 1rem;
+  width: 16rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.25rem 0.5rem 1rem 1rem;
+}
+.planning-create {
+  align-self: flex-start;
+  height: 3.5rem;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  padding-inline: 1rem 0.75rem;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+.planning-mini-grid {
+  display: grid;
+  row-gap: 0.125rem;
+  margin-top: 0.25rem;
+  font-size: var(--text-tiny);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+}
+.planning-mini-label {
+  line-height: 1.5rem;
+  color: hsl(var(--muted-foreground));
+}
+.planning-mini-week {
+  display: grid;
+  place-items: center;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted));
+  font-variant-numeric: tabular-nums;
+}
+.planning-mini-grid > .planning-mini-week:nth-child(9) {
+  border-radius: 0.25rem 0.25rem 0 0;
+}
+.planning-mini-day {
+  justify-self: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  font-variant-numeric: tabular-nums;
+}
+.planning-mini-day:hover {
+  background: hsl(var(--foreground) / 0.05);
+}
+.planning-mini-day.is-outside {
+  color: hsl(var(--muted-foreground));
+}
+.planning-mini-day.is-selected {
+  background: hsl(var(--foreground) / 0.1);
+  font-weight: var(--font-weight-semibold);
+}
+.planning-mini-day.is-today {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.planning-sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border-radius: 0.25rem;
+}
+.planning-sidebar-row:hover {
+  background: hsl(var(--foreground) / 0.05);
+}
+.planning-color-check {
+  border-width: 2px;
+  border-color: var(--planning-color);
+  border-radius: 0.1875rem;
+}
+.planning-color-check[data-checked] {
+  border-color: var(--planning-color);
+  background: var(--planning-color);
+  color: var(--planning-on-color);
+}
+.planning-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  height: 2rem;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  text-align: left;
+}
+.planning-nav-item:hover {
+  background: hsl(var(--foreground) / 0.05);
+}
+.planning-nav-item[aria-current="page"] {
+  background: hsl(var(--foreground) / 0.1);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---------- Tasks board ---------- */
+.planning-board {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 100%;
+  padding: 0 0.75rem 0.75rem;
+}
+.planning-page .planning-body > main:first-child .planning-board {
+  padding-left: 0;
+}
+.planning-board-card {
+  flex: 0 0 auto;
+  width: min(25rem, 100%);
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+/* ---------- Time grid (day / week) ---------- */
+.planning-time-area {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  isolation: isolate;
+}
+/* padding-right is set inline to the measured scrollbar width of .planning-time-scroll. */
+.planning-day-head,
+.planning-all-day {
+  display: grid;
+}
+.planning-day-head > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 0 0.25rem;
+}
+.planning-day-head small,
+.planning-zone-label,
+.planning-time-labels small,
+.planning-dst {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--text-tiny);
+  font-weight: var(--font-weight-medium);
+  line-height: 1rem;
+}
+.planning-day-head small {
+  font-size: var(--text-xs);
+}
+.planning-day-number {
+  display: grid;
+  place-items: center;
+  width: 2.875rem;
+  height: 2.875rem;
+  margin-top: 0.125rem;
+  border-radius: 9999px;
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.planning-day-number:hover {
+  background: hsl(var(--accent));
+}
+.planning-day-head .is-past .planning-day-number {
+  color: hsl(var(--muted-foreground));
+}
+.planning-day-head .is-today small {
+  color: hsl(var(--primary));
+}
+.planning-day-head .is-today .planning-day-number {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.planning-day-head .planning-lunar {
+  font-weight: normal;
+}
+.planning-zone-label {
+  align-self: end;
+  overflow: hidden;
+  padding: 0 0.5rem 0.25rem 0;
+  text-align: right;
+  white-space: nowrap;
+}
+.planning-all-day {
+  max-height: 7rem;
+  min-height: 1.75rem;
+  overflow: auto;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.planning-all-day > fieldset {
+  min-width: 0;
+  padding: 0 0.5rem 0.25rem 0;
+  border-left: 1px solid hsl(var(--border));
+}
+.planning-all-day-event,
+.planning-month-event {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+  height: 1.375rem;
+  overflow: hidden;
+  padding: 0 0.5rem;
+  border-radius: 0.375rem;
+  font-size: var(--text-xs);
+  line-height: 1.25rem;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.planning-all-day-event {
+  margin-bottom: 0.125rem;
+}
+.planning-pending-chip {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+.planning-time-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.planning-time-columns {
+  display: grid;
+  position: relative;
+}
+.planning-time-labels {
+  position: relative;
+}
+.planning-time-labels small {
+  position: absolute;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  font-variant-numeric: tabular-nums;
+}
+.planning-time-day {
+  position: relative;
+  min-width: 0;
+  border-left: 1px solid hsl(var(--border));
+  background-image: linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+}
+
+.planning-time-event {
+  position: absolute;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  box-shadow: 0 0 0 1px hsl(var(--card));
+  z-index: 2;
+}
+.planning-time-event.is-dragging {
+  opacity: 0.4;
+}
+.planning-time-event.is-past,
+.planning-all-day-event.is-past,
+.planning-month-event.is-past {
+  opacity: 0.55;
+}
+:is(.planning-month-event, .planning-agenda-row):not(.is-filled).is-past {
+  opacity: 1;
+  color: hsl(var(--muted-foreground));
+}
+:is(.planning-time-event, .planning-all-day-event, .planning-month-event).is-completed {
+  text-decoration: line-through;
+}
+.planning-event-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.planning-event-body strong,
+.planning-event-body small {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  line-height: 1rem;
+}
+.planning-event-body strong {
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}
+.planning-event-body small {
+  font-variant-numeric: tabular-nums;
+}
+/* In cramped blocks the time gives way before the title does. */
+.planning-inline-time {
+  display: none;
+  flex-shrink: 10;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: normal;
+}
+.planning-time-event.is-short .planning-event-body {
+  justify-content: center;
+  padding-block: 0;
+}
+.planning-time-event.is-short .planning-event-body small {
+  display: none;
+}
+.planning-time-event.is-short .planning-inline-time {
+  display: inline;
+}
+.planning-resize {
+  position: absolute;
+  width: 100%;
+  height: 7px;
+  padding: 0;
+  touch-action: none;
+  cursor: ns-resize;
+  z-index: 3;
+}
+.planning-resize-start {
+  top: 0;
+}
+.planning-resize-end {
+  bottom: 0;
+}
+.planning-resize::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: calc(50% - 9px);
+  width: 18px;
+  height: 2px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0;
+}
+.planning-time-event:hover .planning-resize::after,
+.planning-resize:focus-visible::after {
+  opacity: 0.5;
+}
+.planning-drag-preview {
+  position: absolute;
+  inset-inline: 0 0.625rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  font-size: var(--text-xs);
+  z-index: 4;
+}
+.planning-now {
+  position: absolute;
+  inset-inline: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--destructive);
+  pointer-events: none;
+  z-index: 3;
+}
+.planning-now::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: inherit;
+}
+.planning-outside {
+  position: absolute;
+  inset-inline: 0.25rem 0.625rem;
+  z-index: 1;
+  overflow: hidden;
+  padding: 0 0.375rem;
+  border-radius: 0.25rem;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: var(--text-tiny);
+  line-height: 1rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.planning-outside.is-before {
+  top: 0.125rem;
+}
+.planning-outside.is-after {
+  bottom: 0.125rem;
+}
+.planning-dst {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  z-index: 1;
+}
+
+/* ---------- Month ---------- */
+.planning-month {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.planning-month-week {
+  display: flex;
+  justify-content: center;
+  padding-top: 1.75rem;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.planning-month-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.25rem 0.25rem 0.375rem;
+  border-left: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.planning-month-weekday {
+  align-self: center;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--text-tiny);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25rem;
+}
+.planning-month-date {
+  display: flex;
+  align-self: center;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+}
+.planning-month-num {
+  display: grid;
+  place-items: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.25rem;
+  border-radius: 9999px;
+  font-variant-numeric: tabular-nums;
+}
+.planning-month-date:hover .planning-month-num {
+  background: hsl(var(--accent));
+}
+.planning-month-cell.is-outside .planning-month-num {
+  color: hsl(var(--muted-foreground));
+}
+.planning-month-cell.is-today .planning-month-num {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.planning-month-event:not(.is-filled):hover,
+.planning-month-more:hover {
+  background: hsl(var(--accent));
+}
+.planning-month-dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.125rem;
+  border-radius: 9999px;
+}
+.planning-month-more {
+  padding: 0 0.5rem;
+  border-radius: 0.375rem;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.375rem;
+  text-align: left;
+}
+
+/* ---------- Agenda ---------- */
+.planning-agenda {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.5rem 0.75rem;
+}
+.planning-agenda-day {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.planning-agenda-date {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  width: 7.5rem;
+  text-align: left;
+}
+.planning-agenda-num {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+.planning-agenda-date:hover .planning-agenda-num {
+  background: hsl(var(--accent));
+}
+.planning-agenda-date.is-today .planning-agenda-num {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.planning-agenda-meta {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--text-tiny);
+  font-weight: var(--font-weight-medium);
+  line-height: 1rem;
+}
+.planning-agenda-date.is-today .planning-agenda-meta {
+  color: hsl(var(--primary));
+}
+.planning-agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  text-align: left;
+}
+button.planning-agenda-row:hover {
+  background: hsl(var(--accent));
+}
+.planning-agenda-dot {
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+}
+.planning-agenda-now {
+  position: relative;
+  height: 2px;
+  margin: 0.125rem 0 0.125rem 0.375rem;
+  background: var(--destructive);
+}
+.planning-agenda-now::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: inherit;
+}
+
+/* ---------- Drag targets & focus ---------- */
+.planning-all-day-target {
+  background: color-mix(in srgb, hsl(var(--primary)) 15%, hsl(var(--card)));
+  outline: 2px dashed hsl(var(--primary));
+  outline-offset: -2px;
+}
+:is(
+  .planning-event-body,
+  .planning-resize,
+  .planning-all-day-event,
+  .planning-day-number,
+  .planning-month-date,
+  .planning-month-event,
+  .planning-deadline,
+  .planning-mini-day,
+  .planning-agenda-row,
+  .planning-agenda-date
+):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+/* The filled event surface needs a focus ring that follows its contrast text. */
+.planning-event-body:focus-visible,
+.planning-resize:focus-visible,
+.planning-all-day-event:focus-visible,
+.planning-month-event.is-filled:focus-visible {
+  outline-color: currentColor;
+}
+:is(.planning-month-event.is-filled, .planning-all-day-event, .planning-deadline):hover {
+  filter: brightness(1.08);
+}
+
+@media (max-width: 820px) {
+  .planning-event-body {
+    padding-inline: 0.25rem;
+  }
+  .planning-body {
+    padding-right: 0.5rem;
+  }
+  .planning-page .planning-body > main:first-child {
+    margin-left: 0.5rem;
+  }
+  .planning-agenda-date {
+    width: 5rem;
+  }
+}
+hr.planning-agenda-now {
+  border: 0;
+}
+
+/* ---------- Events vs tasks ----------
+ * Events: solid blocks in the calendar color.
+ * Scheduled task blocks: tinted surface, accent bar and a checkbox mark in the list color.
+ * Deadlines: dashed outline, "Due hh:mm", laid out beside events rather than over them. */
+.planning-task-mark {
+  flex-shrink: 0;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--planning-accent, currentColor);
+}
+.planning-time-event.is-task,
+.planning-all-day-event.planning-task-chip,
+.planning-month-event.planning-task-chip {
+  border-left: 4px solid var(--planning-accent);
+}
+.planning-time-event.is-task .planning-event-body {
+  padding-left: 0.375rem;
+}
+.planning-time-event.is-task.is-completed {
+  opacity: 0.45;
+}
+.planning-deadline {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  padding: 0 0.375rem;
+  border: 1px dashed var(--planning-accent);
+  font-size: var(--text-xs);
+  line-height: 1rem;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.planning-deadline-time {
+  flex-shrink: 10;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+.planning-month-deadline {
+  border: 1px dashed var(--planning-accent);
+}
+.planning-agenda-dot.is-task {
+  display: grid;
+  place-items: center;
+  background: none;
+}
+.planning-agenda-dot.is-task .planning-task-mark {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.planning-deadline.is-past {
+  opacity: 0.55;
+}
