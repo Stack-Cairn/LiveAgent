@@ -334,16 +334,43 @@
   -webkit-user-select: none;
   cursor: grab;
 }
+.planning-task-mark {
+  flex-shrink: 0;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--planning-accent, currentColor);
+}
+.planning-deadline-time {
+  flex-shrink: 10;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+/* Narrow columns wrap downwards instead of truncating: the title takes as many lines as the
+ * block height allows (--planning-title-lines), the time range may wrap at the dash. */
 .planning-event-body strong,
 .planning-event-body small {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
   max-width: 100%;
   overflow: hidden;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   font-size: var(--text-xs);
   line-height: 1rem;
+}
+.planning-event-body strong {
+  -webkit-line-clamp: var(--planning-title-lines, 1);
+}
+.planning-event-body small {
+  -webkit-line-clamp: 2;
+}
+.planning-event-body .planning-task-mark {
+  display: inline-block;
+  margin-right: 0.25rem;
+  vertical-align: -0.125rem;
 }
 .planning-event-body strong {
   flex-shrink: 0;
@@ -364,11 +391,37 @@
   justify-content: center;
   padding-block: 0;
 }
+/* Short blocks stay on one line: "title, 09:30". */
+.planning-time-event.is-short .planning-event-body strong {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.planning-time-event.is-short .planning-event-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.planning-time-event,
+.planning-deadline {
+  container-type: inline-size;
+}
 .planning-time-event.is-short .planning-event-body small {
   display: none;
 }
 .planning-time-event.is-short .planning-inline-time {
   display: inline;
+}
+/* In very narrow blocks the title wins; the time is in the tooltip and preview. */
+@container (max-width: 5.5rem) {
+  .planning-event-body,
+  .planning-time-event.is-task .planning-event-body {
+    padding-inline: 0.25rem;
+  }
+  .planning-time-event.is-short .planning-inline-time,
+  .planning-deadline:not(.is-tall) .planning-deadline-time {
+    display: none;
+  }
 }
 .planning-resize {
   position: absolute;
@@ -677,12 +730,6 @@ hr.planning-agenda-now {
  * Events: solid blocks in the calendar color.
  * Scheduled task blocks: tinted surface, accent bar and a checkbox mark in the list color.
  * Deadlines: dashed outline, "Due hh:mm", laid out beside events rather than over them. */
-.planning-task-mark {
-  flex-shrink: 0;
-  width: 0.875rem;
-  height: 0.875rem;
-  color: var(--planning-accent, currentColor);
-}
 .planning-time-event.is-task,
 .planning-all-day-event.planning-task-chip,
 .planning-month-event.planning-task-chip {
@@ -707,13 +754,34 @@ hr.planning-agenda-now {
   white-space: nowrap;
   cursor: pointer;
 }
-.planning-deadline-time {
-  flex-shrink: 10;
+.planning-deadline-title {
   min-width: 0;
-  margin-left: auto;
   overflow: hidden;
-  color: hsl(var(--muted-foreground));
-  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planning-deadline-title .planning-task-mark {
+  display: inline-block;
+  margin-right: 0.25rem;
+  vertical-align: -0.125rem;
+}
+.planning-deadline.is-tall {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0.25rem 0.375rem;
+}
+.planning-deadline.is-tall .planning-deadline-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--planning-title-lines, 1);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.planning-deadline.is-tall .planning-deadline-time {
+  flex-shrink: 0;
+  margin-left: 0;
 }
 .planning-month-deadline {
   border: 1px dashed var(--planning-accent);

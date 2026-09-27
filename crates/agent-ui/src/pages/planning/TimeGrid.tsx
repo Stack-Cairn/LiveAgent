@@ -1,4 +1,10 @@
-import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Check, CheckCircle2, Circle } from "../../components/IconSet";
 import { type DragState, dragTime, edgeScroll, layoutEvents } from "../../lib/planning/geometry";
 import { planningDateLocale, translate } from "../../lib/planning/i18n";
@@ -20,6 +26,14 @@ import { eventAppearance, eventColor, taskAppearance } from "./eventAppearance";
 
 const GUTTER = 56;
 const DEADLINE_PREFIX = "deadline:";
+/** Text line height inside blocks (text-xs / 1rem) plus vertical padding. */
+const LINE_HEIGHT = 16;
+const BLOCK_PADDING = 8;
+/** How many wrapped title lines fit, leaving one line for the time when there is room. */
+function titleLines(height: number, reserveTimeLine: boolean) {
+  const lines = Math.max(1, Math.floor((height - BLOCK_PADDING) / LINE_HEIGHT));
+  return Math.max(1, reserveTimeLine ? lines - 1 : lines);
+}
 
 function TaskMark({ todo }: { todo?: Todo }) {
   return todo?.status === "completed" ? (
@@ -619,17 +633,24 @@ export function TimeGrid({
                         <button
                           type="button"
                           key={event.id}
-                          className={`planning-time-event planning-deadline ${dueAt < now ? "is-past" : ""}`}
+                          className={`planning-time-event planning-deadline ${dueAt < now ? "is-past" : ""} ${height >= 2 * LINE_HEIGHT + BLOCK_PADDING ? "is-tall" : ""}`}
                           title={translate("planner.grid.taskDue", { title: todo.title })}
-                          style={{
-                            ...geometry,
-                            height: Math.max(20, height),
-                            ...taskAppearance(taskListColor(todo, snapshot), "deadline"),
-                          }}
+                          style={
+                            {
+                              ...geometry,
+                              height: Math.max(20, height),
+                              ...taskAppearance(taskListColor(todo, snapshot), "deadline"),
+                              ...({
+                                "--planning-title-lines": titleLines(Math.max(20, height), true),
+                              } as CSSProperties),
+                            } as CSSProperties
+                          }
                           onClick={() => onSelectTodo(todo)}
                         >
-                          <Circle className="planning-task-mark" aria-hidden />
-                          <span className="truncate">{todo.title}</span>
+                          <span className="planning-deadline-title">
+                            <Circle className="planning-task-mark" aria-hidden />
+                            {todo.title}
+                          </span>
                           <span className="planning-deadline-time">
                             {translate("planner.grid.dueAt", {
                               time: zonedParts(dueAt, zone).time,
@@ -646,10 +667,15 @@ export function TimeGrid({
                       <div
                         key={event.id}
                         className={`planning-time-event ${height < 40 ? "is-short" : ""} ${event.todoId ? "is-task" : ""} ${draggingId === event.id ? "is-dragging" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "timed" && event.time.endAt < now ? "is-past" : ""}`}
-                        style={{
-                          ...geometry,
-                          ...(event.todoId ? taskAppearance(color) : eventAppearance(color)),
-                        }}
+                        style={
+                          {
+                            ...geometry,
+                            ...(event.todoId ? taskAppearance(color) : eventAppearance(color)),
+                            ...({
+                              "--planning-title-lines": titleLines(Math.max(16, height), true),
+                            } as CSSProperties),
+                          } as CSSProperties
+                        }
                       >
                         {!readOnly && startsHere && (
                           <button
@@ -710,7 +736,9 @@ export function TimeGrid({
                             {event.todoId && (
                               <TaskMark todo={snapshot.todos.find((t) => t.id === event.todoId)} />
                             )}
-                            <span className="truncate">{eventTitle(event, snapshot.todos)}</span>
+                            <span className="planning-event-title">
+                              {eventTitle(event, snapshot.todos)}
+                            </span>
                             <span className="planning-inline-time">
                               ，
                               {timeLabel(event.time, zone).split(" · ")[0].split(/[–-]/)[0].trim()}
