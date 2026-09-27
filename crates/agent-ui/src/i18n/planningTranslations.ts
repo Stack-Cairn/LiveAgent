@@ -233,6 +233,9 @@ export const PLANNING_TRANSLATIONS = {
     "planner.import.missingUid": "缺少来源 UID",
     "planner.import.needCalendar": "请选择目标日历",
     "planner.import.noInvitation": "邮件中没有 ICS 日历邀请附件。",
+    "planner.import.htmlNotIcs":
+      "返回的是网页而不是 iCal 数据。Google 日历请使用「设置 → 集成日历」中的「iCal 格式的私密地址」。",
+    "planner.import.invalidIcs": "iCal 数据格式有误：{detail}",
     "planner.import.notIcs": "文件不是有效的 ICS 日历。",
     "planner.import.notTasks": "文件不是有效的 Google Tasks 导出（Tasks.json）",
     "planner.import.overLimit": "单次最多导入 5000 条，请缩小日期范围",
@@ -694,6 +697,9 @@ export const PLANNING_TRANSLATIONS = {
     "planner.import.missingUid": "Missing source UID",
     "planner.import.needCalendar": "Choose a target calendar",
     "planner.import.noInvitation": "The email has no ICS calendar invitation attachment.",
+    "planner.import.htmlNotIcs":
+      "Got a web page instead of iCal data. For Google Calendar, use the “Secret address in iCal format” under Settings → Integrate calendar.",
+    "planner.import.invalidIcs": "Malformed iCal data: {detail}",
     "planner.import.notIcs": "This file is not a valid ICS calendar.",
     "planner.import.notTasks": "This isn’t a valid Google Tasks export (Tasks.json)",
     "planner.import.overLimit": "Up to 5000 items per import. Narrow the date range",

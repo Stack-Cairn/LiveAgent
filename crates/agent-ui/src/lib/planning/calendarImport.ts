@@ -50,6 +50,32 @@ export interface ParseRange {
   /** Subscriptions mirror a wider window than manual imports. */
   maxDays?: number;
 }
+/**
+ * ical.js requires the text to start at `BEGIN:VCALENDAR`; a UTF-8 BOM, zero-width
+ * characters or any preamble line makes it throw an internal "designSet.propertyGroups"
+ * TypeError. Some feeds ship a BOM, and a wrong Google URL returns an HTML page instead.
+ */
+function parseIcs(text: string) {
+  const start = text.search(/BEGIN:VCALENDAR/i);
+  if (start < 0)
+    throw Error(
+      translate(
+        /^\s*</.test(text.replace(/^[\uFEFF\u200B]+/, ""))
+          ? "planner.import.htmlNotIcs"
+          : "planner.import.notIcs",
+      ),
+    );
+  try {
+    return ICAL.parse(text.slice(start));
+  } catch (error) {
+    throw Error(
+      translate("planner.import.invalidIcs", {
+        detail: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
+
 export function parseCalendar(
   text: string,
   { from, to, zone, maxDays = 367 }: ParseRange,
@@ -58,7 +84,7 @@ export function parseCalendar(
     last = dayStart(addDays(to, 1), zone);
   if (last <= first || last - first > maxDays * 86400000)
     throw Error(translate("planner.import.rangeDays"));
-  const root = new ICAL.Component(ICAL.parse(text));
+  const root = new ICAL.Component(parseIcs(text));
   if (root.name !== "vcalendar") throw Error(translate("planner.import.notIcs"));
   if (root.getFirstPropertyValue("method") === "CANCEL")
     throw Error(translate("planner.import.cancelled"));
