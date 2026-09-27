@@ -14,19 +14,10 @@ import {
 import { Input } from "../../components/ui/input";
 import { localizePlanningError } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
-import { PlanningField, PlanningSelect } from "./PlanningControls";
+import { ColorSwatches, PLANNING_COLORS, PlanningField, PlanningSelect } from "./PlanningControls";
 import { usePlanningT } from "./usePlanningT";
 
 export const SUBSCRIPTION_INTERVALS = [15, 30, 60, 180, 360, 720, 1440] as const;
-export const SUBSCRIPTION_COLORS = [
-  "#0F766E",
-  "#2563EB",
-  "#7C3AED",
-  "#DB2777",
-  "#D97706",
-  "#16A34A",
-  "#64748B",
-];
 
 export function intervalLabel(
   t: (key: string, vars?: Record<string, number>) => string,
@@ -44,7 +35,7 @@ export function SubscriptionDialog({ onClose }: { onClose(): void }) {
   const { t } = usePlanningT();
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
-  const [color, setColor] = useState(SUBSCRIPTION_COLORS[0]);
+  const [color, setColor] = useState(PLANNING_COLORS[0]);
   const [refreshMinutes, setRefreshMinutes] = useState(60);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -115,23 +106,12 @@ export function SubscriptionDialog({ onClose }: { onClose(): void }) {
                 onChange={(e) => setName(e.target.value)}
               />
             </PlanningField>
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">{t("planner.calendar.color")}</legend>
-              <div className="flex gap-2">
-                {SUBSCRIPTION_COLORS.map((swatch) => (
-                  <button
-                    key={swatch}
-                    type="button"
-                    aria-label={swatch}
-                    aria-pressed={color === swatch}
-                    disabled={busy}
-                    className="size-6 rounded-full ring-offset-2 ring-offset-background aria-pressed:ring-2 aria-pressed:ring-ring"
-                    style={{ backgroundColor: swatch }}
-                    onClick={() => setColor(swatch)}
-                  />
-                ))}
-              </div>
-            </fieldset>
+            <ColorSwatches
+              label={t("planner.calendar.color")}
+              value={color}
+              disabled={busy}
+              onChange={setColor}
+            />
             <PlanningField label={t("planner.subscription.interval")}>
               <PlanningSelect
                 value={refreshMinutes}

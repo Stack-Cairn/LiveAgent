@@ -76,3 +76,54 @@ export function PlanningSelect({
     </Select>
   );
 }
+
+/** Palette for calendars and subscriptions; readable with both black and white text. */
+export const PLANNING_COLORS = [
+  "#2563EB",
+  "#0F766E",
+  "#16A34A",
+  "#7C3AED",
+  "#DB2777",
+  "#DC2626",
+  "#D97706",
+  "#64748B",
+];
+
+/** Round colour swatches (Google-style) instead of the browser's colour input. */
+export function ColorSwatches({
+  value,
+  onChange,
+  disabled,
+  label,
+}: {
+  value: string;
+  onChange(color: string): void;
+  disabled?: boolean;
+  label: string;
+}) {
+  const colors = PLANNING_COLORS.some((c) => c.toLowerCase() === value.toLowerCase())
+    ? PLANNING_COLORS
+    : [value, ...PLANNING_COLORS];
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm text-muted-foreground">{label}</legend>
+      <div className="flex flex-wrap gap-2.5">
+        {colors.map((swatch) => {
+          const selected = swatch.toLowerCase() === value.toLowerCase();
+          return (
+            <button
+              key={swatch}
+              type="button"
+              aria-label={swatch}
+              aria-pressed={selected}
+              disabled={disabled}
+              className="size-6 rounded-full ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-ring/40 aria-pressed:ring-2 aria-pressed:ring-ring disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ backgroundColor: swatch }}
+              onClick={() => onChange(swatch)}
+            />
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}

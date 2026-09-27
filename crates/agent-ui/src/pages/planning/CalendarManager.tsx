@@ -18,7 +18,7 @@ import { Label } from "../../components/ui/label";
 import { calendarName, localizePlanningError } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
 import type { PlanningCalendar, PlanningSnapshot } from "../../lib/planning/types";
-import { PlanningField, PlanningSelect } from "./PlanningControls";
+import { ColorSwatches, PLANNING_COLORS, PlanningField, PlanningSelect } from "./PlanningControls";
 import { usePlanningT } from "./usePlanningT";
 export function CalendarManager({
   snapshot,
@@ -31,7 +31,7 @@ export function CalendarManager({
   const formId = useId();
   const [selected, setSelected] = useState<PlanningCalendar | null>(null);
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#2563eb");
+  const [color, setColor] = useState(PLANNING_COLORS[0]);
   const [minutes, setMinutes] = useState("0");
   const [isDefault, setIsDefault] = useState(false);
   const [moveTo, setMoveTo] = useState("");
@@ -41,7 +41,7 @@ export function CalendarManager({
   const select = (calendar: PlanningCalendar | null) => {
     setSelected(calendar);
     setName(calendar?.name ?? "");
-    setColor(calendar?.color ?? "#2563eb");
+    setColor(calendar?.color ?? PLANNING_COLORS[0]);
     setMinutes(calendar?.reminderMinutes === null ? "" : String(calendar?.reminderMinutes ?? 0));
     setIsDefault(calendar?.isDefault ?? false);
     setDeleting(false);
@@ -101,7 +101,7 @@ export function CalendarManager({
       }}
     >
       <DialogContent
-        className="flex max-h-85dvh max-w-xl flex-col"
+        className="flex max-h-85dvh max-w-2xl flex-col"
         showCloseButton
         closeLabel={t("planner.common.close")}
         closeDisabled={busy}
@@ -111,130 +111,148 @@ export function CalendarManager({
           <DialogDescription>{t("planner.calendar.manageHint")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <div className="mb-4 flex flex-wrap gap-2 [&_i]:size-2 [&_i]:shrink-0 [&_i]:rounded-full">
-            {snapshot.calendars.map((c) => (
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                key={c.id}
-                onClick={() => select(c)}
-                className="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
-                disabled={busy}
-                aria-pressed={selected?.id === c.id}
-              >
-                <i style={{ background: c.color }} />
-                {calendarName(c)}
-                {c.isDefault ? ` · ${t("planner.calendar.default")}` : ""}
-                {c.readOnly ? ` · ${t("planner.calendar.readOnly")}` : ""}
-              </Button>
-            ))}
-            <Button
-              variant="ghost"
-              size="sm"
-              type="button"
-              disabled={busy}
-              onClick={() => select(null)}
+          <div className="grid min-w-0 gap-5 sm:grid-cols-[11rem_minmax(0,1fr)]">
+            {/* Calendar list on the left, like Google's settings sidebar. */}
+            <nav
+              className="flex flex-col gap-0.5 sm:border-r sm:border-border sm:pr-3"
+              aria-label={t("planner.toolbar.manageCalendars")}
             >
-              <Plus className="size-4" />
-              {t("planner.calendar.new")}
-            </Button>
-          </div>
-          <form
-            id={formId}
-            className="flex min-h-0 flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(false);
-            }}
-          >
-            <fieldset className="min-w-0 space-y-4" disabled={busy || selected?.readOnly}>
-              <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-                <PlanningField label={t("planner.calendar.name")}>
-                  <Input
-                    variant="plain"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+              {snapshot.calendars.map((c) => (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  key={c.id}
+                  onClick={() => select(c)}
+                  className="justify-start gap-2 font-normal aria-pressed:bg-accent aria-pressed:text-accent-foreground"
+                  disabled={busy}
+                  aria-pressed={selected?.id === c.id}
+                >
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: c.color }}
                   />
-                </PlanningField>
-                <PlanningField label={t("planner.calendar.color")}>
-                  <Input
-                    variant="plain"
-                    type="color"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                  />
-                </PlanningField>
-              </div>
-              <PlanningField label={t("planner.editor.remindBefore")}>
-                <PlanningSelect
-                  disabled={busy || selected?.readOnly}
-                  value={minutes}
-                  onValueChange={(value) => setMinutes(value)}
-                  options={[
-                    { value: "", label: t("planner.calendar.noReminder") },
-                    ...([0, 5, 15, 30, 60, 1440].map((m) => ({
-                      value: m,
-                      label:
-                        m === 0
-                          ? t("planner.calendar.atStart")
-                          : m === 1440
-                            ? t("planner.calendar.dayBefore")
-                            : t("planner.calendar.minutesBefore", { count: m }),
-                    })) ?? []),
-                  ]}
-                />
-              </PlanningField>
-              <Label className="flex items-center gap-2 text-sm font-normal">
-                <Checkbox
-                  checked={isDefault}
-                  disabled={busy || selected?.readOnly || selected?.isDefault}
-                  onCheckedChange={(checked) => setIsDefault(checked)}
-                />
-                {t("planner.calendar.makeDefault")}
-              </Label>
-            </fieldset>
-            {error && (
-              <SettingsNotice role="alert" variant="action-error">
-                {error}
-              </SettingsNotice>
-            )}
-          </form>
-          {deleting && selected && (
-            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm [&>p]:w-full">
-              <p>{t("planner.calendar.deleteMove", { name: calendarName(selected) })}</p>
-              <PlanningSelect
-                disabled={busy || selected?.readOnly}
-                aria-label={t("planner.calendar.moveTo")}
-                value={moveTo}
-                onValueChange={(value) => setMoveTo(value)}
-                options={[
-                  ...(snapshot.calendars
-                    .filter((c) => c.id !== selected.id && !c.readOnly)
-                    .map((c) => ({ value: c.id, label: calendarName(c) })) ?? []),
-                ]}
-              />
+                  <span className="min-w-0 flex-1 truncate text-left">{calendarName(c)}</span>
+                  {(c.isDefault || c.readOnly) && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {c.isDefault ? t("planner.calendar.default") : t("planner.calendar.readOnly")}
+                    </span>
+                  )}
+                </Button>
+              ))}
               <Button
                 variant="ghost"
                 size="sm"
                 type="button"
-                disabled={busy || !moveTo}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => void run(true)}
-              >
-                {t("planner.calendar.moveAndDelete")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 disabled={busy}
-                onClick={() => setDeleting(false)}
+                aria-pressed={selected === null}
+                className="justify-start gap-2 font-normal aria-pressed:bg-accent aria-pressed:text-accent-foreground"
+                onClick={() => select(null)}
               >
-                {t("planner.common.cancel")}
+                <Plus className="size-4" />
+                {t("planner.calendar.new")}
               </Button>
+            </nav>
+            <div className="min-w-0">
+              <form
+                id={formId}
+                className="flex min-h-0 flex-col gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(false);
+                }}
+              >
+                <fieldset className="min-w-0 space-y-4" disabled={busy || selected?.readOnly}>
+                  <PlanningField label={t("planner.calendar.name")}>
+                    <Input
+                      variant="plain"
+                      required
+                      maxLength={60}
+                      placeholder={t("planner.calendar.namePlaceholder")}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </PlanningField>
+                  <ColorSwatches
+                    label={t("planner.calendar.color")}
+                    value={color}
+                    disabled={busy || selected?.readOnly}
+                    onChange={setColor}
+                  />
+                  {/* The "Default" choice of each event's notification reads this value. */}
+                  <PlanningField
+                    label={t("planner.calendar.eventNotification")}
+                    description={t("planner.calendar.eventNotificationHint")}
+                  >
+                    <PlanningSelect
+                      disabled={busy || selected?.readOnly}
+                      value={minutes}
+                      onValueChange={(value) => setMinutes(value)}
+                      options={[
+                        { value: "", label: t("planner.calendar.noReminder") },
+                        ...([0, 5, 15, 30, 60, 1440].map((m) => ({
+                          value: m,
+                          label:
+                            m === 0
+                              ? t("planner.calendar.atStart")
+                              : m === 1440
+                                ? t("planner.calendar.dayBefore")
+                                : t("planner.calendar.minutesBefore", { count: m }),
+                        })) ?? []),
+                      ]}
+                    />
+                  </PlanningField>
+                  <Label className="flex items-center gap-2 text-sm font-normal">
+                    <Checkbox
+                      checked={isDefault}
+                      disabled={busy || selected?.readOnly || selected?.isDefault}
+                      onCheckedChange={(checked) => setIsDefault(checked)}
+                    />
+                    {t("planner.calendar.makeDefault")}
+                  </Label>
+                </fieldset>
+                {error && (
+                  <SettingsNotice role="alert" variant="action-error">
+                    {error}
+                  </SettingsNotice>
+                )}
+              </form>
+              {deleting && selected && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm [&>p]:w-full">
+                  <p>{t("planner.calendar.deleteMove", { name: calendarName(selected) })}</p>
+                  <PlanningSelect
+                    disabled={busy || selected?.readOnly}
+                    aria-label={t("planner.calendar.moveTo")}
+                    value={moveTo}
+                    onValueChange={(value) => setMoveTo(value)}
+                    options={[
+                      ...(snapshot.calendars
+                        .filter((c) => c.id !== selected.id && !c.readOnly)
+                        .map((c) => ({ value: c.id, label: calendarName(c) })) ?? []),
+                    ]}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    disabled={busy || !moveTo}
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => void run(true)}
+                  >
+                    {t("planner.calendar.moveAndDelete")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setDeleting(false)}
+                  >
+                    {t("planner.common.cancel")}
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </DialogBody>
         <DialogFooter>
           <DialogActions className="w-full">
