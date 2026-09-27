@@ -9,6 +9,12 @@ static SCHEMA_INITIALIZED: OnceLock<()> = OnceLock::new();
 static SCHEMA_INITIALIZE_LOCK: Mutex<()> = Mutex::new(());
 
 pub(crate) fn config_dir() -> Result<PathBuf, String> {
+    if let Some(path) = std::env::var_os("LIVEAGENT_CONFIG_DIR") {
+        let dir = PathBuf::from(path);
+        if !dir.is_absolute() { return Err("LIVEAGENT_CONFIG_DIR 必须是绝对路径".into()); }
+        fs::create_dir_all(&dir).map_err(|e| format!("创建开发配置目录失败：{e}"))?;
+        return Ok(dir);
+    }
     let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
     fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败：{e}"))?;
