@@ -49,7 +49,6 @@ workspace.zip
 *.pdb
 
 # Local workflow artifacts
-/.gitattributes
 /.trellis
 /AGENTS.md
 /CLAUDE.md
