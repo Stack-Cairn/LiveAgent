@@ -32,6 +32,7 @@ import { type EditorTarget, PlanningEditor } from "./PlanningEditor";
 import { PlanningSidebar, type TaskFilter } from "./PlanningSidebar";
 import { type PlanningMode, PlanningToolbar, type PlanningView } from "./PlanningToolbar";
 import { PlanningTrash } from "./PlanningTrash";
+import { QuickCreate, type QuickKind } from "./QuickCreate";
 import { TaskListDialog } from "./TaskListDialog";
 import { TaskPanel } from "./TaskPanel";
 import { TasksBoard } from "./TasksBoard";
@@ -89,6 +90,14 @@ export function PlanningPage() {
     null,
   );
   const [editor, setEditor] = useState<EditorTarget | null>(null);
+  // Clicking or dragging on the grid opens Google's quick-create card beside a draft block.
+  const [quick, setQuick] = useState<{
+    kind: QuickKind;
+    time: EventTime;
+    title: string;
+    anchor?: Element;
+  } | null>(null);
+  const [draftElement, setDraftElement] = useState<HTMLElement | null>(null);
   const [calendarsOpen, setCalendarsOpen] = useState(false);
   const [taskSheetOpen, setTaskSheetOpen] = useState(false);
   const [todoDrag, setTodoDrag] = useState<PlanningDragStart | null>(null);
@@ -111,6 +120,9 @@ export function PlanningPage() {
       ? all.filter((d) => ![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()))
       : all;
   }, [date, view, preferences.weekStartsOn, preferences.showWeekends]);
+  // A draft belongs to the visible range; navigating away discards it like Google does.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the range or mode changes
+  useEffect(() => setQuick(null), [days, mode]);
   useEffect(() => {
     void planningStore.refresh({
       from: dayStart(days[0], zone),
@@ -124,6 +136,7 @@ export function PlanningPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching Agent scopes must reset drafts
   useEffect(() => {
     setEditor(null);
+    setQuick(null);
     setPreview(null);
     setTrashOpen(false);
     setImportOpen(false);
@@ -478,7 +491,7 @@ export function PlanningPage() {
               onSelect={(event, anchor) => setPreview({ event, anchor })}
               onSelectTodo={(todo) => setEditor({ kind: "todo", todo })}
               onOpenDay={openDay}
-              onCreate={(time) => setEditor({ kind: "event", time })}
+              onCreate={(time, anchor) => setQuick({ kind: "event", time, title: "", anchor })}
             />
           ) : view === "agenda" ? (
             <AgendaView
@@ -512,7 +525,13 @@ export function PlanningPage() {
               todoDrag={todoDrag}
               onDragEnd={() => setTodoDrag(null)}
               onSelect={(event, anchor) => setPreview({ event, anchor })}
-              onCreate={(time) => setEditor({ kind: "event", time })}
+              onCreate={(time) => setQuick({ kind: "event", time, title: "" })}
+              draft={
+                quick && !quick.anchor
+                  ? { time: quick.time, title: quick.title, task: quick.kind === "todo" }
+                  : null
+              }
+              onDraftElement={setDraftElement}
               onCommit={commitTime}
             />
           )}
@@ -605,6 +624,22 @@ export function PlanningPage() {
           onClose={() => setPreview(null)}
           onEdit={(target) => {
             setPreview(null);
+            setEditor(target);
+          }}
+        />
+      )}
+      {quick && (quick.anchor ?? draftElement) && (
+        <QuickCreate
+          kind={quick.kind}
+          time={quick.time}
+          anchor={(quick.anchor ?? draftElement) as Element}
+          snapshot={snapshot}
+          onKind={(kind) => setQuick({ ...quick, kind })}
+          onTitleChange={(title) => setQuick((current) => current && { ...current, title })}
+          onTimeChange={(time) => setQuick((current) => current && { ...current, time })}
+          onClose={() => setQuick(null)}
+          onMore={(target) => {
+            setQuick(null);
             setEditor(target);
           }}
         />

@@ -802,3 +802,37 @@ hr.planning-agenda-now {
   width: 0.875rem;
   height: 0.875rem;
 }
+
+/* ---------- Quick create draft ----------
+ * Placeholder for the item being created, like Google's "(No title)" block. */
+.planning-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.25rem 0.5rem;
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-xs);
+  line-height: 1rem;
+  pointer-events: none;
+}
+.planning-draft.planning-deadline,
+.planning-all-day-event.planning-draft {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+  padding-block: 0;
+}
+.planning-draft-title {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planning-draft-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.planning-draft.planning-deadline .planning-draft-time::before {
+  content: "，";
+}

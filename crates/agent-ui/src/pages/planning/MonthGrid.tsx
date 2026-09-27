@@ -41,7 +41,7 @@ export function MonthGrid({
   onSelect(event: PlanningEvent, anchor: HTMLElement): void;
   onSelectTodo(todo: Todo): void;
   onOpenDay(day: string): void;
-  onCreate(time: EventTime): void;
+  onCreate(time: EventTime, anchor: Element): void;
 }) {
   const now = Date.now();
   const completed = (todoId?: string | null) =>
@@ -117,12 +117,15 @@ export function MonthGrid({
               className={`planning-month-cell ${hoverDay === day ? "planning-all-day-target" : ""} ${day === today ? "is-today" : ""} ${day.slice(0, 7) !== date.slice(0, 7) ? "is-outside" : ""}`}
               onDoubleClick={(e) => {
                 if (e.target === e.currentTarget)
-                  onCreate({
-                    kind: "allDay",
-                    startDate: day,
-                    endDateExclusive: addDays(day, 1),
-                    timeZone: zone,
-                  });
+                  onCreate(
+                    {
+                      kind: "allDay",
+                      startDate: day,
+                      endDateExclusive: addDays(day, 1),
+                      timeZone: zone,
+                    },
+                    e.currentTarget,
+                  );
               }}
             >
               {row === 0 && <small className="planning-month-weekday">{weekday}</small>}

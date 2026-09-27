@@ -8,7 +8,7 @@ import {
 import { Check, CheckCircle2, Circle } from "../../components/IconSet";
 import { type DragState, dragTime, edgeScroll, layoutEvents } from "../../lib/planning/geometry";
 import { planningDateLocale, translate } from "../../lib/planning/i18n";
-import { taskListColor, taskListLayer } from "../../lib/planning/taskLists";
+import { DEFAULT_TASK_COLOR, taskListColor, taskListLayer } from "../../lib/planning/taskLists";
 import {
   addDays,
   dayStart,
@@ -75,6 +75,9 @@ interface Props {
   onCreate(time: EventTime): void;
   onInteractionChange(active: boolean): void;
   nowRequest: number;
+  /** The item being quick-created, drawn as a placeholder block the card anchors to. */
+  draft: { time: EventTime; title: string; task: boolean } | null;
+  onDraftElement(element: HTMLElement | null): void;
   onCommit(
     event: PlanningEvent | undefined,
     todoId: string | undefined,
@@ -100,6 +103,8 @@ export function TimeGrid({
   onCommit,
   onInteractionChange,
   nowRequest,
+  draft,
+  onDraftElement,
 }: Props) {
   const viewport = useRef<HTMLDivElement>(null);
   const [viewHeight, setViewHeight] = useState(0);
@@ -150,6 +155,23 @@ export function TimeGrid({
   };
   const rangeRef = useRef(rangeOf);
   rangeRef.current = rangeOf;
+  // The quick-create card anchors to the draft's first visible piece.
+  const draftTime = draft?.time;
+  const draftDay =
+    draftTime &&
+    days.find((day) => {
+      if (draftTime.kind === "allDay")
+        return draftTime.startDate <= day && draftTime.endDateExclusive > day;
+      const [from, to] = rangeOf(day);
+      return draftTime.startAt < to && draftTime.endAt > from;
+    });
+  const draftStyle = eventAppearance(
+    draft?.task
+      ? (snapshot.groups?.find((g) => g.id === snapshot.defaultGroupId)?.color ??
+          DEFAULT_TASK_COLOR)
+      : snapshot.calendars.find((c) => c.isDefault)?.color,
+  );
+  const draftTitle = draft?.title.trim() || translate("planner.quick.untitled");
   const hours = Math.max(
     ...days.map((day) => {
       const [start, end] = rangeOf(day);
@@ -456,6 +478,18 @@ export function TimeGrid({
             >
               {translate("planner.grid.newAllDay")}
             </button>
+            {draftTime?.kind === "allDay" &&
+              draftTime.startDate <= day &&
+              draftTime.endDateExclusive > day && (
+                <div
+                  ref={day === draftDay ? onDraftElement : undefined}
+                  className="planning-all-day-event planning-draft"
+                  style={draftStyle}
+                >
+                  {draft?.task && <Circle className="planning-task-mark" aria-hidden />}
+                  <span className="truncate">{draftTitle}</span>
+                </div>
+              )}
             {snapshot.todos
               .filter(
                 (t) =>
@@ -597,6 +631,7 @@ export function TimeGrid({
                     e.target !== e.currentTarget ||
                     e.button !== 0 ||
                     pending ||
+                    draft ||
                     e.pointerType === "touch"
                   )
                     return;
@@ -631,6 +666,37 @@ export function TimeGrid({
                     {translate("planner.grid.afterHours", { hour: endHour, count: after })}
                   </small>
                 )}
+                {draftTime?.kind === "timed" &&
+                  draftTime.startAt < to &&
+                  draftTime.endAt > from && (
+                    <div
+                      ref={day === draftDay ? onDraftElement : undefined}
+                      className={`planning-time-event planning-draft ${draft?.task ? "planning-deadline" : ""}`}
+                      style={{
+                        ...draftStyle,
+                        top: ((Math.max(draftTime.startAt, from) - from) / HOUR) * hourHeight,
+                        height: draft?.task
+                          ? CHIP_HEIGHT
+                          : Math.max(
+                              16,
+                              ((Math.min(draftTime.endAt, to) - Math.max(draftTime.startAt, from)) /
+                                HOUR) *
+                                hourHeight,
+                            ),
+                        left: 1,
+                        width: "calc(100% - 10px)",
+                        zIndex: 30,
+                      }}
+                    >
+                      {draft?.task && <Circle className="planning-task-mark" aria-hidden />}
+                      <span className="planning-draft-title">{draftTitle}</span>
+                      <small className="planning-draft-time">
+                        {draft?.task
+                          ? zonedParts(draftTime.startAt, zone).time
+                          : timeLabel(draftTime, zone).split(" · ")[0]}
+                      </small>
+                    </div>
+                  )}
                 {placements.map(
                   ({ event, top, height, column, columns: count, span, startsHere, endsHere }) => {
                     // Equal columns while each block stays readable; otherwise cascade so every
