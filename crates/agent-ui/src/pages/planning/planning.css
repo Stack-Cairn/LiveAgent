@@ -4,8 +4,8 @@
 
 /* ---------- Page shell ---------- */
 /* Canvas matches the app chrome; calendar/task surfaces are cards on top of it. */
-/* Same outer frame as the Hub pages (MCP / Skills): responsive gutters and a centered
- * 1320px stage, so switching between them keeps the content edges in place. */
+/* Same responsive gutters as the Hub pages (MCP / Skills). Unlike their centered stage, the
+ * calendar fills the full width like Google Calendar, so wide windows get more room per day. */
 .planning-page {
   padding: 1rem 1.25rem 1.5rem;
   background: hsl(var(--background));
@@ -24,12 +24,6 @@
   .planning-page {
     padding-inline: 2.5rem;
   }
-}
-.planning-topbar,
-.planning-body {
-  width: 100%;
-  max-width: 1320px;
-  margin-inline: auto;
 }
 .planning-topbar {
   display: flex;
