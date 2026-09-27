@@ -1154,3 +1154,132 @@ fn planning_import_accepts_and_drops_legacy_project_and_links() {
     assert!(exported["todos"][0].get("projectId").is_none());
     assert_eq!(exported["todos"][0]["title"], "Legacy");
 }
+
+#[test]
+fn planning_google_tasks_import_maps_lists_subtasks_and_dedupes() {
+    let store = store();
+    let entries = json!([
+        {"uid":"p","list":"Work","title":"Parent","status":"needsAction","dueDate":"2026-10-01"},
+        {"uid":"c","list":"Work","title":"Child","parentUid":"p","status":"completed","completedAt":1},
+        {"uid":"d","list":"My Tasks","title":"Default list task"},
+        {"uid":"blank","list":"Work","title":"   "},
+    ]);
+    let result = store
+        .mutate(input(
+            "todo.import",
+            None,
+            None,
+            json!({"entries": entries}),
+        ))
+        .unwrap();
+    assert_eq!(result.item.unwrap(), json!({"imported":3,"skipped":1}));
+    let s = store.export().unwrap();
+    assert_eq!(s.groups.len(), 1);
+    assert_eq!(s.groups[0].name, "Work");
+    let parent = s.todos.iter().find(|t| t.title == "Parent").unwrap();
+    let child = s.todos.iter().find(|t| t.title == "Child").unwrap();
+    assert_eq!(parent.group_id.as_deref(), Some(s.groups[0].id.as_str()));
+    assert_eq!(parent.due_date.as_deref(), Some("2026-10-01"));
+    assert_eq!(child.parent_id.as_deref(), Some(parent.id.as_str()));
+    assert_eq!(child.status, "completed");
+    assert!(s
+        .todos
+        .iter()
+        .any(|t| t.title == "Default list task" && t.group_id.is_none()));
+    // Re-importing the same export adds nothing.
+    let again = store
+        .mutate(input(
+            "todo.import",
+            None,
+            None,
+            json!({"entries": entries}),
+        ))
+        .unwrap();
+    assert_eq!(again.item.unwrap(), json!({"imported":0,"skipped":4}));
+    assert!(store
+        .mutate(input(
+            "todo.import",
+            None,
+            None,
+            json!({"entries":[{"uid":"x","title":"x","extra":1}]})
+        ))
+        .is_err());
+}
+
+#[test]
+fn planning_subscriptions_keep_the_url_private_and_mirror_the_feed() {
+    let store = store();
+    assert_eq!(
+        subscription::normalize_url(
+            " webcal://calendar.google.com/calendar/ical/a/private-k/basic.ics "
+        )
+        .unwrap(),
+        "https://calendar.google.com/calendar/ical/a/private-k/basic.ics"
+    );
+    assert!(subscription::normalize_url("file:///etc/passwd").is_err());
+    let (calendar, _) = store
+        .subscription(
+            "subscription.create",
+            &json!({"name":"Google","color":"#0F766E","url":"webcal://calendar.google.com/secret.ics","refreshMinutes":30}),
+        )
+        .unwrap();
+    let id = calendar["id"].as_str().unwrap().to_string();
+    assert_eq!(calendar["readOnly"], true);
+    let snapshot = serde_json::to_string(&store.snapshot(Query::default()).unwrap()).unwrap();
+    assert!(
+        !snapshot.contains("secret.ics"),
+        "snapshot must not expose the feed URL"
+    );
+    assert!(snapshot.contains("\"host\":\"calendar.google.com\""));
+    assert!(store
+        .subscription(
+            "subscription.create",
+            &json!({"name":"x","url":"https://a.b/c","refreshMinutes":7})
+        )
+        .is_err());
+
+    // Due immediately, then leased so a second claim returns nothing.
+    let at = store::now();
+    assert_eq!(store.due_subscriptions(at).unwrap(), vec![id.clone()]);
+    assert!(store.due_subscriptions(at).unwrap().is_empty());
+    assert_eq!(
+        store.subscription_url(&id).unwrap(),
+        "https://calendar.google.com/secret.ics"
+    );
+
+    let event = |uid: &str, title: &str, start: i64| json!({"uid":uid,"title":title,"notes":"","time":{"kind":"timed","startAt":start,"endAt":start+3_600_000,"timeZone":"UTC"}});
+    let (first, _) = store
+        .sync_subscription(&id, &[event("a", "A", at), event("b", "B", at + 7_200_000)])
+        .unwrap();
+    assert_eq!(first, json!({"added":2,"updated":0,"removed":0}));
+    let (second, _) = store
+        .sync_subscription(&id, &[event("a", "A renamed", at)])
+        .unwrap();
+    assert_eq!(second, json!({"added":0,"updated":1,"removed":1}));
+    let s = store.export().unwrap();
+    let mirrored: Vec<_> = s.events.iter().filter(|e| e.calendar_id == id).collect();
+    assert_eq!(mirrored.len(), 1);
+    assert_eq!(mirrored[0].title, "A renamed");
+    // Read-only: regular edits are rejected, the mirror is only changed by syncs.
+    assert!(store
+        .mutate(input(
+            "event.update",
+            Some(&mirrored[0].id),
+            Some(mirrored[0].revision),
+            json!({"title":"x"})
+        ))
+        .is_err());
+
+    store.fail_subscription(&id, "HTTP 404").unwrap();
+    let status = store.snapshot(Query::default()).unwrap().subscriptions;
+    assert_eq!(status[0].last_error.as_deref(), Some("HTTP 404"));
+    assert!(status[0].last_synced_at.is_some());
+
+    store
+        .subscription("subscription.delete", &json!({"id": id}))
+        .unwrap();
+    let s = store.export().unwrap();
+    assert!(s.calendars.iter().all(|c| c.id != id));
+    assert!(s.events.iter().all(|e| e.calendar_id != id));
+    assert!(s.subscriptions.is_empty());
+}
