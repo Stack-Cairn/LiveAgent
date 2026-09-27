@@ -43,3 +43,40 @@ test("Calendar display handles ISO week boundaries, lunar dates, zones and task 
  assert.equal(activeEvent(e,{events:[e],todos:[{id:"todo",deletedAt:1}]}),false);
  assert.equal(activeEvent({...e,seriesId:"series"},{events:[{id:"series",deletedAt:1}],todos:[]}),false);
 });
+
+const { parseGoogleTasks } = loader.loadModule("@liveagent/ui/lib/planning/calendarImport.ts");
+const { createRequire } = await import("node:module");
+const JSZip = createRequire(new URL("../../../agent-ui/package.json", import.meta.url))("jszip");
+const takeout = JSON.stringify({ kind: "tasks#taskLists", items: [
+ { title: "Work", items: [
+  { id: "child", title: "Child", parent: "parent", status: "needsAction" },
+  { id: "parent", title: " Parent ", notes: "n", status: "completed", completed: "2026-09-20T08:00:00.000Z", due: "2026-09-30T00:00:00.000Z" },
+  { id: "gone", title: "Deleted", deleted: true },
+  { id: "blank", title: "   " },
+ ] },
+ { title: "My Tasks", items: [{ id: "solo", title: "Solo" }] },
+] });
+test("Google Takeout tasks keep lists, due dates, completion and put parents first", () => {
+ const tasks = parseGoogleTasks(takeout);
+ assert.deepEqual(tasks.map((t) => t.uid), ["parent", "solo", "child"]);
+ assert.deepEqual(tasks[0], { uid: "parent", list: "Work", title: "Parent", notes: "n", status: "completed", dueDate: "2026-09-30", completedAt: Date.parse("2026-09-20T08:00:00Z") });
+ assert.equal(tasks[2].parentUid, "parent");
+ assert.throws(() => parseGoogleTasks("not json"));
+ assert.throws(() => parseGoogleTasks(JSON.stringify({ kind: "other" })));
+});
+test("Google Calendar export ZIP and Takeout ZIP are read without unpacking", async () => {
+ const zip = new JSZip();
+ zip.file("Work_abc@group.calendar.google.com.ics", ics(event(["UID:a", "SUMMARY:A", "DTSTART:20260927T010000Z", "DTEND:20260927T020000Z"])));
+ zip.file("Personal.ics", ics(event(["UID:b", "SUMMARY:B", "DTSTART:20260928T010000Z", "DTEND:20260928T020000Z"])));
+ zip.file("__MACOSX/._Personal.ics", "junk");
+ zip.file("Takeout/Tasks/Tasks.json", takeout);
+ const file = new File([await zip.generateAsync({ type: "uint8array" })], "export.zip");
+ const preview = await readCalendarFile(file, range);
+ assert.deepEqual(preview.entries.map((e) => e.uid).sort(), ["a", "b"]);
+ assert.equal(preview.tasks.length, 3);
+ assert.equal(preview.warnings.length, 0);
+ const empty = new JSZip(); empty.file("readme.txt", "x");
+ await assert.rejects(readCalendarFile(new File([await empty.generateAsync({ type: "uint8array" })], "x.zip"), range));
+ const json = await readCalendarFile(new File([takeout], "Tasks.json"), range);
+ assert.equal(json.entries.length, 0); assert.equal(json.tasks.length, 3);
+});
