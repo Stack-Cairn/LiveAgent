@@ -37,12 +37,6 @@ import { AgentActivationSwitch, PromptTag, SettingsGroup, SettingsRow } from "./
 
 const HOURS = Array.from({ length: 25 }, (_, hour) => hour);
 const clock = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
-const DENSITIES = [
-  [40, "planner.display.compact"],
-  [48, "planner.display.standard"],
-  [64, "planner.display.relaxed"],
-  [96, "planner.display.spacious"],
-] as const;
 
 function HourSelect({
   value,
@@ -159,26 +153,6 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
               <SettingsToggleGroupItem value="sunday">
                 {t("planner.display.sunday")}
               </SettingsToggleGroupItem>
-            </SettingsToggleGroup>
-          }
-        />
-        <SettingsRow
-          title={t("planner.display.density")}
-          description={t("planner.settings.densityHint")}
-          control={
-            <SettingsToggleGroup
-              aria-label={t("planner.display.density")}
-              value={[String(preferences.hourHeight)]}
-              onValueChange={(values) => {
-                const next = Number(values[0]);
-                if (next) setPreferences({ hourHeight: next });
-              }}
-            >
-              {DENSITIES.map(([height, key]) => (
-                <SettingsToggleGroupItem key={height} value={String(height)}>
-                  {t(key)}
-                </SettingsToggleGroupItem>
-              ))}
             </SettingsToggleGroup>
           }
         />

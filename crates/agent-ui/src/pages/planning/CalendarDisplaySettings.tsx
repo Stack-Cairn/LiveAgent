@@ -59,19 +59,6 @@ export function CalendarDisplaySettings({
             ]}
           />
         </PlanningField>
-        <PlanningField label={t("planner.display.density")}>
-          <PlanningSelect
-            value={value.hourHeight}
-            disabled={disabled}
-            onValueChange={(v) => onChange({ hourHeight: Number(v) })}
-            options={[
-              { value: 40, label: t("planner.display.compact") },
-              { value: 48, label: t("planner.display.standard") },
-              { value: 64, label: t("planner.display.relaxed") },
-              { value: 96, label: t("planner.display.spacious") },
-            ]}
-          />
-        </PlanningField>
         {(
           [
             ["showWeekNumbers", t("planner.display.weekNumbers")],

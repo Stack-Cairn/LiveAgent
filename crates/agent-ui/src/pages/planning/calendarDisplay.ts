@@ -22,21 +22,20 @@ export interface CalendarPreferences {
   showCompleted: boolean;
   showWeekends: boolean;
   weekStartsOn: "monday" | "sunday";
-  hourHeight: number;
   view: "day" | "week" | "month" | "agenda";
   /** Only render working hours in day/week views. */
   workHoursOnly: boolean;
   workStart: number;
   workEnd: number;
 }
-export const HOUR_HEIGHTS = [40, 48, 64, 96];
+/** Minimum hour height in day/week views (Google uses 48px); taller windows stretch it. */
+export const HOUR_HEIGHT = 48;
 const defaults: CalendarPreferences = {
   showWeekNumbers: true,
   showLunar: false,
   showCompleted: true,
   showWeekends: true,
   weekStartsOn: "monday",
-  hourHeight: 48,
   view: "week",
   workHoursOnly: false,
   workStart: 9,
@@ -66,7 +65,6 @@ function loadPreferences(): CalendarPreferences {
       showCompleted: saved.showCompleted !== false,
       showWeekends: saved.showWeekends !== false,
       weekStartsOn: saved.weekStartsOn === "sunday" ? "sunday" : "monday",
-      hourHeight: HOUR_HEIGHTS.includes(saved.hourHeight) ? saved.hourHeight : defaults.hourHeight,
       view: ["day", "week", "month", "agenda"].includes(saved.view) ? saved.view : defaults.view,
       ...workHours(saved.workStart, saved.workEnd),
       workHoursOnly: saved.workHoursOnly === true,

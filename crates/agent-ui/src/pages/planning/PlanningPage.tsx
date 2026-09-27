@@ -29,7 +29,7 @@ import type { EventTime, PlanningEvent, Todo } from "../../lib/planning/types";
 import { AgendaView } from "./AgendaView";
 import { CalendarImport } from "./CalendarImport";
 import { CalendarManager } from "./CalendarManager";
-import { useCalendarPreferences } from "./calendarDisplay";
+import { HOUR_HEIGHT, useCalendarPreferences } from "./calendarDisplay";
 import { EventPreview } from "./EventPreview";
 import { MonthGrid } from "./MonthGrid";
 import { type EditorTarget, PlanningEditor } from "./PlanningEditor";
@@ -526,7 +526,7 @@ export function PlanningPage() {
               days={days}
               today={today}
               snapshot={snapshot}
-              hourHeight={preferences.hourHeight}
+              hourHeight={HOUR_HEIGHT}
               workHours={
                 preferences.workHoursOnly ? [preferences.workStart, preferences.workEnd] : null
               }
