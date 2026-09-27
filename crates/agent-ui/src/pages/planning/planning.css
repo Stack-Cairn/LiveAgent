@@ -73,7 +73,8 @@
   width: 16rem;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.25rem 0.5rem 1rem 1rem;
+  /* No left inset: the Create button lines up with the toolbar title at the page gutter. */
+  padding: 0.25rem 0.5rem 1rem 0;
 }
 .planning-create {
   align-self: flex-start;
