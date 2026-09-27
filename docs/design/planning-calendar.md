@@ -4,6 +4,8 @@
 
 基线：LiveAgent `b86061bb`（已包含资源管理入口和侧栏快捷入口）；分支 `feat/planning-calendar`。参考 [Proma 源码分析](proma-planning-reproduction.md)。本设计中的能力、接口和目录均为目标，不代表已经交付。
 
+> 已被后续决策取代的部分：§2.1 的 280px 右栏与显示密度、§4.3 的三档时间密度、§5.2 交给 Agent / Cron 标记（日历已与定时任务隔离）、§7 的 `ReminderInbox`（到期提醒面板已移除，提醒改为系统通知）。以 [实现记录](planning-calendar-implementation.md) 与 [设计对齐](planning-design-alignment.md) 为准。
+
 ## 1. 产品定位与范围
 
 面向使用 LiveAgent 安排个人工作、并把部分工作交给 Agent 的用户。页面的首要任务是：**把待办放到日历里的具体时间，并直接调整安排。**
