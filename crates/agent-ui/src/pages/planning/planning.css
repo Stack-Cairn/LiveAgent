@@ -829,7 +829,6 @@ hr.planning-agenda-now {
   line-height: 1rem;
   pointer-events: none;
 }
-.planning-draft.planning-deadline,
 .planning-all-day-event.planning-draft {
   flex-direction: row;
   align-items: center;
@@ -847,6 +846,8 @@ hr.planning-agenda-now {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.planning-draft.planning-deadline .planning-draft-time::before {
-  content: "，";
+.planning-draft-title .planning-task-mark {
+  display: inline-block;
+  margin-right: 0.25rem;
+  vertical-align: -0.125rem;
 }

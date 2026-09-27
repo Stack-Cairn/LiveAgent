@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { CalendarDays, Clock3, List, ListChecks, X } from "../../components/IconSet";
+import { CalendarDays, Clock3, List, ListChecks, Target, X } from "../../components/IconSet";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
@@ -10,7 +10,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { calendarName, localizePlanningError } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
 import { homeTaskList, taskLists } from "../../lib/planning/taskLists";
-import { addDays, localEpoch, MINUTE, zonedParts } from "../../lib/planning/time";
+import { addDays, localEpoch, zonedParts } from "../../lib/planning/time";
 import type { EventTime, PlanningSnapshot } from "../../lib/planning/types";
 import { PlanningSelect } from "./PlanningControls";
 import { PlanningDateTimePicker } from "./PlanningDateTimePicker";
@@ -83,6 +83,8 @@ export function QuickCreate({
   );
   const [groupId, setGroupId] = useState(homeTaskList(snapshot));
   const [frequency, setFrequency] = useState<NonNullable<EditorDraft["frequency"]>>("");
+  // Google tasks take a time block plus an optional, separate deadline.
+  const [due, setDue] = useState({ date: "", time: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const draft = (): EditorDraft => ({
@@ -91,7 +93,7 @@ export function QuickCreate({
     calendarId,
     groupId,
     frequency,
-    due: { date: start.date, time: start.time },
+    due: due.date ? due : { date: start.date, time: start.time },
   });
   const save = async () => {
     setBusy(true);
@@ -105,9 +107,11 @@ export function QuickCreate({
             title: name,
             notes,
             groupId: groupId || null,
-            dueAt: start.time ? localEpoch(start.date, start.time, zone) : null,
-            dueDate: start.time ? null : start.date,
-            dueTimeZone: zone,
+            dueAt: due.date && due.time ? localEpoch(due.date, due.time, zone) : null,
+            dueDate: due.date && !due.time ? due.date : null,
+            dueTimeZone: due.date ? zone : null,
+            // The dragged range becomes the task's block in the calendar, as in Google.
+            schedule: { calendarId, time },
           },
         });
       } else {
@@ -226,58 +230,35 @@ export function QuickCreate({
             </fieldset>
             <Row icon={<Clock3 className="size-5" />}>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                {kind === "todo" ? (
-                  <PlanningDateTimePicker
-                    value={{ date: start.date, time: start.time }}
-                    onChange={(v) => {
-                      if (!v.date) return;
-                      const at = v.time ? localEpoch(v.date, v.time, zone) : 0;
-                      onTimeChange(
-                        v.time
-                          ? { kind: "timed", startAt: at, endAt: at + 30 * MINUTE, timeZone: zone }
-                          : {
-                              kind: "allDay",
-                              startDate: v.date,
-                              endDateExclusive: addDays(v.date, 1),
-                              timeZone: zone,
-                            },
-                      );
-                    }}
-                    zone={zone}
-                    label={t("planner.editor.due")}
-                    clearable={false}
-                  />
-                ) : (
-                  <PlanningDateTimePicker
-                    value={{
-                      date: start.date,
-                      time: start.time,
-                      endDate: end.date,
-                      endTime: end.time,
-                    }}
-                    onChange={(v) =>
-                      onTimeChange(
-                        v.time
-                          ? {
-                              kind: "timed",
-                              startAt: localEpoch(v.date, v.time, zone),
-                              endAt: localEpoch(v.endDate || v.date, v.endTime || v.time, zone),
-                              timeZone: zone,
-                            }
-                          : {
-                              kind: "allDay",
-                              startDate: v.date,
-                              endDateExclusive: addDays(v.endDate || v.date, 1),
-                              timeZone: zone,
-                            },
-                      )
-                    }
-                    zone={zone}
-                    label={t("planner.editor.eventTime")}
-                    range
-                    clearable={false}
-                  />
-                )}
+                <PlanningDateTimePicker
+                  value={{
+                    date: start.date,
+                    time: start.time,
+                    endDate: end.date,
+                    endTime: end.time,
+                  }}
+                  onChange={(v) =>
+                    onTimeChange(
+                      v.time
+                        ? {
+                            kind: "timed",
+                            startAt: localEpoch(v.date, v.time, zone),
+                            endAt: localEpoch(v.endDate || v.date, v.endTime || v.time, zone),
+                            timeZone: zone,
+                          }
+                        : {
+                            kind: "allDay",
+                            startDate: v.date,
+                            endDateExclusive: addDays(v.endDate || v.date, 1),
+                            timeZone: zone,
+                          },
+                    )
+                  }
+                  zone={zone}
+                  label={t("planner.editor.eventTime")}
+                  range
+                  clearable={false}
+                />
                 <Label className="flex items-center gap-2 text-sm font-normal">
                   <Checkbox
                     checked={time.kind === "allDay"}
@@ -301,6 +282,16 @@ export function QuickCreate({
                 />
               )}
             </Row>
+            {kind === "todo" && (
+              <Row icon={<Target className="size-5" />}>
+                <PlanningDateTimePicker
+                  value={due}
+                  onChange={(v) => setDue({ date: v.date, time: v.time })}
+                  zone={zone}
+                  label={t("planner.quick.addDue")}
+                />
+              </Row>
+            )}
             <Row icon={<List className="size-5" />}>
               <Textarea
                 variant="plain"
