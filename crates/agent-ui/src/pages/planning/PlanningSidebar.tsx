@@ -169,6 +169,7 @@ export function PlanningSidebar({
             <Button
               variant="secondary"
               className="planning-create shadow-sm ring-1 ring-border/60 transition-shadow hover:shadow-md"
+              data-planning-create
             />
           }
           aria-label={translate("planner.sidebar.create")}

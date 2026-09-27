@@ -22,6 +22,8 @@ import {
   addDays,
   calendarWeekStart,
   dayStart,
+  HOUR,
+  MINUTE,
   monthDays,
   zonedParts,
 } from "../../lib/planning/time";
@@ -125,9 +127,37 @@ export function PlanningPage() {
       ? all.filter((d) => ![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()))
       : all;
   }, [date, view, preferences.weekStartsOn, preferences.showWeekends]);
+  // "Create" (button or C) starts a quick-create draft at the current time, like dragging on
+  // the grid. Day/week views show the draft block; other views anchor the card elsewhere.
+  const pendingCreate = useRef<QuickKind | null>(null);
+  const nowDraft = (kind: QuickKind) => {
+    const startAt = Math.floor(Date.now() / (15 * MINUTE)) * 15 * MINUTE;
+    const time: EventTime = { kind: "timed", startAt, endAt: startAt + HOUR, timeZone: zone };
+    const grid = mode === "calendar" && (view === "day" || view === "week") && days.includes(today);
+    const anchor = grid
+      ? undefined
+      : ((mode === "calendar" && view === "month"
+          ? document.querySelector(`[data-planning-all-day="${today}"]`)
+          : null) ??
+        document.querySelector("[data-planning-create]") ??
+        surface ??
+        undefined);
+    return { kind, time, title: "", anchor };
+  };
+  const createNow = (kind: QuickKind) => {
+    setNowRequest((n) => n + 1);
+    if (mode === "calendar" && !days.includes(today)) {
+      pendingCreate.current = kind;
+      setDate(today);
+    } else setQuick(nowDraft(kind));
+  };
   // A draft belongs to the visible range; navigating away discards it like Google does.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the range or mode changes
-  useEffect(() => setQuick(null), [days, mode]);
+  useEffect(() => {
+    const kind = pendingCreate.current;
+    pendingCreate.current = null;
+    setQuick(kind ? nowDraft(kind) : null);
+  }, [days, mode]);
   useEffect(() => {
     void planningStore.refresh({
       from: dayStart(days[0], zone),
@@ -315,7 +345,7 @@ export function PlanningPage() {
       setNowRequest((n) => n + 1);
     } else if (mode === "calendar" && (key === "j" || key === "n")) navigate(1);
     else if (mode === "calendar" && (key === "k" || key === "p")) navigate(-1);
-    else if (key === "c") setEditor({ kind: mode === "tasks" ? "todo" : "event" });
+    else if (key === "c") createNow(mode === "tasks" ? "todo" : "event");
     else return;
     e.preventDefault();
   };
@@ -403,11 +433,11 @@ export function PlanningPage() {
       onToggleLayer={toggleLayer}
       onCreateEvent={() => {
         setSidebarSheet(false);
-        setEditor({ kind: "event" });
+        createNow("event");
       }}
       onCreateTask={() => {
         setSidebarSheet(false);
-        setEditor({ kind: "todo" });
+        createNow("todo");
       }}
       onManageCalendars={() => setCalendarsOpen(true)}
       onCreateList={() => setCreatingList(true)}
