@@ -156,6 +156,10 @@ type Tagged[T any] struct {
 }
 
 type syncHub struct {
+	planningMu          sync.Mutex
+	nextPlanningSubID   int
+	planningSubscribers map[int]chan Tagged[*gatewayv2.PlanningChanged]
+
 	historyMu          sync.Mutex
 	nextHistorySubID   int
 	historySubscribers map[int]chan Tagged[*gatewayv2.HistorySyncEvent]
@@ -183,6 +187,7 @@ type syncHub struct {
 
 func newSyncHub() *syncHub {
 	return &syncHub{
+		planningSubscribers:       make(map[int]chan Tagged[*gatewayv2.PlanningChanged]),
 		historySubscribers:        make(map[int]chan Tagged[*gatewayv2.HistorySyncEvent]),
 		settingsSubscribers:       make(map[int]chan Tagged[*gatewayv2.SettingsSyncEvent]),
 		terminalSubscribers:       make(map[int]chan Tagged[*gatewayv2.TerminalEvent]),

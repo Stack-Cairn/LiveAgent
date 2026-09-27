@@ -294,6 +294,10 @@ func (c *browserConn) handleWorkspaceUnsubscribe(requestID, agentID string, req 
 // 泛型 forward 统一可掉帧广播骨架，各路只提供订阅与帧构造。广播帧盖来源
 // agent_id（服务端不过滤，客户端按活跃 Agent 过滤）；功能门控按来源 Agent 判定。
 func (c *browserConn) startEventForwarders() {
+	forward(c, c.sm.SubscribePlanningChanged, func(event session.Tagged[*gatewayv2.PlanningChanged]) (*gatewayv2.WebServerFrame, bool) {
+		return &gatewayv2.WebServerFrame{AgentId: event.AgentID, Payload: &gatewayv2.WebServerFrame_PlanningChanged{PlanningChanged: event.Event}}, true
+	}, "planning_changed")
+
 	forward(c, c.sm.SubscribeHistorySync, func(event session.Tagged[*gatewayv2.HistorySyncEvent]) (*gatewayv2.WebServerFrame, bool) {
 		return &gatewayv2.WebServerFrame{
 			AgentId: event.AgentID,

@@ -27,6 +27,11 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		return errors.New("agent_request payload is required")
 
 	// ---- 普通直通臂（无门控） ----
+	case *gatewayv2.GatewayEnvelope_Planning:
+		if payload.Planning == nil || len(payload.Planning.GetInputJson()) > 4_000_000 {
+			return errors.New("invalid planning request")
+		}
+		return nil
 	case *gatewayv2.GatewayEnvelope_HistoryList:
 		clampHistoryList(payload.HistoryList)
 		return nil

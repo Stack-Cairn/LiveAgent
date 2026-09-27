@@ -91,6 +91,11 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 		m.ingestChatControl(agentID, env.GetRequestId(), chatControl)
 	}
 
+	if planning := env.GetPlanningChanged(); planning != nil {
+		m.broadcastPlanningChanged(agentID, planning)
+		return
+	}
+
 	if historySync := env.GetHistorySync(); historySync != nil {
 		// Agent-sent running/idle activity is dropped: conversation activity
 		// is derived from run lifecycle transitions in the stream store, which
