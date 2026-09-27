@@ -51,11 +51,14 @@ export async function executeClarifyPromptTurn(
       providerId: provider.id,
       model,
       runtimeControls: override
-        ? normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
-            providerId: provider.type,
-            requestFormat: provider.requestFormat,
-            modelId: model,
-          })
+        ? normalizeChatRuntimeControlsForProvider(
+            fallback.runtimeControls ?? settings.chatRuntimeControls,
+            {
+              providerId: provider.type,
+              requestFormat: provider.requestFormat,
+              modelId: model,
+            },
+          )
         : fallback.runtimeControls,
     },
     onTextDelta ? { onDelta: onTextDelta } : undefined,

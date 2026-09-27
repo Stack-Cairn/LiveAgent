@@ -16,6 +16,11 @@ import type { HistoryWindowState } from "@/lib/chat/historyWindow";
 import type { TranscriptStoreRegistry } from "@/lib/chat/stream/useConversationChat";
 import type { GatewayWebSocketClient } from "@/lib/gatewaySocket";
 import type { HistoryDetail } from "@/lib/gatewayTypes";
+import {
+  type AppSettings,
+  copyConversationThinking,
+  removeConversationThinking,
+} from "@/lib/settings";
 import { normalizeGatewayConversationSummary } from "@/lib/sidebar/webSidebarBackend";
 import { clearLiveTrajectory } from "@/lib/trajectory/liveTrajectory";
 
@@ -70,6 +75,7 @@ type CreateGatewayConversationActionsOptions = {
   setSelectedHistoryId: Dispatch<SetStateAction<string>>;
   setSidebarOpen: Dispatch<SetStateAction<boolean>>;
   sidebarStore: SidebarStore;
+  setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   submitInFlightRef: MutableRefObject<boolean>;
   transcriptStoreRegistry: TranscriptStoreRegistry;
 };
@@ -202,6 +208,14 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
       if (id === displayedId) displayedRemoved = true;
     }
     if (removedIds.size === 0) return;
+    options.setSettings((prev) => {
+      let chatRuntimeControls = prev.chatRuntimeControls;
+      for (const id of removedIds)
+        chatRuntimeControls = removeConversationThinking(chatRuntimeControls, id);
+      return chatRuntimeControls === prev.chatRuntimeControls
+        ? prev
+        : { ...prev, chatRuntimeControls };
+    });
     options.removeSharedHistoryItems(removedIds);
     if (displayedRemoved) {
       startNewConversation({
@@ -277,6 +291,14 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
     options.setBranchPendingMessageId(messageRef.messageId);
     try {
       const summary = await options.api.branchHistory(activeConversationId, messageRef);
+      options.setSettings((prev) => ({
+        ...prev,
+        chatRuntimeControls: copyConversationThinking(
+          prev.chatRuntimeControls,
+          activeConversationId,
+          summary.id,
+        ),
+      }));
       options.sidebarStore.upsertLocal(normalizeGatewayConversationSummary(summary));
       handleSidebarSelectConversation(summary.id);
     } catch (error) {

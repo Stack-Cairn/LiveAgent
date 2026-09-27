@@ -152,6 +152,8 @@ import {
   normalizeChatRuntimeControlsForProvider,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
+  removeConversationThinking,
+  resolveChatRuntimeControlsForConversation,
   resolveEffectivePromptSettings,
   resolveEffectiveTheme,
   resolveWorkspaceResources,
@@ -2039,9 +2041,15 @@ function ChatPageContent(props: ChatPageProps) {
   const handleConversationDeleted = useCallback(
     (id: string) => {
       cleanupDeletedConversationActionRef.current(id);
+      setSettings((prev) => {
+        const chatRuntimeControls = removeConversationThinking(prev.chatRuntimeControls, id);
+        return chatRuntimeControls === prev.chatRuntimeControls
+          ? prev
+          : { ...prev, chatRuntimeControls };
+      });
       removeSharedHistoryItems([id]);
     },
-    [removeSharedHistoryItems],
+    [removeSharedHistoryItems, setSettings],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Runtime/edit state is intentionally sampled through refs at click time.
@@ -2211,6 +2219,7 @@ function ChatPageContent(props: ChatPageProps) {
   });
 
   const { branchPendingMessageId, handleBranchConversation } = useBranchConversation({
+    setSettings,
     currentConversationIdRef,
     isSending,
     isConversationHydrating,
@@ -2245,7 +2254,10 @@ function ChatPageContent(props: ChatPageProps) {
           return createProviderRuntimeConfig(
             selection.provider,
             selection.model,
-            clarifySettingsRef.current.chatRuntimeControls,
+            resolveChatRuntimeControlsForConversation(
+              clarifySettingsRef.current.chatRuntimeControls,
+              conversationId,
+            ),
           );
         });
         clarifyRunnersRef.current.set(conversationId, runner);
@@ -3393,6 +3405,7 @@ function ChatPageContent(props: ChatPageProps) {
         providerId: paneProvider?.type,
         requestFormat: paneProvider?.requestFormat,
         modelId: paneSelectedModel?.model,
+        conversationId,
       },
     );
     const paneReasoningOptions = getChatRuntimeReasoningLevelsForProvider({

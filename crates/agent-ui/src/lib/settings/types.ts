@@ -469,12 +469,20 @@ export type ChatRuntimeControls = {
   planModeEnabled: boolean;
   reasoning: ReasoningLevel;
   reasoningByProvider: Partial<Record<ChatRuntimeReasoningProviderKey, ReasoningLevel>>;
+  /** 会话内的思考设置快照；缺失时继承全局默认，修改不回写默认值。 */
+  thinkingByConversation?: Record<
+    string,
+    Pick<
+      ChatRuntimeControls,
+      "thinkingEnabled" | "reasoning" | "reasoningByProvider" | "reasoningByModel"
+    >
+  >;
+  /** 每会话的同步版本；删除后保留版本以阻止旧快照复活记录。 */
+  thinkingByConversationRevisions?: Record<string, { version: number; writerId: string }>;
   /**
-   * 按模型记忆的思考档位覆盖:供应商桶 → 模型 id → 档位。读取顺序
-   * 模型桶 → reasoningByProvider → reasoning(见 resolveChatRuntimeReasoning)。
-   * 只被会话里显式的档位选择写入(写时按该模型档位表钳制),因此一个模型
-   * 的档位永远不会串到另一个模型——单靠 reasoningByProvider 时, narrow 表
-   * 模型会把 wide 表模型选的表外档钳掉并回写,造成「切会话/另一栏被重置」。
+   * 默认思考档位:供应商类型/请求格式 → 模型 id → 档位。
+   * 会话首次调整时复制到 thinkingByConversation 的独立快照中；
+   * 会话内按模型记忆，不回写其他会话或这些全局默认值。
    */
   reasoningByModel: Partial<
     Record<ChatRuntimeReasoningProviderKey, Partial<Record<string, ReasoningLevel>>>

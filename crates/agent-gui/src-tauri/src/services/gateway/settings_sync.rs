@@ -10,6 +10,7 @@ use crate::commands::settings::{
     STT_SECRET_SYNC_FIELD, STT_SECRET_UPDATE_FIELD, SYSTEM_PROXY_PASSWORD_UPDATE_FIELD,
 };
 
+use super::conversation_thinking::merge_conversation_thinking;
 use super::*;
 
 impl GatewayController {
@@ -32,12 +33,23 @@ impl GatewayController {
     }
 
     pub(crate) fn store_settings_snapshot(&self, payload: Value) -> Result<Value, String> {
-        let snapshot =
+        let mut snapshot =
             redact_gateway_settings_sync_payload(normalize_settings_sync_payload(payload)?)?;
         let mut guard = self
             .settings_snapshot
             .lock()
             .map_err(|_| "gateway settings snapshot lock poisoned".to_string())?;
+        // 在同一把锁内合并：Web 更新、桌面发布和重连快照可能交错到达。
+        if let Some(current) = guard
+            .as_ref()
+            .and_then(|value| value.get("chatRuntimeControls"))
+        {
+            let controls = snapshot
+                .get("chatRuntimeControls")
+                .map(|incoming| merge_conversation_thinking(current, incoming))
+                .unwrap_or_else(|| current.clone());
+            snapshot["chatRuntimeControls"] = controls;
+        }
         *guard = Some(snapshot.clone());
         Ok(snapshot)
     }
@@ -89,6 +101,14 @@ pub(crate) fn merge_settings_update_into_snapshot(
         {
             continue;
         }
+        let value = if field == "chatRuntimeControls" {
+            merged
+                .get(&field)
+                .map(|current| merge_conversation_thinking(current, &value))
+                .unwrap_or(value)
+        } else {
+            value
+        };
         merged.insert(field, value);
     }
 

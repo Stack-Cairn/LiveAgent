@@ -701,6 +701,8 @@ impl GatewayController {
                                     return self.send_error_response(request_id, 400, error).await;
                                 }
                             };
+                        let sync_conversation_thinking =
+                            snapshot.get("chatRuntimeControls").is_some();
                         let public_update = match redact_gateway_settings_sync_payload(snapshot) {
                             Ok(payload) => payload,
                             Err(error) => {
@@ -743,8 +745,17 @@ impl GatewayController {
                         {
                             return self.send_error_response(request_id, 500, error).await;
                         }
-                        if let Err(error) = self.store_settings_snapshot(merged_snapshot) {
-                            return self.send_error_response(request_id, 500, error).await;
+                        let merged_snapshot = match self.store_settings_snapshot(merged_snapshot) {
+                            Ok(snapshot) => snapshot,
+                            Err(error) => {
+                                return self.send_error_response(request_id, 500, error).await
+                            }
+                        };
+                        // 即使桌面已拥有获胜版本、不会再发布，也要纠正发送旧快照的 Web。
+                        if sync_conversation_thinking {
+                            if let Err(error) = self.publish_settings_sync(merged_snapshot).await {
+                                return self.send_error_response(request_id, 500, error).await;
+                            }
                         }
                         match self
                             .app_handle

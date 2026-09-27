@@ -276,3 +276,23 @@ test("workbench pane composer wires the clarify runner (web default path)", () =
   );
   assert.match(paneHostSource, /clarifyContext=\{clarifyContext\}/);
 });
+
+
+test("web sends each conversation's thinking choice even when both panes use the same model", () => {
+  const settings = loader.loadModule("@/lib/settings/index.ts");
+  const params = { providerId: "codex", requestFormat: "openai-responses", modelId: "gpt-5.2" };
+  let runtimeControls = settings.updateChatRuntimeControlsForProvider({}, { reasoning: "xhigh" }, { ...params, conversationId: "left" });
+  runtimeControls = settings.updateChatRuntimeControlsForProvider(runtimeControls, { reasoning: "low" }, { ...params, conversationId: "right" });
+  const resolve = (conversationId, controls = runtimeControls) => resolveConversationRuntimeControls({
+    activeProviders: [{ id: "provider-codex", type: "codex", requestFormat: "openai-responses" }],
+    selectedModel: { customProviderId: "provider-codex", model: "gpt-5.2" },
+    runtimeControls: controls,
+    conversationId,
+  });
+  const left = resolve("left");
+  assert.equal(left.reasoning, "xhigh");
+  assert.equal(resolve("right").reasoning, "low");
+  assert.equal(resolve("new").reasoning, "high");
+  assert.equal(left.thinkingByConversation, undefined, "request must not carry other conversations");
+  assert.equal(resolve("left", left).reasoning, "xhigh", "pane snapshots survive command normalization");
+});

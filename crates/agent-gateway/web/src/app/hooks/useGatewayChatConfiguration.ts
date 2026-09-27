@@ -98,9 +98,11 @@ export function useGatewayChatConfiguration({
         providerId: currentChatProvider?.type,
         requestFormat: currentChatProvider?.requestFormat,
         modelId: activeSelectedModel?.model,
+        conversationId: displayedConversationId,
       }),
     [
       activeSelectedModel?.model,
+      displayedConversationId,
       currentChatProvider?.requestFormat,
       currentChatProvider?.type,
       settings.chatRuntimeControls,
@@ -115,11 +117,13 @@ export function useGatewayChatConfiguration({
           providerId: currentChatProvider?.type,
           requestFormat: currentChatProvider?.requestFormat,
           modelId: activeSelectedModel?.model,
+          conversationId: displayedConversationId,
         }),
       }));
     },
     [
       activeSelectedModel?.model,
+      displayedConversationId,
       currentChatProvider?.requestFormat,
       currentChatProvider?.type,
       setSettings,

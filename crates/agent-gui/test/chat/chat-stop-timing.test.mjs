@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
+const realSettings = createTsModuleLoader().loadModule("src/lib/settings/index.ts");
+
 function createHookHarness() {
   const refs = [];
   const states = [];
@@ -224,6 +226,7 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
         },
       },
       "../../../lib/settings": {
+        resolveChatRuntimeControlsForConversation: realSettings.resolveChatRuntimeControlsForConversation,
         isAgentExecutionMode() {
           return false;
         },
@@ -274,7 +277,13 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
           workdir: "",
           commandSafetyMode: "sandboxOffline",
         },
-        chatRuntimeControls: {},
+        chatRuntimeControls: {
+          reasoning: "high",
+          thinkingByConversation: {
+            "conversation-1": { reasoning: "low", thinkingEnabled: false },
+            "conversation-2": { reasoning: "xhigh", thinkingEnabled: true },
+          },
+        },
       },
       currentConversationId: "conversation-1",
       currentConversationIdRef: { current: "conversation-1" },
@@ -339,6 +348,9 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   queue.requestQueuedChatTurnProcessing("conversation-1");
   await flushPromises();
   assert.equal(sendCalls.length, 1);
+  assert.equal(sendCalls[0].runtimeControlsOverride.reasoning, "low");
+  assert.equal(sendCalls[0].runtimeControlsOverride.thinkingEnabled, false);
+  assert.equal(sendCalls[0].runtimeControlsOverride.thinkingByConversation, undefined);
   assert.equal(
     sendCalls[0].commandSafetyModeOverride,
     "sandboxOffline",
@@ -438,6 +450,7 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
         },
       },
       "../../../lib/settings": {
+        resolveChatRuntimeControlsForConversation: realSettings.resolveChatRuntimeControlsForConversation,
         isAgentExecutionMode() {
           return false;
         },

@@ -49,6 +49,7 @@ mod chat_ingress_transport;
 mod clarify;
 mod connection;
 mod controller;
+mod conversation_thinking;
 mod envelope_handler;
 mod history_sync;
 mod managed_process;
@@ -144,8 +145,7 @@ pub struct GatewayController {
     pub(crate) tunnel_proxy: TunnelProxy,
     pub(crate) workspace_watch: Arc<WorkspaceWatchService>,
     pending_chat_queue_requests: Mutex<HashMap<String, oneshot::Sender<proto::ChatQueueResponse>>>,
-    pending_clarify_turns:
-        Mutex<HashMap<String, oneshot::Sender<proto::ClarifyTurnResponse>>>,
+    pending_clarify_turns: Mutex<HashMap<String, oneshot::Sender<proto::ClarifyTurnResponse>>>,
     chat_ingress: ChatIngressMirror,
     chat_ingress_flush_lock: tokio::sync::Mutex<()>,
     terminal_forwarder_once: Once,

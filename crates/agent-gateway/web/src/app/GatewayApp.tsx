@@ -51,6 +51,7 @@ import type {
 } from "@/lib/gatewayTypes";
 import { parseHistoryShareToken } from "@/lib/historyShare";
 import {
+  moveConversationThinking,
   openRightDockSingletonTab,
   parseSelectedModelJson,
   resolveEffectiveTheme,
@@ -898,6 +899,16 @@ function useGatewayAppController() {
           isPending: existingNext && existingNext.isPending !== true ? undefined : true,
         });
       }
+      setSettings((prev) => {
+        const chatRuntimeControls = moveConversationThinking(
+          prev.chatRuntimeControls,
+          previousId,
+          nextId,
+        );
+        return chatRuntimeControls === prev.chatRuntimeControls
+          ? prev
+          : { ...prev, chatRuntimeControls };
+      });
       // Re-key the local model override so the pick made on the draft keeps
       // applying to the bound conversation.
       setConversationModelOverrides((prev) => {
@@ -909,7 +920,7 @@ function useGatewayAppController() {
         return next;
       });
     },
-    [moveConversationUploads, sidebarStore, transcriptStoreRegistry],
+    [moveConversationUploads, setSettings, sidebarStore, transcriptStoreRegistry],
   );
 
   const ensureTunnelToolTab = useCallback(
@@ -1156,6 +1167,7 @@ function useGatewayAppController() {
     handleSidebarSelectConversation,
     startNewConversation,
   } = createGatewayConversationActions({
+    setSettings,
     activateConversationWorkspace,
     activateSearchConversationWorkspace,
     clearSearchConversationWorkspace,

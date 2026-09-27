@@ -1099,3 +1099,46 @@ test("transcript store history refresh stays quiet for identical content", () =>
     "the exchange renders exactly once (no duplicate prompt)",
   );
 });
+
+
+test("web branch copies source thinking before opening the new conversation", async () => {
+  const s = loader.loadModule("@/lib/settings/index.ts");
+  const params = { providerId: "codex", requestFormat: "openai-responses", modelId: "gpt-5.2" };
+  let app = s.normalizeSettings({ chatRuntimeControls: s.updateChatRuntimeControlsForProvider({}, { reasoning: "low", thinkingEnabled: false }, { ...params, conversationId: "source" }) });
+  let opened;
+  const actions = createGatewayConversationActions({
+    api: { branchHistory: async () => ({ id: "branch" }) },
+    conversationIdRef: { current: "source" }, isLocalDraftConversationId: () => false,
+    isConversationBusy: () => false, branchInFlightRef: { current: false },
+    setBranchPendingMessageId() {}, sidebarStore: { upsertLocal() {} },
+    setSettings: (fn) => { app = fn(app); }, setChatError: (error) => { throw Error(error); },
+    activeView: "chat", setActiveView() {}, setSidebarOpen() {}, getVisibleComposerConversationId: () => "source",
+    prepareComposerForConversationChange() {}, restoreCachedComposerDraft() {},
+    pendingDisplayedConversationAutoBottomRef: { current: null },
+    openController: { open: (id) => {
+      opened = id;
+      const controls = s.normalizeChatRuntimeControlsForProvider(app.chatRuntimeControls, { ...params, conversationId: id });
+      assert.equal(controls.reasoning, "low");
+      assert.equal(controls.thinkingEnabled, false);
+    } },
+  });
+  await actions.handleBranchConversation({ messageId: "m" });
+  assert.equal(opened, "branch");
+  assert.equal(app.chatRuntimeControls.thinkingByConversation.source.reasoning, "low");
+});
+
+
+test("web confirmed deletion removes thinking and keeps a sync tombstone", () => {
+  const s = loader.loadModule("@/lib/settings/index.ts");
+  let app = s.normalizeSettings({ chatRuntimeControls: s.updateChatRuntimeControlsForProvider({}, { reasoning: "low" }, { providerId: "codex", modelId: "gpt-5.2", conversationId: "removed" }) });
+  const actions = createGatewayConversationActions({
+    getDisplayedConversationId: () => "kept", isLocalDraftConversationId: () => false,
+    transcriptStoreRegistry: { remove() {} }, historyWindowStatesRef: { current: new Map() },
+    conversationWorkdirsRef: { current: new Map() }, composerDraftCacheRef: { current: new Map() },
+    setPendingUploadsForConversation() {}, removeSharedHistoryItems() {},
+    setSettings: (fn) => { app = fn(app); },
+  });
+  actions.handleSidebarConversationsRemoved(["removed"]);
+  assert.equal(app.chatRuntimeControls.thinkingByConversation.removed, undefined);
+  assert.equal(app.chatRuntimeControls.thinkingByConversationRevisions.removed.version, 2);
+});

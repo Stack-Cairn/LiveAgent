@@ -66,6 +66,7 @@ import {
   isAgentDevMode,
   isAgentExecutionMode,
   removeWorkspaceResourceReferences,
+  resolveChatRuntimeControlsForConversation,
   resolveEffectivePromptSettings,
   resolveWorkspaceResources,
   type SelectedModel,
@@ -494,10 +495,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     updateConversationRuntimeEntry(conversationId, (prev) =>
       selectedModelsMatch(prev.selectedModel, selectedModel) ? prev : { ...prev, selectedModel },
     );
-    const runtimeControls =
+    const runtimeControls = resolveChatRuntimeControlsForConversation(
       gatewayBridgeRequest?.runtimeControlsOverride ??
-      overrides?.runtimeControlsOverride ??
-      settings.chatRuntimeControls;
+        overrides?.runtimeControlsOverride ??
+        settings.chatRuntimeControls,
+      conversationId,
+    );
     const providerConfig = createProviderRuntimeConfig(provider, model, runtimeControls);
     // cc-switch style auto-failover plan for this turn (shared by the agent
     // and text runtimes). The switch callback makes the winning fallback the

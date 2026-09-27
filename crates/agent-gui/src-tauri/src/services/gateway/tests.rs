@@ -904,3 +904,27 @@ fn stalled_webview_status_refreshes_running_ledger_only_inside_grace_window() {
         )
     );
 }
+
+#[test]
+fn settings_update_merges_conversation_thinking_without_losing_other_sessions() {
+    let current = json!({"chatRuntimeControls": {
+        "thinkingByConversation": {"a": {"reasoning": "xhigh"}},
+        "thinkingByConversationRevisions": {"a": {"version": 2, "writerId": "desktop"}}
+    }});
+    let incoming = json!({"chatRuntimeControls": {
+        "thinkingByConversation": {"a": {"reasoning": "high"}, "b": {"reasoning": "low"}},
+        "thinkingByConversationRevisions": {
+            "a": {"version": 1, "writerId": "desktop"},
+            "b": {"version": 1, "writerId": "web"}
+        }
+    }});
+    let merged = merge_settings_update_into_snapshot(current, incoming).unwrap();
+    assert_eq!(
+        merged["chatRuntimeControls"]["thinkingByConversation"]["a"]["reasoning"],
+        "xhigh"
+    );
+    assert_eq!(
+        merged["chatRuntimeControls"]["thinkingByConversation"]["b"]["reasoning"],
+        "low"
+    );
+}

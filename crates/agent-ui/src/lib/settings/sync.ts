@@ -9,6 +9,8 @@ import {
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings/index";
 
+import { mergeConversationThinking } from "./conversationThinkingSync";
+
 export type GatewayProviderApiKeyUpdates = Record<string, string>;
 export type GatewayProviderUsageQuerySecretUpdates = Record<
   string,
@@ -1349,7 +1351,10 @@ export function applyGatewaySettingsSyncPayload(
     },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,
     chatRuntimeControls: Object.hasOwn(source, "chatRuntimeControls")
-      ? normalizeChatRuntimeControls(source.chatRuntimeControls)
+      ? mergeConversationThinking(
+          current.chatRuntimeControls,
+          normalizeChatRuntimeControls(source.chatRuntimeControls),
+        )
       : current.chatRuntimeControls,
     selectedModel,
     theme: (source.theme as AppSettings["theme"] | undefined) ?? current.theme,

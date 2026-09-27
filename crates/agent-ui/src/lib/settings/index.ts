@@ -34,6 +34,7 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
+import { normalizeConversationThinkingRevisions } from "./conversationThinkingSync";
 import { normalizeModelFailoverSettings } from "./modelFailover";
 import {
   normalizeChatTranscriptSettings,
@@ -490,9 +491,137 @@ function resolveChatRuntimeReasoning(
   return controls.reasoningByProvider[key] ?? controls.reasoning;
 }
 
+function pickChatRuntimeThinking(controls: ChatRuntimeControls) {
+  return {
+    thinkingEnabled: controls.thinkingEnabled,
+    reasoning: controls.reasoning,
+    reasoningByProvider: controls.reasoningByProvider,
+    reasoningByModel: controls.reasoningByModel,
+  };
+}
+
+function normalizeConversationThinking(
+  input: unknown,
+): ChatRuntimeControls["thinkingByConversation"] {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const entries = Object.entries(input).flatMap(([rawId, value]) => {
+    const id = rawId.trim();
+    if (!id || !value || typeof value !== "object" || Array.isArray(value)) return [];
+    // 只读取思考字段，不递归接受远端传来的会话映射。
+    const raw = value as Record<string, unknown>;
+    return [
+      [
+        id,
+        pickChatRuntimeThinking(
+          normalizeChatRuntimeControls({
+            thinkingEnabled: raw.thinkingEnabled,
+            reasoning: raw.reasoning,
+            reasoningByProvider: raw.reasoningByProvider,
+            reasoningByModel: raw.reasoningByModel,
+          }),
+        ),
+      ],
+    ];
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+/** 返回只包含目标会话的设置，发送/排队快照不会携带其他会话的数据。 */
+export function resolveChatRuntimeControlsForConversation(
+  input: unknown,
+  conversationId?: string,
+): ChatRuntimeControls {
+  const raw = (input && typeof input === "object" ? input : {}) as ChatRuntimeControls;
+  const {
+    thinkingByConversation,
+    thinkingByConversationRevisions: _revisions,
+    ...rawDefaults
+  } = raw;
+  const defaults = normalizeChatRuntimeControls(rawDefaults);
+  const id = conversationId?.trim();
+  // 请求仅归一化目标会话，不遍历全部历史会话，也不携带同步元数据。
+  const thinking =
+    id && thinkingByConversation && Object.hasOwn(thinkingByConversation, id)
+      ? normalizeConversationThinking({ [id]: thinkingByConversation[id] })?.[id]
+      : undefined;
+  return { ...defaults, ...thinking };
+}
+
+// 每个运行中的客户端使用独立 writer，避免同源浏览器标签页版本相同时互相覆盖。
+let conversationThinkingWriterId: string | undefined;
+function nextConversationThinkingRevision(input: ChatRuntimeControls, id: string) {
+  conversationThinkingWriterId ??= createUuid();
+  return {
+    version: (input.thinkingByConversationRevisions?.[id]?.version ?? 0) + 1,
+    writerId: conversationThinkingWriterId,
+  };
+}
+
+/** 分支复制有效设置（包括继承的默认值），源会话保持独立。 */
+export function copyConversationThinking(
+  input: ChatRuntimeControls,
+  fromId: string,
+  toId: string,
+): ChatRuntimeControls {
+  const id = toId.trim();
+  if (
+    !id ||
+    !fromId.trim() ||
+    fromId.trim() === id ||
+    Object.hasOwn(input.thinkingByConversation ?? {}, id)
+  )
+    return input;
+  return {
+    ...input,
+    thinkingByConversation: {
+      ...input.thinkingByConversation,
+      [id]: pickChatRuntimeThinking(resolveChatRuntimeControlsForConversation(input, fromId)),
+    },
+    thinkingByConversationRevisions: {
+      ...input.thinkingByConversationRevisions,
+      [id]: nextConversationThinkingRevision(input, id),
+    },
+  };
+}
+
+/** 删除快照但保留同步版本，旧的在途快照不能恢复已删除的设置。 */
+export function removeConversationThinking(input: ChatRuntimeControls, conversationId: string) {
+  const id = conversationId.trim();
+  if (!id || !Object.hasOwn(input.thinkingByConversation ?? {}, id)) return input;
+  const thinkingByConversation = { ...input.thinkingByConversation };
+  delete thinkingByConversation[id];
+  return {
+    ...input,
+    thinkingByConversation,
+    thinkingByConversationRevisions: {
+      ...input.thinkingByConversationRevisions,
+      [id]: nextConversationThinkingRevision(input, id),
+    },
+  };
+}
+
+/** 草稿绑定正式 ID 时沿用思考选择，正式会话已有的设置优先。 */
+export function moveConversationThinking(
+  input: ChatRuntimeControls,
+  fromId: string,
+  toId: string,
+): ChatRuntimeControls {
+  if (
+    fromId.trim() === toId.trim() ||
+    !toId.trim() ||
+    !Object.hasOwn(input.thinkingByConversation ?? {}, fromId.trim())
+  )
+    return input;
+  return removeConversationThinking(copyConversationThinking(input, fromId, toId), fromId);
+}
+
 export function normalizeChatRuntimeControls(input: unknown): ChatRuntimeControls {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const reasoning = normalizeChatRuntimeReasoning(obj.reasoning);
+  const thinkingByConversation = normalizeConversationThinking(obj.thinkingByConversation);
+  const thinkingByConversationRevisions = normalizeConversationThinkingRevisions(
+    obj.thinkingByConversationRevisions,
+  );
   return {
     thinkingEnabled: obj.thinkingEnabled !== false,
     nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
@@ -505,6 +634,8 @@ export function normalizeChatRuntimeControls(input: unknown): ChatRuntimeControl
       reasoning,
     ),
     reasoningByModel: normalizeChatRuntimeReasoningByModel(obj.reasoningByModel),
+    ...(thinkingByConversation ? { thinkingByConversation } : {}),
+    ...(thinkingByConversationRevisions ? { thinkingByConversationRevisions } : {}),
   };
 }
 
@@ -536,9 +667,10 @@ export function normalizeChatRuntimeControlsForProvider(
     providerId?: ProviderId;
     requestFormat?: CodexRequestFormat;
     modelId?: string;
+    conversationId?: string;
   },
 ): ChatRuntimeControls {
-  const controls = normalizeChatRuntimeControls(input);
+  const controls = resolveChatRuntimeControlsForConversation(input, params.conversationId);
   const key = getChatRuntimeReasoningProviderKey(params);
   const levels = getChatRuntimeReasoningLevelsForProvider(params);
   const reasoning = normalizeChatRuntimeReasoningForLevels(
@@ -555,8 +687,32 @@ export function updateChatRuntimeControlsForProvider(
     providerId?: ProviderId;
     requestFormat?: CodexRequestFormat;
     modelId?: string;
+    conversationId?: string;
   },
 ): ChatRuntimeControls {
+  const conversationId = params.conversationId?.trim();
+  if (conversationId) {
+    const defaults = normalizeChatRuntimeControls(input);
+    const controls = updateChatRuntimeControlsForProvider(
+      resolveChatRuntimeControlsForConversation(defaults, conversationId),
+      patch,
+      { ...params, conversationId: undefined },
+    );
+    return {
+      ...defaults,
+      // 联网和 Plan mode 维持原有语义；思考开关与档位只写目标会话。
+      nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
+      planModeEnabled: controls.planModeEnabled,
+      thinkingByConversation: {
+        ...defaults.thinkingByConversation,
+        [conversationId]: pickChatRuntimeThinking(controls),
+      },
+      thinkingByConversationRevisions: {
+        ...defaults.thinkingByConversationRevisions,
+        [conversationId]: nextConversationThinkingRevision(defaults, conversationId),
+      },
+    };
+  }
   const key = getChatRuntimeReasoningProviderKey(params);
   const levels = getChatRuntimeReasoningLevelsForProvider(params);
   const controls = normalizeChatRuntimeControls({

@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import { branchChatHistory } from "../../../lib/chat/history/chatHistory";
+import { type AppSettings, copyConversationThinking } from "../../../lib/settings";
 import { asErrorMessage } from "../chatPageUtils";
 
 type UseBranchConversationParams = {
@@ -17,6 +18,7 @@ type UseBranchConversationParams = {
   isConversationHydrating: boolean;
   isConversationHydrationFailed: boolean;
   sidebarStore: SidebarStore;
+  setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   handleSelectConversation: (id: string) => void;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   t: (key: string) => string;
@@ -33,6 +35,7 @@ export function useBranchConversation(params: UseBranchConversationParams) {
     isConversationHydrating,
     isConversationHydrationFailed,
     sidebarStore,
+    setSettings,
     handleSelectConversation,
     setErrorMessage,
     t,
@@ -53,6 +56,14 @@ export function useBranchConversation(params: UseBranchConversationParams) {
       setBranchPendingMessageId(messageRef.messageId);
       try {
         const summary = await branchChatHistory(conversationId, messageRef);
+        setSettings((prev) => ({
+          ...prev,
+          chatRuntimeControls: copyConversationThinking(
+            prev.chatRuntimeControls,
+            conversationId,
+            summary.id,
+          ),
+        }));
         sidebarStore.upsertLocal({ ...summary, isPending: undefined });
         handleSelectConversation(summary.id);
       } catch (error) {
@@ -70,6 +81,7 @@ export function useBranchConversation(params: UseBranchConversationParams) {
       isSending,
       setErrorMessage,
       sidebarStore,
+      setSettings,
       t,
     ],
   );

@@ -90,6 +90,7 @@ export function resolveConversationRuntimeControls(input: {
   activeProviders: ModelProviderSource[];
   selectedModel: SelectedModel | undefined;
   runtimeControls: AppSettings["chatRuntimeControls"];
+  conversationId?: string;
 }) {
   const provider = input.activeProviders.find(
     (entry) => entry.id === input.selectedModel?.customProviderId,
@@ -98,6 +99,7 @@ export function resolveConversationRuntimeControls(input: {
     providerId: provider?.type,
     requestFormat: provider?.requestFormat,
     modelId: input.selectedModel?.model,
+    conversationId: input.conversationId,
   });
 }
 
@@ -206,6 +208,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
     const runtimeControls = resolveConversationRuntimeControls({
       activeProviders,
       selectedModel: turnSelectedModel,
+      conversationId: activeConversationId,
       runtimeControls: sendOptions?.runtimeControls ?? settings.chatRuntimeControls,
     });
     const outcome = await chatCommandPipeline.submit({

@@ -23,6 +23,7 @@ import {
   type ExecutionMode,
   isAgentExecutionMode,
   normalizeChatRuntimeControls,
+  resolveChatRuntimeControlsForConversation,
 } from "../../../lib/settings";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { answerPlanDecision } from "../../../lib/tools/planModeTools";
@@ -452,7 +453,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       executionMode,
       workdir: workdirForTurn,
       commandSafetyMode,
-      runtimeControls: editSlot?.runtimeControls ?? settings.chatRuntimeControls,
+      runtimeControls: resolveChatRuntimeControlsForConversation(
+        editSlot?.runtimeControls ?? settings.chatRuntimeControls,
+        conversationId,
+      ),
       createdAt: editSlot?.createdAt,
       gatewayRequest: editSlot?.gatewayRequest,
     });
@@ -511,7 +515,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       executionMode,
       workdir: workdirForTurn,
       commandSafetyMode: settings.system.commandSafetyMode,
-      runtimeControls: input.runtimeControls ?? settings.chatRuntimeControls,
+      runtimeControls: resolveChatRuntimeControlsForConversation(
+        input.runtimeControls ?? settings.chatRuntimeControls,
+        conversationId,
+      ),
     });
     setQueuedChatTurnsState((current) => appendQueuedChatTurn(current, queuedTurn));
     setPendingUploadsForConversation(conversationId, []);
@@ -823,7 +830,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       settings.system.workdir;
     const runtimeControls = payload.runtimeControls
       ? normalizeChatRuntimeControls(payload.runtimeControls)
-      : settings.chatRuntimeControls;
+      : resolveChatRuntimeControlsForConversation(
+          settings.chatRuntimeControls,
+          targetConversationId,
+        );
     const queuedTurn = createQueuedChatTurn({
       id: `gateway-${requestId}`,
       conversationId: targetConversationId,

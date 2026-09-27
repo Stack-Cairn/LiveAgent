@@ -152,8 +152,14 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
       providerId: currentChatProvider?.type,
       requestFormat: currentChatProvider?.requestFormat,
       modelId: currentChatModelId,
+      conversationId: currentConversationId,
     }),
-    [currentChatModelId, currentChatProvider?.requestFormat, currentChatProvider?.type],
+    [
+      currentChatModelId,
+      currentChatProvider?.requestFormat,
+      currentChatProvider?.type,
+      currentConversationId,
+    ],
   );
   // 运行期思考档位补充到达会改变档位列表/恒开判定，版本号计入依赖使 memo 跟进。
   const thinkingLiveVersion = useThinkingLiveVersion();

@@ -475,9 +475,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         providerId: selectedProvider?.type,
         requestFormat: selectedProvider?.requestFormat,
         modelId: selection?.model,
+        conversationId,
       }),
     [
       context.settings.chatRuntimeControls,
+      conversationId,
       selectedProvider?.requestFormat,
       selectedProvider?.type,
       selection?.model,
