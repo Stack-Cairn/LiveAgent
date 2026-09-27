@@ -8,7 +8,7 @@ const loader = createWebModuleLoader({
 });
 const { createGatewayConversationActions } = loader.loadModule("src/app/gatewayConversationActions.ts");
 
-for (const resource of ["skills", "mcp", "memory", "cron"]) {
+for (const resource of ["skills", "mcp", "memory", "cron", "planning"]) {
   test(`${resource} opens in the content area while preserving the desktop sidebar and composer draft`, () => {
     const calls = [];
     const actions = createGatewayConversationActions({

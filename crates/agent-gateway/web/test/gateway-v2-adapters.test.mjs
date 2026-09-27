@@ -696,3 +696,16 @@ test("cua driver status requests carry the read-only action and decode the host 
     error: null,
   });
 });
+
+test("Planning v2 preserves CAS and taxonomy payloads and identifies the invalidated Agent", () => {
+  const input = { requestId: "request-stable", action: "todo.update", id: "todo-1", expectedRevision: 7, data: { groupId: "group-1", tagIds: ["tag-1"], projectId: "project-1", reminderMinutes: 15 } };
+  const frame = decodeClientFrame(encodeRequestFrame("planning-1", "planning.manage", { action: "mutate", input }, "agent-1"));
+  assert.equal(frame.payload.value.payload.case, "planning");
+  assert.equal(frame.payload.value.payload.value.action, "mutate");
+  assert.deepEqual(JSON.parse(frame.payload.value.payload.value.inputJson), input);
+  const conflict = {status:"conflict",seq:8,item:{id:"todo-1",revision:8}};
+  const decoded = decodeServerFrame(roundtrip(serverFrame({request_id:"planning-1",agent_id:"agent-1",agent_response:{request_id:"planning-1",planning_resp:{result_json:JSON.stringify(conflict)}}})),{agentOnline:true});
+  assert.equal(decoded.kind,"response");assert.deepEqual(decoded.payload,conflict);
+  const changed = decodeServerFrame(roundtrip(serverFrame({agent_id:"agent-1",planning_changed:{seq:"9"}})),{agentOnline:true});
+  assert.equal(changed.type,"planning.changed");assert.equal(changed.agentId,"agent-1");assert.equal(changed.payload.seq,9);
+});

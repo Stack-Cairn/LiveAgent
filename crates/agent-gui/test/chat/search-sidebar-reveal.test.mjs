@@ -20,6 +20,7 @@ const icons = [
   "ChevronRight",
   "CirclePlus",
   "Clock3",
+  "CalendarDays",
   "Folder",
   "FolderClosed",
   "FolderOpen",
