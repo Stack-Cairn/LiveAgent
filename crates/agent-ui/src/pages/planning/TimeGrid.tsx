@@ -31,6 +31,10 @@ const LINE_HEIGHT = 16;
 /** Below this width per overlapping block, blocks cascade (Google-style) instead of splitting. */
 const MIN_SPLIT_WIDTH = 64;
 const CASCADE_OFFSET = 14;
+/** Overlapping blocks widen past their share and are overlapped by later columns (Google). */
+const OVERLAP_WIDEN = 1.7;
+/** Deadlines render as one-line chips (Google task chips) floating above events. */
+const CHIP_HEIGHT = 22;
 const BLOCK_PADDING = 8;
 /** How many wrapped title lines fit, leaving one line for the time when there is room. */
 function titleLines(height: number, reserveTimeLine: boolean) {
@@ -551,9 +555,10 @@ export function TimeGrid({
                   (e) => e.time.kind === "timed" && e.time.startAt >= to && e.time.startAt < dayTo,
                 ).length + deadlines.filter((at) => at >= to && at < dayTo).length
               : 0;
-            // Timed deadlines take a 30-minute slot in the overlap layout so they sit beside
-            // events instead of covering them.
-            const deadlineBlocks: PlanningEvent[] = dueTodos
+            // Deadlines do not squeeze events: they float above them as chips and only share
+            // width with other chips close enough to collide.
+            const chipMinutes = (CHIP_HEIGHT / hourHeight) * 60;
+            const deadlineChips: PlanningEvent[] = dueTodos
               .filter((t) => (t.dueAt ?? 0) >= from && (t.dueAt ?? 0) < to)
               .map((t) => ({
                 id: `${DEADLINE_PREFIX}${t.id}`,
@@ -564,14 +569,17 @@ export function TimeGrid({
                 time: {
                   kind: "timed",
                   startAt: t.dueAt ?? from,
-                  endAt: (t.dueAt ?? from) + 30 * MINUTE,
+                  endAt: (t.dueAt ?? from) + chipMinutes * MINUTE,
                   timeZone: zone,
                 },
                 revision: 0,
                 createdAt: 0,
                 updatedAt: 0,
               }));
-            const placements = layoutEvents([...visible, ...deadlineBlocks], from, to, hourHeight);
+            const placements = [
+              ...layoutEvents(visible, from, to, hourHeight),
+              ...layoutEvents(deadlineChips, from, to, hourHeight),
+            ];
             const pStart = preview?.kind === "timed" ? Math.max(preview.startAt, from) : 0,
               pEnd = preview?.kind === "timed" ? Math.min(preview.endAt, to) : 0;
             return (
@@ -627,52 +635,52 @@ export function TimeGrid({
                   ({ event, top, height, column, columns: count, span, startsHere, endsHere }) => {
                     // Equal columns while each block stays readable; otherwise cascade so every
                     // block keeps most of the width and later blocks sit on top, offset right.
+                    const deadline = event.id.startsWith(DEADLINE_PREFIX);
                     const cascade = count > 1 && dayWidth / count < MIN_SPLIT_WIDTH;
+                    const share = 100 / count;
+                    const last = column + span >= count;
                     const geometry = cascade
                       ? {
                           top,
-                          height: Math.max(16, height),
                           left: `${1 + column * CASCADE_OFFSET}px`,
                           width: `calc(100% - ${column * CASCADE_OFFSET + 10}px)`,
-                          zIndex: 2 + column,
                         }
-                      : {
-                          top,
-                          height: Math.max(16, height),
-                          left: `calc(${(column / count) * 100}% + 1px)`,
-                          width: `calc(${(span * 100) / count}% - ${column + span >= count ? 10 : 2}px)`,
-                        };
-                    if (event.id.startsWith(DEADLINE_PREFIX)) {
+                      : count > 1 && !deadline
+                        ? {
+                            top,
+                            left: `calc(${column * share}% + 1px)`,
+                            width: last
+                              ? `calc(${100 - column * share}% - 10px)`
+                              : `calc(${Math.min(span * share + (OVERLAP_WIDEN - 1) * share, 100 - column * share)}% - 10px)`,
+                          }
+                        : {
+                            top,
+                            left: `calc(${column * share}% + 1px)`,
+                            width: `calc(${span * share}% - ${last ? 10 : 2}px)`,
+                          };
+                    const layer = { zIndex: (deadline ? 20 : 2) + column };
+                    if (deadline) {
                       const todo = dueTodos.find((t) => t.id === event.todoId);
                       if (!todo) return null;
                       const dueAt = todo.dueAt ?? from;
+                      const time = zonedParts(dueAt, zone).time;
                       return (
                         <button
                           type="button"
                           key={event.id}
-                          className={`planning-time-event planning-deadline ${dueAt < now ? "is-past" : ""} ${height >= 2 * LINE_HEIGHT + BLOCK_PADDING ? "is-tall" : ""}`}
-                          title={translate("planner.grid.taskDue", { title: todo.title })}
-                          style={
-                            {
-                              ...geometry,
-                              height: Math.max(20, height),
-                              ...taskAppearance(taskListColor(todo, snapshot), "deadline"),
-                              ...({
-                                "--planning-title-lines": titleLines(Math.max(20, height), true),
-                              } as CSSProperties),
-                            } as CSSProperties
-                          }
+                          className={`planning-time-event planning-deadline ${dueAt < now ? "is-past" : ""}`}
+                          title={`${translate("planner.grid.taskDue", { title: todo.title })} ${time}`}
+                          style={{
+                            ...geometry,
+                            ...layer,
+                            height: CHIP_HEIGHT,
+                            ...eventAppearance(taskListColor(todo, snapshot)),
+                          }}
                           onClick={() => onSelectTodo(todo)}
                         >
-                          <span className="planning-deadline-title">
-                            <Circle className="planning-task-mark" aria-hidden />
-                            {todo.title}
-                          </span>
-                          <span className="planning-deadline-time">
-                            {translate("planner.grid.dueAt", {
-                              time: zonedParts(dueAt, zone).time,
-                            })}
-                          </span>
+                          <Circle className="planning-task-mark" aria-hidden />
+                          <span className="planning-deadline-title">{todo.title}</span>
+                          <span className="planning-deadline-time">，{time}</span>
                         </button>
                       );
                     }
@@ -687,6 +695,8 @@ export function TimeGrid({
                         style={
                           {
                             ...geometry,
+                            ...layer,
+                            height: Math.max(16, height),
                             ...(event.todoId ? taskAppearance(color) : eventAppearance(color)),
                             ...({
                               "--planning-title-lines": titleLines(Math.max(16, height), true),

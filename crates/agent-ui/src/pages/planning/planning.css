@@ -372,8 +372,9 @@
 .planning-event-body strong {
   -webkit-line-clamp: var(--planning-title-lines, 1);
 }
+/* One line only: a wrapped second line would be cut mid-glyph by the block edge. */
 .planning-event-body small {
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 .planning-event-body .planning-task-mark {
   display: inline-block;
@@ -427,7 +428,13 @@
     padding-inline: 0.25rem;
   }
   .planning-time-event.is-short .planning-inline-time,
-  .planning-deadline:not(.is-tall) .planning-deadline-time {
+  .planning-time-event.planning-deadline .planning-deadline-time {
+    display: none;
+  }
+}
+/* A chip this narrow keeps its few pixels for the title. */
+@container (max-width: 4rem) {
+  .planning-deadline .planning-task-mark {
     display: none;
   }
 }
@@ -471,7 +478,7 @@
   box-shadow: var(--shadow-lg);
   pointer-events: none;
   font-size: var(--text-xs);
-  z-index: 4;
+  z-index: 41;
 }
 .planning-now {
   position: absolute;
@@ -480,7 +487,7 @@
   margin-top: -1px;
   background: var(--destructive);
   pointer-events: none;
-  z-index: 3;
+  z-index: 40;
 }
 .planning-now::before {
   content: "";
@@ -754,13 +761,14 @@ hr.planning-agenda-now {
   background: hsl(var(--card) / 0.55);
   pointer-events: none;
 }
+/* Google-style task chip: one line "○ title, 12:00", floating above events. */
 .planning-deadline {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   overflow: hidden;
   padding: 0 0.375rem;
-  border: 1px dashed var(--planning-accent);
+  border-radius: 0.375rem;
   font-size: var(--text-xs);
   line-height: 1rem;
   text-align: left;
@@ -773,28 +781,14 @@ hr.planning-agenda-now {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.planning-deadline-title .planning-task-mark {
-  display: inline-block;
-  margin-right: 0.25rem;
-  vertical-align: -0.125rem;
+.planning-deadline .planning-task-mark {
+  color: currentColor;
 }
-.planning-deadline.is-tall {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: 0;
-  padding: 0.25rem 0.375rem;
-}
-.planning-deadline.is-tall .planning-deadline-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--planning-title-lines, 1);
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-.planning-deadline.is-tall .planning-deadline-time {
+.planning-time-event.planning-deadline .planning-deadline-time {
   flex-shrink: 0;
   margin-left: 0;
+  color: inherit;
+  opacity: 0.85;
 }
 .planning-month-deadline {
   border: 1px dashed var(--planning-accent);
