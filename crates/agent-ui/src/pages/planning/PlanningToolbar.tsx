@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Clock3,
   ListChecks,
   Menu,
   MoreHorizontal,
@@ -76,11 +75,9 @@ export function PlanningToolbar({
   onMode,
   onSidebar,
   onTasks,
-  onReminders,
   onCalendars,
   onTrash,
   onImport,
-  reminderCount,
 }: {
   date: string;
   days: string[];
@@ -100,11 +97,9 @@ export function PlanningToolbar({
   onMode(mode: PlanningMode): void;
   onSidebar(): void;
   onTasks(): void;
-  onReminders(): void;
   onCalendars(): void;
   onTrash(): void;
   onImport(): void;
-  reminderCount: number;
 }) {
   const { t, locale } = usePlanningT();
   const viewLabel = (v: PlanningView) => t(`planner.view.${v}`);
@@ -180,27 +175,13 @@ export function PlanningToolbar({
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {mode === "calendar" && (
-          <>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="relative rounded-full"
-              aria-label={`${t("planner.toolbar.reminders")}${reminderCount ? ` · ${reminderCount}` : ""}`}
-              onClick={onReminders}
-            >
-              <Clock3 className="size-5" />
-              {reminderCount > 0 && (
-                <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive" />
-              )}
-            </Button>
-            <CalendarDisplaySettings
-              value={preferences}
-              onChange={onPreferences}
-              zone={zone}
-              onZoneChange={onZoneChange}
-              disabled={interaction || busy}
-            />
-          </>
+          <CalendarDisplaySettings
+            value={preferences}
+            onChange={onPreferences}
+            zone={zone}
+            onZoneChange={onZoneChange}
+            disabled={interaction || busy}
+          />
         )}
         <DropdownMenu>
           <DropdownMenuTrigger

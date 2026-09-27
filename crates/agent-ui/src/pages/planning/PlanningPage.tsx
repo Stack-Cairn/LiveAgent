@@ -90,7 +90,6 @@ export function PlanningPage() {
   );
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [calendarsOpen, setCalendarsOpen] = useState(false);
-  const [remindersOpen, setRemindersOpen] = useState(false);
   const [taskSheetOpen, setTaskSheetOpen] = useState(false);
   const [todoDrag, setTodoDrag] = useState<PlanningDragStart | null>(null);
   const [error, setError] = useState("");
@@ -335,9 +334,6 @@ export function PlanningPage() {
         )}
       </section>
     );
-  const reminders = snapshot.reminders.filter(
-    (r) => r.status === "pending" && (r.snoozedUntil ?? r.triggerAt) <= clock,
-  );
   const panelProps = {
     busy,
     run,
@@ -449,11 +445,9 @@ export function PlanningPage() {
             ? setTaskSheetOpen(true)
             : setPreferences({ taskPanelOpen: !preferences.taskPanelOpen })
         }
-        onReminders={() => setRemindersOpen(!remindersOpen)}
         onCalendars={() => setCalendarsOpen(true)}
         onTrash={() => setTrashOpen(true)}
         onImport={() => setImportOpen(true)}
-        reminderCount={reminders.length}
       />
       {(error || state.error) && (
         <SettingsNotice variant="action-error" role="alert" className="mx-4 mb-3">
@@ -469,53 +463,6 @@ export function PlanningPage() {
             {state.error ? t("planner.common.retry") : t("planner.common.close")}
           </Button>
         </SettingsNotice>
-      )}
-      {remindersOpen && (
-        <div className="mx-4 mb-3 max-h-40 overflow-y-auto rounded-2xl border border-border bg-background p-3">
-          <h2 className="mb-2 text-sm font-medium">{t("planner.reminders.title")}</h2>
-          {!reminders.length && (
-            <p className="text-xs text-muted-foreground">{t("planner.reminders.empty")}</p>
-          )}
-          {reminders.map((r) => (
-            <div key={r.id} className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate">{r.title}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  void run(() =>
-                    planningStore.mutate({
-                      action: "reminder.snooze",
-                      id: r.id,
-                      expectedRevision: r.revision,
-                      data: { minutes: 10 },
-                    }),
-                  )
-                }
-              >
-                {t("planner.reminders.snooze10")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  void run(() =>
-                    planningStore.mutate({
-                      action: "reminder.acknowledge",
-                      id: r.id,
-                      expectedRevision: r.revision,
-                      data: {},
-                    }),
-                  )
-                }
-              >
-                {t("planner.reminders.acknowledge")}
-              </Button>
-            </div>
-          ))}
-        </div>
       )}
       <div className="planning-body" data-testid="planning-split">
         {showSidebar && sidebar}
