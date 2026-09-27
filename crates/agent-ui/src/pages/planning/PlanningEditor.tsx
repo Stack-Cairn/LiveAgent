@@ -23,9 +23,42 @@ import { addDays, eventTitle, localEpoch, timeLabel, zonedParts } from "../../li
 import type { EventTime, PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
 import { PlanningDateTimePicker } from "./PlanningDateTimePicker";
-import { TimeZonePicker } from "./TimeZonePicker";
 import { usePlanningT } from "./usePlanningT";
 
+const NOTIFY_MINUTES = [0, 5, 15, 30, 60, 1440];
+function notifyLabel(t: (key: string, vars?: Record<string, string>) => string, minutes: number) {
+  const duration: Record<number, string> = {
+    5: "planner.duration.5m",
+    15: "planner.duration.15m",
+    30: "planner.duration.30m",
+    60: "planner.duration.1h",
+    1440: "planner.duration.1d",
+  };
+  return minutes === 0
+    ? t("planner.notify.atStart")
+    : duration[minutes]
+      ? t("planner.notify.before", { duration: t(duration[minutes]) })
+      : t("planner.notify.minutesBefore", { minutes: String(minutes) });
+}
+/** Google-style "Notification" choices; the first follows the calendar's default. */
+function notificationOptions(
+  t: (key: string, vars?: Record<string, string>) => string,
+  calendarDefault: number | null | undefined,
+) {
+  return [
+    {
+      value: "",
+      label: t("planner.notify.default", {
+        label: calendarDefault == null ? t("planner.notify.off") : notifyLabel(t, calendarDefault),
+      }),
+    },
+    { value: "-1", label: t("planner.notify.off") },
+    ...NOTIFY_MINUTES.map((minutes) => ({
+      value: String(minutes),
+      label: notifyLabel(t, minutes),
+    })),
+  ];
+}
 /** Values typed into the quick-create card, carried over by "More options". */
 export interface EditorDraft {
   title: string;
@@ -55,7 +88,7 @@ export function PlanningEditor({
   onClose(): void;
   onError(error: unknown): void;
 }) {
-  const { t, locale } = usePlanningT();
+  const { t } = usePlanningT();
   const event = target.kind === "event" ? target.event : undefined;
   const todo = target.todo ?? snapshot.todos.find((t) => t.id === event?.todoId);
   const creating = !event && !todo;
@@ -88,7 +121,6 @@ export function PlanningEditor({
   const [tagIds, setTagIds] = useState(event?.tagIds ?? todo?.tagIds ?? []);
   const [priority, setPriority] = useState(todo?.priority ?? "medium");
   const [reminderMinutes, setReminderMinutes] = useState(todo?.reminderMinutes ?? 0);
-  const [reminderAt, setReminderAt] = useState("");
   const [estimate, setEstimate] = useState(todo?.estimateMinutes?.toString() ?? "60");
   const [dueDate, setDueDate] = useState(
     todo?.dueDate ??
@@ -105,7 +137,12 @@ export function PlanningEditor({
     [endDate, setEndDate] = useState(initialEnd.date);
   const [startClock, setStartClock] = useState(initialStart.time),
     [endClock, setEndClock] = useState(initialEnd.time);
-  const [timeZone, setTimeZone] = useState(zone);
+  // Items keep their stored zone; new ones use the calendar's zone (Google has no per-item picker).
+  const timeZone = zone;
+  // "" follows the calendar default; -1 turns the notification off.
+  const [notify, setNotify] = useState(
+    event?.reminderMinutes == null ? "" : String(event.reminderMinutes),
+  );
   const [frequency, setFrequency] = useState(
     event?.recurrence?.frequency ?? draft?.frequency ?? "",
   );
@@ -186,6 +223,9 @@ export function PlanningEditor({
               tagIds,
               calendarId,
               time,
+              ...(synthetic || todo
+                ? {}
+                : { reminderMinutes: notify === "" ? null : Number(notify) }),
               recurrence: frequency
                 ? {
                     frequency,
@@ -441,6 +481,17 @@ export function PlanningEditor({
                   />
                   {!synthetic && !todo && (
                     <>
+                      <PlanningField label={t("planner.editor.notification")}>
+                        <PlanningSelect
+                          disabled={busy || !!readOnly}
+                          value={notify}
+                          onValueChange={setNotify}
+                          options={notificationOptions(
+                            t,
+                            snapshot.calendars.find((c) => c.id === calendarId)?.reminderMinutes,
+                          )}
+                        />
+                      </PlanningField>
                       <PlanningField label={t("planner.editor.repeat")}>
                         <PlanningSelect
                           disabled={busy || !!readOnly}
@@ -508,20 +559,6 @@ export function PlanningEditor({
                     </div>
                   </div>
                 )}
-              {/* Tasks follow the calendar's time zone, like Google Tasks; only events expose it. */}
-              {target.kind === "event" && !todo && (
-                <details className="space-y-3 text-sm [&>summary]:cursor-pointer [&>summary]:text-muted-foreground">
-                  <summary>{t("planner.editor.timeZoneSettings")}</summary>
-                  <PlanningField label={t("planner.timeZone")}>
-                    <TimeZonePicker
-                      label={t("planner.timeZone")}
-                      value={timeZone}
-                      disabled={busy || !!readOnly}
-                      onChange={setTimeZone}
-                    />
-                  </PlanningField>
-                </details>
-              )}
             </fieldset>
             {error && (
               <SettingsNotice role="alert" variant="action-error">
@@ -530,97 +567,6 @@ export function PlanningEditor({
             )}
             {readOnly && <p>{t("planner.editor.externalReadOnly")}</p>}
           </form>
-          {(todo || event) && !synthetic && (
-            <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 text-sm [&>h3]:font-medium [&>p]:text-muted-foreground [&>small]:text-xs [&>small]:text-muted-foreground">
-              <h3>{t("planner.editor.reminders")}</h3>
-              {snapshot.reminders
-                .filter(
-                  (r) =>
-                    r.targetType === (event ? "event" : "todo") &&
-                    r.targetId === (event?.id ?? todo?.id) &&
-                    r.status === "pending",
-                )
-                .map((r) => (
-                  <div
-                    className="flex flex-wrap items-center gap-2 [&>input]:min-w-0 [&>input]:flex-1 [&>span]:flex-1"
-                    key={r.id}
-                  >
-                    <span>
-                      {new Date(r.snoozedUntil ?? r.triggerAt).toLocaleString(locale, {
-                        timeZone,
-                        month: "numeric",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                      {r.origin !== "manual" ? ` · ${t("planner.editor.reminderAuto")}` : ""}
-                    </span>
-                    {r.origin === "manual" && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        disabled={busy || readOnly}
-                        aria-label={t("planner.editor.deleteReminder")}
-                        onClick={() =>
-                          void perform(
-                            () =>
-                              planningStore.mutate({
-                                action: "reminder.delete",
-                                id: r.id,
-                                expectedRevision: r.revision,
-                                data: {},
-                              }),
-                            false,
-                          )
-                        }
-                      >
-                        {t("planner.common.remove")}
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              {!readOnly && (
-                <div className="flex flex-wrap items-center gap-2 [&>input]:min-w-0 [&>input]:flex-1 [&>span]:flex-1">
-                  <PlanningDateTimePicker
-                    value={{
-                      date: reminderAt.split("T")[0] || "",
-                      time: reminderAt.split("T")[1] || "",
-                    }}
-                    onChange={(v) => setReminderAt(v.date ? `${v.date}T${v.time || "09:00"}` : "")}
-                    label={t("planner.editor.reminderTime")}
-                    zone={timeZone}
-                    disabled={busy}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    type="button"
-                    disabled={busy || !reminderAt || todo?.status === "completed"}
-                    onClick={() =>
-                      void perform(async () => {
-                        await planningStore.mutate({
-                          action: "reminder.create",
-                          data: {
-                            targetType: event ? "event" : "todo",
-                            targetId: event?.id ?? todo?.id,
-                            triggerAt: localEpoch(
-                              reminderAt.slice(0, 10),
-                              reminderAt.slice(11, 16),
-                              timeZone,
-                            ),
-                          },
-                        });
-                        setReminderAt("");
-                      }, false)
-                    }
-                  >
-                    {t("planner.editor.addReminder")}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
           {target.kind === "todo" && todo && (
             <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 text-sm [&>h3]:font-medium [&>p]:text-muted-foreground [&>small]:text-xs [&>small]:text-muted-foreground">
               {scheduled.length > 0 ? (

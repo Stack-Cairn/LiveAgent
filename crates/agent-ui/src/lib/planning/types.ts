@@ -63,6 +63,8 @@ export interface PlanningEvent {
   recurrence?: Recurrence | null;
   seriesId?: string | null;
   originalDate?: string | null;
+  /** Per-event notification: null/absent follows the calendar, -1 is off, else minutes before. */
+  reminderMinutes?: number | null;
   revision: number;
   createdAt: number;
   updatedAt: number;
