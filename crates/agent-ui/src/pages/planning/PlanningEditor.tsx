@@ -26,9 +26,18 @@ import { PlanningDateTimePicker } from "./PlanningDateTimePicker";
 import { TimeZonePicker } from "./TimeZonePicker";
 import { usePlanningT } from "./usePlanningT";
 
+/** Values typed into the quick-create card, carried over by "More options". */
+export interface EditorDraft {
+  title: string;
+  notes: string;
+  calendarId?: string;
+  groupId?: string;
+  frequency?: "" | "daily" | "weekly" | "monthly";
+  due?: { date: string; time: string };
+}
 export type EditorTarget =
-  | { kind: "todo"; todo?: Todo }
-  | { kind: "event"; event?: PlanningEvent; todo?: Todo; time?: EventTime };
+  | { kind: "todo"; todo?: Todo; draft?: EditorDraft }
+  | { kind: "event"; event?: PlanningEvent; todo?: Todo; time?: EventTime; draft?: EditorDraft };
 export function PlanningEditor({
   target,
   snapshot,
@@ -67,24 +76,28 @@ export function PlanningEditor({
           time: "10:00",
         };
   const formId = useId();
+  const draft = target.draft;
   const [title, setTitle] = useState(
-    event ? eventTitle(event, snapshot.todos) : (todo?.title ?? ""),
+    event ? eventTitle(event, snapshot.todos) : (todo?.title ?? draft?.title ?? ""),
   );
-  const [notes, setNotes] = useState(todo?.notes ?? event?.notes ?? "");
+  const [notes, setNotes] = useState(todo?.notes ?? event?.notes ?? draft?.notes ?? "");
   const [calendarId, setCalendarId] = useState(
-    event?.calendarId ?? snapshot.calendars.find((c) => c.isDefault)?.id ?? "",
+    event?.calendarId ?? draft?.calendarId ?? snapshot.calendars.find((c) => c.isDefault)?.id ?? "",
   );
-  const [groupId, setGroupId] = useState(todo?.groupId ?? homeTaskList(snapshot));
+  const [groupId, setGroupId] = useState(todo?.groupId ?? draft?.groupId ?? homeTaskList(snapshot));
   const [tagIds, setTagIds] = useState(event?.tagIds ?? todo?.tagIds ?? []);
   const [priority, setPriority] = useState(todo?.priority ?? "medium");
   const [reminderMinutes, setReminderMinutes] = useState(todo?.reminderMinutes ?? 0);
   const [reminderAt, setReminderAt] = useState("");
   const [estimate, setEstimate] = useState(todo?.estimateMinutes?.toString() ?? "60");
   const [dueDate, setDueDate] = useState(
-    todo?.dueDate ?? (todo?.dueAt ? zonedParts(todo.dueAt, todo.dueTimeZone ?? zone).date : ""),
+    todo?.dueDate ??
+      (todo?.dueAt
+        ? zonedParts(todo.dueAt, todo.dueTimeZone ?? zone).date
+        : (draft?.due?.date ?? "")),
   );
   const [dueTime, setDueTime] = useState(
-    todo?.dueAt ? zonedParts(todo.dueAt, todo.dueTimeZone ?? zone).time : "",
+    todo?.dueAt ? zonedParts(todo.dueAt, todo.dueTimeZone ?? zone).time : (draft?.due?.time ?? ""),
   );
   const [dueReminder, setDueReminder] = useState(todo?.dueReminder ?? false);
   const [allDay, setAllDay] = useState(initialTime?.kind === "allDay");
@@ -93,7 +106,9 @@ export function PlanningEditor({
   const [startClock, setStartClock] = useState(initialStart.time),
     [endClock, setEndClock] = useState(initialEnd.time);
   const [timeZone, setTimeZone] = useState(zone);
-  const [frequency, setFrequency] = useState(event?.recurrence?.frequency ?? "");
+  const [frequency, setFrequency] = useState(
+    event?.recurrence?.frequency ?? draft?.frequency ?? "",
+  );
   const [interval, setInterval] = useState(String(event?.recurrence?.interval ?? 1));
   const [until, setUntil] = useState(event?.recurrence?.until ?? "");
   const [busy, setBusy] = useState(false),
@@ -274,7 +289,7 @@ export function PlanningEditor({
                   variant="plain"
                   className={
                     creating
-                      ? "h-11 rounded-none border-0 border-b bg-transparent px-0 text-xl shadow-none focus-visible:border-primary focus-visible:ring-0"
+                      ? "h-11 rounded-none border-0 border-b bg-transparent px-0 text-xl shadow-none focus:bg-transparent focus:ring-0 focus-visible:border-primary focus-visible:ring-0"
                       : undefined
                   }
                   placeholder={creating ? t("planner.editor.addTitle") : undefined}
