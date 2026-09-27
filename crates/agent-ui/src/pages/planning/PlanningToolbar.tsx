@@ -4,8 +4,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  ListChecks,
-  Menu,
   MoreHorizontal,
   Trash2,
   Upload,
@@ -67,14 +65,9 @@ export function PlanningToolbar({
   onZoneChange,
   interaction,
   busy,
-  compact,
-  sidebarSheet,
   onNavigate,
-  onToday,
   onView,
   onMode,
-  onSidebar,
-  onTasks,
   onCalendars,
   onTrash,
   onImport,
@@ -89,15 +82,9 @@ export function PlanningToolbar({
   onZoneChange(zone: string): Promise<void>;
   interaction: boolean;
   busy: boolean;
-  compact: boolean;
-  /** Narrow windows move the sidebar into a sheet opened from the menu button. */
-  sidebarSheet: boolean;
   onNavigate(direction: number): void;
-  onToday(): void;
   onView(view: PlanningView): void;
   onMode(mode: PlanningMode): void;
-  onSidebar(): void;
-  onTasks(): void;
   onCalendars(): void;
   onTrash(): void;
   onImport(): void;
@@ -114,32 +101,17 @@ export function PlanningToolbar({
             .join(" ~ ")
       : "";
   return (
-    <header className="planning-topbar">
-      {sidebarSheet && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full"
-          aria-label={t("planner.toolbar.toggleSidebar")}
-          onClick={onSidebar}
-        >
-          <Menu className="size-5" />
-        </Button>
-      )}
-      <h1 className={`mr-4 text-xl font-normal ${mode === "calendar" ? "hidden md:block" : ""}`}>
+    // Sizes follow the toolbar's own width (container queries), so a narrow page between
+    // two sidebars drops the title and week badge instead of squeezing them.
+    <header className="planning-topbar @container">
+      <h1
+        className={`mr-2 shrink-0 whitespace-nowrap text-xl font-normal ${mode === "calendar" ? "hidden @3xl:block" : ""}`}
+      >
         {t("settings.navPlanning")}
       </h1>
       {mode === "calendar" ? (
         <>
-          <Button
-            variant="outline"
-            className="h-9 rounded-full px-5"
-            disabled={interaction}
-            onClick={onToday}
-          >
-            {t("planner.today")}
-          </Button>
-          <div className="flex items-center">
+          <div className="flex shrink-0 items-center">
             <Button
               variant="ghost"
               size="icon-sm"
@@ -161,7 +133,7 @@ export function PlanningToolbar({
               <ChevronRight className="size-5" />
             </Button>
           </div>
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <div className="min-w-0">
               <p className="truncate text-xl leading-7 tabular-nums">
                 {periodTitle(date, view, days, planningDateLocale(locale))}
@@ -173,7 +145,7 @@ export function PlanningToolbar({
               )}
             </div>
             {preferences.showWeekNumbers && (view === "week" || view === "day") && (
-              <span className="hidden shrink-0 rounded bg-muted px-1 text-xs font-medium leading-5 sm:inline">
+              <span className="hidden shrink-0 whitespace-nowrap rounded bg-muted px-1 text-xs font-medium leading-5 @2xl:inline">
                 {t("planner.weekNumber", { week: isoWeek(date) })}
               </span>
             )}
@@ -281,17 +253,6 @@ export function PlanningToolbar({
             </SettingsToggleGroupItem>
           ))}
         </SettingsToggleGroup>
-        {mode === "calendar" && compact && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full"
-            aria-label={t("planner.toolbar.showTasks")}
-            onClick={onTasks}
-          >
-            <ListChecks className="size-5" />
-          </Button>
-        )}
       </div>
     </header>
   );

@@ -3,13 +3,6 @@ import { HubHeader } from "../../components/hub/HubChrome";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";
 import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetPanel,
-  SheetTitle,
-} from "../../components/ui/sheet";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
 import {
@@ -89,7 +82,6 @@ export function PlanningPage() {
   const [mode, setMode] = useState<PlanningMode>("calendar");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
   const [creatingList, setCreatingList] = useState(false);
-  const [sidebarSheet, setSidebarSheet] = useState(false);
   const [hidden, setHidden] = useState(new Set<string>());
   const [trashOpen, setTrashOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -106,7 +98,6 @@ export function PlanningPage() {
   } | null>(null);
   const [draftElement, setDraftElement] = useState<HTMLElement | null>(null);
   const [calendarsOpen, setCalendarsOpen] = useState(false);
-  const [taskSheetOpen, setTaskSheetOpen] = useState(false);
   const [todoDrag, setTodoDrag] = useState<PlanningDragStart | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -392,11 +383,9 @@ export function PlanningPage() {
     busy,
     run,
     onEdit: (todo?: Todo) => {
-      setTaskSheetOpen(false);
       setEditor({ kind: "todo", todo });
     },
     onSchedule: (todo: Todo, event?: PlanningEvent) => {
-      setTaskSheetOpen(false);
       setEditor({ kind: "event", todo, event });
     },
     onDragEnd: () => {
@@ -426,25 +415,16 @@ export function PlanningPage() {
       weekStartsOn={preferences.weekStartsOn}
       showWeekNumbers={preferences.showWeekNumbers}
       taskFilter={taskFilter}
-      onDate={(day) => {
-        setDate(day);
-        setSidebarSheet(false);
-      }}
+      onDate={setDate}
       onToggleLayer={toggleLayer}
-      onCreateEvent={() => {
-        setSidebarSheet(false);
-        createNow("event");
-      }}
-      onCreateTask={() => {
-        setSidebarSheet(false);
-        createNow("todo");
-      }}
+      onCreateEvent={() => createNow("event")}
+      onCreateTask={() => createNow("todo")}
       onManageCalendars={() => setCalendarsOpen(true)}
       onCreateList={() => setCreatingList(true)}
       onTaskFilter={setTaskFilter}
     />
   );
-  // Side panels are fixed parts of the layout; only narrow windows move them into sheets.
+  // Side panels are fixed parts of the layout; narrow windows simply leave them out.
   const showSidebar = sidebarInline;
   const showTaskPanel = !compact && mode === "calendar";
   return (
@@ -455,7 +435,6 @@ export function PlanningPage() {
       onDragStart={(e) => e.preventDefault()}
     >
       <PlanningToolbar
-        compact={compact}
         date={date}
         days={days}
         view={view}
@@ -474,16 +453,9 @@ export function PlanningPage() {
         }
         interaction={interaction}
         busy={busy}
-        sidebarSheet={!sidebarInline}
         onNavigate={navigate}
-        onToday={() => {
-          setDate(today);
-          setNowRequest((n) => n + 1);
-        }}
         onView={setView}
         onMode={setMode}
-        onSidebar={() => setSidebarSheet(true)}
-        onTasks={() => setTaskSheetOpen(true)}
         onCalendars={() => setCalendarsOpen(true)}
         onTrash={() => setTrashOpen(true)}
         onImport={() => setImportOpen(true)}
@@ -552,7 +524,7 @@ export function PlanningPage() {
               onInteractionChange={setInteraction}
               onSelectTodo={(todo) => setEditor({ kind: "todo", todo })}
               onOpenDay={openDay}
-              onOpenTasks={() => (compact ? setTaskSheetOpen(true) : setMode("tasks"))}
+              onOpenTasks={() => setMode("tasks")}
               days={days}
               today={today}
               snapshot={snapshot}
@@ -587,30 +559,6 @@ export function PlanningPage() {
           </aside>
         )}
       </div>
-      <Sheet open={!sidebarInline && sidebarSheet} onOpenChange={setSidebarSheet}>
-        <SheetContent
-          side="left"
-          className="w-72 max-w-[calc(100vw-2rem)]"
-          closeLabel={t("planner.page.closeSidebar")}
-        >
-          <SheetHeader className="px-4 py-3">
-            <SheetTitle>{t("settings.navPlanning")}</SheetTitle>
-          </SheetHeader>
-          <SheetPanel className="min-h-0 flex-1 overflow-y-auto p-0">{sidebar}</SheetPanel>
-        </SheetContent>
-      </Sheet>
-      <Sheet open={compact && taskSheetOpen} onOpenChange={setTaskSheetOpen}>
-        <SheetContent
-          side="right"
-          className="w-80 max-w-[calc(100vw-2rem)]"
-          closeLabel={t("planner.page.closeTasks")}
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>{t("planner.mode.tasks")}</SheetTitle>
-          </SheetHeader>
-          <SheetPanel className="min-h-0 flex-1 p-0">{taskPanel}</SheetPanel>
-        </SheetContent>
-      </Sheet>
       {creatingList && (
         <TaskListDialog
           action={{ kind: "create" }}
