@@ -199,15 +199,17 @@ export function EventPreview({
                 </dd>
               </div>
             )}
-            <div className="flex items-center gap-3">
-              <dt>
-                <Clock3
-                  className="size-4 text-muted-foreground"
-                  aria-label={t("planner.preview.timeZone")}
-                />
-              </dt>
-              <dd>{snapshot.timeZone}</dd>
-            </div>
+            {!todo && (
+              <div className="flex items-center gap-3">
+                <dt>
+                  <Clock3
+                    className="size-4 text-muted-foreground"
+                    aria-label={t("planner.preview.timeZone")}
+                  />
+                </dt>
+                <dd>{snapshot.timeZone}</dd>
+              </div>
+            )}
             {(todo ? todo.notes : event.notes) && (
               <div className="flex items-start gap-3">
                 <dt>

@@ -492,17 +492,20 @@ export function PlanningEditor({
                     </div>
                   </div>
                 )}
-              <details className="space-y-3 text-sm [&>summary]:cursor-pointer [&>summary]:text-muted-foreground">
-                <summary>{t("planner.editor.timeZoneSettings")}</summary>
-                <PlanningField label={t("planner.timeZone")}>
-                  <TimeZonePicker
-                    label={t("planner.timeZone")}
-                    value={timeZone}
-                    disabled={busy || !!readOnly}
-                    onChange={setTimeZone}
-                  />
-                </PlanningField>
-              </details>
+              {/* Tasks follow the calendar's time zone, like Google Tasks; only events expose it. */}
+              {target.kind === "event" && !todo && (
+                <details className="space-y-3 text-sm [&>summary]:cursor-pointer [&>summary]:text-muted-foreground">
+                  <summary>{t("planner.editor.timeZoneSettings")}</summary>
+                  <PlanningField label={t("planner.timeZone")}>
+                    <TimeZonePicker
+                      label={t("planner.timeZone")}
+                      value={timeZone}
+                      disabled={busy || !!readOnly}
+                      onChange={setTimeZone}
+                    />
+                  </PlanningField>
+                </details>
+              )}
             </fieldset>
             {error && (
               <SettingsNotice role="alert" variant="action-error">
