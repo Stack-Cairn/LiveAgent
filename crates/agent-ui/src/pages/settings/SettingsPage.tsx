@@ -6,6 +6,7 @@ import {
   BookOpen,
   Brain,
   Cable,
+  CalendarDays,
   Clock3,
   Cloud,
   Cpu,
@@ -19,6 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SettingsSectionDefinition, UiExtensionRegistry } from "../../contracts/registry";
 import { AgentsSection } from "./AgentsSection";
+import { CalendarSection } from "./CalendarSection";
 import { CronSection } from "./CronSection";
 import { CuaDriverSection } from "./CuaDriverSection";
 import { HooksSection } from "./HooksSection";
@@ -131,6 +133,15 @@ export function SettingsPage(props: SettingsPageProps) {
           <ResourceHubSection resource={id} settings={settings} setSettings={setSettings} />
         ),
       })),
+      {
+        id: "planning",
+        groupKey: "settings.groupResources",
+        groupOrder: 20,
+        order: 35,
+        labelKey: "settings.navPlanning",
+        icon: <CalendarDays className={extension.iconClassName} />,
+        render: () => <CalendarSection settings={settings} setSettings={setSettings} />,
+      },
       {
         id: "memory",
         groupKey: "settings.groupResources",

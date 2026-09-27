@@ -16,6 +16,7 @@ export type SectionId =
   | "memory"
   | "hooks"
   | "cron"
+  | "planning"
   | "devices"
   | "cua"
   | "remote";
