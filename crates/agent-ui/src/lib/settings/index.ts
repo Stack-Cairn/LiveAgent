@@ -548,6 +548,47 @@ export function normalizeChatRuntimeControlsForProvider(
   return { ...controls, reasoning };
 }
 
+/**
+ * 会话选择附带的思考设置覆盖全局默认，仅用于派生显示/请求参数，不写回设置。
+ * 档位写入该模型在各供应商键下的档位桶，后续按模型档位表钳制。
+ */
+export function applyConversationThinking(
+  input: unknown,
+  selection: SelectedModel | undefined,
+): ChatRuntimeControls {
+  const controls = normalizeChatRuntimeControls(input);
+  if (!selection) return controls;
+  const { model, thinkingEnabled, reasoning } = selection;
+  return {
+    ...controls,
+    thinkingEnabled: thinkingEnabled ?? controls.thinkingEnabled,
+    reasoningByModel: reasoning
+      ? Object.fromEntries(
+          CHAT_RUNTIME_REASONING_PROVIDER_KEYS.map((key) => [
+            key,
+            { ...controls.reasoningByModel[key], [model]: reasoning },
+          ]),
+        )
+      : controls.reasoningByModel,
+  };
+}
+
+/** 思考控件的调整同时保存到会话选择；非思考字段的调整返回 undefined。 */
+export function applyThinkingPatchToSelection(
+  selection: SelectedModel | undefined,
+  current: Pick<ChatRuntimeControls, "thinkingEnabled" | "reasoning">,
+  patch: Partial<ChatRuntimeControls>,
+): SelectedModel | undefined {
+  if (!selection || (patch.thinkingEnabled === undefined && patch.reasoning === undefined)) {
+    return undefined;
+  }
+  return {
+    ...selection,
+    thinkingEnabled: patch.thinkingEnabled ?? current.thinkingEnabled,
+    reasoning: patch.reasoning ?? current.reasoning,
+  };
+}
+
 export function updateChatRuntimeControlsForProvider(
   input: unknown,
   patch: Partial<ChatRuntimeControls>,
@@ -1592,7 +1633,14 @@ export function normalizeSelectedModel(input: unknown): SelectedModel | undefine
   const model = typeof obj.model === "string" ? obj.model.trim() : "";
 
   if (!customProviderId || !model) return undefined;
-  return { customProviderId, model };
+  return {
+    customProviderId,
+    model,
+    ...(typeof obj.thinkingEnabled === "boolean" ? { thinkingEnabled: obj.thinkingEnabled } : {}),
+    ...(typeof obj.reasoning === "string" && (REASONING_LEVELS as string[]).includes(obj.reasoning)
+      ? { reasoning: obj.reasoning as ReasoningLevel }
+      : {}),
+  };
 }
 
 export function parseSelectedModelJson(json: string | null | undefined): SelectedModel | undefined {

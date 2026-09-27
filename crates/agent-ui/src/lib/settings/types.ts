@@ -418,6 +418,9 @@ export type WorkspaceProject = {
 export type SelectedModel = {
   customProviderId: string;
   model: string;
+  /** 会话选择附带的思考设置，随 selectedModelJson 保存在会话历史中。 */
+  thinkingEnabled?: boolean;
+  reasoning?: ReasoningLevel;
 };
 
 export type PromptCacheHintMode = "auto" | "openai-key" | "openrouter-session" | "none";

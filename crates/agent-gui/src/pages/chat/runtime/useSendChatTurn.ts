@@ -57,6 +57,7 @@ import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import {
   type AppSettings,
+  applyConversationThinking,
   applyMcpOpsToAppSettings,
   type ChatRuntimeControls,
   type CommandSafetyMode,
@@ -65,10 +66,12 @@ import {
   getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
+  normalizeChatRuntimeControlsForProvider,
   removeWorkspaceResourceReferences,
   resolveEffectivePromptSettings,
   resolveWorkspaceResources,
   type SelectedModel,
+  serializeSelectedModelJson,
   strictestCommandSafetyMode,
   updateMemorySettings,
   updateSkills,
@@ -490,14 +493,30 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
 
-    const { selectedModel, provider, providerId, model } = effectiveSelectedModel;
-    updateConversationRuntimeEntry(conversationId, (prev) =>
-      selectedModelsMatch(prev.selectedModel, selectedModel) ? prev : { ...prev, selectedModel },
-    );
-    const runtimeControls =
+    const { provider, providerId, model } = effectiveSelectedModel;
+    // 远程请求携带目标会话的思考设置；本地发送叠加会话选择中的思考设置。
+    const runtimeControls = applyConversationThinking(
       gatewayBridgeRequest?.runtimeControlsOverride ??
-      overrides?.runtimeControlsOverride ??
-      settings.chatRuntimeControls;
+        overrides?.runtimeControlsOverride ??
+        settings.chatRuntimeControls,
+      effectiveSelectedModel.selectedModel,
+    );
+    // 本轮实际使用的思考设置随模型写入会话选择，草稿首次发送与远程发送也会保存。
+    const turnThinking = normalizeChatRuntimeControlsForProvider(runtimeControls, {
+      providerId: provider.type,
+      requestFormat: provider.requestFormat,
+      modelId: model,
+    });
+    const selectedModel: SelectedModel = {
+      ...effectiveSelectedModel.selectedModel,
+      thinkingEnabled: turnThinking.thinkingEnabled,
+      reasoning: turnThinking.reasoning,
+    };
+    updateConversationRuntimeEntry(conversationId, (prev) =>
+      serializeSelectedModelJson(prev.selectedModel) === serializeSelectedModelJson(selectedModel)
+        ? prev
+        : { ...prev, selectedModel },
+    );
     const providerConfig = createProviderRuntimeConfig(provider, model, runtimeControls);
     // cc-switch style auto-failover plan for this turn (shared by the agent
     // and text runtimes). The switch callback makes the winning fallback the
@@ -519,7 +538,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             updateConversationRuntimeEntry(conversationId, (prev) =>
               selectedModelsMatch(prev.selectedModel, nextSelectedModel)
                 ? prev
-                : { ...prev, selectedModel: nextSelectedModel },
+                : { ...prev, selectedModel: { ...prev.selectedModel, ...nextSelectedModel } },
             );
           },
         }

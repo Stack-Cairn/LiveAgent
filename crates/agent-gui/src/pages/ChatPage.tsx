@@ -142,6 +142,7 @@ import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
 import {
+  applyConversationThinking,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
   getRightDockFileTreeState,
@@ -2245,7 +2246,10 @@ function ChatPageContent(props: ChatPageProps) {
           return createProviderRuntimeConfig(
             selection.provider,
             selection.model,
-            clarifySettingsRef.current.chatRuntimeControls,
+            applyConversationThinking(
+              clarifySettingsRef.current.chatRuntimeControls,
+              selection.selectedModel,
+            ),
           );
         });
         clarifyRunnersRef.current.set(conversationId, runner);
@@ -3388,7 +3392,7 @@ function ChatPageContent(props: ChatPageProps) {
       ? settings.customProviders.find((entry) => entry.id === paneSelectedModel.customProviderId)
       : undefined;
     const paneRuntimeControls = normalizeChatRuntimeControlsForProvider(
-      settings.chatRuntimeControls,
+      applyConversationThinking(settings.chatRuntimeControls, paneSelectedModel),
       {
         providerId: paneProvider?.type,
         requestFormat: paneProvider?.requestFormat,

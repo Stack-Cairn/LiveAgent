@@ -9,6 +9,8 @@ import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
 import { toModelValue } from "@/lib/providers/llm";
 import {
   type AppSettings,
+  applyConversationThinking,
+  applyThinkingPatchToSelection,
   type ChatRuntimeControls,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
@@ -94,13 +96,16 @@ export function useGatewayChatConfiguration({
   // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档。
   const chatRuntimeControlsForCurrentProvider = useMemo(
     () =>
-      normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
-        providerId: currentChatProvider?.type,
-        requestFormat: currentChatProvider?.requestFormat,
-        modelId: activeSelectedModel?.model,
-      }),
+      normalizeChatRuntimeControlsForProvider(
+        applyConversationThinking(settings.chatRuntimeControls, activeSelectedModel),
+        {
+          providerId: currentChatProvider?.type,
+          requestFormat: currentChatProvider?.requestFormat,
+          modelId: activeSelectedModel?.model,
+        },
+      ),
     [
-      activeSelectedModel?.model,
+      activeSelectedModel,
       currentChatProvider?.requestFormat,
       currentChatProvider?.type,
       settings.chatRuntimeControls,
@@ -109,6 +114,17 @@ export function useGatewayChatConfiguration({
   );
   const handleChatRuntimeControlsChange = useCallback(
     (patch: Partial<ChatRuntimeControls>) => {
+      // 思考调整保存到本会话的选择（随下一次发送写入会话历史）；
+      // 全局设置继续记录最近的调整，作为新会话的默认值。
+      const selection = applyThinkingPatchToSelection(
+        activeSelectedModel,
+        chatRuntimeControlsForCurrentProvider,
+        patch,
+      );
+      const targetConversationId = displayedConversationId.trim();
+      if (selection && targetConversationId) {
+        setConversationModelOverrides((prev) => new Map(prev).set(targetConversationId, selection));
+      }
       setSettings((prev) => ({
         ...prev,
         chatRuntimeControls: updateChatRuntimeControlsForProvider(prev.chatRuntimeControls, patch, {
@@ -119,9 +135,12 @@ export function useGatewayChatConfiguration({
       }));
     },
     [
-      activeSelectedModel?.model,
+      activeSelectedModel,
+      chatRuntimeControlsForCurrentProvider,
       currentChatProvider?.requestFormat,
       currentChatProvider?.type,
+      displayedConversationId,
+      setConversationModelOverrides,
       setSettings,
     ],
   );
@@ -138,13 +157,14 @@ export function useGatewayChatConfiguration({
       if (targetConversationId) {
         setConversationModelOverrides((prev) => {
           const next = new Map(prev);
-          next.set(targetConversationId, selection);
+          // 切换模型保留会话已有的思考设置；全局默认只记录模型。
+          next.set(targetConversationId, { ...activeSelectedModel, ...selection });
           return next;
         });
       }
       setSettings((prev) => setSelectedModel(prev, selection));
     },
-    [displayedConversationId, setConversationModelOverrides, setSettings],
+    [activeSelectedModel, displayedConversationId, setConversationModelOverrides, setSettings],
   );
 
   const workspaceResources = useMemo(
