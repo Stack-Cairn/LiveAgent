@@ -25,7 +25,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.navCron": "定时任务",
   "settings.navRemote": "Remote",
   "settings.navSkills": "Skills",
-  "settings.navPlanning": "日历",
+  "settings.navPlanning": "日程",
   "settings.navMemory": "记忆",
   "settings.groupGeneral": "通用",
   "settings.groupIntelligence": "智能",
