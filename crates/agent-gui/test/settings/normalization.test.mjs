@@ -316,7 +316,7 @@ test("DeepSeek provider normalization keeps native routing and native search", (
   assert.equal(provider.promptCacheHintMode, undefined);
   assert.equal(provider.nativeWebSearchEnabled, true);
   assert.equal(provider.models[0].contextWindow, 1_000_000);
-  assert.equal(provider.models[0].maxOutputToken, 384_000);
+  assert.equal(provider.models[0].maxOutputToken, 393_216);
 });
 
 test("legacy Codex-group DeepSeek configs stay untouched — migration is user-driven", () => {
@@ -3045,7 +3045,7 @@ test("cross-provider models resolve real catalog limits instead of provider fall
     "deepseek-v4-flash",
   );
   assert.equal(deepseekUnderClaude.contextWindow, 1_000_000);
-  assert.equal(deepseekUnderClaude.maxOutputToken, 384_000);
+  assert.equal(deepseekUnderClaude.maxOutputToken, 393_216);
   const glmUnderCodex = settings.getProviderModelDefaults("codex", "glm-4.7");
   assert.equal(glmUnderCodex.contextWindow, 204_800);
   assert.equal(glmUnderCodex.maxOutputToken, 131_072);

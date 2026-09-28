@@ -81,9 +81,10 @@ test("generated catalog upholds the data invariants", () => {
 test("openai catalog prefers Codex metadata and keeps models.dev supplements", () => {
   // Codex models.json 的 context_window 是输入侧预算（272K），生成期换算成
   // 与目录其余分区一致的总窗口语义：272K + 128K（models.dev 输出补充）= 400K。
+  // gpt-5.4 left openai/codex models.json in the 2026-09-27 refresh; it now follows
+  // models.dev (1.05M total window) and is no longer a Codex-sourced model.
   for (const modelId of [
     "gpt-5.2",
-    "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.5",
     "gpt-5.6-luna",
