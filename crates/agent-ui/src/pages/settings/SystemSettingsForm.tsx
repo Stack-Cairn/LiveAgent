@@ -11,6 +11,7 @@ import {
   type ExecutionMode,
   type FontScaleSettings,
   isValidSystemProxyHost,
+  resolveDefaultTimeZone,
   type SystemProxyConfig,
   type SystemProxyType,
   THEME_OPTIONS,
@@ -33,6 +34,10 @@ import {
   SettingsToggleGroup,
   SettingsToggleGroupItem,
 } from "@liveagent/ui/components/settings/SettingsToggleGroup";
+import {
+  preloadTimeZoneOptions,
+  TimeZonePicker,
+} from "@liveagent/ui/components/settings/TimeZonePicker";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   Dialog,
@@ -124,7 +129,13 @@ function ProxySettingsRow({
 
 export function SystemSettingsForm(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const systemTimeZone = resolveDefaultTimeZone({
+    defaultTimeZone: "",
+    resolvedTimeZone: settings.system.resolvedTimeZone,
+  });
+
+  useEffect(() => preloadTimeZoneOptions(locale), [locale]);
 
   const executionMode = settings.system.executionMode;
 
@@ -431,6 +442,22 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                 ))}
               </SettingsSelectContent>
             </Select>
+          }
+        />
+
+        <SettingsRow
+          title={t("settings.defaultTimeZone")}
+          description={t("settings.defaultTimeZoneDesc")}
+          control={
+            <TimeZonePicker
+              value={settings.system.defaultTimeZone}
+              label={t("settings.defaultTimeZone")}
+              autoLabel={t("settings.defaultTimeZoneAuto").replace("{zone}", systemTimeZone)}
+              triggerClassName="w-64 max-w-full"
+              onChange={(defaultTimeZone) =>
+                setSettings((prev) => updateSystem(prev, { defaultTimeZone }))
+              }
+            />
           }
         />
       </SettingsGroup>

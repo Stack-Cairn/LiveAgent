@@ -11,6 +11,7 @@ import {
   SettingsToggleGroup,
   SettingsToggleGroupItem,
 } from "../../components/settings/SettingsToggleGroup";
+import { TimeZonePicker } from "../../components/settings/TimeZonePicker";
 import { Button } from "../../components/ui/button";
 import { ConfirmDeletePopover } from "../../components/ui/confirm-action-popover";
 import { Select, SelectItem, SelectValue } from "../../components/ui/select";
@@ -32,7 +33,6 @@ import {
   SUBSCRIPTION_INTERVALS,
   SubscriptionDialog,
 } from "../planning/SubscriptionDialog";
-import { TimeZonePicker } from "../planning/TimeZonePicker";
 import { usePlanningT } from "../planning/usePlanningT";
 import { AgentActivationSwitch, PromptTag, SettingsGroup, SettingsRow } from "./shared";
 

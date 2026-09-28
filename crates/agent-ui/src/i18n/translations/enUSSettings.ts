@@ -289,6 +289,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.language": "Language",
   "settings.languageDesc":
     "Choose the display language for the interface. Changes take effect immediately.",
+  "settings.defaultTimeZone": "Default time zone",
+  "settings.defaultTimeZoneDesc":
+    "Used by the schedule, scheduled tasks and background date math; follows the system by default.",
+  "settings.defaultTimeZoneAuto": "Automatic (system: {zone})",
+  "settings.timeZoneSearch": "Search time zones or cities",
+  "settings.timeZoneEmpty": "No matching time zones",
   "settings.chinese": "简体中文",
   "settings.english": "English",
   "settings.fontSize": "Font Size",

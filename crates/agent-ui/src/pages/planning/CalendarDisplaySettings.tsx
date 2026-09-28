@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CalendarDays, MoreHorizontal, Trash2, Upload } from "../../components/IconSet";
+import { TimeZonePicker } from "../../components/settings/TimeZonePicker";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
@@ -7,7 +8,6 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "../../com
 import { planningLunarAvailable } from "../../lib/planning/i18n";
 import type { CalendarPreferences } from "./calendarDisplay";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
-import { TimeZonePicker } from "./TimeZonePicker";
 import { usePlanningT } from "./usePlanningT";
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);

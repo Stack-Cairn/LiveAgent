@@ -1,10 +1,6 @@
 import { useMemo } from "react";
-import {
-  SettingsCombobox,
-  type SettingsComboboxOption,
-} from "../../components/settings/SettingsCombobox";
-import { planningDateLocale } from "../../lib/planning/i18n";
-import { usePlanningT } from "./usePlanningT";
+import { type Locale, useLocale } from "../../i18n/index";
+import { SettingsCombobox, type SettingsComboboxOption } from "./SettingsCombobox";
 
 // Intl has no localized city names; cover common zones so Chinese searches like "东京" work.
 // Engines differ between canonical and legacy IDs (Asia/Kolkata vs Asia/Calcutta), so both are listed.
@@ -112,8 +108,8 @@ function timeZoneOptions(locale: string) {
 }
 
 /** Warm the cache while the browser is idle, before the picker is first opened. */
-export function preloadTimeZoneOptions(locale: string) {
-  const run = () => timeZoneOptions(locale);
+export function preloadTimeZoneOptions(locale: Locale) {
+  const run = () => timeZoneOptions(zoneLabelLocale(locale));
   if (typeof requestIdleCallback === "function") {
     const id = requestIdleCallback(run, { timeout: 3000 });
     return () => cancelIdleCallback(id);
@@ -122,40 +118,52 @@ export function preloadTimeZoneOptions(locale: string) {
   return () => clearTimeout(id);
 }
 
+/** Intl locale used for zone names; only the two UI locales are supported. */
+function zoneLabelLocale(locale: Locale) {
+  return locale === "en-US" ? "en-US" : "zh-CN";
+}
+
 /** Searchable IANA time zone list, ordered by current UTC offset. */
-function useTimeZoneOptions(current: string, locale: string) {
+function useTimeZoneOptions(current: string, locale: string, autoLabel?: string) {
   return useMemo(() => {
     const options = timeZoneOptions(locale);
-    return !current || options.some((option) => option.value === current)
-      ? options
-      : [{ value: current, label: current }, ...options];
-  }, [current, locale]);
+    const zones =
+      !current || options.some((option) => option.value === current)
+        ? options
+        : [{ value: current, label: current }, ...options];
+    return autoLabel === undefined ? zones : [{ value: "", label: autoLabel }, ...zones];
+  }, [autoLabel, current, locale]);
 }
 
 export function TimeZonePicker({
   value,
   onChange,
   label,
+  autoLabel,
   id,
   disabled,
+  triggerClassName = "w-full max-w-none",
 }: {
   value: string;
   onChange(zone: string): void;
   label: string;
+  /** When set, prepends an "automatic" option whose value is the empty string. */
+  autoLabel?: string;
   id?: string;
   disabled?: boolean;
+  triggerClassName?: string;
 }) {
-  const { t, locale } = usePlanningT();
-  const options = useTimeZoneOptions(value, planningDateLocale(locale));
+  const { t, locale } = useLocale();
+  const options = useTimeZoneOptions(value, zoneLabelLocale(locale), autoLabel);
   return (
     <SettingsCombobox
       value={value}
       options={options}
       onValueChange={onChange}
       ariaLabel={label}
-      searchPlaceholder={t("planner.zone.search")}
-      emptyLabel={t("planner.zone.empty")}
-      triggerClassName="w-full max-w-none"
+      searchPlaceholder={t("settings.timeZoneSearch")}
+      emptyLabel={t("settings.timeZoneEmpty")}
+      triggerClassName={triggerClassName}
       disabled={disabled}
       id={id}
     />

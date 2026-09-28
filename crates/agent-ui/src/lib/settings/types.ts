@@ -352,6 +352,16 @@ export type SystemSettings = {
   commandSafetyMode: CommandSafetyMode;
   /** Browser 工具的浏览器接入模式;缺省 auto(旧快照缺失该字段时同 auto)。 */
   browserAutomationMode: BrowserAutomationMode;
+  /**
+   * 全局默认时区(IANA 名);"" = 自动跟随桌面端 OS 时区。日程、定时任务与后台日期
+   * 计算统一使用。有效值用 `resolveDefaultTimeZone` 求得。
+   */
+  defaultTimeZone: string;
+  /**
+   * 只读派生值:桌面后端加载设置时注入的「自动」档时区(桌面 OS 时区)。保存时被
+   * 后端忽略;WebUI 借此显示桌面时区而不是浏览器时区。
+   */
+  resolvedTimeZone?: string;
   workspaceProjects: WorkspaceProject[];
   workspaceProjectGroups: WorkspaceProjectGroup[];
   workspaceProjectOrder?: string[];

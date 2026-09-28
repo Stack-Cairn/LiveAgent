@@ -1520,6 +1520,42 @@ export function normalizeBrowserAutomationMode(input: unknown): BrowserAutomatio
     : "auto";
 }
 
+/** 合法 IANA 时区名(按当前 JS 引擎的 Intl 校验)。 */
+function isValidTimeZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 默认时区归一:非字符串 / 空串 / 非法时区一律回 ""(自动)。 */
+export function normalizeDefaultTimeZone(input: unknown): string {
+  if (typeof input !== "string") return "";
+  const zone = input.trim();
+  return zone && isValidTimeZone(zone) ? zone : "";
+}
+
+/** 本机 JS 运行时的时区;取不到时回 UTC。 */
+function runtimeTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/**
+ * 全局有效时区:手选值 → 后端注入的桌面 OS 时区 → 当前 JS 运行时时区。
+ * 与后端 `load_runtime_default_time_zone` 同一优先级。
+ */
+export function resolveDefaultTimeZone(
+  system: Pick<SystemSettings, "defaultTimeZone" | "resolvedTimeZone">,
+): string {
+  return system.defaultTimeZone || system.resolvedTimeZone || runtimeTimeZone();
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
@@ -1530,6 +1566,10 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     cuaAllowSelfTargeting: obj.cuaAllowSelfTargeting === true,
     commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
     browserAutomationMode: normalizeBrowserAutomationMode(obj.browserAutomationMode),
+    defaultTimeZone: normalizeDefaultTimeZone(obj.defaultTimeZone),
+    ...(typeof obj.resolvedTimeZone === "string" && obj.resolvedTimeZone.trim()
+      ? { resolvedTimeZone: obj.resolvedTimeZone.trim() }
+      : {}),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     workspaceProjectGroups: normalizeWorkspaceProjectGroups(obj.workspaceProjectGroups),
     workspaceProjectOrder: [
@@ -1772,6 +1812,7 @@ export function getDefaultSettings(): AppSettings {
       workdir: "",
       commandSafetyMode: "auto",
       browserAutomationMode: "auto",
+      defaultTimeZone: "",
       workspaceProjects: [],
       workspaceProjectGroups: [],
       activeWorkspaceProjectId: undefined,
