@@ -11,7 +11,6 @@ import {
   SettingsToggleGroup,
   SettingsToggleGroupItem,
 } from "../../components/settings/SettingsToggleGroup";
-import { TimeZonePicker } from "../../components/settings/TimeZonePicker";
 import { Button } from "../../components/ui/button";
 import { ConfirmDeletePopover } from "../../components/ui/confirm-action-popover";
 import { Select, SelectItem, SelectValue } from "../../components/ui/select";
@@ -81,19 +80,6 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
       onToggle={() => setPreferences({ [key]: !preferences[key] })}
     />
   );
-  const setZone = async (timeZone: string) => {
-    if (!snapshot || timeZone === snapshot.timeZone) return;
-    setError("");
-    try {
-      await planningStore.mutate({
-        action: "timezone.set",
-        expectedRevision: snapshot.seq,
-        data: { timeZone },
-      });
-    } catch (e) {
-      setError(localizePlanningError(e));
-    }
-  };
   return (
     <div className="mx-auto w-full max-w-920px space-y-8">
       <SettingsGroup title={t("planner.settings.entry")}>
@@ -120,23 +106,6 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
       </SettingsGroup>
 
       <SettingsGroup title={t("planner.display.title")}>
-        <SettingsRow
-          title={t("planner.timeZone")}
-          description={t("planner.settings.timeZoneHint")}
-          control={
-            snapshot ? (
-              <div className="w-72 max-w-full">
-                <TimeZonePicker
-                  label={t("planner.timeZone")}
-                  value={snapshot.timeZone}
-                  onChange={(zone) => void setZone(zone)}
-                />
-              </div>
-            ) : (
-              <Skeleton className="h-8 w-48" />
-            )
-          }
-        />
         <SettingsRow
           title={t("planner.display.weekStart")}
           control={

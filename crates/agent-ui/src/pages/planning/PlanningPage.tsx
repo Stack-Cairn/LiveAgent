@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HubHeader } from "../../components/hub/HubChrome";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";
-import { preloadTimeZoneOptions } from "../../components/settings/TimeZonePicker";
 import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
 import { Skeleton } from "../../components/ui/skeleton";
@@ -174,7 +173,6 @@ export function PlanningPage() {
     const timer = setInterval(() => setClock(Date.now()), undoActive ? 1000 : 60_000);
     return () => clearInterval(timer);
   }, [undoActive]);
-  useEffect(() => preloadTimeZoneOptions(locale), [locale]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching Agent scopes must reset drafts
   useEffect(() => {
     setEditor(null);
@@ -449,18 +447,8 @@ export function PlanningPage() {
         days={days}
         view={view}
         mode={mode}
-        zone={zone}
         preferences={preferences}
         onPreferences={setPreferences}
-        onZoneChange={(timeZone) =>
-          run(() =>
-            planningStore.mutate({
-              action: "timezone.set",
-              expectedRevision: snapshot.seq,
-              data: { timeZone },
-            }),
-          )
-        }
         interaction={interaction}
         busy={busy}
         onNavigate={navigate}

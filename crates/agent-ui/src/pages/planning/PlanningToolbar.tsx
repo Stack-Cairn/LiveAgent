@@ -56,10 +56,8 @@ export function PlanningToolbar({
   days,
   view,
   mode,
-  zone,
   preferences,
   onPreferences,
-  onZoneChange,
   interaction,
   busy,
   onNavigate,
@@ -73,10 +71,8 @@ export function PlanningToolbar({
   days: string[];
   view: PlanningView;
   mode: PlanningMode;
-  zone: string;
   preferences: CalendarPreferences;
   onPreferences(p: Partial<CalendarPreferences>): void;
-  onZoneChange(zone: string): Promise<void>;
   interaction: boolean;
   busy: boolean;
   onNavigate(direction: number): void;
@@ -157,8 +153,6 @@ export function PlanningToolbar({
           onTrash={onTrash}
           value={preferences}
           onChange={onPreferences}
-          zone={zone}
-          onZoneChange={onZoneChange}
           disabled={interaction || busy}
         />
         {mode === "calendar" && (

@@ -126,7 +126,6 @@ export interface PlanningQuery {
 export type PlanningAction =
   | `group.${"create" | "update" | "delete"}`
   | `tag.${"create" | "update" | "delete"}`
-  | "timezone.set"
   | "mytasks.delete"
   | "calendar.create"
   | "calendar.update"

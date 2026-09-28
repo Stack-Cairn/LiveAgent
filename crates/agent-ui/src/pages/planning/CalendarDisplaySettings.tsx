@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { CalendarDays, MoreHorizontal, Trash2, Upload } from "../../components/IconSet";
-import { TimeZonePicker } from "../../components/settings/TimeZonePicker";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
@@ -24,8 +23,6 @@ export function CalendarDisplaySettings({
   onTrash,
   value,
   onChange,
-  zone,
-  onZoneChange,
   disabled,
 }: {
   /** Display settings only apply to the calendar views. */
@@ -35,8 +32,6 @@ export function CalendarDisplaySettings({
   onTrash(): void;
   value: CalendarPreferences;
   onChange(patch: Partial<CalendarPreferences>): void;
-  zone: string;
-  onZoneChange(zone: string): Promise<void>;
   disabled: boolean;
 }) {
   const { t, locale } = usePlanningT();
@@ -87,16 +82,6 @@ export function CalendarDisplaySettings({
             <PopoverTitle className="text-sm font-semibold">
               {t("planner.display.title")}
             </PopoverTitle>
-            <PlanningField label={t("planner.timeZone")}>
-              <TimeZonePicker
-                label={t("planner.timeZone")}
-                value={zone}
-                disabled={disabled}
-                onChange={(next) => {
-                  if (next !== zone) void onZoneChange(next);
-                }}
-              />
-            </PlanningField>
             <PlanningField label={t("planner.display.weekStart")}>
               <PlanningSelect
                 value={value.weekStartsOn}

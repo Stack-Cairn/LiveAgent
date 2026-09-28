@@ -31,13 +31,13 @@ test("Planning tools preserve revision conflicts, support classification and rej
 });
 
 
-test("Agent tools read recursive tasks and expose scheduling, ordering, import and timezone mutations", async () => {
+test("Agent tools read recursive tasks and expose scheduling, ordering and import mutations", async () => {
  const {bundle,calls}=harness();
  const result=await bundle.executeToolCall({id:"tree",name:"PlanningQuery",arguments:{todoId:"t",includeDescendants:true}});
  assert.deepEqual(JSON.parse(result.content[0].text).todos.map(t=>t.id).sort(),["nested","t","x"]);
  const children=await bundle.executeToolCall({id:"children",name:"PlanningQuery",arguments:{parentId:"x"}});
  assert.deepEqual(JSON.parse(children.content[0].text).todos.map(t=>t.id),["nested"]);
- for (const action of ["todo.move","todo.schedule","calendar.import","timezone.set","event.restoreException"]) {
+ for (const action of ["todo.move","todo.schedule","calendar.import","event.restoreException"]) {
   const before=calls.length;
   const response=await bundle.executeToolCall({id:action,name:"PlanningMutate",arguments:{action,requestId:`test-${action}`,id:"t",expectedRevision:7,data:{parentId:null,beforeId:"x",relativeRevision:4}}});
   assert.equal(calls.length,before+1);assert.equal(calls.at(-1).args.input.action,action);assert.equal(response.isError,true); // Preserve backend conflict handling.
@@ -45,6 +45,17 @@ test("Agent tools read recursive tasks and expose scheduling, ordering, import a
  const before=calls.length;
  await bundle.executeToolCall({id:"invalid",name:"PlanningMutate",arguments:{action:"calendar.schedule",data:{}}});
  assert.equal(calls.length,before);
+});
+
+test("Agent tools reject timezone.set because the time zone is a global setting", async () => {
+ const {bundle,calls}=harness();
+ const response=await bundle.executeToolCall({id:"tz",name:"PlanningMutate",arguments:{action:"timezone.set",requestId:"test-timezone-set",expectedRevision:1,data:{timeZone:"UTC"}}});
+ assert.equal(response.isError,true);
+ assert.equal(calls.length,0);
+ const mutate=bundle.tools.find(tool=>tool.name==="PlanningMutate");
+ assert.equal(JSON.stringify(mutate.parameters).includes("timezone.set"),false);
+ assert.match(mutate.description,/app-wide default time zone/);
+ assert.doesNotMatch(mutate.description,/timezone\.set/);
 });
 
 test("Planning query mirrors the UI's starred list and overdue rollup", async () => {
