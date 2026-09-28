@@ -198,6 +198,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
   toolStatus?: string | null;
   toolStatusVariant?: "default" | "compaction";
   durationMs?: number;
+  startedAtMs?: number;
   renderMode?: "streaming" | "static";
   readOnly?: boolean;
   redactToolContent?: boolean;
@@ -211,6 +212,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
     toolStatus,
     toolStatusVariant,
     durationMs,
+    startedAtMs,
     renderMode = isStreaming ? "streaming" : "static",
     readOnly = false,
     redactToolContent = false,
@@ -275,6 +277,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
           durationMs={durationMs}
           hasDetails={layout.work.length > 0 || showDetailedStatus}
           running={running}
+          startedAtMs={startedAtMs}
         >
           {layout.work.map((entry) => renderEntry(entry, true))}
           {showDetailedStatus ? (

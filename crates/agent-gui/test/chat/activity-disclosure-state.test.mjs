@@ -157,6 +157,35 @@ test("manual work-trace disclosure survives running state transitions", () => {
   act(() => root.unmount());
 });
 
+test("a running work trace keeps counting from the turn start across remounts", () => {
+  // 切换会话 / 虚拟列表回收会卸载工作区块；重挂后「处理中」必须接着回合真实
+  // 起点计时，而不是从挂载时刻重新从 1s 数起（#875）。
+  const startedAtMs = Date.now() - 15_000;
+  const mount = () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        React.createElement(AssistantWorkTrace, {
+          hasDetails: false,
+          running: true,
+          startedAtMs,
+          children: null,
+        }),
+      );
+    });
+    return { container, root };
+  };
+
+  const first = mount();
+  assert.match(first.container.textContent, /处理中 1[5-6]s/);
+  act(() => first.root.unmount());
+
+  const second = mount();
+  assert.match(second.container.textContent, /处理中 1[5-6]s/);
+  act(() => second.root.unmount());
+});
+
 test("an empty running work trace shows the plain processing header, not a button", () => {
   const container = document.createElement("div");
   const root = createRoot(container);

@@ -33,6 +33,8 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
   toolStatus?: string | null;
   toolStatusVariant?: "default" | "compaction";
   durationMs?: number;
+  /** 运行中回合的起点（epoch ms），见 AssistantWorkTrace.startedAtMs。 */
+  startedAtMs?: number;
   readOnly?: boolean;
   redactToolContent?: boolean;
   workdir?: string;
@@ -46,6 +48,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
     toolStatus,
     toolStatusVariant,
     durationMs,
+    startedAtMs,
     readOnly = false,
     redactToolContent = false,
     workdir,
@@ -69,6 +72,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
           toolStatus={toolStatus}
           toolStatusVariant={toolStatusVariant}
           durationMs={durationMs}
+          startedAtMs={startedAtMs}
           readOnly={readOnly}
           redactToolContent={redactToolContent}
           workdir={workdir}

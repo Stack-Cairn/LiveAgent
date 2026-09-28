@@ -87,6 +87,7 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
             durationMs={unit.durationMs}
             hasDetails={workEntries.length > 0 || isCompactionRunning}
             running={row.live}
+            startedAtMs={unit.startedAtMs}
           >
             {workEntries.map((entry) => renderWorkEntry(entry))}
             {isCompactionRunning ? (

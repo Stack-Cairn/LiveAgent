@@ -60,6 +60,7 @@ export function AssistantWorkTrace({
   attentionRequired = false,
   awaitingDecision = false,
   running,
+  startedAtMs,
   collapseAfterAnswer = false,
 }: {
   children: ReactNode;
@@ -79,6 +80,12 @@ export function AssistantWorkTrace({
    */
   awaitingDecision?: boolean;
   running: boolean;
+  /**
+   * 回合真实起点（epoch ms，通常是触发本回合的用户消息时间戳）。组件会随
+   * 切换会话、虚拟列表回收而卸载重挂；只靠挂载时刻计时会让「处理中」归零。
+   * 缺省时退回挂载时刻。
+   */
+  startedAtMs?: number;
   /** 回复有总结文案（answer）时：回合结束（流停止）后自动折叠一次。 */
   collapseAfterAnswer?: boolean;
 }) {
@@ -91,8 +98,12 @@ export function AssistantWorkTrace({
   useEffect(() => {
     if (!running && !attentionRequired && collapseAfterAnswer) setExpanded(false);
   }, [running, attentionRequired, collapseAfterAnswer, setExpanded]);
-  const [elapsedMs, setElapsedMs] = useState(durationMs ?? 0);
-  const startedAtRef = useRef<number | null>(running ? Date.now() : null);
+  const [elapsedMs, setElapsedMs] = useState(
+    () =>
+      durationMs ??
+      (running && startedAtMs !== undefined ? Math.max(0, Date.now() - startedAtMs) : 0),
+  );
+  const startedAtRef = useRef<number | null>(running ? (startedAtMs ?? Date.now()) : null);
 
   useEffect(() => {
     if (!running) {
@@ -104,7 +115,8 @@ export function AssistantWorkTrace({
       return;
     }
 
-    if (startedAtRef.current === null) startedAtRef.current = Date.now();
+    if (startedAtMs !== undefined) startedAtRef.current = startedAtMs;
+    else if (startedAtRef.current === null) startedAtRef.current = Date.now();
     const updateElapsed = () => {
       const startedAt = startedAtRef.current;
       if (startedAt !== null) setElapsedMs(Math.max(0, Date.now() - startedAt));
@@ -117,7 +129,7 @@ export function AssistantWorkTrace({
       updateElapsed();
     }, 1_000);
     return () => window.clearInterval(timer);
-  }, [durationMs, running]);
+  }, [durationMs, running, startedAtMs]);
 
   const elapsedLabel = formatElapsedTime(elapsedMs);
   const label = `${running ? t("chat.work.running") : t("chat.work.activity")}${

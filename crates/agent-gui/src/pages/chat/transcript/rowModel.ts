@@ -88,6 +88,23 @@ function findLiveReplyLeader(
 }
 
 /**
+ * 运行中回合的起点：live 尾部（或被并入的前半段回复）之前最近的用户消息时间戳。
+ * 中间隔着 assistant 说明那是上一轮的用户消息，不能拿来计时，返回 undefined
+ * 让工作区块退回挂载时刻。
+ */
+function findLiveTurnStartedAt(
+  historyItems: readonly RenderTimelineItem[],
+  endIndex: number,
+): number | undefined {
+  for (let index = endIndex - 1; index >= 0; index -= 1) {
+    const item = historyItems[index];
+    if (!item || item.kind === "assistant") return undefined;
+    if (item.kind === "user") return item.timestamp;
+  }
+  return undefined;
+}
+
+/**
  * Rounds of the live reply: the absorbed committed prefix (re-keyed exactly
  * as the persisted twin will be) followed by the streaming continuation,
  * re-keyed as the next part so settle lands on identical unit keys.
@@ -140,6 +157,8 @@ export type AssistantPlaceholderRenderUnit = {
 export type AssistantWorkTraceRenderUnit = {
   kind: "work-trace";
   durationMs?: number;
+  /** 运行中回合的真实起点（触发它的用户消息时间戳），重挂载后计时不归零。 */
+  startedAtMs?: number;
   entries: AssistantTurnLayoutEntry[];
   latestToolGroupKey: string | null;
   /** 回合已有总结文案（answer 层非空）：落定后工作区块可自动折叠成一行。 */
@@ -369,6 +388,7 @@ function canReuseLiveUnit(previous: AssistantUnitRow, next: AssistantUnitRow) {
     return (
       previous.unit.entries.length === nextWorkTrace.entries.length &&
       previous.unit.durationMs === nextWorkTrace.durationMs &&
+      previous.unit.startedAtMs === nextWorkTrace.startedAtMs &&
       previous.unit.entries.every((entry, index) => {
         const nextEntry = nextWorkTrace.entries[index];
         if (!nextEntry) return false;
@@ -436,6 +456,8 @@ type BuildAssistantUnitsInput = {
   replyText: string;
   retryTarget: RenderUserMessage | null;
   anchorUserKey: string | null;
+  /** live 回合没有 retryTarget，起点单独传入。 */
+  liveStartedAtMs?: number;
   liveUnitCache?: Map<string, AssistantUnitRow>;
 };
 
@@ -450,6 +472,7 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
     replyText,
     retryTarget,
     anchorUserKey,
+    liveStartedAtMs,
     liveUnitCache,
   } = input;
   const rows: AssistantUnitRow[] = [];
@@ -498,6 +521,7 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
           !live && timestamp !== undefined && retryTarget?.timestamp !== undefined
             ? Math.max(0, timestamp - retryTarget.timestamp)
             : undefined,
+        startedAtMs: live ? liveStartedAtMs : undefined,
         entries: layout.work,
         latestToolGroupKey,
         hasAnswer: layout.answer.length > 0,
@@ -897,6 +921,10 @@ export function createTranscriptRowModel(): TranscriptRowModel {
           replyText: "",
           retryTarget: null,
           anchorUserKey: visibleHistoryRows.at(-1)?.anchorUserKey ?? null,
+          liveStartedAtMs: findLiveTurnStartedAt(
+            historyItems,
+            absorbedLeaderIndex === -1 ? historyItems.length : absorbedLeaderIndex,
+          ),
           liveUnitCache: activeTurn.liveUnitCache,
         });
         // Preserve array identity when every unit was reused so the whole

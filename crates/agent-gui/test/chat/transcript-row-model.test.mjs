@@ -100,6 +100,21 @@ const idleLive = {
   isSettled: false,
 };
 
+test("live work trace starts its clock at the triggering user message", () => {
+  const model = createTranscriptRowModel();
+  const history = [{ ...userItem("u1"), timestamp: 1_700_000_000_000 }];
+
+  const live = model.build(history, { ...idleLive, isSending: true });
+  assert.equal(workTraceRows(live)[0].unit.startedAtMs, 1_700_000_000_000);
+
+  // 用户消息尚未入历史、最后一项是上一轮回复时，不能拿上一轮的用户消息计时。
+  const stale = createTranscriptRowModel().build(
+    [userItem("u0"), assistantItem("a0", [round("r1", "done")])],
+    { ...idleLive, isSending: true },
+  );
+  assert.equal(workTraceRows(stale)[0].unit.startedAtMs, undefined);
+});
+
 test("live work trace keeps reasoning entries with their streaming flag", () => {
   const model = createTranscriptRowModel();
   const history = [userItem("u1")];

@@ -987,6 +987,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                   toolStatus={isLatestLiveStreaming ? displayedToolStatus : null}
                   toolStatusVariant={displayedToolStatusIsCompaction ? "compaction" : "default"}
                   durationMs={durationMs}
+                  startedAtMs={isLatestLiveStreaming ? retryTarget?.timestamp : undefined}
                   readOnly={readOnly}
                   redactToolContent={redactToolContent}
                   workdir={workspaceRoot}
