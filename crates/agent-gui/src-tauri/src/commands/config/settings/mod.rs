@@ -59,6 +59,12 @@ const SYSTEM_SYSTEM_PROXY_KEY: &str = "systemProxy";
 // 改自己的设置、关掉自己。置 true 才解除（用 LiveAgent 自动化测试
 // LiveAgent 这类场景需要）。
 const SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY: &str = "cuaAllowSelfTargeting";
+// 全局默认时区(IANA 名,"" = 自动跟随桌面端 OS 时区)。日程快照、Cron 调度与
+// 记忆后台日期计算统一经 `load_runtime_default_time_zone` 解析。
+const SYSTEM_DEFAULT_TIME_ZONE_KEY: &str = "defaultTimeZone";
+// 只读派生值:load 时注入「自动」档解析到的桌面 OS 时区,供前端(含 WebUI)展示与
+// 回退;不进保存白名单。
+const SYSTEM_RESOLVED_TIME_ZONE_KEY: &str = "resolvedTimeZone";
 const DEFAULT_WORKSPACE_PROJECT_ID: &str = "default-project";
 const DEFAULT_WORKSPACE_PROJECT_NAME: &str = "Default Project";
 pub(crate) const PROVIDER_API_KEY_UPDATES_FIELD: &str = "providerApiKeyUpdates";

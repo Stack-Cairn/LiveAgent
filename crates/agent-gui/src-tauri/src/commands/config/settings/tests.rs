@@ -1223,7 +1223,7 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 14);
+        assert_eq!(row_count, 15);
         assert_eq!(
             keys,
             vec![
@@ -1232,6 +1232,7 @@ mod tests {
                 SYSTEM_BROWSER_AUTOMATION_MODE_KEY.to_string(),
                 SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
                 SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY.to_string(),
+                SYSTEM_DEFAULT_TIME_ZONE_KEY.to_string(),
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
@@ -1255,6 +1256,7 @@ mod tests {
                 "workspaceResourceSettings": {},
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
+                "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": default_workdir.clone(),
                 "toolPolicies": { "Bash": "ask", "server:docs-mcp": "deny" },
@@ -1590,6 +1592,7 @@ mod tests {
                 "workspaceResourceSettings": {},
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
+                "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
@@ -1646,6 +1649,7 @@ mod tests {
                 "workspaceResourceSettings": {},
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
+                "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
@@ -1704,8 +1708,13 @@ mod tests {
 
     #[test]
     fn load_system_with_defaults_returns_agent_mode_and_default_project() {        let conn = open_memory_db();
-        let loaded = load_system_with_defaults(&conn, "/tmp/liveagent-default-project")
+        let mut loaded = load_system_with_defaults(&conn, "/tmp/liveagent-default-project")
             .expect("load system");
+        let resolved = loaded
+            .as_object_mut()
+            .and_then(|map| map.remove(SYSTEM_RESOLVED_TIME_ZONE_KEY))
+            .expect("resolvedTimeZone injected");
+        assert_eq!(resolved, json!(os_time_zone()));
 
         assert_eq!(
             loaded,
@@ -1719,6 +1728,7 @@ mod tests {
                 "workspaceResourceSettings": {},
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
+                "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "workspaceProjects": [
@@ -1733,6 +1743,97 @@ mod tests {
                 ]
             })
         );
+    }
+
+    #[test]
+    fn normalize_default_time_zone_value_accepts_only_known_iana_zones() {
+        assert_eq!(normalize_default_time_zone_value(None), json!(""));
+        assert_eq!(
+            normalize_default_time_zone_value(Some(&json!(null))),
+            json!("")
+        );
+        assert_eq!(
+            normalize_default_time_zone_value(Some(&json!(8))),
+            json!("")
+        );
+        assert_eq!(
+            normalize_default_time_zone_value(Some(&json!("   "))),
+            json!("")
+        );
+        assert_eq!(
+            normalize_default_time_zone_value(Some(&json!("Mars/Olympus"))),
+            json!("")
+        );
+        assert_eq!(
+            normalize_default_time_zone_value(Some(&json!(" Asia/Shanghai "))),
+            json!("Asia/Shanghai")
+        );
+        assert_eq!(
+            normalize_default_time_zone_value(Some(&json!("UTC"))),
+            json!("UTC")
+        );
+    }
+
+    #[test]
+    fn resolve_default_time_zone_prefers_setting_then_os() {
+        assert_eq!(
+            resolve_default_time_zone(Some("America/New_York")),
+            "America/New_York"
+        );
+        assert_eq!(resolve_default_time_zone(Some("")), os_time_zone());
+        assert_eq!(
+            resolve_default_time_zone(Some("bogus/zone")),
+            os_time_zone()
+        );
+        assert_eq!(resolve_default_time_zone(None), os_time_zone());
+        assert!(os_time_zone().parse::<chrono_tz::Tz>().is_ok());
+    }
+
+    #[test]
+    fn save_system_persists_default_time_zone_without_resolved_value() {
+        let mut conn = open_memory_db();
+        save_system_with_default_workdir(
+            &mut conn,
+            json!({
+                "executionMode": "tools",
+                "defaultTimeZone": "Europe/Berlin",
+                "resolvedTimeZone": "Asia/Tokyo",
+            }),
+            "/tmp/liveagent-default-project",
+        )
+        .expect("save system");
+
+        let stored = load_system(&conn)
+            .expect("load system")
+            .expect("system rows");
+        assert_eq!(stored["defaultTimeZone"], json!("Europe/Berlin"));
+        assert!(stored.get(SYSTEM_RESOLVED_TIME_ZONE_KEY).is_none());
+        let resolved_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM system_settings WHERE setting_key = ?1",
+                params![SYSTEM_RESOLVED_TIME_ZONE_KEY],
+                |row| row.get(0),
+            )
+            .expect("count resolved rows");
+        assert_eq!(resolved_rows, 0);
+
+        let loaded = load_system_with_defaults(&conn, "/tmp/liveagent-default-project")
+            .expect("load system with defaults");
+        assert_eq!(loaded["defaultTimeZone"], json!("Europe/Berlin"));
+        assert_eq!(loaded["resolvedTimeZone"], json!(os_time_zone()));
+
+        save_system_with_default_workdir(
+            &mut conn,
+            json!({ "executionMode": "tools", "defaultTimeZone": "Nowhere/Invalid" }),
+            "/tmp/liveagent-default-project",
+        )
+        .expect("save system with invalid zone");
+        let loaded = load_system_with_defaults(&conn, "/tmp/liveagent-default-project")
+            .expect("reload system");
+        assert_eq!(loaded["defaultTimeZone"], json!(""));
+        let resolved = loaded["resolvedTimeZone"].as_str().expect("resolved zone");
+        assert!(!resolved.is_empty());
+        assert_eq!(resolved, os_time_zone());
     }
 
     #[test]

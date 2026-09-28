@@ -499,8 +499,72 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_BROWSER_AUTOMATION_MODE_KEY.to_string(),
         normalize_browser_automation_mode_value(system.get(SYSTEM_BROWSER_AUTOMATION_MODE_KEY)),
     );
+    system.insert(
+        SYSTEM_DEFAULT_TIME_ZONE_KEY.to_string(),
+        normalize_default_time_zone_value(system.get(SYSTEM_DEFAULT_TIME_ZONE_KEY)),
+    );
+    // 派生只读键:无论调用方传入什么都不采信,由 load_system_with_defaults 重新注入。
+    system.remove(SYSTEM_RESOLVED_TIME_ZONE_KEY);
 
     Value::Object(system)
+}
+
+/// 默认时区:非字符串 / 空串 / chrono_tz 无法解析的名字一律收敛为 ""(自动)。
+fn normalize_default_time_zone_value(raw: Option<&Value>) -> Value {
+    let text = raw
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    if !text.is_empty() && text.parse::<chrono_tz::Tz>().is_ok() {
+        Value::String(text.to_string())
+    } else {
+        Value::String(String::new())
+    }
+}
+
+/// 桌面端 OS 时区(IANA 名);取不到或 chrono_tz 无法解析时回退 "UTC"。
+pub(crate) fn os_time_zone() -> String {
+    match iana_time_zone::get_timezone() {
+        Ok(name) if name.parse::<chrono_tz::Tz>().is_ok() => name,
+        Ok(name) => {
+            eprintln!("[settings] OS time zone {name:?} is not a known IANA zone; using UTC");
+            "UTC".to_string()
+        }
+        Err(_) => "UTC".to_string(),
+    }
+}
+
+/// 全局有效时区的唯一权威来源:设置值合法 → 设置值;否则 OS 时区;否则 "UTC"。
+/// 配置库打不开时同样回退 OS 时区,不阻断调用方。
+pub(crate) fn load_runtime_default_time_zone() -> String {
+    let configured = open_db()
+        .and_then(|conn| load_system(&conn))
+        .ok()
+        .flatten()
+        .and_then(|value| {
+            value
+                .get(SYSTEM_DEFAULT_TIME_ZONE_KEY)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+    resolve_default_time_zone(configured.as_deref())
+}
+
+/// 纯函数:按「设置值 → OS → UTC」的优先级得出有效时区名。
+fn resolve_default_time_zone(configured: Option<&str>) -> String {
+    match normalize_default_time_zone_value(
+        configured.map(|v| Value::String(v.to_string())).as_ref(),
+    ) {
+        Value::String(zone) if !zone.is_empty() => zone,
+        _ => os_time_zone(),
+    }
+}
+
+/// 有效时区的 chrono_tz 形态;解析失败(理论上不会发生)回退 UTC。
+pub(crate) fn runtime_default_tz() -> chrono_tz::Tz {
+    load_runtime_default_time_zone()
+        .parse::<chrono_tz::Tz>()
+        .unwrap_or(chrono_tz::Tz::UTC)
 }
 
 /// 浏览器接入模式的合法取值,与前端 BROWSER_AUTOMATION_MODES 一致。
@@ -601,10 +665,17 @@ pub(crate) fn load_runtime_browser_automation_mode() -> String {
 }
 
 fn load_system_with_defaults(conn: &Connection, default_workdir: &str) -> Result<Value, String> {
-    Ok(system_value_with_defaults(
-        load_system(conn)?,
-        default_workdir,
-    ))
+    let mut system = system_value_with_defaults(load_system(conn)?, default_workdir);
+    if let Value::Object(map) = &mut system {
+        // 注入「自动」档实际解析到的时区(桌面 OS 时区)。刻意不注入含设置值的有效
+        // 时区:前端切回「自动」时若沿用旧快照,展示的会是上一次的手选值;有效时区
+        // 由前端按 defaultTimeZone || resolvedTimeZone 自行得出,语义一致。
+        map.insert(
+            SYSTEM_RESOLVED_TIME_ZONE_KEY.to_string(),
+            Value::String(os_time_zone()),
+        );
+    }
+    Ok(system)
 }
 fn save_system(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let default_workdir = default_project_workdir()?;
@@ -648,6 +719,7 @@ fn save_system_with_default_workdir(
         SYSTEM_WORKSPACE_RESOURCE_SETTINGS_KEY,
         SYSTEM_SYSTEM_PROXY_KEY,
         SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY,
+        SYSTEM_DEFAULT_TIME_ZONE_KEY,
     ]
     .into_iter()
     .chain(
