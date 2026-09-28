@@ -333,7 +333,7 @@ test("golden/deepseek-responses: 原生适配器完整请求体（developer role
       { role: "user", content: [{ type: "input_text", text: "hello world" }] },
     ],
     stream: true,
-    max_output_tokens: 384000,
+    max_output_tokens: 393216,
     tools: [
       {
         type: "function",
