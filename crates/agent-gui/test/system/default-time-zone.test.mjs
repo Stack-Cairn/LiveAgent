@@ -87,3 +87,33 @@ test("incoming settings-sync payload carries defaultTimeZone and resolvedTimeZon
   assert.equal(next.system.defaultTimeZone, "Europe/London");
   assert.equal(next.system.resolvedTimeZone, "Asia/Shanghai");
 });
+
+test("memory organizer schedule runs at the wall-clock time of the default time zone", () => {
+  const daily = { frequency: "daily", timeLocal: "03:00", weekday: 1, timezone: "UTC" };
+  // 2026-09-29 12:00 UTC = 20:00 in Shanghai, so the next 03:00 there is 2026-09-30 03:00 +08.
+  const from = Date.parse("2026-09-29T12:00:00Z");
+  assert.equal(
+    settings.computeNextMemoryOrganizerRunAt(daily, from, "Asia/Shanghai"),
+    Date.parse("2026-09-29T19:00:00Z"),
+  );
+  assert.equal(
+    settings.computeNextMemoryOrganizerRunAt(daily, from, "America/New_York"),
+    Date.parse("2026-09-30T07:00:00Z"),
+  );
+  // Weekly on Monday (1): 2026-09-29 is a Tuesday, so the next run is Monday 2026-10-05.
+  const weekly = { ...daily, frequency: "weekly", weekday: 1 };
+  assert.equal(
+    settings.computeNextMemoryOrganizerRunAt(weekly, from, "Asia/Shanghai"),
+    Date.parse("2026-10-04T19:00:00Z"),
+  );
+  // DST: New York leaves daylight saving on 2026-11-01; 03:00 that day is EST (-05:00).
+  assert.equal(
+    settings.computeNextMemoryOrganizerRunAt(
+      daily,
+      Date.parse("2026-11-01T05:00:00Z"),
+      "America/New_York",
+    ),
+    Date.parse("2026-11-01T08:00:00Z"),
+  );
+  assert.equal(settings.computeNextMemoryOrganizerRunAt({ ...daily, frequency: "none" }, from), undefined);
+});

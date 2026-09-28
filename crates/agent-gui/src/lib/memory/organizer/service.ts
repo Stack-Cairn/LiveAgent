@@ -34,6 +34,7 @@ import {
   computeNextMemoryOrganizerRunAt,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   isAgentDevMode,
+  resolveDefaultTimeZone,
 } from "../../settings";
 import { createMemoryTools } from "../../tools/memoryTools";
 import {
@@ -152,7 +153,11 @@ function advanceScheduledOrganizer(run: MemoryOrganizeRun, setSettings: SetSetti
     const organizerEnabled =
       prev.memory.organizerEnabled && prev.memory.organizerSchedule.frequency !== "none";
     const nextRunAt = organizerEnabled
-      ? computeNextMemoryOrganizerRunAt(prev.memory.organizerSchedule, now + 1_000)
+      ? computeNextMemoryOrganizerRunAt(
+          prev.memory.organizerSchedule,
+          now + 1_000,
+          resolveDefaultTimeZone(prev.system),
+        )
       : undefined;
     return {
       ...prev,

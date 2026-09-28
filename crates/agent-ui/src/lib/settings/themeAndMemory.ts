@@ -118,40 +118,99 @@ export function normalizeOptionalTimestamp(input: unknown): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+type ZonedParts = { year: number; month: number; day: number; hour: number; minute: number };
+
+function zonedParts(epoch: number, zone: string): ZonedParts | null {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(epoch);
+    const get = (type: Intl.DateTimeFormatPartTypes) =>
+      Number(parts.find((part) => part.type === type)?.value);
+    return {
+      year: get("year"),
+      month: get("month"),
+      day: get("day"),
+      hour: get("hour"),
+      minute: get("minute"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Epoch of a wall-clock time in `zone` (DST gaps resolve to the shifted instant). */
+function zonedEpoch(target: ZonedParts, zone: string): number {
+  const wanted = Date.UTC(target.year, target.month - 1, target.day, target.hour, target.minute);
+  let guess = wanted;
+  for (let i = 0; i < 3; i += 1) {
+    const actual = zonedParts(guess, zone);
+    if (!actual) break;
+    const shown = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute);
+    if (shown === wanted) break;
+    guess += wanted - shown;
+  }
+  return guess;
+}
+
+/**
+ * Next scheduled organizer run. `zone` is the app default time zone (Settings → General), so
+ * "03:00" means 03:00 there; without it the schedule's own stored zone is used.
+ */
 export function computeNextMemoryOrganizerRunAt(
   schedule: MemoryOrganizerSchedule,
   from = Date.now(),
+  zone: string = schedule.timezone,
 ): number | undefined {
   if (schedule.frequency === "none") {
     return undefined;
   }
-
   const [hourRaw, minuteRaw] = schedule.timeLocal.split(":");
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-  const base = new Date(from);
-  const candidate = new Date(base);
-  candidate.setSeconds(0, 0);
-  candidate.setHours(
-    Number.isInteger(hour) ? hour : 3,
-    Number.isInteger(minute) ? minute : 0,
-    0,
-    0,
-  );
+  const hour = Number.isInteger(Number(hourRaw)) ? Number(hourRaw) : 3;
+  const minute = Number.isInteger(Number(minuteRaw)) ? Number(minuteRaw) : 0;
+  const today = zonedParts(from, zone);
+  if (!today) return computeInBrowserZone(schedule, from, hour, minute);
+  const targetWeekday = normalizeMemoryOrganizerWeekday(schedule.weekday);
+  for (let offset = 0; offset <= 7; offset += 1) {
+    const date = new Date(Date.UTC(today.year, today.month - 1, today.day + offset));
+    if (schedule.frequency === "weekly" && date.getUTCDay() !== targetWeekday) continue;
+    const at = zonedEpoch(
+      {
+        year: date.getUTCFullYear(),
+        month: date.getUTCMonth() + 1,
+        day: date.getUTCDate(),
+        hour,
+        minute,
+      },
+      zone,
+    );
+    if (at > from) return at;
+  }
+  return undefined;
+}
 
+/** Fallback when the zone is not a valid IANA name: the browser's own local time. */
+function computeInBrowserZone(
+  schedule: MemoryOrganizerSchedule,
+  from: number,
+  hour: number,
+  minute: number,
+) {
+  const candidate = new Date(from);
+  candidate.setHours(hour, minute, 0, 0);
   if (schedule.frequency === "weekly") {
     const targetWeekday = normalizeMemoryOrganizerWeekday(schedule.weekday);
-    const currentWeekday = candidate.getDay();
-    let days = (targetWeekday - currentWeekday + 7) % 7;
-    if (days === 0 && candidate.getTime() <= from) {
-      days = 7;
-    }
+    let days = (targetWeekday - candidate.getDay() + 7) % 7;
+    if (days === 0 && candidate.getTime() <= from) days = 7;
     candidate.setDate(candidate.getDate() + days);
     return candidate.getTime();
   }
-
-  if (candidate.getTime() <= from) {
-    candidate.setDate(candidate.getDate() + 1);
-  }
+  if (candidate.getTime() <= from) candidate.setDate(candidate.getDate() + 1);
   return candidate.getTime();
 }

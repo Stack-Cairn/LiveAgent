@@ -11,6 +11,7 @@ import {
   type MemoryOrganizerFrequency,
   type MemoryOrganizerMode,
   type MemoryOrganizerScope,
+  resolveDefaultTimeZone,
   updateMemorySettings,
 } from "@liveagent/app/lib/settings";
 import { AlertTriangle, History, RefreshCw, Trash2 } from "@liveagent/ui/components/IconSet";
@@ -226,7 +227,11 @@ export function MemorySettingsDrawer(props: {
         organizerEnabled: enabled,
         organizerSchedule,
         organizerNextRunAt: enabled
-          ? computeNextMemoryOrganizerRunAt(organizerSchedule)
+          ? computeNextMemoryOrganizerRunAt(
+              organizerSchedule,
+              Date.now(),
+              resolveDefaultTimeZone(prev.system),
+            )
           : undefined,
       });
     });
@@ -247,7 +252,11 @@ export function MemorySettingsDrawer(props: {
         organizerSchedule,
         organizerEnabled,
         organizerNextRunAt: organizerEnabled
-          ? computeNextMemoryOrganizerRunAt(organizerSchedule)
+          ? computeNextMemoryOrganizerRunAt(
+              organizerSchedule,
+              Date.now(),
+              resolveDefaultTimeZone(prev.system),
+            )
           : undefined,
       });
     });
