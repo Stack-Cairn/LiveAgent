@@ -1526,3 +1526,67 @@ fn planning_event_notification_overrides_calendar_default() {
         "E:reminder_offset_invalid"
     );
 }
+
+#[test]
+fn planning_snapshot_uses_global_default_zone() {
+    time::set_test_zone(Some("Pacific/Auckland"));
+    let store = store();
+    let s = store.snapshot(Query::default()).unwrap();
+    assert_eq!(s.time_zone, "Pacific/Auckland");
+    time::set_test_zone(Some("America/Chicago"));
+    assert_eq!(
+        store.snapshot(Query::default()).unwrap().time_zone,
+        "America/Chicago"
+    );
+    time::set_test_zone(None);
+}
+
+#[test]
+fn planning_timezone_set_is_rejected_as_global() {
+    time::set_test_zone(Some("Asia/Shanghai"));
+    let store = store();
+    let seq = store.snapshot(Query::default()).unwrap().seq;
+    let error = store
+        .mutate(input(
+            "timezone.set",
+            None,
+            Some(seq),
+            json!({"timeZone":"Europe/London"}),
+        ))
+        .unwrap_err();
+    assert_eq!(error, "E:timezone_global");
+    let s = store.snapshot(Query::default()).unwrap();
+    assert_eq!(s.time_zone, "Asia/Shanghai");
+    assert_eq!(s.seq, seq);
+    time::set_test_zone(None);
+}
+
+#[test]
+fn planning_date_due_reminder_fires_at_default_zone_midnight() {
+    time::set_test_zone(Some("Asia/Tokyo"));
+    let store = store();
+    store
+        .mutate(input(
+            "todo.create",
+            None,
+            None,
+            json!({"title":"Due","dueDate":"2099-03-10","dueReminder":true,"reminderMinutes":0}),
+        ))
+        .unwrap();
+    let tokyo_midnight = time::midnight("2099-03-10", "Asia/Tokyo").unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    assert_eq!(s.reminders.len(), 1);
+    assert_eq!(s.reminders[0].trigger_at, tokyo_midnight);
+
+    // 切换全局时区后同步:提醒按新时区午夜重算,seq 前进;再次同步无变化。
+    time::set_test_zone(Some("America/Los_Angeles"));
+    let synced = store.sync_default_zone(store::now()).unwrap();
+    assert_eq!(synced, Some(s.seq + 1));
+    let la_midnight = time::midnight("2099-03-10", "America/Los_Angeles").unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    assert_eq!(s.reminders.len(), 1);
+    assert_eq!(s.reminders[0].trigger_at, la_midnight);
+    assert_ne!(la_midnight, tokyo_midnight);
+    assert_eq!(store.sync_default_zone(store::now()).unwrap(), None);
+    time::set_test_zone(None);
+}

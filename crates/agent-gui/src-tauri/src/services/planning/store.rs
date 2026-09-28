@@ -77,7 +77,8 @@ fn meta(conn: &Connection, key: &str) -> Result<String, String> {
 pub(super) fn snapshot(conn: &Connection) -> Result<Snapshot, String> {
     Ok(Snapshot {
         seq: meta(conn, "seq")?.parse().map_err(sql_error)?,
-        time_zone: meta(conn, "timeZone")?,
+        // 全局默认时区为唯一来源;meta 中的 timeZone 仅由 persist 镜像写入。
+        time_zone: super::time::default_zone(),
         calendars: read(conn, "calendars")?,
         todos: read(conn, "todos")?,
         groups: read(conn, "groups")?,
@@ -201,7 +202,7 @@ impl PlanningStore {
             CREATE INDEX IF NOT EXISTS planning_reminder_due ON planning_reminders(json_extract(payload,'$.triggerAt'));
             INSERT OR IGNORE INTO planning_meta VALUES('schema','1'); INSERT OR IGNORE INTO planning_meta VALUES('seq','0');").map_err(sql_error)?;
         super::subscription::create_table(&tx)?;
-        let tz = iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".into());
+        let tz = super::time::default_zone();
         tx.execute(
             "INSERT OR IGNORE INTO planning_meta VALUES('timeZone',?1)",
             [tz],
@@ -293,6 +294,10 @@ impl PlanningStore {
     }
 
     pub fn mutate(&self, input: Mutation) -> Result<MutationResult, String> {
+        // 时区改由「设置 → 通用 → 默认时区」统一管理;旧客户端的写入得到稳定错误码。
+        if input.action == "timezone.set" {
+            return Err("E:timezone_global".into());
+        }
         if input.request_id.len() < 8 || input.request_id.len() > 128 {
             return Err("E:request_id_invalid".into());
         }
@@ -330,15 +335,6 @@ impl PlanningStore {
                     message: Some("E:conflict".into()),
                 });
             }
-        }
-        if input.action == "timezone.set" && input.expected_revision != Some(s.seq) {
-            return Ok(MutationResult {
-                status: "conflict".into(),
-                seq: s.seq,
-                item: Some(json!({"timeZone":s.time_zone,"revision":s.seq})),
-                replayed: false,
-                message: Some("E:timezone_changed".into()),
-            });
         }
         let now = now();
         let item = apply(&mut s, &input, now)?;
@@ -382,6 +378,23 @@ impl PlanningStore {
         .map_err(sql_error)?;
         tx.commit().map_err(sql_error)?;
         Ok(response)
+    }
+
+    /// 全局默认时区变化后调用:若镜像时区与当前有效时区不同,按新时区重算日期截止
+    /// 提醒并推进 seq,返回新 seq 供调用方广播 `planning:changed`;未变化返回 None。
+    pub fn sync_default_zone(&self, now: i64) -> Result<Option<u64>, String> {
+        let mut conn = self.conn.lock().map_err(sql_error)?;
+        let tx = conn.transaction().map_err(sql_error)?;
+        let mirrored = meta(&tx, "timeZone")?;
+        let mut s = snapshot(&tx)?;
+        if mirrored == s.time_zone {
+            return Ok(None);
+        }
+        reconcile_reminders(&mut s, now, false)?;
+        s.seq += 1;
+        persist(&tx, &s)?;
+        tx.commit().map_err(sql_error)?;
+        Ok(Some(s.seq))
     }
 
     pub fn claim_reminders(&self, at: i64) -> Result<Vec<Reminder>, String> {
@@ -499,9 +512,7 @@ impl PlanningStore {
 
 fn lookup(s: &Snapshot, input: &Mutation) -> Result<Option<Value>, String> {
     let action = input.action.as_str();
-    if action.ends_with(".create")
-        || ["timezone.set", "todo.import", "mytasks.delete"].contains(&action)
-    {
+    if action.ends_with(".create") || ["todo.import", "mytasks.delete"].contains(&action) {
         return Ok(None);
     }
     let key = input.id.as_deref().ok_or("E:field_required:id")?;
@@ -608,7 +619,6 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
         }
         "group.delete" | "tag.delete" => &[],
         "mytasks.delete" => &["defaultGroupId", "deleteTasks"],
-        "timezone.set" => &["timeZone"],
         "calendar.create" => &["name", "color"],
         "calendar.update" => &["name", "color", "sortOrder", "isDefault", "reminderMinutes"],
         "calendar.delete" => &["moveTo"],
@@ -764,10 +774,6 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
                 t.updated_at = now;
             }
             s.default_group_id = Some(target);
-        }
-        "timezone.set" => {
-            time::zone(required(d, "timeZone")?)?;
-            s.time_zone = required(d, "timeZone")?.into();
         }
         "calendar.create" => {
             let c: Calendar = data(

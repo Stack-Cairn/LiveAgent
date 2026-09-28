@@ -1,6 +1,54 @@
 use super::types::{Event, EventTime};
 use chrono::{Datelike, Duration, LocalResult, NaiveDate, TimeZone, Utc};
 use chrono_tz::Tz;
+use std::sync::{Arc, RwLock};
+
+type ZoneResolver = Arc<dyn Fn() -> String + Send + Sync>;
+
+/// 进程级「全局默认时区」解析器。由应用启动时安装为设置读取函数;日程快照的
+/// `timeZone` 一律由它得出,`planning_meta.timeZone` 只保留为镜像。
+static DEFAULT_ZONE_RESOLVER: RwLock<Option<ZoneResolver>> = RwLock::new(None);
+
+#[cfg(test)]
+thread_local! {
+    static TEST_ZONE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+pub fn set_default_zone_resolver(resolver: ZoneResolver) {
+    if let Ok(mut current) = DEFAULT_ZONE_RESOLVER.write() {
+        *current = Some(resolver);
+    }
+}
+
+/// 测试专用:仅对当前线程覆盖默认时区,避免并行测试互相干扰。
+#[cfg(test)]
+pub fn set_test_zone(zone: Option<&str>) {
+    TEST_ZONE.with(|cell| *cell.borrow_mut() = zone.map(str::to_string));
+}
+
+fn os_zone() -> String {
+    iana_time_zone::get_timezone()
+        .ok()
+        .filter(|name| zone(name).is_ok())
+        .unwrap_or_else(|| "UTC".into())
+}
+
+/// 当前有效的全局默认时区(IANA 名)。未安装解析器时回退 OS 时区;解析结果非法
+/// 时同样回退,保证返回值总能被 `zone()` 解析。
+pub fn default_zone() -> String {
+    #[cfg(test)]
+    if let Some(zone) = TEST_ZONE.with(|cell| cell.borrow().clone()) {
+        return zone;
+    }
+    let resolver = DEFAULT_ZONE_RESOLVER
+        .read()
+        .ok()
+        .and_then(|current| current.clone());
+    match resolver.map(|resolve| resolve()) {
+        Some(name) if zone(&name).is_ok() => name,
+        _ => os_zone(),
+    }
+}
 
 pub fn date(value: &str) -> Result<NaiveDate, String> {
     if value.len() != 10 {
