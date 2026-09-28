@@ -761,6 +761,30 @@ impl AutomationStore {
         .map_err(|e| format!("清理 automation_cron_runs 失败：{e}"))
     }
 
+    /// 日程「定时任务」图层:全局默认时区下的计划触发、真实运行与按天汇总。
+    pub fn cron_occurrences(
+        &self,
+        query: super::occurrences::CronOccurrenceQuery,
+    ) -> Result<super::occurrences::CronOccurrencesResponse, String> {
+        super::occurrences::validate_range(&query)?;
+        let tz = crate::commands::settings::runtime_default_tz();
+        let now = db::now_ms();
+        let (tasks, runs_in_range, recent_runs) = {
+            let conn = self.lock_conn()?;
+            let tasks = db::read_cron_tasks(&conn)?;
+            let runs_in_range = db::read_runs_between(
+                &conn,
+                query.from,
+                query.to.min(now),
+                super::occurrences::MAX_RUNS,
+            )?;
+            let ids: Vec<String> = tasks.iter().map(|task| task.id.clone()).collect();
+            let recent_runs = db::read_last_completed_runs(&conn, &ids)?;
+            (tasks, runs_in_range, recent_runs)
+        };
+        super::occurrences::compute(&tasks, &runs_in_range, &recent_runs, query, tz, now)
+    }
+
     /// Enabled, non-exhausted tasks for the scheduler's diff reload. Workdirs
     /// are resolved per task at fire time, not here.
     pub fn runnable_cron_tasks(&self) -> Result<Vec<CronTask>, String> {

@@ -177,6 +177,57 @@ export function isManualCronRunFinished(runs: CronRunRecord[], startedAt: number
   return run?.state === "done" || run?.state === "expired";
 }
 
+/** Run summary returned by the schedule layer query (output truncated to 300 chars). */
+export type CronRunSummary = {
+  id: string;
+  taskId: string;
+  startedAt: number;
+  finishedAt?: number;
+  state: CronRunState;
+  success: boolean;
+  durationMs: number;
+  exitCode?: number;
+  outputPreview: string;
+};
+
+export type CronOccurrenceTask = {
+  id: string;
+  name: string;
+  cron: string;
+  kind: CronTaskType;
+  remainingExecutions?: number | null;
+  lastRun?: CronRunSummary;
+};
+
+export type CronOccurrence = {
+  taskId: string;
+  at: number;
+};
+
+/** Per task and local day aggregate for high-frequency tasks. */
+export type CronDaySummary = {
+  taskId: string;
+  /** YYYY-MM-DD in the app default time zone. */
+  date: string;
+  planned: number;
+  /** The per-day expansion cap was reached; the real count is higher. */
+  plannedTruncated: boolean;
+  ran: number;
+  failed: number;
+  firstAt: number;
+  lastAt: number;
+};
+
+/** Planned fires (future), real runs (past) and day summaries for [from, to). */
+export type CronOccurrencesResponse = {
+  timeZone: string;
+  now: number;
+  tasks: CronOccurrenceTask[];
+  occurrences: CronOccurrence[];
+  runs: CronRunSummary[];
+  summaries: CronDaySummary[];
+};
+
 export type PromptRunRequest = {
   executionId: string;
   taskId: string;

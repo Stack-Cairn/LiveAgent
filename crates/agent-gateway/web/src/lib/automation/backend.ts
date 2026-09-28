@@ -10,6 +10,7 @@ import type {
   AutomationApplyInput,
   AutomationSnapshot,
   CronApplyResponse,
+  CronOccurrencesResponse,
   CronRunNowResponse,
   CronRunRecord,
   CronSnapshot,
@@ -59,6 +60,10 @@ export const backend = {
       limit: limit ?? 100,
     });
     return Array.isArray(payload.runs) ? payload.runs : [];
+  },
+
+  cronOccurrences(from: number, to: number): Promise<CronOccurrencesResponse> {
+    return cronManage<CronOccurrencesResponse>("occurrences", undefined, { from, to });
   },
 
   async clearRuns(taskId: string): Promise<number> {

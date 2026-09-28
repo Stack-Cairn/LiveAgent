@@ -129,3 +129,4 @@ export const listCronRuns = backend.listRuns;
 export const clearCronRuns = backend.clearRuns;
 export const runCronNow = backend.runNow;
 export const validateCronExpression = backend.validateCronExpression;
+export const fetchCronOccurrences = backend.cronOccurrences;
