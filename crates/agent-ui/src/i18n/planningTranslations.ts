@@ -26,6 +26,7 @@ export const PLANNING_TRANSLATIONS = {
     "planner.calendar.eventNotification": "活动默认通知",
     "planner.calendar.eventNotificationHint": "此日历中活动的「通知」选择「默认」时使用这个时间。",
     "planner.calendar.name": "名称",
+    "planner.calendar.subscribedHint": "订阅的日历只能修改名称和颜色，其中的活动随订阅源同步。",
     "planner.calendar.namePlaceholder": "例如：工作、家庭",
     "planner.calendar.new": "新建日历",
     "planner.calendar.noReminder": "不提醒",
@@ -485,6 +486,8 @@ export const PLANNING_TRANSLATIONS = {
     "planner.calendar.eventNotificationHint":
       "Used when an event in this calendar keeps its notification on “Default”.",
     "planner.calendar.name": "Name",
+    "planner.calendar.subscribedHint":
+      "Only the name and color of a subscribed calendar can be changed; its events follow the feed.",
     "planner.calendar.namePlaceholder": "e.g. Work, Family",
     "planner.calendar.new": "New calendar",
     "planner.calendar.noReminder": "No reminder",

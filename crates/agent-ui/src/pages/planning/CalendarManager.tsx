@@ -47,6 +47,9 @@ export function CalendarManager({
     setDeleting(false);
     setError("");
   };
+  // Subscribed calendars are read-only mirrors, but their name and color are local choices.
+  const subscribed = selected?.sourceKind === "subscription";
+  const locked = !!selected?.readOnly && !subscribed;
   const run = async (remove: boolean) => {
     setBusy(true);
     setError("");
@@ -57,6 +60,12 @@ export function CalendarManager({
           id: selected.id,
           expectedRevision: selected.revision,
           data: { moveTo },
+        });
+      else if (selected && subscribed)
+        await planningStore.command("subscription.update", {
+          id: selected.id,
+          name: name.trim(),
+          color,
         });
       else if (selected)
         await planningStore.mutate({
@@ -162,7 +171,7 @@ export function CalendarManager({
                   void run(false);
                 }}
               >
-                <fieldset className="min-w-0 space-y-4" disabled={busy || selected?.readOnly}>
+                <fieldset className="min-w-0 space-y-4" disabled={busy || locked}>
                   <PlanningField label={t("planner.calendar.name")}>
                     <Input
                       variant="plain"
@@ -176,7 +185,7 @@ export function CalendarManager({
                   <ColorSwatches
                     label={t("planner.calendar.color")}
                     value={color}
-                    disabled={busy || selected?.readOnly}
+                    disabled={busy || locked}
                     onChange={setColor}
                   />
                   {/* The "Default" choice of each event's notification reads this value. */}
@@ -210,6 +219,11 @@ export function CalendarManager({
                     />
                     {t("planner.calendar.makeDefault")}
                   </Label>
+                  {subscribed && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("planner.calendar.subscribedHint")}
+                    </p>
+                  )}
                 </fieldset>
                 {error && (
                   <SettingsNotice role="alert" variant="action-error">
@@ -281,7 +295,7 @@ export function CalendarManager({
               size="sm"
               type="submit"
               form={formId}
-              disabled={busy || selected?.readOnly}
+              disabled={busy || locked}
             >
               {busy
                 ? t("planner.common.saving")
