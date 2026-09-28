@@ -1037,7 +1037,10 @@ function useGatewayAppController() {
       if (
         persisted &&
         persisted.customProviderId === override.customProviderId &&
-        persisted.model === override.model
+        persisted.model === override.model &&
+        (override.thinkingEnabled === undefined ||
+          persisted.thinkingEnabled === override.thinkingEnabled) &&
+        (override.reasoning === undefined || persisted.reasoning === override.reasoning)
       ) {
         next.delete(id);
         changed = true;

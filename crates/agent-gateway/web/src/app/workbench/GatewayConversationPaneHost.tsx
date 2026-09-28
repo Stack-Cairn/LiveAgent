@@ -73,6 +73,7 @@ import { parseHistoryMessagesJsonAsync } from "@/lib/historyParser";
 import { toModelValue } from "@/lib/providers/llm";
 import {
   type AppSettings,
+  applyConversationThinking,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
   isThinkingAlwaysOnForModel,
@@ -468,19 +469,24 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   // 运行期思考档位补充到达会改变档位列表/恒开判定/当前档钳制，版本号计入依赖使
   // memo 跟进。
   const thinkingLiveVersion = useThinkingLiveVersion();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档；selection 按字段比较，避免每次解析出新对象触发重算。
   const paneRuntimeControls = useMemo(
     () =>
-      normalizeChatRuntimeControlsForProvider(context.settings.chatRuntimeControls, {
-        providerId: selectedProvider?.type,
-        requestFormat: selectedProvider?.requestFormat,
-        modelId: selection?.model,
-      }),
+      normalizeChatRuntimeControlsForProvider(
+        applyConversationThinking(context.settings.chatRuntimeControls, selection),
+        {
+          providerId: selectedProvider?.type,
+          requestFormat: selectedProvider?.requestFormat,
+          modelId: selection?.model,
+        },
+      ),
     [
       context.settings.chatRuntimeControls,
       selectedProvider?.requestFormat,
       selectedProvider?.type,
       selection?.model,
+      selection?.thinkingEnabled,
+      selection?.reasoning,
       thinkingLiveVersion,
     ],
   );

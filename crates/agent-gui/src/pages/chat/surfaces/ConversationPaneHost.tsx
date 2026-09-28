@@ -31,7 +31,10 @@ import {
   useConversationPaneRegistration,
 } from "./ConversationPaneHostEnvironment";
 import { ConversationSurface } from "./ConversationSurface";
-import { beginPaneComposerDraftSession } from "./paneComposerDraftSession";
+import {
+  beginPaneComposerDraftSession,
+  restoreClearedPaneComposerDraft,
+} from "./paneComposerDraftSession";
 import { createPaneComposerSendHandler } from "./paneComposerSend";
 
 export type ConversationPaneHostProps = {
@@ -202,6 +205,22 @@ const RegisteredConversationPaneHostContent = forwardRef<
       setDraft: (draft) => controller.setDraft(draft),
     });
   }, [conversationId]);
+
+  // Focus leaving this pane swaps it from the primary binding (no sendDraft)
+  // to a background one for the same conversation. The page pipeline cleared
+  // this composer while it was still primary, after caching its draft; put the
+  // draft back. Only this transition is handled: the incoming pane is never
+  // cleared, and restoring on focus-in could resurrect text the user deleted.
+  const isBackgroundPane = Boolean(sendDraft);
+  const wasBackgroundPaneRef = useRef(isBackgroundPane);
+  useLayoutEffect(() => {
+    const wasBackgroundPane = wasBackgroundPaneRef.current;
+    wasBackgroundPaneRef.current = isBackgroundPane;
+    if (wasBackgroundPane || !isBackgroundPane) return;
+    restoreClearedPaneComposerDraft(composerRef.current, {
+      getDraft: () => controller.getSnapshot().draft,
+    });
+  }, [controller, isBackgroundPane]);
 
   return (
     <ConversationSurface

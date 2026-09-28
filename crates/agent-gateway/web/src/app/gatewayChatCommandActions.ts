@@ -22,6 +22,7 @@ import type { GatewayWebSocketClient } from "@/lib/gatewaySocket";
 import type { ChatQueueSnapshot } from "@/lib/gatewayTypes";
 import {
   type AppSettings,
+  applyConversationThinking,
   normalizeChatRuntimeControlsForProvider,
   type SelectedModel,
 } from "@/lib/settings";
@@ -94,11 +95,14 @@ export function resolveConversationRuntimeControls(input: {
   const provider = input.activeProviders.find(
     (entry) => entry.id === input.selectedModel?.customProviderId,
   );
-  return normalizeChatRuntimeControlsForProvider(input.runtimeControls, {
-    providerId: provider?.type,
-    requestFormat: provider?.requestFormat,
-    modelId: input.selectedModel?.model,
-  });
+  return normalizeChatRuntimeControlsForProvider(
+    applyConversationThinking(input.runtimeControls, input.selectedModel),
+    {
+      providerId: provider?.type,
+      requestFormat: provider?.requestFormat,
+      modelId: input.selectedModel?.model,
+    },
+  );
 }
 
 export function createGatewayChatCommandActions(options: GatewayChatCommandActionOptions) {

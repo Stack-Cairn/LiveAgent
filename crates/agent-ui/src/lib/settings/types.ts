@@ -418,6 +418,9 @@ export type WorkspaceProject = {
 export type SelectedModel = {
   customProviderId: string;
   model: string;
+  /** 会话选择附带的思考设置，随 selectedModelJson 保存在会话历史中。 */
+  thinkingEnabled?: boolean;
+  reasoning?: ReasoningLevel;
 };
 
 export type PromptCacheHintMode = "auto" | "openai-key" | "openrouter-session" | "none";
@@ -469,6 +472,16 @@ export type ChatRuntimeControls = {
   planModeEnabled: boolean;
   reasoning: ReasoningLevel;
   reasoningByProvider: Partial<Record<ChatRuntimeReasoningProviderKey, ReasoningLevel>>;
+  /**
+   * 按模型记忆的思考档位覆盖:供应商桶 → 模型 id → 档位。读取顺序
+   * 模型桶 → reasoningByProvider → reasoning(见 resolveChatRuntimeReasoning)。
+   * 只被会话里显式的档位选择写入(写时按该模型档位表钳制),因此一个模型
+   * 的档位永远不会串到另一个模型——单靠 reasoningByProvider 时, narrow 表
+   * 模型会把 wide 表模型选的表外档钳掉并回写,造成「切会话/另一栏被重置」。
+   */
+  reasoningByModel: Partial<
+    Record<ChatRuntimeReasoningProviderKey, Partial<Record<string, ReasoningLevel>>>
+  >;
 };
 
 export type ChatRuntimeReasoningProviderKey =
@@ -754,6 +767,7 @@ export const DEFAULT_CHAT_RUNTIME_CONTROLS: ChatRuntimeControls = {
     xai: "high",
     deepseek: "high",
   },
+  reasoningByModel: {},
 };
 
 export const DEFAULT_WORKSPACE_PROJECT_ID = "default-project";

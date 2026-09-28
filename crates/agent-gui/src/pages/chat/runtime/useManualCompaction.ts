@@ -18,7 +18,7 @@ import { memoryTurnInjection } from "../../../lib/chat/memory/injectionControlle
 import { buildToolsSuffix } from "../../../lib/chat/runner/toolExecutionPrompt";
 import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createProviderRuntimeConfig } from "../../../lib/providers/llm";
-import type { AppSettings } from "../../../lib/settings";
+import { type AppSettings, applyConversationThinking } from "../../../lib/settings";
 import {
   acquireTrajectoryRecorder,
   updateTrajectoryRecorderSegment,
@@ -289,7 +289,11 @@ export function useManualCompaction(params: {
           };
         }
         const { provider, providerId, model, selectedModel } = effective;
-        const runtime = createProviderRuntimeConfig(provider, model, settings.chatRuntimeControls);
+        const runtime = createProviderRuntimeConfig(
+          provider,
+          model,
+          applyConversationThinking(settings.chatRuntimeControls, selectedModel),
+        );
 
         // 与发送链路同源的检查点上下文：注入 agent/skills/memory 提示词与 tools，
         // 使 checkpoint contextTokensAfter（两端环的权威锚点）计入系统提示词与
