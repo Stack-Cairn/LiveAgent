@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use chrono::Local;
+use croner::parser::{CronParser, Seconds};
+use croner::Cron;
 use serde_json::{Map, Value};
-use tokio_cron_scheduler::Job;
 use uuid::Uuid;
 
 use super::types::{
@@ -36,6 +36,13 @@ pub fn max_cron_timeout_seconds(kind: &str) -> u64 {
 }
 
 pub fn validate_cron_expression(expression: &str) -> Result<(), String> {
+    parse_cron(expression).map(|_| ())
+}
+
+/// 解析六段式 cron 表达式。解析选项与 tokio-cron-scheduler 注册任务时一致
+/// (秒必填、日与周同时生效),保证校验通过的表达式调度器一定能接受,
+/// 且据此计算出的触发时间与调度器一致。
+pub(crate) fn parse_cron(expression: &str) -> Result<Cron, String> {
     let trimmed = expression.trim();
     if trimmed.is_empty() {
         return Err("Cron 表达式不能为空".to_string());
@@ -43,8 +50,11 @@ pub fn validate_cron_expression(expression: &str) -> Result<(), String> {
     if trimmed.split_whitespace().count() != 6 {
         return Err("Cron 表达式必须是标准六段格式（秒 分 时 日 月 周）".to_string());
     }
-    Job::new_async_tz(trimmed, Local, |_job_id, _lock| Box::pin(async move {}))
-        .map(|_| ())
+    CronParser::builder()
+        .seconds(Seconds::Required)
+        .dom_and_dow(true)
+        .build()
+        .parse(trimmed)
         .map_err(|e| format!("无效 Cron 表达式：{trimmed} ({e})"))
 }
 

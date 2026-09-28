@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use chrono::Local;
+use chrono_tz::Tz;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio_cron_scheduler::{Job, JobScheduler};
 use uuid::Uuid;
@@ -25,6 +25,27 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 struct ScheduledJob {
     job_id: Uuid,
     cron: String,
+    /// 注册时使用的时区(IANA 名);全局默认时区变化后据此重建任务。
+    tz: String,
+}
+
+/// 已注册任务是否需要移除重建:任务消失/停用、表达式或调度时区发生变化。
+fn job_is_stale(scheduled: &ScheduledJob, desired: Option<&CronTask>, tz: &str) -> bool {
+    match desired {
+        Some(task) => task.cron.trim() != scheduled.cron || scheduled.tz != tz,
+        None => true,
+    }
+}
+
+/// 解析调度用时区;设置值理论上已校验,仍按 UTC 兜底并记录日志。
+fn scheduler_time_zone(name: &str) -> (String, Tz) {
+    match name.parse::<Tz>() {
+        Ok(tz) => (name.to_string(), tz),
+        Err(_) => {
+            eprintln!("[automation] unknown time zone {name:?}; scheduling cron tasks in UTC");
+            ("UTC".to_string(), Tz::UTC)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,9 +165,17 @@ impl AutomationScheduler {
         self.ensure_scheduler().await?;
 
         let store = Arc::clone(&self.store);
-        let tasks = tauri::async_runtime::spawn_blocking(move || store.runnable_cron_tasks())
-            .await
-            .map_err(|e| format!("automation reload join 失败：{e}"))??;
+        let (tasks, zone_name) = tauri::async_runtime::spawn_blocking(move || {
+            store.runnable_cron_tasks().map(|tasks| {
+                (
+                    tasks,
+                    crate::commands::settings::load_runtime_default_time_zone(),
+                )
+            })
+        })
+        .await
+        .map_err(|e| format!("automation reload join 失败：{e}"))??;
+        let (zone_name, tz) = scheduler_time_zone(&zone_name);
 
         let desired: HashMap<String, CronTask> = tasks
             .into_iter()
@@ -162,10 +191,7 @@ impl AutomationScheduler {
         let stale: Vec<String> = jobs
             .iter()
             .filter(|(task_id, scheduled)| {
-                desired
-                    .get(*task_id)
-                    .map(|task| task.cron.trim() != scheduled.cron)
-                    .unwrap_or(true)
+                job_is_stale(scheduled, desired.get(*task_id), &zone_name)
             })
             .map(|(task_id, _)| task_id.clone())
             .collect();
@@ -197,7 +223,7 @@ impl AutomationScheduler {
                 // is re-read from the store at fire time, so edits that keep
                 // the cron expression apply to the next fire without a job
                 // rebuild.
-                Job::new_async_tz(cron_expr.as_str(), Local, move |_job_id, _lock| {
+                Job::new_async_tz(cron_expr.as_str(), tz, move |_job_id, _lock| {
                     let manager = Arc::clone(&manager);
                     let task_id = task_id.clone();
                     Box::pin(async move {
@@ -215,6 +241,7 @@ impl AutomationScheduler {
                                 ScheduledJob {
                                     job_id,
                                     cron: cron_expr,
+                                    tz: zone_name.clone(),
                                 },
                             );
                             self.report_task_error(task_id, None);
@@ -652,4 +679,61 @@ fn format_http_failure(index: usize, display: &str, error: &HttpExecutionFailure
         error.to_string(),
     ]
     .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn task(cron: &str) -> CronTask {
+        serde_json::from_value(serde_json::json!({
+            "id": "t1",
+            "name": "task",
+            "cron": cron,
+            "enabled": true,
+            "type": "bash",
+            "script": "true",
+        }))
+        .expect("cron task")
+    }
+
+    fn scheduled(cron: &str, tz: &str) -> ScheduledJob {
+        ScheduledJob {
+            job_id: Uuid::nil(),
+            cron: cron.to_string(),
+            tz: tz.to_string(),
+        }
+    }
+
+    #[test]
+    fn job_is_stale_detects_removed_changed_and_time_zone_moves() {
+        let job = scheduled("0 0 9 * * *", "Asia/Shanghai");
+        assert!(!job_is_stale(
+            &job,
+            Some(&task(" 0 0 9 * * * ")),
+            "Asia/Shanghai"
+        ));
+        assert!(job_is_stale(&job, None, "Asia/Shanghai"));
+        assert!(job_is_stale(
+            &job,
+            Some(&task("0 0 10 * * *")),
+            "Asia/Shanghai"
+        ));
+        assert!(job_is_stale(
+            &job,
+            Some(&task("0 0 9 * * *")),
+            "Europe/Paris"
+        ));
+    }
+
+    #[test]
+    fn scheduler_time_zone_falls_back_to_utc() {
+        assert_eq!(
+            scheduler_time_zone("Asia/Tokyo").1,
+            chrono_tz::Tz::Asia__Tokyo
+        );
+        let (name, tz) = scheduler_time_zone("Not/AZone");
+        assert_eq!(name, "UTC");
+        assert_eq!(tz, chrono_tz::Tz::UTC);
+    }
 }

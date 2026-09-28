@@ -3,7 +3,7 @@ use serde_json::json;
 use super::db;
 use super::store::AutomationStore;
 use super::types::*;
-use super::validate::validate_cron_expression;
+use super::validate::{parse_cron, validate_cron_expression};
 
 fn apply_input(base_revision: u64, ops: Vec<AutomationOp>) -> AutomationApplyInput {
     AutomationApplyInput { base_revision, ops }
@@ -56,6 +56,28 @@ fn validate_cron_expression_accepts_six_field_syntax() {
 fn validate_cron_expression_rejects_five_field_syntax() {
     let error = validate_cron_expression("* * * * *").expect_err("reject five-field cron");
     assert!(error.contains("六段"));
+}
+
+#[test]
+fn parse_cron_rejects_five_fields_and_accepts_six() {
+    assert!(parse_cron("* * * * *").unwrap_err().contains("六段"));
+    assert!(parse_cron("   ").is_err());
+    assert!(parse_cron("0 0 25 * * *").is_err());
+    parse_cron(" 0 */5 * * * * ").expect("six-field cron with surrounding spaces");
+}
+
+#[test]
+fn parse_cron_evaluates_in_the_given_time_zone() {
+    use chrono::{Datelike, TimeZone, Timelike, Weekday};
+    let tz: chrono_tz::Tz = "Asia/Shanghai".parse().unwrap();
+    let cron = parse_cron("0 0 9 * * MON").expect("parse weekly cron");
+    // 2026-09-29 is a Tuesday; the next Monday 09:00 in Shanghai is 2026-10-05.
+    let start = tz.with_ymd_and_hms(2026, 9, 29, 12, 0, 0).unwrap();
+    let next = cron.iter_after(start).next().expect("next occurrence");
+    assert_eq!(next.weekday(), Weekday::Mon);
+    assert_eq!((next.hour(), next.minute(), next.second()), (9, 0, 0));
+    assert_eq!(next.date_naive().to_string(), "2026-10-05");
+    assert_eq!(next.with_timezone(&chrono::Utc).hour(), 1);
 }
 
 #[test]

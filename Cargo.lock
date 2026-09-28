@@ -3418,6 +3418,7 @@ dependencies = [
  "chardetng",
  "chrono",
  "chrono-tz",
+ "croner",
  "dirs",
  "encoding_rs",
  "flate2",

@@ -103,6 +103,7 @@ impl MemoryStore {
         type_filter: Option<&str>,
     ) -> Result<Vec<MemorySearchMatch>, String> {
         let mut out = Vec::new();
+        let today = memory_now().date_naive();
         for meta in meta_by_key.values() {
             if let Some(filter) = type_filter {
                 if meta.memory_type != filter {
@@ -130,7 +131,7 @@ impl MemoryStore {
                 }
             }
             if best_score > 0.0 {
-                let (score, raw_score, age_days) = apply_daily_decay(best_score, meta);
+                let (score, raw_score, age_days) = apply_daily_decay(best_score, meta, today);
                 out.push(MemorySearchMatch {
                     slug: meta.slug.clone(),
                     scope: meta.scope.clone(),
@@ -216,6 +217,7 @@ fn search_fts_table(
             ))
         })
         .map_err(|e| format!("执行记忆 FTS 查询失败：{e}"))?;
+    let today = memory_now().date_naive();
     for row in rows {
         let (slug, scope, workdir_hash, snippet, bm25) =
             row.map_err(|e| format!("读取记忆 FTS 结果失败：{e}"))?;
@@ -232,7 +234,7 @@ fn search_fts_table(
         } else {
             1.0 / (1.0 + bm25)
         };
-        let (score, raw_score, age_days) = apply_daily_decay(raw, meta);
+        let (score, raw_score, age_days) = apply_daily_decay(raw, meta, today);
         out.push(MemorySearchMatch {
             slug: meta.slug.clone(),
             scope: meta.scope.clone(),
@@ -297,7 +299,11 @@ fn scope_matches(
         }
     }
 }
-fn apply_daily_decay(raw_score: f64, meta: &MemoryMeta) -> (f64, Option<f64>, Option<f64>) {
+fn apply_daily_decay(
+    raw_score: f64,
+    meta: &MemoryMeta,
+    today: NaiveDate,
+) -> (f64, Option<f64>, Option<f64>) {
     let weighted_score = raw_score * memory_priority_weight(meta);
     if meta.memory_type != "daily" {
         return (weighted_score, None, None);
@@ -307,10 +313,7 @@ fn apply_daily_decay(raw_score: f64, meta: &MemoryMeta) -> (f64, Option<f64>, Op
     };
     let age_days = NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()
-        .map(|entry_date| {
-            let today = Local::now().date_naive();
-            (today.signed_duration_since(entry_date).num_days().max(0)) as f64
-        })
+        .map(|entry_date| (today.signed_duration_since(entry_date).num_days().max(0)) as f64)
         .unwrap_or(0.0);
     let score = weighted_score * (-age_days / 30.0).exp();
     (score, Some(raw_score), Some(age_days))

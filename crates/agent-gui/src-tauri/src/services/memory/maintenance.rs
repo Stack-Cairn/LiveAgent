@@ -238,7 +238,7 @@ impl MemoryStore {
         if !daily_dir.exists() {
             return Ok(());
         }
-        let today = Local::now().date_naive();
+        let today = memory_now().date_naive();
         let entries = fs::read_dir(&daily_dir).map_err(|e| format!("读取 daily 目录失败：{e}"))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("读取 daily 文件失败：{e}"))?;

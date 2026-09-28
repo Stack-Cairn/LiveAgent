@@ -62,6 +62,8 @@ chrono-tz = "0.10.4"
 iana-time-zone = "0.1"
 tauri-plugin-notification = "2"
 tokio-cron-scheduler = "0.15.1"
+# 与 tokio-cron-scheduler 共用的 cron 解析器;直接依赖用于校验与计算未来触发时间。
+croner = "3.0.1"
 rustls = { version = "0.23.41", default-features = false, features = ["ring", "std"] }
 prost = "0.14.4"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
