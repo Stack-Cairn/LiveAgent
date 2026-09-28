@@ -133,6 +133,10 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
         <SettingsRow title={t("planner.view.showWeekends")} control={toggle("showWeekends")} />
         <SettingsRow title={t("planner.view.showCompleted")} control={toggle("showCompleted")} />
         <SettingsRow
+          title={t("planner.settings.showCronTasks")}
+          control={toggle("showCronTasks")}
+        />
+        <SettingsRow
           title={t("planner.display.workHoursOnly")}
           description={t("planner.display.workHoursHint")}
           control={toggle("workHoursOnly")}

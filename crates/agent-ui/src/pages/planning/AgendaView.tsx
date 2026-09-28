@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { Check, Circle } from "../../components/IconSet";
+import { isCronEvent } from "../../lib/planning/cronLayer";
 import { planningDateLocale, translate } from "../../lib/planning/i18n";
 import { taskListColor, taskListLayer } from "../../lib/planning/taskLists";
 import { addDays, dayStart, eventTitle, timeBounds, zonedParts } from "../../lib/planning/time";
@@ -143,7 +144,7 @@ export function AgendaView({
                     )}
                     <button
                       type="button"
-                      className={`planning-agenda-row ${past || done ? "is-past" : ""}`}
+                      className={`planning-agenda-row ${item.kind === "event" && isCronEvent(item.event) ? "planning-event-cron" : ""} ${past || done ? "is-past" : ""}`}
                       onClick={(e) =>
                         item.kind === "event"
                           ? onSelect(item.event, e.currentTarget)

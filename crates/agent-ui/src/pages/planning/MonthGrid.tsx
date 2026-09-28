@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Check, Circle } from "../../components/IconSet";
+import { isCronEvent } from "../../lib/planning/cronLayer";
 import { planningDateLocale, translate } from "../../lib/planning/i18n";
 import { taskListColor, taskListLayer } from "../../lib/planning/taskLists";
 import { addDays, dayStart, eventTitle, timeBounds, zonedParts } from "../../lib/planning/time";
@@ -179,7 +180,7 @@ export function MonthGrid({
                   <button
                     type="button"
                     key={e.id}
-                    className={`planning-month-event is-filled ${e.todoId ? "planning-task-chip" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
+                    className={`planning-month-event is-filled ${e.todoId ? "planning-task-chip" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
                     title={eventTitle(e, snapshot.todos)}
                     style={e.todoId ? taskAppearance(color) : eventAppearance(color)}
                     onClick={(click) => onSelect(e, click.currentTarget)}
@@ -191,7 +192,7 @@ export function MonthGrid({
                   <button
                     type="button"
                     key={e.id}
-                    className={`planning-month-event ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
+                    className={`planning-month-event ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
                     title={eventTitle(e, snapshot.todos)}
                     style={e.todoId ? ({ "--planning-accent": color } as CSSProperties) : undefined}
                     onClick={(click) => onSelect(e, click.currentTarget)}

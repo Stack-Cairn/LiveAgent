@@ -27,6 +27,8 @@ export interface CalendarPreferences {
   workHoursOnly: boolean;
   workStart: number;
   workEnd: number;
+  /** Overlay the read-only scheduled-task (cron) layer on the calendar views. */
+  showCronTasks: boolean;
 }
 /** Minimum hour height in day/week views (Google uses 48px); taller windows stretch it. */
 export const HOUR_HEIGHT = 48;
@@ -40,6 +42,7 @@ const defaults: CalendarPreferences = {
   workHoursOnly: false,
   workStart: 9,
   workEnd: 18,
+  showCronTasks: false,
 };
 function workHours(start: unknown, end: unknown) {
   const valid =
@@ -68,6 +71,7 @@ function loadPreferences(): CalendarPreferences {
       view: ["day", "week", "month", "agenda"].includes(saved.view) ? saved.view : defaults.view,
       ...workHours(saved.workStart, saved.workEnd),
       workHoursOnly: saved.workHoursOnly === true,
+      showCronTasks: saved.showCronTasks === true,
     };
   } catch {
     return defaults;

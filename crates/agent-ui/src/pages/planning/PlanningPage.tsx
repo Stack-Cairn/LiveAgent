@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
+import { cronVirtualEvents, isCronEvent, withCronLayer } from "../../lib/planning/cronLayer";
 import { localizePlanningError, planningLunarAvailable } from "../../lib/planning/i18n";
 import { planningStore, usePlanning } from "../../lib/planning/store";
 import {
@@ -20,6 +21,7 @@ import type { EventTime, PlanningEvent, Todo } from "../../lib/planning/types";
 import { AgendaView } from "./AgendaView";
 import { CalendarImport } from "./CalendarImport";
 import { CalendarManager } from "./CalendarManager";
+import { CronEventPreview } from "./CronEventPreview";
 import { HOUR_HEIGHT, useCalendarPreferences } from "./calendarDisplay";
 import { EventPreview } from "./EventPreview";
 import { MonthGrid } from "./MonthGrid";
@@ -32,6 +34,7 @@ import { TaskListDialog } from "./TaskListDialog";
 import { TaskPanel } from "./TaskPanel";
 import { TasksBoard } from "./TasksBoard";
 import { type PlanningDragStart, TimeGrid } from "./TimeGrid";
+import { useCronOccurrences } from "./useCronOccurrences";
 import { usePlanningT } from "./usePlanningT";
 import "./planning.css";
 
@@ -41,7 +44,12 @@ type Undo = {
   original?: EventTime;
   restore?: { masterId: string; masterRevision: number; date: string };
 };
-export function PlanningPage() {
+export function PlanningPage({
+  onOpenCron,
+}: {
+  /** Opens the scheduled-task page; without it the cron preview hides the jump button. */
+  onOpenCron?: () => void;
+} = {}) {
   const isMobile = useIsMobile();
   const [surface, setSurface] = useState<HTMLElement | null>(null);
   const [width, setWidth] = useState(() => window.innerWidth);
@@ -158,12 +166,27 @@ export function PlanningPage() {
     // The preview's anchor block is gone after navigating.
     setPreview(null);
   }, [days, mode]);
-  useEffect(() => {
-    void planningStore.refresh({
+  const range = useMemo(
+    () => ({
       from: dayStart(days[0], zone),
       to: dayStart(addDays(days[days.length - 1], 1), zone),
-    });
-  }, [days, zone]);
+    }),
+    [days, zone],
+  );
+  useEffect(() => {
+    void planningStore.refresh(range);
+  }, [range]);
+  // Read-only scheduled-task layer: only merged into the snapshot handed to the calendar views.
+  const showCron = mode === "calendar" && preferences.showCronTasks;
+  const cron = useCronOccurrences(showCron, range.from, range.to);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: virtual titles follow the UI locale
+  const viewSnapshot = useMemo(
+    () =>
+      snapshot && showCron && cron.data
+        ? withCronLayer(snapshot, cronVirtualEvents(cron.data, zone))
+        : snapshot,
+    [snapshot, showCron, cron.data, zone, locale],
+  );
   // Re-rendering the whole page (grid layout, task panel) every second made every popover
   // stutter. Tick per second only while the undo countdown shows; otherwise once a minute
   // keeps the now line and past-item styling current.
@@ -430,8 +453,11 @@ export function PlanningPage() {
       onManageCalendars={() => setCalendarsOpen(true)}
       onCreateList={() => setCreatingList(true)}
       onTaskFilter={setTaskFilter}
+      showCron={preferences.showCronTasks}
+      onToggleCron={() => setPreferences({ showCronTasks: !preferences.showCronTasks })}
     />
   );
+  const calendarSnapshot = viewSnapshot ?? snapshot;
   // Side panels are fixed parts of the layout; narrow windows simply leave them out.
   const showSidebar = sidebarInline;
   const showTaskPanel = !compact && mode === "calendar";
@@ -473,6 +499,14 @@ export function PlanningPage() {
           </Button>
         </SettingsNotice>
       )}
+      {showCron && cron.error && (
+        <SettingsNotice variant="action-error" role="alert" className="mx-4 mb-3">
+          {cron.error}
+          <Button variant="ghost" size="sm" onClick={() => void cron.reload()}>
+            {t("planner.common.retry")}
+          </Button>
+        </SettingsNotice>
+      )}
       <div className="planning-body" data-testid="planning-split">
         {showSidebar && sidebar}
         <main
@@ -493,7 +527,7 @@ export function PlanningPage() {
               date={date}
               today={today}
               zone={zone}
-              snapshot={snapshot}
+              snapshot={calendarSnapshot}
               hidden={hidden}
               hoverDay={hoverDay}
               showLunar={preferences.showLunar}
@@ -512,7 +546,7 @@ export function PlanningPage() {
             <AgendaView
               days={days}
               today={today}
-              snapshot={snapshot}
+              snapshot={calendarSnapshot}
               hidden={hidden}
               showLunar={preferences.showLunar}
               showCompleted={preferences.showCompleted}
@@ -529,7 +563,7 @@ export function PlanningPage() {
               onOpenTasks={() => setMode("tasks")}
               days={days}
               today={today}
-              snapshot={snapshot}
+              snapshot={calendarSnapshot}
               hourHeight={HOUR_HEIGHT}
               workHours={
                 preferences.workHoursOnly ? [preferences.workStart, preferences.workEnd] : null
@@ -607,7 +641,17 @@ export function PlanningPage() {
           </Button>
         </div>
       )}
-      {preview && (
+      {preview && isCronEvent(preview.event) ? (
+        cron.data && (
+          <CronEventPreview
+            event={preview.event}
+            anchor={preview.anchor}
+            data={cron.data}
+            onClose={() => setPreview(null)}
+            onOpenCron={onOpenCron}
+          />
+        )
+      ) : preview ? (
         <EventPreview
           event={snapshot.events.find((e) => e.id === preview.event.id) ?? preview.event}
           anchor={preview.anchor}
@@ -618,7 +662,7 @@ export function PlanningPage() {
             setEditor(target);
           }}
         />
-      )}
+      ) : null}
       {quick && (quick.anchor ?? draftElement) && (
         <QuickCreate
           kind={quick.kind}

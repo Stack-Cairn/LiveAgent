@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { Check, CheckCircle2, Circle } from "../../components/IconSet";
+import { isCronEvent } from "../../lib/planning/cronLayer";
 import { type DragState, dragTime, edgeScroll, layoutEvents } from "../../lib/planning/geometry";
 import { planningDateLocale, translate } from "../../lib/planning/i18n";
 import { DEFAULT_TASK_COLOR, taskListColor, taskListLayer } from "../../lib/planning/taskLists";
@@ -20,7 +21,6 @@ import {
   zonedParts,
 } from "../../lib/planning/time";
 import type { EventTime, PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
-
 import { activeEvent, calendarLayer, lunarDate, zoneOffset } from "./calendarDisplay";
 import { eventAppearance, eventColor, taskAppearance } from "./eventAppearance";
 
@@ -561,7 +561,7 @@ export function TimeGrid({
                 <button
                   type="button"
                   key={event.id}
-                  className={`planning-all-day-event ${event.todoId ? "planning-task-chip" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "allDay" && event.time.endDateExclusive <= today ? "is-past" : ""}`}
+                  className={`planning-all-day-event ${event.todoId ? "planning-task-chip" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "allDay" && event.time.endDateExclusive <= today ? "is-past" : ""}`}
                   title={eventTitle(event, snapshot.todos)}
                   style={
                     event.todoId
@@ -786,7 +786,7 @@ export function TimeGrid({
                     return (
                       <div
                         key={event.id}
-                        className={`planning-time-event ${height < 40 ? "is-short" : ""} ${event.todoId ? "is-task" : ""} ${draggingId === event.id ? "is-dragging" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "timed" && event.time.endAt < now ? "is-past" : ""}`}
+                        className={`planning-time-event ${height < 40 ? "is-short" : ""} ${event.todoId ? "is-task" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${draggingId === event.id ? "is-dragging" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "timed" && event.time.endAt < now ? "is-past" : ""}`}
                         style={
                           {
                             ...geometry,

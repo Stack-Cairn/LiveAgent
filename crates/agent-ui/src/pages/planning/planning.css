@@ -350,6 +350,26 @@
 :is(.planning-time-event, .planning-all-day-event, .planning-month-event).is-completed {
   text-decoration: line-through;
 }
+/* Read-only scheduled-task layer: dashed outline and slightly faded so it reads as derived
+   information rather than an editable block. */
+:is(
+  .planning-time-event,
+  .planning-all-day-event,
+  .planning-month-event.is-filled
+).planning-event-cron {
+  border-style: dashed;
+  border-width: 1px;
+  opacity: 0.85;
+}
+.planning-time-event.planning-event-cron {
+  box-shadow: none;
+}
+:is(.planning-month-event:not(.is-filled), .planning-agenda-row).planning-event-cron {
+  opacity: 0.85;
+}
+:is(.planning-all-day-event, .planning-month-event).planning-event-cron.is-past {
+  opacity: 0.5;
+}
 .planning-event-body {
   position: absolute;
   inset: 0;

@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
+import { CRON_LAYER_COLOR } from "../../lib/planning/cronLayer";
 import { calendarName, translate } from "../../lib/planning/i18n";
 import { taskListLayer, taskLists } from "../../lib/planning/taskLists";
 import type { PlanningSnapshot } from "../../lib/planning/types";
@@ -131,6 +132,8 @@ export function PlanningSidebar({
   onManageCalendars,
   onCreateList,
   onTaskFilter,
+  showCron,
+  onToggleCron,
 }: {
   mode: "calendar" | "tasks";
   snapshot: PlanningSnapshot;
@@ -147,6 +150,9 @@ export function PlanningSidebar({
   onManageCalendars(): void;
   onCreateList(): void;
   onTaskFilter(filter: TaskFilter): void;
+  /** Read-only scheduled-task layer, listed last under "Other calendars". */
+  showCron: boolean;
+  onToggleCron(): void;
 }) {
   const [month, setMonth] = useState(date);
   const [lastDate, setLastDate] = useState(date);
@@ -235,19 +241,23 @@ export function PlanningSidebar({
               />
             ))}
           </Section>
-          {other.length > 0 && (
-            <Section title={translate("planner.sidebar.otherCalendars")}>
-              {other.map((c) => (
-                <LayerRow
-                  key={c.id}
-                  color={c.color}
-                  name={calendarName(c)}
-                  checked={!hidden.has(c.id)}
-                  onToggle={() => onToggleLayer(c.id)}
-                />
-              ))}
-            </Section>
-          )}
+          <Section title={translate("planner.sidebar.otherCalendars")}>
+            {other.map((c) => (
+              <LayerRow
+                key={c.id}
+                color={c.color}
+                name={calendarName(c)}
+                checked={!hidden.has(c.id)}
+                onToggle={() => onToggleLayer(c.id)}
+              />
+            ))}
+            <LayerRow
+              color={CRON_LAYER_COLOR}
+              name={translate("planner.cron.layer")}
+              checked={showCron}
+              onToggle={onToggleCron}
+            />
+          </Section>
         </>
       ) : (
         <>

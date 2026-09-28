@@ -28,6 +28,8 @@ type ApplicationViewProps = {
   chatStyle?: CSSProperties;
   chat: ApplicationChatViewProps;
   workspaceOverlays?: ReactNode;
+  /** Lets hub pages jump to another view (e.g. schedule → scheduled tasks). */
+  onOpenView?: (view: ApplicationViewId) => void;
 };
 
 export function ApplicationView(props: ApplicationViewProps) {
@@ -43,11 +45,12 @@ export function ApplicationView(props: ApplicationViewProps) {
     chatStyle,
     chat,
     workspaceOverlays,
+    onOpenView,
   } = props;
 
   let content: ReactNode;
   if (activeView === "planning-hub") {
-    content = <PlanningPage />;
+    content = <PlanningPage onOpenCron={onOpenView ? () => onOpenView("cron-hub") : undefined} />;
   } else if (activeView === "skills-hub") {
     content = (
       <SkillsHubPage
