@@ -561,10 +561,33 @@ fn resolve_default_time_zone(configured: Option<&str>) -> String {
 }
 
 /// 有效时区的 chrono_tz 形态;解析失败(理论上不会发生)回退 UTC。
+/// 高频调用方(记忆索引逐文件计算日期锚点等)使用的短时缓存,避免每次都读配置库。
+/// 保存系统设置时调用 `invalidate_default_tz_cache` 立即失效。
+static DEFAULT_TZ_CACHE: std::sync::Mutex<Option<(std::time::Instant, chrono_tz::Tz)>> =
+    std::sync::Mutex::new(None);
+const DEFAULT_TZ_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub(crate) fn runtime_default_tz() -> chrono_tz::Tz {
-    load_runtime_default_time_zone()
+    if let Ok(cache) = DEFAULT_TZ_CACHE.lock() {
+        if let Some((at, tz)) = *cache {
+            if at.elapsed() < DEFAULT_TZ_CACHE_TTL {
+                return tz;
+            }
+        }
+    }
+    let tz = load_runtime_default_time_zone()
         .parse::<chrono_tz::Tz>()
-        .unwrap_or(chrono_tz::Tz::UTC)
+        .unwrap_or(chrono_tz::Tz::UTC);
+    if let Ok(mut cache) = DEFAULT_TZ_CACHE.lock() {
+        *cache = Some((std::time::Instant::now(), tz));
+    }
+    tz
+}
+
+pub(crate) fn invalidate_default_tz_cache() {
+    if let Ok(mut cache) = DEFAULT_TZ_CACHE.lock() {
+        *cache = None;
+    }
 }
 
 /// 浏览器接入模式的合法取值,与前端 BROWSER_AUTOMATION_MODES 一致。

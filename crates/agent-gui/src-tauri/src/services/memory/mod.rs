@@ -7,7 +7,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Timelike, Utc};
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};

@@ -235,7 +235,12 @@ fn index_parsed_file(
         .as_deref()
         .and_then(|date| NaiveDate::parse_from_str(date, "%Y-%m-%d").ok())
         .and_then(|date| date.and_hms_opt(0, 0, 0))
-        .and_then(|dt| Local.from_local_datetime(&dt).single())
+        // 日记日期按全局默认时区的当天 0 点计算年龄锚点,与写入日记时的"今天"一致。
+        .and_then(|dt| {
+            crate::commands::settings::runtime_default_tz()
+                .from_local_datetime(&dt)
+                .single()
+        })
         .map(|dt| dt.timestamp());
     let confidence = if memory_type == "daily" {
         MEMORY_CONFIDENCE_UNKNOWN.to_string()

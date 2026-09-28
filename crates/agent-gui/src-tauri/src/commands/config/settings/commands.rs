@@ -46,6 +46,8 @@ pub async fn settings_save_system(
     .map_err(|e| format!("settings_save_system join 失败：{e}"))??;
     // Bash cron tasks execute in the system workdir; reschedule so the new
     // workdir takes effect without an app restart.
+    // 默认时区可能已变:先让缓存失效,记忆等高频调用方立即读到新时区。
+    invalidate_default_tz_cache();
     automation_scheduler.request_reload();
     // 默认时区可能已变:让日程按新时区重算日期截止提醒并通知桌面端与 WebUI 刷新。
     refresh_planning_default_zone(&app).await;
