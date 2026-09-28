@@ -56,9 +56,11 @@ export function PlanningPage() {
     observer.observe(surface);
     return () => observer.disconnect();
   }, [surface]);
-  // Below these widths the side panels are left out so the calendar keeps its minimum width.
+  // Below these widths the side panels are left out so the calendar keeps its minimum width;
+  // in between both panels slim down (see .is-snug) so sidebar, calendar and tasks all fit.
   const compact = width < 900;
-  const sidebarInline = width >= 1180;
+  const sidebarInline = width >= 1100;
+  const snug = width < 1440;
   const state = usePlanning();
   const snapshot = state.snapshot;
   const zone = snapshot?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -442,7 +444,7 @@ export function PlanningPage() {
   return (
     <section
       ref={setSurface}
-      className="planning-page relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden text-sm text-foreground"
+      className={`planning-page relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden text-sm text-foreground ${snug ? "is-snug" : ""}`}
       aria-label={t("planner.page.label")}
       onDragStart={(e) => e.preventDefault()}
     >

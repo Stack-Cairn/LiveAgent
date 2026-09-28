@@ -63,6 +63,10 @@
   overflow: hidden;
   border-radius: 1.5rem;
 }
+/* Medium widths keep all three columns by slimming both side panels. */
+.planning-page.is-snug .planning-task-surface {
+  width: 17rem;
+}
 
 /* ---------- Sidebar ---------- */
 .planning-sidebar {
@@ -75,6 +79,9 @@
   overflow-y: auto;
   /* No left inset: the Create button lines up with the toolbar title at the page gutter. */
   padding: 0.25rem 0.5rem 1rem 0;
+}
+.planning-page.is-snug .planning-sidebar {
+  width: 15rem;
 }
 .planning-create {
   align-self: flex-start;
