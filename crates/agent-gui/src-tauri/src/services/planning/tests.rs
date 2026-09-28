@@ -1270,6 +1270,31 @@ fn planning_subscriptions_keep_the_url_private_and_mirror_the_feed() {
         ))
         .is_err());
 
+    // Subscribed calendars can be renamed and recolored; invalid colors are rejected.
+    store
+        .subscription(
+            "subscription.update",
+            &json!({"id": id, "name": " 团队日程 ", "color": "#DB2777"}),
+        )
+        .unwrap();
+    let calendar = store
+        .export()
+        .unwrap()
+        .calendars
+        .into_iter()
+        .find(|c| c.id == id)
+        .unwrap();
+    assert_eq!(
+        (calendar.name.as_str(), calendar.color.as_str()),
+        ("团队日程", "#DB2777")
+    );
+    assert!(store
+        .subscription("subscription.update", &json!({"id": id, "color": "red"}))
+        .is_err());
+    assert!(store
+        .subscription("subscription.update", &json!({"id": id, "name": "  "}))
+        .is_err());
+
     store.fail_subscription(&id, "HTTP 404").unwrap();
     let status = store.snapshot(Query::default()).unwrap().subscriptions;
     assert_eq!(status[0].last_error.as_deref(), Some("HTTP 404"));
