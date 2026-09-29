@@ -23,6 +23,7 @@ import {
 import type { EventTime, PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
 import { activeEvent, calendarLayer, lunarDate, zoneOffset } from "./calendarDisplay";
 import { eventAppearance, eventColor, taskAppearance } from "./eventAppearance";
+import { useDayDrag } from "./useDayDrag";
 
 const GUTTER = 56;
 const DEADLINE_PREFIX = "deadline:";
@@ -142,6 +143,15 @@ export function TimeGrid({
   const [pending, setPending] = useState(false);
   const zone = snapshot.timeZone;
   const callbacks = useRef({ onCommit, onDragEnd, onCreate, onInteractionChange });
+  // All-day chips move between days in the all-day row.
+  const dayDrag = useDayDrag({
+    zone,
+    canDrag: (e) =>
+      e.time.kind === "allDay" &&
+      !isCronEvent(e) &&
+      !snapshot.calendars.find((c) => c.id === e.calendarId)?.readOnly,
+    onMove: (event, time) => void onCommit(event, undefined, time),
+  });
   callbacks.current = { onCommit, onDragEnd, onCreate, onInteractionChange };
   const previousDensity = useRef<number | null>(null);
   const visible = snapshot.events.filter(
@@ -485,7 +495,8 @@ export function TimeGrid({
                 });
             }}
             className={
-              preview?.kind === "allDay" && preview.startDate === day
+              (preview?.kind === "allDay" && preview.startDate === day) ||
+              dayDrag.dragging?.target === day
                 ? "planning-all-day-target"
                 : ""
             }
@@ -561,14 +572,18 @@ export function TimeGrid({
                 <button
                   type="button"
                   key={event.id}
-                  className={`planning-all-day-event ${event.todoId ? "planning-task-chip" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "allDay" && event.time.endDateExclusive <= today ? "is-past" : ""}`}
+                  className={`planning-all-day-event ${dayDrag.dragging?.id === event.id ? "is-dragging" : ""} ${event.todoId ? "planning-task-chip" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "allDay" && event.time.endDateExclusive <= today ? "is-past" : ""}`}
                   title={eventTitle(event, snapshot.todos)}
                   style={
                     event.todoId
                       ? taskAppearance(eventColor(event, snapshot))
                       : eventAppearance(eventColor(event, snapshot))
                   }
-                  onClick={(e) => onSelect(event, e.currentTarget)}
+                  onPointerDown={(down) => dayDrag.start(down, event, day)}
+                  onClick={(e) => {
+                    const anchor = e.currentTarget;
+                    dayDrag.click(() => onSelect(event, anchor));
+                  }}
                 >
                   {event.todoId && (
                     <TaskMark todo={snapshot.todos.find((t) => t.id === event.todoId)} />

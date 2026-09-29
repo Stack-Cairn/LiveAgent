@@ -556,6 +556,7 @@ export function PlanningPage({
                 if (Date.now() - quickClosedAt.current < 400) return;
                 setQuick({ kind: "event", time, title: "", anchor });
               }}
+              onMove={(event, time) => void commitTime(event, undefined, time)}
             />
           ) : view === "agenda" ? (
             <AgendaView

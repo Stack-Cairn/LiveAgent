@@ -7,6 +7,7 @@ import { addDays, dayStart, eventTitle, timeBounds, zonedParts } from "../../lib
 import type { EventTime, PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
 import { activeEvent, calendarLayer, isoWeek, lunarDate } from "./calendarDisplay";
 import { eventAppearance, eventColor, taskAppearance } from "./eventAppearance";
+import { useDayDrag } from "./useDayDrag";
 
 // Row chrome: weekday (first row), date button and padding; each item is 22px + 2px gap.
 const ROW_CHROME = 34;
@@ -28,6 +29,7 @@ export function MonthGrid({
   onSelectTodo,
   onOpenDay,
   onCreate,
+  onMove,
 }: {
   days: string[];
   date: string;
@@ -43,6 +45,8 @@ export function MonthGrid({
   onSelectTodo(todo: Todo): void;
   onOpenDay(day: string): void;
   onCreate(time: EventTime, anchor: Element): void;
+  /** Dropping a chip on another day moves it there, keeping its clock time. */
+  onMove(event: PlanningEvent, time: EventTime): void;
 }) {
   const now = Date.now();
   const allDay = (day: string): EventTime => ({
@@ -50,6 +54,12 @@ export function MonthGrid({
     startDate: day,
     endDateExclusive: addDays(day, 1),
     timeZone: zone,
+  });
+  const drag = useDayDrag({
+    zone,
+    canDrag: (e) =>
+      !isCronEvent(e) && !snapshot.calendars.find((c) => c.id === e.calendarId)?.readOnly,
+    onMove,
   });
   const completed = (todoId?: string | null) =>
     snapshot.todos.some((t) => t.id === todoId && t.status === "completed");
@@ -124,7 +134,7 @@ export function MonthGrid({
               key={day}
               aria-label={translate("planner.month.cell", { day })}
               data-planning-all-day={day}
-              className={`planning-month-cell ${hoverDay === day ? "planning-all-day-target" : ""} ${day === today ? "is-today" : ""} ${day.slice(0, 7) !== date.slice(0, 7) ? "is-outside" : ""}`}
+              className={`planning-month-cell ${hoverDay === day || drag.dragging?.target === day ? "planning-all-day-target" : ""} ${day === today ? "is-today" : ""} ${day.slice(0, 7) !== date.slice(0, 7) ? "is-outside" : ""}`}
               onClick={(e) => {
                 if (e.target === e.currentTarget) onCreate(allDay(day), e.currentTarget);
               }}
@@ -180,10 +190,14 @@ export function MonthGrid({
                   <button
                     type="button"
                     key={e.id}
-                    className={`planning-month-event is-filled ${e.todoId ? "planning-task-chip" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
+                    className={`planning-month-event is-filled ${drag.dragging?.id === e.id ? "is-dragging" : ""} ${e.todoId ? "planning-task-chip" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
                     title={eventTitle(e, snapshot.todos)}
                     style={e.todoId ? taskAppearance(color) : eventAppearance(color)}
-                    onClick={(click) => onSelect(e, click.currentTarget)}
+                    onPointerDown={(down) => drag.start(down, e, day)}
+                    onClick={(click) => {
+                      const anchor = click.currentTarget;
+                      drag.click(() => onSelect(e, anchor));
+                    }}
                   >
                     {mark}
                     <span className="truncate">{eventTitle(e, snapshot.todos)}</span>
@@ -192,10 +206,14 @@ export function MonthGrid({
                   <button
                     type="button"
                     key={e.id}
-                    className={`planning-month-event ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
+                    className={`planning-month-event ${drag.dragging?.id === e.id ? "is-dragging" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
                     title={eventTitle(e, snapshot.todos)}
                     style={e.todoId ? ({ "--planning-accent": color } as CSSProperties) : undefined}
-                    onClick={(click) => onSelect(e, click.currentTarget)}
+                    onPointerDown={(down) => drag.start(down, e, day)}
+                    onClick={(click) => {
+                      const anchor = click.currentTarget;
+                      drag.click(() => onSelect(e, anchor));
+                    }}
                   >
                     {mark ?? (
                       <span className="planning-month-dot" style={{ backgroundColor: color }} />

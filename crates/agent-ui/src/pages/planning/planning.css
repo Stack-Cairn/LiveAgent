@@ -327,7 +327,9 @@
   box-shadow: 0 0 0 1px hsl(var(--card));
   z-index: 2;
 }
-.planning-time-event.is-dragging {
+.planning-time-event.is-dragging,
+.planning-month-event.is-dragging,
+.planning-all-day-event.is-dragging {
   opacity: 0.4;
 }
 .planning-all-day-event.is-past,
