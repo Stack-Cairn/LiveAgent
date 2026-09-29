@@ -145,6 +145,7 @@ export type PlanningAction =
   | "event.restore"
   | "event.purge"
   | "event.exception"
+  | "event.split"
   | "event.restoreException"
   | "reminder.create"
   | "reminder.acknowledge"

@@ -30,8 +30,8 @@ import { eventNotificationOptions } from "./notifyOptions";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
 import { PlanningDateTimePicker } from "./PlanningDateTimePicker";
 import { RecurrenceFields, type RepeatValue, repeatRule } from "./RecurrenceFields";
-import { rulePreset } from "./recurrence";
-import { useSeriesScope } from "./SeriesScopeDialog";
+import { dayOffset, firstDay, rulePreset, seriesTime, shiftRuleDays } from "./recurrence";
+import { type SeriesScope, useSeriesScope } from "./SeriesScopeDialog";
 import { usePlanningT } from "./usePlanningT";
 
 /** Values typed into the quick-create card, carried over by "More options". */
@@ -45,12 +45,6 @@ export interface EditorDraft {
   /** A new task's time block chosen in quick create; created together with the task. */
   schedule?: { calendarId: string; time: EventTime };
 }
-/** First local day of an event time. */
-function firstDay(time: EventTime) {
-  return time.kind === "timed" ? zonedParts(time.startAt, time.timeZone).date : time.startDate;
-}
-const daysBetween = (from: string, to: string) =>
-  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 /** Compare rules ignoring null/undefined differences from storage. */
 const ruleKey = (rule: Recurrence | null | undefined) =>
   rule
@@ -172,7 +166,7 @@ export function PlanningEditor({
     }
   };
   const save = async () => {
-    let scope: "this" | "all" | undefined;
+    let scope: SeriesScope | undefined;
     if (seriesId && event && title.trim()) {
       const rule = repeatRule(repeat, masterDay ?? startDate, ruleSource);
       const seriesOnly =
@@ -180,7 +174,10 @@ export function PlanningEditor({
         (synthetic &&
           (calendarId !== event.calendarId ||
             (notify === "" ? null : Number(notify)) !== (event.reminderMinutes ?? null)));
-      const chosen = await askScope(t("planner.series.editTitle"), !seriesOnly);
+      const chosen = await askScope(t("planner.series.editTitle"), {
+        allowThis: !seriesOnly,
+        allowFollowing: event.originalDate !== masterDay,
+      });
       if (!chosen) return;
       scope = chosen;
     }
@@ -217,9 +214,14 @@ export function PlanningEditor({
         const reminderMinutes = notify === "" ? null : Number(notify);
         if (scope === "all" && event?.originalDate) {
           if (!master || !masterDay) throw new Error(t("planner.series.missing"));
-          // Move the series by the same day offset and clock the occurrence was given.
-          const base = addDays(masterDay, daysBetween(event.originalDate, startDate));
-          const span = daysBetween(startDate, endDate);
+          const moved = seriesTime(masterDay, event.originalDate, time);
+          // An untouched custom weekly rule moves its weekdays with the series.
+          const seriesRule = () => {
+            const rule = repeatRule(repeat, firstDay(moved), ruleSource);
+            return rule && repeat.preset === "custom" && ruleKey(rule) === ruleKey(ruleSource)
+              ? shiftRuleDays(rule, dayOffset(masterDay, firstDay(moved)))
+              : rule;
+          };
           await planningStore.mutate({
             action: "event.update",
             id: master.id,
@@ -229,20 +231,28 @@ export function PlanningEditor({
               notes,
               calendarId,
               reminderMinutes,
-              time: allDay
-                ? {
-                    kind: "allDay",
-                    startDate: base,
-                    endDateExclusive: addDays(base, span + 1),
-                    timeZone,
-                  }
-                : {
-                    kind: "timed",
-                    startAt: localEpoch(base, startClock, timeZone),
-                    endAt: localEpoch(addDays(base, span), endClock, timeZone),
-                    timeZone,
-                  },
-              recurrence: repeatRule(repeat, base, ruleSource),
+              time: moved,
+              recurrence: seriesRule(),
+            },
+          });
+        } else if (scope === "following" && event?.originalDate) {
+          if (!master) throw new Error(t("planner.series.missing"));
+          // Unchanged rules let the store carry the remaining count and deleted dates over.
+          const rule = repeatRule(repeat, startDate, ruleSource);
+          await planningStore.mutate({
+            action: "event.split",
+            id: master.id,
+            expectedRevision: master.revision,
+            data: {
+              date: event.originalDate,
+              title: title.trim(),
+              notes,
+              calendarId,
+              reminderMinutes,
+              time,
+              ...(ruleKey(rule) === ruleKey(ruleSource)
+                ? {}
+                : { recurrence: rule && { ...rule, excludedDates: [] } }),
             },
           });
         } else if (synthetic && event?.seriesId) {
@@ -285,9 +295,17 @@ export function PlanningEditor({
       }
     });
   };
-  const remove = (scope?: "this" | "all") =>
+  const remove = (scope?: SeriesScope) =>
     perform(async () => {
-      if (event && scope === "all") {
+      if (event && scope === "following" && event.originalDate) {
+        if (!master) throw new Error(t("planner.series.missing"));
+        await planningStore.mutate({
+          action: "event.split",
+          id: master.id,
+          expectedRevision: master.revision,
+          data: { date: event.originalDate, delete: true },
+        });
+      } else if (event && scope === "all") {
         if (!master) throw new Error(t("planner.series.missing"));
         await planningStore.mutate({
           action: "event.delete",
@@ -629,7 +647,9 @@ export function PlanningEditor({
                 disabled={busy}
                 onClick={async () => {
                   if (seriesId && event) {
-                    const scope = await askScope(t("planner.series.deleteTitle"));
+                    const scope = await askScope(t("planner.series.deleteTitle"), {
+                      allowFollowing: event.originalDate !== masterDay,
+                    });
                     if (scope) await remove(scope);
                     return;
                   }

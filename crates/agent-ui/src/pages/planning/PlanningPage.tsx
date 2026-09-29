@@ -31,6 +31,8 @@ import { LayerChecklist, PlanningSidebar, type TaskFilter } from "./PlanningSide
 import { type PlanningMode, PlanningToolbar, type PlanningView } from "./PlanningToolbar";
 import { PlanningTrash } from "./PlanningTrash";
 import { QuickCreate, type QuickKind } from "./QuickCreate";
+import { dayOffset, firstDay, seriesTime, shiftRuleDays } from "./recurrence";
+import { type SeriesScope, useSeriesScope } from "./SeriesScopeDialog";
 import { ShortcutHelp } from "./ShortcutHelp";
 import { TaskListDialog } from "./TaskListDialog";
 import { TaskPanel } from "./TaskPanel";
@@ -214,6 +216,7 @@ export function PlanningPage({
     setUndo(null);
     setError("");
   }, [state.scope]);
+  const { askScope, scopeDialog } = useSeriesScope();
   const report = (e: unknown) => setError(localizePlanningError(e));
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -229,11 +232,49 @@ export function PlanningPage({
   const commitTime = useCallback(
     async (event: PlanningEvent | undefined, todoId: string | undefined, time: EventTime) => {
       if (!snapshot) return;
+      // Moving an occurrence of a recurring event asks for the scope, as in Google.
+      const master =
+        event?.seriesId && event.originalDate
+          ? (snapshot.eventMasters ?? snapshot.events).find((e) => e.id === event.seriesId)
+          : undefined;
+      let scope: SeriesScope = "this";
+      if (master && event?.originalDate) {
+        const chosen = await askScope(t("planner.series.editTitle"), {
+          allowFollowing: event.originalDate !== firstDay(master.time),
+        });
+        if (!chosen) return;
+        scope = chosen;
+      }
       setBusy(true);
       setError("");
       try {
         let saved: PlanningEvent | null;
-        if (event?.id.includes("@") && event.seriesId && event.originalDate) {
+        if (master && event?.originalDate && scope !== "this") {
+          await planningStore.mutate<PlanningEvent>(
+            scope === "all"
+              ? {
+                  action: "event.update",
+                  id: master.id,
+                  expectedRevision: master.revision,
+                  data: {
+                    time: seriesTime(firstDay(master.time), event.originalDate, time),
+                    ...(master.recurrence && {
+                      recurrence: shiftRuleDays(
+                        master.recurrence,
+                        dayOffset(event.originalDate, firstDay(time)),
+                      ),
+                    }),
+                  },
+                }
+              : {
+                  action: "event.split",
+                  id: master.id,
+                  expectedRevision: master.revision,
+                  data: { date: event.originalDate, time },
+                },
+          );
+          setUndo(null);
+        } else if (event?.id.includes("@") && event.seriesId && event.originalDate) {
           saved = await planningStore.mutate<PlanningEvent>({
             action: "event.exception",
             id: event.seriesId,
@@ -288,7 +329,7 @@ export function PlanningPage({
         setBusy(false);
       }
     },
-    [snapshot, t],
+    [snapshot, t, askScope],
   );
   useEffect(() => {
     if (!todoDrag || view !== "month") return;
@@ -631,6 +672,7 @@ export function PlanningPage({
           </aside>
         )}
       </div>
+      {scopeDialog}
       {shortcutsOpen && <ShortcutHelp onClose={() => setShortcutsOpen(false)} />}
       {creatingList && (
         <TaskListDialog

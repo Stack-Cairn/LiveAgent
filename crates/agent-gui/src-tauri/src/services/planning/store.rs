@@ -672,6 +672,16 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             "reminderMinutes",
         ],
         "event.exception" => &["date", "delete", "time", "title", "notes"],
+        "event.split" => &[
+            "date",
+            "delete",
+            "calendarId",
+            "title",
+            "notes",
+            "time",
+            "recurrence",
+            "reminderMinutes",
+        ],
         "event.restoreException" => &["date", "exceptionId", "exceptionRevision"],
         "reminder.create" => &["targetType", "targetId", "triggerAt"],
         "reminder.snooze" => &["minutes"],
@@ -1157,6 +1167,98 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
                     }
                 }
                 result = s.events.iter().find(|e| e.id == event_id).map(|e| json!(e));
+            }
+        }
+        // "此日程及后续": the series ends the day before `date`; unless `delete`, a new series
+        // starts there with the edits. Exceptions from `date` on belong to the old series and
+        // are dropped, while deleted occurrences stay excluded in the new one.
+        "event.split" => {
+            let old = s
+                .events
+                .iter()
+                .find(|e| e.id == key)
+                .ok_or("E:event_missing")?
+                .clone();
+            writable(s, &old.calendar_id)?;
+            if let Some(target) = d["calendarId"].as_str() {
+                writable(s, target)?;
+            }
+            let rule = old.recurrence.clone().ok_or("E:not_recurring")?;
+            let split = required(d, "date")?;
+            let day = time::date(split)?;
+            if day <= time::date(&time::local_date(&old.time)?)? {
+                return Err("E:split_first".into());
+            }
+            let last = day.pred_opt().ok_or("E:date_invalid")?.to_string();
+            // Count every occurrence before the split (excluded ones too) so a count-limited
+            // series keeps its total across both halves.
+            let mut probe = old.clone();
+            if let Some(r) = probe.recurrence.as_mut() {
+                r.excluded_dates.clear();
+                r.until = Some(last.clone());
+            }
+            let before = time::occurrences(&probe, i64::MIN / 4, i64::MAX / 4)?.len() as u32;
+            let remaining = rule.count.map(|c| c.saturating_sub(before));
+            if remaining == Some(0) {
+                return Err("E:occurrence_missing".into());
+            }
+            let carried: Vec<String> = rule
+                .excluded_dates
+                .iter()
+                .filter(|x| x.as_str() >= split)
+                .filter(|x| {
+                    !s.events.iter().any(|e| {
+                        e.series_id.as_deref() == Some(key)
+                            && e.original_date.as_deref() == Some(x.as_str())
+                            && e.deleted_at.is_none()
+                    })
+                })
+                .cloned()
+                .collect();
+            s.events.retain(|e| {
+                !(e.series_id.as_deref() == Some(key)
+                    && e.original_date.as_deref().is_some_and(|x| x >= split))
+            });
+            let master = s.events.iter_mut().find(|e| e.id == key).unwrap();
+            if let Some(r) = master.recurrence.as_mut() {
+                r.until = Some(last);
+                r.excluded_dates.retain(|x| x.as_str() < split);
+            }
+            master.revision += 1;
+            master.updated_at = now;
+            if d["delete"] == true {
+                result = Some(json!(master));
+            } else {
+                let mut e = old.clone();
+                e.id = id();
+                e.revision = 1;
+                e.created_at = now;
+                e.updated_at = now;
+                e.time = time::on_date(&old.time, day)?;
+                e.recurrence = Some(Recurrence {
+                    count: remaining,
+                    excluded_dates: carried,
+                    ..rule
+                });
+                let mut updates = d.clone();
+                if let Some(map) = updates.as_object_mut() {
+                    map.remove("date");
+                    map.remove("delete");
+                }
+                let e: Event = patch(
+                    &e,
+                    &updates,
+                    &[
+                        "calendarId",
+                        "title",
+                        "notes",
+                        "time",
+                        "recurrence",
+                        "reminderMinutes",
+                    ],
+                )?;
+                result = Some(json!(e));
+                s.events.push(e);
             }
         }
         "event.restoreException" => {

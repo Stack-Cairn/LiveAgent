@@ -1604,3 +1604,68 @@ fn planning_yearly_recurrence_repeats_on_the_same_date() {
         .collect();
     assert_eq!(days, ["2026-10-05", "2027-10-05", "2028-10-05"]);
 }
+
+#[test]
+fn planning_split_series_keeps_total_count_and_deleted_occurrences() {
+    let store = store();
+    let s = store.snapshot(Query::default()).unwrap();
+    let e = store.mutate(input("event.create",None,None,json!({"title":"Standup","calendarId":s.calendars[0].id,"time":{"kind":"allDay","startDate":"2026-10-01","endDateExclusive":"2026-10-02","timeZone":"Asia/Shanghai"},"recurrence":{"frequency":"daily","interval":1,"count":5}}))).unwrap().item.unwrap();
+    let id = e["id"].as_str().unwrap();
+    store
+        .mutate(input(
+            "event.exception",
+            Some(id),
+            Some(1),
+            json!({"date":"2026-10-04","delete":true}),
+        ))
+        .unwrap();
+    assert!(store
+        .mutate(input(
+            "event.split",
+            Some(id),
+            Some(2),
+            json!({"date":"2026-10-01","delete":true})
+        ))
+        .is_err());
+    let next: Event = serde_json::from_value(
+        store
+            .mutate(input(
+                "event.split",
+                Some(id),
+                Some(2),
+                json!({"date":"2026-10-03","title":"Sync"}),
+            ))
+            .unwrap()
+            .item
+            .unwrap(),
+    )
+    .unwrap();
+    let dates = |event: &Event| -> Vec<String> {
+        time::occurrences(event, 0, i64::MAX / 2)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.original_date.unwrap())
+            .collect()
+    };
+    assert_eq!(next.title, "Sync");
+    assert_eq!(dates(&next), ["2026-10-03", "2026-10-05"]);
+    let s = store.snapshot(Query::default()).unwrap();
+    let old = s.events.iter().find(|e| e.id == id).unwrap();
+    assert_eq!(dates(old), ["2026-10-01", "2026-10-02"]);
+    assert!(!s
+        .events
+        .iter()
+        .any(|e| e.series_id.as_deref() == Some(id)));
+    // Deleting "this and following" only shortens the series.
+    store
+        .mutate(input(
+            "event.split",
+            Some(&next.id),
+            Some(1),
+            json!({"date":"2026-10-05","delete":true}),
+        ))
+        .unwrap();
+    let s = store.snapshot(Query::default()).unwrap();
+    let next = s.events.iter().find(|e| e.id == next.id).unwrap();
+    assert_eq!(dates(next), ["2026-10-03"]);
+}

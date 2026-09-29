@@ -13,11 +13,13 @@ import {
 import { Button } from "../../components/ui/button";
 import { usePlanningT } from "./usePlanningT";
 
-export type SeriesScope = "this" | "all";
+export type SeriesScope = "this" | "following" | "all";
 interface ScopeRequest {
   title: string;
   /** Changes that only the series can hold (rule, calendar, notification) hide "此日程". */
   allowThis: boolean;
+  /** Hidden on the first occurrence, where it equals "所有日程". */
+  allowFollowing: boolean;
   resolve(scope: SeriesScope | null): void;
 }
 
@@ -32,10 +34,10 @@ export function useSeriesScope() {
     setRequest(null);
   }, []);
   const askScope = useCallback(
-    (title: string, allowThis = true) =>
+    (title: string, { allowThis = true, allowFollowing = true } = {}) =>
       new Promise<SeriesScope | null>((resolve) => {
         pending.current?.resolve(null);
-        pending.current = { title, allowThis, resolve };
+        pending.current = { title, allowThis, allowFollowing, resolve };
         setRequest(pending.current);
       }),
     [],
@@ -52,30 +54,38 @@ export function useSeriesScope() {
         <AlertDialogHeader>
           <AlertDialogTitle>{request.title}</AlertDialogTitle>
         </AlertDialogHeader>
-        {!request.allowThis && (
-          <AlertDialogBody>
+        <AlertDialogBody className="space-y-3">
+          {!request.allowThis && (
             <AlertDialogDescription>{t("planner.series.allOnlyHint")}</AlertDialogDescription>
-          </AlertDialogBody>
-        )}
+          )}
+          <div className="flex flex-col gap-2">
+            {(
+              [
+                ["this", request.allowThis],
+                ["following", request.allowFollowing],
+                ["all", true],
+              ] as const
+            )
+              .filter(([, shown]) => shown)
+              .map(([scope], index) => (
+                <Button
+                  key={scope}
+                  type="button"
+                  variant="outline"
+                  className="justify-start"
+                  autoFocus={index === 0}
+                  onClick={() => finish(scope)}
+                >
+                  {t(`planner.series.${scope}`)}
+                </Button>
+              ))}
+          </div>
+        </AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogActions>
             <AlertDialogClose render={<Button type="button" variant="ghost" className="h-8" />}>
               {t("planner.common.cancel")}
             </AlertDialogClose>
-            {request.allowThis && (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8"
-                autoFocus
-                onClick={() => finish("this")}
-              >
-                {t("planner.series.this")}
-              </Button>
-            )}
-            <Button type="button" className="h-8" onClick={() => finish("all")}>
-              {t("planner.series.all")}
-            </Button>
           </AlertDialogActions>
         </AlertDialogFooter>
       </AlertDialogContent>

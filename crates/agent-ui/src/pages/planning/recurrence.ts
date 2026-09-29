@@ -1,6 +1,7 @@
 import type { Locale } from "@liveagent/app/i18n/config";
 import { planningDateLocale } from "../../lib/planning/i18n";
-import type { Recurrence } from "../../lib/planning/types";
+import { addDays, localEpoch, zonedParts } from "../../lib/planning/time";
+import type { EventTime, Recurrence } from "../../lib/planning/types";
 
 type Translate = (key: string, vars?: Record<string, string>) => string;
 export type Frequency = Recurrence["frequency"];
@@ -106,4 +107,47 @@ export function describeRecurrence(t: Translate, locale: Locale, rule: Recurrenc
   else if (rule.count)
     text = t("planner.repeat.descCount", { base: text, count: String(rule.count) });
   return text;
+}
+
+/** First local day of an event time. */
+export function firstDay(time: EventTime) {
+  return time.kind === "timed" ? zonedParts(time.startAt, time.timeZone).date : time.startDate;
+}
+
+const daysBetween = (from: string, to: string) =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/**
+ * The series' new first time when the occurrence of `originalDate` is given `time` for all
+ * events: the first day moves by the same number of days and takes the new clock times.
+ */
+export function seriesTime(masterDay: string, originalDate: string, time: EventTime): EventTime {
+  if (time.kind === "allDay") {
+    const base = addDays(masterDay, daysBetween(originalDate, time.startDate));
+    return {
+      ...time,
+      startDate: base,
+      endDateExclusive: addDays(base, daysBetween(time.startDate, time.endDateExclusive)),
+    };
+  }
+  const start = zonedParts(time.startAt, time.timeZone),
+    end = zonedParts(time.endAt, time.timeZone);
+  const base = addDays(masterDay, daysBetween(originalDate, start.date));
+  return {
+    ...time,
+    startAt: localEpoch(base, start.time, time.timeZone),
+    endAt: localEpoch(addDays(base, daysBetween(start.date, end.date)), end.time, time.timeZone),
+  };
+}
+
+/** Weekly weekdays follow a series moved by `days`, so "周一、周四" dragged a day becomes "周二、周五". */
+export function shiftRuleDays(rule: Recurrence, days: number): Recurrence {
+  if (rule.frequency !== "weekly" || !rule.weekdays.length || days % 7 === 0) return rule;
+  return {
+    ...rule,
+    weekdays: rule.weekdays.map((d) => (((d + days) % 7) + 7) % 7).sort(),
+  };
+}
+export function dayOffset(from: string, to: string) {
+  return daysBetween(from, to);
 }

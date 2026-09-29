@@ -24,7 +24,7 @@ import { eventTitle, timeLabel, zonedParts } from "../../lib/planning/time";
 import type { PlanningEvent, PlanningSnapshot } from "../../lib/planning/types";
 import { eventColor } from "./eventAppearance";
 import type { EditorTarget } from "./PlanningEditor";
-import { describeRecurrence } from "./recurrence";
+import { describeRecurrence, firstDay } from "./recurrence";
 import { useSeriesScope } from "./SeriesScopeDialog";
 import { usePlanningT } from "./usePlanningT";
 export function EventPreview({
@@ -87,9 +87,22 @@ export function EventPreview({
     : "";
   const recycleEvent = async () => {
     const series = event.seriesId && event.originalDate && !todo;
-    const scope = series ? await askScope(t("planner.series.deleteTitle")) : "this";
+    const scope = series
+      ? await askScope(t("planner.series.deleteTitle"), {
+          allowFollowing: !!master && event.originalDate !== firstDay(master.time),
+        })
+      : "this";
     if (!scope) return;
     await perform(() => {
+      if (scope === "following") {
+        if (!master) throw new Error(t("planner.series.missing"));
+        return planningStore.mutate({
+          action: "event.split",
+          id: master.id,
+          expectedRevision: master.revision,
+          data: { date: event.originalDate, delete: true },
+        });
+      }
       if (scope === "all") {
         if (!master) throw new Error(t("planner.series.missing"));
         return planningStore.mutate({
