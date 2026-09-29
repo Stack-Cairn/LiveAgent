@@ -8,7 +8,11 @@ import {
   installMemoryOrganizerService,
   type MemoryOrganizerService,
 } from "../../lib/memory/organizer/service";
-import type { AppSettings } from "../../lib/settings";
+import {
+  type AppSettings,
+  rescheduleOrganizerForTimeZone,
+  resolveDefaultTimeZone,
+} from "../../lib/settings";
 
 type SetSettings = (updater: (prev: AppSettings) => AppSettings) => void;
 
@@ -47,6 +51,15 @@ export function useMemoryOrganizer(settings: AppSettings, setSettings: SetSettin
   useEffect(() => {
     serviceRef.current?.configure();
   }, [scheduleKey]);
+
+  // The default time zone changed (or differs from the zone the pending run was computed in):
+  // recompute the next run right away; the new organizerNextRunAt then re-arms the timer above.
+  const zone = resolveDefaultTimeZone(settings.system);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only zone and schedule identity matter; the updater reads prev
+  useEffect(() => {
+    if (!rescheduleOrganizerForTimeZone(settingsRef.current, zone)) return;
+    setSettingsRef.current((prev) => rescheduleOrganizerForTimeZone(prev, zone) ?? prev);
+  }, [zone, organizerEnabled, organizerSchedule.frequency, organizerSchedule.timezone]);
 }
 
 export function MemoryOrganizerHost(props: { settings: AppSettings; setSettings: SetSettings }) {

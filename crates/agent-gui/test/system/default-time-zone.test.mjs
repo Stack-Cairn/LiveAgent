@@ -117,3 +117,24 @@ test("memory organizer schedule runs at the wall-clock time of the default time 
   );
   assert.equal(settings.computeNextMemoryOrganizerRunAt({ ...daily, frequency: "none" }, from), undefined);
 });
+
+test("changing the default time zone reschedules the pending memory organizer run", () => {
+  const base = settings.getDefaultSettings();
+  const now = Date.parse("2026-09-29T12:00:00Z");
+  const enabled = {
+    ...base,
+    memory: {
+      ...base.memory,
+      organizerEnabled: true,
+      organizerSchedule: { frequency: "daily", timeLocal: "03:00", weekday: 1, timezone: "Asia/Shanghai" },
+      organizerNextRunAt: Date.parse("2026-09-29T19:00:00Z"),
+    },
+  };
+  assert.equal(settings.rescheduleOrganizerForTimeZone(enabled, "Asia/Shanghai", now), null);
+  const moved = settings.rescheduleOrganizerForTimeZone(enabled, "America/New_York", now);
+  assert.equal(moved.memory.organizerSchedule.timezone, "America/New_York");
+  assert.equal(moved.memory.organizerNextRunAt, Date.parse("2026-09-30T07:00:00Z"));
+  // Disabled or unscheduled organizers are left alone.
+  const disabled = { ...enabled, memory: { ...enabled.memory, organizerEnabled: false } };
+  assert.equal(settings.rescheduleOrganizerForTimeZone(disabled, "America/New_York", now), null);
+});

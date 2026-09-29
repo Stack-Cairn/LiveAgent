@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   EffectiveTheme,
   MemoryOrganizerFrequency,
   MemoryOrganizerMode,
@@ -213,4 +214,29 @@ function computeInBrowserZone(
   }
   if (candidate.getTime() <= from) candidate.setDate(candidate.getDate() + 1);
   return candidate.getTime();
+}
+
+/**
+ * `organizerSchedule.timezone` records the zone the next run was computed in. When the app
+ * default time zone differs (changed here, in the WebUI, or while the app was closed), the
+ * pending run is recomputed at once so "03:00" means 03:00 in the new zone. Returns null when
+ * nothing needs to change.
+ */
+export function rescheduleOrganizerForTimeZone(
+  settings: AppSettings,
+  zone: string,
+  now = Date.now(),
+): AppSettings | null {
+  const { organizerEnabled, organizerSchedule } = settings.memory;
+  if (!organizerEnabled || organizerSchedule.frequency === "none") return null;
+  if (organizerSchedule.timezone === zone) return null;
+  const schedule = { ...organizerSchedule, timezone: zone };
+  return {
+    ...settings,
+    memory: {
+      ...settings.memory,
+      organizerSchedule: schedule,
+      organizerNextRunAt: computeNextMemoryOrganizerRunAt(schedule, now, zone),
+    },
+  };
 }

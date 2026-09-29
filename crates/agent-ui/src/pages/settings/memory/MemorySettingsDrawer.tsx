@@ -216,22 +216,20 @@ export function MemorySettingsDrawer(props: {
     setSettings((prev) => {
       const enabled =
         !prev.memory.organizerEnabled || prev.memory.organizerSchedule.frequency === "none";
-      const organizerSchedule =
-        enabled && prev.memory.organizerSchedule.frequency === "none"
-          ? {
-              ...prev.memory.organizerSchedule,
-              frequency: "daily" as MemoryOrganizerFrequency,
-            }
-          : prev.memory.organizerSchedule;
+      const zone = resolveDefaultTimeZone(prev.system);
+      const organizerSchedule = {
+        ...prev.memory.organizerSchedule,
+        ...(enabled && prev.memory.organizerSchedule.frequency === "none"
+          ? { frequency: "daily" as MemoryOrganizerFrequency }
+          : {}),
+        // Record the zone the next run is computed in (see rescheduleOrganizerForTimeZone).
+        timezone: zone,
+      };
       return updateMemorySettings(prev, {
         organizerEnabled: enabled,
         organizerSchedule,
         organizerNextRunAt: enabled
-          ? computeNextMemoryOrganizerRunAt(
-              organizerSchedule,
-              Date.now(),
-              resolveDefaultTimeZone(prev.system),
-            )
+          ? computeNextMemoryOrganizerRunAt(organizerSchedule, Date.now(), zone)
           : undefined,
       });
     });
@@ -239,9 +237,11 @@ export function MemorySettingsDrawer(props: {
 
   function updateOrganizerSchedule(patch: Partial<AppSettings["memory"]["organizerSchedule"]>) {
     setSettings((prev) => {
+      const zone = resolveDefaultTimeZone(prev.system);
       const organizerSchedule = {
         ...prev.memory.organizerSchedule,
         ...patch,
+        timezone: zone,
       };
       const enabledByFrequency = patch.frequency === "daily" || patch.frequency === "weekly";
       const organizerEnabled =
@@ -252,11 +252,7 @@ export function MemorySettingsDrawer(props: {
         organizerSchedule,
         organizerEnabled,
         organizerNextRunAt: organizerEnabled
-          ? computeNextMemoryOrganizerRunAt(
-              organizerSchedule,
-              Date.now(),
-              resolveDefaultTimeZone(prev.system),
-            )
+          ? computeNextMemoryOrganizerRunAt(organizerSchedule, Date.now(), zone)
           : undefined,
       });
     });

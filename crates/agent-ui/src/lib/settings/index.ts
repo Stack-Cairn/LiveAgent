@@ -172,6 +172,7 @@ export {
   getDefaultMemoryOrganizerSchedule,
   getNextTheme,
   normalizeTheme,
+  rescheduleOrganizerForTimeZone,
   resolveEffectiveTheme,
   subscribeToSystemThemePreference,
 } from "./themeAndMemory";
