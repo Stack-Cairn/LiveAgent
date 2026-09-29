@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { CalendarDays, MoreHorizontal, Trash2, Upload } from "../../components/IconSet";
+import { CalendarDays, Keyboard, MoreHorizontal, Trash2, Upload } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
@@ -22,6 +22,7 @@ export function CalendarDisplaySettings({
   onCalendars,
   onImport,
   onTrash,
+  onShortcuts,
   value,
   onChange,
   disabled,
@@ -33,6 +34,7 @@ export function CalendarDisplaySettings({
   onCalendars(): void;
   onImport(): void;
   onTrash(): void;
+  onShortcuts(): void;
   value: CalendarPreferences;
   onChange(patch: Partial<CalendarPreferences>): void;
   disabled: boolean;
@@ -50,6 +52,7 @@ export function CalendarDisplaySettings({
           [CalendarDays, t("planner.toolbar.manageCalendars"), onCalendars],
           [Upload, t("planner.toolbar.import"), onImport],
           [Trash2, t("planner.trash"), onTrash],
+          [Keyboard, t("planner.shortcuts.title"), onShortcuts],
         ] as const
       ).map(([Icon, label, run]) => (
         <Button

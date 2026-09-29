@@ -67,7 +67,9 @@ export function PlanningToolbar({
   onCalendars,
   onTrash,
   onImport,
+  onShortcuts,
   layers,
+  search,
 }: {
   date: string;
   days: string[];
@@ -83,6 +85,9 @@ export function PlanningToolbar({
   onCalendars(): void;
   onTrash(): void;
   onImport(): void;
+  onShortcuts(): void;
+  /** Search button and results popover. */
+  search?: ReactNode;
   /** Calendar visibility for the ⋮ popover when the sidebar is not shown. */
   layers?: ReactNode;
 }) {
@@ -150,12 +155,14 @@ export function PlanningToolbar({
         </>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-1">
+        {search}
         <CalendarDisplaySettings
           showDisplay={mode === "calendar"}
           layers={layers}
           onCalendars={onCalendars}
           onImport={onImport}
           onTrash={onTrash}
+          onShortcuts={onShortcuts}
           value={preferences}
           onChange={onPreferences}
           disabled={interaction || busy}

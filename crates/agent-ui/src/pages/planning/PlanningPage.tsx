@@ -26,10 +26,12 @@ import { HOUR_HEIGHT, useCalendarPreferences } from "./calendarDisplay";
 import { EventPreview } from "./EventPreview";
 import { MonthGrid } from "./MonthGrid";
 import { type EditorTarget, PlanningEditor } from "./PlanningEditor";
+import { PlanningSearch } from "./PlanningSearch";
 import { LayerChecklist, PlanningSidebar, type TaskFilter } from "./PlanningSidebar";
 import { type PlanningMode, PlanningToolbar, type PlanningView } from "./PlanningToolbar";
 import { PlanningTrash } from "./PlanningTrash";
 import { QuickCreate, type QuickKind } from "./QuickCreate";
+import { ShortcutHelp } from "./ShortcutHelp";
 import { TaskListDialog } from "./TaskListDialog";
 import { TaskPanel } from "./TaskPanel";
 import { TasksBoard } from "./TasksBoard";
@@ -93,6 +95,8 @@ export function PlanningPage({
   const [creatingList, setCreatingList] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [preview, setPreview] = useState<{ event: PlanningEvent; anchor: HTMLElement } | null>(
     null,
   );
@@ -370,6 +374,8 @@ export function PlanningPage({
     } else if (mode === "calendar" && (key === "j" || key === "n")) navigate(1);
     else if (mode === "calendar" && (key === "k" || key === "p")) navigate(-1);
     else if (key === "c") createNow(mode === "tasks" ? "todo" : "event");
+    else if (key === "/") setSearchOpen(true);
+    else if (key === "?") setShortcutsOpen(true);
     else return;
     e.preventDefault();
   };
@@ -487,6 +493,20 @@ export function PlanningPage({
         onCalendars={() => setCalendarsOpen(true)}
         onTrash={() => setTrashOpen(true)}
         onImport={() => setImportOpen(true)}
+        onShortcuts={() => setShortcutsOpen(true)}
+        search={
+          <PlanningSearch
+            snapshot={snapshot}
+            open={searchOpen}
+            onOpenChange={setSearchOpen}
+            onOpenEvent={(event, day) => {
+              setMode("calendar");
+              setDate(day);
+              setEditor({ kind: "event", event });
+            }}
+            onOpenTodo={(todo) => setEditor({ kind: "todo", todo })}
+          />
+        }
         layers={
           showSidebar ? undefined : (
             <LayerChecklist
@@ -611,6 +631,7 @@ export function PlanningPage({
           </aside>
         )}
       </div>
+      {shortcutsOpen && <ShortcutHelp onClose={() => setShortcutsOpen(false)} />}
       {creatingList && (
         <TaskListDialog
           action={{ kind: "create" }}
