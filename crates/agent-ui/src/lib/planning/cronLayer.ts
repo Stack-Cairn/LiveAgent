@@ -26,11 +26,11 @@ export type CronEventRef =
   | { kind: "run"; runId: string }
   | { kind: "day"; taskId: string; date: string };
 
-export function cronLayerCalendar(): PlanningCalendar {
+export function cronLayerCalendar(color = CRON_LAYER_COLOR): PlanningCalendar {
   return {
     id: CRON_LAYER_ID,
     name: translate("planner.cron.layer"),
-    color: CRON_LAYER_COLOR,
+    color,
     sortOrder: Number.MAX_SAFE_INTEGER,
     isDefault: false,
     reminderMinutes: null,
@@ -178,10 +178,14 @@ export function cronVirtualEvents(response: CronOccurrencesResponse, zone: strin
 }
 
 /** Derived snapshot for the calendar views only; the original snapshot is never mutated. */
-export function withCronLayer(snapshot: PlanningSnapshot, events: PlanningEvent[]) {
+export function withCronLayer(
+  snapshot: PlanningSnapshot,
+  events: PlanningEvent[],
+  color = CRON_LAYER_COLOR,
+) {
   return {
     ...snapshot,
-    calendars: [...snapshot.calendars, cronLayerCalendar()],
+    calendars: [...snapshot.calendars, cronLayerCalendar(color)],
     events: [...snapshot.events, ...events],
   };
 }

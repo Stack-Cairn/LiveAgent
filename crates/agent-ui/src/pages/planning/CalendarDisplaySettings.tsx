@@ -4,11 +4,17 @@ import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "../../components/ui/popover";
+import { CRON_LAYER_COLOR } from "../../lib/planning/cronLayer";
 import { planningLunarAvailable } from "../../lib/planning/i18n";
 import type { CalendarPreferences } from "./calendarDisplay";
-import { PlanningField, PlanningSelect } from "./PlanningControls";
+import { ColorSwatches, PLANNING_COLORS, PlanningField, PlanningSelect } from "./PlanningControls";
 import { usePlanningT } from "./usePlanningT";
 
+/** The default slate first, then the calendar palette. */
+export const CRON_COLORS = [
+  CRON_LAYER_COLOR,
+  ...PLANNING_COLORS.filter((c) => c.toLowerCase() !== CRON_LAYER_COLOR),
+];
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const clock = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
@@ -154,6 +160,25 @@ export function CalendarDisplaySettings({
               <p className="pl-6 text-xs text-muted-foreground">
                 {t("planner.display.workHoursHint")}
               </p>
+            </div>
+            <div className="space-y-2 border-t border-border pt-3">
+              <Label className="flex items-center gap-2 text-sm font-normal">
+                <Checkbox
+                  checked={value.showCronTasks}
+                  disabled={disabled}
+                  onCheckedChange={(checked) => onChange({ showCronTasks: checked })}
+                />
+                {t("planner.settings.showCronTasks")}
+              </Label>
+              <div className="pl-6">
+                <ColorSwatches
+                  label={t("planner.display.cronColor")}
+                  value={value.cronColor}
+                  palette={CRON_COLORS}
+                  disabled={disabled}
+                  onChange={(cronColor) => onChange({ cronColor })}
+                />
+              </div>
             </div>
             {layers && (
               <div className="space-y-2 border-t border-border pt-3">

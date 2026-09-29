@@ -190,9 +190,9 @@ export function PlanningPage({
   const viewSnapshot = useMemo(
     () =>
       snapshot && showCron && cron.data
-        ? withCronLayer(snapshot, cronVirtualEvents(cron.data, zone))
+        ? withCronLayer(snapshot, cronVirtualEvents(cron.data, zone), preferences.cronColor)
         : snapshot,
-    [snapshot, showCron, cron.data, zone, locale],
+    [snapshot, showCron, cron.data, zone, locale, preferences.cronColor],
   );
   // Re-rendering the whole page (grid layout, task panel) every second made every popover
   // stutter. Tick per second only while the undo countdown shows; otherwise once a minute

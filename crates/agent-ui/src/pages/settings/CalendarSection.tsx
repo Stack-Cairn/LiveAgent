@@ -22,9 +22,11 @@ import {
   planningLunarAvailable,
 } from "../../lib/planning/i18n";
 import { planningStore, usePlanning } from "../../lib/planning/store";
+import { CRON_COLORS } from "../planning/CalendarDisplaySettings";
 import { CalendarImport } from "../planning/CalendarImport";
 import { CalendarManager } from "../planning/CalendarManager";
 import { type CalendarPreferences, useCalendarPreferences } from "../planning/calendarDisplay";
+import { ColorSwatches } from "../planning/PlanningControls";
 import { PlanningTrash } from "../planning/PlanningTrash";
 import {
   GoogleCalendarLink,
@@ -137,6 +139,20 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
           title={t("planner.settings.showCronTasks")}
           control={toggle("showCronTasks")}
         />
+        {preferences.showCronTasks && (
+          <SettingsRow
+            title={t("planner.display.cronColor")}
+            control={
+              <ColorSwatches
+                label={t("planner.display.cronColor")}
+                value={preferences.cronColor}
+                palette={CRON_COLORS}
+                hideLabel
+                onChange={(cronColor) => setPreferences({ cronColor })}
+              />
+            }
+          />
+        )}
         <SettingsRow
           title={t("planner.display.workHoursOnly")}
           description={t("planner.display.workHoursHint")}

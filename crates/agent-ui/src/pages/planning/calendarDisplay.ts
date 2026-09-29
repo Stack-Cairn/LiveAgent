@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { CRON_LAYER_COLOR } from "../../lib/planning/cronLayer";
 import { taskListLayer } from "../../lib/planning/taskLists";
 import { dayStart } from "../../lib/planning/time";
 import type { PlanningEvent, PlanningSnapshot } from "../../lib/planning/types";
@@ -29,6 +30,8 @@ export interface CalendarPreferences {
   workEnd: number;
   /** Overlay the read-only scheduled-task (cron) layer on the calendar views. */
   showCronTasks: boolean;
+  /** Color of the scheduled-task layer (hex, like calendar colors). */
+  cronColor: string;
   /** Hidden calendar / task-list layers, per Agent scope (each Agent has its own calendars). */
   hiddenLayers: Record<string, string[]>;
 }
@@ -45,6 +48,7 @@ const defaults: CalendarPreferences = {
   workStart: 9,
   workEnd: 18,
   showCronTasks: false,
+  cronColor: CRON_LAYER_COLOR,
   hiddenLayers: {},
 };
 function hiddenLayers(input: unknown): Record<string, string[]> {
@@ -86,6 +90,10 @@ function loadPreferences(): CalendarPreferences {
       ...workHours(saved.workStart, saved.workEnd),
       workHoursOnly: saved.workHoursOnly === true,
       showCronTasks: saved.showCronTasks === true,
+      cronColor:
+        typeof saved.cronColor === "string" && /^#[0-9a-f]{6}$/i.test(saved.cronColor)
+          ? saved.cronColor
+          : defaults.cronColor,
       hiddenLayers: hiddenLayers(saved.hiddenLayers),
     };
   } catch {

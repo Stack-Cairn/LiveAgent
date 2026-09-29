@@ -95,18 +95,24 @@ export function ColorSwatches({
   onChange,
   disabled,
   label,
+  palette = PLANNING_COLORS,
+  hideLabel,
 }: {
   value: string;
   onChange(color: string): void;
   disabled?: boolean;
   label: string;
+  /** Swatches offered; the current value is prepended when it is not one of them. */
+  palette?: readonly string[];
+  /** The surrounding row already shows the label. */
+  hideLabel?: boolean;
 }) {
-  const colors = PLANNING_COLORS.some((c) => c.toLowerCase() === value.toLowerCase())
-    ? PLANNING_COLORS
-    : [value, ...PLANNING_COLORS];
+  const colors = palette.some((c) => c.toLowerCase() === value.toLowerCase())
+    ? palette
+    : [value, ...palette];
   return (
     <fieldset className="space-y-2">
-      <legend className="text-sm text-muted-foreground">{label}</legend>
+      <legend className={hideLabel ? "sr-only" : "text-sm text-muted-foreground"}>{label}</legend>
       <div className="flex flex-wrap gap-2.5">
         {colors.map((swatch) => {
           const selected = swatch.toLowerCase() === value.toLowerCase();

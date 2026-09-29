@@ -15,10 +15,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
-import { CRON_LAYER_COLOR } from "../../lib/planning/cronLayer";
 import { calendarName, translate } from "../../lib/planning/i18n";
 import { taskListLayer, taskLists } from "../../lib/planning/taskLists";
 import type { PlanningSnapshot } from "../../lib/planning/types";
+import { useCalendarPreferences } from "./calendarDisplay";
 import { eventAppearance } from "./eventAppearance";
 import { MiniMonth } from "./MiniMonth";
 
@@ -133,6 +133,7 @@ export function LayerChecklist({
   showCron: boolean;
   onToggleCron(): void;
 }) {
+  const [{ cronColor }] = useCalendarPreferences();
   const groups = [
     {
       title: translate("planner.sidebar.myCalendars"),
@@ -173,7 +174,7 @@ export function LayerChecklist({
             ))}
             {index === groups.length - 1 && (
               <LayerRow
-                color={CRON_LAYER_COLOR}
+                color={cronColor}
                 name={translate("planner.cron.layer")}
                 checked={showCron}
                 onToggle={onToggleCron}
@@ -224,6 +225,7 @@ export function PlanningSidebar({
   showCron: boolean;
   onToggleCron(): void;
 }) {
+  const [{ cronColor }] = useCalendarPreferences();
   const [month, setMonth] = useState(date);
   const [lastDate, setLastDate] = useState(date);
   if (date !== lastDate) {
@@ -322,7 +324,7 @@ export function PlanningSidebar({
               />
             ))}
             <LayerRow
-              color={CRON_LAYER_COLOR}
+              color={cronColor}
               name={translate("planner.cron.layer")}
               checked={showCron}
               onToggle={onToggleCron}

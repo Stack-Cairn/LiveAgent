@@ -15,10 +15,11 @@ import type {
   CronTaskType,
 } from "../../lib/automation/types";
 import { describeCron } from "../../lib/planning/cronDescribe";
-import { CRON_LAYER_COLOR, parseCronEventId, runFailed } from "../../lib/planning/cronLayer";
+import { parseCronEventId, runFailed } from "../../lib/planning/cronLayer";
 import { planningDateLocale } from "../../lib/planning/i18n";
 import { durationLabel, MINUTE } from "../../lib/planning/time";
 import type { PlanningEvent } from "../../lib/planning/types";
+import { useCalendarPreferences } from "./calendarDisplay";
 import { usePlanningT } from "./usePlanningT";
 
 const KIND_LABEL: Record<CronTaskType, string> = {
@@ -48,6 +49,7 @@ export function CronEventPreview({
   onOpenCron?: () => void;
 }) {
   const { t, locale } = usePlanningT();
+  const [{ cronColor }] = useCalendarPreferences();
   const ref = parseCronEventId(event.id);
   const taskId = ref ? (ref.kind === "run" ? undefined : ref.taskId) : undefined;
   const run = ref?.kind === "run" ? data.runs.find((item) => item.id === ref.runId) : undefined;
@@ -117,7 +119,7 @@ export function CronEventPreview({
           <div className="flex gap-4">
             <span
               className="mx-1 mt-2.5 size-3.5 shrink-0 rounded"
-              style={{ backgroundColor: CRON_LAYER_COLOR }}
+              style={{ backgroundColor: cronColor }}
             />
             <div className="min-w-0">
               <PopoverTitle className="break-words text-2xl font-normal leading-8">
