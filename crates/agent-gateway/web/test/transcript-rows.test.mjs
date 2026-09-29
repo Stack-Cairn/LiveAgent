@@ -707,3 +707,29 @@ test("groupHistoryEntriesIntoTurns keeps a headless leading turn", () => {
   assert.equal(turns[0].user, null);
   assert.equal(turns[1].user?.id, "hu:m1");
 });
+
+test("findLiveTurnStartTimestamp only uses the user message that started the live turn", () => {
+  const { findLiveTurnStartTimestamp } = loader.loadModule("src/lib/chat/transcript/rows.ts");
+  const user = (key, timestamp) => ({ key, kind: "user", timestamp });
+  const assistant = (key) => ({ key, kind: "assistant", rounds: [] });
+  const checkpoint = (key) => ({ key, kind: "checkpoint" });
+
+  assert.equal(findLiveTurnStartTimestamp([user("u1", 1_000), assistant("a1")], 1), 1_000);
+  assert.equal(
+    findLiveTurnStartTimestamp([user("u1", 1_000), checkpoint("c1"), assistant("a1")], 2),
+    1_000,
+  );
+  // 回复先于用户消息到达：前面是上一轮回复，不能借用上一轮的用户时间戳。
+  assert.equal(
+    findLiveTurnStartTimestamp([user("u1", 1_000), assistant("a1"), assistant("a2")], 2),
+    undefined,
+  );
+  assert.equal(
+    findLiveTurnStartTimestamp(
+      [user("u1", 1_000), { key: "e1", kind: "error", text: "boom" }, assistant("a2")],
+      2,
+    ),
+    undefined,
+  );
+  assert.equal(findLiveTurnStartTimestamp([assistant("a1")], 0), undefined);
+});

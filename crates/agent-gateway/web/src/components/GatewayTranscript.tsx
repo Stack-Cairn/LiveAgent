@@ -61,6 +61,7 @@ import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import { getRoundText } from "@/lib/chat/uiMessages";
 import { DEFAULT_CHAT_TRANSCRIPT_WIDTH } from "@/lib/settings";
 import { extractLiveRange } from "@/lib/transcript-virtual/liveRangeExtractor";
+import { findLiveTurnStartTimestamp } from "../lib/chat/transcript/rows";
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
 import {
   GATEWAY_CHAT_COLUMN_CLASS,
@@ -987,7 +988,9 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                   toolStatus={isLatestLiveStreaming ? displayedToolStatus : null}
                   toolStatusVariant={displayedToolStatusIsCompaction ? "compaction" : "default"}
                   durationMs={durationMs}
-                  startedAtMs={isLatestLiveStreaming ? retryTarget?.timestamp : undefined}
+                  startedAtMs={
+                    isLatestLiveStreaming ? findLiveTurnStartTimestamp(rows, rowIndex) : undefined
+                  }
                   readOnly={readOnly}
                   redactToolContent={redactToolContent}
                   workdir={workspaceRoot}
