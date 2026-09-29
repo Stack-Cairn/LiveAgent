@@ -116,6 +116,76 @@ function LayerRow({
   );
 }
 
+/**
+ * Flat calendar / task-list visibility checklist for places without the sidebar (the ⋮
+ * popover on narrow windows). Uses the same layers and rows as the sidebar sections.
+ */
+export function LayerChecklist({
+  snapshot,
+  hidden,
+  onToggleLayer,
+  showCron,
+  onToggleCron,
+}: {
+  snapshot: PlanningSnapshot;
+  hidden: Set<string>;
+  onToggleLayer(id: string): void;
+  showCron: boolean;
+  onToggleCron(): void;
+}) {
+  const groups = [
+    {
+      title: translate("planner.sidebar.myCalendars"),
+      rows: snapshot.calendars
+        .filter((c) => !c.readOnly)
+        .map((c) => ({ id: c.id, color: c.color, name: calendarName(c), layer: c.id })),
+    },
+    {
+      title: translate("planner.sidebar.taskLists"),
+      rows: taskLists(snapshot).map((list) => ({
+        id: list.id || "default",
+        color: list.color,
+        name: list.name,
+        layer: taskListLayer(list.id),
+      })),
+    },
+    {
+      title: translate("planner.sidebar.otherCalendars"),
+      rows: snapshot.calendars
+        .filter((c) => c.readOnly)
+        .map((c) => ({ id: c.id, color: c.color, name: calendarName(c), layer: c.id })),
+    },
+  ];
+  return (
+    <div className="space-y-3">
+      {groups.map((group, index) => (
+        <section key={group.title} aria-label={group.title} className="space-y-1">
+          <h4 className="text-xs font-medium text-muted-foreground">{group.title}</h4>
+          <ul className="-mx-2">
+            {group.rows.map((row) => (
+              <LayerRow
+                key={row.id}
+                color={row.color}
+                name={row.name}
+                checked={!hidden.has(row.layer)}
+                onToggle={() => onToggleLayer(row.layer)}
+              />
+            ))}
+            {index === groups.length - 1 && (
+              <LayerRow
+                color={CRON_LAYER_COLOR}
+                name={translate("planner.cron.layer")}
+                checked={showCron}
+                onToggle={onToggleCron}
+              />
+            )}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function PlanningSidebar({
   mode,
   snapshot,

@@ -53,10 +53,16 @@ export function QuickCreate({
   onTimeChange,
   onClose,
   onMore,
+  defaultScheduled = true,
 }: {
   kind: QuickKind;
   time: EventTime;
   anchor: Element;
+  /**
+   * Whether a new task starts with a time block. True when created on the time grid; tasks
+   * created from the Create button or month cells start as plain to-dos (Google Tasks).
+   */
+  defaultScheduled?: boolean;
   snapshot: PlanningSnapshot;
   onKind(kind: QuickKind): void;
   /** Mirrors the title into the draft block. */
@@ -84,7 +90,13 @@ export function QuickCreate({
   const [groupId, setGroupId] = useState(homeTaskList(snapshot));
   const [frequency, setFrequency] = useState<NonNullable<EditorDraft["frequency"]>>("");
   // Google tasks take a time block plus an optional, separate deadline.
-  const [due, setDue] = useState({ date: "", time: "" });
+  const [due, setDue] = useState(
+    !defaultScheduled && time.kind === "allDay"
+      ? { date: time.startDate, time: "" }
+      : { date: "", time: "" },
+  );
+  // Tasks may be plain to-dos without a calendar block.
+  const [scheduled, setScheduled] = useState(defaultScheduled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const draft = (): EditorDraft => ({
@@ -94,7 +106,7 @@ export function QuickCreate({
     groupId,
     frequency,
     due: due.date ? due : undefined,
-    schedule: { calendarId, time },
+    schedule: scheduled ? { calendarId, time } : undefined,
   });
   const save = async () => {
     setBusy(true);
@@ -112,7 +124,7 @@ export function QuickCreate({
             dueDate: due.date && !due.time ? due.date : null,
             dueTimeZone: due.date ? zone : null,
             // The dragged range becomes the task's block in the calendar, as in Google.
-            schedule: { calendarId, time },
+            ...(scheduled ? { schedule: { calendarId, time } } : {}),
           },
         });
       } else {
@@ -229,60 +241,87 @@ export function QuickCreate({
                 </Button>
               ))}
             </fieldset>
-            <Row icon={<Clock3 className="size-5" />}>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <PlanningDateTimePicker
-                  value={{
-                    date: start.date,
-                    time: start.time,
-                    endDate: end.date,
-                    endTime: end.time,
-                  }}
-                  onChange={(v) =>
-                    onTimeChange(
-                      v.time
-                        ? {
-                            kind: "timed",
-                            startAt: localEpoch(v.date, v.time, zone),
-                            endAt: localEpoch(v.endDate || v.date, v.endTime || v.time, zone),
-                            timeZone: zone,
-                          }
-                        : {
-                            kind: "allDay",
-                            startDate: v.date,
-                            endDateExclusive: addDays(v.endDate || v.date, 1),
-                            timeZone: zone,
-                          },
-                    )
-                  }
-                  zone={zone}
-                  label={t("planner.editor.eventTime")}
-                  range
-                  clearable={false}
-                />
-                <Label className="flex items-center gap-2 text-sm font-normal">
-                  <Checkbox
-                    checked={time.kind === "allDay"}
-                    onCheckedChange={(checked) => setAllDay(checked)}
+            {kind === "todo" && !scheduled ? (
+              <Row icon={<Clock3 className="size-5" />}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 font-normal text-muted-foreground"
+                  onClick={() => setScheduled(true)}
+                >
+                  {t("planner.quick.addSchedule")}
+                </Button>
+              </Row>
+            ) : (
+              <Row icon={<Clock3 className="size-5" />}>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <PlanningDateTimePicker
+                    value={{
+                      date: start.date,
+                      time: start.time,
+                      endDate: end.date,
+                      endTime: end.time,
+                    }}
+                    onChange={(v) =>
+                      onTimeChange(
+                        v.time
+                          ? {
+                              kind: "timed",
+                              startAt: localEpoch(v.date, v.time, zone),
+                              endAt: localEpoch(v.endDate || v.date, v.endTime || v.time, zone),
+                              timeZone: zone,
+                            }
+                          : {
+                              kind: "allDay",
+                              startDate: v.date,
+                              endDateExclusive: addDays(v.endDate || v.date, 1),
+                              timeZone: zone,
+                            },
+                      )
+                    }
+                    zone={zone}
+                    label={t("planner.editor.eventTime")}
+                    range
+                    clearable={false}
                   />
-                  {t("planner.allDay")}
-                </Label>
-              </div>
-              {kind === "event" && (
-                <PlanningSelect
-                  className="mt-2 w-auto"
-                  aria-label={t("planner.editor.repeat")}
-                  value={frequency}
-                  onValueChange={(value) => setFrequency(value as typeof frequency)}
-                  options={[
-                    { value: "", label: t("planner.repeat.none") },
-                    { value: "daily", label: t("planner.repeat.daily") },
-                    { value: "weekly", label: t("planner.repeat.weekly") },
-                    { value: "monthly", label: t("planner.repeat.monthly") },
-                  ]}
-                />
-              )}
-            </Row>
+                  <Label className="flex items-center gap-2 text-sm font-normal">
+                    <Checkbox
+                      checked={time.kind === "allDay"}
+                      onCheckedChange={(checked) => setAllDay(checked)}
+                    />
+                    {t("planner.allDay")}
+                  </Label>
+                  {kind === "todo" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="rounded-full"
+                      aria-label={t("planner.quick.removeSchedule")}
+                      title={t("planner.quick.removeSchedule")}
+                      onClick={() => setScheduled(false)}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  )}
+                </div>
+                {kind === "event" && (
+                  <PlanningSelect
+                    className="mt-2 w-auto"
+                    aria-label={t("planner.editor.repeat")}
+                    value={frequency}
+                    onValueChange={(value) => setFrequency(value as typeof frequency)}
+                    options={[
+                      { value: "", label: t("planner.repeat.none") },
+                      { value: "daily", label: t("planner.repeat.daily") },
+                      { value: "weekly", label: t("planner.repeat.weekly") },
+                      { value: "monthly", label: t("planner.repeat.monthly") },
+                    ]}
+                  />
+                )}
+              </Row>
+            )}
             {kind === "todo" && (
               <Row icon={<Target className="size-5" />}>
                 <PlanningDateTimePicker

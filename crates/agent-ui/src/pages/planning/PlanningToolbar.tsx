@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   CalendarDays,
   Check,
@@ -66,6 +67,7 @@ export function PlanningToolbar({
   onCalendars,
   onTrash,
   onImport,
+  layers,
 }: {
   date: string;
   days: string[];
@@ -81,6 +83,8 @@ export function PlanningToolbar({
   onCalendars(): void;
   onTrash(): void;
   onImport(): void;
+  /** Calendar visibility for the ⋮ popover when the sidebar is not shown. */
+  layers?: ReactNode;
 }) {
   const { t, locale } = usePlanningT();
   const viewLabel = (v: PlanningView) => t(`planner.view.${v}`);
@@ -148,6 +152,7 @@ export function PlanningToolbar({
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <CalendarDisplaySettings
           showDisplay={mode === "calendar"}
+          layers={layers}
           onCalendars={onCalendars}
           onImport={onImport}
           onTrash={onTrash}

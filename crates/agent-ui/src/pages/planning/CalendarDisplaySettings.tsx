@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { CalendarDays, MoreHorizontal, Trash2, Upload } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
@@ -18,6 +18,7 @@ const clock = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
  */
 export function CalendarDisplaySettings({
   showDisplay,
+  layers,
   onCalendars,
   onImport,
   onTrash,
@@ -27,6 +28,8 @@ export function CalendarDisplaySettings({
 }: {
   /** Display settings only apply to the calendar views. */
   showDisplay: boolean;
+  /** Calendar visibility, shown here only when the sidebar is hidden (narrow windows). */
+  layers?: ReactNode;
   onCalendars(): void;
   onImport(): void;
   onTrash(): void;
@@ -149,6 +152,12 @@ export function CalendarDisplaySettings({
                 {t("planner.display.workHoursHint")}
               </p>
             </div>
+            {layers && (
+              <div className="space-y-2 border-t border-border pt-3">
+                <h3 className="text-sm font-semibold">{t("planner.display.visibleCalendars")}</h3>
+                {layers}
+              </div>
+            )}
             <div className="border-t border-border pt-2">{actions}</div>
           </>
         )}

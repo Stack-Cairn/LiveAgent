@@ -29,6 +29,8 @@ export interface CalendarPreferences {
   workEnd: number;
   /** Overlay the read-only scheduled-task (cron) layer on the calendar views. */
   showCronTasks: boolean;
+  /** Hidden calendar / task-list layers, per Agent scope (each Agent has its own calendars). */
+  hiddenLayers: Record<string, string[]>;
 }
 /** Minimum hour height in day/week views (Google uses 48px); taller windows stretch it. */
 export const HOUR_HEIGHT = 48;
@@ -43,7 +45,19 @@ const defaults: CalendarPreferences = {
   workStart: 9,
   workEnd: 18,
   showCronTasks: false,
+  hiddenLayers: {},
 };
+function hiddenLayers(input: unknown): Record<string, string[]> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  return Object.fromEntries(
+    Object.entries(input as Record<string, unknown>)
+      .filter(([, layers]) => Array.isArray(layers))
+      .map(([scope, layers]) => [
+        scope,
+        (layers as unknown[]).filter((layer): layer is string => typeof layer === "string"),
+      ]),
+  );
+}
 function workHours(start: unknown, end: unknown) {
   const valid =
     Number.isInteger(start) &&
@@ -72,6 +86,7 @@ function loadPreferences(): CalendarPreferences {
       ...workHours(saved.workStart, saved.workEnd),
       workHoursOnly: saved.workHoursOnly === true,
       showCronTasks: saved.showCronTasks === true,
+      hiddenLayers: hiddenLayers(saved.hiddenLayers),
     };
   } catch {
     return defaults;

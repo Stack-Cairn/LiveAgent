@@ -108,6 +108,7 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
       <SettingsGroup title={t("planner.display.title")}>
         <SettingsRow
           title={t("planner.display.weekStart")}
+          description={t("planner.settings.displayLocalHint")}
           control={
             <SettingsToggleGroup
               aria-label={t("planner.display.weekStart")}

@@ -26,7 +26,7 @@ import { HOUR_HEIGHT, useCalendarPreferences } from "./calendarDisplay";
 import { EventPreview } from "./EventPreview";
 import { MonthGrid } from "./MonthGrid";
 import { type EditorTarget, PlanningEditor } from "./PlanningEditor";
-import { PlanningSidebar, type TaskFilter } from "./PlanningSidebar";
+import { LayerChecklist, PlanningSidebar, type TaskFilter } from "./PlanningSidebar";
 import { type PlanningMode, PlanningToolbar, type PlanningView } from "./PlanningToolbar";
 import { PlanningTrash } from "./PlanningTrash";
 import { QuickCreate, type QuickKind } from "./QuickCreate";
@@ -81,13 +81,16 @@ export function PlanningPage({
     }),
     [storedPreferences, locale],
   );
+  const hidden = useMemo(
+    () => new Set(storedPreferences.hiddenLayers[state.scope] ?? []),
+    [storedPreferences.hiddenLayers, state.scope],
+  );
   const [date, setDate] = useState(today);
   const view: PlanningView = isMobile && preferences.view === "week" ? "day" : preferences.view;
   const setView = (next: PlanningView) => setPreferences({ view: next });
   const [mode, setMode] = useState<PlanningMode>("calendar");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
   const [creatingList, setCreatingList] = useState(false);
-  const [hidden, setHidden] = useState(new Set<string>());
   const [trashOpen, setTrashOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [preview, setPreview] = useState<{ event: PlanningEvent; anchor: HTMLElement } | null>(
@@ -206,7 +209,6 @@ export function PlanningPage({
     setCalendarsOpen(false);
     setUndo(null);
     setError("");
-    setHidden(new Set());
   }, [state.scope]);
   const report = (e: unknown) => setError(localizePlanningError(e));
   const run = async (fn: () => Promise<unknown>) => {
@@ -429,13 +431,15 @@ export function PlanningPage({
     },
   };
   const taskPanel = <TaskPanel key={state.scope} snapshot={snapshot} {...panelProps} />;
-  const toggleLayer = (id: string) =>
-    setHidden((old) => {
-      const next = new Set(old);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  // Layer visibility is remembered per Agent scope, like Google remembers calendar checkboxes.
+  const toggleLayer = (id: string) => {
+    const next = new Set(hidden);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setPreferences({
+      hiddenLayers: { ...preferences.hiddenLayers, [state.scope]: [...next] },
     });
+  };
   const sidebar = (
     <PlanningSidebar
       mode={mode}
@@ -483,6 +487,17 @@ export function PlanningPage({
         onCalendars={() => setCalendarsOpen(true)}
         onTrash={() => setTrashOpen(true)}
         onImport={() => setImportOpen(true)}
+        layers={
+          showSidebar ? undefined : (
+            <LayerChecklist
+              snapshot={snapshot}
+              hidden={hidden}
+              onToggleLayer={toggleLayer}
+              showCron={preferences.showCronTasks}
+              onToggleCron={() => setPreferences({ showCronTasks: !preferences.showCronTasks })}
+            />
+          )
+        }
       />
       {(error || state.error) && (
         <SettingsNotice variant="action-error" role="alert" className="mx-4 mb-3">
@@ -615,6 +630,24 @@ export function PlanningPage({
             disabled={busy}
             onClick={() =>
               void run(async () => {
+                if (!undo.restore && !undo.original) {
+                  // Undoing a new block (dragged-in task) discards it instead of filling the trash.
+                  const deleted = await planningStore.mutate<PlanningEvent>({
+                    action: "event.delete",
+                    id: undo.event.id,
+                    expectedRevision: undo.event.revision,
+                    data: {},
+                  });
+                  if (deleted)
+                    await planningStore.mutate({
+                      action: "event.purge",
+                      id: deleted.id,
+                      expectedRevision: deleted.revision,
+                      data: {},
+                    });
+                  setUndo(null);
+                  return;
+                }
                 await planningStore.mutate({
                   action: undo.restore
                     ? "event.restoreException"
@@ -668,6 +701,7 @@ export function PlanningPage({
           kind={quick.kind}
           time={quick.time}
           anchor={(quick.anchor ?? draftElement) as Element}
+          defaultScheduled={!quick.anchor}
           snapshot={snapshot}
           onKind={(kind) => setQuick({ ...quick, kind })}
           onTitleChange={(title) => setQuick((current) => current && { ...current, title })}

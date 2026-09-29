@@ -18,6 +18,7 @@ import { Label } from "../../components/ui/label";
 import { calendarName, localizePlanningError } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
 import type { PlanningCalendar, PlanningSnapshot } from "../../lib/planning/types";
+import { calendarNotificationOptions } from "./notifyOptions";
 import { ColorSwatches, PLANNING_COLORS, PlanningField, PlanningSelect } from "./PlanningControls";
 import { usePlanningT } from "./usePlanningT";
 export function CalendarManager({
@@ -197,18 +198,7 @@ export function CalendarManager({
                       disabled={busy || selected?.readOnly}
                       value={minutes}
                       onValueChange={(value) => setMinutes(value)}
-                      options={[
-                        { value: "", label: t("planner.calendar.noReminder") },
-                        ...([0, 5, 15, 30, 60, 1440].map((m) => ({
-                          value: m,
-                          label:
-                            m === 0
-                              ? t("planner.calendar.atStart")
-                              : m === 1440
-                                ? t("planner.calendar.dayBefore")
-                                : t("planner.calendar.minutesBefore", { count: m }),
-                        })) ?? []),
-                      ]}
+                      options={calendarNotificationOptions(t, minutes)}
                     />
                   </PlanningField>
                   <Label className="flex items-center gap-2 text-sm font-normal">

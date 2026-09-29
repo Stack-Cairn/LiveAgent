@@ -21,44 +21,11 @@ import { planningStore } from "../../lib/planning/store";
 import { homeTaskList, taskLists } from "../../lib/planning/taskLists";
 import { addDays, eventTitle, localEpoch, timeLabel, zonedParts } from "../../lib/planning/time";
 import type { EventTime, PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
+import { eventNotificationOptions } from "./notifyOptions";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
 import { PlanningDateTimePicker } from "./PlanningDateTimePicker";
 import { usePlanningT } from "./usePlanningT";
 
-const NOTIFY_MINUTES = [0, 5, 15, 30, 60, 1440];
-function notifyLabel(t: (key: string, vars?: Record<string, string>) => string, minutes: number) {
-  const duration: Record<number, string> = {
-    5: "planner.duration.5m",
-    15: "planner.duration.15m",
-    30: "planner.duration.30m",
-    60: "planner.duration.1h",
-    1440: "planner.duration.1d",
-  };
-  return minutes === 0
-    ? t("planner.notify.atStart")
-    : duration[minutes]
-      ? t("planner.notify.before", { duration: t(duration[minutes]) })
-      : t("planner.notify.minutesBefore", { minutes: String(minutes) });
-}
-/** Google-style "Notification" choices; the first follows the calendar's default. */
-function notificationOptions(
-  t: (key: string, vars?: Record<string, string>) => string,
-  calendarDefault: number | null | undefined,
-) {
-  return [
-    {
-      value: "",
-      label: t("planner.notify.default", {
-        label: calendarDefault == null ? t("planner.notify.off") : notifyLabel(t, calendarDefault),
-      }),
-    },
-    { value: "-1", label: t("planner.notify.off") },
-    ...NOTIFY_MINUTES.map((minutes) => ({
-      value: String(minutes),
-      label: notifyLabel(t, minutes),
-    })),
-  ];
-}
 /** Values typed into the quick-create card, carried over by "More options". */
 export interface EditorDraft {
   title: string;
@@ -112,6 +79,8 @@ export function PlanningEditor({
         };
   const formId = useId();
   const draft = target.draft;
+  // A new task's time block from quick create; the user may drop it here.
+  const [schedule, setSchedule] = useState(draft?.schedule);
   const [title, setTitle] = useState(
     event ? eventTitle(event, snapshot.todos) : (todo?.title ?? draft?.title ?? ""),
   );
@@ -187,7 +156,7 @@ export function PlanningEditor({
           action: todo ? "todo.update" : "todo.create",
           id: todo?.id,
           expectedRevision: todo?.revision,
-          data: !todo && draft?.schedule ? { ...data, schedule: draft.schedule } : data,
+          data: !todo && schedule ? { ...data, schedule } : data,
         });
       } else {
         const time: EventTime = allDay
@@ -222,9 +191,7 @@ export function PlanningEditor({
               notes,
               calendarId,
               time,
-              ...(synthetic || todo
-                ? {}
-                : { reminderMinutes: notify === "" ? null : Number(notify) }),
+              ...(synthetic ? {} : { reminderMinutes: notify === "" ? null : Number(notify) }),
               recurrence: frequency
                 ? {
                     frequency,
@@ -342,7 +309,7 @@ export function PlanningEditor({
               <PlanningField label={t("planner.editor.notes")}>
                 <Textarea
                   variant="plain"
-                  disabled={!!synthetic || (target.kind === "event" && !!todo && !event)}
+                  disabled={target.kind === "event" && !!todo && !event}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
@@ -350,16 +317,27 @@ export function PlanningEditor({
               </PlanningField>
               {target.kind === "todo" ? (
                 <>
-                  {!todo && draft?.schedule && (
-                    <p className="text-sm">
+                  {!todo && schedule && (
+                    <div className="flex items-center gap-2 text-sm">
                       <span className="text-muted-foreground">
                         {t("planner.editor.scheduledTimes")}
-                      </span>{" "}
-                      {draft.schedule.time.kind === "timed"
-                        ? zonedParts(draft.schedule.time.startAt, zone).date
-                        : draft.schedule.time.startDate}{" "}
-                      · {timeLabel(draft.schedule.time, zone)}
-                    </p>
+                      </span>
+                      <span className="min-w-0 truncate">
+                        {schedule.time.kind === "timed"
+                          ? zonedParts(schedule.time.startAt, zone).date
+                          : schedule.time.startDate}{" "}
+                        · {timeLabel(schedule.time, zone)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto shrink-0"
+                        onClick={() => setSchedule(undefined)}
+                      >
+                        {t("planner.quick.removeSchedule")}
+                      </Button>
+                    </div>
                   )}
                   <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
                     <PlanningField label={t("planner.taskList")}>
@@ -447,7 +425,7 @@ export function PlanningEditor({
                 </>
               ) : (
                 <>
-                  {todo ? (
+                  {todo && (
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-muted-foreground">{t("planner.taskList")}</span>
                       <span>
@@ -455,7 +433,8 @@ export function PlanningEditor({
                           t("planner.myTasks")}
                       </span>
                     </div>
-                  ) : (
+                  )}
+                  {
                     <PlanningField label={t("planner.calendar")}>
                       <PlanningSelect
                         disabled={busy || !!readOnly || !!synthetic}
@@ -468,7 +447,7 @@ export function PlanningEditor({
                         ]}
                       />
                     </PlanningField>
-                  )}
+                  }
                   <PlanningDateTimePicker
                     value={{
                       date: startDate,
@@ -489,19 +468,22 @@ export function PlanningEditor({
                     clearable={false}
                     disabled={busy || !!readOnly}
                   />
+                  {!synthetic && (event || !todo) && (
+                    <PlanningField label={t("planner.editor.notification")}>
+                      <PlanningSelect
+                        disabled={busy || !!readOnly}
+                        value={notify}
+                        onValueChange={setNotify}
+                        options={eventNotificationOptions(
+                          t,
+                          snapshot.calendars.find((c) => c.id === calendarId)?.reminderMinutes,
+                          notify,
+                        )}
+                      />
+                    </PlanningField>
+                  )}
                   {!synthetic && !todo && (
                     <>
-                      <PlanningField label={t("planner.editor.notification")}>
-                        <PlanningSelect
-                          disabled={busy || !!readOnly}
-                          value={notify}
-                          onValueChange={setNotify}
-                          options={notificationOptions(
-                            t,
-                            snapshot.calendars.find((c) => c.id === calendarId)?.reminderMinutes,
-                          )}
-                        />
-                      </PlanningField>
                       <PlanningField label={t("planner.editor.repeat")}>
                         <PlanningSelect
                           disabled={busy || !!readOnly}
