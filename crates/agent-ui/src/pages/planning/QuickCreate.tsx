@@ -15,6 +15,7 @@ import type { EventTime, PlanningSnapshot } from "../../lib/planning/types";
 import { PlanningSelect } from "./PlanningControls";
 import { PlanningDateTimePicker } from "./PlanningDateTimePicker";
 import type { EditorDraft, EditorTarget } from "./PlanningEditor";
+import { presetOptions, presetRule, type RepeatPreset } from "./recurrence";
 import { usePlanningT } from "./usePlanningT";
 
 export type QuickKind = EditorTarget["kind"];
@@ -72,7 +73,7 @@ export function QuickCreate({
   onClose(): void;
   onMore(target: EditorTarget): void;
 }) {
-  const { t } = usePlanningT();
+  const { t, locale } = usePlanningT();
   const zone = time.timeZone || snapshot.timeZone;
   const start =
     time.kind === "timed" ? zonedParts(time.startAt, zone) : { date: time.startDate, time: "" };
@@ -88,7 +89,7 @@ export function QuickCreate({
       "",
   );
   const [groupId, setGroupId] = useState(homeTaskList(snapshot));
-  const [frequency, setFrequency] = useState<NonNullable<EditorDraft["frequency"]>>("");
+  const [preset, setPreset] = useState<RepeatPreset>("");
   // Google tasks take a time block plus an optional, separate deadline.
   const [due, setDue] = useState(
     !defaultScheduled && time.kind === "allDay"
@@ -104,7 +105,7 @@ export function QuickCreate({
     notes,
     calendarId,
     groupId,
-    frequency,
+    repeat: { preset, rule: presetRule(preset, start.date) },
     due: due.date ? due : undefined,
     schedule: scheduled ? { calendarId, time } : undefined,
   });
@@ -135,16 +136,7 @@ export function QuickCreate({
             notes,
             calendarId,
             time,
-            recurrence: frequency
-              ? {
-                  frequency,
-                  interval: 1,
-                  weekdays: [],
-                  excludedDates: [],
-                  until: null,
-                  count: null,
-                }
-              : null,
+            recurrence: presetRule(preset, start.date),
           },
         });
       }
@@ -310,14 +302,21 @@ export function QuickCreate({
                   <PlanningSelect
                     className="mt-2 w-auto"
                     aria-label={t("planner.editor.repeat")}
-                    value={frequency}
-                    onValueChange={(value) => setFrequency(value as typeof frequency)}
-                    options={[
-                      { value: "", label: t("planner.repeat.none") },
-                      { value: "daily", label: t("planner.repeat.daily") },
-                      { value: "weekly", label: t("planner.repeat.weekly") },
-                      { value: "monthly", label: t("planner.repeat.monthly") },
-                    ]}
+                    value={preset}
+                    onValueChange={(value) => {
+                      // Custom rules need the full editor, as Google opens its custom dialog.
+                      if (value === "custom")
+                        onMore({
+                          kind: "event",
+                          time,
+                          draft: {
+                            ...draft(),
+                            repeat: { preset: "custom", rule: presetRule("weekly", start.date) },
+                          },
+                        });
+                      else setPreset(value as RepeatPreset);
+                    }}
+                    options={presetOptions(t, locale, start.date)}
                   />
                 )}
               </Row>

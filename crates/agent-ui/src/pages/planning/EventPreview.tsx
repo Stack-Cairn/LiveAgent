@@ -4,6 +4,7 @@ import {
   List,
   ListChecks,
   MoreHorizontal,
+  Repeat,
   SquarePen,
   Trash2,
   X,
@@ -23,6 +24,8 @@ import { eventTitle, timeLabel, zonedParts } from "../../lib/planning/time";
 import type { PlanningEvent, PlanningSnapshot } from "../../lib/planning/types";
 import { eventColor } from "./eventAppearance";
 import type { EditorTarget } from "./PlanningEditor";
+import { describeRecurrence } from "./recurrence";
+import { useSeriesScope } from "./SeriesScopeDialog";
 import { usePlanningT } from "./usePlanningT";
 export function EventPreview({
   event,
@@ -66,8 +69,36 @@ export function EventPreview({
       setBusy(false);
     }
   };
-  const recycleEvent = () =>
-    perform(() => {
+  const { askScope, scopeDialog } = useSeriesScope();
+  const master = event.seriesId
+    ? (snapshot.eventMasters ?? snapshot.events).find((e) => e.id === event.seriesId)
+    : undefined;
+  const rule = master?.recurrence ?? event.recurrence;
+  const ruleStart = (master ?? event).time;
+  const repeatText = rule
+    ? describeRecurrence(
+        t,
+        locale,
+        rule,
+        ruleStart.kind === "timed"
+          ? zonedParts(ruleStart.startAt, ruleStart.timeZone).date
+          : ruleStart.startDate,
+      )
+    : "";
+  const recycleEvent = async () => {
+    const series = event.seriesId && event.originalDate && !todo;
+    const scope = series ? await askScope(t("planner.series.deleteTitle")) : "this";
+    if (!scope) return;
+    await perform(() => {
+      if (scope === "all") {
+        if (!master) throw new Error(t("planner.series.missing"));
+        return planningStore.mutate({
+          action: "event.delete",
+          id: master.id,
+          expectedRevision: master.revision,
+          data: {},
+        });
+      }
       const instance = event.id.includes("@") && event.seriesId && event.originalDate;
       return planningStore.mutate({
         action: instance ? "event.exception" : "event.delete",
@@ -76,6 +107,7 @@ export function EventPreview({
         data: instance ? { date: event.originalDate, delete: true } : {},
       });
     });
+  };
   return (
     <Popover
       open
@@ -198,8 +230,18 @@ export function EventPreview({
                 <dd>
                   {calendar ? calendarName(calendar) : t("planner.calendar")}
                   {calendar?.readOnly ? ` · ${t("planner.calendar.readOnly")}` : ""}
-                  {event.seriesId || event.recurrence ? ` · ${t("planner.preview.recurring")}` : ""}
                 </dd>
+              </div>
+            )}
+            {repeatText && (
+              <div className="flex items-center gap-3">
+                <dt>
+                  <Repeat
+                    className="size-4 text-muted-foreground"
+                    aria-label={t("planner.editor.repeat")}
+                  />
+                </dt>
+                <dd>{repeatText}</dd>
               </div>
             )}
             {(todo ? todo.notes : event.notes) && (
@@ -246,6 +288,7 @@ export function EventPreview({
           </div>
         )}
       </PopoverContent>
+      {scopeDialog}
     </Popover>
   );
 }

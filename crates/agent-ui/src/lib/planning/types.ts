@@ -43,7 +43,7 @@ export interface Todo {
   completedAt?: number | null;
 }
 export interface Recurrence {
-  frequency: "daily" | "weekly" | "monthly";
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
   interval: number;
   weekdays: number[];
   count?: number | null;

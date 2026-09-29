@@ -8,7 +8,6 @@ import {
   DialogActions,
   DialogBody,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,10 +19,19 @@ import { calendarName, localizePlanningError } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
 import { homeTaskList, taskLists } from "../../lib/planning/taskLists";
 import { addDays, eventTitle, localEpoch, timeLabel, zonedParts } from "../../lib/planning/time";
-import type { EventTime, PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
+import type {
+  EventTime,
+  PlanningEvent,
+  PlanningSnapshot,
+  Recurrence,
+  Todo,
+} from "../../lib/planning/types";
 import { eventNotificationOptions } from "./notifyOptions";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
 import { PlanningDateTimePicker } from "./PlanningDateTimePicker";
+import { RecurrenceFields, type RepeatValue, repeatRule } from "./RecurrenceFields";
+import { rulePreset } from "./recurrence";
+import { useSeriesScope } from "./SeriesScopeDialog";
 import { usePlanningT } from "./usePlanningT";
 
 /** Values typed into the quick-create card, carried over by "More options". */
@@ -32,11 +40,28 @@ export interface EditorDraft {
   notes: string;
   calendarId?: string;
   groupId?: string;
-  frequency?: "" | "daily" | "weekly" | "monthly";
+  repeat?: RepeatValue;
   due?: { date: string; time: string };
   /** A new task's time block chosen in quick create; created together with the task. */
   schedule?: { calendarId: string; time: EventTime };
 }
+/** First local day of an event time. */
+function firstDay(time: EventTime) {
+  return time.kind === "timed" ? zonedParts(time.startAt, time.timeZone).date : time.startDate;
+}
+const daysBetween = (from: string, to: string) =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+/** Compare rules ignoring null/undefined differences from storage. */
+const ruleKey = (rule: Recurrence | null | undefined) =>
+  rule
+    ? JSON.stringify([
+        rule.frequency,
+        rule.interval,
+        [...rule.weekdays].sort(),
+        rule.count ?? null,
+        rule.until ?? null,
+      ])
+    : "";
 export type EditorTarget =
   | { kind: "todo"; todo?: Todo; draft?: EditorDraft }
   | { kind: "event"; event?: PlanningEvent; todo?: Todo; time?: EventTime; draft?: EditorDraft };
@@ -113,16 +138,26 @@ export function PlanningEditor({
   const [notify, setNotify] = useState(
     event?.reminderMinutes == null ? "" : String(event.reminderMinutes),
   );
-  const [frequency, setFrequency] = useState(
-    event?.recurrence?.frequency ?? draft?.frequency ?? "",
+  // Occurrences of a recurring event (expanded instances and saved exceptions) edit the
+  // series' rule; changes ask "此日程 / 所有日程" on save like Google.
+  const seriesId = event?.seriesId && event.originalDate ? event.seriesId : undefined;
+  const master = seriesId
+    ? (snapshot.eventMasters ?? snapshot.events).find((e) => e.id === seriesId)
+    : undefined;
+  const synthetic = !!seriesId && !!event?.id.includes("@");
+  const ruleSource = seriesId ? master?.recurrence : event?.recurrence;
+  const masterDay = master ? firstDay(master.time) : undefined;
+  const [repeat, setRepeat] = useState<RepeatValue>(
+    draft?.repeat ?? {
+      preset: rulePreset(ruleSource, masterDay ?? initialStart.date),
+      rule: ruleSource ?? null,
+    },
   );
-  const [interval, setInterval] = useState(String(event?.recurrence?.interval ?? 1));
-  const [until, setUntil] = useState(event?.recurrence?.until ?? "");
+  const { askScope, scopeDialog } = useSeriesScope();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirmDialog();
   const readOnly = event && snapshot.calendars.find((c) => c.id === event.calendarId)?.readOnly;
-  const synthetic = event?.id.includes("@") && event.seriesId && event.originalDate;
   const perform = async (fn: () => Promise<unknown>, close = true) => {
     setBusy(true);
     setError(null);
@@ -136,8 +171,20 @@ export function PlanningEditor({
       setBusy(false);
     }
   };
-  const save = () =>
-    perform(async () => {
+  const save = async () => {
+    let scope: "this" | "all" | undefined;
+    if (seriesId && event && title.trim()) {
+      const rule = repeatRule(repeat, masterDay ?? startDate, ruleSource);
+      const seriesOnly =
+        ruleKey(rule) !== ruleKey(ruleSource) ||
+        (synthetic &&
+          (calendarId !== event.calendarId ||
+            (notify === "" ? null : Number(notify)) !== (event.reminderMinutes ?? null)));
+      const chosen = await askScope(t("planner.series.editTitle"), !seriesOnly);
+      if (!chosen) return;
+      scope = chosen;
+    }
+    await perform(async () => {
       if (!title.trim()) throw new Error(t("planner.editor.titleRequired"));
       if (target.kind === "todo") {
         const data = {
@@ -167,12 +214,51 @@ export function PlanningEditor({
               endAt: localEpoch(endDate, endClock, timeZone),
               timeZone,
             };
-        if (synthetic && event?.seriesId) {
+        const reminderMinutes = notify === "" ? null : Number(notify);
+        if (scope === "all" && event?.originalDate) {
+          if (!master || !masterDay) throw new Error(t("planner.series.missing"));
+          // Move the series by the same day offset and clock the occurrence was given.
+          const base = addDays(masterDay, daysBetween(event.originalDate, startDate));
+          const span = daysBetween(startDate, endDate);
+          await planningStore.mutate({
+            action: "event.update",
+            id: master.id,
+            expectedRevision: master.revision,
+            data: {
+              title: title.trim(),
+              notes,
+              calendarId,
+              reminderMinutes,
+              time: allDay
+                ? {
+                    kind: "allDay",
+                    startDate: base,
+                    endDateExclusive: addDays(base, span + 1),
+                    timeZone,
+                  }
+                : {
+                    kind: "timed",
+                    startAt: localEpoch(base, startClock, timeZone),
+                    endAt: localEpoch(addDays(base, span), endClock, timeZone),
+                    timeZone,
+                  },
+              recurrence: repeatRule(repeat, base, ruleSource),
+            },
+          });
+        } else if (synthetic && event?.seriesId) {
           await planningStore.mutate({
             action: "event.exception",
             id: event.seriesId,
             expectedRevision: event.revision,
             data: { date: event.originalDate, time, title, notes },
+          });
+        } else if (seriesId && event) {
+          // A saved exception is an ordinary event row.
+          await planningStore.mutate({
+            action: "event.update",
+            id: event.id,
+            expectedRevision: event.revision,
+            data: { title: title.trim(), notes, calendarId, time, reminderMinutes },
           });
         } else if (todo && !event) {
           await planningStore.mutate({
@@ -191,25 +277,25 @@ export function PlanningEditor({
               notes,
               calendarId,
               time,
-              ...(synthetic ? {} : { reminderMinutes: notify === "" ? null : Number(notify) }),
-              recurrence: frequency
-                ? {
-                    frequency,
-                    interval: Number(interval),
-                    weekdays: event?.recurrence?.weekdays ?? [],
-                    excludedDates: event?.recurrence?.excludedDates ?? [],
-                    until: until || null,
-                    count: event?.recurrence?.count ?? null,
-                  }
-                : null,
+              reminderMinutes,
+              recurrence: todo ? null : repeatRule(repeat, startDate, ruleSource),
             },
           });
         }
       }
     });
-  const remove = () =>
+  };
+  const remove = (scope?: "this" | "all") =>
     perform(async () => {
-      if (event)
+      if (event && scope === "all") {
+        if (!master) throw new Error(t("planner.series.missing"));
+        await planningStore.mutate({
+          action: "event.delete",
+          id: master.id,
+          expectedRevision: master.revision,
+          data: {},
+        });
+      } else if (event)
         await planningStore.mutate({
           action: synthetic ? "event.exception" : "event.delete",
           id: synthetic ? (event.seriesId ?? event.id) : event.id,
@@ -273,9 +359,6 @@ export function PlanningEditor({
                   ? t("planner.editor.eventDetails")
                   : t("planner.editor.newEvent")}
           </DialogTitle>
-          {synthetic && (
-            <DialogDescription>{t("planner.editor.onlyThisOccurrence")}</DialogDescription>
-          )}
         </DialogHeader>
         <DialogBody>
           <form
@@ -437,7 +520,7 @@ export function PlanningEditor({
                   {
                     <PlanningField label={t("planner.calendar")}>
                       <PlanningSelect
-                        disabled={busy || !!readOnly || !!synthetic}
+                        disabled={busy || !!readOnly}
                         value={calendarId}
                         onValueChange={(value) => setCalendarId(value)}
                         options={[
@@ -468,7 +551,7 @@ export function PlanningEditor({
                     clearable={false}
                     disabled={busy || !!readOnly}
                   />
-                  {!synthetic && (event || !todo) && (
+                  {(event || !todo) && (
                     <PlanningField label={t("planner.editor.notification")}>
                       <PlanningSelect
                         disabled={busy || !!readOnly}
@@ -482,46 +565,14 @@ export function PlanningEditor({
                       />
                     </PlanningField>
                   )}
-                  {!synthetic && !todo && (
-                    <>
-                      <PlanningField label={t("planner.editor.repeat")}>
-                        <PlanningSelect
-                          disabled={busy || !!readOnly}
-                          value={frequency}
-                          onValueChange={(value) => setFrequency(value as typeof frequency)}
-                          options={[
-                            { value: "", label: t("planner.repeat.none") },
-                            { value: "daily", label: t("planner.repeat.daily") },
-                            { value: "weekly", label: t("planner.repeat.weekly") },
-                            { value: "monthly", label: t("planner.repeat.monthly") },
-                          ]}
-                        />
-                      </PlanningField>
-                      {frequency && (
-                        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-                          <PlanningField label={t("planner.editor.interval")}>
-                            <Input
-                              variant="plain"
-                              type="number"
-                              min={1}
-                              max={365}
-                              value={interval}
-                              onChange={(e) => setInterval(e.target.value)}
-                            />
-                          </PlanningField>
-                          <PlanningField label={t("planner.editor.repeatUntil")}>
-                            <PlanningDateTimePicker
-                              value={{ date: until, time: "" }}
-                              onChange={(v) => setUntil(v.date)}
-                              zone={timeZone}
-                              dateOnly
-                              label={t("planner.editor.repeatUntil")}
-                              disabled={busy || !!readOnly}
-                            />
-                          </PlanningField>
-                        </div>
-                      )}
-                    </>
+                  {!todo && (
+                    <RecurrenceFields
+                      value={repeat}
+                      date={masterDay ?? startDate}
+                      zone={timeZone}
+                      disabled={busy || !!readOnly}
+                      onChange={setRepeat}
+                    />
                   )}
                 </>
               )}
@@ -577,17 +628,20 @@ export function PlanningEditor({
                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 disabled={busy}
                 onClick={async () => {
+                  if (seriesId && event) {
+                    const scope = await askScope(t("planner.series.deleteTitle"));
+                    if (scope) await remove(scope);
+                    return;
+                  }
                   if (
                     await confirm({
                       title: t("planner.common.moveToTrash"),
                       description:
                         todo && !event
                           ? t("planner.editor.trashTask")
-                          : synthetic
-                            ? t("planner.editor.trashOccurrence")
-                            : event?.recurrence
-                              ? t("planner.editor.trashSeries")
-                              : t("planner.editor.trashEvent"),
+                          : event?.recurrence
+                            ? t("planner.editor.trashSeries")
+                            : t("planner.editor.trashEvent"),
                       confirmLabel: t("planner.common.moveToTrash"),
                       cancelLabel: t("planner.common.keep"),
                       preferCancel: true,
@@ -612,6 +666,7 @@ export function PlanningEditor({
         </DialogFooter>
       </DialogContent>
       {dialog}
+      {scopeDialog}
     </Dialog>
   );
 }

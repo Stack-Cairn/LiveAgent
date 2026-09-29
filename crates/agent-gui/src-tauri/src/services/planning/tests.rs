@@ -1590,3 +1590,17 @@ fn planning_date_due_reminder_fires_at_default_zone_midnight() {
     assert_eq!(store.sync_default_zone(store::now()).unwrap(), None);
     time::set_test_zone(None);
 }
+
+#[test]
+fn planning_yearly_recurrence_repeats_on_the_same_date() {
+    let store = store();
+    let s = store.snapshot(Query::default()).unwrap();
+    let e = store.mutate(input("event.create",None,None,json!({"title":"Birthday","calendarId":s.calendars[0].id,"time":{"kind":"allDay","startDate":"2026-10-05","endDateExclusive":"2026-10-06","timeZone":"Asia/Shanghai"},"recurrence":{"frequency":"yearly","interval":1,"count":3}}))).unwrap().item.unwrap();
+    let master: Event = serde_json::from_value(e).unwrap();
+    let days: Vec<_> = time::occurrences(&master, 0, i64::MAX / 2)
+        .unwrap()
+        .into_iter()
+        .map(|event| event.original_date.unwrap())
+        .collect();
+    assert_eq!(days, ["2026-10-05", "2027-10-05", "2028-10-05"]);
+}

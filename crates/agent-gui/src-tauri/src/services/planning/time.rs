@@ -191,7 +191,7 @@ fn occurrences_limit(
     };
     if rule.interval == 0
         || rule.interval > 365
-        || !["daily", "weekly", "monthly"].contains(&rule.frequency.as_str())
+        || !["daily", "weekly", "monthly", "yearly"].contains(&rule.frequency.as_str())
     {
         return Err("E:recurrence_invalid".into());
     }
@@ -230,6 +230,7 @@ fn occurrences_limit(
                             .contains(&day.weekday().num_days_from_monday())
                     }
             }
+            "yearly" => months % (12 * rule.interval as i32) == 0 && day.day() == first.day(),
             _ => months % rule.interval as i32 == 0 && day.day() == first.day(),
         };
         if !eligible {
