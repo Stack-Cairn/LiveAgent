@@ -29,11 +29,9 @@ const GUTTER = 56;
 const DEADLINE_PREFIX = "deadline:";
 /** Text line height inside blocks (text-xs / 1rem) plus vertical padding. */
 const LINE_HEIGHT = 16;
-/** Below this width per overlapping block, blocks cascade (Google-style) instead of splitting. */
-const MIN_SPLIT_WIDTH = 64;
+/** Below this width per overlapping block, blocks cascade instead of splitting into columns. */
+const MIN_SPLIT_WIDTH = 48;
 const CASCADE_OFFSET = 14;
-/** Overlapping blocks widen past their share and are overlapped by later columns (Google). */
-const OVERLAP_WIDEN = 1.7;
 /** Deadlines render as one-line chips (Google task chips) floating above events. */
 const CHIP_HEIGHT = 22;
 const BLOCK_PADDING = 8;
@@ -742,8 +740,8 @@ export function TimeGrid({
                   )}
                 {placements.map(
                   ({ event, top, height, column, columns: count, span, startsHere, endsHere }) => {
-                    // Equal columns while each block stays readable; otherwise cascade so every
-                    // block keeps most of the width and later blocks sit on top, offset right.
+                    // Overlapping blocks sit side by side in columns so each shows its full title
+                    // and time; only when a column would be unreadably narrow do they cascade.
                     const deadline = event.id.startsWith(DEADLINE_PREFIX);
                     const cascade = count > 1 && dayWidth / count < MIN_SPLIT_WIDTH;
                     const share = 100 / count;
@@ -754,19 +752,11 @@ export function TimeGrid({
                           left: `${1 + column * CASCADE_OFFSET}px`,
                           width: `calc(100% - ${column * CASCADE_OFFSET + 10}px)`,
                         }
-                      : count > 1 && !deadline
-                        ? {
-                            top,
-                            left: `calc(${column * share}% + 1px)`,
-                            width: last
-                              ? `calc(${100 - column * share}% - 10px)`
-                              : `calc(${Math.min(span * share + (OVERLAP_WIDEN - 1) * share, 100 - column * share)}% - 10px)`,
-                          }
-                        : {
-                            top,
-                            left: `calc(${column * share}% + 1px)`,
-                            width: `calc(${span * share}% - ${last ? 10 : 2}px)`,
-                          };
+                      : {
+                          top,
+                          left: `calc(${column * share}% + 1px)`,
+                          width: `calc(${span * share}% - ${last ? 10 : 2}px)`,
+                        };
                     const layer = { zIndex: (deadline ? 20 : 2) + column };
                     if (deadline) {
                       const todo = dueTodos.find((t) => t.id === event.todoId);
