@@ -149,6 +149,7 @@ impl PlanningStore {
                     calendar.name = name;
                 }
                 if let Some(color) = input["color"].as_str() {
+                    super::store::valid_color(&input["color"])?;
                     calendar.color = color.into();
                 }
                 calendar.revision += 1;

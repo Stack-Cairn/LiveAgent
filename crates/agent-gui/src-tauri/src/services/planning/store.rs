@@ -98,6 +98,14 @@ pub(super) fn snapshot(conn: &Connection) -> Result<Snapshot, String> {
             )
             .optional()
             .map_err(sql_error)?,
+        my_tasks_color: conn
+            .query_row(
+                "SELECT value FROM planning_meta WHERE key='myTasksColor'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(sql_error)?,
     })
 }
 pub(super) fn persist(conn: &Connection, s: &Snapshot) -> Result<(), String> {
@@ -126,7 +134,29 @@ pub(super) fn persist(conn: &Connection, s: &Snapshot) -> Result<(), String> {
         None => conn.execute("DELETE FROM planning_meta WHERE key='defaultGroupId'", []),
     }
     .map_err(sql_error)?;
+    match &s.my_tasks_color {
+        Some(color) => conn.execute(
+            "INSERT OR REPLACE INTO planning_meta VALUES('myTasksColor',?1)",
+            [color],
+        ),
+        None => conn.execute("DELETE FROM planning_meta WHERE key='myTasksColor'", []),
+    }
+    .map_err(sql_error)?;
     Ok(())
+}
+/// Calendar, list and tag colors are `#RRGGBB`; the UI and the Agent both go through here.
+pub(super) fn valid_color(value: &Value) -> Result<(), String> {
+    match value {
+        Value::Null => Ok(()),
+        Value::String(v)
+            if v.len() == 7
+                && v.starts_with('#')
+                && v[1..].chars().all(|c| c.is_ascii_hexdigit()) =>
+        {
+            Ok(())
+        }
+        _ => Err("E:invalid_color".into()),
+    }
 }
 pub(super) fn data<T: DeserializeOwned>(value: Value) -> Result<T, String> {
     serde_json::from_value(value).map_err(|e| format!("E:invalid_params:{e}"))
@@ -512,7 +542,9 @@ impl PlanningStore {
 
 fn lookup(s: &Snapshot, input: &Mutation) -> Result<Option<Value>, String> {
     let action = input.action.as_str();
-    if action.ends_with(".create") || ["todo.import", "mytasks.delete"].contains(&action) {
+    if action.ends_with(".create")
+        || ["todo.import", "mytasks.delete", "mytasks.update"].contains(&action)
+    {
         return Ok(None);
     }
     let key = input.id.as_deref().ok_or("E:field_required:id")?;
@@ -619,6 +651,7 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
         }
         "group.delete" | "tag.delete" => &[],
         "mytasks.delete" => &["defaultGroupId", "deleteTasks"],
+        "mytasks.update" => &["color"],
         "calendar.create" => &["name", "color"],
         "calendar.update" => &["name", "color", "sortOrder", "isDefault", "reminderMinutes"],
         "calendar.delete" => &["moveTo"],
@@ -701,6 +734,9 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             return Err(format!("E:unknown_field:{field}"));
         }
     }
+    if d.get("color").is_some() {
+        valid_color(&d["color"])?;
+    }
     let mut result = None;
     match m.action.as_str() {
         "group.create" | "tag.create" => {
@@ -761,6 +797,12 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
                 }
             }
         }
+        "mytasks.update" => {
+            if s.default_group_id.is_some() {
+                return Err("E:my_tasks_deleted".into());
+            }
+            s.my_tasks_color = d["color"].as_str().map(str::to_string);
+        }
         "mytasks.delete" => {
             if s.default_group_id.is_some() {
                 return Err("E:my_tasks_deleted".into());
@@ -793,7 +835,17 @@ fn apply(s: &mut Snapshot, m: &Mutation, now: i64) -> Result<Option<Value>, Stri
             s.calendars.push(c);
         }
         "calendar.update" => {
-            writable(s, key)?;
+            // Read-only calendars (imports, subscriptions) may still be recolored locally.
+            let color_only = d
+                .as_object()
+                .is_some_and(|m| m.keys().all(|k| k == "color"));
+            if color_only {
+                if !s.calendars.iter().any(|c| c.id == key) {
+                    return Err("E:calendar_missing".into());
+                }
+            } else {
+                writable(s, key)?;
+            }
             if d["isDefault"] == true {
                 for c in &mut s.calendars {
                     if c.is_default && c.id != key {

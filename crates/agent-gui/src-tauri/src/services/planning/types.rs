@@ -226,6 +226,9 @@ pub struct Snapshot {
     /// Set once the built-in "My Tasks" list is deleted: list-less tasks land in this list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_group_id: Option<String>,
+    /// Color of the built-in "My Tasks" list; other lists keep their color on the group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub my_tasks_color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

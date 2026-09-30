@@ -3,11 +3,19 @@ import type { PlanningSnapshot, Todo } from "./types";
 
 export const DEFAULT_TASK_COLOR = "#6366f1";
 /** All task lists; the built-in "My Tasks" (id "") disappears once it has been deleted. */
-export function taskLists(snapshot: Pick<PlanningSnapshot, "groups" | "defaultGroupId">) {
+export function taskLists(
+  snapshot: Pick<PlanningSnapshot, "groups" | "defaultGroupId" | "myTasksColor">,
+) {
   return [
     ...(snapshot.defaultGroupId
       ? []
-      : [{ id: "", name: translate("planner.myTasks"), color: DEFAULT_TASK_COLOR }]),
+      : [
+          {
+            id: "",
+            name: translate("planner.myTasks"),
+            color: snapshot.myTasksColor ?? DEFAULT_TASK_COLOR,
+          },
+        ]),
     ...(snapshot.groups ?? []),
   ];
 }
@@ -18,8 +26,22 @@ export function homeTaskList(snapshot: Pick<PlanningSnapshot, "defaultGroupId">)
 export function taskListLayer(groupId?: string | null) {
   return groupId ? `planning:tasks:${groupId}` : "planning:tasks";
 }
-export function taskListColor(todo: Todo | undefined, snapshot: Pick<PlanningSnapshot, "groups">) {
-  return snapshot.groups?.find((g) => g.id === todo?.groupId)?.color ?? DEFAULT_TASK_COLOR;
+/** Color of a task list; "" (or a list that no longer exists) is the built-in "My Tasks". */
+export function listColor(
+  snapshot: Pick<PlanningSnapshot, "groups" | "myTasksColor">,
+  groupId?: string | null,
+) {
+  return (
+    (groupId ? snapshot.groups?.find((g) => g.id === groupId)?.color : undefined) ??
+    snapshot.myTasksColor ??
+    DEFAULT_TASK_COLOR
+  );
+}
+export function taskListColor(
+  todo: Todo | undefined,
+  snapshot: Pick<PlanningSnapshot, "groups" | "myTasksColor">,
+) {
+  return listColor(snapshot, todo?.groupId);
 }
 export interface TaskNode {
   todo: Todo;

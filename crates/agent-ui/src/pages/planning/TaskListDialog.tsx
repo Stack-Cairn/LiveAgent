@@ -15,9 +15,11 @@ import {
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { localizePlanningError, translate } from "../../lib/planning/i18n";
+import { nextPaletteColor } from "../../lib/planning/layers";
 import { planningStore } from "../../lib/planning/store";
+import { taskLists } from "../../lib/planning/taskLists";
 import type { PlanningCategory } from "../../lib/planning/types";
-import { PlanningField, PlanningSelect } from "./PlanningControls";
+import { ColorSwatches, PLANNING_COLORS, PlanningField, PlanningSelect } from "./PlanningControls";
 
 export type TaskListAction =
   | { kind: "create" }
@@ -42,6 +44,12 @@ export function TaskListDialog({
   const [target, setTarget] = useState(
     action.kind === "deleteMyTasks" ? (action.lists[0]?.id ?? "") : "",
   );
+  // New lists start with a palette color no other list uses, instead of all being slate.
+  const [color, setColor] = useState(() => {
+    if (action.kind === "rename") return action.list.color ?? PLANNING_COLORS[0];
+    const snapshot = planningStore.getState().snapshot;
+    return nextPaletteColor(snapshot ? taskLists(snapshot).map((list) => list.color) : []);
+  });
   const [trashTasks, setTrashTasks] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -65,7 +73,7 @@ export function TaskListDialog({
           (
             await planningStore.mutate<PlanningCategory>({
               action: "group.create",
-              data: { name: name.trim() },
+              data: { name: name.trim(), color },
             })
           )?.id;
         if (!home) return;
@@ -81,12 +89,12 @@ export function TaskListDialog({
       }
       const list = await planningStore.mutate<PlanningCategory>(
         action.kind === "create"
-          ? { action: "group.create", data: { name: name.trim() } }
+          ? { action: "group.create", data: { name: name.trim(), color } }
           : {
               action: deleting ? "group.delete" : "group.update",
               id: action.list.id,
               expectedRevision: action.list.revision,
-              data: deleting ? {} : { name: name.trim() },
+              data: deleting ? {} : { name: name.trim(), color },
             },
       );
       if (deleting) onSelect("");
@@ -161,15 +169,23 @@ export function TaskListDialog({
                 })}
               </DialogDescription>
             ) : (
-              <Input
-                variant="plain"
-                aria-label={translate("planner.list.nameLabel")}
-                placeholder={translate("planner.list.namePlaceholder")}
-                maxLength={100}
-                value={name}
-                disabled={busy}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <div className="space-y-4">
+                <Input
+                  variant="plain"
+                  aria-label={translate("planner.list.nameLabel")}
+                  placeholder={translate("planner.list.namePlaceholder")}
+                  maxLength={100}
+                  value={name}
+                  disabled={busy}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <ColorSwatches
+                  label={translate("planner.list.color")}
+                  value={color}
+                  disabled={busy}
+                  onChange={setColor}
+                />
+              </div>
             )}
             {error && (
               <SettingsNotice variant="inline-error" role="alert">

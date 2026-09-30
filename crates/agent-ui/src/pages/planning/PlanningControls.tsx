@@ -4,6 +4,7 @@ import {
   FormFieldDescription,
   FormFieldLabel,
 } from "../../components/settings/FormField";
+import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -11,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import { translate } from "../../lib/planning/i18n";
+import { PLANNING_COLORS } from "../../lib/planning/layers";
 
 /** Associate the planning forms' labels and descriptions with their shared controls. */
 export function PlanningField({
@@ -78,18 +81,28 @@ export function PlanningSelect({
 }
 
 /** Palette for calendars and subscriptions; readable with both black and white text. */
-export const PLANNING_COLORS = [
-  "#2563EB",
-  "#0F766E",
-  "#16A34A",
-  "#7C3AED",
-  "#DB2777",
-  "#DC2626",
-  "#D97706",
-  "#64748B",
-];
+export { PLANNING_COLORS };
 
 /** Round colour swatches (Google-style) instead of the browser's colour input. */
+const COLOR_NAMES: Record<string, string> = {
+  "#2563eb": "blue",
+  "#0f766e": "teal",
+  "#16a34a": "green",
+  "#7c3aed": "purple",
+  "#db2777": "pink",
+  "#dc2626": "red",
+  "#d97706": "amber",
+  "#64748b": "slate",
+};
+/** Screen readers hear "蓝色", not "#2563EB"; other colors read as "自定义 #hex". */
+export function colorName(color: string) {
+  const key = COLOR_NAMES[color.toLowerCase()];
+  return key
+    ? translate(`planner.color.${key}`)
+    : translate("planner.color.custom", { hex: color });
+}
+
+/** Round color swatches (Google-style) as a radio group: Tab enters once, arrows move. */
 export function ColorSwatches({
   value,
   onChange,
@@ -107,29 +120,32 @@ export function ColorSwatches({
   /** The surrounding row already shows the label. */
   hideLabel?: boolean;
 }) {
-  const colors = palette.some((c) => c.toLowerCase() === value.toLowerCase())
-    ? palette
-    : [value, ...palette];
+  const current = palette.find((c) => c.toLowerCase() === value.toLowerCase());
+  const colors = current ? palette : [value, ...palette];
+  const labelId = useId();
   return (
-    <fieldset className="space-y-2">
-      <legend className={hideLabel ? "sr-only" : "text-sm text-muted-foreground"}>{label}</legend>
-      <div className="flex flex-wrap gap-2.5">
-        {colors.map((swatch) => {
-          const selected = swatch.toLowerCase() === value.toLowerCase();
-          return (
-            <button
-              key={swatch}
-              type="button"
-              aria-label={swatch}
-              aria-pressed={selected}
-              disabled={disabled}
-              className="size-6 rounded-full ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-ring/40 aria-pressed:ring-2 aria-pressed:ring-ring disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              style={{ backgroundColor: swatch }}
-              onClick={() => onChange(swatch)}
-            />
-          );
-        })}
-      </div>
-    </fieldset>
+    <div className="space-y-2">
+      <span id={labelId} className={hideLabel ? "sr-only" : "block text-sm text-muted-foreground"}>
+        {label}
+      </span>
+      <RadioGroup
+        aria-labelledby={labelId}
+        value={current ?? value}
+        disabled={disabled}
+        onValueChange={(next) => onChange(String(next))}
+        className="flex flex-wrap gap-2.5"
+      >
+        {colors.map((swatch) => (
+          <RadioGroupItem
+            key={swatch}
+            value={swatch}
+            aria-label={colorName(swatch)}
+            title={colorName(swatch)}
+            className="size-6 rounded-full ring-1 ring-border ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-ring/40 data-checked:ring-2 data-checked:ring-ring data-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+            style={{ backgroundColor: swatch }}
+          />
+        ))}
+      </RadioGroup>
+    </div>
   );
 }

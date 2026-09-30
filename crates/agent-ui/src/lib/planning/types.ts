@@ -118,6 +118,8 @@ export interface PlanningSnapshot {
   subscriptions?: PlanningSubscription[];
   /** Set once the built-in "My Tasks" list is deleted; list-less tasks land here. */
   defaultGroupId?: string;
+  /** Color of the built-in "My Tasks" list (other lists keep theirs on the group). */
+  myTasksColor?: string;
 }
 export interface PlanningQuery {
   from?: number;
@@ -127,6 +129,7 @@ export type PlanningAction =
   | `group.${"create" | "update" | "delete"}`
   | `tag.${"create" | "update" | "delete"}`
   | "mytasks.delete"
+  | "mytasks.update"
   | "calendar.create"
   | "calendar.update"
   | "calendar.delete"

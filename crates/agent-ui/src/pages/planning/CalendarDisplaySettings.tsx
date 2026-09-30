@@ -4,17 +4,11 @@ import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "../../components/ui/popover";
-import { CRON_LAYER_COLOR } from "../../lib/planning/cronLayer";
 import { planningLunarAvailable } from "../../lib/planning/i18n";
 import type { CalendarPreferences } from "./calendarDisplay";
-import { ColorSwatches, PLANNING_COLORS, PlanningField, PlanningSelect } from "./PlanningControls";
+import { PlanningField, PlanningSelect } from "./PlanningControls";
 import { usePlanningT } from "./usePlanningT";
 
-/** The default slate first, then the calendar palette. */
-export const CRON_COLORS = [
-  CRON_LAYER_COLOR,
-  ...PLANNING_COLORS.filter((c) => c.toLowerCase() !== CRON_LAYER_COLOR),
-];
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const clock = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
@@ -170,15 +164,14 @@ export function CalendarDisplaySettings({
                 />
                 {t("planner.settings.showCronTasks")}
               </Label>
-              <div className="pl-6">
-                <ColorSwatches
-                  label={t("planner.display.cronColor")}
-                  value={value.cronColor}
-                  palette={CRON_COLORS}
-                  disabled={disabled}
-                  onChange={(cronColor) => onChange({ cronColor })}
-                />
-              </div>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto px-0 pl-6 text-xs font-normal"
+                onClick={action(onCalendars)}
+              >
+                {t("planner.layers.manageHere")}
+              </Button>
             </div>
             {layers && (
               <div className="space-y-2 border-t border-border pt-3">

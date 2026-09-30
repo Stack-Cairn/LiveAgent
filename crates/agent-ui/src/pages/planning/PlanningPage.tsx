@@ -7,6 +7,7 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { cronVirtualEvents, isCronEvent, withCronLayer } from "../../lib/planning/cronLayer";
 import { localizePlanningError, planningLunarAvailable } from "../../lib/planning/i18n";
+import type { LayerRef } from "../../lib/planning/layers";
 import { planningStore, usePlanning } from "../../lib/planning/store";
 import {
   addDays,
@@ -20,10 +21,10 @@ import {
 import type { EventTime, PlanningEvent, Todo } from "../../lib/planning/types";
 import { AgendaView } from "./AgendaView";
 import { CalendarImport } from "./CalendarImport";
-import { CalendarManager } from "./CalendarManager";
 import { CronEventPreview } from "./CronEventPreview";
 import { HOUR_HEIGHT, useCalendarPreferences } from "./calendarDisplay";
 import { EventPreview } from "./EventPreview";
+import { LayerManager } from "./LayerManager";
 import { MonthGrid } from "./MonthGrid";
 import { type EditorTarget, PlanningEditor } from "./PlanningEditor";
 import { PlanningSearch } from "./PlanningSearch";
@@ -114,7 +115,8 @@ export function PlanningPage({
     anchor?: Element;
   } | null>(null);
   const [draftElement, setDraftElement] = useState<HTMLElement | null>(null);
-  const [calendarsOpen, setCalendarsOpen] = useState(false);
+  // The 「日历与列表」 manager; a LayerRef opens it on that row.
+  const [calendarsOpen, setCalendarsOpen] = useState<LayerRef | boolean>(false);
   const [todoDrag, setTodoDrag] = useState<PlanningDragStart | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -558,6 +560,8 @@ export function PlanningPage({
       onTaskFilter={setTaskFilter}
       showCron={preferences.showCronTasks}
       onToggleCron={() => setPreferences({ showCronTasks: !preferences.showCronTasks })}
+      onManageLayer={setCalendarsOpen}
+      onError={report}
     />
   );
   const calendarSnapshot = viewSnapshot ?? snapshot;
@@ -608,6 +612,8 @@ export function PlanningPage({
               onToggleLayer={toggleLayer}
               showCron={preferences.showCronTasks}
               onToggleCron={() => setPreferences({ showCronTasks: !preferences.showCronTasks })}
+              onManageLayer={setCalendarsOpen}
+              onError={report}
             />
           )
         }
@@ -829,7 +835,11 @@ export function PlanningPage({
       {trashOpen && <PlanningTrash snapshot={snapshot} onClose={() => setTrashOpen(false)} />}
       {importOpen && <CalendarImport snapshot={snapshot} onClose={() => setImportOpen(false)} />}
       {calendarsOpen && (
-        <CalendarManager snapshot={snapshot} onClose={() => setCalendarsOpen(false)} />
+        <LayerManager
+          snapshot={snapshot}
+          initial={calendarsOpen === true ? undefined : calendarsOpen}
+          onClose={() => setCalendarsOpen(false)}
+        />
       )}
     </section>
   );

@@ -21,12 +21,11 @@ import {
   planningDateLocale,
   planningLunarAvailable,
 } from "../../lib/planning/i18n";
+import { type LayerRef, listLayers } from "../../lib/planning/layers";
 import { planningStore, usePlanning } from "../../lib/planning/store";
-import { CRON_COLORS } from "../planning/CalendarDisplaySettings";
 import { CalendarImport } from "../planning/CalendarImport";
-import { CalendarManager } from "../planning/CalendarManager";
 import { type CalendarPreferences, useCalendarPreferences } from "../planning/calendarDisplay";
-import { ColorSwatches } from "../planning/PlanningControls";
+import { LayerManager } from "../planning/LayerManager";
 import { PlanningTrash } from "../planning/PlanningTrash";
 import {
   GoogleCalendarLink,
@@ -73,7 +72,8 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
   const state = usePlanning();
   const snapshot = state.snapshot;
   const [preferences, setPreferences] = useCalendarPreferences();
-  const [dialog, setDialog] = useState<"calendars" | "import" | "trash" | "subscribe" | null>(null);
+  const [dialog, setDialog] = useState<"import" | "trash" | "subscribe" | null>(null);
+  const [managing, setManaging] = useState<LayerRef | true | null>(null);
   const [error, setError] = useState("");
   const toggle = (key: keyof CalendarPreferences) => (
     <AgentActivationSwitch
@@ -139,20 +139,6 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
           title={t("planner.settings.showCronTasks")}
           control={toggle("showCronTasks")}
         />
-        {preferences.showCronTasks && (
-          <SettingsRow
-            title={t("planner.display.cronColor")}
-            control={
-              <ColorSwatches
-                label={t("planner.display.cronColor")}
-                value={preferences.cronColor}
-                palette={CRON_COLORS}
-                hideLabel
-                onChange={(cronColor) => setPreferences({ cronColor })}
-              />
-            }
-          />
-        )}
         <SettingsRow
           title={t("planner.display.workHoursOnly")}
           description={t("planner.display.workHoursHint")}
@@ -182,7 +168,7 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
         )}
       </SettingsGroup>
 
-      <SettingsGroup title={t("planner.settings.calendars")}>
+      <SettingsGroup title={t("planner.layers.title")}>
         {!snapshot ? (
           state.error ? (
             <SettingsRow
@@ -198,26 +184,40 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
             <Skeleton className="h-14 w-full rounded-xl" />
           )
         ) : (
-          snapshot.calendars.map((calendar) => (
+          // Every calendar, task list and the scheduled-task layer, each opening the
+          // 「日历与列表」 manager on its own row.
+          listLayers(snapshot, preferences.cronColor).map((layer) => (
             <SettingsRow
-              key={calendar.id}
+              key={layer.layerId}
               title={
                 <span className="flex items-center gap-2">
                   <span
+                    aria-hidden
                     className="size-3 shrink-0 rounded"
-                    style={{ backgroundColor: calendar.color }}
+                    style={{ backgroundColor: layer.color }}
                   />
-                  <span className="truncate">{calendarName(calendar)}</span>
+                  <span className="truncate">{layer.name}</span>
                 </span>
               }
               control={
-                <span className="flex gap-1.5">
-                  {calendar.isDefault && <PromptTag label={t("planner.calendar.default")} />}
-                  {calendar.sourceKind === "subscription" ? (
+                <span className="flex items-center gap-1.5">
+                  {layer.isDefault && <PromptTag label={t("planner.calendar.default")} />}
+                  {layer.subscription ? (
                     <PromptTag label={t("planner.subscription.tag")} muted />
-                  ) : (
-                    calendar.readOnly && <PromptTag label={t("planner.calendar.readOnly")} muted />
+                  ) : layer.readOnly ? (
+                    <PromptTag label={t("planner.calendar.readOnly")} muted />
+                  ) : null}
+                  {layer.group === "cron" && (
+                    <PromptTag label={t("planner.layers.localTag")} muted />
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t("planner.layers.editRow", { name: layer.name })}
+                    onClick={() => setManaging(layer.ref)}
+                  >
+                    {t("planner.layers.edit")}
+                  </Button>
                 </span>
               }
             />
@@ -232,7 +232,7 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
                 variant="outline"
                 size="sm"
                 disabled={!snapshot}
-                onClick={() => setDialog("calendars")}
+                onClick={() => setManaging(true)}
               >
                 <CalendarDays className="size-4" />
                 {t("planner.toolbar.manageCalendars")}
@@ -375,8 +375,12 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
           {error}
         </SettingsNotice>
       )}
-      {snapshot && dialog === "calendars" && (
-        <CalendarManager snapshot={snapshot} onClose={() => setDialog(null)} />
+      {snapshot && managing && (
+        <LayerManager
+          snapshot={snapshot}
+          initial={managing === true ? undefined : managing}
+          onClose={() => setManaging(null)}
+        />
       )}
       {snapshot && dialog === "import" && (
         <CalendarImport snapshot={snapshot} onClose={() => setDialog(null)} />

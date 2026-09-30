@@ -1,14 +1,9 @@
 import type { CSSProperties } from "react";
-import { taskListColor } from "../../lib/planning/taskLists";
+import { eventLayer, layerColor } from "../../lib/planning/layers";
 import type { PlanningEvent, PlanningSnapshot } from "../../lib/planning/types";
 
 export function eventColor(event: PlanningEvent, snapshot: PlanningSnapshot) {
-  return event.todoId
-    ? taskListColor(
-        snapshot.todos.find((t) => t.id === event.todoId),
-        snapshot,
-      )
-    : snapshot.calendars.find((c) => c.id === event.calendarId)?.color;
+  return layerColor(snapshot, eventLayer(event, snapshot));
 }
 
 /**

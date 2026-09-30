@@ -1,13 +1,11 @@
 import { useSyncExternalStore } from "react";
 import { CRON_LAYER_COLOR } from "../../lib/planning/cronLayer";
-import { taskListLayer } from "../../lib/planning/taskLists";
+import { eventLayer, layerIdOf } from "../../lib/planning/layers";
 import { dayStart } from "../../lib/planning/time";
 import type { PlanningEvent, PlanningSnapshot } from "../../lib/planning/types";
 
 export function calendarLayer(event: PlanningEvent, snapshot: PlanningSnapshot) {
-  return event.todoId
-    ? taskListLayer(snapshot.todos.find((t) => t.id === event.todoId)?.groupId)
-    : event.calendarId;
+  return layerIdOf(eventLayer(event, snapshot));
 }
 export function activeEvent(event: PlanningEvent, snapshot: PlanningSnapshot) {
   const masters = snapshot.eventMasters ?? snapshot.events;

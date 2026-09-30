@@ -1652,10 +1652,7 @@ fn planning_split_series_keeps_total_count_and_deleted_occurrences() {
     let s = store.snapshot(Query::default()).unwrap();
     let old = s.events.iter().find(|e| e.id == id).unwrap();
     assert_eq!(dates(old), ["2026-10-01", "2026-10-02"]);
-    assert!(!s
-        .events
-        .iter()
-        .any(|e| e.series_id.as_deref() == Some(id)));
+    assert!(!s.events.iter().any(|e| e.series_id.as_deref() == Some(id)));
     // Deleting "this and following" only shortens the series.
     store
         .mutate(input(
@@ -1668,4 +1665,80 @@ fn planning_split_series_keeps_total_count_and_deleted_occurrences() {
     let s = store.snapshot(Query::default()).unwrap();
     let next = s.events.iter().find(|e| e.id == next.id).unwrap();
     assert_eq!(dates(next), ["2026-10-03"]);
+}
+
+#[test]
+fn planning_colors_are_validated_and_editable_for_every_layer() {
+    let store = store();
+    let list = store
+        .mutate(input(
+            "group.create",
+            None,
+            None,
+            json!({"name":"Work","color":"#7C3AED"}),
+        ))
+        .unwrap()
+        .item
+        .unwrap();
+    assert_eq!(list["color"], "#7C3AED");
+    assert_eq!(
+        store
+            .mutate(input(
+                "group.update",
+                list["id"].as_str(),
+                Some(1),
+                json!({"color":"red"})
+            ))
+            .unwrap_err()
+            .to_string(),
+        "E:invalid_color"
+    );
+    // The built-in "My Tasks" keeps its color in the store, not on a group row.
+    store
+        .mutate(input(
+            "mytasks.update",
+            None,
+            None,
+            json!({"color":"#DB2777"}),
+        ))
+        .unwrap();
+    assert_eq!(
+        store
+            .snapshot(Query::default())
+            .unwrap()
+            .my_tasks_color
+            .as_deref(),
+        Some("#DB2777")
+    );
+    // A subscribed (read-only) calendar may change color, but nothing else.
+    let (calendar, _) = store
+        .subscription(
+            "subscription.create",
+            &json!({"name":"Google","color":"#0F766E","url":"https://calendar.google.com/a.ics","refreshMinutes":30}),
+        )
+        .unwrap();
+    let id = calendar["id"].as_str().unwrap();
+    store
+        .mutate(input(
+            "calendar.update",
+            Some(id),
+            Some(1),
+            json!({"color":"#16A34A"}),
+        ))
+        .unwrap();
+    assert_eq!(
+        store
+            .mutate(input(
+                "calendar.update",
+                Some(id),
+                Some(2),
+                json!({"name":"Mine"})
+            ))
+            .unwrap_err()
+            .to_string(),
+        "E:calendar_read_only"
+    );
+    assert!(store
+        .subscription("subscription.update", &json!({"id":id,"color":"blue"}))
+        .is_err());
 }

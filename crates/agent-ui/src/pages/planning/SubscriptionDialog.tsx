@@ -15,8 +15,9 @@ import {
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { localizePlanningError } from "../../lib/planning/i18n";
+import { nextPaletteColor } from "../../lib/planning/layers";
 import { planningStore } from "../../lib/planning/store";
-import { ColorSwatches, PLANNING_COLORS, PlanningField, PlanningSelect } from "./PlanningControls";
+import { ColorSwatches, PlanningField, PlanningSelect } from "./PlanningControls";
 import { usePlanningT } from "./usePlanningT";
 
 export const SUBSCRIPTION_INTERVALS = [15, 30, 60, 180, 360, 720, 1440] as const;
@@ -59,7 +60,9 @@ export function SubscriptionDialog({ onClose }: { onClose(): void }) {
   const { t } = usePlanningT();
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
-  const [color, setColor] = useState(PLANNING_COLORS[0]);
+  const [color, setColor] = useState(() =>
+    nextPaletteColor(planningStore.getState().snapshot?.calendars.map((c) => c.color) ?? []),
+  );
   const [refreshMinutes, setRefreshMinutes] = useState(60);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
