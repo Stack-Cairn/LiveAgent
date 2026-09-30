@@ -490,6 +490,7 @@ fn skipped_run(task_id: &str) -> CompletedRun {
         exit_code: None,
         output: "Skipped: previous run is still in progress.".to_string(),
         counted: false,
+        skipped: true,
     }
 }
 
@@ -502,6 +503,7 @@ fn failed_run(task_id: &str, message: String, counted: bool) -> CompletedRun {
         exit_code: None,
         output: message,
         counted,
+        skipped: false,
     }
 }
 
@@ -575,6 +577,7 @@ fn execute_bash(task: &CronTask, workdir: String) -> CompletedRun {
         exit_code: Some(result.exit_code),
         output: format_shell_result(&script, &result),
         counted: true,
+        skipped: false,
     }
 }
 
@@ -619,6 +622,7 @@ fn execute_http(task: &CronTask) -> CompletedRun {
         exit_code: None,
         output: sections.join("\n\n"),
         counted: true,
+        skipped: false,
     }
 }
 

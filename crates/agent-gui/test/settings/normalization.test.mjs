@@ -3752,3 +3752,19 @@ test("legacy gateway messages without sidebar shortcuts preserve the current pre
     assert.deepEqual(applied.customSettings.sidebarShortcuts, current.customSettings.sidebarShortcuts);
   }
 });
+
+test("notification preferences default per category and ignore non-boolean values", () => {
+  assert.deepEqual(settings.normalizeNotificationPreferences(undefined), {
+    planning: true,
+    cronFailure: true,
+    cronSuccess: false,
+    agent: true,
+  });
+  assert.deepEqual(
+    settings.normalizeNotificationPreferences({ planning: false, cronSuccess: true, agent: "no" }),
+    { planning: false, cronFailure: true, cronSuccess: true, agent: true },
+  );
+  const normalized = settings.normalizeSettings({ system: {} });
+  assert.equal(normalized.system.notifications.cronSuccess, false);
+  assert.deepEqual(settings.getDefaultSettings().system.notifications, normalized.system.notifications);
+});

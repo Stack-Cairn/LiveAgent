@@ -207,7 +207,10 @@ macro_rules! app_invoke_handler {
             commands::planning::planning_query,
             commands::planning::planning_mutate,
             commands::planning::planning_export,
-            commands::planning::planning_set_labels,
+            commands::notifications::notifications_set_labels,
+            commands::notifications::notifications_test,
+            commands::notifications::notifications_notify,
+            commands::notifications::notifications_open_settings,
             commands::planning::planning_subscription,
             commands::planning::planning_subscription_due,
             commands::planning::planning_subscription_fetch,
@@ -834,6 +837,7 @@ pub fn run() {
     let planning_store = Arc::new(
         services::planning::PlanningStore::open().expect("failed to initialize planning store"),
     );
+    let notification_service = Arc::new(services::notifications::NotificationService::new());
     let automation_store = Arc::new(
         services::automation::AutomationStore::open()
             .expect("failed to initialize LiveAgent automation store"),
@@ -912,6 +916,7 @@ pub fn run() {
         .manage(Arc::clone(&allow_exit))
         .manage(Arc::clone(&close_window_behavior))
         .manage(Arc::clone(&planning_store))
+        .manage(Arc::clone(&notification_service))
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
@@ -992,7 +997,12 @@ pub fn run() {
                     scheduler: Arc::downgrade(&automation_scheduler),
                 });
                 Arc::clone(&automation_scheduler).start();
-                services::planning::start(app.handle().clone(), Arc::clone(&planning_store));
+                notification_service.attach(app.handle().clone());
+                services::planning::start(
+                    app.handle().clone(),
+                    Arc::clone(&planning_store),
+                    Arc::clone(&notification_service),
+                );
                 app.manage(Arc::clone(&gateway_controller));
                 if let Err(error) = gateway_controller.start() {
                     eprintln!("failed to start remote gateway controller: {error}");

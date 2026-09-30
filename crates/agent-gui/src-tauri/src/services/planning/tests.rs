@@ -1772,3 +1772,28 @@ fn planning_writes_wait_for_a_concurrent_writer_instead_of_failing() {
     assert_eq!(result.unwrap().status, "ok");
     assert!(store.claim_reminders(store::now()).is_ok());
 }
+
+#[test]
+fn planning_reminder_is_stale_a_day_after_trigger_or_snooze() {
+    let mut reminder = Reminder {
+        id: "event:t1".into(),
+        target_type: "event".into(),
+        target_id: "t1".into(),
+        title: "周会".into(),
+        origin: "event_start".into(),
+        trigger_at: 1_000_000,
+        snoozed_until: None,
+        status: "pending".into(),
+        notified_at: None,
+        lease_until: None,
+        attempts: 0,
+        next_attempt_at: 0,
+        revision: 1,
+    };
+    let due = 1_000_000 + super::STALE_REMINDER_MS;
+    assert!(!super::is_stale_reminder(&reminder, due));
+    assert!(super::is_stale_reminder(&reminder, due + 1));
+    // 稍后提醒按新的到点时间计算。
+    reminder.snoozed_until = Some(due);
+    assert!(!super::is_stale_reminder(&reminder, due + 1));
+}

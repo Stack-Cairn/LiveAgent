@@ -2,6 +2,7 @@ import { createSettingsExtension } from "@liveagent/adapters/settingsExtension";
 import type { SttProviderId } from "@liveagent/app/lib/settings";
 import type { SettingsPageProps } from "@liveagent/app/pages/settings/types";
 import {
+  Bell,
   Blend,
   BookOpen,
   Brain,
@@ -25,6 +26,7 @@ import { CronSection } from "./CronSection";
 import { CuaDriverSection } from "./CuaDriverSection";
 import { HooksSection } from "./HooksSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
+import { NotificationsSection } from "./NotificationsSection";
 import { ProvidersSection } from "./ProvidersSection";
 import { RemoteSection } from "./RemoteSection";
 import { ResourceHubSection } from "./ResourceHubSection";
@@ -115,6 +117,21 @@ export function SettingsPage(props: SettingsPageProps) {
         labelKey: "settings.navAgents",
         icon: <BookOpen className={extension.iconClassName} />,
         render: () => <AgentsSection settings={settings} setSettings={setSettings} />,
+      },
+      {
+        id: "notifications",
+        groupKey: "settings.groupGeneral",
+        groupOrder: 10,
+        order: 40,
+        labelKey: "settings.navNotifications",
+        icon: <Bell className={extension.iconClassName} />,
+        render: () => (
+          <NotificationsSection
+            settings={settings}
+            setSettings={setSettings}
+            surface={extension.surface}
+          />
+        ),
       },
       ...(["skills", "mcp"] as const).map((id, index) => ({
         id,

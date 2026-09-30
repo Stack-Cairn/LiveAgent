@@ -29,12 +29,6 @@ pub async fn planning_mutate(
     Ok(response)
 }
 
-/// Localized labels for backend-originated UI (reminder notifications).
-#[tauri::command]
-pub fn planning_set_labels(notification_title: String) {
-    planning::set_notification_title(notification_title);
-}
-
 #[tauri::command]
 pub async fn planning_export(store: State<'_, Arc<PlanningStore>>) -> Result<Snapshot, String> {
     let store = Arc::clone(&store);
