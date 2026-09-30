@@ -66,10 +66,12 @@ export function layoutEvents(
     .filter((e) => e.time.kind === "timed")
     .map((event) => ({ event, bounds: timeBounds(event.time) }))
     .filter(({ bounds: [s, e] }) => s < to && e > from)
+    // Same start: the longer item takes the left column (Google), so a task chip that shares a
+    // start with an event sits to its right.
     .sort(
       (a, b) =>
         a.bounds[0] - b.bounds[0] ||
-        a.bounds[1] - b.bounds[1] ||
+        b.bounds[1] - a.bounds[1] ||
         a.event.id.localeCompare(b.event.id),
     );
   const result: EventPlacement[] = [];

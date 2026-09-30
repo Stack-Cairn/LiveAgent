@@ -122,6 +122,110 @@ export function MonthGrid({
           );
           const total = events.length + due.length;
           const limit = total > maxItems ? maxItems - 1 : maxItems;
+          // Deadlines are interleaved with events by time (all-day and day-only first), as in
+          // the agenda view, instead of trailing after every event.
+          const items = [
+            ...events.map((e) => ({
+              kind: "event" as const,
+              e,
+              allDay: e.time.kind === "allDay",
+              at: timeBounds(e.time)[0],
+            })),
+            ...due.map((t) => ({
+              kind: "todo" as const,
+              t,
+              allDay: t.dueAt == null,
+              at: t.dueAt ?? from,
+            })),
+          ].sort((x, y) => Number(y.allDay) - Number(x.allDay) || x.at - y.at);
+          const renderEvent = (e: PlanningEvent) => {
+            const color = eventColor(e, snapshot);
+            const isPast = timeBounds(e.time)[1] < now;
+            const done = completed(e.todoId);
+            const mark = e.todoId ? (
+              done ? (
+                <Check
+                  key="mark"
+                  className="planning-task-mark"
+                  aria-label={translate("planner.status.completed")}
+                />
+              ) : (
+                <Circle
+                  key="mark"
+                  className="planning-task-mark"
+                  aria-label={translate("planner.kind.task")}
+                />
+              )
+            ) : null;
+            return e.time.kind === "allDay" ? (
+              <button
+                type="button"
+                key={e.id}
+                className={`planning-month-event is-filled ${drag.dragging?.id === e.id ? "is-dragging" : ""} ${e.todoId ? "planning-task-chip" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
+                title={eventTitle(e, snapshot.todos)}
+                style={
+                  e.todoId ? taskAppearance(color, "task", isPast) : eventAppearance(color, isPast)
+                }
+                onPointerDown={(down) => drag.start(down, e, day)}
+                onClick={(click) => {
+                  const anchor = click.currentTarget;
+                  drag.click(() => onSelect(e, anchor));
+                }}
+              >
+                {mark}
+                <span className="truncate">{eventTitle(e, snapshot.todos)}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                key={e.id}
+                className={`planning-month-event ${drag.dragging?.id === e.id ? "is-dragging" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
+                title={eventTitle(e, snapshot.todos)}
+                style={e.todoId ? ({ "--planning-accent": color } as CSSProperties) : undefined}
+                onPointerDown={(down) => drag.start(down, e, day)}
+                onClick={(click) => {
+                  const anchor = click.currentTarget;
+                  drag.click(() => onSelect(e, anchor));
+                }}
+              >
+                {mark ?? <span className="planning-month-dot" style={{ backgroundColor: color }} />}
+                <span className="shrink-0 tabular-nums">
+                  {zonedParts(Math.max(e.time.startAt, from), zone).time}
+                </span>
+                <span className="truncate">{eventTitle(e, snapshot.todos)}</span>
+              </button>
+            );
+          };
+          const renderDue = (t: Todo) => (
+            <button
+              type="button"
+              key={t.id}
+              className={`planning-month-event planning-month-deadline ${(t.dueAt ?? to) < now ? "is-past" : ""} ${t.status === "completed" ? "is-completed" : ""}`}
+              style={taskAppearance(taskListColor(t, snapshot), "deadline", (t.dueAt ?? to) < now)}
+              title={translate("planner.task.rowLabel", { title: t.title })}
+              onClick={() => onSelectTodo(t)}
+            >
+              {t.status === "completed" ? (
+                <Check
+                  key="mark"
+                  className="planning-task-mark"
+                  aria-label={translate("planner.status.completed")}
+                />
+              ) : (
+                <Circle
+                  key="mark"
+                  className="planning-task-mark"
+                  aria-label={translate("planner.kind.task")}
+                />
+              )}
+              <span className="truncate">{t.title}</span>
+              <span className="planning-deadline-time">
+                {t.dueAt != null
+                  ? translate("planner.grid.dueAt", { time: zonedParts(t.dueAt, zone).time })
+                  : translate("planner.month.due")}
+              </span>
+            </button>
+          );
           const weekday = new Intl.DateTimeFormat(planningDateLocale(), {
             weekday: "short",
             timeZone: "UTC",
@@ -167,102 +271,9 @@ export function MonthGrid({
                 </span>
                 {showLunar && <span className="text-muted-foreground">{lunarDate(day)}</span>}
               </button>
-              {events.slice(0, limit).map((e) => {
-                const color = eventColor(e, snapshot);
-                const isPast = timeBounds(e.time)[1] < now;
-                const done = completed(e.todoId);
-                const mark = e.todoId ? (
-                  done ? (
-                    <Check
-                      key="mark"
-                      className="planning-task-mark"
-                      aria-label={translate("planner.status.completed")}
-                    />
-                  ) : (
-                    <Circle
-                      key="mark"
-                      className="planning-task-mark"
-                      aria-label={translate("planner.kind.task")}
-                    />
-                  )
-                ) : null;
-                return e.time.kind === "allDay" ? (
-                  <button
-                    type="button"
-                    key={e.id}
-                    className={`planning-month-event is-filled ${drag.dragging?.id === e.id ? "is-dragging" : ""} ${e.todoId ? "planning-task-chip" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
-                    title={eventTitle(e, snapshot.todos)}
-                    style={
-                      e.todoId
-                        ? taskAppearance(color, "task", isPast)
-                        : eventAppearance(color, isPast)
-                    }
-                    onPointerDown={(down) => drag.start(down, e, day)}
-                    onClick={(click) => {
-                      const anchor = click.currentTarget;
-                      drag.click(() => onSelect(e, anchor));
-                    }}
-                  >
-                    {mark}
-                    <span className="truncate">{eventTitle(e, snapshot.todos)}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    key={e.id}
-                    className={`planning-month-event ${drag.dragging?.id === e.id ? "is-dragging" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
-                    title={eventTitle(e, snapshot.todos)}
-                    style={e.todoId ? ({ "--planning-accent": color } as CSSProperties) : undefined}
-                    onPointerDown={(down) => drag.start(down, e, day)}
-                    onClick={(click) => {
-                      const anchor = click.currentTarget;
-                      drag.click(() => onSelect(e, anchor));
-                    }}
-                  >
-                    {mark ?? (
-                      <span className="planning-month-dot" style={{ backgroundColor: color }} />
-                    )}
-                    <span className="shrink-0 tabular-nums">
-                      {zonedParts(Math.max(e.time.startAt, from), zone).time}
-                    </span>
-                    <span className="truncate">{eventTitle(e, snapshot.todos)}</span>
-                  </button>
-                );
-              })}
-              {due.slice(0, Math.max(0, limit - events.length)).map((t) => (
-                <button
-                  type="button"
-                  key={t.id}
-                  className={`planning-month-event planning-month-deadline ${(t.dueAt ?? to) < now ? "is-past" : ""} ${t.status === "completed" ? "is-completed" : ""}`}
-                  style={taskAppearance(
-                    taskListColor(t, snapshot),
-                    "deadline",
-                    (t.dueAt ?? to) < now,
-                  )}
-                  title={translate("planner.task.rowLabel", { title: t.title })}
-                  onClick={() => onSelectTodo(t)}
-                >
-                  {t.status === "completed" ? (
-                    <Check
-                      key="mark"
-                      className="planning-task-mark"
-                      aria-label={translate("planner.status.completed")}
-                    />
-                  ) : (
-                    <Circle
-                      key="mark"
-                      className="planning-task-mark"
-                      aria-label={translate("planner.kind.task")}
-                    />
-                  )}
-                  <span className="truncate">{t.title}</span>
-                  <span className="planning-deadline-time">
-                    {t.dueAt != null
-                      ? translate("planner.grid.dueAt", { time: zonedParts(t.dueAt, zone).time })
-                      : translate("planner.month.due")}
-                  </span>
-                </button>
-              ))}
+              {items
+                .slice(0, limit)
+                .map((item) => (item.kind === "event" ? renderEvent(item.e) : renderDue(item.t)))}
               {total > limit && (
                 <button
                   type="button"

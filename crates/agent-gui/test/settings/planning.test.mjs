@@ -107,12 +107,29 @@ test("Unified date/time selection validates ranges, multi-day all-day and DST ga
 test("Overlap layout lets a block expand into columns that stay free for its whole duration", () => {
   const from = Date.parse("2026-09-07T00:00:00Z");
   const event = (id, start, end) => ({ id, time: { kind: "timed", startAt: from + start * time.HOUR, endAt: from + end * time.HOUR, timeZone: "UTC" } });
-  // a 9–10 (col 0), b 9–9.5 (col 1), c 9–9.75 (col 2), d 9.5–10 reuses col 1.
+  // Same start, longer first: a 9–10 (col 0), c 9–9.75 (col 1), b 9–9.5 (col 2); d 9.75–10 reuses col 1.
   const placed = Object.fromEntries(geometry.layoutEvents([event("a", 9, 10), event("b", 9, 9.5), event("c", 9, 9.75), event("d", 9.75, 10)], from, from + 24 * time.HOUR, 48).map((p) => [p.event.id, p]));
-  assert.deepEqual([placed.a.column, placed.b.column, placed.c.column, placed.d.column], [2, 0, 1, 0]);
+  assert.deepEqual([placed.a.column, placed.b.column, placed.c.column, placed.d.column], [0, 2, 1, 1]);
   assert.equal(placed.a.columns, 3);
-  // d starts when b and c have ended, so it widens across the free columns 0–1; a stays single.
+  // d starts when b and c have ended, so it widens across the free columns 1–2; a stays single.
   assert.equal(placed.d.span, 2);
   assert.equal(placed.a.span, 1);
   assert.equal(placed.b.span, 1);
+});
+
+test("Planning deadline chips share columns with events instead of covering them", () => {
+  const from = Date.parse("2026-09-07T00:00:00Z");
+  const hourHeight = 48;
+  const chipMs = ((22 + 2) / hourHeight) * time.HOUR;
+  const at = (h) => from + h * time.HOUR;
+  const item = (id, start, end) => ({ id, time: { kind: "timed", startAt: start, endAt: end, timeZone: "UTC" } });
+  // A 10:00–11:00 event and a chip due 10:00: the event keeps column 0, the chip goes right.
+  const placed = Object.fromEntries(geometry.layoutEvents([item("deadline:t", at(10), at(10) + chipMs), item("e", at(10), at(11))], from, at(24), hourHeight).map((p) => [p.event.id, p]));
+  assert.equal(placed.e.column, 0);
+  assert.equal(placed["deadline:t"].column, 1);
+  assert.equal(placed.e.columns, 2);
+  // A chip due 10:45 overlaps the event only while it lasts; an event after the chip is free.
+  const later = Object.fromEntries(geometry.layoutEvents([item("e", at(10), at(11)), item("deadline:t", at(10.75), at(10.75) + chipMs), item("f", at(11.5), at(12))], from, at(24), hourHeight).map((p) => [p.event.id, p]));
+  assert.equal(later["deadline:t"].column, 1);
+  assert.equal(later.f.columns, 1);
 });

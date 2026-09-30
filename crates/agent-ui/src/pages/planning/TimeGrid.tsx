@@ -30,7 +30,7 @@ const DEADLINE_PREFIX = "deadline:";
 /** Text line height inside blocks (text-xs / 1rem) plus vertical padding. */
 const LINE_HEIGHT = 16;
 /** Below this width per overlapping block, blocks cascade instead of splitting into columns. */
-const MIN_SPLIT_WIDTH = 48;
+const MIN_SPLIT_WIDTH = 32;
 const CASCADE_OFFSET = 14;
 /** Deadlines render as one-line chips (Google task chips) floating above events. */
 const CHIP_HEIGHT = 22;
@@ -174,7 +174,7 @@ export function TimeGrid({
     (t) =>
       !hidden.has(taskListLayer(t.groupId)) &&
       !t.deletedAt &&
-      t.status === "open" &&
+      (showCompleted || t.status === "open") &&
       t.dueAt != null,
   );
   const [startHour, endHour] = workHours ?? [0, 24];
@@ -632,31 +632,27 @@ export function TimeGrid({
                   (e) => e.time.kind === "timed" && e.time.startAt >= to && e.time.startAt < dayTo,
                 ).length + deadlines.filter((at) => at >= to && at < dayTo).length
               : 0;
-            // Deadlines do not squeeze events: they float above them as chips and only share
-            // width with other chips close enough to collide.
-            const chipMinutes = (CHIP_HEIGHT / hourHeight) * 60;
+            // Deadline chips join the same column layout as events: their footprint is exactly
+            // their pixel height (plus the 1px outline on each side), so items that touch on
+            // screen split into columns instead of covering each other.
+            const chipMs = ((CHIP_HEIGHT + 2) / hourHeight) * HOUR;
             const deadlineChips: PlanningEvent[] = dueTodos
               .filter((t) => (t.dueAt ?? 0) >= from && (t.dueAt ?? 0) < to)
-              .map((t) => ({
-                id: `${DEADLINE_PREFIX}${t.id}`,
-                calendarId: "",
-                todoId: t.id,
-                title: t.title,
-                notes: "",
-                time: {
-                  kind: "timed",
-                  startAt: t.dueAt ?? from,
-                  endAt: (t.dueAt ?? from) + chipMinutes * MINUTE,
-                  timeZone: zone,
-                },
-                revision: 0,
-                createdAt: 0,
-                updatedAt: 0,
-              }));
-            const placements = [
-              ...layoutEvents(visible, from, to, hourHeight),
-              ...layoutEvents(deadlineChips, from, to, hourHeight),
-            ];
+              .map((t) => {
+                const startAt = Math.min(t.dueAt ?? from, to - chipMs);
+                return {
+                  id: `${DEADLINE_PREFIX}${t.id}`,
+                  calendarId: "",
+                  todoId: t.id,
+                  title: t.title,
+                  notes: "",
+                  time: { kind: "timed", startAt, endAt: startAt + chipMs, timeZone: zone },
+                  revision: 0,
+                  createdAt: 0,
+                  updatedAt: 0,
+                } satisfies PlanningEvent;
+              });
+            const placements = layoutEvents([...visible, ...deadlineChips], from, to, hourHeight);
             const pStart = preview?.kind === "timed" ? Math.max(preview.startAt, from) : 0,
               pEnd = preview?.kind === "timed" ? Math.min(preview.endAt, to) : 0;
             return (
@@ -757,18 +753,22 @@ export function TimeGrid({
                           left: `calc(${column * share}% + 1px)`,
                           width: `calc(${span * share}% - ${last ? 10 : 2}px)`,
                         };
-                    const layer = { zIndex: (deadline ? 20 : 2) + column };
+                    const layer = { zIndex: 2 + column };
                     if (deadline) {
                       const todo = dueTodos.find((t) => t.id === event.todoId);
                       if (!todo) return null;
                       const dueAt = todo.dueAt ?? from;
                       const time = zonedParts(dueAt, zone).time;
+                      const done = todo.status === "completed";
+                      const overdue = !done && dueAt < now;
+                      const label = `${translate(done ? "planner.grid.taskDueDone" : "planner.grid.taskDue", { title: todo.title })} ${time}${overdue ? ` · ${translate("planner.task.overdue")}` : ""}`;
                       return (
                         <button
                           type="button"
                           key={event.id}
-                          className={`planning-time-event planning-deadline ${dueAt < now ? "is-past" : ""}`}
-                          title={`${translate("planner.grid.taskDue", { title: todo.title })} ${time}`}
+                          className={`planning-time-event planning-deadline ${dueAt < now ? "is-past" : ""} ${done ? "is-completed" : ""}`}
+                          title={label}
+                          aria-label={label}
                           style={{
                             ...geometry,
                             ...layer,
@@ -777,7 +777,11 @@ export function TimeGrid({
                           }}
                           onClick={() => onSelectTodo(todo)}
                         >
-                          <Circle className="planning-task-mark" aria-hidden />
+                          {done ? (
+                            <Check className="planning-task-mark" aria-hidden />
+                          ) : (
+                            <Circle className="planning-task-mark" aria-hidden />
+                          )}
                           <span className="planning-deadline-title">{todo.title}</span>
                           <span className="planning-deadline-time">
                             {translate("planner.grid.inlineSeparator")}
