@@ -161,6 +161,9 @@ export function TimeGrid({
       (showCompleted || !snapshot.todos.some((t) => t.id === e.todoId && t.status === "completed")),
   );
   const now = Date.now();
+  const timedPast = (e: PlanningEvent) => e.time.kind === "timed" && e.time.endAt < now;
+  const allDayPast = (e: PlanningEvent) =>
+    e.time.kind === "allDay" && e.time.endDateExclusive <= today;
   const overdue = snapshot.todos.filter(
     (t) =>
       !t.deletedAt &&
@@ -541,7 +544,7 @@ export function TimeGrid({
                   type="button"
                   key={t.id}
                   className={`planning-all-day-event planning-task-chip ${day < today ? "is-past" : ""}`}
-                  style={taskAppearance(taskListColor(t, snapshot))}
+                  style={taskAppearance(taskListColor(t, snapshot), "task", day < today)}
                   title={translate("planner.task.rowLabel", { title: t.title })}
                   onClick={() => onSelectTodo(t)}
                 >
@@ -572,12 +575,12 @@ export function TimeGrid({
                 <button
                   type="button"
                   key={event.id}
-                  className={`planning-all-day-event ${dayDrag.dragging?.id === event.id ? "is-dragging" : ""} ${event.todoId ? "planning-task-chip" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "allDay" && event.time.endDateExclusive <= today ? "is-past" : ""}`}
+                  className={`planning-all-day-event ${dayDrag.dragging?.id === event.id ? "is-dragging" : ""} ${event.todoId ? "planning-task-chip" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${allDayPast(event) ? "is-past" : ""}`}
                   title={eventTitle(event, snapshot.todos)}
                   style={
                     event.todoId
-                      ? taskAppearance(eventColor(event, snapshot))
-                      : eventAppearance(eventColor(event, snapshot))
+                      ? taskAppearance(eventColor(event, snapshot), "task", allDayPast(event))
+                      : eventAppearance(eventColor(event, snapshot), allDayPast(event))
                   }
                   onPointerDown={(down) => dayDrag.start(down, event, day)}
                   onClick={(e) => {
@@ -780,7 +783,7 @@ export function TimeGrid({
                             ...geometry,
                             ...layer,
                             height: CHIP_HEIGHT,
-                            ...eventAppearance(taskListColor(todo, snapshot)),
+                            ...eventAppearance(taskListColor(todo, snapshot), dueAt < now),
                           }}
                           onClick={() => onSelectTodo(todo)}
                         >
@@ -801,13 +804,15 @@ export function TimeGrid({
                     return (
                       <div
                         key={event.id}
-                        className={`planning-time-event ${height < 40 ? "is-short" : ""} ${event.todoId ? "is-task" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${draggingId === event.id ? "is-dragging" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${event.time.kind === "timed" && event.time.endAt < now ? "is-past" : ""}`}
+                        className={`planning-time-event ${height < 40 ? "is-short" : ""} ${event.todoId ? "is-task" : ""} ${isCronEvent(event) ? "planning-event-cron" : ""} ${draggingId === event.id ? "is-dragging" : ""} ${snapshot.todos.find((t) => t.id === event.todoId)?.status === "completed" ? "is-completed" : ""} ${timedPast(event) ? "is-past" : ""}`}
                         style={
                           {
                             ...geometry,
                             ...layer,
                             height: Math.max(16, height),
-                            ...(event.todoId ? taskAppearance(color) : eventAppearance(color)),
+                            ...(event.todoId
+                              ? taskAppearance(color, "task", timedPast(event))
+                              : eventAppearance(color, timedPast(event))),
                             ...({
                               "--planning-title-lines": titleLines(Math.max(16, height), true),
                             } as CSSProperties),

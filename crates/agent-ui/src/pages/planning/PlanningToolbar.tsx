@@ -102,6 +102,7 @@ export function PlanningToolbar({
             .filter(Boolean)
             .join(" ~ ")
       : "";
+  const title = periodTitle(date, view, days, planningDateLocale(locale));
   return (
     // Sizes follow the toolbar's own width (container queries), so a narrow page between
     // two sidebars drops the title and week badge instead of squeezing them.
@@ -135,10 +136,11 @@ export function PlanningToolbar({
               <ChevronRight className="size-5" />
             </Button>
           </div>
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          {/* Keeps room for the full period title; below that the actions wrap. */}
+          <div className="flex min-w-40 flex-1 items-center gap-2 overflow-hidden">
             <div className="min-w-0">
-              <p className="truncate text-xl leading-7 tabular-nums">
-                {periodTitle(date, view, days, planningDateLocale(locale))}
+              <p className="truncate text-xl leading-7 tabular-nums" title={title}>
+                {title}
               </p>
               {lunar && (
                 <p className="text-xs text-muted-foreground">

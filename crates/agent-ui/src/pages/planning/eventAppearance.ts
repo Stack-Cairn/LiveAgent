@@ -11,8 +11,22 @@ export function eventColor(event: PlanningEvent, snapshot: PlanningSnapshot) {
     : snapshot.calendars.find((c) => c.id === event.calendarId)?.color;
 }
 
+/**
+ * Past items fade to a light tint of their color with regular text, like Google Calendar.
+ * Lowering opacity instead dropped text below 4.5:1 for every calendar color.
+ */
+function pastAppearance(accent: string, tint: number): CSSProperties {
+  return {
+    "--planning-accent": accent,
+    backgroundColor: `color-mix(in srgb, ${accent} ${tint}%, hsl(var(--card)))`,
+    color: "hsl(var(--foreground))",
+    borderColor: `color-mix(in srgb, ${accent} 45%, hsl(var(--card)))`,
+  } as CSSProperties;
+}
+
 /** Calendar colors are user data; choose readable text independently of the app theme. */
-export function eventAppearance(color?: string): CSSProperties {
+export function eventAppearance(color?: string, past = false): CSSProperties {
+  if (past && color && /^#[\da-f]{6}$/i.test(color)) return pastAppearance(color, 22);
   if (!color || !/^#[\da-f]{6}$/i.test(color)) {
     return {
       backgroundColor: "hsl(var(--muted))",
@@ -38,8 +52,13 @@ export function eventAppearance(color?: string): CSSProperties {
  * Tasks must read differently from events at a glance: events are solid blocks, scheduled
  * task blocks are tinted with an accent bar, deadlines are dashed outlines.
  */
-export function taskAppearance(color: string | undefined, kind: "task" | "deadline" = "task") {
+export function taskAppearance(
+  color: string | undefined,
+  kind: "task" | "deadline" = "task",
+  past = false,
+) {
   const accent = color && /^#[\da-f]{6}$/i.test(color) ? color : "hsl(var(--primary))";
+  if (past) return pastAppearance(accent, kind === "task" ? 12 : 6);
   return {
     "--planning-accent": accent,
     backgroundColor: `color-mix(in srgb, ${accent} ${kind === "task" ? 32 : 12}%, hsl(var(--card)))`,

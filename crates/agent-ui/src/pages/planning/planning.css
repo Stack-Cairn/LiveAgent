@@ -28,6 +28,8 @@
 .planning-topbar {
   display: flex;
   flex-shrink: 0;
+  /* Narrow windows move the action cluster to a second row instead of clipping it. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   min-height: 3rem;
@@ -332,28 +334,16 @@
 .planning-all-day-event.is-dragging {
   opacity: 0.4;
 }
-.planning-all-day-event.is-past,
-.planning-month-event.is-past {
-  opacity: 0.55;
-}
-/* Grid blocks may cascade over each other, so fade them with an opaque veil, not opacity. */
-.planning-time-event.is-past::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  background: hsl(var(--card) / 0.45);
-  pointer-events: none;
-}
+/* Past filled blocks get a light tint from eventAppearance/taskAppearance (inline), never
+   opacity: fading the whole block dropped text below 4.5:1. Unfilled rows mute their text. */
 :is(.planning-month-event, .planning-agenda-row):not(.is-filled).is-past {
-  opacity: 1;
   color: hsl(var(--muted-foreground));
 }
 :is(.planning-time-event, .planning-all-day-event, .planning-month-event).is-completed {
   text-decoration: line-through;
 }
-/* Read-only scheduled-task layer: dashed outline and slightly faded so it reads as derived
-   information rather than an editable block. */
+/* Read-only scheduled-task layer: a dashed outline marks it as derived information rather
+   than an editable block (no fading, which would cost text contrast). */
 :is(
   .planning-time-event,
   .planning-all-day-event,
@@ -361,16 +351,9 @@
 ).planning-event-cron {
   border-style: dashed;
   border-width: 1px;
-  opacity: 0.85;
 }
 .planning-time-event.planning-event-cron {
   box-shadow: none;
-}
-:is(.planning-month-event:not(.is-filled), .planning-agenda-row).planning-event-cron {
-  opacity: 0.85;
-}
-:is(.planning-all-day-event, .planning-month-event).planning-event-cron.is-past {
-  opacity: 0.5;
 }
 .planning-event-body {
   position: absolute;
@@ -826,7 +809,6 @@ hr.planning-agenda-now {
   flex-shrink: 0;
   margin-left: 0;
   color: inherit;
-  opacity: 0.85;
 }
 .planning-month-deadline {
   border: 1px dashed var(--planning-accent);

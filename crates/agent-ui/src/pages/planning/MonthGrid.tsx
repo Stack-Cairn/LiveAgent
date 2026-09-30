@@ -192,7 +192,11 @@ export function MonthGrid({
                     key={e.id}
                     className={`planning-month-event is-filled ${drag.dragging?.id === e.id ? "is-dragging" : ""} ${e.todoId ? "planning-task-chip" : ""} ${isCronEvent(e) ? "planning-event-cron" : ""} ${isPast ? "is-past" : ""} ${done ? "is-completed" : ""}`}
                     title={eventTitle(e, snapshot.todos)}
-                    style={e.todoId ? taskAppearance(color) : eventAppearance(color)}
+                    style={
+                      e.todoId
+                        ? taskAppearance(color, "task", isPast)
+                        : eventAppearance(color, isPast)
+                    }
                     onPointerDown={(down) => drag.start(down, e, day)}
                     onClick={(click) => {
                       const anchor = click.currentTarget;
@@ -230,7 +234,11 @@ export function MonthGrid({
                   type="button"
                   key={t.id}
                   className={`planning-month-event planning-month-deadline ${(t.dueAt ?? to) < now ? "is-past" : ""} ${t.status === "completed" ? "is-completed" : ""}`}
-                  style={taskAppearance(taskListColor(t, snapshot), "deadline")}
+                  style={taskAppearance(
+                    taskListColor(t, snapshot),
+                    "deadline",
+                    (t.dueAt ?? to) < now,
+                  )}
                   title={translate("planner.task.rowLabel", { title: t.title })}
                   onClick={() => onSelectTodo(t)}
                 >
