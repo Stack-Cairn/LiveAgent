@@ -42,12 +42,15 @@ import { useCronOccurrences } from "./useCronOccurrences";
 import { usePlanningT } from "./usePlanningT";
 import "./planning.css";
 
+/** A reversible change offered in the bottom bar; hovering or focusing it pauses the timer. */
 type Undo = {
+  message: string;
+  revert(): Promise<unknown>;
   expiresAt: number;
-  event: PlanningEvent;
-  original?: EventTime;
-  restore?: { masterId: string; masterRevision: number; date: string };
+  /** Milliseconds left while paused. */
+  paused?: number;
 };
+const UNDO_MS = 10_000;
 export function PlanningPage({
   onOpenCron,
 }: {
@@ -199,7 +202,23 @@ export function PlanningPage({
   // Re-rendering the whole page (grid layout, task panel) every second made every popover
   // stutter. Tick per second only while the undo countdown shows; otherwise once a minute
   // keeps the now line and past-item styling current.
-  const undoActive = undo !== null && undo.expiresAt > clock;
+  const undoActive = undo !== null && (undo.paused !== undefined || undo.expiresAt > clock);
+  const offerUndo = useCallback(
+    (message: string, revert: () => Promise<unknown>) =>
+      setUndo({ message, revert, expiresAt: Date.now() + UNDO_MS }),
+    [],
+  );
+  const pauseUndo = (paused: boolean) =>
+    setUndo((current) => {
+      if (!current) return current;
+      if (paused)
+        return current.paused === undefined
+          ? { ...current, paused: Math.max(0, current.expiresAt - Date.now()) }
+          : current;
+      return current.paused === undefined
+        ? current
+        : { ...current, expiresAt: Date.now() + Math.max(current.paused, 3000), paused: undefined };
+    });
   useEffect(() => {
     setClock(Date.now());
     const timer = setInterval(() => setClock(Date.now()), undoActive ? 1000 : 60_000);
@@ -248,7 +267,6 @@ export function PlanningPage({
       setBusy(true);
       setError("");
       try {
-        let saved: PlanningEvent | null;
         if (master && event?.originalDate && scope !== "this") {
           await planningStore.mutate<PlanningEvent>(
             scope === "all"
@@ -275,43 +293,67 @@ export function PlanningPage({
           );
           setUndo(null);
         } else if (event?.id.includes("@") && event.seriesId && event.originalDate) {
-          saved = await planningStore.mutate<PlanningEvent>({
+          const saved = await planningStore.mutate<PlanningEvent>({
             action: "event.exception",
             id: event.seriesId,
             expectedRevision: event.revision,
             data: { date: event.originalDate, time },
           });
+          const masterId = event.seriesId,
+            date = event.originalDate;
           if (saved)
-            setUndo({
-              expiresAt: Date.now() + 10_000,
-              event: saved,
-              restore: {
-                masterId: event.seriesId,
-                masterRevision: event.revision + 1,
-                date: event.originalDate,
-              },
-            });
+            offerUndo(t("planner.undo.saved"), () =>
+              planningStore.mutate({
+                action: "event.restoreException",
+                id: masterId,
+                expectedRevision: event.revision + 1,
+                data: { date, exceptionId: saved.id, exceptionRevision: saved.revision },
+              }),
+            );
         } else if (event) {
-          saved = await planningStore.mutate<PlanningEvent>({
+          const saved = await planningStore.mutate<PlanningEvent>({
             action: "event.update",
             id: event.id,
             expectedRevision: event.revision,
             data: { time },
           });
           if (saved)
-            setUndo({ expiresAt: Date.now() + 10_000, event: saved, original: event.time });
+            offerUndo(t("planner.undo.saved"), () =>
+              planningStore.mutate({
+                action: "event.update",
+                id: saved.id,
+                expectedRevision: saved.revision,
+                data: { time: event.time },
+              }),
+            );
         } else {
           const todo = snapshot.todos.find((t) => t.id === todoId);
           if (!todo) throw new Error(t("planner.page.taskGone"));
           const calendar = snapshot.calendars.find((c) => c.isDefault && !c.readOnly);
           if (!calendar) throw new Error(t("planner.page.needDefaultCalendar"));
-          saved = await planningStore.mutate<PlanningEvent>({
+          const saved = await planningStore.mutate<PlanningEvent>({
             action: "todo.schedule",
             id: todo.id,
             expectedRevision: todo.revision,
             data: { calendarId: calendar.id, time },
           });
-          if (saved) setUndo({ expiresAt: Date.now() + 10_000, event: saved });
+          // Undoing a new block (dragged-in task) discards it instead of filling the trash.
+          if (saved)
+            offerUndo(t("planner.undo.saved"), async () => {
+              const deleted = await planningStore.mutate<PlanningEvent>({
+                action: "event.delete",
+                id: saved.id,
+                expectedRevision: saved.revision,
+                data: {},
+              });
+              if (deleted)
+                await planningStore.mutate({
+                  action: "event.purge",
+                  id: deleted.id,
+                  expectedRevision: deleted.revision,
+                  data: {},
+                });
+            });
         }
       } catch (e) {
         setError(localizePlanningError(e));
@@ -329,7 +371,7 @@ export function PlanningPage({
         setBusy(false);
       }
     },
-    [snapshot, t, askScope],
+    [snapshot, t, askScope, offerUndo],
   );
   useEffect(() => {
     if (!todoDrag || view !== "month") return;
@@ -459,9 +501,19 @@ export function PlanningPage({
         )}
       </section>
     );
+  const trashed = (kind: "event" | "todo", item: { id: string; revision: number }) =>
+    offerUndo(t("planner.undo.trashed"), () =>
+      planningStore.mutate({
+        action: kind === "event" ? "event.restore" : "todo.restore",
+        id: item.id,
+        expectedRevision: item.revision,
+        data: {},
+      }),
+    );
   const panelProps = {
     busy,
     run,
+    onTrashed: trashed,
     onEdit: (todo?: Todo) => {
       setEditor({ kind: "todo", todo });
     },
@@ -681,12 +733,20 @@ export function PlanningPage({
           onSelect={() => {}}
         />
       )}
-      {undo && undo.expiresAt > clock && (
+      {/* A stable polite region announces the change once; the countdown stays silent. */}
+      <p role="status" className="sr-only">
+        {undoActive ? undo.message : ""}
+      </p>
+      {undo && undoActive && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: hover and focus only pause the timer
         <div
           className="absolute bottom-4 left-1/2 z-10 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-popover px-4 py-2 text-sm text-popover-foreground shadow-lg"
-          role="status"
+          onMouseEnter={() => pauseUndo(true)}
+          onMouseLeave={() => pauseUndo(false)}
+          onFocus={() => pauseUndo(true)}
+          onBlur={() => pauseUndo(false)}
         >
-          {t("planner.undo.saved")}
+          <span aria-hidden>{undo.message}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -694,47 +754,19 @@ export function PlanningPage({
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                if (!undo.restore && !undo.original) {
-                  // Undoing a new block (dragged-in task) discards it instead of filling the trash.
-                  const deleted = await planningStore.mutate<PlanningEvent>({
-                    action: "event.delete",
-                    id: undo.event.id,
-                    expectedRevision: undo.event.revision,
-                    data: {},
-                  });
-                  if (deleted)
-                    await planningStore.mutate({
-                      action: "event.purge",
-                      id: deleted.id,
-                      expectedRevision: deleted.revision,
-                      data: {},
-                    });
-                  setUndo(null);
-                  return;
-                }
-                await planningStore.mutate({
-                  action: undo.restore
-                    ? "event.restoreException"
-                    : undo.original
-                      ? "event.update"
-                      : "event.delete",
-                  id: undo.restore?.masterId ?? undo.event.id,
-                  expectedRevision: undo.restore?.masterRevision ?? undo.event.revision,
-                  data: undo.restore
-                    ? {
-                        date: undo.restore.date,
-                        exceptionId: undo.event.id,
-                        exceptionRevision: undo.event.revision,
-                      }
-                    : undo.original
-                      ? { time: undo.original }
-                      : {},
-                });
+                await undo.revert();
                 setUndo(null);
               })
             }
           >
-            {t("planner.undo.action", { seconds: Math.ceil((undo.expiresAt - clock) / 1000) })}
+            {t("planner.undo.undo")}
+            {undo.paused === undefined && (
+              <span aria-hidden className="tabular-nums text-muted-foreground">
+                {t("planner.undo.seconds", {
+                  seconds: Math.max(1, Math.ceil((undo.expiresAt - clock) / 1000)),
+                })}
+              </span>
+            )}
           </Button>
         </div>
       )}
@@ -754,6 +786,7 @@ export function PlanningPage({
           anchor={preview.anchor}
           snapshot={snapshot}
           onClose={() => setPreview(null)}
+          onTrashed={trashed}
           onEdit={(target) => {
             setPreview(null);
             setEditor(target);

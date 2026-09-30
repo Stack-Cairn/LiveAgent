@@ -108,9 +108,14 @@ export function PlanningSearch({
         {results && (
           <div className="mt-2 max-h-[60dvh] space-y-3 overflow-y-auto">
             {results.events.length === 0 && results.todos.length === 0 ? (
-              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                {t("planner.search.empty")}
-              </p>
+              <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-sm">
+                <p className="text-muted-foreground">
+                  {t("planner.search.empty", { query: query.trim() })}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setQuery("")}>
+                  {t("planner.search.clear")}
+                </Button>
+              </div>
             ) : null}
             {results.events.length > 0 && (
               <section aria-label={t("planner.kind.event")}>

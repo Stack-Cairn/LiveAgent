@@ -1,5 +1,13 @@
 import { type PointerEvent, type ReactNode, useState } from "react";
-import { Check, ChevronDown, Circle, Clock3, Star, Trash2 } from "../../components/IconSet";
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Circle,
+  Clock3,
+  Star,
+  Trash2,
+} from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
 import { ContextMenuPopup } from "../../components/ui/context-menu";
 import {
@@ -177,10 +185,18 @@ export function TaskRow({
                   size="sm"
                   className={`h-6 rounded-full bg-transparent px-2.5 text-xs font-medium ${overdue ? "text-destructive" : ""}`}
                   data-task-control
-                  aria-label={t("planner.task.dueLabel", { due: dueLabel })}
+                  aria-label={t(overdue ? "planner.task.overdueLabel" : "planner.task.dueLabel", {
+                    due: dueLabel,
+                  })}
+                  title={overdue ? t("planner.task.overdue") : undefined}
                   onClick={onEdit}
                 >
-                  <Clock3 className="size-3.5" />
+                  {/* Overdue swaps the icon too, so the state does not rest on red alone. */}
+                  {overdue ? (
+                    <AlertCircle className="size-3.5" aria-hidden />
+                  ) : (
+                    <Clock3 className="size-3.5" aria-hidden />
+                  )}
                   {dueLabel}
                 </Button>
               )}

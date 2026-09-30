@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
+import { Label } from "../../components/ui/label";
 import { calendarName, translate } from "../../lib/planning/i18n";
 import { taskListLayer, taskLists } from "../../lib/planning/taskLists";
 import type { PlanningSnapshot } from "../../lib/planning/types";
@@ -33,6 +34,7 @@ export function ColorCheckbox({
 }: {
   color: string;
   checked: boolean;
+  /** The visible name; Base UI's checkbox does not take it from a wrapping label. */
   label: string;
   onChange(): void;
 }) {
@@ -99,19 +101,17 @@ function LayerRow({
   onToggle(): void;
 }) {
   return (
-    <li className="planning-sidebar-row">
-      <ColorCheckbox
-        color={color}
-        checked={checked}
-        label={translate(checked ? "planner.sidebar.hide" : "planner.sidebar.show", { name })}
-        onChange={onToggle}
-      />
-      <span className="min-w-0 flex-1 truncate" title={name}>
-        {name}
-      </span>
-      {count !== undefined && (
-        <span className="text-tiny tabular-nums text-muted-foreground">{count}</span>
-      )}
+    <li>
+      {/* The whole row is the checkbox's label, so the name toggles it too. */}
+      <Label className="planning-sidebar-row cursor-pointer text-sm font-normal">
+        <ColorCheckbox color={color} checked={checked} label={name} onChange={onToggle} />
+        <span className="min-w-0 flex-1 truncate" title={name}>
+          {name}
+        </span>
+        {count !== undefined && (
+          <span className="text-tiny tabular-nums text-muted-foreground">{count}</span>
+        )}
+      </Label>
     </li>
   );
 }

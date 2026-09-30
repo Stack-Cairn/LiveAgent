@@ -28,6 +28,7 @@ export function TaskPanel({
   onSchedule,
   onDrag,
   onDragEnd,
+  onTrashed,
   list: fixedList,
   variant = "panel",
 }: {
@@ -41,6 +42,8 @@ export function TaskPanel({
   onSchedule(todo: Todo, event?: PlanningEvent): void;
   onDrag(drag: PlanningDragStart): void;
   onDragEnd(): void;
+  /** Offers undo after a task goes to the trash. */
+  onTrashed?(kind: "todo", item: { id: string; revision: number }): void;
 }) {
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -202,14 +205,15 @@ export function TaskPanel({
         onMove={(groupId) => update(todo, { groupId })}
         onStar={() => update(todo, { priority: todo.priority === "high" ? "medium" : "high" })}
         onTrash={() =>
-          void run(() =>
-            planningStore.mutate({
+          void run(async () => {
+            const item = await planningStore.mutate<Todo>({
               action: "todo.delete",
               id: todo.id,
               expectedRevision: todo.revision,
               data: {},
-            }),
-          )
+            });
+            if (item) onTrashed?.("todo", item);
+          })
         }
         onDrag={(event) => drag.start(event, todo)}
       >

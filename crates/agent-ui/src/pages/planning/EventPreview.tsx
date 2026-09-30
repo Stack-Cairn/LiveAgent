@@ -21,7 +21,7 @@ import { Popover, PopoverContent, PopoverTitle } from "../../components/ui/popov
 import { calendarName, localizePlanningError, planningDateLocale } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
 import { eventTitle, timeLabel, zonedParts } from "../../lib/planning/time";
-import type { PlanningEvent, PlanningSnapshot } from "../../lib/planning/types";
+import type { PlanningEvent, PlanningSnapshot, Todo } from "../../lib/planning/types";
 import { eventColor } from "./eventAppearance";
 import type { EditorTarget } from "./PlanningEditor";
 import { describeRecurrence, firstDay } from "./recurrence";
@@ -33,12 +33,15 @@ export function EventPreview({
   snapshot,
   onClose,
   onEdit,
+  onTrashed,
 }: {
   event: PlanningEvent;
   anchor: HTMLElement;
   snapshot: PlanningSnapshot;
   onClose(): void;
   onEdit(target: EditorTarget): void;
+  /** A single event or task went to the trash without a prompt; the page offers undo. */
+  onTrashed?(kind: "event" | "todo", item: { id: string; revision: number }): void;
 }) {
   const { t, locale } = usePlanningT();
 
@@ -113,12 +116,24 @@ export function EventPreview({
         });
       }
       const instance = event.id.includes("@") && event.seriesId && event.originalDate;
-      return planningStore.mutate({
-        action: instance ? "event.exception" : "event.delete",
-        id: instance ? (event.seriesId ?? event.id) : event.id,
-        expectedRevision: event.revision,
-        data: instance ? { date: event.originalDate, delete: true } : {},
-      });
+      if (instance)
+        return planningStore.mutate({
+          action: "event.exception",
+          id: event.seriesId ?? event.id,
+          expectedRevision: event.revision,
+          data: { date: event.originalDate, delete: true },
+        });
+      return planningStore
+        .mutate<PlanningEvent>({
+          action: "event.delete",
+          id: event.id,
+          expectedRevision: event.revision,
+          data: {},
+        })
+        .then((item) => {
+          // Series choices were already confirmed in the scope prompt; single deletes get undo.
+          if (item && !series) onTrashed?.("event", item);
+        });
     });
   };
   return (
@@ -156,14 +171,15 @@ export function EventPreview({
             disabled={busy || calendar?.readOnly}
             onClick={() =>
               todo
-                ? void perform(() =>
-                    planningStore.mutate({
+                ? void perform(async () => {
+                    const item = await planningStore.mutate<Todo>({
                       action: "todo.delete",
                       id: todo.id,
                       expectedRevision: todo.revision,
                       data: {},
-                    }),
-                  )
+                    });
+                    if (item) onTrashed?.("todo", item);
+                  })
                 : void recycleEvent()
             }
           >
