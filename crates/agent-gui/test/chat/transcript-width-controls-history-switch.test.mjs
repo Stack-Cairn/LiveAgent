@@ -41,17 +41,29 @@ const { TranscriptWidthControls, CHAT_TRANSCRIPT_WIDTH_CSS_VAR } = env.loadModul
 );
 const widthModel = env.loadModule("@liveagent/ui/lib/transcript-width/transcriptWidthModel.ts");
 
+// Assertions on DOM nodes compare booleans: a failed strictEqual on a jsdom node makes
+// assert pretty-print and diff the whole window graph, which can stall for minutes.
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
 // 与 ChatTranscript 同构：宽度 owner → 转录根（hostRef）→ 控件是根的子节点。
+// 宿主尺寸在 ref 回调里装好：提交阶段就生效，早于任何布局 effect 与挂载 RAF 的测量。
+// 若在 render 之后才替换 getBoundingClientRect，机器繁忙时 jsdom 的 RAF（约 16ms）
+// 可能已在 act 期间先跑，量到默认宽度 0 → 回退到 1200 上限，手柄被误判为可用。
 function Stage(props) {
   const hostRef = React.useRef(null);
+  const attachHost = React.useCallback(
+    (node) => {
+      hostRef.current = node;
+      if (node) node.getBoundingClientRect = props.measure;
+    },
+    [props.measure],
+  );
   return React.createElement(
     "div",
     { "data-chat-width-owner": "", "data-testid": "owner" },
     React.createElement(
       "div",
-      { ref: hostRef, "data-testid": "host" },
+      { ref: attachHost, "data-testid": "host" },
       React.createElement(TranscriptWidthControls, {
         hostRef,
         width: props.width,
@@ -70,22 +82,7 @@ async function mountStage({ stageWidth, width = 768, suspended = false, onWidthC
   const root = createRoot(container);
   const stage = { width: stageWidth };
   const handleWidthChange = onWidthChange ?? (() => {});
-  const render = async (overrides = {}) => {
-    await act(async () => {
-      root.render(
-        React.createElement(Stage, {
-          width,
-          onWidthChange: handleWidthChange,
-          suspended,
-          ...overrides,
-        }),
-      );
-    });
-  };
-  await render();
-  const host = container.querySelector('[data-testid="host"]');
-  // 宿主实测宽度由测试控制；挂载 RAF 此刻还没跑，第一次测量就读到它。
-  host.getBoundingClientRect = () => ({
+  const measure = () => ({
     x: 0,
     y: 0,
     top: 0,
@@ -98,6 +95,21 @@ async function mountStage({ stageWidth, width = 768, suspended = false, onWidthC
       return {};
     },
   });
+  const render = async (overrides = {}) => {
+    await act(async () => {
+      root.render(
+        React.createElement(Stage, {
+          width,
+          onWidthChange: handleWidthChange,
+          suspended,
+          measure,
+          ...overrides,
+        }),
+      );
+    });
+  };
+  await render();
+  const host = container.querySelector('[data-testid="host"]');
   await act(async () => {
     await nextFrame();
   });
@@ -141,7 +153,7 @@ test("the controls state names the first gate that hides the handles", () => {
 
 test("a stage below the hide threshold keeps the root mounted with a readable reason", async () => {
   const stage = await mountStage({ stageWidth: 600 });
-  assert.equal(stage.separator(), null, "no handle can widen a 560px-max stage");
+  assert.equal(stage.separator() === null, true, "no handle can widen a 560px-max stage");
   const controls = stage.controls();
   assert.ok(controls, "controls root stays mounted while the handles are hidden");
   assert.equal(controls.dataset.transcriptWidthState, "stage-narrow");
@@ -154,7 +166,7 @@ test("a stage below the hide threshold keeps the root mounted with a readable re
 
 test("crossing the threshold restores the handles through the stage observer alone", async () => {
   const stage = await mountStage({ stageWidth: 600 });
-  assert.equal(stage.separator(), null);
+  assert.equal(stage.separator() === null, true, "no handle is rendered");
 
   stage.stage.width = 900;
   await stage.deliverResize();
@@ -173,7 +185,7 @@ test("handles suspend behind a loading overlay and return, re-measured, when it 
   assert.equal(stage.separator().getAttribute("aria-valuemax"), "936");
 
   await stage.render({ suspended: true });
-  assert.equal(stage.separator(), null, "nothing is grabbable under an opaque overlay");
+  assert.equal(stage.separator() === null, true, "nothing is grabbable under an opaque overlay");
   assert.equal(stage.controls().dataset.transcriptWidthState, "suspended");
   assert.equal(stage.controls().hidden, true);
 
@@ -219,7 +231,7 @@ test("an overlay arriving mid-drag commits the dragged width and drops the liste
   // 右侧手柄拖 40px → 宽度 +80 → 848，落在 936 的舞台上限之内。
   assert.deepEqual(committed, [848]);
   assert.equal(doc.body.style.cursor, "", "drag cleanup restored the body cursor");
-  assert.equal(stage.separator(), null);
+  assert.equal(stage.separator() === null, true, "no handle is rendered");
   await stage.unmount();
 });
 
