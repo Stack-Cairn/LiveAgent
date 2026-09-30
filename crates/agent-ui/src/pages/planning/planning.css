@@ -459,10 +459,26 @@
     display: none;
   }
 }
-/* A chip this narrow keeps its few pixels for the title. */
+/* A chip this narrow cannot show a readable title, so it shows the due time instead; the
+   full title appears when the chip is hovered or focused (see below) and in its tooltip. */
 @container (max-width: 4rem) {
-  .planning-deadline .planning-task-mark {
+  .planning-deadline .planning-task-mark,
+  .planning-deadline .planning-deadline-title,
+  .planning-deadline .planning-deadline-sep {
     display: none;
+  }
+  .planning-time-event.planning-deadline .planning-deadline-time {
+    display: inline;
+  }
+}
+/* Too narrow even for "11:00": only the task circle marks the chip. */
+@container (max-width: 2.75rem) {
+  .planning-time-event.planning-deadline .planning-deadline-time {
+    display: none;
+  }
+  .planning-deadline .planning-task-mark {
+    display: inline-block;
+    margin-inline: auto;
   }
 }
 .planning-resize {
@@ -782,7 +798,7 @@ hr.planning-agenda-now {
   background: hsl(var(--card) / 0.55);
   pointer-events: none;
 }
-/* Google-style task chip: one line "○ title, 12:00", floating above events. */
+/* Google-style task chip: one line "○ title, 12:00", laid out in columns beside events. */
 .planning-deadline {
   display: flex;
   align-items: center;
@@ -809,6 +825,19 @@ hr.planning-agenda-now {
   flex-shrink: 0;
   margin-left: 0;
   color: inherit;
+}
+/* Chip geometry comes in as variables so hovering or focusing can widen a narrow chip across
+   the day and show its whole title, without a permanent overlay on the events beside it. */
+.planning-time-event.planning-deadline {
+  left: var(--chip-left);
+  width: var(--chip-width);
+  z-index: var(--chip-z);
+}
+.planning-time-event.planning-deadline:is(:hover, :focus-visible) {
+  left: 1px;
+  width: calc(100% - 10px);
+  z-index: 40;
+  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.25);
 }
 .planning-month-deadline {
   border: 1px dashed var(--planning-accent);

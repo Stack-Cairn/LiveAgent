@@ -128,24 +128,44 @@ export function ColorSwatches({
       <span id={labelId} className={hideLabel ? "sr-only" : "block text-sm text-muted-foreground"}>
         {label}
       </span>
-      <RadioGroup
-        aria-labelledby={labelId}
-        value={current ?? value}
-        disabled={disabled}
-        onValueChange={(next) => onChange(String(next))}
-        className="flex flex-wrap gap-2.5"
-      >
-        {colors.map((swatch) => (
-          <RadioGroupItem
-            key={swatch}
-            value={swatch}
-            aria-label={colorName(swatch)}
-            title={colorName(swatch)}
-            className="size-6 rounded-full ring-1 ring-border ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-ring/40 data-checked:ring-2 data-checked:ring-ring data-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-            style={{ backgroundColor: swatch }}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <RadioGroup
+          aria-labelledby={labelId}
+          value={current ?? value}
+          disabled={disabled}
+          onValueChange={(next) => onChange(String(next))}
+          className="flex flex-wrap gap-2.5"
+        >
+          {colors.map((swatch) => (
+            <RadioGroupItem
+              key={swatch}
+              value={swatch}
+              aria-label={colorName(swatch)}
+              title={colorName(swatch)}
+              className="size-6 rounded-full ring-1 ring-border ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-ring/40 data-checked:ring-2 data-checked:ring-ring data-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              style={{ backgroundColor: swatch }}
+            />
+          ))}
+        </RadioGroup>
+        {/* Any other color comes from the system picker; the choice then joins the swatches. */}
+        <span
+          title={translate("planner.color.pick")}
+          className={`relative size-6 shrink-0 rounded-full ring-1 ring-border ring-offset-2 ring-offset-background focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-ring ${disabled ? "opacity-50" : "hover:ring-2 hover:ring-ring/40"}`}
+          style={{
+            background:
+              "conic-gradient(#ef4444, #f59e0b, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)",
+          }}
+        >
+          <input
+            type="color"
+            aria-label={translate("planner.color.pick")}
+            disabled={disabled}
+            value={/^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000"}
+            onChange={(e) => onChange(e.target.value.toUpperCase())}
+            className="absolute inset-0 size-full cursor-pointer rounded-full opacity-0 disabled:cursor-not-allowed"
           />
-        ))}
-      </RadioGroup>
+        </span>
+      </div>
     </div>
   );
 }

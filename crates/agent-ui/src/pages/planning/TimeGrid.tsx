@@ -769,12 +769,16 @@ export function TimeGrid({
                           className={`planning-time-event planning-deadline ${dueAt < now ? "is-past" : ""} ${done ? "is-completed" : ""}`}
                           title={label}
                           aria-label={label}
-                          style={{
-                            ...geometry,
-                            ...layer,
-                            height: CHIP_HEIGHT,
-                            ...eventAppearance(taskListColor(todo, snapshot), dueAt < now),
-                          }}
+                          style={
+                            {
+                              top: geometry.top,
+                              "--chip-left": geometry.left,
+                              "--chip-width": geometry.width,
+                              "--chip-z": layer.zIndex,
+                              height: CHIP_HEIGHT,
+                              ...eventAppearance(taskListColor(todo, snapshot), dueAt < now),
+                            } as CSSProperties
+                          }
                           onClick={() => onSelectTodo(todo)}
                         >
                           {done ? (
@@ -784,7 +788,9 @@ export function TimeGrid({
                           )}
                           <span className="planning-deadline-title">{todo.title}</span>
                           <span className="planning-deadline-time">
-                            {translate("planner.grid.inlineSeparator")}
+                            <span className="planning-deadline-sep">
+                              {translate("planner.grid.inlineSeparator")}
+                            </span>
                             {time}
                           </span>
                         </button>
