@@ -96,6 +96,14 @@ pub async fn terminal_ssh_reconnect(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub fn terminal_ssh_enable_sftp(
+    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    session_id: String,
+) -> Result<TerminalSessionRecord, String> {
+    registry.ssh_enable_sftp(session_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_latency(
     registry: State<'_, Arc<TerminalSessionRegistry>>,
     session_id: String,

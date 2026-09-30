@@ -776,6 +776,38 @@ impl TerminalSessionRegistry {
         })
     }
 
+    /// Turns SFTP on for an existing SSH session. SFTP is a subsystem channel
+    /// on the session's already-authenticated connection, so this never dials
+    /// or re-authenticates; it lets SSHManager reuse a running session opened
+    /// without SFTP instead of opening a second connection to the same host.
+    pub fn ssh_enable_sftp(&self, session_id: String) -> Result<TerminalSessionRecord, String> {
+        let session_id = session_id.trim().to_string();
+        let entry = self.entry(&session_id)?;
+        let changed = {
+            let mut record = entry
+                .record
+                .lock()
+                .map_err(|_| "terminal session lock poisoned".to_string())?;
+            if record.kind.trim() != "ssh" {
+                return Err("terminal session is not an SSH connection".to_string());
+            }
+            let ssh = record
+                .ssh
+                .as_mut()
+                .ok_or_else(|| "SSH session metadata is missing".to_string())?;
+            let changed = !ssh.sftp_enabled;
+            ssh.sftp_enabled = true;
+            if changed {
+                record.updated_at = now_ms();
+            }
+            changed
+        };
+        if changed {
+            self.broadcast("sftp_enabled", &entry, None, None, None);
+        }
+        self.record(session_id)
+    }
+
     pub async fn ssh_latency(
         self: &Arc<Self>,
         session_id: String,
@@ -797,8 +829,7 @@ impl TerminalSessionRegistry {
         };
         let start = Instant::now();
         let ping = timeout(Duration::from_secs(3), async {
-            let handle = runtime.handle.lock().await;
-            let Some(handle) = handle.as_ref() else {
+            let Some(handle) = runtime.current_handle().await else {
                 return Err(russh::Error::Disconnect);
             };
             handle.send_ping().await
@@ -852,54 +883,100 @@ impl TerminalSessionRegistry {
         let timeout_duration = normalize_ssh_exec_timeout(timeout_ms);
         let capture_limit = normalize_ssh_exec_max_bytes(max_bytes);
         let start = Instant::now();
-        let execution = timeout(
-            timeout_duration,
-            run_ssh_exec_channel(runtime, wrapped_command, capture_limit),
-        );
-        tokio::pin!(execution);
-        let result = if let Some(cancel_token) = cancel_token {
-            tokio::select! {
-                result = &mut execution => result,
-                _ = cancel_token.cancelled() => {
-                    return Err("Cancelled".to_string());
-                }
-            }
-        } else {
-            execution.await
+        let deadline = tokio::time::Instant::now() + timeout_duration;
+        let cancel_token = cancel_token.as_ref();
+        // Pin the connection generation this exec runs on, so a failure is
+        // judged (and a reconnect keyed) against the connection that failed,
+        // not whatever a concurrent reconnect installed meanwhile.
+        let connection_id = runtime.current_connection_id();
+        let Some(handle) = runtime.current_handle().await else {
+            return Err("SSH exec failed: SSH connection is not connected".to_string());
         };
-        let duration_ms = start.elapsed().as_millis();
+        let timed_out_response = |duration_ms: u128| TerminalSshExecResponse {
+            session_id: record.id.clone(),
+            command: command.clone(),
+            cwd: cwd.clone(),
+            exit_code: None,
+            exit_signal: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+            timed_out: true,
+            duration_ms,
+        };
 
-        match result {
-            Ok(Ok(mut response)) => {
+        let opened = wait_ssh_exec_step(
+            open_ssh_exec_channel(&handle, wrapped_command),
+            deadline,
+            cancel_token,
+        )
+        .await;
+        drop(handle);
+        let (read_half, write_half) = match opened {
+            SshExecStep::Done(Ok(halves)) => halves,
+            SshExecStep::Done(Err(error)) => {
+                return Err(self
+                    .handle_ssh_exec_channel_error(&record.id, runtime, connection_id, error)
+                    .await);
+            }
+            SshExecStep::TimedOut => {
+                return Ok(timed_out_response(start.elapsed().as_millis()));
+            }
+            SshExecStep::Cancelled => return Err("Cancelled".to_string()),
+        };
+
+        match wait_ssh_exec_step(
+            read_ssh_exec_output(read_half, capture_limit),
+            deadline,
+            cancel_token,
+        )
+        .await
+        {
+            SshExecStep::Done(mut response) => {
                 response.session_id = record.id;
                 response.command = command;
                 response.cwd = cwd;
-                response.duration_ms = duration_ms;
+                response.duration_ms = start.elapsed().as_millis();
                 Ok(response)
             }
-            Ok(Err(error)) => {
-                spawn_ssh_reconnect_runner(
-                    Arc::clone(self),
-                    record.id,
-                    Arc::clone(runtime),
-                    runtime.current_connection_id(),
-                );
-                Err(format!("SSH exec failed: {error}"))
+            SshExecStep::TimedOut => {
+                close_ssh_exec_channel(write_half, false);
+                Ok(timed_out_response(start.elapsed().as_millis()))
             }
-            Err(_) => Ok(TerminalSshExecResponse {
-                session_id: record.id,
-                command,
-                cwd,
-                exit_code: None,
-                exit_signal: None,
-                stdout: String::new(),
-                stderr: String::new(),
-                stdout_truncated: false,
-                stderr_truncated: false,
-                timed_out: true,
-                duration_ms,
-            }),
+            SshExecStep::Cancelled => {
+                close_ssh_exec_channel(write_half, true);
+                Err("Cancelled".to_string())
+            }
         }
+    }
+
+    /// A failed exec channel open/request does not by itself mean the SSH
+    /// connection is gone: servers refuse extra channels (e.g. OpenSSH
+    /// `MaxSessions`) on a perfectly healthy connection. Tearing that
+    /// connection down would flip the session to `reconnecting`, and callers
+    /// that only reuse running sessions (SSHManager) would then dial a second
+    /// connection to the same host. Only reconnect when the connection that
+    /// served this exec no longer answers.
+    async fn handle_ssh_exec_channel_error(
+        self: &Arc<Self>,
+        session_id: &str,
+        runtime: &Arc<SshSessionRuntime>,
+        connection_id: usize,
+        error: String,
+    ) -> String {
+        if ssh_connection_alive(runtime, connection_id).await {
+            return format!(
+                "SSH exec failed: {error} (the SSH connection is still alive and was kept; the server may be limiting concurrent channels, e.g. MaxSessions)"
+            );
+        }
+        spawn_ssh_reconnect_runner(
+            Arc::clone(self),
+            session_id.to_string(),
+            Arc::clone(runtime),
+            connection_id,
+        );
+        format!("SSH exec failed: {error}")
     }
 
     pub(crate) fn mark_ssh_reconnecting(&self, entry: &Arc<TerminalSessionEntry>, attempt: u8) {

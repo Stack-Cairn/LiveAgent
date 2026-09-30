@@ -151,6 +151,9 @@ test("SSHManager create_session defaults SFTP on and refuses SSH prompts", async
       "@tauri-apps/api/core": {
         async invoke(command, args) {
           invocations.push({ command, args });
+          if (command === "terminal_list") {
+            return { sessions: [] };
+          }
           if (command === "terminal_create_ssh") {
             return { session: createSshSession(), output: "", truncated: false };
           }
@@ -175,8 +178,13 @@ test("SSHManager create_session defaults SFTP on and refuses SSH prompts", async
   );
   assert.equal(result.isError, false);
   assert.equal(result.details.session.session_id, "ssh-session-1");
+  assert.equal(result.details.session_created, true);
   assert.deepEqual(changes, [{ action: "create", projectPathKey: "/workspace" }]);
   assert.deepEqual(invocations, [
+    {
+      command: "terminal_list",
+      args: { project_path_key: "/workspace" },
+    },
     {
       command: "terminal_create_ssh",
       args: {
@@ -190,6 +198,212 @@ test("SSHManager create_session defaults SFTP on and refuses SSH prompts", async
       },
     },
   ]);
+});
+
+test("SSHManager create_session reuses the host's running session instead of reconnecting", async () => {
+  const invocations = [];
+  const changes = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          if (command === "terminal_list") {
+            return { sessions: [createSshSession({ id: "ssh-running" })] };
+          }
+          throw new Error(`unexpected invoke ${command}`);
+        },
+      },
+    },
+  });
+  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const bundle = createSSHManagerTools({
+    enabled: true,
+    runtimeScope: "chat",
+    workdir: "/workspace",
+    projectPathKey: "/workspace",
+    hosts: [SSH_HOST],
+    associatedHostIds: ["host-1"],
+    onSshSessionsChanged: (change) => changes.push(change),
+  });
+
+  // Models commonly open every task with create_session; each call must land
+  // on the same connection rather than dialing the host again.
+  for (let index = 0; index < 3; index += 1) {
+    const result = await bundle.executeToolCall(
+      createToolCall({ action: "create_session", host_id: "host-1" }),
+    );
+    assert.equal(result.isError, false);
+    assert.equal(result.details.session.session_id, "ssh-running");
+    assert.equal(result.details.session_strategy, "reuse_or_create");
+    assert.equal(result.details.session_reused, true);
+    assert.equal(result.details.session_created, false);
+    assert.match(result.content[0].text, /no new connection/);
+  }
+  assert.deepEqual(
+    invocations.map((call) => call.command),
+    ["terminal_list", "terminal_list", "terminal_list"],
+  );
+  assert.deepEqual(changes, []);
+});
+
+test("SSHManager create_session with session_strategy=new opens an additional connection", async () => {
+  const invocations = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          if (command === "terminal_create_ssh") {
+            return { session: createSshSession({ id: "ssh-extra" }), output: "" };
+          }
+          throw new Error(`unexpected invoke ${command}`);
+        },
+      },
+    },
+  });
+  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const bundle = createSSHManagerTools({
+    enabled: true,
+    runtimeScope: "chat",
+    workdir: "/workspace",
+    projectPathKey: "/workspace",
+    hosts: [SSH_HOST],
+    associatedHostIds: ["host-1"],
+  });
+
+  const result = await bundle.executeToolCall(
+    createToolCall({
+      action: "create_session",
+      host_id: "host-1",
+      session_strategy: "new",
+      title: "isolated",
+    }),
+  );
+  assert.equal(result.isError, false);
+  assert.deepEqual(
+    invocations.map((call) => call.command),
+    ["terminal_create_ssh"],
+  );
+  assert.equal(invocations[0].args.title, "isolated");
+  assert.equal(result.details.session_strategy, "new");
+  assert.equal(result.details.session_created, true);
+});
+
+test("SSHManager waits for a reconnecting session instead of dialing a duplicate", async () => {
+  const invocations = [];
+  let listCalls = 0;
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          if (command === "terminal_list") {
+            listCalls += 1;
+            const reconnecting = listCalls === 1;
+            return {
+              sessions: [
+                createSshSession({
+                  id: "ssh-flaky",
+                  running: !reconnecting,
+                  ssh: {
+                    ...createSshSession().ssh,
+                    status: reconnecting ? "reconnecting" : "connected",
+                  },
+                }),
+              ],
+            };
+          }
+          if (command === "terminal_ssh_exec") {
+            return { exitCode: 0, stdout: "ok\n", stderr: "", timedOut: false };
+          }
+          throw new Error(`unexpected invoke ${command}`);
+        },
+      },
+    },
+  });
+  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const bundle = createSSHManagerTools({
+    enabled: true,
+    runtimeScope: "chat",
+    workdir: "/workspace",
+    projectPathKey: "/workspace",
+    hosts: [SSH_HOST],
+    associatedHostIds: ["host-1"],
+  });
+
+  const result = await bundle.executeToolCall(
+    createToolCall({ action: "exec", host_id: "host-1", command: "uptime" }),
+  );
+  assert.equal(result.isError, false);
+  assert.deepEqual(
+    invocations.map((call) => call.command),
+    ["terminal_list", "terminal_list", "terminal_ssh_exec"],
+  );
+  assert.equal(invocations[2].args.session_id, "ssh-flaky");
+  assert.equal(result.details.session_reused, true);
+});
+
+test("SSHManager serializes concurrent resolutions so one host gets one connection", async () => {
+  const invocations = [];
+  const openSessions = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          if (command === "terminal_list") {
+            return { sessions: [...openSessions] };
+          }
+          if (command === "terminal_create_ssh") {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            const session = createSshSession({ id: "ssh-shared" });
+            openSessions.push(session);
+            return { session, output: "" };
+          }
+          if (command === "terminal_ssh_exec") {
+            return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
+          }
+          throw new Error(`unexpected invoke ${command}`);
+        },
+      },
+    },
+  });
+  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const createBundle = () =>
+    createSSHManagerTools({
+      enabled: true,
+      runtimeScope: "chat",
+      workdir: "/workspace",
+      projectPathKey: "/workspace",
+      hosts: [SSH_HOST],
+      associatedHostIds: ["host-1"],
+    });
+
+  // Two conversations in the same project race on the same host.
+  const results = await Promise.all([
+    createBundle().executeToolCall(
+      createToolCall({ action: "exec", host_id: "host-1", command: "a" }),
+    ),
+    createBundle().executeToolCall(
+      createToolCall({ action: "exec", host_id: "host-1", command: "b" }),
+    ),
+  ]);
+  assert.deepEqual(
+    results.map((result) => result.isError),
+    [false, false],
+  );
+  assert.equal(invocations.filter((call) => call.command === "terminal_create_ssh").length, 1);
+  assert.deepEqual(
+    invocations
+      .filter((call) => call.command === "terminal_ssh_exec")
+      .map((call) => call.args.session_id),
+    ["ssh-shared", "ssh-shared"],
+  );
+  assert.deepEqual(
+    results.map((result) => result.details.session_created),
+    [true, false],
+  );
 });
 
 test("SSHManager exec auto-creates a visible session before running command", async () => {
@@ -555,15 +769,19 @@ test("SSHManager never dials keyboard-interactive hosts itself", async () => {
     associatedHostIds: ["host-kbi"],
   });
 
-  // create_session is refused outright, without touching the terminal runtime.
+  // create_session without a running session is refused instead of dialing.
   const created = await bundle.executeToolCall(
     createToolCall({ action: "create_session", host_id: "host-kbi" }),
   );
   assert.equal(created.isError, true);
   assert.match(created.content[0].text, /键盘交互/);
-  assert.deepEqual(invocations, []);
+  assert.deepEqual(
+    invocations.map((call) => call.command),
+    ["terminal_list"],
+  );
 
   // exec without a running session errors instead of implicitly connecting.
+  invocations.length = 0;
   const noSession = await bundle.executeToolCall(
     createToolCall({ action: "exec", host_id: "host-kbi", command: "pwd" }),
   );
@@ -587,6 +805,18 @@ test("SSHManager never dials keyboard-interactive hosts itself", async () => {
   );
   assert.equal(invocations[1].args.session_id, "ssh-kbi-running");
   assert.equal(reused.details.session_reused, true);
+
+  // create_session hands back the user-opened session too.
+  invocations.length = 0;
+  const reusedByCreate = await bundle.executeToolCall(
+    createToolCall({ action: "create_session", host_id: "host-kbi" }),
+  );
+  assert.equal(reusedByCreate.isError, false);
+  assert.equal(reusedByCreate.details.session.session_id, "ssh-kbi-running");
+  assert.deepEqual(
+    invocations.map((call) => call.command),
+    ["terminal_list"],
+  );
 
   // session_strategy=new never dials either.
   invocations.length = 0;
@@ -748,7 +978,7 @@ test("SSHManager SFTP actions reuse SFTP-enabled host sessions", async () => {
   assert.equal(result.details.session_created, false);
 });
 
-test("SSHManager SFTP actions create a new session when no SFTP-enabled session exists", async () => {
+test("SSHManager SFTP actions enable SFTP in place on a running session instead of reconnecting", async () => {
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
@@ -761,6 +991,79 @@ test("SSHManager SFTP actions create a new session when no SFTP-enabled session 
                 createSshSession({
                   id: "ssh-no-sftp",
                   ssh: { ...createSshSession().ssh, sftpEnabled: false },
+                }),
+              ],
+            };
+          }
+          if (command === "terminal_ssh_enable_sftp") {
+            return createSshSession({ id: args.session_id });
+          }
+          if (command === "sftp_stat") {
+            return { path: "/tmp", kind: "dir" };
+          }
+          throw new Error(`unexpected invoke ${command}`);
+        },
+      },
+    },
+  });
+  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const bundle = createSSHManagerTools({
+    enabled: true,
+    runtimeScope: "chat",
+    workdir: "/workspace",
+    projectPathKey: "/workspace",
+    hosts: [SSH_HOST],
+    associatedHostIds: ["host-1"],
+  });
+
+  const byHost = await bundle.executeToolCall(
+    createToolCall({
+      action: "sftp_stat",
+      host_id: "host-1",
+      path: "/tmp",
+    }),
+  );
+  assert.equal(byHost.isError, false);
+  assert.deepEqual(
+    invocations.map((call) => call.command),
+    ["terminal_list", "terminal_ssh_enable_sftp", "sftp_stat"],
+  );
+  assert.equal(invocations[1].args.session_id, "ssh-no-sftp");
+  assert.equal(invocations[2].args.session_id, "ssh-no-sftp");
+  assert.equal(byHost.details.session.sftpEnabled, true);
+  assert.equal(byHost.details.session_reused, true);
+  assert.equal(byHost.details.session_created, false);
+
+  // A pinned session_id without SFTP is upgraded the same way.
+  invocations.length = 0;
+  const bySession = await bundle.executeToolCall(
+    createToolCall({
+      action: "sftp_stat",
+      session_id: "ssh-no-sftp",
+      path: "/tmp",
+    }),
+  );
+  assert.equal(bySession.isError, false);
+  assert.deepEqual(
+    invocations.map((call) => call.command),
+    ["terminal_list", "terminal_ssh_enable_sftp", "sftp_stat"],
+  );
+});
+
+test("SSHManager SFTP actions create a new session when none is running", async () => {
+  const invocations = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          if (command === "terminal_list") {
+            return {
+              sessions: [
+                createSshSession({
+                  id: "ssh-disconnected",
+                  running: false,
+                  ssh: { ...createSshSession().ssh, status: "disconnected" },
                 }),
               ],
             };
