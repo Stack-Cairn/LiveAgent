@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "test": "node ../../../scripts/run-node-tests.mjs ../test/webui test",
     "lint": "biome check src/ --max-diagnostics=none",
     "format": "biome format --write src/",
-    "lint:fix": "biome check --write src/"
+    "lint:fix": "biome check --write src/",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "@liveagent/ui": "workspace:*",
@@ -40,7 +41,6 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
     "@bufbuild/protoc-gen-es": "2.12.1",
     "@earendil-works/pi-ai": "^0.84.2",
     "@iconify-json/logos": "^1.2.11",

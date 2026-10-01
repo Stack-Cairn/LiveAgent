@@ -74,6 +74,10 @@ HTMLElement.prototype.scrollTo = () => {};
 const { ChatHistorySidebar } = env.loadModule(
   "@liveagent/ui/components/chat/ChatHistorySidebar.tsx",
 );
+// 侧栏现在基于 ui/sidebar 壳（需要 SidebarProvider 上下文）。
+const { SidebarProvider } = env.loadModule("@liveagent/ui/components/ui/sidebar.tsx");
+const renderSidebar = (props) =>
+  React.createElement(SidebarProvider, null, React.createElement(ChatHistorySidebar, props));
 const items = Array.from({ length: 100 }, (_, index) => ({
   id: String(index),
   title: String(index),
@@ -110,22 +114,22 @@ test("search completion reveals a collapsed virtual list once without saving sid
     completion = options.afterCommit;
   };
   try {
-    await act(async () => root.render(React.createElement(ChatHistorySidebar, props)));
+    await act(async () => root.render(renderSidebar(props)));
     await act(async () => dialogProps.onSelectConversation("99", { source: "search" }));
     assert.equal(scrolls.length, 0);
     props = { ...props, currentConversationId: "99", scopeKey: "cwd:/repo/b", items: [items[99]], listStatus: "syncing" };
     await act(async () => {
-      root.render(React.createElement(ChatHistorySidebar, props));
+      root.render(renderSidebar(props));
       completion();
     });
     assert.deepEqual(scrolls, [], "wait for the target position after the first page arrives");
     props = { ...props, items, listStatus: "ready" };
-    await act(async () => root.render(React.createElement(ChatHistorySidebar, props)));
+    await act(async () => root.render(renderSidebar(props)));
     assert.deepEqual(scrolls, [99]);
     const list = container.querySelector(".chat-history-list");
     assert.equal(list.parentElement.getAttribute("aria-hidden"), "false");
     props = { ...props, items: [...items] };
-    await act(async () => root.render(React.createElement(ChatHistorySidebar, props)));
+    await act(async () => root.render(renderSidebar(props)));
     assert.deepEqual(
       scrolls,
       [99],

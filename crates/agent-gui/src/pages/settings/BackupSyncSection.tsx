@@ -1,10 +1,9 @@
 import {
   AlertTriangle,
-  ArchiveRestore,
+  ArrowLeft,
   Brain,
-  CheckCircle2,
+  ChevronRight,
   CircleHelp,
-  Cloud,
   CloudDownload,
   Download,
   FileText,
@@ -12,30 +11,41 @@ import {
   Key,
   Layers,
   Loader2,
-  Lock,
   McpLogo,
   MessageSquare,
   Mic,
-  Plug,
-  Save,
   ScrollText,
   Server,
   Settings2,
-  Shield,
   SkillIcon,
   Upload,
-  XCircle,
-  Zap,
 } from "@liveagent/ui/components/IconSet";
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsSection,
+} from "@liveagent/ui/components/settings/SettingsLayout";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { LabelTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import { Switch } from "@liveagent/ui/components/ui/switch";
+import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { listen } from "@tauri-apps/api/event";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useState } from "react";
 import {
   applyBackupImport,
   BACKUP_SYNC_STATUS_EVENT,
@@ -68,7 +78,7 @@ import type { SettingsSectionProps } from "./types";
 
 type Status = { kind: "ok" | "error"; text: string } | null;
 
-type SyncBusy = "load" | "test" | "save" | "upload" | "download" | null;
+type SyncBusy = "load" | "save" | "upload" | "download" | null;
 
 /** 后端返回的错误已是可直接展示的中文文案。 */
 function errorText(error: unknown): string {
@@ -118,156 +128,20 @@ function describeSource(manifest: BackupManifest, t: (key: string) => string) {
   );
 }
 
-/** 即时反馈条：成功绿 / 失败红，替代裸文本。 */
-function FeedbackStrip({ status }: { status: Status }) {
-  if (!status) return null;
-  const ok = status.kind === "ok";
-  return (
-    <div
-      className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 text-xs leading-relaxed ${
-        ok
-          ? "border-emerald-600/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:text-emerald-300"
-          : "border-destructive/30 bg-destructive/10 text-destructive"
-      }`}
-    >
-      {ok ? (
-        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-      ) : (
-        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-      )}
-      <span className="min-w-0 break-all font-medium">{status.text}</span>
-    </div>
-  );
-}
-
 function FieldLabel({ children, hint }: { children: ReactNode; hint?: string }) {
   return (
     <Label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
       {children}
       {hint ? (
         <LabelTooltip label={<span className="max-w-64 text-xs leading-relaxed">{hint}</span>}>
-          <CircleHelp className="h-3.5 w-3.5 cursor-help text-muted-foreground/60" />
+          <CircleHelp className="size-3.5 cursor-help text-muted-foreground/60" />
         </LabelTooltip>
       ) : null}
     </Label>
   );
 }
 
-/** 顶部状态横幅：未配置 / 已就绪 / 自动同步失败，聚合上次同步时间与自动同步开关态。 */
-function SyncStatusBanner({
-  view,
-  loading,
-  t,
-}: {
-  view: BackupSyncConfigView | null;
-  loading: boolean;
-  t: (key: string) => string;
-}) {
-  if (loading && !view) {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-5 py-4">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">{t("settings.backupSyncLoading")}</span>
-      </div>
-    );
-  }
-
-  // 加载失败时 view 为 null：按「未配置」展示，具体错误由表单区的反馈条给出。
-  const configured = view ? canTestSyncConnection(view) : false;
-  const failed = Boolean(view?.lastError);
-
-  const iconWrap = failed
-    ? "bg-destructive/10 text-destructive"
-    : configured
-      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-      : "bg-muted text-muted-foreground";
-
-  return (
-    <div className="rounded-2xl border border-border/60 bg-card px-5 py-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconWrap}`}
-        >
-          {failed ? <AlertTriangle className="h-5 w-5" /> : <Cloud className="h-5 w-5" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-foreground">
-            {failed
-              ? t("settings.backupSyncAutoErrorTitle")
-              : configured
-                ? t("settings.backupSyncStatusReady")
-                : t("settings.backupSyncStatusNotConfigured")}
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {configured
-              ? view?.lastSyncAt
-                ? `${t("settings.backupSyncLastAt")}${formatTimestamp(view.lastSyncAt)}`
-                : t("settings.backupSyncStatusNeverSynced")
-              : t("settings.backupSyncStatusNotConfiguredHint")}
-          </p>
-        </div>
-        {configured ? (
-          <span
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none ${
-              view?.autoSync
-                ? "border-emerald-600/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:text-emerald-300"
-                : "border-border/70 bg-muted/45 text-muted-foreground"
-            }`}
-          >
-            <Zap className="h-3 w-3" />
-            {view?.autoSync ? t("settings.backupSyncAutoOn") : t("settings.backupSyncAutoOff")}
-          </span>
-        ) : null}
-      </div>
-      {failed && view?.lastError ? (
-        <p className="mt-3 break-all rounded-xl bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive/90">
-          {view.lastError}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/** 本地备份的大号操作磁贴。 */
-function ActionTile({
-  icon,
-  busy,
-  title,
-  hint,
-  disabled,
-  onClick,
-}: {
-  icon: ReactNode;
-  busy: boolean;
-  title: string;
-  hint: string;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-3 text-left transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-55"
-    >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm font-medium text-foreground">{title}</span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{hint}</span>
-      </span>
-    </button>
-  );
-}
-
-/**
- * 备份范围条目：包含项常色，排除项弱化。
- *
- * 紧凑 chip 形态，按内容宽度流式换行 —— 范围扩到 6+6 项后，两列大行的
- * 网格会把右栏撑得比左栏表单还高，整页跟着出滚动条。
- */
+/** 备份范围条目：包含项常色，排除项弱化。 */
 function ScopeItem({
   icon,
   label,
@@ -279,12 +153,17 @@ function ScopeItem({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium leading-none ${
-        excluded ? "bg-muted/30 text-muted-foreground/70" : "bg-muted/45 text-foreground/85"
-      }`}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1",
+        "text-xs font-medium leading-none",
+        excluded ? "bg-muted/30 text-muted-foreground/70" : "bg-muted/45 text-foreground/85",
+      )}
     >
       <span
-        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center ${excluded ? "opacity-60" : ""}`}
+        className={cn(
+          "flex size-3.5 shrink-0 items-center justify-center",
+          excluded && "opacity-60",
+        )}
       >
         {icon}
       </span>
@@ -293,21 +172,120 @@ function ScopeItem({
   );
 }
 
+function BackupScopeDetails({ t }: { t: (key: string) => string }) {
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <div className="text-xs font-medium text-muted-foreground">
+          {t("settings.backupScopeIncluded")}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <ScopeItem
+            icon={<Server className="size-3.5" />}
+            label={t("settings.backupDomainProviders")}
+          />
+          <ScopeItem
+            icon={<McpLogo className="size-3.5" />}
+            label={t("settings.backupDomainMcp")}
+          />
+          <ScopeItem
+            icon={<Settings2 className="size-3.5" />}
+            label={t("settings.backupDomainSystem")}
+          />
+          <ScopeItem
+            icon={<ScrollText className="size-3.5" />}
+            label={t("settings.backupDomainAgents")}
+          />
+          <ScopeItem
+            icon={<Layers className="size-3.5" />}
+            label={t("settings.backupDomainModelFailover")}
+          />
+          <ScopeItem icon={<Mic className="size-3.5" />} label={t("settings.backupDomainStt")} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-xs font-medium text-muted-foreground">
+          {t("settings.backupScopeExcluded")}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <ScopeItem
+            excluded
+            icon={<MessageSquare className="size-3.5" />}
+            label={t("settings.backupScopeChat")}
+          />
+          <ScopeItem
+            excluded
+            icon={<Brain className="size-3.5" />}
+            label={t("settings.backupScopeMemory")}
+          />
+          <ScopeItem
+            excluded
+            icon={<FileText className="size-3.5" />}
+            label={t("settings.backupScopeUploads")}
+          />
+          <ScopeItem
+            excluded
+            icon={<Key className="size-3.5" />}
+            label={t("settings.backupScopeSshKeys")}
+          />
+          <ScopeItem
+            excluded
+            icon={<SkillIcon className="size-3.5" />}
+            label={t("settings.backupScopeSkills")}
+          />
+          <ScopeItem
+            excluded
+            icon={<HardDrive className="size-3.5" />}
+            label={t("settings.backupScopeDeviceLocal")}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BackupSyncSection(props: SettingsSectionProps) {
   const { reloadSettings } = props;
   const { t } = useLocale();
   const { confirm, dialog } = useConfirmDialog();
+  const toastScope = useId();
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
   const [status, setStatus] = useState<Status>(null);
 
   const [syncView, setSyncView] = useState<BackupSyncConfigView | null>(null);
   const [form, setForm] = useState<SyncForm>(emptyForm);
   const [preset, setPreset] = useState<PresetId>("custom");
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [syncFormOpen, setSyncFormOpen] = useState(false);
   const [syncBusy, setSyncBusy] = useState<SyncBusy>("load");
   const [syncStatus, setSyncStatus] = useState<Status>(null);
 
   const dirty = isDirty(form, syncView);
   const syncLocked = syncBusy !== null;
+  const syncConfigured = syncView ? canTestSyncConnection(syncView) : false;
+
+  useEffect(() => {
+    if (!status) return;
+    const options = { id: `${toastScope}-local`, appearance: "notice" as const };
+    if (status.kind === "ok") toast.success(status.text, options);
+    else toast.error(status.text, options);
+  }, [status, toastScope]);
+
+  useEffect(() => {
+    if (!syncStatus) return;
+    const options = { id: `${toastScope}-sync`, appearance: "notice" as const };
+    if (syncStatus.kind === "ok") toast.success(syncStatus.text, options);
+    else toast.error(syncStatus.text, options);
+  }, [syncStatus, toastScope]);
+
+  useEffect(
+    () => () => {
+      toast.dismiss(`${toastScope}-local`);
+      toast.dismiss(`${toastScope}-sync`);
+    },
+    [toastScope],
+  );
 
   /**
    * 还原（导入 / 下载）落库后从 SQLite 重载前端状态。
@@ -365,14 +343,27 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     setForm((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const handleSyncDialogOpenChange = useCallback(
+    (open: boolean) => {
+      setSyncDialogOpen(open);
+      if (open) setSyncFormOpen(false);
+      if (!open && syncView) {
+        setForm(formFromView(syncView));
+        setPreset(detectPreset(syncView.url));
+      }
+    },
+    [syncView],
+  );
+
   const handlePresetChange = useCallback(
     (value: PresetId) => {
       setPreset(value);
       const matched = SYNC_PRESETS.find((item) => item.id === value);
       // 选「自定义」时保留当前 URL，只有选到具体预设才覆写。
-      if (matched) patchForm({ url: matched.url });
+      if (matched && value !== preset) patchForm({ url: matched.url });
+      setSyncFormOpen(true);
     },
-    [patchForm],
+    [patchForm, preset],
   );
 
   /**
@@ -441,23 +432,6 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       setSyncBusy(null);
     }
   }, [form, t]);
-
-  /** 测试连接读的是库里的配置，故未保存时不可用。 */
-  const handleTestSync = useCallback(async () => {
-    setSyncBusy("test");
-    setSyncStatus(null);
-    try {
-      await testSyncConnection();
-      setSyncStatus({ kind: "ok", text: t("settings.backupSyncTestDone") });
-    } catch (error) {
-      setSyncStatus({
-        kind: "error",
-        text: errorText(error) || t("settings.backupSyncTestFailed"),
-      });
-    } finally {
-      setSyncBusy(null);
-    }
-  }, [t]);
 
   const handleUpload = useCallback(async () => {
     setSyncBusy("upload");
@@ -573,339 +547,336 @@ export function BackupSyncSection(props: SettingsSectionProps) {
   }, [confirm, syncStateAfterRestore, t]);
 
   const presetOptions: { id: PresetId }[] = [...SYNC_PRESETS, { id: "custom" as const }];
+  const syncSummary =
+    syncBusy === "load" && !syncView
+      ? t("settings.backupSyncLoading")
+      : syncView?.lastError
+        ? t("settings.backupSyncAutoErrorTitle")
+        : syncConfigured
+          ? [
+              syncView?.autoSync ? t("settings.backupSyncAutoOn") : t("settings.backupSyncAutoOff"),
+              syncView?.lastSyncAt
+                ? `${t("settings.backupSyncLastAt")}${formatTimestamp(syncView.lastSyncAt)}`
+                : t("settings.backupSyncStatusNeverSynced"),
+            ].join(" · ")
+          : t("settings.backupSyncStatusNotConfiguredHint");
 
   return (
-    <div className="mx-auto w-full max-w-[980px] space-y-5">
-      <SyncStatusBanner view={syncView} loading={syncBusy === "load"} t={t} />
-
-      {/* 两栏等高拉伸（默认 stretch），保证左右卡片底边始终对齐。 */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        {/* 左栏：WebDAV 同步配置。弹性布局把底部操作区钉在底边，撑高时中间留白。 */}
-        <section className="flex flex-col rounded-2xl border border-border/60 bg-card">
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-5 py-4">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Cloud className="h-4 w-4" />
+    <div className="space-y-6">
+      <SettingsSection title={t("settings.backupLocalTitle")}>
+        <SettingsCard>
+          <SettingsRow
+            title={t("settings.backupExport")}
+            description={t("settings.backupExportHint")}
+            control={
+              <Button size="sm" disabled={busy !== null} onClick={() => void handleExport()}>
+                {busy === "export" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Download className="size-3.5" />
+                )}
+                {t("settings.backupExport")}
+              </Button>
+            }
+          />
+          <SettingsRow
+            title={t("settings.backupImport")}
+            description={
+              <span>
+                {t("settings.backupImportHint")}
+                <span className="block">{t("settings.backupAutoBackupHint")}</span>
               </span>
-              <h3 className="text-sm font-semibold text-foreground">
-                {t("settings.backupSyncTitle")}
-              </h3>
-            </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/45 px-2.5 py-1 text-[11px] font-medium leading-none text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              {t("settings.backupSyncCredentialNote")}
-            </span>
-          </header>
-
-          <div className="flex-1 space-y-4 px-5 py-4">
-            <div className="space-y-1.5">
-              <FieldLabel>{t("settings.backupSyncPreset")}</FieldLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {presetOptions.map((item) => {
-                  const active = preset === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      disabled={syncLocked}
-                      aria-pressed={active}
-                      onClick={() => handlePresetChange(item.id)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
-                        active
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border/70 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground"
-                      }`}
-                    >
-                      {t(`settings.backupSyncPreset_${item.id}`)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <FieldLabel>{t("settings.backupSyncUrl")}</FieldLabel>
-              <div className="relative">
-                <Server className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
-                <Input
-                  value={form.url}
-                  disabled={syncLocked}
-                  placeholder="https://dav.example.com/dav/"
-                  className="pl-9"
-                  onChange={(event) => patchForm({ url: event.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <FieldLabel>{t("settings.backupSyncUsername")}</FieldLabel>
-                <Input
-                  value={form.username}
-                  disabled={syncLocked}
-                  autoComplete="off"
-                  onChange={(event) => patchForm({ username: event.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <FieldLabel>{t("settings.backupSyncPassword")}</FieldLabel>
-                <div className="relative">
-                  <Key className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
-                  <Input
-                    type="password"
-                    value={form.password}
-                    disabled={syncLocked}
-                    autoComplete="new-password"
-                    className="pl-9"
-                    placeholder={
-                      syncView?.hasPassword && !form.passwordTouched
-                        ? t("settings.backupSyncPasswordSaved")
-                        : ""
-                    }
-                    onChange={(event) => {
-                      const password = event.target.value;
-                      // 清空密码框视为「没动过」，而不是「把密码改成空」。
-                      // 后端只在 passwordTouched 时采用新值，若这里对空串也置 true，
-                      // 用户输入几个字符再全删掉就会静默抹掉已存的密码 —— 与本框
-                      // 自己的「留空则不修改」占位提示直接矛盾，且此后自动同步因
-                      // 凭据不全而永久静默跳过（auto_upload 的 credentials 分支）。
-                      // 真要清空密码就关掉同步或改用户名，不该由删字符触发。
-                      patchForm({ password, passwordTouched: password.length > 0 });
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <FieldLabel>{t("settings.backupSyncRemoteDir")}</FieldLabel>
-                <Input
-                  value={form.remoteDir}
-                  disabled={syncLocked}
-                  placeholder="liveagent"
-                  onChange={(event) => patchForm({ remoteDir: event.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <FieldLabel hint={t("settings.backupSyncProfileHint")}>
-                  {t("settings.backupSyncProfile")}
-                </FieldLabel>
-                <Input
-                  value={form.profile}
-                  disabled={syncLocked}
-                  placeholder="default"
-                  onChange={(event) => patchForm({ profile: event.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-3">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <Zap className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-foreground">
-                    {t("settings.backupSyncAuto")}
-                  </div>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {t("settings.backupSyncAutoHint")}
-                  </p>
-                </div>
-              </div>
-              <Switch
-                checked={form.autoSync}
-                disabled={syncLocked}
-                title={t("settings.backupSyncAuto")}
-                aria-label={t("settings.backupSyncAuto")}
-                onCheckedChange={(checked) => void handleAutoSyncChange(checked)}
-              />
-            </div>
-          </div>
-
-          <footer className="space-y-3 border-t border-border/60 px-5 py-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" disabled={syncLocked} onClick={() => void handleSaveSync()}>
-                {syncBusy === "save" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )}
-                {t("settings.backupSyncSave")}
-              </Button>
+            }
+            control={
               <Button
-                variant="outline"
                 size="sm"
-                disabled={syncLocked || dirty}
-                onClick={() => void handleTestSync()}
-              >
-                {syncBusy === "test" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Plug className="h-3.5 w-3.5" />
-                )}
-                {t("settings.backupSyncTest")}
-              </Button>
-              <div className="mx-1 h-4 w-px bg-border/70" />
-              <Button
                 variant="outline"
-                size="sm"
-                disabled={syncLocked || dirty}
-                onClick={() => void handleUpload()}
-              >
-                {syncBusy === "upload" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Upload className="h-3.5 w-3.5" />
-                )}
-                {t("settings.backupSyncUpload")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={syncLocked || dirty}
-                onClick={() => void handleDownload()}
-              >
-                {syncBusy === "download" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <CloudDownload className="h-3.5 w-3.5" />
-                )}
-                {t("settings.backupSyncDownload")}
-              </Button>
-            </div>
-
-            {dirty && !syncLocked ? (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                {t("settings.backupSyncDirtyHint")}
-              </div>
-            ) : null}
-
-            <FeedbackStrip status={syncStatus} />
-          </footer>
-        </section>
-
-        {/* 右栏：本地备份 + 备份范围。范围卡弹性补足高度，与左栏底边对齐。 */}
-        <aside className="flex flex-col gap-5">
-          <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <HardDrive className="h-4 w-4" />
-              </span>
-              <h3 className="text-sm font-semibold text-foreground">
-                {t("settings.backupLocalTitle")}
-              </h3>
-            </div>
-
-            <div className="space-y-2">
-              <ActionTile
-                icon={<Download className="h-4 w-4" />}
-                busy={busy === "export"}
-                title={t("settings.backupExport")}
-                hint={t("settings.backupExportHint")}
-                disabled={busy !== null}
-                onClick={() => void handleExport()}
-              />
-              <ActionTile
-                icon={<Upload className="h-4 w-4" />}
-                busy={busy === "import"}
-                title={t("settings.backupImport")}
-                hint={t("settings.backupImportHint")}
                 disabled={busy !== null}
                 onClick={() => void handleImport()}
-              />
-            </div>
+              >
+                {busy === "import" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Upload className="size-3.5" />
+                )}
+                {t("settings.backupImport")}
+              </Button>
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
 
-            <div className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
-              <ArchiveRestore className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{t("settings.backupAutoBackupHint")}</span>
-            </div>
-
-            <FeedbackStrip status={status} />
-          </section>
-
-          <section className="flex-1 space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Shield className="h-4 w-4" />
+      <SettingsSection title={t("settings.backupSyncTitle")}>
+        <SettingsCard>
+          <SettingsRow
+            title={
+              syncView?.lastError
+                ? t("settings.backupSyncAutoErrorTitle")
+                : syncConfigured
+                  ? t("settings.backupSyncStatusReady")
+                  : t("settings.backupSyncStatusNotConfigured")
+            }
+            description={
+              <span className={syncView?.lastError ? "text-destructive" : undefined}>
+                {syncSummary}
               </span>
-              <h3 className="text-sm font-semibold text-foreground">
-                {t("settings.backupScopeTitle")}
-              </h3>
-            </div>
+            }
+            control={
+              <Dialog open={syncDialogOpen} onOpenChange={handleSyncDialogOpenChange}>
+                <DialogTrigger
+                  render={
+                    <Button
+                      size="sm"
+                      variant={syncConfigured ? "outline" : "default"}
+                      disabled={syncBusy === "load"}
+                    />
+                  }
+                >
+                  {syncConfigured
+                    ? t("settings.backupSyncManage")
+                    : t("settings.backupSyncConfigure")}
+                </DialogTrigger>
+                <DialogContent
+                  className="flex max-h-[calc(100dvh-2rem)] max-w-lg flex-col"
+                  closeLabel={t("settings.backupCancel")}
+                  showCloseButton
+                >
+                  <DialogHeader>
+                    <div className="flex items-center gap-2">
+                      {syncFormOpen ? (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={syncLocked}
+                          aria-label={t("settings.backupSyncBackToProviders")}
+                          onClick={() => setSyncFormOpen(false)}
+                        >
+                          <ArrowLeft className="size-4" />
+                        </Button>
+                      ) : null}
+                      <DialogTitle>
+                        {syncFormOpen
+                          ? t(`settings.backupSyncPreset_${preset}`)
+                          : t("settings.backupSyncChooseProvider")}
+                      </DialogTitle>
+                    </div>
+                    <DialogDescription>{t("settings.backupSyncCredentialNote")}</DialogDescription>
+                  </DialogHeader>
 
-            <div className="space-y-1.5">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                {t("settings.backupScopeIncluded")}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <ScopeItem
-                  icon={<Server className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainProviders")}
-                />
-                <ScopeItem
-                  icon={<McpLogo className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainMcp")}
-                />
-                <ScopeItem
-                  icon={<Settings2 className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainSystem")}
-                />
-                <ScopeItem
-                  icon={<ScrollText className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainAgents")}
-                />
-                <ScopeItem
-                  icon={<Layers className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainModelFailover")}
-                />
-                <ScopeItem
-                  icon={<Mic className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainStt")}
-                />
-              </div>
-            </div>
+                  <DialogBody className="space-y-4">
+                    {!syncFormOpen ? (
+                      <div className="space-y-2">
+                        {presetOptions.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            disabled={syncLocked}
+                            className={cn(
+                              "flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3",
+                              "bg-settings-tile text-left text-sm font-medium hover:bg-settings-tile-hover",
+                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                            )}
+                            onClick={() => handlePresetChange(item.id)}
+                          >
+                            {t(`settings.backupSyncPreset_${item.id}`)}
+                            <ChevronRight className="size-4 text-muted-foreground" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-1.5">
+                          <FieldLabel>{t("settings.backupSyncUrl")}</FieldLabel>
+                          <div className="relative">
+                            <Server className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                            <Input
+                              variant="plain"
+                              value={form.url}
+                              disabled={syncLocked}
+                              placeholder="https://dav.example.com/dav/"
+                              className="pl-9"
+                              onChange={(event) => patchForm({ url: event.target.value })}
+                            />
+                          </div>
+                        </div>
 
-            <div className="space-y-1.5">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                {t("settings.backupScopeExcluded")}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <ScopeItem
-                  excluded
-                  icon={<MessageSquare className="h-3.5 w-3.5" />}
-                  label={t("settings.backupScopeChat")}
-                />
-                <ScopeItem
-                  excluded
-                  icon={<Brain className="h-3.5 w-3.5" />}
-                  label={t("settings.backupScopeMemory")}
-                />
-                <ScopeItem
-                  excluded
-                  icon={<FileText className="h-3.5 w-3.5" />}
-                  label={t("settings.backupScopeUploads")}
-                />
-                <ScopeItem
-                  excluded
-                  icon={<Key className="h-3.5 w-3.5" />}
-                  label={t("settings.backupScopeSshKeys")}
-                />
-                <ScopeItem
-                  excluded
-                  icon={<SkillIcon className="h-3.5 w-3.5" />}
-                  label={t("settings.backupScopeSkills")}
-                />
-                <ScopeItem
-                  excluded
-                  icon={<HardDrive className="h-3.5 w-3.5" />}
-                  label={t("settings.backupScopeDeviceLocal")}
-                />
-              </div>
-            </div>
-          </section>
-        </aside>
-      </div>
+                        <div className="space-y-4">
+                          <div className="space-y-1.5">
+                            <FieldLabel>{t("settings.backupSyncUsername")}</FieldLabel>
+                            <Input
+                              variant="plain"
+                              value={form.username}
+                              disabled={syncLocked}
+                              autoComplete="off"
+                              onChange={(event) => patchForm({ username: event.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <FieldLabel>{t("settings.backupSyncPassword")}</FieldLabel>
+                            <div className="relative">
+                              <Key className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                              <Input
+                                variant="plain"
+                                type="password"
+                                value={form.password}
+                                disabled={syncLocked}
+                                autoComplete="new-password"
+                                className="pl-9"
+                                placeholder={
+                                  syncView?.hasPassword && !form.passwordTouched
+                                    ? t("settings.backupSyncPasswordSaved")
+                                    : ""
+                                }
+                                onChange={(event) => {
+                                  const password = event.target.value;
+                                  patchForm({ password, passwordTouched: password.length > 0 });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="space-y-1.5">
+                            <FieldLabel>{t("settings.backupSyncRemoteDir")}</FieldLabel>
+                            <Input
+                              variant="plain"
+                              value={form.remoteDir}
+                              disabled={syncLocked}
+                              placeholder="liveagent"
+                              onChange={(event) => patchForm({ remoteDir: event.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <FieldLabel hint={t("settings.backupSyncProfileHint")}>
+                              {t("settings.backupSyncProfile")}
+                            </FieldLabel>
+                            <Input
+                              variant="plain"
+                              value={form.profile}
+                              disabled={syncLocked}
+                              placeholder="default"
+                              onChange={(event) => patchForm({ profile: event.target.value })}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4 rounded-xl bg-settings-tile px-4 py-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-foreground">
+                              {t("settings.backupSyncAuto")}
+                            </div>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {t("settings.backupSyncAutoHint")}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={form.autoSync}
+                            disabled={syncLocked}
+                            title={t("settings.backupSyncAuto")}
+                            aria-label={t("settings.backupSyncAuto")}
+                            onCheckedChange={(checked) => void handleAutoSyncChange(checked)}
+                          />
+                        </div>
+
+                        {dirty && !syncLocked ? (
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                            <AlertTriangle className="size-3.5 shrink-0" />
+                            {t("settings.backupSyncDirtyHint")}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </DialogBody>
+
+                  {syncFormOpen ? (
+                    <DialogFooter>
+                      <Button
+                        size="sm"
+                        disabled={syncLocked || !dirty}
+                        onClick={() => void handleSaveSync()}
+                      >
+                        {syncBusy === "save" ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                        {t("settings.backupSyncSave")}
+                      </Button>
+                    </DialogFooter>
+                  ) : null}
+                </DialogContent>
+              </Dialog>
+            }
+          />
+
+          {syncConfigured ? (
+            <SettingsRow
+              title={t("settings.backupSyncRemoteTitle")}
+              description={
+                syncView?.lastSyncAt
+                  ? `${t("settings.backupSyncLastAt")}${formatTimestamp(syncView.lastSyncAt)}`
+                  : t("settings.backupSyncStatusNeverSynced")
+              }
+              control={
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={syncLocked || dirty}
+                    onClick={() => void handleUpload()}
+                  >
+                    {syncBusy === "upload" ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="size-3.5" />
+                    )}
+                    {t("settings.backupSyncUpload")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={syncLocked || dirty}
+                    onClick={() => void handleDownload()}
+                  >
+                    {syncBusy === "download" ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <CloudDownload className="size-3.5" />
+                    )}
+                    {t("settings.backupSyncDownload")}
+                  </Button>
+                </div>
+              }
+            />
+          ) : null}
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t("settings.backupScopeTitle")}>
+        <SettingsCard>
+          <SettingsRow
+            title={t("settings.backupScopeSummaryTitle")}
+            description={t("settings.backupScopeSummary")}
+            control={
+              <Dialog>
+                <DialogTrigger render={<Button size="sm" variant="outline" />}>
+                  {t("settings.backupScopeView")}
+                </DialogTrigger>
+                <DialogContent
+                  className="max-w-lg"
+                  closeLabel={t("settings.backupCancel")}
+                  showCloseButton
+                >
+                  <DialogHeader>
+                    <DialogTitle>{t("settings.backupScopeTitle")}</DialogTitle>
+                    <DialogDescription>{t("settings.backupScopeSummary")}</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody>
+                    <BackupScopeDetails t={t} />
+                  </DialogBody>
+                </DialogContent>
+              </Dialog>
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
 
       {dialog}
     </div>

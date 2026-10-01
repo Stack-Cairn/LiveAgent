@@ -142,7 +142,15 @@ export function useConversationStats(options: {
 
 ### 4.2 组件层 `components/chat/ConversationStatsBar.tsx`
 
-- 单行、水平居中、`text-[calc(11px*var(--zone-font-scale,1))]`、`text-muted-foreground/70`，分组间用 `｜`（`text-muted-foreground/40`），组内用 `·`——与 `UsagePanel` 现有视觉语言一致。
+- 单行、水平居中、`text-tiny`、`text-muted-foreground/65`，组内用 `·`。
+
+  **修订（观感迭代）**：原先的分组分隔符是全角 `｜`（`text-muted-foreground/40`），全角字形
+  自带侧边留白、笔画与读数同重，一行重复四五次会把读数切成几段孤岛；现改为 `1px` 发丝竖线
+  （`mx-2.5 h-2.5 w-px bg-border/70`），高度只齐字腰，分量退到读数之后。`aria-label` 仍用 `｜` 拼接。
+
+  **修订（术语）**：单行改用工程缩写，把宽度让给数字本身：`输入 111M tok` → `↑111M`、
+  `首 token 平均 20.9s` → `TTFT 20.9s`、`缓存命中 85%` → `命中 85%`。全称只在 tooltip 与
+  `aria-label` 里出现，故每个指标在 i18n 里有缩写与 `*Label` 两套文案（见 §6）。
 - 渲染在 composer 玻璃卡片**下方**、与卡片同宽的容器内（见 4.3），高度约 20px，不参与卡片的展开/收起动画。
 - **响应式收缩**：composer 卡片已是 `@container`，按容器宽度分档隐藏低优先级分组：
   1. 恒显：`轮 · 步` `+ 上下文占用 %`（移动端够不到下一档，理由见 4.5 末尾的修订说明）
@@ -154,6 +162,13 @@ export function useConversationStats(options: {
 - **交互**：hover 出 `LabelTooltip` 显示未被收缩掉的完整指标 + 压缩次数；占用达到手动压缩门槛（`canManualCompact`，≥50%）且宿主提供了压缩回调时整条可点击 → 弹出确认后触发手动压缩，门槛表达式与 `ContextUsageRing` 同源（`canManualCompact(ratio) && !manualCompactBlocked && Boolean(onManualCompactConfirm)`），复用同一套 `ConfirmActionPopover` 交互；不满足条件时纯展示，无点击行为。
 
   **修订**：上述「整条可点击 → 切换到轨迹视图」的原始设计已推翻，改为点击触发手动压缩确认。原因：轨迹视图已有独立入口（`ConversationViewTabs`，桌面端与 WebUI 均已接线），状态栏复用点击手势去做导航是重复入口；而手动压缩此前只能从 `ContextUsageRing` 的环形入口触发，环在窄屏/低占用（`hideBelowWarn`）时会隐身，压缩入口跟着一起消失——状态栏本就常驻可见（见 4.5 恒显上下文占用分组的确认），复用为压缩入口正好补上这个缺口。点击只 `open()` 出 `ConfirmActionPopover`，压缩回调只挂在弹层内部的 `onConfirm`，不会被整行点击绕过确认步骤。
+
+  **修订（tooltip 版式）**：最初的 tooltip 是「每个分组一整句」的左对齐堆叠（`51 turns · 672 steps`），
+  名称与数字混在一起、还会被 `max-w-64` 折行切断。现改为仪表盘式的「分区小标题 + 逐指标一行」：
+  分区标题用 `text-tiny uppercase tracking-wide text-muted-foreground/70`，指标行是
+  `grid-cols-[auto_1fr]` 两列（左列全称、右列 `tabular-nums` 右对齐），容器 `whitespace-nowrap`
+  且通过新增的 `LabelTooltip.contentClassName` 解除 `max-w`。`≈` 释义与「点击可压缩」提示
+  下沉为分割线下的脚注，不再与读数同级。
 - 无障碍：容器 `role="status"` + `aria-label` 拼完整文本；数字变化不用 `aria-live`（流式期间会刷屏）。
 
 ### 4.3 ChatComposerBar 的改动（最小侵入）
@@ -249,23 +264,48 @@ statsBar={
 
 ## 6. i18n
 
-`crates/agent-ui/src/i18n/translations/{zhCNCommon,enUSCommon}.ts` 新增：
+`crates/agent-ui/src/i18n/translations/{zhCNCommon,enUSCommon}.ts` 新增。每个指标有两套文案，
+对应两个出口（见 §4.2 终稿修订）：
+
+- **单行缩写**（无后缀键）：宽度优先，用工程惯用语（`TTFT`、`↑`/`↓`）。
+- **`*Label` 全称**：tooltip 左列与 `aria-label` 使用，可读性优先，不用缩写。
+
+读数单位拆成可复用的 `chat.stats.tokenValue` / `percentValue`；tooltip 左列已是名称，
+计数类右列（轮次/步数/压缩次数）只给裸数字，避免「Turns 51 turns」这类重复。
 
 | key | zh-CN | en-US |
 | --- | --- | --- |
 | `chat.stats.turns` | `{n} 轮` | `{n} turns` |
+| `chat.stats.turnsLabel` | `对话轮次` | `Turns` |
 | `chat.stats.steps` | `{n} 步` | `{n} steps` |
-| `chat.stats.contextUsage` | `上下文 {p}%` | `Context {p}%` |
+| `chat.stats.stepsLabel` | `推理步数` | `Reasoning steps` |
+| `chat.stats.contextUsage` | `上下文 {p}%` | `Ctx {p}%` |
+| `chat.stats.contextUsageLabel` | `窗口占用` | `Window used` |
 | `chat.stats.llmTime` | `LLM {t}` | `LLM {t}` |
-| `chat.stats.toolTime` | `工具调用 {t}` | `Tools {t}` |
-| `chat.stats.ttftAvg` | `首 token 平均 {t}` | `Avg TTFT {t}` |
+| `chat.stats.llmTimeLabel` | `模型推理` | `Model inference` |
+| `chat.stats.toolTime` | `工具 {t}` | `Tools {t}` |
+| `chat.stats.toolTimeLabel` | `工具执行` | `Tool execution` |
+| `chat.stats.ttftAvg` | `TTFT {t}` | `TTFT {t}` |
+| `chat.stats.ttftAvgLabel` | `首 token 延迟` | `Time to first token` |
 | `chat.stats.throughput` | `{n} tok/s` | `{n} tok/s` |
-| `chat.stats.cacheHit` | `缓存命中 {p}%` | `Cache hit {p}%` |
-| `chat.stats.inputTokens` | `输入 {n} tok` | `In {n} tok` |
-| `chat.stats.outputTokens` | `输出 {n} tok` | `Out {n} tok` |
-| `chat.stats.compactions` | `压缩 {n} 次`（仅 tooltip） | `{n} compactions` |
+| `chat.stats.throughputLabel` | `解码吞吐` | `Decode throughput` |
+| `chat.stats.cacheHit` | `命中 {p}%` | `Cache {p}%` |
+| `chat.stats.cacheHitLabel` | `缓存命中率` | `Cache hit rate` |
+| `chat.stats.inputTokens` / `outputTokens` | `输入/输出 {n} tok` | `In/Out {n} tok` |
+| `chat.stats.inputTokensShort` / `outputTokensShort` | `↑{n}` / `↓{n}` | 同左 |
+| `chat.stats.inputTokensLabel` / `outputTokensLabel` | `输入/输出 token` | `Input/Output tokens` |
+| `chat.stats.compactionsLabel` | `上下文压缩`（仅 tooltip） | `Context compactions` |
+| `chat.stats.compactionsValue` | `{n} 次` | `{n}` |
+| `chat.stats.tokenValue` / `percentValue` | `{n} tok` / `{p}%` | 同左 |
+| `chat.stats.groupScale` | `会话规模` | `Conversation` |
+| `chat.stats.groupContext` | `上下文窗口` | `Context window` |
+| `chat.stats.groupTime` | `时间开销` | `Time spent` |
+| `chat.stats.groupTokens` | `Token 用量` | `Token usage` |
+| `chat.stats.groupPerf` | `响应性能` | `Responsiveness` |
+| `chat.stats.groupHistory` | `历史维护` | `History upkeep` |
 | `chat.stats.approximate` | `≈`（前缀，含 tooltip 释义） | `≈` |
 | `chat.manualCompactTitle` | `手动压缩上下文？` | `Compact context manually?`（同时用作触发按钮 `aria-label`） |
+| `chat.manualCompactHint` | `点击可手动压缩上下文`（tooltip 脚注） | `Click to compact context manually` |
 | `chat.manualCompactDescription` | `将历史消息折叠为摘要检查点，释放上下文空间。` | `Folds earlier messages into a summary checkpoint to free context space.` |
 | `chat.manualCompactConfirm` | `压缩` | `Compact` |
 

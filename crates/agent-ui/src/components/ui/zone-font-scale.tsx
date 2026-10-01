@@ -30,7 +30,7 @@ export function resolveZoneFontScale(style: unknown, fallback: number): number {
 /**
  * Inline style for a popup's Positioner that carries the enclosing zone's
  * scale across the portal. `.layer-popover` already re-declares the text-size
- * variables from `--zone-font-scale` (common-components.css), so setting the
+ * variables from `--zone-font-scale` (base.css), so setting the
  * property on the Positioner is all a popup needs; with no zone the variable
  * stays unset and the popup renders at 1.0 as before. The Positioner is the
  * right host because Base UI lets callers pass the Popup's own `style` as a

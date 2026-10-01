@@ -202,7 +202,7 @@ export function createWebModuleLoader(options = {}) {
       specifier.startsWith("@liveagent/adapters/");
 
     if (!isRootRelative && !specifier.startsWith(".") && !path.isAbsolute(specifier)) {
-      return requireFromRoot(specifier);
+      return createRequire(path.join(parentDir, "__liveagent_test_loader__.js"))(specifier);
     }
 
     const filePath = resolveLocal(specifier, isRootRelative ? rootDir : parentDir);
@@ -236,7 +236,7 @@ export function createWebModuleLoader(options = {}) {
       nextSpecifier.startsWith("@liveagent/app/") ||
       nextSpecifier.startsWith("@liveagent/adapters/")
         ? resolveLocal(nextSpecifier, dirname)
-        : requireFromRoot.resolve(nextSpecifier);
+        : createRequire(path.join(dirname, "__liveagent_test_loader__.js")).resolve(nextSpecifier);
 
     const wrapped = `(function (exports, require, module, __filename, __dirname) {\n${outputText}\n})`;
     const script = new vm.Script(wrapped, { filename: filePath });

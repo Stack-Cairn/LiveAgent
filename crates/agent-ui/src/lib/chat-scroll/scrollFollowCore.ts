@@ -42,13 +42,15 @@
 // that boundary and can never re-attach at the physical clamp.
 export const BOTTOM_ATTACH_THRESHOLD_PX = 8;
 
-// ChatTranscript reserves max(192, composer height + 12)px of blank space
-// below the last message so content clears the floating composer. Users
-// naturally stop "at the bottom" inside that band, dozens of px short of the
-// physical clamp, so a clamp-only check could never re-engage them. Any
-// gesture-latched downward arrival inside this zone counts as "scrolled back
-// to the bottom". ChatTranscript imports this constant to keep the reserve
-// band and the zone equal.
+// Reserve-band minimum: ChatTranscript reserves max(192, composer height +
+// 12)px of blank space below the last message (the WebUI spacer mirrors it as
+// 12rem) so content clears the floating composer. It also sizes the default
+// reattach zone, but both transcript hosts now pass `reattachZonePx: 0`: a
+// gesture-latched arrival inside the zone pinned the viewport to the clamp in
+// one write, which reads as the page snapping up (231px measured in the WebUI
+// probe page). Attach happens at the physical clamp only; wheel-down at the
+// clamp and a release at the clamp still re-engage. The thinking-block
+// scroller passes 0 as well.
 export const BOTTOM_REATTACH_ZONE_PX = 192;
 
 // Gap wiggle inside this slop is layout noise (virtualizer measurement

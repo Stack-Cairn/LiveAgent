@@ -71,6 +71,8 @@ export type GatewayBridgeEventController = {
   close: () => Promise<void>;
   hasForwardedText: () => boolean;
   isClosed: () => boolean;
+  /** 事件流是否仍在消费：未启用或已关闭时，调用方可跳过构造昂贵的预览负载。 */
+  isEventStreamActive: () => boolean;
 };
 
 export function createGatewayBridgeEventController(
@@ -256,6 +258,9 @@ export function createGatewayBridgeEventController(
     },
     isClosed() {
       return streamClosed;
+    },
+    isEventStreamActive() {
+      return params.enabled && !streamClosed;
     },
   };
 }

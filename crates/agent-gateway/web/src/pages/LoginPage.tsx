@@ -25,19 +25,22 @@ const features = [
     icon: MessageSquareText,
     title: "Remote Chat",
     desc: "按桌面端式样查看 token、thinking、tool_call 与 tool_result。",
-    accent: "login-feat--blue",
+    accent:
+      "[&>div:first-child]:bg-hsl-215-80-52-0p1 [&>div:first-child]:text-hsl-215-80-52 dark:[&>div:first-child]:bg-hsl-215-80-60-0p14 dark:[&>div:first-child]:text-hsl-215-80-70",
   },
   {
     icon: History,
     title: "History Resume",
     desc: "从远程历史回填会话并继续对话，而不是只看原始 JSON。",
-    accent: "login-feat--violet",
+    accent:
+      "[&>div:first-child]:bg-hsl-255-60-56-0p1 [&>div:first-child]:text-hsl-255-60-56 dark:[&>div:first-child]:bg-hsl-255-60-60-0p14 dark:[&>div:first-child]:text-hsl-255-60-72",
   },
   {
     icon: Timer,
     title: "Cron Control",
     desc: "在浏览器里完成任务查看、创建、更新与删除的转发调试。",
-    accent: "login-feat--amber",
+    accent:
+      "[&>div:first-child]:bg-hsl-32-90-48-0p1 [&>div:first-child]:text-hsl-32-90-48 dark:[&>div:first-child]:bg-hsl-32-80-50-0p14 dark:[&>div:first-child]:text-hsl-32-80-64",
   },
 ];
 
@@ -45,34 +48,109 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
   const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <main className="login-shell">
+    <main
+      className={cn(
+        "relative grid min-h-100dvh place-items-center overflow-hidden bg-hsl-220-20-97 px-24px py-40px",
+        "dark:bg-hsl-224-20-8 max-820:overflow-y-auto",
+      )}
+    >
       {/* Subtle mesh gradient backdrop */}
-      <div className="login-backdrop" aria-hidden="true" />
-      <div className="login-backdrop-orb login-backdrop-orb--1" aria-hidden="true" />
-      <div className="login-backdrop-orb login-backdrop-orb--2" aria-hidden="true" />
+      <div
+        className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_60%_at_20%_10%,var(--ui-color-hsl-210-100-92-0p6),transparent_60%),radial-gradient(ellipse_60%_50%_at_80%_20%,var(--ui-color-hsl-250-80-92-0p4),transparent_50%),radial-gradient(ellipse_50%_60%_at_60%_90%,var(--ui-color-hsl-200-60-92-0p3),transparent_50%)] dark:bg-[radial-gradient(ellipse_80%_60%_at_20%_10%,var(--ui-color-hsl-210-80-20-0p3),transparent_60%),radial-gradient(ellipse_60%_50%_at_80%_20%,var(--ui-color-hsl-250-60-24-0p2),transparent_50%),radial-gradient(ellipse_50%_60%_at_60%_90%,var(--ui-color-hsl-200-50-18-0p2),transparent_50%)]"
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          "pointer-events-none fixed top-minus-120px left-minus-80px z-0 size-500px",
+          "rounded-full bg-hsl-210-100-88-0p5 opacity-(--ui-opacity-0p5) blur-80px dark:bg-hsl-210-80-30-0p2 max-820:size-300px",
+        )}
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          "pointer-events-none fixed right-minus-60px bottom-minus-100px z-0 size-400px",
+          "rounded-full bg-hsl-250-70-88-0p4 opacity-(--ui-opacity-0p5) blur-80px dark:bg-hsl-250-60-30-0p15 max-820:size-250px",
+        )}
+        aria-hidden="true"
+      />
 
-      <div className="login-container login-entrance">
+      <div
+        className={cn(
+          "relative z-1 grid w-login-container-w grid-cols-login-container gap-0 overflow-hidden",
+          "rounded-28px border border-solid border-white/70 bg-white/55 shadow-login-container backdrop-blur-40px backdrop-saturate-160",
+          "dark:border-white/8 dark:bg-hsl-224-20-12-0p6 dark:shadow-login-container-2 max-1080:w-login-container-w-2 max-1080:grid-cols-login-container-2 max-820:rounded-22px max-640:w-full max-640:rounded-20px",
+          "max-380:rounded-18px",
+        )}
+      >
         {/* Left: branding + features */}
-        <div className="login-hero login-entrance-d1">
-          <div className="login-hero-title-row">
-            <div className="login-logo-mark">
-              <Shield size={18} strokeWidth={2} />
+        <div
+          className={cn(
+            "flex flex-col justify-center",
+            "border-r border-solid border-r-black/4 bg-white/30 px-40px py-48px",
+            "dark:border-r-white/5 dark:bg-white/2 max-1080:border-r-0 max-1080:border-r-current max-1080:border-b max-1080:border-solid max-1080:border-b-black/4 max-1080:px-32px",
+            "max-1080:pt-36px max-1080:pb-28px dark:max-1080:border-b-white/5 max-820:px-24px max-820:pt-28px max-820:pb-20px max-640:px-20px max-640:pt-24px",
+            "max-640:pb-18px max-380:px-16px max-380:pt-20px max-380:pb-14px",
+          )}
+        >
+          <div className="flex items-center gap-12px max-380:gap-8px">
+            <div
+              className={cn(
+                "flex size-40px shrink-0 items-center justify-center",
+                "rounded-12px bg-primary text-primary-foreground shadow-[0_var(--spacing-2px)_var(--spacing-8px)_hsl(var(--primary)/0.2)]",
+                "dark:shadow-[0_var(--spacing-2px)_var(--spacing-12px)_hsl(var(--primary)/0.3)] max-820:size-34px max-820:rounded-10px max-380:size-30px max-380:rounded-9px",
+              )}
+            >
+              <Shield size={18} strokeWidth={2} className="max-380:size-14px" />
             </div>
-            <h1 className="login-hero-title">LiveAgent Gateway</h1>
+            <h1
+              className={cn(
+                "m-0 text-3xl font-bold leading-1p15 tracking-minus-0p035em text-foreground",
+                "max-820:text-2xl max-640:text-2xl max-380:text-2xl",
+              )}
+            >
+              LiveAgent Gateway
+            </h1>
           </div>
-          <p className="login-hero-desc">
+          <p
+            className={cn(
+              "mx-0 mt-14px mb-0",
+              "text-sm leading-1p7 text-muted-foreground",
+              "max-640:text-sm max-640:mt-10px max-380:text-xs max-380:leading-1p6",
+            )}
+          >
             安全连接到远程代理会话，在浏览器中获得完整的控制台体验。
           </p>
 
-          <div className="login-feat-list login-entrance-d2">
+          <div className="mt-32px flex flex-col gap-10px max-640:mt-20px max-640:gap-8px max-380:mt-16px max-380:gap-6px">
             {features.map((f) => (
-              <div key={f.title} className={cn("login-feat", f.accent)}>
-                <div className="login-feat-icon">
+              <div
+                key={f.title}
+                className={cn(
+                  "flex items-start gap-12px",
+                  "rounded-14px border border-black/4 bg-hsl-0-0-100-0p5 px-14px py-12px",
+                  "transition-[background,border-color,transform] duration-200ms ease-default",
+                  "hover:translate-x-2px hover:border-black/6 hover:bg-hsl-0-0-100-0p75 motion-reduce:animate-none dark:border-white/6 dark:bg-white/4 dark:hover:border-hsl-0-0-100-0p1 dark:hover:bg-hsl-0-0-100-0p07",
+                  "[&>div:first-child]:transition-transform [&>div:first-child]:duration-200ms [&>div:first-child]:ease-default hover:[&>div:first-child]:scale-[1.08] touch-primary:hover:translate-x-0 touch-primary:hover:border-black/4 touch-primary:hover:bg-hsl-0-0-100-0p5 touch-primary:active:bg-hsl-0-0-100-0p75",
+                  "touch-primary:dark:hover:border-white/6 touch-primary:dark:hover:bg-white/4 touch-primary:dark:active:bg-hsl-0-0-100-0p07 touch-primary:hover:[&>div:first-child]:scale-100 max-820:rounded-12px max-820:px-12px max-820:py-10px max-640:items-center",
+                  "max-640:py-9px max-380:gap-10px max-380:rounded-10px max-380:px-10px max-380:py-8px",
+                  f.accent,
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex size-32px shrink-0 items-center justify-center rounded-9px",
+                    "max-820:size-28px max-820:rounded-8px max-380:size-26px max-380:rounded-7px",
+                  )}
+                >
                   <f.icon size={16} strokeWidth={2} />
                 </div>
-                <div className="login-feat-text">
-                  <strong>{f.title}</strong>
-                  <span>{f.desc}</span>
+                <div className="min-w-0">
+                  <strong className="block text-sm font-semibold mb-2px text-foreground max-640:text-xs max-640:mb-0">
+                    {f.title}
+                  </strong>
+                  <span className="block text-xs leading-1p55 text-muted-foreground max-820:text-xs max-640:hidden">
+                    {f.desc}
+                  </span>
                 </div>
               </div>
             ))}
@@ -80,20 +158,52 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
         </div>
 
         {/* Right: auth form */}
-        <div className="login-form-panel login-entrance-d2">
-          <div className="login-form-card">
-            <div className="login-form-header">
-              <div className="login-form-title-row">
-                <div className="login-form-icon">
+        <div
+          className={cn(
+            "flex items-center justify-center px-40px py-48px",
+            "max-1080:px-32px max-1080:pt-28px max-1080:pb-36px max-820:px-24px max-820:pt-20px max-820:pb-28px max-640:px-20px max-640:pt-18px",
+            "max-640:pb-24px max-380:px-16px max-380:pt-14px max-380:pb-20px",
+          )}
+        >
+          <div className="w-full max-w-360px max-1080:max-w-full">
+            <div className="mb-28px max-640:mb-20px max-380:mb-16px">
+              <div className="flex items-center gap-10px">
+                <div
+                  className={cn(
+                    "shrink-0 flex items-center justify-center size-34px",
+                    "rounded-10px text-muted-foreground bg-muted/60 border border-solid border-black/4",
+                    "dark:bg-white/6 dark:border-white/6 max-820:size-30px max-820:rounded-9px max-380:size-28px max-380:rounded-8px",
+                  )}
+                >
                   <Lock size={16} strokeWidth={2} />
                 </div>
-                <h2 className="login-form-title">连接控制台</h2>
+                <h2 className="m-0 text-2xl font-bold tracking-minus-0p02em text-foreground max-820:text-xl max-380:text-lg">
+                  连接控制台
+                </h2>
               </div>
-              <p className="login-form-sub">输入 Gateway 服务端的 Access Token 以验证身份</p>
+              <p className="mx-0 mt-8px mb-0 text-sm leading-1p6 text-muted-foreground max-640:text-xs max-380:text-xs">
+                输入 Gateway 服务端的 Access Token 以验证身份
+              </p>
             </div>
 
-            <div className={cn("login-input-wrap", isFocused && "login-input-wrap--focus")}>
-              <label htmlFor="access-token" className="login-input-label">
+            <div
+              className={cn(
+                "mb-16px px-16px py-14px",
+                "rounded-16px border border-solid border-black/6 bg-white/55",
+                "transition-[border-color,box-shadow] duration-250ms ease-default",
+                "dark:border-white/8 dark:bg-white/4 max-820:px-14px max-820:py-12px max-820:rounded-14px max-380:px-12px max-380:py-10px max-380:rounded-12px",
+                "max-380:mb-12px",
+                isFocused &&
+                  "border-hsl-215-70-60-0p4 shadow-login-input-wrap-focus dark:border-hsl-215-60-55-0p5 dark:shadow-login-input-wrap--focus-2",
+              )}
+            >
+              <label
+                htmlFor="access-token"
+                className={cn(
+                  "flex items-center gap-6px mb-10px",
+                  "text-xs font-semibold tracking-0p08em uppercase text-muted-foreground max-380:mb-8px max-380:text-tiny",
+                )}
+              >
                 <Key size={12} strokeWidth={2.5} />
                 Access Token
               </label>
@@ -108,21 +218,40 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 onChange={(e) => onTokenChange(e.target.value)}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                className="login-input"
+                className={cn(
+                  "min-h-72px resize-none border-0 bg-transparent p-0",
+                  "font-mono text-sm leading-1p6 text-foreground shadow-none",
+                  "focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none touch-primary:text-base",
+                )}
               />
             </div>
 
-            {error && <p className="login-form-error">{error}</p>}
+            {error && (
+              <p
+                className={cn(
+                  "mx-0 mt-0 mb-14px px-14px py-10px",
+                  "rounded-10px text-sm leading-1p5 text-hsl-0-72-50 bg-hsl-0-80-50-0p06 border border-solid border-hsl-0-80-50-0p1",
+                  "dark:text-hsl-0-80-68 dark:bg-hsl-0-80-50-0p1 dark:border-hsl-0-80-50-0p15",
+                )}
+              >
+                {error}
+              </p>
+            )}
 
             <Button
               type="button"
               size="lg"
               disabled={token.trim() === "" || isSubmitting}
               onClick={onSubmit}
-              className="login-btn"
+              className={cn(
+                "h-46px w-full cursor-pointer gap-8px",
+                "rounded-13px text-sm font-semibold",
+                "transition-[transform,box-shadow,opacity] duration-200ms ease-default",
+                "enabled:hover:-translate-y-1px enabled:hover:shadow-[0_var(--spacing-4px)_var(--spacing-20px)_hsl(var(--primary)/0.2)] enabled:active:translate-y-0 enabled:active:scale-[0.985] touch-primary:enabled:hover:translate-y-0 touch-primary:enabled:hover:shadow-none touch-primary:enabled:active:scale-[0.98]",
+              )}
             >
               {isSubmitting ? (
-                <span className="login-btn-loading" />
+                <span className="inline-block size-18px animate-spin rounded-full border-2 border-solid border-primary-foreground/30 border-t-primary-foreground motion-reduce:animate-none" />
               ) : (
                 <>
                   进入 Gateway
@@ -131,7 +260,9 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               )}
             </Button>
 
-            <p className="login-form-footer">Token 验证通过后将本地保存，下次自动登录</p>
+            <p className="mt-16px text-center text-xs text-muted-foreground/60 max-640:text-xs max-380:mt-12px">
+              Token 验证通过后将本地保存，下次自动登录
+            </p>
           </div>
         </div>
       </div>

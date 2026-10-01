@@ -49,8 +49,16 @@ export function AppUpdateButton({
       size="sm"
       className={cn(
         iconOnly
-          ? "group/update relative h-6 w-6 shrink-0 gap-0 overflow-hidden rounded-full bg-[#4096ff] px-0 text-[11px] font-medium leading-none text-white shadow-none transition-[width,background-color] duration-150 hover:w-10 hover:bg-[#1677ff] hover:text-white active:bg-[#0958d9]"
-          : "h-[22px] shrink-0 gap-[3px] rounded-full bg-[#4096ff] px-2 text-[11px] font-medium leading-none text-white shadow-none hover:bg-[#1677ff] hover:text-white active:bg-[#0958d9]",
+          ? cn(
+              "group/update relative size-6 shrink-0 gap-0 overflow-hidden rounded-full bg-ui-4096ff",
+              "px-0 text-xs font-medium leading-none text-white shadow-none transition-[width,background-color] duration-150",
+              "hover:w-10 hover:bg-ui-1677ff hover:text-white active:bg-ui-0958d9",
+            )
+          : cn(
+              "h-22px shrink-0 gap-3px rounded-full bg-ui-4096ff px-2",
+              "text-xs font-medium leading-none text-white shadow-none",
+              "hover:bg-ui-1677ff hover:text-white active:bg-ui-0958d9",
+            ),
         className,
       )}
       disabled={busy}
@@ -63,15 +71,13 @@ export function AppUpdateButton({
       }
     >
       {busy ? (
-        <Loader2
-          className={cn(iconOnly ? "h-3 w-3" : "h-[13px] w-[13px]", iconClassName, "animate-spin")}
-        />
+        <Loader2 className={cn(iconOnly ? "size-3" : "size-13px", iconClassName, "animate-spin")} />
       ) : installed ? (
         <RefreshCw
           className={cn(
             iconOnly
-              ? "h-3 w-3 transition-opacity duration-150 group-hover/update:opacity-0"
-              : "h-[13px] w-[13px]",
+              ? "size-3 transition-opacity duration-150 group-hover/update:opacity-0"
+              : "size-13px",
             iconClassName,
           )}
         />
@@ -79,8 +85,8 @@ export function AppUpdateButton({
         <Download
           className={cn(
             iconOnly
-              ? "h-3 w-3 transition-opacity duration-150 group-hover/update:opacity-0"
-              : "h-[13px] w-[13px]",
+              ? "size-3 transition-opacity duration-150 group-hover/update:opacity-0"
+              : "size-13px",
             iconClassName,
           )}
         />

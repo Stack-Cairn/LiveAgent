@@ -3,6 +3,7 @@ import { Cloud, Download, Plus, Search, Server } from "@liveagent/ui/components/
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { McpRegistryBrowser } from "@liveagent/ui/pages/mcp-hub/McpRegistryBrowser";
 import { McpServerEditModal, McpServersForm } from "@liveagent/ui/pages/mcp-hub/McpServersForm";
 import { useMemo, useState } from "react";
@@ -79,7 +80,12 @@ export function McpHubPage(props: McpHubPageProps) {
   }
 
   return (
-    <div className="hub-page hub-page-enter relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className={cn(
+        "hub-page relative flex h-full min-h-0 flex-1 flex-col overflow-hidden",
+        "bg-background",
+      )}
+    >
       <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden">
         <HubHeader
           embedded={props.embedded}
@@ -103,7 +109,7 @@ export function McpHubPage(props: McpHubPageProps) {
                 onClick={openAdd}
                 title={t("mcpHub.add")}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="size-3.5" />
                 <span className="hidden whitespace-nowrap sm:inline">{t("mcpHub.add")}</span>
               </Button>
             </div>
@@ -114,10 +120,13 @@ export function McpHubPage(props: McpHubPageProps) {
           className={
             props.embedded
               ? "hub-scroll min-h-0 flex-1 overflow-hidden"
-              : "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 sm:px-6 lg:px-8 xl:px-10"
+              : cn(
+                  "hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6",
+                  "sm:px-6 lg:px-8 xl:px-10",
+                )
           }
         >
-          <div className="hub-content-stage mx-auto flex h-full min-h-0 w-full max-w-[1320px] flex-col">
+          <div className="hub-content-stage mx-auto flex size-full min-h-0 max-w-1320px flex-col">
             <Tabs
               value={view}
               onValueChange={(nextView) => {
@@ -125,8 +134,8 @@ export function McpHubPage(props: McpHubPageProps) {
               }}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="hub-panel-enter relative mb-5">
-                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="relative mb-5">
+                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="search"
                   value={activeSearchQuery}
@@ -136,12 +145,16 @@ export function McpHubPage(props: McpHubPageProps) {
                   }}
                   placeholder={searchPlaceholder}
                   aria-label={searchPlaceholder}
-                  className="h-11 rounded-full border-border bg-background pl-11 pr-4 text-sm shadow-none placeholder:text-muted-foreground"
+                  className={cn(
+                    "h-11 rounded-full border-border bg-background pl-11 pr-4 text-sm shadow-none",
+                    "placeholder:text-muted-foreground",
+                  )}
                 />
               </div>
 
-              <div className="hub-panel-enter flex min-h-11 items-center justify-between gap-3 max-sm:items-stretch">
+              <div className="flex min-h-11 items-center justify-between gap-3 max-sm:items-stretch">
                 <ResourceTabsList
+                  variant="segmented"
                   value={view}
                   items={[
                     {

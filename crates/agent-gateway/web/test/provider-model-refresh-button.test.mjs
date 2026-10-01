@@ -21,10 +21,6 @@ const providerProbeSource = readSharedSettingsSource("providerProbe.ts");
 const providerChipsSource = readSharedSettingsSource("providers/providerChips.tsx");
 const providerUtilsSource = readSharedSettingsSource("providerUtils.ts");
 const catalogListSource = readSharedSettingsSource("providers/ProviderCatalogList.tsx");
-const responsiveStylesSource = readFileSync(
-  new URL("../src/styles/responsive.css", import.meta.url),
-  "utf8",
-);
 
 function openingTagAround(source, anchor) {
   const anchorIndex = source.indexOf(anchor);
@@ -89,10 +85,7 @@ test("catalog rows keep their content and status dot on one mobile row", () => {
     providersSectionSource,
     /settings-provider-columns grid min-h-0 flex-1 grid-cols-\[264px_minmax\(0,1fr\)\] gap-5 max-\[720px\]:grid-cols-1/,
   );
-  assert.match(
-    responsiveStylesSource,
-    /\.settings-provider-section\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?min-height:\s*0;/,
-  );
+  assert.match(providersSectionSource, /settings-provider-section flex min-h-0 min-w-0 flex-1 flex-col/);
 });
 
 test("mobile detail view is reached from the list and can go back", () => {

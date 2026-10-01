@@ -81,20 +81,3 @@ export function resolveOpenSelection(
     end: selectionEnd ?? valueLength,
   };
 }
-
-export function clampMenuPosition(
-  x: number,
-  y: number,
-  menuWidth: number,
-  menuHeight: number,
-  viewportWidth: number,
-  viewportHeight: number,
-  margin = 8,
-): { left: number; top: number } {
-  const maxLeft = Math.max(margin, viewportWidth - menuWidth - margin);
-  const maxTop = Math.max(margin, viewportHeight - menuHeight - margin);
-  return {
-    left: Math.min(Math.max(margin, x), maxLeft),
-    top: Math.min(Math.max(margin, y), maxTop),
-  };
-}

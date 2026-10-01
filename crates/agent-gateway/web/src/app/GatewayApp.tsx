@@ -3,13 +3,16 @@ import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
-import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { SidebarProvider, useSidebar } from "@liveagent/ui/components/ui/sidebar";
+import { type ToastTone, toast } from "@liveagent/ui/components/ui/toast-manager";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { loadThinkingLiveSupplement } from "@liveagent/ui/lib/models/thinkingLive";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import {
   type ConversationOpenState,
@@ -56,6 +59,12 @@ import {
   workspaceProjectPathKey,
 } from "@/lib/settings";
 import { createIdleSidebarBackend, createWebSidebarBackend } from "@/lib/sidebar/webSidebarBackend";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_MAIN_BACKDROP_CLASS,
+  GATEWAY_MAIN_SHELL_CLASS,
+  GATEWAY_SHELL_CLASS,
+} from "@/lib/webStyleClasses";
 import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
@@ -77,7 +86,7 @@ import {
   createLocalDraftConversationId,
   isLocalDraftConversationId,
 } from "./gatewayLocalDraft";
-import { resolveVisibleConversationId, shouldOpenSidebarByDefault } from "./historyUtils";
+import { resolveVisibleConversationId } from "./historyUtils";
 import { resolveConversationUploadWorkdir } from "./hooks/uploadWorkdirRouting";
 import { useDirectoryDropActions } from "./hooks/useDirectoryDropActions";
 import { useGatewayChatConfiguration } from "./hooks/useGatewayChatConfiguration";
@@ -168,17 +177,11 @@ function useGatewayAppController() {
     },
     [],
   );
-  // Top-right toast stack for upload/attachment feedback — mirrors the GUI's
-  // NotifyToast usage so upload failures never render as conversation output.
-  const [notifyItems, setNotifyItems] = useState<NotifyItem[]>([]);
-  const notifyIdCounter = useRef(0);
-  const addNotify = useCallback((type: NotifyItem["type"], message: string) => {
-    const id = `notify-${++notifyIdCounter.current}`;
-    setNotifyItems((prev) => [...prev, { id, type, message }]);
-  }, []);
-  const dismissNotify = useCallback((id: string) => {
-    setNotifyItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const addNotify = useCallback(
+    (type: ToastTone, message: string) =>
+      toast[type](message, { id: `app-notify:${type}:${message}` }),
+    [],
+  );
   // Sidebar errors raised outside the sidebar store (project removal flow).
   const [sidebarActionError, setSidebarActionError] = useState<string | null>(null);
   const [queuedChatTurns, setQueuedChatTurns] = useState<ChatQueueItemSummary[]>([]);
@@ -213,7 +216,9 @@ function useGatewayAppController() {
   }, []);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const isAgentMode = settings.system.executionMode !== "text";
-  const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
+  const sidebar = useSidebar();
+  const sidebarOpen = sidebar.isMobile ? sidebar.openMobile : sidebar.open;
+  const setSidebarOpen = sidebar.isMobile ? sidebar.setOpenMobile : sidebar.setOpen;
   const {
     settingsOpen,
     overlay,
@@ -246,6 +251,11 @@ function useGatewayAppController() {
     viewport: transcriptViewport,
     listenerRoot: transcriptScrollAreaRoot,
     trackKeys: true,
+    // 回贴区为 0：只有真正到达底部（8px 容差内）才恢复跟随。默认的 192px
+    // 回贴区会在滚轮下行进入该区间的那一 tick 直接 pin 到底，读者看到的是
+    // 正文突然上跳一段（复现页实测单 tick 231px），即"磁吸"。到达底部后向下
+    // 滚轮、手势落底、指针在底部释放三种路径仍会重新贴底。
+    config: { reattachZonePx: 0 },
   });
   // 楼层导航：当前楼层由转写区上报，跳转经 navRef 直达虚拟列表；粘底跟随
   // 激活时程序化滚动会被立即拽回底部——跳转前先按「跳入历史」语义解除跟随。
@@ -411,6 +421,13 @@ function useGatewayAppController() {
     };
   }, [api, sidebarStore]);
 
+  // 思考档位运行期补充（models.dev）：启动后台拉一次，TTL 内幂等；失败静默，
+  // 档位解析维持在「快照 + 兜底」的现状。models.dev 带 ACAO:*，浏览器直连可达，
+  // 无需经 gateway 代理。
+  useEffect(() => {
+    void loadThinkingLiveSupplement();
+  }, []);
+
   // Narrow app-root subscriptions: workdirs (rare commits — project merge
   // inputs) and the byId index (list commits only; never running/idle ticks).
   const sidebarWorkdirs = useSidebarSelector(sidebarStore, (snapshot) => snapshot.workdirs);
@@ -461,6 +478,7 @@ function useGatewayAppController() {
   >(() => "");
   const {
     activateWorkspaceProject,
+    activateConversationWorkspace,
     activateSearchConversationWorkspace,
     clearSearchConversationWorkspace,
     searchConversationWorkdir,
@@ -1019,7 +1037,10 @@ function useGatewayAppController() {
       if (
         persisted &&
         persisted.customProviderId === override.customProviderId &&
-        persisted.model === override.model
+        persisted.model === override.model &&
+        (override.thinkingEnabled === undefined ||
+          persisted.thinkingEnabled === override.thinkingEnabled) &&
+        (override.reasoning === undefined || persisted.reasoning === override.reasoning)
       ) {
         next.delete(id);
         changed = true;
@@ -1138,6 +1159,7 @@ function useGatewayAppController() {
     handleSidebarSelectConversation,
     startNewConversation,
   } = createGatewayConversationActions({
+    activateConversationWorkspace,
     activateSearchConversationWorkspace,
     clearSearchConversationWorkspace,
     activeView,
@@ -1391,7 +1413,7 @@ function useGatewayAppController() {
       resetSettingsOverlay();
       setActiveView("chat");
       setRightDockOpen(false);
-      setNotifyItems([]);
+      toast.dismiss();
       resetProjectToolsRuntimeRef.current();
       workbenchClearRef.current();
       resetToFreshHomeConversation();
@@ -1629,7 +1651,6 @@ function useGatewayAppController() {
     handleWorkspaceEditorHide,
     handleWorkspaceFilePreviewClosed,
     hideWorkspaceSshTerminalOverlay,
-    isSuggestionTyping,
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
     projectTerminalSessions,
@@ -1921,10 +1942,16 @@ function useGatewayAppController() {
   if (!settingsSyncReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
-        <div className="gateway-shell">
-          <main className="gateway-main-shell">
-            <div className="gateway-main-backdrop" />
-            <div className="gateway-chat-frame flex items-center justify-center">
+        <div className={GATEWAY_SHELL_CLASS}>
+          <main className={GATEWAY_MAIN_SHELL_CLASS}>
+            <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
+            <div
+              className={cn(
+                GATEWAY_CHAT_FRAME_CLASS,
+                "relative flex h-full min-h-0 min-w-0 flex-1 flex-col",
+                "items-center justify-center max-820:h-full",
+              )}
+            >
               <SettingsSyncLoading locale={settings.locale} />
             </div>
           </main>
@@ -1983,7 +2010,6 @@ function useGatewayAppController() {
     currentChatProvider,
     currentModelContextWindow,
     currentModelLabel,
-    dismissNotify,
     displayedConversationBusyRef,
     displayedConversationId,
     displayedConversationWorkdir,
@@ -2093,7 +2119,6 @@ function useGatewayAppController() {
     isConversationBusy,
     isFileDropActive,
     isImportingPastedTextRef,
-    isSuggestionTyping,
     isUploadingFiles,
     uploadingConversationId,
     loadComposerHistoryPrompts,
@@ -2108,7 +2133,6 @@ function useGatewayAppController() {
     missingWorkspaceProjectPathKeys,
     modelOptions,
     moveQueuedTurnUp,
-    notifyItems,
     openSettings,
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
@@ -2231,6 +2255,13 @@ export type GatewayAppViewModel = Extract<
 >;
 
 export default function GatewayApp() {
+  return (
+    <SidebarProvider>
+      <GatewayAppContent />
+    </SidebarProvider>
+  );
+}
+function GatewayAppContent() {
   const result = useGatewayAppController();
   if (!result || !("activeFloorKey" in result)) {
     return result;

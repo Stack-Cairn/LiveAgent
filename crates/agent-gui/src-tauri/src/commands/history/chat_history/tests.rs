@@ -2851,4 +2851,30 @@ mod tests {
             Some(r#"{"role":"summary","id":"summary-1","content":"older"}"#)
         );
     }
+
+    #[test]
+    fn history_window_borrows_unselected_payloads_and_preserves_selected_content() {
+        let mut segments = window_fixture_segments();
+        let segment = &mut segments[0];
+        let payload = "工具输出 \"quoted\"\n".repeat(100_000);
+        segment.messages_json = serde_json::json!([
+            {"role": "user", "id": "first", "content": payload},
+            {"role": "assistant", "content": [{"type":"text", "text":"保留\n换行"}]},
+            {"role": "user", "id": "last", "content": "selected"}
+        ]).to_string();
+        segment.message_count = 3;
+        let raw = parse_history_window_segment_messages(segment).expect("borrow messages");
+        let start = segment.messages_json.as_ptr() as usize;
+        let end = start + segment.messages_json.len();
+        for message in &raw {
+            let address = message.get().as_ptr() as usize;
+            assert!(address >= start && address + message.get().len() <= end);
+        }
+        let window = build_history_message_window(&segments[..1], 2, None, false)
+            .expect("read selected messages");
+        assert_eq!(window.returned_message_count, 2);
+        assert_eq!(window.oldest_offset, 1);
+        assert_eq!(window.segments[0].messages[0]["content"][0]["text"], "保留\n换行");
+        assert_eq!(window.segments[0].messages[1]["content"], "selected");
+    }
 }

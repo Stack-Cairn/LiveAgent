@@ -19,10 +19,15 @@ function diffLineCounts(oldText: string, newText: string): FileChangeStats | und
   }
 }
 
-export function deriveFileChangeStats(toolCall: {
-  name: string;
-  arguments?: Record<string, unknown>;
-}): FileChangeStats | undefined {
+export function deriveFileChangeStats(
+  toolCall: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  },
+  // 流式参数每个 delta 重派生一次；exact diff（Myers，上限 200K 字符）只应在
+  // 参数定稿后计算，preferEstimate 让流式期直接走行数估算回退。
+  options?: { preferEstimate?: boolean },
+): FileChangeStats | undefined {
   const name = toolCall.name;
   if (name !== "Write" && name !== "Edit") return undefined;
   const args = toolCall.arguments ?? {};
@@ -43,6 +48,7 @@ export function deriveFileChangeStats(toolCall: {
     meta?.fields.old_string?.truncated === true || meta?.fields.new_string?.truncated === true;
 
   if (
+    !options?.preferEstimate &&
     oldRaw !== undefined &&
     newRaw !== undefined &&
     !truncated &&

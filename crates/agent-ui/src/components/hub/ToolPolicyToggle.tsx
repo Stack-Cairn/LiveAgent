@@ -1,59 +1,34 @@
-// 工具审批策略三态控件(allow/ask/deny)。抽出后供系统工具设置页与 MCP Hub 就地
-// 复用,保证各处外观一致。
-// 两端直接复用本共享组件。
-
 import type { ToolPolicy } from "@liveagent/app/lib/settings";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { cn } from "../../lib/shared/utils";
+import { SettingsToggleGroup, SettingsToggleGroupItem } from "../settings/SettingsToggleGroup";
 
 const POLICY_ORDER: readonly ToolPolicy[] = ["allow", "ask", "deny"];
 
-const POLICY_ACTIVE_STYLE: Record<ToolPolicy, string> = {
-  allow: "bg-emerald-500 text-white",
-  ask: "bg-amber-500 text-white",
-  deny: "bg-red-500 text-white",
-};
-
 /**
  * 三态审批策略切换。value 为当前生效策略,onChange 回传所选。ariaLabel 给无障碍
- * 定位(工具名 / server id / 组名)。size="sm" 用于内联到卡片旁的紧凑场景。
+ * 定位(工具名 / server id / 组名)。
  */
 export function ToolPolicyToggle(props: {
   value: ToolPolicy;
   ariaLabel: string;
   onChange: (next: ToolPolicy) => void;
-  size?: "sm" | "md";
 }) {
-  const { value, ariaLabel, onChange, size = "md" } = props;
+  const { value, ariaLabel, onChange } = props;
   const { t } = useLocale();
-  const buttonPad = size === "sm" ? "px-2 py-0.5" : "px-2.5 py-1";
   return (
-    <fieldset
-      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；互斥单选语义需要向读屏表达。
-      role="radiogroup"
+    <SettingsToggleGroup
+      value={[value]}
       aria-label={ariaLabel}
-      className="inline-flex min-w-0 shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
+      onValueChange={(values) => {
+        const next = values[0];
+        if (next === "allow" || next === "ask" || next === "deny") onChange(next);
+      }}
     >
-      {POLICY_ORDER.map((option) => {
-        const active = value === option;
-        return (
-          // biome-ignore lint/a11y/useSemanticElements: 分段控件保留 button 样式；互斥语义用 radio 表达，改原生 radio input 需要视觉重构。
-          <button
-            key={option}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(option)}
-            className={cn(
-              "rounded-md text-[11px] font-medium leading-none transition-colors",
-              buttonPad,
-              active ? POLICY_ACTIVE_STYLE[option] : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t(`settings.toolPolicy.${option}`)}
-          </button>
-        );
-      })}
-    </fieldset>
+      {POLICY_ORDER.map((option) => (
+        <SettingsToggleGroupItem key={option} value={option}>
+          {t(`settings.toolPolicy.${option}`)}
+        </SettingsToggleGroupItem>
+      ))}
+    </SettingsToggleGroup>
   );
 }

@@ -131,6 +131,7 @@ export type UseGatewayWorkbenchParams = {
 
 export type GatewayWorkbenchController = {
   workbench: WindowWorkbench;
+  canvasRef: React.MutableRefObject<HTMLDivElement | null>;
   geometryRef: React.MutableRefObject<WorkbenchGeometry | null>;
   handleGeometryChange: (geometry: WorkbenchGeometry) => void;
   handleFocusPane: (paneId: string) => void;
@@ -277,6 +278,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
   );
 
   const geometryRef = useRef<WorkbenchGeometry | null>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   const handleGeometryChange = useCallback((geometry: WorkbenchGeometry) => {
     geometryRef.current = geometry;
   }, []);
@@ -715,6 +717,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
 
   const { dragState, beginDrag, dragGhostRef } = useWorkbenchDragSession({
     enabled,
+    canvasRef,
     layoutRef: workbench.layoutRef,
     geometryRef,
     onCommit: handleDropCommit,
@@ -1013,6 +1016,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
   return useMemo(
     () => ({
       workbench,
+      canvasRef,
       geometryRef,
       handleGeometryChange,
       handleFocusPane,

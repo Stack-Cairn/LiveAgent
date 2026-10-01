@@ -2,7 +2,7 @@
 
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { parseReleaseVersion, tauriVersionConfig } from "./release-version.mjs";
+import { msiVersionFor, parseReleaseVersion, tauriVersionConfig } from "./release-version.mjs";
 
 function usage() {
   return [
@@ -92,6 +92,7 @@ try {
   const metadata = parseReleaseVersion(
     options.releaseTag || process.env.LIVEAGENT_RELEASE_TAG || process.env.RELEASE_TAG,
   );
+  const msiVersion = msiVersionFor(metadata.appVersion);
 
   if (options.tauriConfigPath) {
     writeTauriConfig(options.tauriConfigPath, metadata.appVersion);
@@ -126,6 +127,7 @@ try {
       JSON.stringify(
         {
           ...metadata,
+          msiVersion: msiVersion ?? null,
           tauriVersionConfig: options.tauriConfigPath,
         },
         null,
@@ -136,8 +138,9 @@ try {
     const configSuffix = options.tauriConfigPath
       ? ` Wrote Tauri version config: ${options.tauriConfigPath}.`
       : "";
+    const msiSuffix = msiVersion ? ` MSI version override: ${msiVersion}.` : "";
     console.log(
-      `Prepared LiveAgent ${metadata.releaseTag} (app version ${metadata.appVersion}, prerelease ${metadata.isPrerelease}).${configSuffix}`,
+      `Prepared LiveAgent ${metadata.releaseTag} (app version ${metadata.appVersion}, prerelease ${metadata.isPrerelease}).${msiSuffix}${configSuffix}`,
     );
   }
 } catch (error) {

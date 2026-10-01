@@ -1,3 +1,4 @@
+import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -97,12 +98,14 @@ test("MCP import tabs keep source icons and compact count badges", () => {
   assert.match(externalToolIconSource, /codex: OpenaiChatgptIcon/);
   assert.match(externalToolIconSource, /codebuddy: Bot/);
   assert.match(importPickerSource, /<Badge/);
-  assert.match(importPickerSource, /min-w-4/);
+  assert.match(importPickerSource, /size="filter-count"/);
 });
 
 test("installed MCP resources use a compact settings list while Store keeps its card grid", () => {
-  assert.match(serversFormSource, /divide-y[^"\n]*overflow-hidden[^"\n]*rounded-xl[^"\n]*border/);
+  assert.match(serversFormSource, /<div className="space-y-1\.5">/);
+  assert.doesNotMatch(serversFormSource, /divide-y[^"\n]*border/);
   assert.match(serverCardSource, /min-h-16[^"\n]*items-center/);
+  assert.match(serverCardSource, /rounded-xl bg-settings-tile/);
   assert.match(serverCardSource, /ResourceActivationSwitch/);
   assert.match(serverCardSource, /ToolPolicyToggle/);
   assert.match(serverCardSource, /const argsCount = \(server\.args \?\? \[\]\)\.filter\(Boolean\)\.length/);
@@ -114,7 +117,7 @@ test("installed MCP resources use a compact settings list while Store keeps its 
   assert.match(serverCardSource, /label=\{t\("mcpHub\.previewArgs"\)\}/);
   assert.match(serverCardSource, /label=\{t\("mcpHub\.previewEnv"\)\}/);
   assert.match(serverCardSource, /label=\{t\("mcpHub\.previewHeaders"\)\}/);
-  assert.match(serverCardSource, /grid-cols-\[auto_2rem_2rem\]/);
+  assert.match(serverCardSource, /grid-cols-mcp-actions/);
   assert.match(serverCardSource, /aria-hidden="true"/);
   assert.ok(
     serverCardSource.indexOf("<ResourceActivationSwitch") <
@@ -126,7 +129,7 @@ test("installed MCP resources use a compact settings list while Store keeps its 
   );
   assert.match(
     serverCardSource,
-    /className="h-8 w-8 text-muted-foreground transition-colors hover:bg-destructive\/10 hover:text-destructive"/,
+    /size="icon-sm"\s+onClick=\{open\}\s+className="text-muted-foreground transition-colors hover:bg-destructive\/10 hover:text-destructive"/,
   );
   assert.doesNotMatch(serverCardSource, /border-emerald/);
   assert.doesNotMatch(serverCardSource, /hover:-translate-y/);
@@ -141,7 +144,7 @@ test("MCP Store automatically appends pages in multiples of four at the scroll b
   );
   assert.ok(pageLimit > 0);
   assert.equal(pageLimit % 4, 0);
-  assert.match(registryBrowserSource, /STORE_SKELETON_IDS = Array\.from\(\{ length: 8 \}/);
+  assert.match(registryBrowserSource, /STORE_SKELETON_IDS = Array\.from\(\{ length: 6 \}/);
   assert.match(registryBrowserSource, /new IntersectionObserver/);
   assert.match(registryBrowserSource, /root: scrollRootRef\.current|root,/);
   assert.match(registryBrowserSource, /rootMargin: "0px 0px 320px 0px"/);
@@ -153,8 +156,8 @@ test("MCP Store automatically appends pages in multiples of four at the scroll b
 test("MCP Store cards center connection previews and use working external and add actions", () => {
   assert.match(registryBrowserSource, /shims\/tauriOpener/);
   assert.match(registryBrowserSource, /void openUrl\(link\)/);
-  assert.match(registryBrowserSource, /flex min-h-\[40px\] items-center/);
-  assert.match(registryBrowserSource, /<Plus className="h-3\.5 w-3\.5"/);
+  assert.match(registryBrowserSource, /flex min-h-40px items-center/);
+  assertJsxDimensions(registryBrowserSource, "Plus", { width: "3.5", height: "3.5" });
   assert.doesNotMatch(registryBrowserSource, /<Sparkles/);
 });
 

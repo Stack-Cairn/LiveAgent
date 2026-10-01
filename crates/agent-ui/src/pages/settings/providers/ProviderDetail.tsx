@@ -23,8 +23,8 @@ import {
   ImageIcon,
   Lightbulb,
   Loader2,
-  Pencil,
   RefreshCw,
+  SquarePen,
   Trash2,
   Wrench,
 } from "@liveagent/ui/components/IconSet";
@@ -32,7 +32,7 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
-import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
+import { VerticalReorderList } from "@liveagent/ui/components/ui/VerticalReorderList";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { isImageGenerationModel } from "@liveagent/ui/lib/models/modelType";
 import type { ModelCheckAggregate, ModelCheckResult } from "@liveagent/ui/lib/providers/modelCheck";
@@ -247,11 +247,7 @@ const ModelRow = memo(function ModelRow(props: {
   onOpenDrawer: (drawer: ProviderDrawerState) => void;
   onCheck: (modelId: string) => void;
   onToggleImageDefault: (modelId: string, next: boolean) => void;
-  renderDragHandle: (itemId: string, label: string) => ReactNode;
-  getItemProps: (itemId: string) => {
-    "data-vertical-reorder-id": string;
-    style?: React.CSSProperties;
-  };
+  dragHandle: ReactNode;
 }) {
   const {
     model,
@@ -263,8 +259,7 @@ const ModelRow = memo(function ModelRow(props: {
     onOpenDrawer,
     onCheck,
     onToggleImageDefault,
-    renderDragHandle,
-    getItemProps,
+    dragHandle,
   } = props;
   const { t } = useLocale();
   const checking = check?.state === "checking";
@@ -279,14 +274,13 @@ const ModelRow = memo(function ModelRow(props: {
 
   return (
     <div
-      {...getItemProps(model.id)}
       className={cn(
         "settings-model-row group @container/row flex items-center gap-2 bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
         !info.active && "opacity-60",
         dragging && "z-10 bg-accent shadow-lg",
       )}
     >
-      {renderDragHandle(model.id, model.displayName || model.id)}
+      {dragHandle}
       <Switch
         size="sm"
         checked={info.active}
@@ -421,7 +415,7 @@ const ModelRow = memo(function ModelRow(props: {
           title={t("settings.modelSettings")}
           aria-label={`${t("settings.modelSettings")} ${model.id}`}
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <SquarePen className="h-3.5 w-3.5" />
         </Button>
         <Button
           type="button"
@@ -485,15 +479,14 @@ function ModelGroup(props: {
       onChange((current) => reorderProviderModels(current, group.key, nextIds)),
     [onChange, group.key],
   );
-  const { draggingItemId, getItemProps, renderDragHandle, scrollContainerRef } =
-    useVerticalListReorder({
-      itemIds,
-      canReorder: !filtering,
-      reorderLabel: t("settings.reorderModel"),
-      reorderHint: t("settings.reorderVerticalHint"),
-      disabledHint: t("settings.reorderNeedsTwoItems"),
-      onReorder,
-    });
+  const modelById = useMemo(
+    () => new Map(group.models.map((model) => [model.id, model])),
+    [group.models],
+  );
+  const itemLabel = useCallback(
+    (itemId: string) => modelById.get(itemId)?.displayName || itemId,
+    [modelById],
+  );
 
   const groupLabel = group.key === "other" ? t("settings.modelGroupOther") : group.key;
 
@@ -552,28 +545,36 @@ function ModelGroup(props: {
         </Button>
       </div>
       {!collapsed ? (
-        <div ref={scrollContainerRef} className="divide-y">
-          {group.models.map((model) => {
-            const info = infoById.get(model.id);
-            if (!info) return null;
+        <VerticalReorderList
+          itemIds={itemIds}
+          itemLabel={itemLabel}
+          canReorder={!filtering}
+          reorderLabel={t("settings.reorderModel")}
+          reorderHint={t("settings.reorderVerticalHint")}
+          disabledHint={t("settings.reorderNeedsTwoItems")}
+          onReorder={onReorder}
+          className="divide-y"
+        >
+          {(modelId, _index, { dragging, dragHandle }) => {
+            const model = modelById.get(modelId);
+            const info = infoById.get(modelId);
+            if (!model || !info) return null;
             return (
               <ModelRow
-                key={model.id}
                 model={model}
                 info={info}
                 check={checks.get(model.id)}
                 credentialIndexById={credentialIndexById}
-                dragging={draggingItemId === model.id}
+                dragging={dragging}
                 onChange={onChange}
                 onOpenDrawer={onOpenDrawer}
                 onCheck={onCheck}
                 onToggleImageDefault={onToggleImageDefault}
-                renderDragHandle={renderDragHandle}
-                getItemProps={getItemProps}
+                dragHandle={dragHandle}
               />
             );
-          })}
-        </div>
+          }}
+        </VerticalReorderList>
       ) : null}
       {confirmDialog}
     </div>

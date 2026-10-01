@@ -1,10 +1,10 @@
 import iconSimpleUrl from "../../src-tauri/icons/icon-simple.png";
 import { AppUpdateButton } from "../components/AppUpdateButton";
-import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
+import { isMacOsTauri } from "../components/MacOsTitleBarSpacer";
 import type { AppUpdateController } from "../lib/appUpdates";
 
 export function DesktopSidebarTitleBar() {
-  return <MacOsTitleBarSpacer className="bg-[hsl(var(--sidebar-bg))]" />;
+  return null;
 }
 
 export function DesktopSidebarBrand() {
@@ -15,7 +15,7 @@ export function DesktopSidebarBrand() {
         alt=""
         aria-hidden="true"
         draggable={false}
-        className="h-8 w-8 shrink-0 select-none rounded-xl object-contain"
+        className="size-8 shrink-0 select-none rounded-xl object-contain"
       />
       <div className="min-w-0">
         <div className="truncate font-semibold tracking-tight">Live Agent</div>

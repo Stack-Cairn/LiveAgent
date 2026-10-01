@@ -4,7 +4,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use reqwest::header::{ACCEPT, RANGE, USER_AGENT};
 use reqwest::StatusCode;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Url};
 use tauri_plugin_updater::UpdaterExt;
 
@@ -29,6 +29,19 @@ pub struct AppUpdateCheckResponse {
     manual_download: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppReleaseAnnouncementResponse {
+    current_version: String,
+    date: Option<String>,
+    body: String,
+    channel: AppUpdateChannel,
+    release_tag: String,
+    release_name: Option<String>,
+    release_url: Option<String>,
+    repository: String,
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum AppUpdateChannel {
@@ -44,6 +57,16 @@ struct SelectedRelease {
     html_url: Option<String>,
     published_at: Option<String>,
     manifest_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubReleaseResponse {
+    tag_name: String,
+    name: Option<String>,
+    body: Option<String>,
+    html_url: Option<String>,
+    published_at: Option<String>,
+    prerelease: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,6 +168,45 @@ fn release_manifest_url(repository: &str, tag_name: &str) -> Result<String, Stri
     let mut segments = repository_segments(repository);
     segments.extend(["releases", "download", tag_name, UPDATE_MANIFEST_ASSET]);
     github_url_with_segments(segments)
+}
+
+fn release_api_url(repository: &str, tag_name: &str) -> Result<String, String> {
+    let repository = repository_segments(repository);
+    if repository.len() != 2 {
+        return Err("update repository must use the owner/repository format".to_string());
+    }
+
+    let mut url = Url::parse("https://api.github.com/")
+        .map_err(|error| format!("invalid GitHub API URL: {error}"))?;
+    {
+        let mut path = url
+            .path_segments_mut()
+            .map_err(|_| "invalid GitHub API URL path".to_string())?;
+        path.clear();
+        path.extend([
+            "repos",
+            repository[0],
+            repository[1],
+            "releases",
+            "tags",
+            tag_name,
+        ]);
+    }
+    Ok(url.to_string())
+}
+
+fn current_release_tag_candidates(version: &str) -> Vec<String> {
+    let version = version.trim();
+    if version.is_empty() {
+        return Vec::new();
+    }
+
+    let mut candidates = vec![format!("v{}", version.trim_start_matches(['v', 'V']))];
+    if !version.starts_with(['v', 'V']) {
+        candidates.push(version.to_string());
+    }
+    candidates.dedup();
+    candidates
 }
 
 fn tag_name_from_release_url(value: &str) -> Option<String> {
@@ -298,6 +360,41 @@ fn github_client() -> Result<reqwest::Client, String> {
         .timeout(Duration::from_secs(20))
         .build()
         .map_err(|error| format!("failed to create GitHub client: {error}"))
+}
+
+async fn fetch_current_release(
+    repository: &str,
+    version: &str,
+) -> Result<Option<GitHubReleaseResponse>, String> {
+    let client = github_client()?;
+
+    for tag_name in current_release_tag_candidates(version) {
+        let response = client
+            .get(release_api_url(repository, &tag_name)?)
+            .header(USER_AGENT, "LiveAgent-Updater")
+            .header(ACCEPT, "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|error| format!("failed to query the current GitHub release: {error}"))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            continue;
+        }
+        if !response.status().is_success() {
+            let status = response.status();
+            return Err(format!(
+                "current GitHub release lookup failed with status {status}"
+            ));
+        }
+
+        return response
+            .json::<GitHubReleaseResponse>()
+            .await
+            .map(Some)
+            .map_err(|error| format!("failed to read the current GitHub release: {error}"));
+    }
+
+    Ok(None)
 }
 
 async fn manifest_exists(client: &reqwest::Client, manifest_url: &str) -> Result<bool, String> {
@@ -466,6 +563,76 @@ fn build_updater(
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(|error| format!("failed to initialize updater: {error}"))
+}
+
+fn release_announcement_response(
+    repository: String,
+    current_version: String,
+    release: GitHubReleaseResponse,
+) -> Option<AppReleaseAnnouncementResponse> {
+    let body = release.body.map(|body| body.trim().to_string())?;
+    if body.is_empty() {
+        return None;
+    }
+
+    Some(AppReleaseAnnouncementResponse {
+        current_version,
+        date: release.published_at,
+        body,
+        channel: if release.prerelease {
+            AppUpdateChannel::Prerelease
+        } else {
+            AppUpdateChannel::Stable
+        },
+        release_tag: release.tag_name,
+        release_name: release.name,
+        release_url: release.html_url,
+        repository,
+    })
+}
+
+#[tauri::command]
+pub async fn app_release_announcement(
+    app: AppHandle,
+) -> Result<Option<AppReleaseAnnouncementResponse>, String> {
+    let repository = update_repository();
+    let current_version = current_version(&app);
+    let Some(release) = fetch_current_release(&repository, &current_version).await? else {
+        return Ok(None);
+    };
+
+    Ok(release_announcement_response(
+        repository,
+        current_version,
+        release,
+    ))
+}
+
+#[tauri::command]
+pub async fn app_release_announcement_preview(
+) -> Result<Option<AppReleaseAnnouncementResponse>, String> {
+    #[cfg(not(debug_assertions))]
+    {
+        Err("release announcement preview is only available in debug builds".to_string())
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        let repository = update_repository();
+        let Some(selected_release) = select_release_manifest(&repository, true).await? else {
+            return Ok(None);
+        };
+        let preview_version = version_from_tag(&selected_release.tag_name);
+        let Some(release) = fetch_current_release(&repository, &preview_version).await? else {
+            return Ok(None);
+        };
+
+        Ok(release_announcement_response(
+            repository,
+            preview_version,
+            release,
+        ))
+    }
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -690,5 +857,23 @@ mod tests {
 
         assert_eq!(selected[0].tag_name, "v0.1.1");
         assert!(!selected[0].prerelease);
+    }
+
+    #[test]
+    fn current_release_tags_prefer_the_v_prefix() {
+        assert_eq!(
+            current_release_tag_candidates("1.3.6-beta.1"),
+            vec!["v1.3.6-beta.1", "1.3.6-beta.1"]
+        );
+        assert_eq!(current_release_tag_candidates("v1.3.6"), vec!["v1.3.6"]);
+        assert!(current_release_tag_candidates("  ").is_empty());
+    }
+
+    #[test]
+    fn current_release_api_url_escapes_the_tag() {
+        assert_eq!(
+            release_api_url(DEFAULT_UPDATE_REPOSITORY, "v1.3.6 beta").unwrap(),
+            "https://api.github.com/repos/Stack-Cairn/LiveAgent/releases/tags/v1.3.6%20beta"
+        );
     }
 }

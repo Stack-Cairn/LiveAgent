@@ -16,7 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@liveagent/ui/components/ui/radio-group";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useId, useMemo, useState } from "react";
 
@@ -55,81 +59,64 @@ function RedactionPicker(props: {
   const { value, disabled, onChange } = props;
   const redactionGroupName = useId();
   return (
-    <div
-      role="radiogroup"
+    <RadioGroup
+      value={value}
+      disabled={disabled}
+      onValueChange={onChange}
+      name={redactionGroupName}
       aria-label="工具调用脱敏"
       className={cn(
         "inline-flex shrink-0 items-center rounded-full border border-border/60 bg-muted/40 p-0.5",
         disabled && "pointer-events-none opacity-60",
       )}
     >
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders its associated native radio inside this label. */}
       <label
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-xs font-medium transition-colors",
+          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
           value
             ? "bg-emerald-500 text-white shadow-sm"
             : "text-muted-foreground hover:text-foreground",
         )}
       >
-        <input
-          type="radio"
-          name={redactionGroupName}
-          className="sr-only"
-          checked={value}
-          disabled={disabled}
-          onChange={() => onChange(true)}
-        />
+        <RadioGroupItem className="sr-only" value={true} disabled={disabled} />
         开启
       </label>
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders its associated native radio inside this label. */}
       <label
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-xs font-medium transition-colors",
+          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
         )}
       >
-        <input
-          type="radio"
-          name={redactionGroupName}
-          className="sr-only"
-          checked={!value}
-          disabled={disabled}
-          onChange={() => onChange(false)}
-        />
+        <RadioGroupItem className="sr-only" value={false} disabled={disabled} />
         关闭
       </label>
-    </div>
+    </RadioGroup>
   );
 }
 
 function ShareSwitch(props: { checked: boolean; disabled: boolean; onToggle: () => void }) {
   const { checked, disabled, onToggle } = props;
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
+    <Switch
+      size="lg"
+      nativeButton
+      render={<button type="button" />}
+      checked={checked}
       aria-label={checked ? "关闭分享" : "开启分享"}
       title={checked ? "关闭分享" : "开启分享"}
       disabled={disabled}
-      onClick={onToggle}
-      className={cn(
-        "relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed disabled:opacity-60",
-        checked ? "bg-sky-500" : "bg-muted-foreground/20 hover:bg-muted-foreground/30",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-          checked ? "translate-x-5" : "translate-x-0",
-        )}
-      />
-    </button>
+      onCheckedChange={() => onToggle()}
+    />
   );
 }
 
@@ -146,7 +133,10 @@ export function HistoryShareModal({
   onRedactToolContentChange,
   onClose,
 }: HistoryShareModalProps) {
-  const [copied, setCopied] = useState(false);
+  const { copied, showCopied, resetCopied } = useCopyFeedback(
+    false,
+    COPY_FEEDBACK_DURATION.default,
+  );
   const [redactToolContent, setRedactToolContent] = useState(false);
   const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort);
   const token = share?.enabled === true ? (share.token?.trim() ?? "") : "";
@@ -174,18 +164,11 @@ export function HistoryShareModal({
   }
 
   function handleCopy() {
-    if (!shareUrl || !navigator.clipboard?.writeText) {
-      return;
-    }
-    void navigator.clipboard
-      .writeText(shareUrl)
-      .then(() => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => {
-        setCopied(false);
-      });
+    if (!shareUrl) return;
+    void copyTextToClipboard(shareUrl).then((copied) => {
+      if (copied) showCopied(true);
+      else resetCopied();
+    });
   }
 
   return (
@@ -193,8 +176,13 @@ export function HistoryShareModal({
       <DialogContent className="max-w-lg p-0" closeLabel="关闭" showCloseButton>
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
-              <Share2 className="h-5 w-5" />
+            <div
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center",
+                "rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500",
+              )}
+            >
+              <Share2 className="size-5" />
             </div>
             <div className="min-w-0">
               <DialogTitle className="text-sm leading-normal">分享会话</DialogTitle>
@@ -237,13 +225,13 @@ export function HistoryShareModal({
               <div className="flex min-w-0 items-start gap-3">
                 <div
                   className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors",
+                    "flex size-9 shrink-0 items-center justify-center rounded-xl border transition-colors",
                     redactToolContent
                       ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                       : "border-border/60 bg-background text-muted-foreground",
                   )}
                 >
-                  {redactToolContent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {redactToolContent ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="text-sm font-medium text-foreground">工具调用脱敏</span>
@@ -264,8 +252,13 @@ export function HistoryShareModal({
           </div>
 
           {isLoading ? (
-            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                "rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground",
+              )}
+            >
+              <Loader2 className="size-4 animate-spin" />
               正在读取分享状态...
             </div>
           ) : null}
@@ -279,14 +272,22 @@ export function HistoryShareModal({
           {isEnabled && token ? (
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">分享链接</div>
-              <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background px-3 py-2 shadow-sm">
-                <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div
+                className={cn(
+                  "flex items-center gap-2",
+                  "rounded-2xl border border-border/70 bg-background px-3 py-2 shadow-sm",
+                )}
+              >
+                <Link2 className="size-4 shrink-0 text-muted-foreground" />
                 {shareUrl ? (
                   <a
                     href={shareUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4 hover:underline dark:text-sky-400"
+                    className={cn(
+                      "min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4",
+                      "hover:underline dark:text-sky-400",
+                    )}
                     title={shareUrl}
                   >
                     {shareUrl}
@@ -305,7 +306,7 @@ export function HistoryShareModal({
                   onClick={handleCopy}
                   disabled={!canCopy}
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                    "flex size-8 shrink-0 items-center justify-center rounded-xl transition-colors",
                     canCopy
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "cursor-not-allowed text-muted-foreground/40",
@@ -314,9 +315,9 @@ export function HistoryShareModal({
                   aria-label="复制链接"
                 >
                   {copied ? (
-                    <Check className="h-4 w-4 text-emerald-500" />
+                    <Check className="size-4 text-emerald-500" />
                   ) : (
-                    <Copy className="h-4 w-4" />
+                    <Copy className="size-4" />
                   )}
                 </button>
                 <a
@@ -325,24 +326,29 @@ export function HistoryShareModal({
                   rel="noreferrer"
                   aria-disabled={!shareUrl}
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                    "flex size-8 shrink-0 items-center justify-center rounded-xl transition-colors",
                     shareUrl
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "pointer-events-none text-muted-foreground/40",
                   )}
                   title="打开链接"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="size-4" />
                 </a>
               </div>
               {!shareOriginLoading && !publicOrigin ? (
-                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                <div
+                  className={cn(
+                    "rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2",
+                    "text-xs leading-5 text-amber-700 dark:text-amber-300",
+                  )}
+                >
                   当前 Gateway 地址无法用于生成公开链接，请确认 Remote 连接状态后再复制。
                 </div>
               ) : null}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-border/70 px-3 py-3 text-sm text-muted-foreground">
+            <div className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
               开启分享后会在这里生成公开访问链接。
             </div>
           )}

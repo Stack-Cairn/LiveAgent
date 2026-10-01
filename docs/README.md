@@ -16,6 +16,7 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | [architecture/webui.md](architecture/webui.md) | 浏览器 WebUI、socket 客户端、会话流订阅、状态与安全边界 | WebUI 开发 |
 | [architecture/protocols.md](architecture/protocols.md) | GUI 与 Gateway、WebUI 与 Gateway 的协议合同 | 联调与协议改造 |
 | [features/chat-runtime.md](features/chat-runtime.md) | 对话运行时、模型层、流式、压缩、hooks、上传与重发 | Chat 功能开发 |
+| [features/workspace-groups.md](features/workspace-groups.md) | 工作空间分组创建流程、共享侧栏实现与界面预览 | 前端开发与使用者 |
 | [features/tools.md](features/tools.md) | builtin tools、MCP 动态工具、subagent（Agent/SendMessage）、工具执行边界 | 工具系统开发 |
 | [features/memory.md](features/memory.md) | MemoryStore、MemoryManager、Settings Memory、自动学习与召回 | 记忆系统开发 |
 | [features/skills-and-mcp.md](features/skills-and-mcp.md) | Skills root/builtin/ClawHub 与 MCP Hub/registry/runtime | Skills/MCP 开发 |
@@ -59,3 +60,7 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | `doc/` | 既有专项文档与历史设计资料，例如 memory 方案、Gateway 协议草案、上下文压缩策略等。 |
 
 后续如果某个专项文档已经稳定成为当前实现的一部分，可以在 `docs/` 中建立摘要与导航，但不建议把 `doc/` 直接重命名为 `docs/`，以免丢失历史上下文。
+
+## UI 重构（临时）
+
+- [本轮 UI 重构文档](ui-refactor/README.md)：PR 合并前删除该目录及本导航。

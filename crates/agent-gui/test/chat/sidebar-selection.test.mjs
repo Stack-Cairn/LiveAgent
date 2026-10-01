@@ -134,22 +134,22 @@ test("conversation rename suppresses the menu's return-focus without changing do
     "utf8",
   );
 
-  // Two menus in this file mount an inline input on select and so must arm the
+  // Conversation dialogs and inline group renaming must both suppress the
   // one-shot flag: HistoryRow's conversation rename and ProjectGroupHeader's
   // group rename. ProjectRow opens the project-settings flow instead of owning
   // a third inline rename path.
   assert.equal((source.match(/suppressMenuReturnFocusRef\.current = true;/g) ?? []).length, 2);
   assert.equal((source.match(/onSelect=\{handleStartRenamingFromMenu\}/g) ?? []).length, 1);
   assert.equal((source.match(/onSelect=\{\(\) => onConfigureProject\(project\)\}/g) ?? []).length, 1);
-  // Both dropdowns consume the flag declaratively via Base UI's finalFocus,
+  // Both conversation menu variants and the group dropdown consume the flag,
   // keeping the default trigger return-focus for every other close.
-  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 2);
+  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 3);
   assert.equal(
     (source.match(/suppressMenuReturnFocusRef\.current = false;\s*return false;/g) ?? []).length,
-    2,
+    3,
   );
-  // Double-click rename keeps the plain path, and the retired blur-swallowing
-  // guard must not come back — blur either skips once (Enter/Escape) or commits.
+  // Double-click opens the dialog directly; the retired blur-swallowing guard
+  // must not come back. The group header keeps its independent inline editor.
   assert.match(source, /onDoubleClick=\{\(event\) => \{[\s\S]*?handleStartRenaming\(\);/);
   assert.doesNotMatch(source, /ignoreMenuCloseBlurRef/);
 });

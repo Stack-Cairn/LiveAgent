@@ -13,8 +13,13 @@ export function createHarness(options = {}) {
     anchorTo = "end",
     scrollAnchoring,
     directionalOverscanPx,
+    overscanPx,
     overscan = 0,
     scrollEndThreshold = 8,
+    // Non-virtual height below the sizer (a host's bottom spacer and shell
+    // padding): part of DOM scrollHeight, invisible to getTotalSize(). The
+    // hosts render ~200px of it under the transcript list.
+    extraScrollHeight = 0,
   } = options;
 
   const core = loadVirtualCore();
@@ -57,7 +62,7 @@ export function createHarness(options = {}) {
       return state.realScrollTop;
     },
     get scrollHeight() {
-      return state.domSizerHeight;
+      return state.domSizerHeight + extraScrollHeight;
     },
     clientHeight: viewport,
   };
@@ -77,7 +82,7 @@ export function createHarness(options = {}) {
         state.writes.push({ target, swallowed: true });
         return;
       }
-      const max = Math.max(0, state.domSizerHeight - viewport);
+      const max = Math.max(0, state.domSizerHeight + extraScrollHeight - viewport);
       state.realScrollTop = Math.max(0, Math.min(max, target));
       state.writes.push({ target, swallowed: false, landed: state.realScrollTop });
     },
@@ -92,6 +97,7 @@ export function createHarness(options = {}) {
     anchorTo,
     ...(scrollAnchoring !== undefined ? { scrollAnchoring } : {}),
     ...(directionalOverscanPx !== undefined ? { directionalOverscanPx } : {}),
+    ...(overscanPx !== undefined ? { overscanPx } : {}),
     scrollEndThreshold,
     initialOffset,
   });
@@ -115,6 +121,11 @@ export function createHarness(options = {}) {
     },
     get domSizerHeight() {
       return state.domSizerHeight;
+    },
+    // The browser's real scroll clamp: sizer plus any non-virtual height below
+    // it, minus the viewport.
+    maxScrollOffset() {
+      return Math.max(0, state.domSizerHeight + extraScrollHeight - viewport);
     },
     setSwallowWrites(value) {
       state.swallowWrites = value;

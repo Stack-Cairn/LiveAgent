@@ -503,6 +503,10 @@ async function loadSkillsDiscovery(): Promise<SkillDiscovery> {
   return discovery;
 }
 
+export function getCachedSkillsDiscovery(): SkillDiscovery | null {
+  return cachedDiscovery;
+}
+
 export async function discoverSkills(options: DiscoverSkillsOptions = {}): Promise<SkillDiscovery> {
   if (options.force) {
     invalidateSkillsDiscoveryCache();

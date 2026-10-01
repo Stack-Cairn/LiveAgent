@@ -1,20 +1,20 @@
 import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
+import {
+  ContextMenuItem,
+  ContextMenuPopup,
+  ContextMenuSeparator,
+} from "@liveagent/ui/components/ui/context-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { cn } from "@liveagent/ui/lib/shared/utils";
+import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
-  useEffect,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
-import { useMenuExitPresence } from "../../lib/shared/menuMotion";
 import { readClipboardText } from "../../lib/system/clipboardText";
 import {
-  clampMenuPosition,
   computeMenuItems,
   type InputMenuSnapshot,
   isMenuEligibleTarget,
@@ -32,35 +32,9 @@ function resolveMenuTarget(target: EventTarget | null): MenuTarget | null {
   return target;
 }
 
-const MENU_ITEM_CLASS = cn(
-  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
-  "disabled:pointer-events-none disabled:opacity-45",
-);
-
 function writeTextToClipboard(text: string) {
   if (!text) return;
-
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => {
-      fallbackWriteTextToClipboard(text);
-    });
-    return;
-  }
-
-  fallbackWriteTextToClipboard(text);
-}
-
-function fallbackWriteTextToClipboard(text: string) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
+  void copyTextToClipboard(text);
 }
 
 // Writes through the prototype value setter so React's per-node value tracker
@@ -96,7 +70,7 @@ export function useNativeInputContextMenu(): {
   const { t } = useLocale();
   const [snapshot, setSnapshot] = useState<InputMenuSnapshot | null>(null);
   const targetRef = useRef<MenuTarget | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+
   // Selection captured on right-mousedown, before WebKit's context-menu
   // preparation mutates it (see onRootMouseDownCapture).
   const preClickRef = useRef<{
@@ -108,7 +82,6 @@ export function useNativeInputContextMenu(): {
   } | null>(null);
 
   const closeMenu = useCallback(() => {
-    targetRef.current = null;
     setSnapshot(null);
   }, []);
 
@@ -224,80 +197,21 @@ export function useNativeInputContextMenu(): {
     [closeMenu],
   );
 
-  // Clamp against the measured size after render (no hard-coded dimensions —
-  // labels vary by locale); useLayoutEffect runs before paint, so an
-  // out-of-bounds menu never flashes at the raw pointer position.
-  useLayoutEffect(() => {
-    if (!snapshot) return;
-    const rect = menuRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const next = clampMenuPosition(
-      snapshot.x,
-      snapshot.y,
-      rect.width,
-      rect.height,
-      window.innerWidth,
-      window.innerHeight,
-    );
-    if (next.left !== snapshot.x || next.top !== snapshot.y) {
-      setSnapshot({ ...snapshot, x: next.left, y: next.top });
-    }
-  }, [snapshot]);
-
-  useEffect(() => {
-    if (!snapshot) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && menuRef.current?.contains(target)) {
-        return;
-      }
-      closeMenu();
-    };
-
-    // Focus stays in the input while the menu is open, so any keystroke would
-    // invalidate the captured selection snapshot — close on every key. Escape
-    // is consumed so it only dismisses the menu, never a host dialog.
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-      closeMenu();
-    };
-
-    const handleClose = () => {
-      closeMenu();
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("scroll", handleClose, true);
-    window.addEventListener("resize", handleClose);
-    window.addEventListener("blur", handleClose);
-
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("keydown", handleKeyDown, true);
-      window.removeEventListener("scroll", handleClose, true);
-      window.removeEventListener("resize", handleClose);
-      window.removeEventListener("blur", handleClose);
-    };
-  }, [closeMenu, snapshot]);
-
   // Refocuses the input and restores the selection captured at open time so
   // execCommand acts on the range the user right-clicked.
-  const prepareTarget = useCallback(() => {
-    const el = targetRef.current;
-    if (!el?.isConnected || !snapshot) return null;
-    el.focus({ preventScroll: true });
-    try {
-      el.setSelectionRange(snapshot.start, snapshot.end);
-    } catch {
-      // Selection API unsupported; execCommand acts on the browser caret.
-    }
-    return el;
-  }, [snapshot]);
+  const prepareTarget = useCallback(
+    (el = targetRef.current) => {
+      if (!el?.isConnected || !snapshot) return null;
+      el.focus({ preventScroll: true });
+      try {
+        el.setSelectionRange(snapshot.start, snapshot.end);
+      } catch {
+        // Selection API unsupported; execCommand acts on the browser caret.
+      }
+      return el;
+    },
+    [snapshot],
+  );
 
   const handleCopy = useCallback(() => {
     const el = targetRef.current;
@@ -335,13 +249,14 @@ export function useNativeInputContextMenu(): {
   const handlePaste = useCallback(async () => {
     const snap = snapshot;
     if (!snap) return;
+    const target = targetRef.current;
 
     // Native-first read: the webview clipboard API pops WebKit's paste
     // confirmation for externally-copied content (see readClipboardText).
     const text = await readClipboardText();
 
     // Refocus after the await — the read may have shifted focus.
-    const el = prepareTarget();
+    const el = prepareTarget(target);
     if (!el) {
       closeMenu();
       return;
@@ -389,77 +304,44 @@ export function useNativeInputContextMenu(): {
     closeMenu();
   }, [closeMenu]);
 
-  // Clearing the snapshot starts the exit animation; the retained snapshot
-  // keeps the menu rendered (inert) until the fade-out completes.
-  const { rendered: renderedSnapshot, isExiting } = useMenuExitPresence(snapshot);
-  const items = renderedSnapshot ? computeMenuItems(renderedSnapshot) : null;
+  const items = snapshot ? computeMenuItems(snapshot) : null;
 
   const menu =
-    renderedSnapshot && items
-      ? createPortal(
-          <div
-            ref={menuRef}
-            role="menu"
-            className={cn(
-              "editor-context-menu layer-popover fixed w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
-              isExiting && "editor-context-menu-exit",
-            )}
-            style={{ left: renderedSnapshot.x, top: renderedSnapshot.y }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-            }}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canCut}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleCut}
-            >
-              <Scissors className="h-3.5 w-3.5 shrink-0" />
+    typeof document !== "undefined" && snapshot && items ? (
+      <ContextMenuPopup
+        point={snapshot}
+        onClose={closeMenu}
+        finalFocus={targetRef}
+        className="min-w-38"
+      >
+        {snapshot && items ? (
+          <>
+            <ContextMenuItem disabled={!items.canCut} onClick={handleCut}>
+              <Scissors className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.cut")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canCopy}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleCopy}
-            >
-              <Copy className="h-3.5 w-3.5 shrink-0" />
+            </ContextMenuItem>
+            <ContextMenuItem disabled={!items.canCopy} onClick={handleCopy}>
+              <Copy className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.copy")}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            </ContextMenuItem>
+            <ContextMenuItem
               disabled={!items.canPaste}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 void handlePaste();
               }}
             >
-              <ClipboardPaste className="h-3.5 w-3.5 shrink-0" />
+              <ClipboardPaste className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.paste")}</span>
-            </button>
-            <div className="my-1 h-px bg-border/70" />
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!items.canSelectAll}
-              className={MENU_ITEM_CLASS}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleSelectAll}
-            >
-              <ScanText className="h-3.5 w-3.5 shrink-0" />
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem disabled={!items.canSelectAll} onClick={handleSelectAll}>
+              <ScanText className="size-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("inputContextMenu.selectAll")}</span>
-            </button>
-          </div>,
-          document.body,
-        )
-      : null;
+            </ContextMenuItem>
+          </>
+        ) : null}
+      </ContextMenuPopup>
+    ) : null;
 
   return { onRootContextMenu, onRootMouseDownCapture, menu };
 }

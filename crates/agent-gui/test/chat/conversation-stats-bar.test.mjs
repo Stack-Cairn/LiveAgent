@@ -82,7 +82,7 @@ test("完整读数：role=status + aria-label 拼出全部分组", async () => {
   const label = bar.getAttribute("aria-label");
   assert.equal(
     label,
-    "51 turns · 672 steps ｜ LLM 12m34s · Tools 42s ｜ In 111M tok · Out 2.3M tok ｜ Avg TTFT 20.9s · 170 tok/s · Cache hit 85%",
+    "Turns 51 · Reasoning steps 672 ｜ Model inference 12m34s · Tool execution 42s ｜ Input tokens 111M tok · Output tokens 2.3M tok · Cache hit rate 85% ｜ Time to first token 20.9s · Decode throughput 170 tok/s",
   );
   await unmount();
 });
@@ -109,7 +109,7 @@ test("提供 contextWindow 时 context 分组恒显，与 scale 同级不挂断�
   const label = container.querySelector('[role="status"]').getAttribute("aria-label");
   assert.equal(
     label,
-    "51 turns · 672 steps ｜ Context 25% ｜ LLM 12m34s · Tools 42s ｜ In 111M tok · Out 2.3M tok ｜ Avg TTFT 20.9s · 170 tok/s · Cache hit 85%",
+    "Turns 51 · Reasoning steps 672 ｜ Window used 25% ｜ Model inference 12m34s · Tool execution 42s ｜ Input tokens 111M tok · Output tokens 2.3M tok · Cache hit rate 85% ｜ Time to first token 20.9s · Decode throughput 170 tok/s",
   );
   const contextEl = container.querySelector('[data-stats-group="context"]');
   assert.ok(contextEl, "应渲染 context 分组");
@@ -127,7 +127,7 @@ test("未提供合法 contextWindow 时 context 分组不存在（不影响其�
     const label = container.querySelector('[role="status"]').getAttribute("aria-label");
     assert.doesNotMatch(
       label,
-      /Context/,
+      /Window used/,
       `contextWindow=${contextWindow} 时不应出现 context 分组，实际：${label}`,
     );
     assert.equal(container.querySelector('[data-stats-group="context"]'), null);
@@ -138,7 +138,7 @@ test("未提供合法 contextWindow 时 context 分组不存在（不影响其�
 test("contextWindow 有效但 contextUsageTokens 缺省时 context 分组按 0% 展示", async () => {
   const { container, unmount } = await render(sampleStats(), { contextWindow: 200_000 });
   const label = container.querySelector('[role="status"]').getAttribute("aria-label");
-  assert.match(label, /Context 0%/, `未提供 tokens 时应按 0% 展示：${label}`);
+  assert.match(label, /Window used 0%/, `未提供 tokens 时应按 0% 展示：${label}`);
   await unmount();
 });
 
@@ -165,7 +165,10 @@ test("provider 未返回 usage 时 token 与性能分组整组隐藏", async () 
     }),
   );
   const label = container.querySelector('[role="status"]').getAttribute("aria-label");
-  assert.equal(label, "51 turns · 672 steps ｜ LLM 12m34s · Tools 42s");
+  assert.equal(
+    label,
+    "Turns 51 · Reasoning steps 672 ｜ Model inference 12m34s · Tool execution 42s",
+  );
   await unmount();
 });
 
@@ -188,7 +191,11 @@ test("运行中把 RunningSinceAt 折算进显示值并启动心跳", async () =
     );
     const label = container.querySelector('[role="status"]').getAttribute("aria-label");
     // 60s 已完成 + 约 90s 运行中 ≈ 2m30s；容许秒级误差。
-    assert.match(label, /LLM 2m(29|30|31)s/, `折算后的 LLM 时长不对：${label}`);
+    assert.match(
+      label,
+      /Model inference 2m(29|30|31)s/,
+      `折算后的 LLM 时长不对：${label}`,
+    );
     assert.equal(intervalCount, 1, "运行中必须注册 1s 心跳");
     await unmount();
   } finally {
@@ -283,10 +290,10 @@ test("压缩次数只在 tooltip 露出，不占用单行宽度", async () => {
   const label = withCompactions.container
     .querySelector('[role="status"]')
     .getAttribute("aria-label");
-  assert.doesNotMatch(label, /compactions/, "单行不展示压缩次数");
+  assert.doesNotMatch(label, /compaction/i, "单行不展示压缩次数");
   // tooltip 内容由 Base UI 按需挂载，这里断言其数据来源：hover 前不在 DOM 里。
   assert.equal(
-    withCompactions.container.textContent.includes("3 compactions"),
+    withCompactions.container.textContent.includes("Context compactions"),
     false,
     "未悬停时 tooltip 内容不应已渲染",
   );

@@ -1,4 +1,5 @@
 import { createContext, useContext, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { createReplyHoverStore } from "./replyHoverStore";
 
 // Run-scoped interaction state (sending flag, in-flight branch anchor)
 // reaches row action bars through this store instead of row props, so settled
@@ -62,4 +63,13 @@ export function useRowInteractionStore(state: RowInteractionState): RowInteracti
 export function useRowInteraction(): RowInteractionState {
   const store = useContext(RowInteractionContext);
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+}
+
+const ReplyHoverContext = createContext(createReplyHoverStore());
+export const ReplyHoverProvider = ReplyHoverContext.Provider;
+
+export function useReplyHovered(replyKey: string): boolean {
+  const store = useContext(ReplyHoverContext);
+  const getSnapshot = () => store.getSnapshot() === replyKey;
+  return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 }

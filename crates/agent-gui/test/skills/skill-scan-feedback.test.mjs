@@ -52,21 +52,19 @@ test("manual Skill scans announce a persistent, dismissible result", () => {
 
   assert.match(source, /refresh\(\{ announce: true \}\)/);
   assert.match(source, /SCAN_FEEDBACK_DURATION_MS/);
-  assert.match(source, /role=\{scanFeedback\.status === "error" \? "alert" : "status"\}/);
-  assert.match(source, /onClick=\{dismissScanFeedback\}/);
+  assert.match(source, /toast\[feedback.status\]/);
+  assert.match(source, /duration: SCAN_FEEDBACK_DURATION_MS/);
+  assert.match(source, /id: `\$\{toastScope\}-scan`/);
   assert.match(source, /summarizeSkillScan\(skillsSnapshotRef\.current, discovery\.skills\)/);
 });
 
-test("manual Skill scan button holds a completed state before returning to idle", () => {
+test("Skill import result notices auto-dismiss instead of remaining indefinitely", () => {
   const source = readFileSync(
     new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
     "utf8",
   );
 
-  assert.match(source, /SCAN_BUTTON_COMPLETE_DURATION_MS = 2400/);
-  assert.match(source, /setScanButtonComplete\(true\)/);
-  assert.match(source, /showScanButtonComplete\(\)/);
-  assert.match(source, /disabled=\{loading \|\| scanButtonComplete \|\| lockedByChatMode\}/);
-  assert.match(source, /scanButtonComplete\s*\? t\("settings\.skillsScanComplete"\)/);
-  assert.match(source, /text-\[hsl\(var\(--chat-success\)\)\]/);
+  assert.match(source, /showImportToast[\s\S]*duration: 6_000/);
+  assert.match(source, /settings\.skillsImportFailed[\s\S]*duration: 10_000/);
+  assert.match(source, /settings\.skillsImportDone[\s\S]*duration: 5_000/);
 });

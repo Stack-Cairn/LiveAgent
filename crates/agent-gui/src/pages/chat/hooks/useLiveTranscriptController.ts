@@ -100,15 +100,16 @@ type AbortSnapshot = {
 type LiveTranscriptArtifacts = {
   store: LiveTranscriptStore;
   pendingDraftDelta: string;
-  draftFlushCancel: (() => void) | null;
   pendingLRUpdates: Array<(prev: LiveRound[]) => LiveRound[]>;
-  lrFlushCancel: (() => void) | null;
-  // Last-wins tool-status coalescing: a burst of status changes lands as one
-  // store emit per frame.
+  // Last-wins coalescing: only the newest status / retry list of a frame
+  // reaches the store.
   pendingToolStatus: { value: string | null } | null;
-  toolStatusFlushCancel: (() => void) | null;
   pendingRetryAttempts: { value: RetryAttemptRecord[] } | null;
-  retryAttemptsFlushCancel: (() => void) | null;
+  // One shared frame-end flush drains every pending channel and emits in the
+  // same task (React batches those renders). Independent per-channel rAF
+  // callbacks were separate tasks: a tool-heavy frame could run the full
+  // transcript rebuild up to four times.
+  flushCancel: (() => void) | null;
   renderedCharacterCount: number;
   abortSnapshot: AbortSnapshot | null;
 };
@@ -128,16 +129,57 @@ function createLiveTranscriptArtifacts(): LiveTranscriptArtifacts {
   return {
     store: createLiveTranscriptStore(),
     pendingDraftDelta: "",
-    draftFlushCancel: null,
     pendingLRUpdates: [],
-    lrFlushCancel: null,
     pendingToolStatus: null,
-    toolStatusFlushCancel: null,
     pendingRetryAttempts: null,
-    retryAttemptsFlushCancel: null,
+    flushCancel: null,
     renderedCharacterCount: 0,
     abortSnapshot: null,
   };
+}
+
+// Applies every pending channel in one task; the resulting store emits land
+// in a single React render pass instead of one render per channel.
+function drainPendingLiveUpdates(artifacts: LiveTranscriptArtifacts) {
+  const targetStore = artifacts.store;
+  if (artifacts.pendingDraftDelta) {
+    const acc = artifacts.pendingDraftDelta;
+    artifacts.pendingDraftDelta = "";
+    targetStore.appendDraftAssistantText(acc);
+  }
+  if (artifacts.pendingLRUpdates.length > 0) {
+    const batch = artifacts.pendingLRUpdates.splice(0);
+    targetStore.updateLiveRounds((prev) => {
+      let nextRounds = prev;
+      for (const update of batch) {
+        nextRounds = update(nextRounds);
+      }
+      return nextRounds;
+    });
+  }
+  if (artifacts.pendingToolStatus) {
+    const pending = artifacts.pendingToolStatus;
+    artifacts.pendingToolStatus = null;
+    targetStore.setToolStatus(pending.value);
+  }
+  if (artifacts.pendingRetryAttempts) {
+    const pending = artifacts.pendingRetryAttempts;
+    artifacts.pendingRetryAttempts = null;
+    targetStore.setRetryAttempts(pending.value);
+  }
+  artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
+}
+
+// First requester wins: a scheduled flush drains every channel, so joining an
+// existing schedule never loses data. Light channels (status/retry) request
+// delay 0 and may deliver a pending heavy flush one frame early, which only
+// happens at tool boundaries.
+function requestLiveFlush(artifacts: LiveTranscriptArtifacts, minimumDelayMs: number) {
+  if (artifacts.flushCancel !== null) return;
+  artifacts.flushCancel = scheduleLiveTranscriptFlush(() => {
+    artifacts.flushCancel = null;
+    drainPendingLiveUpdates(artifacts);
+  }, minimumDelayMs);
 }
 
 // Pure live-transcript store management: per-conversation stores plus
@@ -187,20 +229,11 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
   const cancelPendingLiveUpdates = useCallback((artifacts: LiveTranscriptArtifacts | null) => {
     if (!artifacts) return;
 
-    artifacts.draftFlushCancel?.();
-    artifacts.draftFlushCancel = null;
+    artifacts.flushCancel?.();
+    artifacts.flushCancel = null;
     artifacts.pendingDraftDelta = "";
-
-    artifacts.lrFlushCancel?.();
-    artifacts.lrFlushCancel = null;
     artifacts.pendingLRUpdates.length = 0;
-
-    artifacts.toolStatusFlushCancel?.();
-    artifacts.toolStatusFlushCancel = null;
     artifacts.pendingToolStatus = null;
-
-    artifacts.retryAttemptsFlushCancel?.();
-    artifacts.retryAttemptsFlushCancel = null;
     artifacts.pendingRetryAttempts = null;
   }, []);
 
@@ -209,44 +242,9 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       const artifacts = resolveLiveTranscriptArtifacts(targetStore);
       if (!artifacts) return;
 
-      artifacts.draftFlushCancel?.();
-      artifacts.draftFlushCancel = null;
-      if (artifacts.pendingDraftDelta) {
-        const acc = artifacts.pendingDraftDelta;
-        artifacts.pendingDraftDelta = "";
-        targetStore.appendDraftAssistantText(acc);
-      }
-
-      artifacts.lrFlushCancel?.();
-      artifacts.lrFlushCancel = null;
-      if (artifacts.pendingLRUpdates.length > 0) {
-        const batch = artifacts.pendingLRUpdates.splice(0);
-        targetStore.updateLiveRounds((prev) => {
-          let nextRounds = prev;
-          for (const update of batch) {
-            nextRounds = update(nextRounds);
-          }
-          return nextRounds;
-        });
-      }
-
-      artifacts.toolStatusFlushCancel?.();
-      artifacts.toolStatusFlushCancel = null;
-      if (artifacts.pendingToolStatus) {
-        const pending = artifacts.pendingToolStatus;
-        artifacts.pendingToolStatus = null;
-        targetStore.setToolStatus(pending.value);
-      }
-
-      artifacts.retryAttemptsFlushCancel?.();
-      artifacts.retryAttemptsFlushCancel = null;
-      if (artifacts.pendingRetryAttempts) {
-        const pending = artifacts.pendingRetryAttempts;
-        artifacts.pendingRetryAttempts = null;
-        targetStore.setRetryAttempts(pending.value);
-      }
-
-      artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
+      artifacts.flushCancel?.();
+      artifacts.flushCancel = null;
+      drainPendingLiveUpdates(artifacts);
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
@@ -332,7 +330,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
 
       const shouldApplyImmediately =
         artifacts.pendingDraftDelta.length === 0 &&
-        artifacts.draftFlushCancel === null &&
+        artifacts.flushCancel === null &&
         targetStore.getSnapshot().draftAssistantText.length === 0;
       if (shouldApplyImmediately) {
         targetStore.appendDraftAssistantText(delta);
@@ -341,18 +339,8 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       }
 
       artifacts.pendingDraftDelta += delta;
-      if (artifacts.draftFlushCancel !== null) return;
-
-      artifacts.draftFlushCancel = scheduleLiveTranscriptFlush(
-        () => {
-          artifacts.draftFlushCancel = null;
-
-          const acc = artifacts.pendingDraftDelta;
-          artifacts.pendingDraftDelta = "";
-          if (!acc) return;
-          targetStore.appendDraftAssistantText(acc);
-          artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
-        },
+      requestLiveFlush(
+        artifacts,
         resolveStreamingRenderDelay(
           artifacts.renderedCharacterCount + artifacts.pendingDraftDelta.length,
         ),
@@ -376,7 +364,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       const lastRound = snapshot.liveRounds[snapshot.liveRounds.length - 1];
       const shouldApplyImmediately =
         artifacts.pendingLRUpdates.length === 0 &&
-        artifacts.lrFlushCancel === null &&
+        artifacts.flushCancel === null &&
         (snapshot.liveRounds.length === 0 || (lastRound?.blocks.length ?? 0) === 0);
       if (shouldApplyImmediately) {
         targetStore.updateLiveRounds(updater);
@@ -385,22 +373,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       }
 
       artifacts.pendingLRUpdates.push(updater);
-      if (artifacts.lrFlushCancel !== null) return;
-
-      artifacts.lrFlushCancel = scheduleLiveTranscriptFlush(() => {
-        artifacts.lrFlushCancel = null;
-
-        const batch = artifacts.pendingLRUpdates.splice(0);
-        if (!batch.length) return;
-        targetStore.updateLiveRounds((prev) => {
-          let nextRounds = prev;
-          for (const update of batch) {
-            nextRounds = update(nextRounds);
-          }
-          return nextRounds;
-        });
-        artifacts.renderedCharacterCount = countLiveTranscriptCharacters(targetStore);
-      }, resolveStreamingRenderDelay(artifacts.renderedCharacterCount));
+      requestLiveFlush(artifacts, resolveStreamingRenderDelay(artifacts.renderedCharacterCount));
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
@@ -416,16 +389,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       // Last-wins: only the newest status of a frame reaches the store. A
       // pending flush (settle, abort snapshot) delivers it early.
       artifacts.pendingToolStatus = { value: status };
-      if (artifacts.toolStatusFlushCancel !== null) return;
-
-      artifacts.toolStatusFlushCancel = scheduleLiveTranscriptFlush(() => {
-        artifacts.toolStatusFlushCancel = null;
-        const pending = artifacts.pendingToolStatus;
-        artifacts.pendingToolStatus = null;
-        if (pending) {
-          targetStore.setToolStatus(pending.value);
-        }
-      });
+      requestLiveFlush(artifacts, 0);
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
@@ -444,16 +408,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       // Last-wins: only the newest list of a frame reaches the store. A
       // pending flush (settle, abort snapshot) delivers it early.
       artifacts.pendingRetryAttempts = { value: retryAttempts };
-      if (artifacts.retryAttemptsFlushCancel !== null) return;
-
-      artifacts.retryAttemptsFlushCancel = scheduleLiveTranscriptFlush(() => {
-        artifacts.retryAttemptsFlushCancel = null;
-        const pending = artifacts.pendingRetryAttempts;
-        artifacts.pendingRetryAttempts = null;
-        if (pending) {
-          targetStore.setRetryAttempts(pending.value);
-        }
-      });
+      requestLiveFlush(artifacts, 0);
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );

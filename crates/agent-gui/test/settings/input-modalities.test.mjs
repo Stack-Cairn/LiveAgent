@@ -81,7 +81,7 @@ test("normalizeProviderModelConfig drops malformed inputModalities and legacy ar
 });
 
 test("modelFactory: codex completions custom model honors the override", () => {
-  // 目录（kimi-for-coding 分区）已收录 k3 且声明支持图片：无覆盖时按目录给 image；
+  // 目录（kimi-code-plan-cn 分区）已收录 k3 且声明支持图片：无覆盖时按目录给 image；
   // 用户覆盖仍最高优先，且构造带覆盖的模型不能反向污染此前创建的实例。
   const base = ["codex", "k3", "https://api.kimi.com/coding/v1", "openai-completions"];
   const withoutOverride = createModelFromConfig(...base);
@@ -308,4 +308,13 @@ test("modelFactory: catalog input modalities beat the built-in whitelist on rela
     },
   );
   assert.deepEqual(forced.input, ["text", "image"]);
+});
+
+test("model display names survive normalization without changing the request id", () => {
+  for (const field of ["displayName", "display_name", "name"]) {
+    const model = normalizeProviderModelConfig({ id: "my-model-id", [field]: "My Model" }, "codex");
+    assert.equal(model.id, "my-model-id");
+    assert.equal(model.displayName, "My Model");
+    assert.equal(normalizeProviderModelConfig(model, "codex").displayName, "My Model");
+  }
 });

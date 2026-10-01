@@ -5,7 +5,7 @@ import test from "node:test";
 const pageSources = [
   {
     label: "共享 Skills Hub",
-    source: ["SkillsHubPage.tsx", "SkillsStoreView.tsx"]
+    source: ["SkillsHubPage.tsx", "SkillsStoreView.tsx", "StoreSkillCard.tsx"]
       .map((file) =>
         readFileSync(
           new URL(`../../../agent-ui/src/pages/skills-hub/${file}`, import.meta.url),

@@ -5,7 +5,7 @@ FROM --platform=$BUILDPLATFORM node:22.17.1-bookworm-slim AS webui
 WORKDIR /src
 RUN npm install -g pnpm@10.32.1
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.node.base.json ./
 COPY crates/virtual-core/package.json crates/virtual-core/package.json
 COPY crates/agent-ui/package.json crates/agent-ui/package.json
 COPY crates/agent-gui/package.json crates/agent-gui/package.json

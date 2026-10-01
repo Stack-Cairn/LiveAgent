@@ -237,7 +237,7 @@ async fn read_macos_traffic_light_metrics(
 fn read_macos_traffic_light_metrics_on_main_thread(
     window: &tauri::Window,
 ) -> Result<Option<MacOsTrafficLightMetrics>, String> {
-    use objc2_app_kit::{NSWindow, NSWindowButton};
+    use objc2_app_kit::{NSView, NSWindow, NSWindowButton, NSWindowStyleMask};
 
     let ns_window_ptr = window
         .ns_window()
@@ -247,17 +247,35 @@ fn read_macos_traffic_light_metrics_on_main_thread(
     }
 
     let ns_window: &NSWindow = unsafe { &*ns_window_ptr.cast::<NSWindow>() };
+    // 原生全屏时红绿灯被 AppKit 移进独立的 NSToolbarFullScreenWindow,平时隐藏、
+    // 鼠标移到屏幕顶部才滑出。此时既没有需要避让的按钮,按主窗口换算出的坐标也
+    // 毫无意义(曾把 --app-header-height 算成数千像素,整个界面被推出屏幕)。
+    if ns_window
+        .styleMask()
+        .contains(NSWindowStyleMask::FullScreen)
+    {
+        return Ok(None);
+    }
     let window_frame = ns_window.frame();
 
-    let button_frames = [
+    let mut button_frames = Vec::with_capacity(3);
+    for button in [
         NSWindowButton::CloseButton,
         NSWindowButton::MiniaturizeButton,
         NSWindowButton::ZoomButton,
     ]
     .into_iter()
     .filter_map(|button| ns_window.standardWindowButton(button))
-    .map(|button| macos_window_button_screen_frame(ns_window, &button))
-    .collect::<Vec<_>>();
+    {
+        // 全屏过渡期间 styleMask 可能尚未更新,但按钮已被挪到别的窗口;
+        // 只信任仍挂在主窗口上的按钮。
+        let owned_by_main_window =
+            NSView::window(&button).is_some_and(|owner| std::ptr::eq(&*owner, ns_window));
+        if !owned_by_main_window {
+            return Ok(None);
+        }
+        button_frames.push(macos_window_button_screen_frame(ns_window, &button));
+    }
 
     if button_frames.is_empty() {
         return Ok(None);
@@ -281,21 +299,14 @@ fn read_macos_traffic_light_metrics_on_main_thread(
         .fold(f64::NEG_INFINITY, f64::max);
     let width = max_x - min_x;
     let height = max_y - min_y;
-    let top_from_top_edge = min_y - window_frame.origin.y;
-    let top_from_bottom_edge = window_frame.origin.y + window_frame.size.height - max_y;
-    let top = [top_from_top_edge, top_from_bottom_edge]
-        .into_iter()
-        .filter(|value| value.is_finite() && *value >= 0.0)
-        .min_by(|left, right| left.partial_cmp(right).unwrap())
-        .unwrap_or(top_from_bottom_edge);
+    // AppKit 屏幕坐标原点在左下角:距窗口上边缘 = 窗口顶边 y - 按钮组顶边 y。
+    let top = window_frame.origin.y + window_frame.size.height - max_y;
     let left = min_x - window_frame.origin.x;
 
-    if [top, left, width, height]
-        .iter()
-        .any(|value| !value.is_finite())
-        || width <= 0.0
-        || height <= 0.0
-    {
+    if !traffic_light_metrics_in_bounds(
+        (top, left, width, height),
+        (window_frame.size.width, window_frame.size.height),
+    ) {
         return Ok(None);
     }
 
@@ -305,6 +316,25 @@ fn read_macos_traffic_light_metrics_on_main_thread(
         width,
         height,
     }))
+}
+
+/// 红绿灯按钮组必须落在窗口内,且位于标题栏高度范围;否则视为不可用,
+/// 由前端回退默认布局,避免异常几何撑爆顶部栏。
+#[allow(dead_code)]
+fn traffic_light_metrics_in_bounds(
+    (top, left, width, height): (f64, f64, f64, f64),
+    (window_width, window_height): (f64, f64),
+) -> bool {
+    const MAX_TITLEBAR_EXTENT: f64 = 120.0;
+    [top, left, width, height, window_width, window_height]
+        .iter()
+        .all(|value| value.is_finite())
+        && width > 0.0
+        && height > 0.0
+        && top >= 0.0
+        && left >= 0.0
+        && top + height <= MAX_TITLEBAR_EXTENT.min(window_height)
+        && left + width <= window_width
 }
 
 #[cfg(target_os = "macos")]
@@ -333,6 +363,32 @@ fn macos_window_button_screen_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn traffic_light_metrics_bounds_reject_fullscreen_garbage() {
+        let window = (1750.0, 1130.0);
+        assert!(traffic_light_metrics_in_bounds(
+            (20.0, 18.0, 52.0, 12.0),
+            window
+        ));
+        // 全屏时按错误窗口换算出的几何:top 落到数千点之外。
+        assert!(!traffic_light_metrics_in_bounds(
+            (2206.0, 18.0, 52.0, 12.0),
+            window
+        ));
+        assert!(!traffic_light_metrics_in_bounds(
+            (-30.0, 18.0, 52.0, 12.0),
+            window
+        ));
+        assert!(!traffic_light_metrics_in_bounds(
+            (20.0, 1740.0, 52.0, 12.0),
+            window
+        ));
+        assert!(!traffic_light_metrics_in_bounds(
+            (f64::NAN, 18.0, 52.0, 12.0),
+            window
+        ));
+    }
 
     #[test]
     fn close_window_behavior_parser_accepts_exit_and_defaults_to_minimize() {

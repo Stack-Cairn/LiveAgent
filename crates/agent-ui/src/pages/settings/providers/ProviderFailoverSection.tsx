@@ -21,7 +21,7 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { X } from "@liveagent/ui/components/IconSet";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
-import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
+import { VerticalReorderList } from "@liveagent/ui/components/ui/VerticalReorderList";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
@@ -155,20 +155,6 @@ function FailoverFamilyCard(
     return settings.customProviders.find((item) => item.id === providerId)?.baseUrl ?? "";
   }
 
-  const {
-    draggingItemId: draggingQueueId,
-    getItemProps: getQueueReorderProps,
-    renderDragHandle: renderQueueDragHandle,
-    scrollContainerRef: queueListRef,
-  } = useVerticalListReorder({
-    itemIds: failover.queue,
-    canReorder: true,
-    reorderLabel: t("settings.reorderProvider"),
-    reorderHint: t("settings.reorderVerticalHint"),
-    disabledHint: t("settings.reorderNeedsTwoItems"),
-    onReorder: (nextIds) => patchFailover({ queue: nextIds }),
-  });
-
   return (
     <div className="rounded-xl border bg-card px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -204,19 +190,26 @@ function FailoverFamilyCard(
                 hint={t("settings.failoverQueueFamilyHint").replace("{family}", familyLabel)}
               />
               {failover.queue.length > 0 ? (
-                <div ref={queueListRef} className="space-y-1.5">
-                  {failover.queue.map((entry, index) => (
+                <VerticalReorderList
+                  itemIds={failover.queue}
+                  itemLabel={queueEntryLabel}
+                  canReorder
+                  reorderLabel={t("settings.reorderProvider")}
+                  reorderHint={t("settings.reorderVerticalHint")}
+                  disabledHint={t("settings.reorderNeedsTwoItems")}
+                  onReorder={(nextIds) => patchFailover({ queue: nextIds })}
+                  className="space-y-1.5"
+                >
+                  {(entry, index, { dragging, dragHandle }) => (
                     <div
-                      key={entry}
-                      {...getQueueReorderProps(entry)}
                       className={cn(
                         "flex items-center gap-1.5 rounded-lg border border-foreground/[0.06] bg-background/60 py-1.5 pl-1 pr-1.5 transition-colors",
-                        draggingQueueId === entry
+                        dragging
                           ? "border-foreground/[0.14] bg-accent shadow-lg"
                           : "hover:border-foreground/[0.12]",
                       )}
                     >
-                      {renderQueueDragHandle(entry, queueEntryLabel(entry))}
+                      {dragHandle}
                       <span className="flex h-5 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] font-mono text-[10px] font-semibold text-foreground/55">
                         P{index + 1}
                       </span>
@@ -242,8 +235,8 @@ function FailoverFamilyCard(
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </VerticalReorderList>
               ) : (
                 <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
                   {t("settings.failoverQueueEmpty")}
@@ -262,7 +255,7 @@ function FailoverFamilyCard(
                   collapsibleGroups={false}
                   searchPlaceholder={t("settings.failoverQueueSearch")}
                   emptyLabel={t("settings.failoverQueueNoMatch")}
-                  triggerClassName="h-8 rounded-lg border-dashed border-foreground/[0.13] bg-transparent py-0 text-xs text-muted-foreground shadow-none transition-colors hover:border-foreground/[0.24] hover:bg-foreground/[0.02]"
+                  variant="dashed"
                 />
               ) : null}
               {unavailableProviderCount > 0 ? (

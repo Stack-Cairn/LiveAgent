@@ -128,6 +128,7 @@ const CATALOG_PRESET_IDS = [
   "zhipu",
   "zhipu-intl",
   "zhipu-coding-plan",
+  "zhipu-intl-coding-plan",
   "minimax",
   "minimax-cn",
   "minimax-token-plan",
@@ -135,6 +136,7 @@ const CATALOG_PRESET_IDS = [
   "moonshot",
   "moonshot-cn",
   "kimi-for-coding",
+  "kimi-for-coding-global",
   "dashscope",
   "dashscope-cn",
   "dashscope-coding-plan",
@@ -231,11 +233,17 @@ test("presets merge models.dev facts with the overlay", () => {
   assert.equal(zhipuPlan.catalogProviderId, "zhipuai-coding-plan");
   assert.equal(zhipuPlan.endpoints["openai-completions"].baseUrl, "https://open.bigmodel.cn/api/coding/paas/v4");
   assert.equal(zhipuPlan.endpoints["anthropic-messages"].baseUrl, "https://open.bigmodel.cn/api/anthropic");
+  const zhipuIntlPlan = registry.findProviderPreset("zhipu-intl-coding-plan");
+  assert.equal(zhipuIntlPlan.catalogProviderId, "zhipuai-coding-plan");
+  assert.equal(zhipuIntlPlan.endpoints["openai-completions"].baseUrl, "https://api.z.ai/api/coding/paas/v4");
+  assert.equal(zhipuIntlPlan.endpoints["anthropic-messages"].baseUrl, "https://api.z.ai/api/anthropic");
   const minimaxPlan = registry.findProviderPreset("minimax-cn-token-plan");
   assert.equal(minimaxPlan.defaultChatProtocol, "anthropic-messages");
-  assert.equal(minimaxPlan.endpoints["anthropic-messages"].baseUrl, "https://api.minimaxi.com/anthropic/v1");
-  assert.equal(minimaxPlan.endpoints["openai-completions"].baseUrl, "https://api.minimaxi.com/v1");
+  assert.equal(minimaxPlan.endpoints["anthropic-messages"].baseUrl, "https://api.minimax.cn/anthropic/v1");
+  assert.equal(minimaxPlan.endpoints["openai-completions"].baseUrl, "https://api.minimax.cn/v1");
   assert.equal(registry.findProviderPreset("kimi-for-coding").defaultChatProtocol, "anthropic-messages");
+  assert.equal(registry.findProviderPreset("kimi-for-coding").endpoints["anthropic-messages"].baseUrl, "https://api.kimi.com/coding");
+  assert.equal(registry.findProviderPreset("kimi-for-coding-global").catalogProviderId, "kimi-code-plan-global");
   // 主渠道分区不再并入套餐模型。
   assert.equal(registry.findProviderPreset("tencent").catalogProviderId, "tencent");
   assert.ok(!catalogModule.MODEL_CATALOG.tencent.some((entry) => entry.id === "tc-code-latest"));

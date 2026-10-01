@@ -8,9 +8,21 @@ import { parseReleaseVersion } from "./release-version.mjs";
 const DEFAULT_BASE_URL = "https://api.deepseek.com/v1";
 const DEFAULT_MODEL = "deepseek-flash";
 const DEFAULT_REASONING_EFFORT = "";
+const DEFAULT_MAX_OUTPUT_TOKENS = 8000;
 const MAX_CONTEXT_CHARS = 22000;
 
-const [releaseTagArg, outputPath, fallbackNotesPath] = process.argv.slice(2);
+/** Output item/part types that carry a reasoning model's chain of thought. */
+const REASONING_TYPES = new Set([
+  "analysis",
+  "reasoning",
+  "reasoning_text",
+  "summary_text",
+  "thinking",
+]);
+
+let fallbackNotesPath;
+let outputPath;
+let releaseVersion;
 
 function usage() {
   return "Usage: create-ai-release-notes.mjs <release-tag> <output-path> [fallback-notes-file]";
@@ -21,15 +33,20 @@ function fail(message, code = 1) {
   process.exit(code);
 }
 
-if (!releaseTagArg || !outputPath) {
-  fail(usage());
-}
+function initializeFromCli() {
+  const [releaseTagArg, outputPathArg, fallbackNotesPathArg] = process.argv.slice(2);
+  if (!releaseTagArg || !outputPathArg) {
+    fail(usage());
+  }
 
-let releaseVersion;
-try {
-  releaseVersion = parseReleaseVersion(releaseTagArg);
-} catch (error) {
-  fail(error instanceof Error ? error.message : String(error));
+  try {
+    releaseVersion = parseReleaseVersion(releaseTagArg);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+
+  outputPath = outputPathArg;
+  fallbackNotesPath = fallbackNotesPathArg;
 }
 
 function runGit(args, options = {}) {
@@ -83,13 +100,21 @@ function stripCodeFence(markdown) {
   return match ? match[1].trim() : trimmed;
 }
 
-function normalizeMarkdown(markdown) {
-  let output = stripCodeFence(markdown);
+/**
+ * Release notes must start with the H1 the prompt mandates. Reasoning models can emit their chain
+ * of thought first, so keep only the block that starts at that heading and reject output that never
+ * reaches it instead of publishing unverified text.
+ */
+export function normalizeMarkdown(markdown, releaseTag) {
+  const output = stripCodeFence(markdown);
   if (!output) return "";
-  if (!output.startsWith("#")) {
-    output = `# LiveAgent ${releaseVersion.releaseTag}\n\n${output}`;
-  }
-  return `${output.trim()}\n`;
+
+  const heading = `# LiveAgent ${releaseTag}`;
+  const lines = output.split("\n");
+  const headingIndex = lines.findIndex((line) => line.trim() === heading);
+  if (headingIndex === -1) return "";
+
+  return `${lines.slice(headingIndex).join("\n").trim()}\n`;
 }
 
 function previousTagFor(releaseCommit) {
@@ -178,15 +203,28 @@ function buildPrompt(context) {
   ].join("\n");
 }
 
-function responseText(payload) {
+function isReasoningOutput(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof value.type === "string" &&
+    REASONING_TYPES.has(value.type.toLowerCase())
+  );
+}
+
+export function responseText(payload) {
   if (typeof payload.output_text === "string") return payload.output_text;
 
   const output = payload.output;
   if (Array.isArray(output)) {
     const parts = [];
     for (const item of output) {
+      // Reasoning is returned as its own output item by reasoning models; it must never reach the
+      // release notes.
+      if (isReasoningOutput(item)) continue;
       if (!Array.isArray(item.content)) continue;
       for (const content of item.content) {
+        if (isReasoningOutput(content)) continue;
         if (typeof content.text === "string") parts.push(content.text);
       }
     }
@@ -197,6 +235,7 @@ function responseText(payload) {
   if (typeof choice === "string") return choice;
   if (Array.isArray(choice)) {
     return choice
+      .filter((part) => !isReasoningOutput(part))
       .map((part) => (typeof part.text === "string" ? part.text : ""))
       .filter(Boolean)
       .join("\n");
@@ -233,7 +272,15 @@ async function fetchJsonWithTimeout(endpoint, { apiKey, body, timeoutMs }) {
   return JSON.parse(text);
 }
 
-async function createResponse({ apiKey, baseUrl, model, prompt, reasoningEffort, timeoutMs }) {
+async function createResponse({
+  apiKey,
+  baseUrl,
+  maxOutputTokens,
+  model,
+  prompt,
+  reasoningEffort,
+  timeoutMs,
+}) {
   const endpoint = `${baseUrl.replace(/\/+$/, "")}/responses`;
   const body = {
     input: [
@@ -251,7 +298,7 @@ async function createResponse({ apiKey, baseUrl, model, prompt, reasoningEffort,
         content: [{ type: "input_text", text: prompt }],
       },
     ],
-    max_output_tokens: 3000,
+    max_output_tokens: maxOutputTokens,
     model,
     store: false,
   };
@@ -265,10 +312,18 @@ async function createResponse({ apiKey, baseUrl, model, prompt, reasoningEffort,
   });
 }
 
-async function createChatCompletion({ apiKey, baseUrl, model, prompt, reasoningEffort, timeoutMs }) {
+async function createChatCompletion({
+  apiKey,
+  baseUrl,
+  maxOutputTokens,
+  model,
+  prompt,
+  reasoningEffort,
+  timeoutMs,
+}) {
   const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
   const body = {
-    max_tokens: 3000,
+    max_tokens: maxOutputTokens,
     messages: [
       {
         role: "system",
@@ -293,6 +348,8 @@ async function createChatCompletion({ apiKey, baseUrl, model, prompt, reasoningE
 }
 
 async function main() {
+  initializeFromCli();
+
   const apiKey =
     process.env.AI_RELEASE_NOTES_API_KEY?.trim() || process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) {
@@ -307,6 +364,13 @@ async function main() {
   );
   const parsedTimeoutMs = Number.parseInt(process.env.AI_RELEASE_NOTES_TIMEOUT_MS ?? "60000", 10);
   const timeoutMs = Number.isFinite(parsedTimeoutMs) ? parsedTimeoutMs : 60000;
+  const parsedMaxOutputTokens = Number.parseInt(
+    process.env.AI_RELEASE_NOTES_MAX_OUTPUT_TOKENS ?? String(DEFAULT_MAX_OUTPUT_TOKENS),
+    10,
+  );
+  const maxOutputTokens = Number.isFinite(parsedMaxOutputTokens)
+    ? parsedMaxOutputTokens
+    : DEFAULT_MAX_OUTPUT_TOKENS;
 
   try {
     const context = collectContext();
@@ -317,13 +381,14 @@ async function main() {
       const chatPayload = await createChatCompletion({
         apiKey,
         baseUrl,
+        maxOutputTokens,
         model,
         prompt,
         reasoningEffort,
         timeoutMs,
       });
       chatCompleted = true;
-      markdown = normalizeMarkdown(responseText(chatPayload));
+      markdown = normalizeMarkdown(responseText(chatPayload), releaseVersion.releaseTag);
     } catch (error) {
       console.warn(
         `Chat completions unavailable: ${
@@ -333,20 +398,23 @@ async function main() {
     }
     if (!markdown) {
       if (chatCompleted) {
-        console.warn("Chat completions returned empty release notes; trying Responses API fallback.");
+        console.warn(
+          "Chat completions returned unusable release notes; trying Responses API fallback.",
+        );
       }
       const responsesPayload = await createResponse({
         apiKey,
         baseUrl,
+        maxOutputTokens,
         model,
         prompt,
         reasoningEffort,
         timeoutMs,
       });
-      markdown = normalizeMarkdown(responseText(responsesPayload));
+      markdown = normalizeMarkdown(responseText(responsesPayload), releaseVersion.releaseTag);
     }
     if (!markdown) {
-      writeFallback("model returned empty release notes");
+      writeFallback("model returned release notes without the required heading");
       return;
     }
     writeFileSync(outputPath, markdown);

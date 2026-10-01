@@ -65,7 +65,8 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
       aria-expanded={kind === "dir" ? expanded : undefined}
       tabIndex={0}
       className={cn(
-        "group flex w-full cursor-pointer select-none items-center gap-1 rounded-md pr-2 text-xs leading-5 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+        "group flex w-full cursor-pointer select-none items-center gap-1 rounded-md",
+        "pr-2 text-xs leading-5 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
         selected && "bg-muted text-foreground",
       )}
       style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: 6 + depth * 14 }}
@@ -86,7 +87,7 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
         <button
           type="button"
           className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-background",
+            "flex size-5 shrink-0 items-center justify-center rounded hover:bg-background",
             hidden && "opacity-60 group-hover:opacity-80",
           )}
           onClick={(event) => {
@@ -96,23 +97,24 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
           title={expanded ? t("projectTools.fileTree.collapse") : t("projectTools.fileTree.expand")}
         >
           {loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <ChevronRight
-              className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")}
+              className={cn("size-3.5 transition-transform", expanded && "rotate-90")}
             />
           )}
         </button>
       ) : (
-        <span className="h-5 w-5 shrink-0" />
+        <span className="size-5 shrink-0" />
       )}
       <div
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-1.5 bg-transparent p-0 text-left text-inherit leading-5",
+          "flex min-w-0 flex-1 items-center gap-1.5 bg-transparent p-0",
+          "text-left text-inherit leading-5",
           hidden && "opacity-60 group-hover:opacity-80",
         )}
       >
-        <TypeIcon className="h-3.5 w-3.5 shrink-0" />
+        <TypeIcon className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">{name}</span>
       </div>
     </div>
@@ -129,7 +131,7 @@ export const FileTreeErrorRow = memo(function FileTreeErrorRow(props: FileTreeEr
   const { depth, message } = props;
   return (
     <div
-      className="break-all px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] text-amber-600"
+      className="break-all px-3 py-1 text-xs text-amber-600"
       style={{ paddingLeft: 12 + depth * 14 }}
     >
       {message}

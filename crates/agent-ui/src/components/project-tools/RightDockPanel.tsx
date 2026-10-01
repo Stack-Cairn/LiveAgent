@@ -55,14 +55,12 @@ import {
   type RightDockSingletonTabKind,
   rightDockTabRequiresProject,
 } from "./rightDockModel";
-import { useRightDockPanelWidth } from "./useRightDockPanelWidth";
 import { useRightDockProjectTabs } from "./useRightDockProjectTabs";
 import { useRightDockSessions } from "./useRightDockSessions";
 import { useRightDockTabReorder } from "./useRightDockTabReorder";
 
 type RightDockPanelProps = {
   isOpen: boolean;
-  collapseImmediately?: boolean;
   fontScale?: number;
   projectPathKey: string;
   cwd: string;
@@ -81,7 +79,6 @@ type RightDockPanelProps = {
    * dock 不再挂其 tab、内容与新建入口;Pane 关闭后自动回归。
    */
   leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
-  width: number;
   theme: "light" | "dark";
   disabledMessage?: string;
   terminalDisabledMessage?: string;
@@ -99,7 +96,6 @@ type RightDockPanelProps = {
   tunnelDisabledMessage?: string;
   tunnelPublicBaseUrl: string;
   workspaceActivityClient?: WorkspaceActivityClient | null;
-  onWidthChange: (width: number) => void;
   onProjectStateChange: (
     updater: (current: RightDockProjectState) => RightDockProjectState,
   ) => void;
@@ -372,8 +368,11 @@ function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | n
       ref={trackRef}
       aria-hidden={!scrollbar.visible}
       className={cn(
-        "project-tools-panel-tabs-scrollbar",
-        scrollbar.visible && "project-tools-panel-tabs-scrollbar-visible",
+        "project-tools-panel-tabs-scrollbar relative h-4px basis-4px touch-none overflow-hidden",
+        "rounded-full bg-[var(--project-tools-tabs-scrollbar-track,hsl(var(--muted)/0.42))] opacity-0",
+        "transition-[background-color,opacity] duration-160 ease-default",
+        "hover:bg-[var(--project-tools-tabs-scrollbar-track-hover,hsl(var(--muted)/0.5))] [&.project-tools-panel-tabs-scrollbar-dragging]:bg-[var(--project-tools-tabs-scrollbar-track-hover,hsl(var(--muted)/0.5))] [&:hover_.project-tools-panel-tabs-scrollbar-thumb]:bg-[var(--project-tools-tabs-scrollbar-thumb-hover,hsl(var(--muted-foreground)/0.36))] [&.project-tools-panel-tabs-scrollbar-dragging_.project-tools-panel-tabs-scrollbar-thumb]:bg-[var(--project-tools-tabs-scrollbar-thumb-hover,hsl(var(--muted-foreground)/0.36))] web:max-820:h-5px web:max-820:basis-5px",
+        scrollbar.visible && "opacity-100 pointer-events-auto",
         dragging && "project-tools-panel-tabs-scrollbar-dragging",
       )}
       onPointerCancel={finishDrag}
@@ -382,7 +381,11 @@ function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | n
       onPointerUp={finishDrag}
     >
       <div
-        className="project-tools-panel-tabs-scrollbar-thumb"
+        className={cn(
+          "project-tools-panel-tabs-scrollbar-thumb absolute inset-y-0 left-0 min-w-28px",
+          "rounded-inherit bg-[var(--project-tools-tabs-scrollbar-thumb,hsl(var(--muted-foreground)/0.22))] shadow-[inset_0_0_0_var(--spacing-1px)_var(--project-tools-tabs-scrollbar-thumb-border,hsl(var(--background)/0.82))]",
+          "transition-[background-color,box-shadow] duration-160 ease-default",
+        )}
         style={{
           transform: `translateX(${scrollbar.thumbLeft}px)`,
           width: `${scrollbar.thumbWidth}px`,
@@ -395,7 +398,6 @@ function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | n
 export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanelProps) {
   const {
     isOpen,
-    collapseImmediately = false,
     fontScale = 1,
     projectPathKey,
     cwd,
@@ -406,7 +408,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     sessionsLoaded: externalSessionsLoaded,
     leasedSessionIds,
     leasedTools = NO_LEASED_RIGHT_DOCK_TOOLS,
-    width,
     theme,
     disabledMessage,
     terminalDisabledMessage,
@@ -424,7 +425,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     tunnelDisabledMessage,
     tunnelPublicBaseUrl,
     workspaceActivityClient,
-    onWidthChange,
     onProjectStateChange,
     onFileTreeStateChange,
     onSshProjectHostIdsChange,
@@ -454,19 +454,6 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       workspaceProjectRootClient,
       workspaceRootRevision,
     });
-  const {
-    effectiveShouldRenderContent,
-    effectiveWidthCollapsed,
-    handleResizeStart,
-    isResizing,
-    panelRef,
-    panelStyle,
-  } = useRightDockPanelWidth({
-    collapseImmediately,
-    isOpen,
-    onWidthChange,
-    width,
-  });
   const projectReady = projectPathKey.trim() !== "" && cwd.trim() !== "" && !disabledMessage;
   const terminalReady = projectReady && !terminalDisabledMessage;
   const {
@@ -845,186 +832,168 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
   return (
     <RightDockToolContext.Provider value={toolContextValue}>
       <aside
-        ref={panelRef}
         aria-hidden={!isOpen}
         inert={!isOpen}
         data-app-frame-column="right-dock"
         data-state={isOpen ? "open" : "closed"}
-        data-project-tools-resizing={isResizing ? "true" : undefined}
-        className={cn(
-          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[width,opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
-          isOpen
-            ? "pointer-events-auto translate-y-0 border-t border-border opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-l md:border-t-0"
-            : "pointer-events-none translate-y-full border-t border-transparent opacity-0 md:translate-x-3 md:translate-y-0 md:border-l-0 md:border-t-0",
-          effectiveWidthCollapsed ? "md:w-0" : "md:w-[var(--project-tools-panel-width)]",
-          (isResizing || (collapseImmediately && !isOpen)) && "md:transition-none",
-        )}
-        style={{ ...panelStyle, "--zone-font-scale": fontScale } as CSSProperties}
+        className="project-tools-panel zone-font-scale flex size-full min-h-0 min-w-0 flex-col overflow-hidden bg-background"
+        style={{ "--zone-font-scale": fontScale } as CSSProperties}
       >
-        <div
-          className={cn(
-            "project-tools-panel-inner flex h-full min-h-0 w-full flex-col transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:w-[var(--project-tools-panel-width)] md:min-w-[var(--project-tools-panel-width)]",
-            isOpen
-              ? "translate-y-0 opacity-100 md:translate-x-0"
-              : "translate-y-3 opacity-0 md:translate-x-2 md:translate-y-0",
-          )}
-        >
-          {effectiveShouldRenderContent ? (
-            <>
-              <div className="project-tools-panel-handle" aria-hidden="true" />
-              <button
-                type="button"
-                aria-label={t("projectTools.resizePanel")}
-                title={t("projectTools.resizePanel")}
+        <div className="project-tools-panel-inner flex size-full min-h-0 flex-col">
+          <div
+            className={cn(
+              "desktop:hidden web:hidden web:max-820:block web:max-820:w-36px web:max-820:h-4px web:max-820:flex-none web:max-820:self-center web:max-820:mt-8px",
+              "web:max-820:rounded-full web:max-820:bg-muted-foreground/24",
+            )}
+            aria-hidden="true"
+          />
+
+          <div
+            className={cn(
+              "flex h-10 shrink-0 items-center gap-2 border-b border-border/60 pl-1 pr-2",
+              "web:max-820:min-h-44px web:max-820:gap-6px",
+            )}
+          >
+            <div
+              className={cn("flex h-full min-w-0 flex-1 flex-col justify-center")}
+              onWheel={handleTabsWheel}
+            >
+              <div
+                ref={tabsScrollRef}
                 className={cn(
-                  "group absolute inset-y-0 left-0 z-10 hidden w-3 cursor-col-resize touch-none items-center justify-center border-0 bg-transparent p-0 md:flex",
-                  "focus-visible:outline-none",
+                  "project-tools-panel-tabs flex h-full min-w-0 items-stretch overflow-x-auto overflow-y-hidden",
+                  "overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0",
                 )}
-                onMouseDown={handleResizeStart}
               >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "h-10 w-0.5 rounded-full bg-muted-foreground/25 opacity-70 shadow-sm transition-[height,background-color,opacity]",
-                    "group-hover:h-16 group-hover:bg-primary/60 group-hover:opacity-100 group-focus-visible:h-16 group-focus-visible:bg-primary group-focus-visible:opacity-100",
-                    isResizing && "h-20 bg-primary opacity-100",
-                  )}
-                />
-              </button>
-              <div className="project-tools-panel-header flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
-                <div
-                  className="project-tools-panel-tabs-shell flex min-w-0 flex-1 flex-col justify-center gap-1"
-                  onWheel={handleTabsWheel}
-                >
-                  <div
-                    ref={tabsScrollRef}
-                    className="project-tools-panel-tabs flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
-                  >
-                    <RightDockTabStrip
-                      tabs={orderedProjectTabs}
-                      currentActiveTab={currentActiveTab}
-                      backgroundTasksRunning={backgroundTasksRunning}
-                      onCloseBackgroundTasks={closeBackgroundTasks}
-                      activeSession={activeSession}
-                      pendingCloseSessionId={pendingCloseSessionId}
-                      closingSessionIds={closingSessionIds}
-                      draggingTabId={draggingTabId}
-                      renderTabDragHandle={renderTabDragHandle}
-                      getTabDragProps={getTabDragProps}
-                      getTabDragStyle={getTabDragStyle}
-                      consumeSuppressedTabClick={consumeSuppressedTabClick}
-                      onActivateTab={activateTab}
-                      onActivateTerminalSession={activateTerminalSession}
-                      onCloseToolTab={closeToolTab}
-                      onCloseTerminalRequest={handleCloseRequest}
-                      onTerminalTabDragStart={onTerminalTabDragStart}
-                      onOpenTerminalInWorkbench={onOpenTerminalInWorkbench}
-                      onToolTabDragStart={onToolDragStart}
-                      onOpenToolInWorkbench={onOpenToolInWorkbench}
-                    />
-                  </div>
-                  <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
-                </div>
-                <RightDockCreateMenu
-                  leasedTools={leasedTools}
-                  open={createMenuOpen}
-                  onOpenChange={setCreateMenuOpen}
-                  shellOptions={shellOptions}
-                  terminalReady={terminalReady}
-                  terminalDisabledMessage={terminalDisabledMessage}
-                  projectReady={projectReady}
-                  tunnelAvailable={tunnelAvailable}
-                  creating={creating}
-                  onCreateTerminal={createTerminal}
-                  onOpenNewTerminalInWorkbench={onOpenNewTerminalInWorkbench}
-                  onStartTool={startToolTab}
-                  onOpenBackgroundTasks={openBackgroundTasks}
-                />
-                {onClose ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={onClose}
-                    title={t("projectTools.closePanel")}
-                    className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground md:hidden"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </div>
-
-              {pendingCloseSession ? (
-                <div className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                  <span className="min-w-0 flex-1 truncate">
-                    {t("projectTools.closeRunningTerminal").replace(
-                      "{title}",
-                      formatTerminalSessionTitle(
-                        pendingCloseSession.title,
-                        t("projectTools.terminalTitle"),
-                      ),
-                    )}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 shrink-0 px-2.5 text-xs"
-                    onClick={clearPendingCloseSession}
-                  >
-                    {t("settings.cancel")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    className="h-7 shrink-0 px-2.5 text-xs"
-                    disabled={closingSessionIds.has(pendingCloseSession.id)}
-                    onClick={() => closeSession(pendingCloseSession)}
-                  >
-                    {t("projectTools.close")}
-                  </Button>
-                </div>
-              ) : null}
-
-              {showDisabledMessage ? (
-                <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  {disabledMessage}
-                </div>
-              ) : showRightDockChooser ? (
-                <RightDockChooser
-                  leasedTools={leasedTools}
-                  terminalReady={terminalReady}
-                  terminalDisabledMessage={terminalDisabledMessage}
-                  disabledMessage={disabledMessage}
-                  projectReady={projectReady}
-                  tunnelAvailable={tunnelAvailable}
-                  creating={creating}
-                  loading={loading}
-                  error={error}
-                  onCreateTerminal={createTerminal}
-                  onStartTool={startToolTab}
-                  onOpenBackgroundTasks={openBackgroundTasks}
-                  onNewTerminalDragStart={onNewTerminalDragStart}
-                  onToolDragStart={onToolDragStart}
-                />
-              ) : (
-                <RightDockContent
+                <RightDockTabStrip
+                  tabs={orderedProjectTabs}
                   currentActiveTab={currentActiveTab}
-                  initializedTools={initializedTools}
-                  localSessions={localSessions}
+                  backgroundTasksRunning={backgroundTasksRunning}
+                  onCloseBackgroundTasks={closeBackgroundTasks}
                   activeSession={activeSession}
-                  initialTerminalSnapshotsRef={initialTerminalSnapshotsRef}
-                  error={activeTerminalError ?? error}
-                  creating={creating}
-                  loading={loading}
-                  onTerminalError={handleTerminalError}
-                  onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
-                  onCreateTerminal={handleCreate}
-                  leasedTools={leasedTools}
+                  pendingCloseSessionId={pendingCloseSessionId}
+                  closingSessionIds={closingSessionIds}
+                  draggingTabId={draggingTabId}
+                  renderTabDragHandle={renderTabDragHandle}
+                  getTabDragProps={getTabDragProps}
+                  getTabDragStyle={getTabDragStyle}
+                  consumeSuppressedTabClick={consumeSuppressedTabClick}
+                  onActivateTab={activateTab}
+                  onActivateTerminalSession={activateTerminalSession}
+                  onCloseToolTab={closeToolTab}
+                  onCloseTerminalRequest={handleCloseRequest}
+                  onTerminalTabDragStart={onTerminalTabDragStart}
+                  onOpenTerminalInWorkbench={onOpenTerminalInWorkbench}
+                  onToolTabDragStart={onToolDragStart}
+                  onOpenToolInWorkbench={onOpenToolInWorkbench}
                 />
+              </div>
+              <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
+            </div>
+            <RightDockCreateMenu
+              leasedTools={leasedTools}
+              open={createMenuOpen}
+              onOpenChange={setCreateMenuOpen}
+              shellOptions={shellOptions}
+              terminalReady={terminalReady}
+              terminalDisabledMessage={terminalDisabledMessage}
+              projectReady={projectReady}
+              tunnelAvailable={tunnelAvailable}
+              creating={creating}
+              onCreateTerminal={createTerminal}
+              onOpenNewTerminalInWorkbench={onOpenNewTerminalInWorkbench}
+              onStartTool={startToolTab}
+              onOpenBackgroundTasks={openBackgroundTasks}
+            />
+            {onClose ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onClose}
+                title={t("projectTools.closePanel")}
+                className="rounded-lg text-muted-foreground hover:text-foreground md:hidden web:max-820:inline-flex"
+              >
+                <X className="size-4" />
+              </Button>
+            ) : null}
+          </div>
+
+          {pendingCloseSession ? (
+            <div
+              className={cn(
+                "flex shrink-0 items-center gap-2",
+                "border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive",
               )}
-            </>
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {t("projectTools.closeRunningTerminal").replace(
+                  "{title}",
+                  formatTerminalSessionTitle(
+                    pendingCloseSession.title,
+                    t("projectTools.terminalTitle"),
+                  ),
+                )}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0 px-2.5 text-xs"
+                onClick={clearPendingCloseSession}
+              >
+                {t("settings.cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="h-7 shrink-0 px-2.5 text-xs"
+                disabled={closingSessionIds.has(pendingCloseSession.id)}
+                onClick={() => closeSession(pendingCloseSession)}
+              >
+                {t("projectTools.close")}
+              </Button>
+            </div>
           ) : null}
+
+          {showDisabledMessage ? (
+            <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+              {disabledMessage}
+            </div>
+          ) : showRightDockChooser ? (
+            <RightDockChooser
+              leasedTools={leasedTools}
+              terminalReady={terminalReady}
+              terminalDisabledMessage={terminalDisabledMessage}
+              disabledMessage={disabledMessage}
+              projectReady={projectReady}
+              tunnelAvailable={tunnelAvailable}
+              creating={creating}
+              loading={loading}
+              error={error}
+              onCreateTerminal={createTerminal}
+              onStartTool={startToolTab}
+              onOpenBackgroundTasks={openBackgroundTasks}
+              onNewTerminalDragStart={onNewTerminalDragStart}
+              onToolDragStart={onToolDragStart}
+            />
+          ) : (
+            <RightDockContent
+              isOpen={isOpen}
+              currentActiveTab={currentActiveTab}
+              initializedTools={initializedTools}
+              localSessions={localSessions}
+              activeSession={activeSession}
+              initialTerminalSnapshotsRef={initialTerminalSnapshotsRef}
+              error={activeTerminalError ?? error}
+              creating={creating}
+              loading={loading}
+              onTerminalError={handleTerminalError}
+              onInitialTerminalSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
+              onCreateTerminal={handleCreate}
+              leasedTools={leasedTools}
+            />
+          )}
         </div>
       </aside>
     </RightDockToolContext.Provider>

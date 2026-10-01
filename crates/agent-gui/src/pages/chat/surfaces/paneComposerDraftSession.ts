@@ -36,3 +36,25 @@ export function beginPaneComposerDraftSession(
     controller.setDraft(nextDraft);
   };
 }
+
+/**
+ * Refill a pane composer that the page pipeline cleared while the pane kept
+ * its conversation. A workbench focus switch runs the legacy select pipeline,
+ * which caches the outgoing draft and then clears the still-focused composer;
+ * the outgoing pane stays mounted on the same conversation, so the
+ * conversation-keyed session above never re-runs to restore it.
+ */
+export function restoreClearedPaneComposerDraft(
+  composer: MentionComposerHandle | null,
+  controller: Pick<PaneComposerDraftController, "getDraft">,
+): boolean {
+  if (!composer || composer.hasContent()) {
+    return false;
+  }
+  const draft = controller.getDraft();
+  if (!draft || draft.isEmpty || !draft.text.trim()) {
+    return false;
+  }
+  composer.setDraft(draft);
+  return true;
+}

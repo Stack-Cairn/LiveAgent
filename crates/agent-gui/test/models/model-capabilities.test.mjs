@@ -249,5 +249,6 @@ test("provider model defaults carry the catalog input budget without fabricating
   // 落库值优先，不被目录覆盖。
   assert.equal(provider.models[1].maxInputTokens, 1000);
   assert.equal(settings.createProviderModelConfig("codex", "gpt-5.2").maxInputTokens, 272_000);
-  assert.equal(settings.findProviderModelConfig(provider, "gpt-5.4").maxInputTokens, 272_000);
+  // gpt-5.4 已退出 Codex models.json、改随 models.dev；用仍在 Codex 清单里的 mini 验证回查。
+  assert.equal(settings.findProviderModelConfig(provider, "gpt-5.4-mini").maxInputTokens, 272_000);
 });

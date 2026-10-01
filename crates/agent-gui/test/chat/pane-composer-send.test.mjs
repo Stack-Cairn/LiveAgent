@@ -12,7 +12,7 @@ const loader = createTsModuleLoader();
 const { createPaneComposerSendHandler } = loader.loadModule(
   "src/pages/chat/surfaces/paneComposerSend.ts",
 );
-const { beginPaneComposerDraftSession } = loader.loadModule(
+const { beginPaneComposerDraftSession, restoreClearedPaneComposerDraft } = loader.loadModule(
   "src/pages/chat/surfaces/paneComposerDraftSession.ts",
 );
 
@@ -222,7 +222,12 @@ test("focusing another pane does not swap an object composer ref across hosts", 
 test("the primary pane stays disabled during hydration in multi-pane layouts", () => {
   const chatPage = readSource("../../src/pages/ChatPage.tsx");
   const registrations = chatPage.slice(chatPage.indexOf("const workbenchRegistrations"));
-  assert.match(registrations, /isUploadingFiles \|\|\s*isConversationHydrating/);
+  assert.match(registrations, /surface\.conversationId === currentConversationId\s*\? primaryPaneBinding/);
+  assert.match(chatPage, /isInputDisabled: isComposerInputDisabled/);
+  const disabled = chatPage.slice(chatPage.indexOf("const isComposerInputDisabled"), chatPage.indexOf("const canDropUpload"));
+  for (const condition of ["isCompactionRunning", "isConversationHydrating", "isConversationHydrationFailed", "isImportingPastedText", "isUploadingFiles"]) {
+    assert.ok(disabled.includes(condition), `${condition} must disable the primary composer`);
+  }
   assert.doesNotMatch(registrations, /isConversationHydrating &&\s*Object\.keys\(workbench\.layout\.panes\)/);
 });
 
@@ -249,4 +254,39 @@ test("switch cleanup saves the outgoing pane draft to its original conversation"
 
   assert.equal(drafts.get("conversation-a").text, "unsent A");
   assert.equal(drafts.has("conversation-b"), false);
+});
+
+test("focus leaving a split pane refills the composer the page pipeline cleared", () => {
+  const composer = fakeComposer(textDraft("typed in pane A"));
+  const drafts = new Map();
+  const controllerA = {
+    getDraft: () => drafts.get("conversation-a") ?? null,
+    setDraft: (draft) => drafts.set("conversation-a", draft),
+  };
+  const cleanupA = beginPaneComposerDraftSession(composer, controllerA);
+  composer.setDraft(textDraft("typed in pane A"));
+
+  // Focusing pane B: the page caches A's draft, then clears the composer
+  // that is still bound as primary. Pane A stays on conversation A.
+  drafts.set("conversation-a", composer.getDraft());
+  composer.clear();
+  assert.equal(composer.hasContent(), false);
+
+  assert.equal(restoreClearedPaneComposerDraft(composer, controllerA), true);
+  assert.equal(composer.current().text, "typed in pane A");
+  cleanupA();
+});
+
+test("restoring a pane composer never overwrites live input or restores empty drafts", () => {
+  const live = fakeComposer(textDraft("newer input"));
+  assert.equal(
+    restoreClearedPaneComposerDraft(live, { getDraft: () => textDraft("cached") }),
+    false,
+  );
+  assert.equal(live.current().text, "newer input");
+
+  const empty = fakeComposer(textDraft(""));
+  assert.equal(restoreClearedPaneComposerDraft(empty, { getDraft: () => null }), false);
+  assert.equal(restoreClearedPaneComposerDraft(empty, { getDraft: () => textDraft("  ") }), false);
+  assert.equal(restoreClearedPaneComposerDraft(null, { getDraft: () => textDraft("x") }), false);
 });

@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Scroll follow probe</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; }
+      body { background: hsl(var(--background)); }
+      .probe-frame { width: 960px; height: 100%; margin: 0 auto; }
+      .probe-composer-card {
+        pointer-events: auto;
+        width: 100%;
+        height: 128px;
+        margin-bottom: 16px;
+        border: 1px solid hsl(var(--border));
+        border-radius: 24px;
+        background: hsl(var(--card));
+        box-shadow: 0 10px 30px hsl(220 22% 10% / 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+      import { createRoot } from "react-dom/client";
+      import "/src/index.css";
+      import "streamdown/styles.css";
+      import { GATEWAY_WEBUI_MARKER } from "@liveagent/ui/lib/runtimeEnv.ts";
+      import { LocaleContext, useLocaleContextValue } from "@liveagent/ui/i18n/index.ts";
+      import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area.tsx";
+      import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow.ts";
+      import { GatewayTranscript } from "/src/components/GatewayTranscript.tsx";
+      import { buildRowsFromEntries } from "/src/lib/chat/transcript/rows.ts";
+
+      document.documentElement.dataset.liveagentWebui = GATEWAY_WEBUI_MARKER;
+
+      // ---- probe state + scroll-write instrumentation -----------------------
+      const probe = {
+        ready: false,
+        viewportEl: null,
+        writes: [],
+        frames: [],
+        events: [],
+        handle: null,
+        setRows: null,
+        rows: [],
+        reset() {
+          this.writes = [];
+          this.frames = [];
+          this.events = [];
+        },
+      };
+      window.__probe = probe;
+
+      function classifyStack(stack) {
+        const text = stack ?? "";
+        if (/useScrollFollow|framePinController/.test(text)) return "follow-engine";
+        if (/virtual-core|react-virtual/.test(text)) return "virtualizer";
+        if (/scroll-area|ScrollArea|base-ui/.test(text)) return "base-ui";
+        if (/scroll-follow-probe/.test(text)) return "probe";
+        return "other";
+      }
+      function shortStack(stack) {
+        return (stack ?? "")
+          .split("\n")
+          .slice(2, 7)
+          .map((line) => line.trim().replace(/https?:\/\/[^/]+/g, "").slice(0, 140))
+          .join(" | ");
+      }
+      const scrollTopDesc = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
+      Object.defineProperty(Element.prototype, "scrollTop", {
+        configurable: true,
+        enumerable: scrollTopDesc.enumerable,
+        get() {
+          return scrollTopDesc.get.call(this);
+        },
+        set(value) {
+          if (this === probe.viewportEl) {
+            const stack = new Error().stack;
+            probe.writes.push({
+              t: Math.round(performance.now()),
+              kind: "scrollTop",
+              from: Math.round(scrollTopDesc.get.call(this) * 10) / 10,
+              to: Math.round(Number(value) * 10) / 10,
+              who: classifyStack(stack),
+              top: shortStack(stack),
+            });
+          }
+          scrollTopDesc.set.call(this, value);
+        },
+      });
+      for (const method of ["scrollTo", "scrollBy"]) {
+        const original = Element.prototype[method];
+        Element.prototype[method] = function patched(...args) {
+          if (this === probe.viewportEl) {
+            const stack = new Error().stack;
+            const top = typeof args[0] === "object" && args[0] !== null ? args[0].top : args[1];
+            probe.writes.push({
+              t: Math.round(performance.now()),
+              kind: method,
+              from: Math.round(scrollTopDesc.get.call(this) * 10) / 10,
+              to: typeof top === "number" ? Math.round(top * 10) / 10 : String(top),
+              who: classifyStack(stack),
+              top: shortStack(stack),
+            });
+          }
+          return original.apply(this, args);
+        };
+      }
+
+      // ---- synthetic conversation ------------------------------------------
+      const PARAGRAPHS = [
+        "滚动跟随引擎的职责是：在用户停留在底部时贴住新内容，在用户主动上滚后释放。这里的每一段文字只是为了撑出足够的高度，让虚拟列表真实地挂载与卸载行。",
+        "为了让估高与实测存在偏差，段落长度故意不均匀；部分行还带有代码块和列表，这样首次测量时 virtualizer 需要做尺寸修正。",
+        "The transcript virtualizer keeps measured heights per row key; rows that were never measured fall back to a content-shaped estimate, so scrolling through unmeasured history exercises the resize compensation paths.",
+        "- 第一点：检查 wheel 事件是否被记为向下手势\n- 第二点：观察 gap 进入 192px 区间时的行为\n- 第三点：记录每一次程序化 scrollTop 写入的来源",
+      ];
+      function assistantText(index) {
+        const parts = [];
+        const count = (index % 5) + 1;
+        for (let i = 0; i < count; i += 1) parts.push(PARAGRAPHS[(index + i) % PARAGRAPHS.length]);
+        if (index % 3 === 0) {
+          parts.push(
+            "```ts\nexport function gap(el: HTMLElement) {\n  return el.scrollHeight - el.scrollTop - el.clientHeight;\n}\n```",
+          );
+        }
+        return parts.join("\n\n");
+      }
+      // History rounds carry a terminal stop reason; without it the last row
+      // (always `isLive` while idle) keeps its prose inside the collapsed work
+      // trace and renders 56px tall.
+      const ASSISTANT_META = { stopReason: "stop" };
+      const entries = [];
+      for (let index = 0; index < 24; index += 1) {
+        entries.push({
+          id: `u-${index}`,
+          kind: "user",
+          text: `问题 ${index + 1}：请解释一下第 ${index + 1} 段的滚动行为，并给出验证方法。`,
+          attachments: [],
+          referencedConversations: [],
+        });
+        entries.push({
+          id: `a-${index}`,
+          kind: "assistant",
+          text: assistantText(index),
+          round: 1,
+          meta: ASSISTANT_META,
+        });
+      }
+      const initialRows = buildRowsFromEntries(entries, "history");
+      let nextTurnIndex = 24;
+
+      // ?ask=1 appends a live turn parked on a pending AskUserQuestion card:
+      // isStreaming, running tool id, countdown + elapsed timers ticking —
+      // the state the user reported the jump in. ?ask=2 starts the same live
+      // turn with prose only; probe.arriveAsk() then injects the tool_call, the
+      // way the streaming store does when the model calls the tool.
+      const askParam = new URLSearchParams(window.location.search).get("ask");
+      const approvalParam = new URLSearchParams(window.location.search).get("approval");
+      // ?approval=2: same live turn, and probe.arriveApproval() injects a Bash
+      // tool_call carrying the gateway's approval-pending markers (the state a
+      // "请求授权" shows up in). ?approval=1 starts with it already pending.
+      const approvalMode = approvalParam === "1" || approvalParam === "2";
+      const askMode = askParam === "1" || askParam === "2" || approvalMode;
+      const askArrivesLater = askParam === "2" || approvalParam === "2";
+      const ASK_QUESTIONS = [
+        {
+          id: "q1",
+          header: "范围",
+          prompt: "这次修改是否需要同时覆盖桌面端的回贴区配置？请选择一个方案。",
+          options: [
+            {
+              label: "仅 Web 端",
+              description: "只改 GatewayApp 的 useScrollFollow 配置，桌面端保持 192px 回贴区。",
+              recommended: true,
+            },
+            { label: "两端一起", description: "ChatTranscript 也传 0，并同步更新常量注释与测试。" },
+            { label: "先不改", description: "只记录问题，等更多反馈。" },
+          ],
+        },
+        {
+          id: "q2",
+          header: "virtual-core",
+          prompt: "是否同时修正 virtual-core 的 wasAtEnd 判定口径？",
+          options: [
+            { label: "是", description: "改用 DOM 距离并补 harness 用例。", recommended: true },
+            { label: "否", description: "留到下一次。" },
+          ],
+        },
+      ];
+      const liveProseEntries = [
+        {
+          id: "u-live",
+          kind: "user",
+          text: "帮我确认一下滚动修复的范围。",
+          attachments: [],
+          referencedConversations: [],
+        },
+        {
+          id: "a-live",
+          kind: "assistant",
+          text: "我需要先确认两个问题，才能决定改动范围：",
+          round: 1,
+        },
+      ];
+      const askToolCallEntry = {
+        id: "tc-ask",
+        kind: "tool_call",
+        round: 1,
+        text: "",
+        toolCall: {
+          type: "toolCall",
+          id: "ask-1",
+          name: "AskUserQuestion",
+          arguments: { questions: ASK_QUESTIONS },
+        },
+      };
+      const approvalToolCallEntry = {
+        id: "tc-approval",
+        kind: "tool_call",
+        round: 1,
+        text: "",
+        toolCall: {
+          type: "toolCall",
+          id: "bash-1",
+          name: "Bash",
+          arguments: {
+            command: "pnpm --filter @liveagent/gateway-webui test",
+            __toolApprovalPending: true,
+            __toolApprovalDeadlineAt: Date.now() + 5 * 60 * 1000,
+            __toolApprovalSummary: "pnpm --filter @liveagent/gateway-webui test",
+          },
+        },
+      };
+      const pendingToolEntry = approvalMode ? approvalToolCallEntry : askToolCallEntry;
+      const liveEntries = askArrivesLater
+        ? liveProseEntries
+        : liveProseEntries.concat([pendingToolEntry]);
+      const liveRows = askMode ? buildRowsFromEntries(liveEntries, "stream") : [];
+      const allInitialRows = initialRows.concat(liveRows);
+      const liveStartIndex = askMode ? initialRows.length : -1;
+      probe.mode = approvalMode
+        ? askArrivesLater
+          ? "approval-arrives"
+          : "approval"
+        : askMode
+          ? askArrivesLater
+            ? "ask-arrives"
+            : "ask"
+          : "history";
+
+      // ?zone=<px> overrides the follow engine's reattach zone (default 192)
+      // so a candidate host config can be measured without touching product
+      // code. ?zone=0 mirrors the thinking-block config.
+      const zoneParam = new URLSearchParams(window.location.search).get("zone");
+      const followConfig =
+        zoneParam !== null && Number.isFinite(Number(zoneParam))
+          ? { reattachZonePx: Number(zoneParam) }
+          : undefined;
+      probe.followConfig = followConfig ?? null;
+
+      // ---- app tree mirroring GatewayConversationPaneHost (primary pane) ----
+      function ProbeApp() {
+        const localeValue = useLocaleContextValue("zh-CN");
+        const [rows, setRows] = useState(allInitialRows);
+        const [scrollAreaRoot, setScrollAreaRoot] = useState(null);
+        const [viewport, setViewport] = useState(null);
+        const handleViewportRef = useCallback((element) => {
+          probe.viewportEl = element;
+          setViewport(element);
+        }, []);
+        const { handle, following } = useScrollFollow({
+          viewport,
+          listenerRoot: scrollAreaRoot,
+          trackKeys: true,
+          ...(followConfig ? { config: followConfig } : {}),
+        });
+        probe.handle = handle;
+        probe.setRows = setRows;
+        probe.rows = rows;
+
+        useEffect(() => {
+          probe.events.push({ t: Math.round(performance.now()), following });
+        }, [following]);
+
+        // GatewayApp pins the freshly displayed conversation to the bottom
+        // once its rows are in.
+        useLayoutEffect(() => {
+          if (!viewport || rows.length === 0 || probe.ready) return;
+          handle.stickToBottom();
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              probe.ready = true;
+            }),
+          );
+        }, [handle, rows.length, viewport]);
+
+        return React.createElement(
+          LocaleContext.Provider,
+          { value: localeValue },
+          React.createElement(
+            "div",
+            { className: "gateway-chat-frame probe-frame" },
+            React.createElement(
+              "section",
+              {
+                className: "gateway-transcript-stage",
+                style: { "--chat-transcript-content-width": "768px" },
+              },
+              React.createElement(
+                "div",
+                { className: "gateway-transcript-scroll-shell" },
+                React.createElement(
+                  ScrollArea,
+                  {
+                    ref: setScrollAreaRoot,
+                    viewportRef: handleViewportRef,
+                    className: "gateway-transcript-scroll",
+                  },
+                  React.createElement(GatewayTranscript, {
+                    conversationId: "probe-conversation",
+                    rows,
+                    liveStartIndex,
+                    activeTurnKey: null,
+                    contentWidth: 768,
+                    isViewportFollowing: handle.isFollowing,
+                    viewportFollowing: following,
+                    isStreaming: askMode,
+                    hasModels: true,
+                  }),
+                ),
+                !following
+                  ? React.createElement(
+                      "button",
+                      { type: "button", className: "gateway-scroll-to-bottom", onClick: handle.jumpToBottom },
+                      "↓",
+                    )
+                  : null,
+              ),
+              React.createElement(
+                "div",
+                {
+                  className:
+                    "gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center",
+                },
+                React.createElement(
+                  "div",
+                  { className: "gateway-chat-column" },
+                  React.createElement("div", { className: "probe-composer-card" }),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // ---- probe API for the CDP driver --------------------------------------
+      const round1 = (value) => Math.round(value * 10) / 10;
+      probe.metrics = () => {
+        const el = probe.viewportEl;
+        if (!el) return null;
+        const rowEls = document.querySelectorAll(".gateway-transcript-row");
+        const lastRowEl = rowEls[rowEls.length - 1];
+        return {
+          scrollTop: round1(el.scrollTop),
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          gap: round1(Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight)),
+          following: probe.handle ? probe.handle.isFollowing() : null,
+          lastRowHeight: lastRowEl ? round1(lastRowEl.getBoundingClientRect().height) : null,
+        };
+      };
+      probe.viewportRect = () => {
+        const rect = probe.viewportEl.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      };
+      probe.setGap = (px) => {
+        const el = probe.viewportEl;
+        el.scrollTop = el.scrollHeight - el.clientHeight - px;
+      };
+      probe.stickToBottom = () => probe.handle.stickToBottom();
+      // Visual anchor: the first mounted row whose top edge sits at/below the
+      // viewport's top edge. Comparing its on-screen top before/after an event
+      // measures what the reader actually sees move, independent of scrollTop
+      // bookkeeping (an 'origin' rebase changes scrollTop without moving
+      // pixels; a bottom-anchor write moves pixels by exactly its delta).
+      probe.visibleAnchor = () => {
+        const viewportTop = probe.viewportEl.getBoundingClientRect().top;
+        const rows = [...document.querySelectorAll(".gateway-transcript-row")]
+          .map((el) => ({
+            key: el.getAttribute("data-row-key") || `idx:${el.getAttribute("data-index")}`,
+            top: el.getBoundingClientRect().top,
+          }))
+          .sort((a, b) => a.top - b.top);
+        const anchor = rows.find((row) => row.top >= viewportTop - 1) ?? rows[rows.length - 1] ?? null;
+        return anchor ? { key: anchor.key, top: round1(anchor.top) } : null;
+      };
+      probe.anchorTop = (key) => {
+        const el = key.startsWith("idx:")
+          ? document.querySelector(`.gateway-transcript-row[data-index="${key.slice(4)}"]`)
+          : document.querySelector(`.gateway-transcript-row[data-row-key="${key}"]`);
+        return el ? round1(el.getBoundingClientRect().top) : null;
+      };
+      // Mounted row heights keyed by row key/index, for diffing which row
+      // re-measured around a programmatic write.
+      probe.rowHeights = () => {
+        const out = {};
+        for (const el of document.querySelectorAll(".gateway-transcript-row")) {
+          const key = el.getAttribute("data-row-key") || `idx:${el.getAttribute("data-index")}`;
+          out[key] = round1(el.getBoundingClientRect().height);
+        }
+        return out;
+      };
+      // The model calls AskUserQuestion: the live turn's rows are rebuilt with
+      // the tool_call appended (same row keys, so the assistant row updates in
+      // place and the card mounts inside it).
+      probe.arriveAsk = () => {
+        const rebuilt = buildRowsFromEntries(liveProseEntries.concat([pendingToolEntry]), "stream");
+        probe.setRows((current) => current.slice(0, initialRows.length).concat(rebuilt));
+        return rebuilt.map((row) => row.key);
+      };
+      // The real ChatComposerBar grows when the approval bar mounts above the
+      // input and republishes --gateway-chat-composer-overlay-height from its
+      // ResizeObserver; the bottom spacer follows. Mirror that on the fake
+      // composer card.
+      probe.growComposer = (px) => {
+        const card = document.querySelector(".probe-composer-card");
+        const frame = document.querySelector(".gateway-chat-frame");
+        if (!card || !frame) return null;
+        const currentHeight = card.getBoundingClientRect().height;
+        card.style.height = `${currentHeight + px}px`;
+        const currentVar =
+          parseFloat(getComputedStyle(frame).getPropertyValue("--gateway-chat-composer-overlay-height")) ||
+          176;
+        frame.style.setProperty("--gateway-chat-composer-overlay-height", `${currentVar + px}px`);
+        return { cardHeight: currentHeight + px, overlayVar: currentVar + px };
+      };
+      // A new user+assistant pair arriving as settled history (count change +
+      // first measurement of unmeasured rows while the reader may be detached).
+      probe.appendTurn = () => {
+        const index = nextTurnIndex;
+        nextTurnIndex += 1;
+        const appended = buildRowsFromEntries(
+          [
+            {
+              id: `u-${index}`,
+              kind: "user",
+              text: `问题 ${index + 1}：这是新到达的一轮对话。`,
+              attachments: [],
+              referencedConversations: [],
+            },
+            {
+              id: `a-${index}`,
+              kind: "assistant",
+              text: assistantText(index),
+              round: 1,
+              meta: ASSISTANT_META,
+            },
+          ],
+          "history",
+        );
+        probe.setRows((current) => current.concat(appended));
+        return appended.map((row) => row.key);
+      };
+      probe.growLastRow = (chars) => {
+        const extra = ` ${"追加的流式内容，".repeat(Math.ceil(chars / 8))}`;
+        probe.setRows((current) => {
+          const next = current.slice();
+          for (let index = next.length - 1; index >= 0; index -= 1) {
+            const row = next[index];
+            if (row.kind !== "assistant") continue;
+            const rounds = row.rounds.map((round, roundIndex) => {
+              if (roundIndex !== row.rounds.length - 1) return round;
+              const blocks = round.blocks.map((block, blockIndex) =>
+                blockIndex === round.blocks.length - 1 && typeof block.text === "string"
+                  ? { ...block, text: block.text + extra }
+                  : block,
+              );
+              return { ...round, blocks };
+            });
+            next[index] = { ...row, rounds };
+            break;
+          }
+          return next;
+        });
+      };
+      probe.lastAssistantKey = () => {
+        for (let index = probe.rows.length - 1; index >= 0; index -= 1) {
+          if (probe.rows[index].kind === "assistant") return probe.rows[index].key;
+        }
+        return null;
+      };
+      probe.lastRowDiag = () => {
+        const key = probe.lastAssistantKey();
+        const el = key ? document.querySelector(`[data-row-key="${key}"]`) : null;
+        const row = probe.rows.find((candidate) => candidate.key === key);
+        const lastRound = row ? row.rounds[row.rounds.length - 1] : null;
+        const lastBlock = lastRound ? lastRound.blocks[lastRound.blocks.length - 1] : null;
+        const sizer = document.querySelector(".gateway-transcript-list > div");
+        return {
+          key,
+          mounted: Boolean(el),
+          height: el ? round1(el.getBoundingClientRect().height) : null,
+          textLength: el ? el.textContent.length : null,
+          hasExtra: el ? el.textContent.includes("追加的流式内容") : false,
+          blockKinds: lastRound ? lastRound.blocks.map((block) => block.kind) : null,
+          lastBlockTextLength:
+            lastBlock && typeof lastBlock.text === "string" ? lastBlock.text.length : null,
+          sizerHeight: sizer ? round1(sizer.getBoundingClientRect().height) : null,
+          metrics: probe.metrics(),
+        };
+      };
+      probe.info = () => {
+        const spacer = document.querySelector(".gateway-transcript-bottom-spacer");
+        const shell = document.querySelector(".gateway-transcript-shell");
+        const sizer = shell ? shell.querySelector(".gateway-transcript-list > div") : null;
+        const frame = document.querySelector(".gateway-chat-frame");
+        return {
+          rows: probe.rows.length,
+          mode: probe.mode,
+          liveStartIndex,
+          followConfig: probe.followConfig,
+          spacerHeight: spacer ? spacer.getBoundingClientRect().height : null,
+          shellPaddingTop: shell ? parseFloat(getComputedStyle(shell).paddingTop) : null,
+          sizerHeight: sizer ? sizer.getBoundingClientRect().height : null,
+          composerOverlayVar: frame
+            ? getComputedStyle(frame).getPropertyValue("--gateway-chat-composer-overlay-height").trim()
+            : null,
+          viewport: probe.metrics(),
+          userAgent: navigator.userAgent,
+        };
+      };
+
+      let lastFrameTop = null;
+      function sampleFrame() {
+        const el = probe.viewportEl;
+        if (el) {
+          const top = round1(el.scrollTop);
+          if (top !== lastFrameTop) {
+            lastFrameTop = top;
+            probe.frames.push({ t: Math.round(performance.now()), scrollTop: top });
+            if (probe.frames.length > 4000) probe.frames.splice(0, 1000);
+          }
+        }
+        requestAnimationFrame(sampleFrame);
+      }
+      requestAnimationFrame(sampleFrame);
+
+      createRoot(document.getElementById("root")).render(React.createElement(ProbeApp));
+    </script>
+  </body>
+</html>

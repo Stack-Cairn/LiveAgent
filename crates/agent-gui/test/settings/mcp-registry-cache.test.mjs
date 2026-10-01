@@ -1,0 +1,23 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+const { loadRegistryCache, readRegistryCache, registryCacheKey } = createTsModuleLoader().loadModule("@liveagent/ui/pages/mcp-hub/registryStoreCache.ts");
+test("registry cache deduplicates requests and retains pages per source and query", async () => {
+  const key = registryCacheKey("glama", "cache-test");
+  let resolve;
+  let calls = 0;
+  const fetchPage = () => { calls++; return new Promise(r => { resolve = r; }); };
+  const first = loadRegistryCache(key, undefined, fetchPage);
+  const second = loadRegistryCache(key, undefined, fetchPage);
+  assert.equal(first, second);
+  resolve({ items: [{ id: "a" }], nextCursor: "next" });
+  await first;
+  assert.equal(calls, 1);
+  await loadRegistryCache(key, "next", async () => ({ items: [{ id: "a" }, { id: "b" }] }));
+  assert.deepEqual(readRegistryCache(key).items.map(x => x.id), ["a", "b"]);
+  assert.equal(readRegistryCache(registryCacheKey("official", "cache-test")), undefined);
+  await assert.rejects(loadRegistryCache(key, undefined, async () => { throw new Error("offline"); }));
+  assert.equal(readRegistryCache(key).items.length, 2);
+  await loadRegistryCache(key, undefined, async () => ({ items: [] }));
+  assert.deepEqual(readRegistryCache(key).items, []);
+});

@@ -1,3 +1,4 @@
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLocale } from "../../i18n/index";
 import type { TerminalClient, TerminalSession } from "../../lib/terminal/types";
@@ -347,7 +348,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     closeRequest && session ? (
       <div
         data-terminal-pane-close-confirm={paneId}
-        className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        className={cn(
+          "flex shrink-0 items-center gap-2",
+          "border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive",
+        )}
       >
         <span className="min-w-0 flex-1 truncate">
           {t("projectTools.closeRunningTerminal").replace(

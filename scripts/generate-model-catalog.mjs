@@ -85,6 +85,9 @@ const MIN_CODEX_MODELS = 5;
 // those ids verbatim; for vendor catalogs such ids are third-party deployments
 // (Bailian's "siliconflow/…", "kimi/…") that relays never serve verbatim and
 // are skipped.
+// The runtime thinking supplement mirrors the non-namespaced sources order as
+// OFFICIAL_SECTION_ORDER in crates/agent-ui/src/lib/models/thinkingLive.ts —
+// keep both lists in sync when adding or removing sources here.
 const SECTIONS = [
   { key: "anthropic", sources: ["anthropic"], min: 8 },
   { key: "google", sources: ["google"], min: 15 },
@@ -94,10 +97,14 @@ const SECTIONS = [
   // zai (Z.AI, international brand) is a superset of zhipuai with identical
   // ids and limits for the overlap; keep the domestic brand as the key.
   { key: "zhipuai", sources: ["zai", "zhipuai"], min: 10 },
-  { key: "zhipuai-coding-plan", sources: ["zhipuai-coding-plan"], min: 6 },
+  // 编码套餐同理：zai-coding-plan 与 zhipuai-coding-plan 模型 id 重叠，上游国内分区
+  // 近期只剩 4 个现役模型，合并两源后再做下限校验。
+  { key: "zhipuai-coding-plan", sources: ["zai-coding-plan", "zhipuai-coding-plan"], min: 6 },
   { key: "moonshotai-cn", sources: ["moonshotai-cn"], min: 2 },
   { key: "moonshotai", sources: ["moonshotai"], min: 2 },
-  { key: "kimi-for-coding", sources: ["kimi-for-coding"], min: 2 },
+  // 上游已把 kimi-for-coding 拆为 kimi.com（cn）与 kimi.ai（global）两个分区。
+  { key: "kimi-code-plan-cn", sources: ["kimi-code-plan-cn"], min: 2 },
+  { key: "kimi-code-plan-global", sources: ["kimi-code-plan-global"], min: 2 },
   { key: "minimax-cn", sources: ["minimax-cn"], min: 3 },
   { key: "minimax", sources: ["minimax"], min: 3 },
   // models.dev 的 id 仍叫 coding-plan；官方套餐名已改为 Token Plan（预设 id 用后者）。
@@ -152,14 +159,16 @@ const PRESETS = [
   { id: "deepseek", section: "deepseek" },
   { id: "zhipu", section: "zhipuai", source: "zhipuai" },
   { id: "zhipu-intl", section: "zhipuai", source: "zai" },
-  { id: "zhipu-coding-plan", section: "zhipuai-coding-plan" },
+  { id: "zhipu-coding-plan", section: "zhipuai-coding-plan", source: "zhipuai-coding-plan" },
+  { id: "zhipu-intl-coding-plan", section: "zhipuai-coding-plan", source: "zai-coding-plan" },
   { id: "minimax", section: "minimax" },
   { id: "minimax-cn", section: "minimax-cn" },
   { id: "minimax-token-plan", section: "minimax-coding-plan" },
   { id: "minimax-cn-token-plan", section: "minimax-cn-coding-plan" },
   { id: "moonshot", section: "moonshotai" },
   { id: "moonshot-cn", section: "moonshotai-cn" },
-  { id: "kimi-for-coding", section: "kimi-for-coding" },
+  { id: "kimi-for-coding", section: "kimi-code-plan-cn" },
+  { id: "kimi-for-coding-global", section: "kimi-code-plan-global" },
   { id: "dashscope", section: "alibaba" },
   { id: "dashscope-cn", section: "alibaba-cn" },
   { id: "dashscope-coding-plan", section: "alibaba-coding-plan" },

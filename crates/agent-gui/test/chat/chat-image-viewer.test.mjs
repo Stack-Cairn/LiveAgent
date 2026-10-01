@@ -1,3 +1,4 @@
+import { assertJsxDimensions } from "../helpers/style-dimensions.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -7,7 +8,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const viewer = loader.loadModule("@liveagent/ui/components/chat/imagePreviewModel.ts");
-const imagePreview = loader.loadModule("@liveagent/ui/components/chat/ImagePreview.tsx");
+const imagePreview = loader.loadModule("@liveagent/ui/components/chat/ImagePreviewMenu.tsx");
 const userAttachments = loader.loadModule("@liveagent/ui/components/chat/UserAttachmentCards.tsx");
 
 function approximately(actual, expected, epsilon = 1e-9) {
@@ -147,36 +148,62 @@ test("viewer index, image data parsing, and MIME inference cover inline and prox
   }
 });
 
-test("context-menu actions close immediately and report failures through their persistent owner", async () => {
+test("image actions start synchronously and report failures through their persistent owner", async () => {
   const events = [];
   let rejectAction;
   const action = new Promise((_, reject) => {
     rejectAction = reject;
   });
-  const pending = imagePreview.runImagePreviewContextMenuAction({
+  const pending = imagePreview.runImagePreviewAction({
     action: () => {
       events.push("action");
       return action;
     },
     fallback: "fallback",
-    onClose: () => events.push("close"),
     onActionError: (message) => events.push(`error:${message}`),
   });
 
-  assert.deepEqual(events, ["close", "action"]);
+  assert.deepEqual(events, ["action"]);
   rejectAction(new Error("clipboard denied"));
   await pending;
-  assert.deepEqual(events, ["close", "action", "error:clipboard denied"]);
+  assert.deepEqual(events, ["action", "error:clipboard denied"]);
 
-  await imagePreview.runImagePreviewContextMenuAction({
+  await imagePreview.runImagePreviewAction({
     action: () => {
       throw new Error("save failed");
     },
     fallback: "save failed",
-    onClose: () => events.push("sync-close"),
     onActionError: (message) => events.push(`sync-error:${message}`),
   });
-  assert.deepEqual(events.slice(-2), ["sync-close", "sync-error:save failed"]);
+  assert.deepEqual(events.slice(-1), ["sync-error:save failed"]);
+});
+
+test("image save opens the picker before resolving data and cancellation does not read the image", async () => {
+  const events = [];
+  let cancel = false;
+  const actions = createTsModuleLoader({ mocks: {
+    "@liveagent/adapters/imagePreview": {
+      prepareImagePreviewSave: () => {
+        events.push("picker");
+        return Promise.resolve(cancel ? null : async (data) => {
+          events.push(`write:${data.dataBase64}`);
+        });
+      },
+    },
+  }}).loadModule("@liveagent/ui/components/chat/ImagePreviewMenu.tsx");
+  const slide = { src: "https://example.invalid/image.png", fileName: "image.png" };
+  const resolveData = async () => {
+    events.push("read");
+    return { dataBase64: "AQ==", mimeType: "image/png", sizeBytes: 1 };
+  };
+  const pending = actions.saveImagePreviewSlide(slide, resolveData);
+  assert.deepEqual(events, ["picker"]);
+  await pending;
+  assert.deepEqual(events, ["picker", "read", "write:AQ=="]);
+  events.length = 0;
+  cancel = true;
+  await actions.saveImagePreviewSlide(slide, resolveData);
+  assert.deepEqual(events, ["picker"]);
 });
 
 test("viewer capabilities expose filesystem actions only for a complete verified attachment", () => {
@@ -250,9 +277,8 @@ test("chat attachment sources preserve verified metadata and keep menus scoped t
     fileURLToPath(new URL("../../../agent-ui/src/components/chat/ImagePreview.tsx", import.meta.url)),
     "utf8",
   );
-  const overlayStyles = fs.readFileSync(
-    fileURLToPath(new URL("../../../agent-ui/src/styles/common-overlays.css", import.meta.url)),
-    "utf8",
+  const menuSource = fs.readFileSync(
+    fileURLToPath(new URL("../../../agent-ui/src/components/chat/ImagePreviewMenu.tsx", import.meta.url)), "utf8",
   );
   const composerSource = fs.readFileSync(
     fileURLToPath(new URL("../../../agent-ui/src/components/chat/ComposerAttachmentCard.tsx", import.meta.url)),
@@ -269,45 +295,39 @@ test("chat attachment sources preserve verified metadata and keep menus scoped t
 
   assert.match(composerSource, /file\?: PendingUploadedFile/);
   assert.match(composerSource, /workspaceRoot\?: string/);
-  assert.match(composerSource, /onContextMenu=\{\(event\) =>/);
   assert.match(composerSource, /attachment: \{/);
-  assert.match(composerSource, /className="block h-full w-full object-cover"/);
+  assert.match(composerSource, /disabled=\{!canPreview\}/);
+  assertJsxDimensions(composerSource, "img", { width: "full", height: "full" }, ["block", "object-cover"]);
   assert.match(composerSource, /const \[imageLoadState, setImageLoadState\] = useState<\{/);
-  assert.match(composerSource, /if \(!canPreview\) return;/);
   assert.match(userImageAttachmentSource, /"block w-full bg-black\/\[0\.02\] dark:bg-white\/5"/);
   assert.match(userImageAttachmentSource, /imageLoadState\?\.src === imageSrc/);
   assert.match(userImageAttachmentSource, /disabled=\{!canPreview\}/);
   assert.match(userImageAttachmentSource, /onError=\{\(\) => \{/);
   assert.doesNotMatch(userImageAttachmentSource, /hover:scale/);
-  assert.doesNotMatch(userImageAttachmentSource, /hover:shadow-\[0_2px_8px_rgba\(0,0,0,0\.1\)\]/);
+  assert.doesNotMatch(userImageAttachmentSource, /hover:shadow-ui-userattachmentcards-21/);
   assert.match(toolImages, /dataBase64: image\.data/);
+  assert.match(toolImages, /disabled=\{!canPreview\}/);
   assert.match(toolImages, /src: imageSources\[index\]\?\.src \?\? ""/);
-  assert.match(toolImages, /"block max-h-\[32rem\] w-full rounded-md object-contain/);
-  assert.match(toolImages, /onContextMenu=\{\(\{ x, y \}\) => setContextMenu\(\{ index, x, y \}\)\}/);
-  assert.match(toolImages, /if \(!canPreview\) return;/);
+  assert.match(toolImages, /"block max-h-128 w-full rounded-md object-contain/);
   assert.match(viewerSource, /@liveagent\/ui\/components\/ui\/dialog/);
   assert.match(viewerSource, /<DialogContent/);
   assert.match(viewerSource, /<DialogClose/);
-  assert.match(viewerSource, /disablePointerDismissal/);
+  assert.doesNotMatch(viewerSource, /disablePointerDismissal/);
   assert.doesNotMatch(viewerSource, /role="dialog"/);
   assert.doesNotMatch(viewerSource, /aria-modal="true"/);
-  assert.match(viewerSource, /layer-popover fixed min-w-52/);
-  assert.match(viewerSource, /layer-toast fixed inset-x-0/);
-  assert.match(viewerSource, /eventDetails\.reason === "escape-key"/);
+  assert.match(menuSource, /toast.error\(props.message/);
+  assert.match(menuSource, /toast.dismiss\(id\)/);
   assert.match(viewerSource, /event\.stopPropagation\(\)/);
-  assert.match(viewerSource, /document\.addEventListener\("keydown", onKeyDown, true\)/);
-  assert.match(viewerSource, /new ResizeObserver\(updateMenuPosition\)/);
-  assert.match(viewerSource, /window\.addEventListener\("resize", updateMenuPosition\)/);
-  assert.match(viewerSource, /chat-image-preview-dialog flex h-\[min\(78vh,760px\)\] w-\[min\(82vw,1120px\)\]/);
+  assert.match(viewerSource, /layout="lightbox"/);
   assert.match(viewerSource, /const \[isFullscreen, setIsFullscreen\] = useState\(false\)/);
   assert.match(viewerSource, /\{capabilities\?\.canCopyPaths && verifiedAttachment \? \(/);
   assert.match(viewerSource, /document\.addEventListener\("fullscreenchange", updateFullscreenState\)/);
   assert.match(viewerSource, /await dialog\.requestFullscreen\(\)/);
   assert.match(viewerSource, /await document\.exitFullscreen\(\)/);
   assert.match(viewerSource, /chat\.imageViewer\.exitFullscreen/);
-  assert.match(viewerSource, /<Minimize2 className="h-4 w-4" \/>/);
+  assertJsxDimensions(viewerSource, "Minimize2", { width: "3.5", height: "3.5" });
   assert.match(
-    viewerSource,
+    menuSource,
     /const writeImage = await prepareImagePreviewSave\([\s\S]*const data = await resolveData\(slide\)/,
   );
   assert.match(
@@ -316,28 +336,23 @@ test("chat attachment sources preserve verified metadata and keep menus scoped t
   );
   assert.match(viewerSource, /void prepareUploadedImagePreviewCopy\(\{/);
   assert.match(viewerSource, /prepareUploadedImagePreviewCopy\([\s\S]*\.catch\(\(\) => undefined\)/);
-  assert.match(viewerSource, /await copyUploadedImagePreview\(/);
+  assert.match(menuSource, /await copyUploadedImagePreview\(/);
   assert.match(viewerSource, /const \[isCopying, setIsCopying\] = useState\(false\)/);
   assert.match(viewerSource, /const \[isSaving, setIsSaving\] = useState\(false\)/);
-  assert.match(viewerSource, /params\.onClose\(\);[\s\S]*return params\.action\(\)\.catch/);
-  assert.match(viewerSource, /export function ImagePreviewActionFeedback/);
+  assert.match(menuSource, /export function ImagePreviewActionFeedback/);
   assert.match(composerSource, /onActionError=\{setActionError\}/);
   assert.match(userImageAttachmentSource, /onActionError=\{setActionError\}/);
   assert.equal(toolImages.match(/onActionError=\{setActionError\}/g)?.length, 2);
   assert.match(viewerSource, /if \(!slide \|\| isSaving\) return;/);
   assert.match(viewerSource, /disabled=\{isSaving\}/);
-  assert.match(viewerSource, /<Loader2 className="h-4 w-4 animate-spin" \/>/);
+  assertJsxDimensions(viewerSource, "Loader2", { width: "4", height: "4" }, ["animate-spin"]);
   assert.match(viewerSource, /new WeakMap<ImagePreviewSlide, ReturnType<typeof resolveImagePreviewData>>\(\)/);
   assert.match(viewerSource, /const hasInlineImageData = Boolean\(slide\?\.dataBase64\?\.trim\(\) \|\| imageSource\.startsWith\("data:"\)\)/);
-  assert.match(viewerSource, /if \(hasInlineImageData\) void resolveCachedImageData\(slide\);/);
+  assert.match(viewerSource, /if \(hasInlineImageData\)\s+void resolveCachedImageData\(slide\)\.catch/);
   assert.match(viewerSource, /await saveImagePreviewSlide\(slide, resolveCachedImageData\)/);
   assert.match(viewerSource, /await copyImagePreviewSlide\(slide, resolveCachedImageData\)/);
-  assert.match(overlayStyles, /\.chat-image-preview-dialog:fullscreen \{/);
-  assert.match(overlayStyles, /\.chat-image-preview-dialog:fullscreen \{[\s\S]*width: 100vw;/);
-  assert.match(overlayStyles, /\.chat-image-preview-dialog:fullscreen \{[\s\S]*height: 100vh;/);
   assert.match(viewerSource, /src=\{imageSource\}/);
   assert.match(viewerSource, /onPointerDown/);
-  assert.match(viewerSource, /onContextMenu/);
   assert.match(viewerSource, /zoomByStep\(-1\)/);
   assert.match(viewerSource, /zoomByStep\(1\)/);
 });

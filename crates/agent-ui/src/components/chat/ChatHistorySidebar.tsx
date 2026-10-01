@@ -4,6 +4,7 @@ import {
   Blend,
   Brain,
   Cable,
+  Check,
   ChevronRight,
   CirclePlus,
   Clock3,
@@ -29,6 +30,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
+import { Input } from "@liveagent/ui/components/ui/input";
+import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
@@ -67,7 +70,25 @@ import {
   sliceWorkspaceProjectSections,
 } from "../../lib/workspaceProjects";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarTrigger,
+} from "../ui/sidebar";
 import { HistoryRow, ProjectGroupHeader, ProjectRow } from "./ChatHistorySidebarRows";
+import {
+  HISTORY_RENAME_INPUT_CLASS,
+  PROJECT_ICON_BUTTON_CLASS,
+  SIDEBAR_CONTEXT_MENU_CLASS,
+} from "./ChatHistorySidebarStyles";
 import type {
   ChatHistorySidebarProps,
   WorkspaceProjectRemoveOptions,
@@ -95,10 +116,8 @@ type PendingWorkspaceProjectAction = {
 
 const MOBILE_SIDEBAR_MEDIA_QUERY = "(max-width: 820px)";
 const HISTORY_ROW_ESTIMATED_HEIGHT = 30;
-const HISTORY_ROW_GAP = 2;
+const HISTORY_ROW_GAP = 1;
 const HISTORY_ROW_OVERSCAN_COUNT = 8;
-const PROJECT_ICON_BUTTON_CLASS =
-  "h-7 w-7 rounded-lg !bg-transparent text-muted-foreground transition-colors hover:!bg-transparent hover:!text-foreground active:!bg-transparent focus-visible:!bg-transparent data-[state=open]:!bg-transparent data-[state=open]:text-foreground data-[popup-open]:!bg-transparent data-[popup-open]:text-foreground";
 const PROJECT_LIST_COLLAPSED_MAX = 30;
 const EMPTY_PROJECT_PATH_KEYS = new Set<string>();
 const EMPTY_APPROVAL_CONVERSATION_IDS = new Set<string>();
@@ -137,20 +156,20 @@ function HistoryListLoadingSkeleton() {
       aria-live="polite"
       aria-label={t("sidebar.readingHistory")}
     >
-      <div className="flex items-center gap-2 px-2 pb-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground/75">
-        <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/35 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-primary/70" />
+      <div className="flex items-center gap-2 px-2 pb-1 text-xs font-medium text-muted-foreground/75">
+        <span className="relative flex size-2 shrink-0" aria-hidden="true">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/35 opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-primary/70" />
         </span>
         <span>{t("sidebar.readingHistory")}</span>
       </div>
       {HISTORY_LOADING_SKELETON_ROWS.map((row) => (
         <div key={`${row.title}-${row.meta}`} className="rounded-lg px-2 py-2.5">
           <div className="flex items-start gap-2">
-            <div className="skills-skeleton-shimmer mt-1 h-3.5 w-3.5 shrink-0 rounded-md" />
+            <Skeleton className="mt-1 size-3.5 shrink-0 rounded-md" />
             <div className="min-w-0 flex-1 space-y-2">
-              <div className={cn("skills-skeleton-shimmer h-3.5 rounded", row.title)} />
-              <div className={cn("skills-skeleton-shimmer h-2.5 rounded", row.meta)} />
+              <Skeleton className={cn("h-3.5 rounded", row.title)} />
+              <Skeleton className={cn("h-2.5 rounded", row.meta)} />
             </div>
           </div>
         </div>
@@ -199,6 +218,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onProjectsCollapsedChange,
     onRecentCollapsedChange,
     onCreateProject,
+    onCreateWorkspaceGroup,
     onRenameWorkspaceGroup,
     onDeleteWorkspaceGroup,
     onMoveProjectToGroup,
@@ -232,7 +252,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onDeleteConversation,
     onDeleteConversations,
     onLoadMore,
-    onCloseSidebar,
     sidebarShortcuts = normalizeSidebarShortcuts(undefined),
     onOpenSettings,
     onOpenResourceHub,
@@ -311,10 +330,19 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     });
   };
 
+  const itemById = useMemo(() => {
+    const index = new Map<string, SidebarConversation>();
+    for (const item of items) {
+      // Preserve Array.find's first-match behavior if malformed input contains
+      // duplicate ids while making repeated lookups constant-time.
+      if (!index.has(item.id)) index.set(item.id, item);
+    }
+    return index;
+  }, [items]);
   const pinnedConversations = useMemo(() => items.filter((item) => item.isPinned), [items]);
   const currentConversationWorkdir = useMemo(
-    () => items.find((item) => item.id === currentConversationId)?.cwd,
-    [currentConversationId, items],
+    () => itemById.get(currentConversationId)?.cwd,
+    [currentConversationId, itemById],
   );
 
   useEffect(() => {
@@ -800,9 +828,41 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   // Archiving must always leave at least one active workspace behind.
   const canArchiveProjects = Boolean(onArchiveProject) && activeProjects.length > 1;
   const [archivedGroupOpen, setArchivedGroupOpen] = useState(false);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupDraft, setGroupDraft] = useState("");
+  // Base UI resolves the "+" menu's return-focus target synchronously while the
+  // menu unmounts — the same commit that mounts the draft input — so the trigger
+  // would take focus straight back and the empty-draft blur would silently close
+  // the row again ("new group does nothing"). The menu's finalFocus consumes this
+  // one-shot flag and the effect below owns focus placement, which is why the
+  // input has no autoFocus.
+  const suppressAddMenuReturnFocusRef = useRef(false);
+  const groupDraftInputRef = useRef<HTMLInputElement | null>(null);
+  // Enter/Escape mark the blur as handled so onBlur commits exactly once —
+  // without it, committing on Enter unmounts a focused input and the trailing
+  // focusout creates the group a second time.
+  const skipNextGroupBlurCommitRef = useRef(false);
+
+  useEffect(() => {
+    if (!creatingGroup) return;
+    skipNextGroupBlurCommitRef.current = false;
+    groupDraftInputRef.current?.focus();
+  }, [creatingGroup]);
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [groupRenameDraft, setGroupRenameDraft] = useState("");
   const { confirm: requestGroupDeleteConfirm, dialog: groupDeleteDialog } = useConfirmDialog();
+
+  const commitNewGroup = useCallback(() => {
+    const name = groupDraft.trim();
+    if (name) onCreateWorkspaceGroup?.(name);
+    setCreatingGroup(false);
+    setGroupDraft("");
+  }, [groupDraft, onCreateWorkspaceGroup]);
+
+  const cancelNewGroup = useCallback(() => {
+    setCreatingGroup(false);
+    setGroupDraft("");
+  }, []);
 
   const commitGroupRename = useCallback(() => {
     const name = groupRenameDraft.trim();
@@ -1183,17 +1243,15 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     return (
       <div
         data-testid={`workspace-conversations-${project.id}`}
-        className={cn("mb-2 ml-3 pl-2", indented && "ml-7")}
+        className={cn("mb-2 ml-3 space-y-px pl-2", indented && "ml-7")}
       >
         {visible.map((item) => renderHistoryRow(item))}
         {!state || (state.loading && visible.length === 0) ? (
-          <div role="status" className="px-2 py-2 text-xs text-muted-foreground">
+          <div role="status" className="p-2 text-xs text-muted-foreground">
             {t("sidebar.readingHistory")}
           </div>
         ) : visible.length === 0 && !state.error ? (
-          <div className="px-2 py-2 text-xs text-muted-foreground">
-            {t("chat.emptyChatHistory")}
-          </div>
+          <div className="p-2 text-xs text-muted-foreground">{t("chat.emptyChatHistory")}</div>
         ) : null}
         {state?.error ? (
           <div role="alert" className="px-2 py-1 text-xs text-destructive">
@@ -1205,7 +1263,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             type="button"
             disabled={sectionsDisabled || state?.loading}
             onClick={() => void onLoadWorkspaceHistory?.(project.path, !state?.error)}
-            className="flex h-[30px] w-full items-center rounded-md px-2 text-left text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className={cn(
+              "flex sidebar-list-row w-full items-center rounded-md px-2",
+              "text-left text-sm font-normal leading-5 text-foreground/60",
+              "hover:bg-foreground/[0.06] hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+            )}
           >
             {state?.loading
               ? t("sidebar.loadingMoreHistory")
@@ -1280,674 +1342,857 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     );
   };
   return (
-    <aside
-      aria-hidden={!isOpen}
-      inert={!isOpen}
-      data-app-frame-column="sidebar"
-      data-state={isOpen ? "open" : "closed"}
-      className={cn(
-        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
-        isOpen ? "w-[272px] opacity-100" : "w-0 opacity-0",
-      )}
-      style={{ "--zone-font-scale": fontScale } as CSSProperties}
-    >
-      {reorder.draggingKey && draggedTitle ? (
-        <div
-          ref={reorder.ghostRef}
-          aria-hidden="true"
-          data-sidebar-drag-ghost
-          className="pointer-events-none fixed left-0 top-0 layer-popover flex h-8 max-w-[240px] items-center gap-2 rounded-lg border border-border/30 bg-popover/95 px-3 text-[calc(14px*var(--zone-font-scale,1))] text-popover-foreground shadow-lg backdrop-blur-sm"
-          style={{
-            transform:
-              "translate3d(var(--sidebar-drag-x, -9999px), var(--sidebar-drag-y, -9999px), 0)",
-          }}
-        >
-          {draggedPinnedEntry?.kind === "conversation" ? (
-            <MessageSquare className="h-4 w-4 shrink-0" />
-          ) : (
-            <FolderClosed className="h-4 w-4 shrink-0" />
-          )}
-          <span className="truncate">{draggedTitle}</span>
-        </div>
-      ) : null}
-      <div className="chat-history-sidebar-inner flex w-[272px] min-w-[272px] min-h-0 flex-1 flex-col">
-        {headerTop}
-        <div className="shrink-0 border-b border-border/50 px-2 pb-3 pt-3">
-          <div className="flex items-center justify-between gap-2">
-            {brand ?? (
-              <div className="flex min-w-0 -translate-y-0.5 items-center gap-2">
-                <img
-                  src="/icon-simple.png"
-                  alt=""
-                  aria-hidden="true"
-                  draggable={false}
-                  className="h-8 w-8 shrink-0 select-none rounded-xl object-contain"
-                />
-                <div className="min-w-0">
-                  <div className="truncate font-semibold tracking-tight">Live Agent</div>
-                </div>
-              </div>
+    <>
+      <Sidebar
+        label={t("sidebar.navigation")}
+        data-app-frame-column="sidebar"
+        className="chat-history-sidebar zone-font-scale bg-settings-rail group-data-[side=left]:border-r-0 [&_button:not(:disabled)]:cursor-pointer"
+        style={{ "--zone-font-scale": fontScale } as CSSProperties}
+      >
+        {reorder.draggingKey && draggedTitle ? (
+          <div
+            ref={reorder.ghostRef}
+            aria-hidden="true"
+            data-sidebar-drag-ghost
+            className={cn(
+              "pointer-events-none fixed left-0 top-0 layer-popover flex h-8 max-w-240px",
+              "items-center gap-2 rounded-lg border border-border/30 bg-popover/95 px-3",
+              "text-sm text-popover-foreground shadow-lg backdrop-blur-sm",
             )}
-
-            {!hideCloseButton ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={onCloseSidebar}
-                title={t("sidebar.closeSidebar")}
-                className="h-9 w-9 shrink-0 rounded-2xl text-muted-foreground hover:text-foreground"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </Button>
-            ) : null}
+            style={{
+              transform: "translate3d(var(--sidebar-drag-x), var(--sidebar-drag-y), 0)",
+            }}
+          >
+            {draggedPinnedEntry?.kind === "conversation" ? (
+              <MessageSquare className="size-4 shrink-0" />
+            ) : (
+              <FolderClosed className="size-4 shrink-0" />
+            )}
+            <span className="truncate">{draggedTitle}</span>
           </div>
-
-          <div className="mt-3 flex flex-col gap-0.5">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onNewConversation}
-              className={cn(
-                "chat-history-new-conversation-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
-                activeView === "chat"
-                  ? "text-foreground/90 hover:bg-foreground/[0.08] hover:text-foreground active:bg-foreground/[0.1] active:text-foreground focus-visible:bg-foreground/[0.08]"
-                  : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
+        ) : null}
+        <div
+          className={cn(
+            "chat-history-sidebar-inner flex w-272px min-w-272px min-h-0 flex-1 flex-col",
+            "web:max-820:w-full web:max-820:min-w-0 web:max-820:translate-z-0 web:max-820:[backface-visibility:hidden]",
+          )}
+        >
+          {headerTop}
+          <SidebarHeader className="px-3 pb-2 pt-2">
+            <div className="flex items-center justify-between gap-2">
+              {brand ?? (
+                <div className="flex min-w-0 -translate-y-0.5 items-center gap-2">
+                  <img
+                    src="/icon-simple.png"
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className="size-8 shrink-0 select-none rounded-xl object-contain"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold tracking-tight">Live Agent</div>
+                  </div>
+                </div>
               )}
-            >
-              <CirclePlus className="h-4 w-4 shrink-0 text-foreground/85" />
-              <span className="chat-history-new-conversation-label">
-                {t("chat.newConversation")}
-              </span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={sectionsDisabled}
-              onClick={() => setConversationSearchOpen(true)}
-              className="chat-history-search-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 text-foreground/80 shadow-none transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-              title={t("chat.searchConversations")}
-            >
-              <Search className="h-4 w-4 shrink-0 text-foreground/85" />
-              <span className="min-w-0 flex-1 truncate text-left">
-                {t("chat.searchConversations")}
-              </span>
-            </Button>
-            {SIDEBAR_SHORTCUTS.filter(({ id }) => sidebarShortcuts[id]).map(({ id, labelKey }) => {
-              const Icon = { skills: Blend, mcp: Cable, cron: Clock3, memory: Brain }[id];
-              const active = activeView === `${id}-hub`;
-              return (
+
+              <div className="flex shrink-0 items-center gap-0.5">
                 <Button
-                  key={id}
                   type="button"
                   variant="ghost"
-                  data-testid={`sidebar-shortcut-${id}`}
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => onOpenResourceHub(id)}
-                  className={cn(
-                    "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
-                    active
-                      ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-                      : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
-                  )}
-                  title={t(labelKey)}
+                  size="icon-sm"
+                  disabled={sectionsDisabled}
+                  onClick={() => setConversationSearchOpen(true)}
+                  title={t("chat.searchConversations")}
+                  aria-label={t("chat.searchConversations")}
+                  className="chat-history-search-button rounded-lg text-muted-foreground hover:text-foreground"
                 >
-                  <Icon className="h-4 w-4 shrink-0 text-foreground/85" />
-                  <span className="truncate">{t(labelKey)}</span>
+                  <Search className="size-4" />
                 </Button>
-              );
-            })}
-          </div>
-        </div>
+                {!hideCloseButton || isMobileMenuLayout ? (
+                  <SidebarTrigger
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    title={t("sidebar.closeSidebar")}
+                    className="shrink-0 rounded-lg text-muted-foreground hover:text-foreground desktop:min-[768px]:hidden"
+                  >
+                    <PanelLeftClose className="size-4" />
+                  </SidebarTrigger>
+                ) : null}
+              </div>
+            </div>
 
-        <div
-          aria-disabled={sectionsDisabled || undefined}
-          inert={sectionsDisabled}
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            sectionsDisabled && "pointer-events-none select-none opacity-50",
-          )}
-        >
-          {showProjects ? (
-            <div
-              ref={workspaceTreeRef}
-              onClickCapture={reorder.onClickCapture}
-              onPointerDownCapture={reorder.onPointerDownCapture}
-              className="scroll-fade min-h-0 flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
-            >
-              {pinnedConversations.length > 0 || pinnedProjects.length > 0 ? (
-                <section aria-label={t("chat.pinnedSection")} className="shrink-0 pb-2">
-                  <div className="flex items-center px-2 pb-1 pt-2">
-                    <button
-                      type="button"
-                      aria-expanded={!pinnedCollapsed}
-                      onClick={() => setPinnedCollapsed((collapsed) => !collapsed)}
-                      className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
+            <SidebarMenu className="mt-2.5 gap-px">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  type="button"
+                  isActive={activeView === "chat"}
+                  onClick={onNewConversation}
+                  className={cn(
+                    "sidebar-list-row w-full justify-start gap-2.5 rounded-md px-2.5",
+                    "text-sm font-normal leading-5 shadow-none transition-colors",
+                    "web:text-sm! web:leading-20px! web:font-normal",
+                    activeView === "chat"
+                      ? "bg-settings-active font-medium text-foreground hover:bg-settings-active"
+                      : "text-foreground/75 hover:bg-settings-tile-hover hover:text-foreground",
+                  )}
+                >
+                  <CirclePlus className="size-4 shrink-0 text-foreground/85" />
+                  <span className="web:font-app web:[font-size:inherit] web:[line-height:inherit] web:[font-weight:inherit]">
+                    {t("chat.newConversation")}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {SIDEBAR_SHORTCUTS.filter(({ id }) => sidebarShortcuts[id]).map(
+                ({ id, labelKey }) => {
+                  const Icon = { skills: Blend, mcp: Cable, cron: Clock3, memory: Brain }[id];
+                  const active = activeView === `${id}-hub`;
+                  return (
+                    <SidebarMenuItem key={id}>
+                      <SidebarMenuButton
+                        isActive={active}
+                        type="button"
+                        data-testid={`sidebar-shortcut-${id}`}
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => onOpenResourceHub(id)}
+                        className={cn(
+                          "sidebar-hub-menu-item sidebar-list-row w-full justify-start gap-2.5 rounded-md px-2.5",
+                          "text-sm font-normal leading-5 shadow-none transition-colors",
+                          active
+                            ? "bg-settings-active font-medium text-foreground hover:bg-settings-active focus-visible:bg-settings-active"
+                            : "text-foreground/75 hover:bg-settings-tile-hover hover:text-foreground focus-visible:bg-settings-tile-hover",
+                        )}
+                        title={t(labelKey)}
+                      >
+                        <Icon className="size-4 shrink-0 text-foreground/85" />
+                        <span className="truncate">{t(labelKey)}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                },
+              )}
+            </SidebarMenu>
+          </SidebarHeader>
+
+          <SidebarContent
+            aria-disabled={sectionsDisabled || undefined}
+            inert={sectionsDisabled}
+            className={cn(
+              "flex min-h-0 flex-1 flex-col overflow-hidden",
+              sectionsDisabled && "pointer-events-none select-none opacity-50",
+            )}
+          >
+            {showProjects ? (
+              <div
+                ref={workspaceTreeRef}
+                onClickCapture={reorder.onClickCapture}
+                onPointerDownCapture={reorder.onPointerDownCapture}
+                className="scroll-fade min-h-0 flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
+              >
+                {pinnedConversations.length > 0 || pinnedProjects.length > 0 ? (
+                  <SidebarGroup
+                    role="region"
+                    aria-label={t("chat.pinnedSection")}
+                    className="shrink-0 pb-2"
+                  >
+                    <div className="flex items-center px-2 pb-1 pt-2">
+                      <SidebarGroupLabel
+                        render={<button type="button" />}
+                        aria-expanded={!pinnedCollapsed}
+                        onClick={() => setPinnedCollapsed((collapsed) => !collapsed)}
+                        className={cn(
+                          "group flex min-w-0 items-center gap-1 rounded-md px-2.5 py-1",
+                          "text-xs font-medium text-muted-foreground/70 outline-hidden",
+                        )}
+                      >
+                        {t("chat.pinnedSection")}
+                        <ChevronRight
+                          aria-hidden="true"
+                          className="size-3.5 opacity-0 transition-[opacity,transform] group-hover:opacity-100"
+                          style={{ transform: `rotate(${pinnedCollapsed ? 0 : 90}deg)` }}
+                        />
+                      </SidebarGroupLabel>
+                    </div>
+                    {!pinnedCollapsed && (
+                      <SidebarGroupContent className="space-y-px px-2">
+                        {pinnedEntries.map((entry) =>
+                          entry.kind === "conversation"
+                            ? renderHistoryRow(entry.item, true)
+                            : renderWorkspaceProject(entry.project),
+                        )}
+                      </SidebarGroupContent>
+                    )}
+                  </SidebarGroup>
+                ) : null}
+                <SidebarGroup
+                  role="region"
+                  aria-label={t("chat.workspaceSection")}
+                  data-workspace-folder-drop-zone={
+                    !sectionsDisabled && !reorder.draggingKey ? "" : undefined
+                  }
+                  {...(!sectionsDisabled && !reorder.draggingKey
+                    ? workspaceFolderDropHandlers
+                    : undefined)}
+                  className="flex flex-1 flex-col"
+                >
+                  <div
+                    className={cn(
+                      "flex shrink-0 items-center justify-between rounded-t-xl",
+                      "px-2 pb-1 pt-2 transition-colors",
+                      showWorkspaceFolderDrop &&
+                        "bg-primary/[0.08] ring-1 ring-primary/40 ring-inset",
+                    )}
+                  >
+                    <SidebarGroupLabel
+                      render={<button type="button" disabled={sectionsDisabled} />}
+                      aria-expanded={!projectsCollapsed}
+                      className={cn(
+                        "group flex min-w-0 items-center gap-1 rounded-md px-2.5 py-1",
+                        "text-xs font-medium text-muted-foreground/70 outline-hidden",
+                      )}
+                      onClick={handleProjectsCollapsedChange}
                     >
-                      {t("chat.pinnedSection")}
+                      <span className="truncate">
+                        {showWorkspaceFolderDrop
+                          ? t("chat.workspaceDropFolder")
+                          : t("chat.workspaceSection")}
+                      </span>
                       <ChevronRight
                         aria-hidden="true"
-                        className="h-3.5 w-3.5 opacity-0 transition-[opacity,transform] group-hover:opacity-100"
-                        style={{ transform: `rotate(${pinnedCollapsed ? 0 : 90}deg)` }}
+                        className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
+                        style={{ transform: `rotate(${projectsCollapsed ? 0 : 90}deg)` }}
                       />
-                    </button>
-                  </div>
-                  {!pinnedCollapsed && (
-                    <div className="space-y-0.5 px-2">
-                      {pinnedEntries.map((entry) =>
-                        entry.kind === "conversation"
-                          ? renderHistoryRow(entry.item, true)
-                          : renderWorkspaceProject(entry.project),
-                      )}
-                    </div>
-                  )}
-                </section>
-              ) : null}
-              <section
-                aria-label={t("chat.workspaceSection")}
-                data-workspace-folder-drop-zone={
-                  !sectionsDisabled && !reorder.draggingKey ? "" : undefined
-                }
-                {...(!sectionsDisabled && !reorder.draggingKey
-                  ? workspaceFolderDropHandlers
-                  : undefined)}
-                className="flex flex-1 flex-col"
-              >
-                <div
-                  className={cn(
-                    "flex shrink-0 items-center justify-between rounded-t-xl px-2 pb-1 pt-2 transition-colors",
-                    showWorkspaceFolderDrop &&
-                      "bg-primary/[0.08] ring-1 ring-primary/40 ring-inset",
-                  )}
-                >
-                  <button
-                    type="button"
-                    aria-expanded={!projectsCollapsed}
-                    className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
-                    onClick={handleProjectsCollapsedChange}
-                    disabled={sectionsDisabled}
-                  >
-                    <span className="truncate">
-                      {showWorkspaceFolderDrop
-                        ? t("chat.workspaceDropFolder")
-                        : t("chat.workspaceSection")}
-                    </span>
-                    <ChevronRight
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
-                      style={{ transform: `rotate(${projectsCollapsed ? 0 : 90}deg)` }}
-                    />
-                  </button>
-                  <div className="flex items-center gap-0.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={PROJECT_ICON_BUTTON_CLASS}
-                      onClick={() => (selectionMode ? exitSelectionMode() : enterSelectionMode())}
-                      aria-pressed={selectionMode}
-                      disabled={
-                        sectionsDisabled || (!selectionMode && selectableConversationIds.size === 0)
-                      }
-                      aria-label={t("chat.conversationBulkSelect")}
-                      title={t("chat.conversationBulkSelect")}
-                    >
-                      <ListChecks className="h-3.5 w-3.5" />
-                    </Button>
-                    {canShareConversations && (
+                    </SidebarGroupLabel>
+                    <div className="flex items-center gap-0.5">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         className={PROJECT_ICON_BUTTON_CLASS}
-                        onClick={handleOpenSharedConversations}
-                        aria-label={t("chat.manageSharedConversations").replace(
-                          "{count}",
-                          String(sharedConversationCount),
-                        )}
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={cn(PROJECT_ICON_BUTTON_CLASS, "hover:!bg-transparent")}
-                      title={t("chat.workspaceCreate")}
-                      aria-label={t("chat.workspaceCreate")}
-                      disabled={sectionsDisabled || !onCreateProject}
-                      onClick={() => onCreateProject?.()}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-                {actionErrorMessage && (
-                  <div role="alert" className="mx-3 mb-2 flex gap-2 text-xs text-destructive">
-                    <span className="min-w-0 flex-1">{actionErrorMessage}</span>
-                    {onDismissActionError && (
-                      <button
-                        type="button"
-                        onClick={onDismissActionError}
-                        aria-label={t("chat.cancel")}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                )}
-                <div
-                  aria-hidden={projectsCollapsed}
-                  inert={projectsCollapsed}
-                  className={cn(
-                    "flex-1 rounded-b-xl transition-[opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
-                    projectsCollapsed ? "hidden" : "opacity-100",
-                    showWorkspaceFolderDrop &&
-                      "bg-primary/[0.045] ring-1 ring-primary/40 ring-inset",
-                  )}
-                >
-                  <div className="space-y-0.5 px-2 pb-0.5">
-                    {showWorkspaceFolderDrop ? (
-                      <div
-                        role="status"
-                        aria-live="polite"
-                        className="flex h-[30px] items-center gap-2 px-2 text-xs text-muted-foreground"
-                      >
-                        <FolderOpen className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{t("chat.workspaceDropFolder")}</span>
-                      </div>
-                    ) : null}
-                    {renderedSections.grouped.map((section) => {
-                      const { group, projects: members } = section;
-                      const collapsed = isGroupCollapsed(group, members);
-                      return (
-                        <Fragment key={group.id}>
-                          <ProjectGroupHeader
-                            group={group}
-                            memberCount={members.length}
-                            isRenaming={renamingGroupId === group.id}
-                            renameDraft={groupRenameDraft}
-                            onRenameDraftChange={setGroupRenameDraft}
-                            onCommitRename={commitGroupRename}
-                            onCancelRename={cancelGroupRename}
-                            onToggleCollapsed={() => {
-                              setRevealedSearchConversationId(null);
-                              onToggleWorkspaceGroupCollapsed?.(group.id);
-                            }}
-                            onStartRename={() => {
-                              setRenamingGroupId(group.id);
-                              setGroupRenameDraft(group.name);
-                            }}
-                            onDelete={() => void requestDeleteGroup(group)}
-                          />
-                          {!collapsed
-                            ? members.map((project) => renderWorkspaceProject(project, true))
-                            : null}
-                        </Fragment>
-                      );
-                    })}
-                    {renderedSections.ungrouped.length > 0 ? (
-                      <Fragment>
-                        {renderedSections.grouped.length > 0 ? (
-                          <div className="px-2 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                            {t("chat.workspaceUngrouped")}
-                          </div>
-                        ) : null}
-                        {renderedSections.ungrouped.map((project) =>
-                          renderWorkspaceProject(project),
-                        )}
-                      </Fragment>
-                    ) : null}
-                    {hiddenProjectCount > 0 || showAllProjects ? (
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[calc(11.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={handleShowAllProjects}
-                        disabled={sectionsDisabled}
-                      >
-                        {showAllProjects
-                          ? t("chat.workspaceShowLessProjects")
-                          : t("chat.workspaceShowAllProjects").replace(
-                              "{count}",
-                              String(activeProjects.length),
-                            )}
-                      </button>
-                    ) : null}
-                    {archivedProjects.length > 0 ? (
-                      <div className="pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setArchivedGroupOpen((current) => !current)}
-                          disabled={sectionsDisabled}
-                          className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-[calc(11.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground/80 outline-hidden transition-colors hover:!bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <ChevronRight
-                            className={cn(
-                              "h-3 w-3 shrink-0 transition-transform duration-200",
-                              archivedGroupOpen && "rotate-90",
-                            )}
-                          />
-                          {t("chat.workspaceArchivedGroup").replace(
-                            "{count}",
-                            String(archivedProjects.length),
-                          )}
-                        </button>
-                        {archivedGroupOpen
-                          ? archivedProjects.map((project) =>
-                              renderWorkspaceProject(project, false, true),
-                            )
-                          : null}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-            </div>
-          ) : null}
-
-          {(!showProjects || selectionMode) && (
-            <div
-              className={cn(
-                "grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 pb-2",
-                showProjects ? "border-t border-border/35 pt-0.5" : "pt-3",
-              )}
-            >
-              {selectionMode ? (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="flex min-w-0 items-center gap-1.5 px-3 py-1 text-xs font-semibold text-foreground/85"
-                >
-                  <ListChecks className="h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 truncate">
-                    {t("chat.conversationBulkSelectedCount").replace(
-                      "{count}",
-                      String(selectedConversationIds.size),
-                    )}
-                  </span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  aria-expanded={!recentCollapsed}
-                  className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
-                  onClick={handleRecentCollapsedChange}
-                  disabled={sectionsDisabled}
-                >
-                  <span className="min-w-0 truncate">{t("chat.recentConversation")}</span>
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
-                    style={{ transform: `rotate(${recentCollapsed ? 0 : 90}deg)` }}
-                  />
-                </button>
-              )}
-              <div className="flex items-center gap-1.5">
-                {selectionMode ? (
-                  <>
-                    <DropdownMenu
-                      open={bulkMoveMenuOpen}
-                      onOpenChange={(open) => {
-                        if (!sectionsDisabled || !open) {
-                          setBulkMoveMenuOpen(open);
-                        }
-                      }}
-                    >
-                      <DropdownMenuTrigger
-                        type="button"
-                        disabled={
-                          sectionsDisabled ||
-                          selectedConversationIds.size === 0 ||
-                          isBulkDeleting ||
-                          isBulkMoving ||
-                          activeProjects.length === 0
-                        }
-                        className={cn(
-                          PROJECT_ICON_BUTTON_CLASS,
-                          "inline-flex items-center justify-center",
-                          "disabled:pointer-events-none disabled:opacity-50",
-                        )}
-                        title={t("chat.conversationMoveToWorkspace")}
-                        aria-label={t("chat.conversationMoveToWorkspace")}
-                      >
-                        {isBulkMoving ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Folder className="h-3.5 w-3.5" />
-                        )}
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        side="top"
-                        align="start"
-                        collisionPadding={12}
-                        className="sidebar-context-menu max-h-[18rem] min-w-[12rem] overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
-                      >
-                        {activeProjects.map((workspace) => (
-                          <DropdownMenuItem
-                            key={workspace.id}
-                            onSelect={() => void handleBulkMove(workspace.path)}
-                            className="gap-2"
-                          >
-                            <FolderClosed className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">{workspace.path}</span>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleBulkDelete}
-                      disabled={
-                        sectionsDisabled ||
-                        selectedConversationIds.size === 0 ||
-                        isBulkDeleting ||
-                        isBulkMoving
-                      }
-                      className={cn(PROJECT_ICON_BUTTON_CLASS, "text-destructive")}
-                      title={t("chat.conversationBulkDelete")}
-                      aria-label={t("chat.conversationBulkDelete")}
-                    >
-                      {isBulkDeleting ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={exitSelectionMode}
-                      className={PROJECT_ICON_BUTTON_CLASS}
-                      title={t("chat.cancel")}
-                      aria-label={t("chat.cancel")}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    {listStatus === "syncing" ? (
-                      <span
-                        role="status"
-                        aria-live="polite"
-                        className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-primary/80"
-                      >
-                        <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden="true">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/35 opacity-75" />
-                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/70" />
-                        </span>
-                        {t("chat.history.syncing")}
-                      </span>
-                    ) : null}
-                    {errorMessage ? (
-                      <span
-                        role="status"
-                        title={`${t("chat.historyReadFailed")}: ${errorMessage}`}
-                        className="flex h-7 w-7 items-center justify-center text-destructive"
-                      >
-                        <AlertCircle
-                          className="h-3.5 w-3.5 shrink-0"
-                          aria-label={t("chat.historyReadFailed")}
-                        />
-                      </span>
-                    ) : null}
-                    {items.length > 0 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
                         onClick={() => (selectionMode ? exitSelectionMode() : enterSelectionMode())}
                         aria-pressed={selectionMode}
                         disabled={
                           sectionsDisabled ||
                           (!selectionMode && selectableConversationIds.size === 0)
                         }
-                        className={PROJECT_ICON_BUTTON_CLASS}
-                        title={t("chat.conversationBulkSelectHint")}
                         aria-label={t("chat.conversationBulkSelect")}
+                        title={t("chat.conversationBulkSelect")}
                       >
-                        <ListChecks className="h-3.5 w-3.5" />
+                        <ListChecks className="size-3.5" />
                       </Button>
-                    ) : null}
-                    {canShareConversations ? (
+                      {canShareConversations && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className={PROJECT_ICON_BUTTON_CLASS}
+                          onClick={handleOpenSharedConversations}
+                          aria-label={t("chat.manageSharedConversations").replace(
+                            "{count}",
+                            String(sharedConversationCount),
+                          )}
+                        >
+                          <Share2 className="size-3.5" />
+                        </Button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className={cn(PROJECT_ICON_BUTTON_CLASS, "hover:!bg-transparent")}
+                              title={t("chat.workspaceAdd")}
+                              aria-label={t("chat.workspaceAdd")}
+                              disabled={
+                                sectionsDisabled || (!onCreateProject && !onCreateWorkspaceGroup)
+                              }
+                            />
+                          }
+                        >
+                          <Plus className="size-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          side="right"
+                          align="start"
+                          sideOffset={6}
+                          className={SIDEBAR_CONTEXT_MENU_CLASS}
+                          finalFocus={() => {
+                            if (suppressAddMenuReturnFocusRef.current) {
+                              suppressAddMenuReturnFocusRef.current = false;
+                              return false;
+                            }
+                            return true;
+                          }}
+                        >
+                          <DropdownMenuItem
+                            disabled={sectionsDisabled || !onCreateProject}
+                            onSelect={() => onCreateProject?.()}
+                            className="gap-2 text-xs"
+                          >
+                            <Plus className="size-3.5" />
+                            <span>{t("chat.workspaceCreate")}</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={sectionsDisabled || !onCreateWorkspaceGroup}
+                            onSelect={() => {
+                              // Only this item mounts an input in the same commit that
+                              // unmounts the menu, so only this item opts out of Base
+                              // UI's return-focus. "New workspace" opens a dialog that
+                              // owns its own focus and still wants the trigger back.
+                              suppressAddMenuReturnFocusRef.current = true;
+                              onProjectsCollapsedChange?.(false);
+                              if (hiddenProjectCount > 0) setShowAllProjects(true);
+                              setCreatingGroup(true);
+                              setGroupDraft("");
+                            }}
+                            className="gap-2 text-xs"
+                          >
+                            <Folder className="size-3.5" />
+                            <span>{t("chat.workspaceGroupCreate")}</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  {actionErrorMessage && (
+                    <div role="alert" className="mx-3 mb-2 flex gap-2 text-xs text-destructive">
+                      <span className="min-w-0 flex-1">{actionErrorMessage}</span>
+                      {onDismissActionError && (
+                        <button
+                          type="button"
+                          onClick={onDismissActionError}
+                          aria-label={t("chat.cancel")}
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div
+                    aria-hidden={projectsCollapsed}
+                    inert={projectsCollapsed}
+                    className={cn(
+                      "flex-1 rounded-b-xl transition-[opacity,background-color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
+                      projectsCollapsed ? "hidden" : "opacity-100",
+                      showWorkspaceFolderDrop &&
+                        "bg-primary/[0.045] ring-1 ring-primary/40 ring-inset",
+                    )}
+                  >
+                    <SidebarGroupContent className="space-y-px px-2 pb-px">
+                      {showWorkspaceFolderDrop ? (
+                        <div
+                          role="status"
+                          aria-live="polite"
+                          className="flex sidebar-list-row items-center gap-2 px-2 text-xs text-muted-foreground"
+                        >
+                          <FolderOpen className="size-4 shrink-0" />
+                          <span className="truncate">{t("chat.workspaceDropFolder")}</span>
+                        </div>
+                      ) : null}
+                      {creatingGroup ? (
+                        // Same geometry as ProjectGroupHeader and ProjectRow —
+                        // pl-1 + px-2 + a 16px icon slot + gap-2 puts the draft name
+                        // at 36px, the shared left edge for every row in this list.
+                        // Committing the name must not shift it.
+                        <div className="flex sidebar-list-row items-center rounded-lg pl-1">
+                          <div className="flex sidebar-list-row min-w-0 flex-1 items-center gap-2 px-2">
+                            <Folder
+                              aria-hidden="true"
+                              className="size-4 shrink-0 text-muted-foreground"
+                            />
+                            <Input
+                              ref={groupDraftInputRef}
+                              value={groupDraft}
+                              onChange={(event) => setGroupDraft(event.currentTarget.value)}
+                              onBlur={() => {
+                                if (skipNextGroupBlurCommitRef.current) {
+                                  skipNextGroupBlurCommitRef.current = false;
+                                  return;
+                                }
+                                commitNewGroup();
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  skipNextGroupBlurCommitRef.current = true;
+                                  commitNewGroup();
+                                } else if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  skipNextGroupBlurCommitRef.current = true;
+                                  cancelNewGroup();
+                                }
+                              }}
+                              aria-label={t("chat.workspaceGroupNamePlaceholder")}
+                              placeholder={t("chat.workspaceGroupNamePlaceholder")}
+                              className={HISTORY_RENAME_INPUT_CLASS}
+                            />
+                          </div>
+                          {/* Mirrors ProjectRow's action column: gap-0.5 between
+                          28px hit targets, 14px glyphs, flush to the row's
+                          right edge. Both buttons preventDefault on mousedown so
+                          focus stays in the input — otherwise the blur lands
+                          first, commits the draft, and the row unmounts before
+                          the click reaches its handler (pressing ✕ would create
+                          the group). Arming the skip flag then covers the blur
+                          that the unmount itself dispatches. */}
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <button
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                skipNextGroupBlurCommitRef.current = true;
+                              }}
+                              onClick={commitNewGroup}
+                              className="flex size-7 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
+                              aria-label={t("chat.workspaceGroupCreate")}
+                            >
+                              <Check className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                skipNextGroupBlurCommitRef.current = true;
+                              }}
+                              onClick={cancelNewGroup}
+                              className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+                              aria-label={t("chat.cancel")}
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                      {renderedSections.grouped.map((section) => {
+                        const { group, projects: members } = section;
+                        const collapsed = isGroupCollapsed(group, members);
+                        return (
+                          <Fragment key={group.id}>
+                            <ProjectGroupHeader
+                              group={group}
+                              memberCount={members.length}
+                              isRenaming={renamingGroupId === group.id}
+                              renameDraft={groupRenameDraft}
+                              onRenameDraftChange={setGroupRenameDraft}
+                              onCommitRename={commitGroupRename}
+                              onCancelRename={cancelGroupRename}
+                              onToggleCollapsed={() => {
+                                setRevealedSearchConversationId(null);
+                                onToggleWorkspaceGroupCollapsed?.(group.id);
+                              }}
+                              onStartRename={() => {
+                                setRenamingGroupId(group.id);
+                                setGroupRenameDraft(group.name);
+                              }}
+                              onDelete={() => void requestDeleteGroup(group)}
+                            />
+                            {!collapsed
+                              ? members.map((project) => renderWorkspaceProject(project, true))
+                              : null}
+                          </Fragment>
+                        );
+                      })}
+                      {renderedSections.ungrouped.length > 0 ? (
+                        <Fragment>
+                          {renderedSections.grouped.length > 0 ? (
+                            <div className="px-2 pt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+                              {t("chat.workspaceUngrouped")}
+                            </div>
+                          ) : null}
+                          {renderedSections.ungrouped.map((project) =>
+                            renderWorkspaceProject(project),
+                          )}
+                        </Fragment>
+                      ) : null}
+                      {hiddenProjectCount > 0 || showAllProjects ? (
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5",
+                            "text-xs font-medium text-muted-foreground outline-hidden transition-colors",
+                            "hover:!bg-foreground/[0.06] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring",
+                          )}
+                          onClick={handleShowAllProjects}
+                          disabled={sectionsDisabled}
+                        >
+                          {showAllProjects
+                            ? t("chat.workspaceShowLessProjects")
+                            : t("chat.workspaceShowAllProjects").replace(
+                                "{count}",
+                                String(activeProjects.length),
+                              )}
+                        </button>
+                      ) : null}
+                      {archivedProjects.length > 0 ? (
+                        <div className="pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setArchivedGroupOpen((current) => !current)}
+                            disabled={sectionsDisabled}
+                            className={cn(
+                              "flex w-full items-center gap-1 rounded-md px-2 py-1.5",
+                              "text-xs font-medium text-muted-foreground/80 outline-hidden transition-colors",
+                              "hover:!bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                            )}
+                          >
+                            <ChevronRight
+                              className={cn(
+                                "size-3 shrink-0 transition-transform duration-200",
+                                archivedGroupOpen && "rotate-90",
+                              )}
+                            />
+                            {t("chat.workspaceArchivedGroup").replace(
+                              "{count}",
+                              String(archivedProjects.length),
+                            )}
+                          </button>
+                          {archivedGroupOpen
+                            ? archivedProjects.map((project) =>
+                                renderWorkspaceProject(project, false, true),
+                              )
+                            : null}
+                        </div>
+                      ) : null}
+                    </SidebarGroupContent>
+                  </div>
+                </SidebarGroup>
+              </div>
+            ) : null}
+
+            {(!showProjects || selectionMode) && (
+              <div
+                className={cn(
+                  "grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 pb-2",
+                  showProjects ? "border-t border-border/35 pt-0.5" : "pt-3",
+                )}
+              >
+                {selectionMode ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className={cn(
+                      "flex min-w-0 items-center gap-1.5 px-3 py-1",
+                      "text-xs font-semibold text-foreground/85",
+                    )}
+                  >
+                    <ListChecks className="size-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">
+                      {t("chat.conversationBulkSelectedCount").replace(
+                        "{count}",
+                        String(selectedConversationIds.size),
+                      )}
+                    </span>
+                  </div>
+                ) : (
+                  <SidebarGroupLabel
+                    render={<button type="button" disabled={sectionsDisabled} />}
+                    aria-expanded={!recentCollapsed}
+                    className={cn(
+                      "group flex min-w-0 items-center gap-1 rounded-md px-2.5 py-1",
+                      "text-xs font-medium text-muted-foreground/70 outline-hidden",
+                    )}
+                    onClick={handleRecentCollapsedChange}
+                  >
+                    <span className="min-w-0 truncate">{t("chat.recentConversation")}</span>
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
+                      style={{ transform: `rotate(${recentCollapsed ? 0 : 90}deg)` }}
+                    />
+                  </SidebarGroupLabel>
+                )}
+                <div className="flex items-center gap-1.5">
+                  {selectionMode ? (
+                    <>
+                      <DropdownMenu
+                        open={bulkMoveMenuOpen}
+                        onOpenChange={(open) => {
+                          if (!sectionsDisabled || !open) {
+                            setBulkMoveMenuOpen(open);
+                          }
+                        }}
+                      >
+                        <DropdownMenuTrigger
+                          type="button"
+                          disabled={
+                            sectionsDisabled ||
+                            selectedConversationIds.size === 0 ||
+                            isBulkDeleting ||
+                            isBulkMoving ||
+                            activeProjects.length === 0
+                          }
+                          className={cn(
+                            PROJECT_ICON_BUTTON_CLASS,
+                            "inline-flex items-center justify-center",
+                            "disabled:pointer-events-none disabled:opacity-50",
+                          )}
+                          title={t("chat.conversationMoveToWorkspace")}
+                          aria-label={t("chat.conversationMoveToWorkspace")}
+                        >
+                          {isBulkMoving ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Folder className="size-3.5" />
+                          )}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          variant="soft"
+                          side="top"
+                          align="start"
+                          collisionPadding={12}
+                          className={cn(SIDEBAR_CONTEXT_MENU_CLASS, "max-h-72")}
+                        >
+                          {activeProjects.map((workspace) => (
+                            <DropdownMenuItem
+                              key={workspace.id}
+                              onSelect={() => void handleBulkMove(workspace.path)}
+                              className="gap-2"
+                            >
+                              <FolderClosed className="size-3.5 shrink-0" />
+                              <span className="truncate">{workspace.path}</span>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={handleOpenSharedConversations}
-                        disabled={sectionsDisabled}
-                        className={PROJECT_ICON_BUTTON_CLASS}
-                        title={t("chat.manageSharedConversations").replace(
-                          "{count}",
-                          String(sharedConversationCount),
-                        )}
-                        aria-label={t("chat.manageSharedConversations").replace(
-                          "{count}",
-                          String(sharedConversationCount),
-                        )}
+                        onClick={handleBulkDelete}
+                        disabled={
+                          sectionsDisabled ||
+                          selectedConversationIds.size === 0 ||
+                          isBulkDeleting ||
+                          isBulkMoving
+                        }
+                        className={cn(PROJECT_ICON_BUTTON_CLASS, "text-destructive")}
+                        title={t("chat.conversationBulkDelete")}
+                        aria-label={t("chat.conversationBulkDelete")}
                       >
-                        <Share2 className="h-3.5 w-3.5" />
+                        {isBulkDeleting ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-3.5" />
+                        )}
                       </Button>
-                    ) : null}
-                  </>
-                )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={exitSelectionMode}
+                        className={PROJECT_ICON_BUTTON_CLASS}
+                        title={t("chat.cancel")}
+                        aria-label={t("chat.cancel")}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {listStatus === "syncing" ? (
+                        <span
+                          role="status"
+                          aria-live="polite"
+                          className={cn(
+                            "flex items-center gap-1",
+                            "rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5",
+                            "text-tiny font-medium text-primary/80",
+                          )}
+                        >
+                          <span className="relative flex size-1.5 shrink-0" aria-hidden="true">
+                            <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/35 opacity-75" />
+                            <span className="relative inline-flex size-1.5 rounded-full bg-primary/70" />
+                          </span>
+                          {t("chat.history.syncing")}
+                        </span>
+                      ) : null}
+                      {errorMessage ? (
+                        <span
+                          role="status"
+                          title={`${t("chat.historyReadFailed")}: ${errorMessage}`}
+                          className="flex size-7 items-center justify-center text-destructive"
+                        >
+                          <AlertCircle
+                            className="size-3.5 shrink-0"
+                            aria-label={t("chat.historyReadFailed")}
+                          />
+                        </span>
+                      ) : null}
+                      {items.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            selectionMode ? exitSelectionMode() : enterSelectionMode()
+                          }
+                          aria-pressed={selectionMode}
+                          disabled={
+                            sectionsDisabled ||
+                            (!selectionMode && selectableConversationIds.size === 0)
+                          }
+                          className={PROJECT_ICON_BUTTON_CLASS}
+                          title={t("chat.conversationBulkSelectHint")}
+                          aria-label={t("chat.conversationBulkSelect")}
+                        >
+                          <ListChecks className="size-3.5" />
+                        </Button>
+                      ) : null}
+                      {canShareConversations ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleOpenSharedConversations}
+                          disabled={sectionsDisabled}
+                          className={PROJECT_ICON_BUTTON_CLASS}
+                          title={t("chat.manageSharedConversations").replace(
+                            "{count}",
+                            String(sharedConversationCount),
+                          )}
+                          aria-label={t("chat.manageSharedConversations").replace(
+                            "{count}",
+                            String(sharedConversationCount),
+                          )}
+                        >
+                          <Share2 className="size-3.5" />
+                        </Button>
+                      ) : null}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-
-          <div
-            aria-hidden={showProjects || recentCollapsed}
-            inert={showProjects || recentCollapsed}
-            className={cn(
-              "flex min-h-0 flex-1 flex-col transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
-              showProjects || recentCollapsed ? "hidden" : "translate-y-0 opacity-100",
             )}
-          >
-            {/* Read failures surface as the red count badge in the section
+
+            <div
+              aria-hidden={showProjects || recentCollapsed}
+              inert={showProjects || recentCollapsed}
+              className={cn(
+                "flex min-h-0 flex-1 flex-col transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
+                showProjects || recentCollapsed ? "hidden" : "translate-y-0 opacity-100",
+              )}
+            >
+              {/* Read failures surface as the red count badge in the section
                 header. Mutation/project errors keep their own message surface
                 and never replace or relabel the successfully loaded rows. */}
-            {actionErrorMessage ? (
-              <div className="shrink-0 px-2 pb-2">
-                <div
-                  role="alert"
-                  title={actionErrorMessage}
-                  className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-destructive"
-                >
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 break-words">{actionErrorMessage}</span>
-                  {onDismissActionError ? (
-                    <button
-                      type="button"
-                      className="ml-auto shrink-0 rounded p-0.5 hover:bg-destructive/10"
-                      onClick={onDismissActionError}
-                      title={t("chat.cancel")}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-            <div
-              ref={historyScrollRef}
-              aria-busy={listStatus === "loading" || listStatus === "syncing" || isLoadingMore}
-              className="chat-history-list scroll-fade min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3"
-            >
-              {items.length > 0 ? (
-                <div
-                  key={scopeKey || "scope"}
-                  className="chat-history-scope-enter relative"
-                  style={{ height: historyVirtualizer.getTotalSize() }}
-                >
-                  {virtualHistoryRows.map((virtualRow) => {
-                    const item = items[virtualRow.index];
-                    if (!item) return null;
-
-                    return (
-                      <div
-                        key={virtualRow.key}
-                        data-index={virtualRow.index}
-                        ref={historyVirtualizer.measureElement}
-                        className="absolute inset-x-0 top-0 pb-0.5"
-                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+              {actionErrorMessage ? (
+                <div className="shrink-0 px-2 pb-2">
+                  <div
+                    role="alert"
+                    title={actionErrorMessage}
+                    className={cn(
+                      "flex items-start gap-2",
+                      "rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2",
+                      "text-xs leading-4 text-destructive",
+                    )}
+                  >
+                    <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                    <span className="min-w-0 break-words">{actionErrorMessage}</span>
+                    {onDismissActionError ? (
+                      <button
+                        type="button"
+                        className="ml-auto shrink-0 rounded p-0.5 hover:bg-destructive/10"
+                        onClick={onDismissActionError}
+                        title={t("chat.cancel")}
                       >
-                        {virtualRow.index === firstUnpinnedHistoryIndex ? (
-                          <div
-                            aria-hidden="true"
-                            className="mx-2 mb-1.5 mt-1 h-px bg-gradient-to-r from-border/80 via-border/45 to-transparent"
-                          />
-                        ) : null}
-                        {renderHistoryRow(item, item.isPinned === true)}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : listStatus === "loading" || listStatus === "initial" ? (
-                <HistoryListLoadingSkeleton />
-              ) : listStatus === "ready" && !errorMessage ? (
-                <div className="chat-history-scope-enter flex items-center justify-center px-4 py-8 text-center">
-                  <p className="text-xs font-medium text-muted-foreground/60">
-                    {t("chat.emptyChatHistory")}
-                  </p>
+                        <X className="size-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
-              {items.length > 0 && (hasMore || isLoadingMore) ? (
-                <button
-                  type="button"
-                  onClick={handleLoadMore}
-                  disabled={sectionsDisabled || isLoadingMore}
-                  className="w-full rounded-md px-2 pb-2 pt-1 text-center text-xs leading-5 text-muted-foreground hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {isLoadingMore
-                    ? t("sidebar.loadingMoreHistory")
-                    : t("sidebar.continueLoadingHistory")}
-                </button>
-              ) : null}
+              <div
+                ref={historyScrollRef}
+                aria-busy={listStatus === "loading" || listStatus === "syncing" || isLoadingMore}
+                className="chat-history-list scroll-fade min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3"
+              >
+                {items.length > 0 ? (
+                  <div
+                    key={scopeKey || "scope"}
+                    className="relative"
+                    style={{ height: historyVirtualizer.getTotalSize() }}
+                  >
+                    {virtualHistoryRows.map((virtualRow) => {
+                      const item = items[virtualRow.index];
+                      if (!item) return null;
+
+                      return (
+                        <div
+                          key={virtualRow.key}
+                          data-index={virtualRow.index}
+                          ref={historyVirtualizer.measureElement}
+                          className="absolute inset-x-0 top-0 pb-px"
+                          style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        >
+                          {virtualRow.index === firstUnpinnedHistoryIndex ? (
+                            <div
+                              aria-hidden="true"
+                              className="mx-2 mb-1.5 mt-1 h-px bg-gradient-to-r from-border/80 via-border/45 to-transparent"
+                            />
+                          ) : null}
+                          {renderHistoryRow(item, item.isPinned === true)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : listStatus === "loading" || listStatus === "initial" ? (
+                  <HistoryListLoadingSkeleton />
+                ) : listStatus === "ready" && !errorMessage ? (
+                  <div className="flex items-center justify-center px-4 py-8 text-center">
+                    <p className="text-xs font-medium text-muted-foreground/60">
+                      {t("chat.emptyChatHistory")}
+                    </p>
+                  </div>
+                ) : null}
+                {items.length > 0 && (hasMore || isLoadingMore) ? (
+                  <button
+                    type="button"
+                    onClick={handleLoadMore}
+                    disabled={sectionsDisabled || isLoadingMore}
+                    className={cn(
+                      "w-full rounded-md px-2 pb-2 pt-1",
+                      "text-center text-xs leading-5 text-muted-foreground",
+                      "hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring",
+                    )}
+                  >
+                    {isLoadingMore
+                      ? t("sidebar.loadingMoreHistory")
+                      : t("sidebar.continueLoadingHistory")}
+                  </button>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-border/50 bg-[hsl(var(--sidebar-bg))] px-2 py-1.5">
-          <Button
-            type="button"
-            variant="ghost"
-            // 与 macOS 标题栏那个设置入口同一个 testid：自动化脚本据此定位，
-            // 不必靠文案或坐标去猜。可读名走 i18n——屏幕阅读器念给用户听的
-            // 东西不该为了脚本方便固定成英文。
-            data-testid="open-settings"
-            onClick={() => onOpenSettings()}
-            className="h-8 w-full justify-start gap-2.5 rounded-lg px-2.5 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"
-            title={t("tooltip.settings")}
+          </SidebarContent>
+          <SidebarFooter
+            className={cn(
+              "grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2",
+              "bg-settings-rail px-2.5 pb-3 pt-2",
+            )}
           >
-            <Settings className="h-4 w-4 shrink-0 text-foreground/75" />
-            <span className="truncate">{t("tooltip.settings")}</span>
-          </Button>
-          {footerTrailing}
+            <Button
+              type="button"
+              variant="ghost"
+              // 与 macOS 标题栏那个设置入口同一个 testid：自动化脚本据此定位，
+              // 不必靠文案或坐标去猜。可读名走 i18n——屏幕阅读器念给用户听的
+              // 东西不该为了脚本方便固定成英文。
+              data-testid="open-settings"
+              onClick={() => onOpenSettings()}
+              className={cn(
+                "sidebar-list-row w-full justify-start gap-2.5 rounded-md px-2.5",
+                "text-sm font-normal text-foreground/75 shadow-none hover:bg-settings-tile-hover hover:text-foreground",
+              )}
+              title={t("tooltip.settings")}
+            >
+              <Settings className="size-4 shrink-0 text-foreground/75" />
+              <span className="truncate">{t("tooltip.settings")}</span>
+            </Button>
+            {footerTrailing}
+          </SidebarFooter>
         </div>
-      </div>
+      </Sidebar>
       {bulkDeleteDialog}
       {groupDeleteDialog}
       <ConversationSearchDialog
@@ -1957,6 +2202,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         currentWorkdir={currentConversationWorkdir}
         onSelectConversation={handleSelectConversation}
       />
-    </aside>
+    </>
   );
 });

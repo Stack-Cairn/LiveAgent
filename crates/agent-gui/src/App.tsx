@@ -2,7 +2,9 @@ import type { Context } from "@earendil-works/pi-ai";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
+import { loadThinkingLiveSupplement } from "@liveagent/ui/lib/models/thinkingLive";
 import {
   applyGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncPayload,
@@ -25,9 +27,12 @@ import {
 } from "react";
 import { AppBootShell } from "./components/app/AppBootShell";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
+import { useMacOsAppHeaderHeight } from "./components/MacOsTitleBarSpacer";
+import { ReleaseAnnouncementDialog } from "./components/ReleaseAnnouncementDialog";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
 import { setRetryErrorExtension } from "./lib/providers/runtime/streamRetry";
+import { useReleaseAnnouncementController } from "./lib/releaseAnnouncement";
 import {
   type AppSettings,
   getDefaultSettings,
@@ -99,11 +104,13 @@ function AppChrome(props: { children: ReactNode }) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Root-level pointer handlers only route native input menus and dismissals; child controls own activation semantics.
     <div
-      className="relative flex h-full w-full flex-col overflow-hidden bg-background"
+      className="relative flex size-full flex-col overflow-hidden bg-background"
       onContextMenu={onRootContextMenu}
       onMouseDownCapture={onRootMouseDownCapture}
     >
-      <WindowsTitleBar />
+      {/* No conditional title bar here: adding or removing a 32px sibling when the
+          settings overlay opens would resize the chat subtree underneath it and make
+          the whole page jump. The overlay carries its own title bar instead. */}
       <div className="relative min-h-0 flex-1 overflow-hidden bg-background">{props.children}</div>
       {menu}
     </div>
@@ -214,6 +221,8 @@ function applyRuntimeSystemDefaults(settings: AppSettings, defaultWorkdir: strin
 }
 
 export default function App() {
+  // Root-level so the header height survives view switches; see the hook's note.
+  useMacOsAppHeaderHeight();
   const {
     settingsOpen,
     overlay,
@@ -248,6 +257,12 @@ export default function App() {
   useEffect(() => {
     setSttProviderOverride(null);
   }, [settings.stt.provider]);
+
+  // 思考档位运行期补充（models.dev）：启动后台拉一次，TTL 内幂等；失败静默，
+  // 档位解析维持在「快照 + 兜底」的现状。
+  useEffect(() => {
+    void loadThinkingLiveSupplement();
+  }, []);
   const [systemThemeVersion, setSystemThemeVersion] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: The version is an explicit invalidation signal for the system media query, which resolveEffectiveTheme reads outside React.
   const effectiveTheme = useMemo(
@@ -266,6 +281,10 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", effectiveTheme === "dark");
+    // index.html 的启动脚本在 system 主题下会监听系统主题；React 接管后移除它。
+    const bootWindow = window as Window & { __liveagentBootThemeCleanup?: () => void };
+    bootWindow.__liveagentBootThemeCleanup?.();
+    bootWindow.__liveagentBootThemeCleanup = undefined;
   }, [effectiveTheme]);
 
   useEffect(() => {
@@ -645,6 +664,10 @@ export default function App() {
     messages: appUpdateMessages,
     beforeRestart: beforeAppRestart,
   });
+  const releaseAnnouncement = useReleaseAnnouncementController({
+    enabled: settingsReady,
+    currentVersion: __LIVEAGENT_APP_VERSION__,
+  });
   // 托盘「检查更新」动作：controller 在监听 effect 之后创建，经 ref 回填。
   runUpdateCheckRef.current = () => {
     void appUpdate.runCheck().catch(() => undefined);
@@ -701,6 +724,7 @@ export default function App() {
   if (!settingsReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
+        <Toaster />
         <AppChrome>
           <AppBootShell loadingLabel={translate("app.loading", settings.locale)} />
         </AppChrome>
@@ -713,6 +737,7 @@ export default function App() {
 
   return (
     <LocaleContext.Provider value={localeContextValue}>
+      <Toaster />
       <AppChrome>
         {backgroundHostsReady ? (
           <Suspense fallback={null}>
@@ -720,7 +745,7 @@ export default function App() {
             <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
           </Suspense>
         ) : null}
-        <AppErrorBoundary>
+        <AppErrorBoundary fallbackHeader={<WindowsTitleBar />}>
           <Suspense
             fallback={<AppBootShell loadingLabel={translate("app.loading", settings.locale)} />}
           >
@@ -742,33 +767,39 @@ export default function App() {
         {visible && (
           <div
             className={cn(
-              "absolute inset-0 z-50 transition-all duration-300 ease-out",
+              "absolute inset-0 z-50 flex flex-col transition-all duration-300 ease-out",
               active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
             )}
             onTransitionEnd={handleTransitionEnd}
           >
-            <AppErrorBoundary>
-              <Suspense
-                fallback={
-                  <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
-                    {translate("app.loading", settings.locale)}
-                  </div>
-                }
-              >
-                <SettingsPage
-                  settings={settings}
-                  setSettings={setSettings}
-                  saveState={settingsSaveState}
-                  onBack={closeSettings}
-                  initialSection={settingsSection}
-                  initialProviderId={settingsProviderId}
-                  appUpdate={appUpdate}
-                  sttSettingsService={desktopSttSettingsService}
-                  onSttProviderChange={setSttProviderOverride}
-                  reloadSettings={reloadPersistedSettings}
-                />
-              </Suspense>
-            </AppErrorBoundary>
+            {/* The overlay owns its title bar so the chat subtree below keeps a
+                constant height across open/close. */}
+            <WindowsTitleBar />
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <AppErrorBoundary>
+                <Suspense
+                  fallback={
+                    <div className="flex size-full items-center justify-center bg-background text-sm text-muted-foreground">
+                      {translate("app.loading", settings.locale)}
+                    </div>
+                  }
+                >
+                  <SettingsPage
+                    settings={settings}
+                    setSettings={setSettings}
+                    saveState={settingsSaveState}
+                    onBack={closeSettings}
+                    initialSection={settingsSection}
+                    initialProviderId={settingsProviderId}
+                    appUpdate={appUpdate}
+                    releaseAnnouncement={releaseAnnouncement}
+                    sttSettingsService={desktopSttSettingsService}
+                    onSttProviderChange={setSttProviderOverride}
+                    reloadSettings={reloadPersistedSettings}
+                  />
+                </Suspense>
+              </AppErrorBoundary>
+            </div>
           </div>
         )}
         {windowPinned && (
@@ -778,12 +809,17 @@ export default function App() {
               void invoke("app_toggle_window_pin").catch(() => {});
             }}
             title={translate("app.windowPinnedHint", settings.locale)}
-            className="layer-toast absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20"
+            className={cn(
+              "layer-toast absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5",
+              "rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1",
+              "text-xs font-medium text-primary shadow-sm backdrop-blur transition-colors hover:bg-primary/20",
+            )}
           >
-            <Pin className="h-3 w-3" />
+            <Pin className="size-3" />
             {translate("app.windowPinned", settings.locale)}
           </button>
         )}
+        <ReleaseAnnouncementDialog controller={releaseAnnouncement} />
         {restartConfirmDialog}
       </AppChrome>
     </LocaleContext.Provider>

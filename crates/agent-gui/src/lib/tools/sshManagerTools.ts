@@ -9,6 +9,7 @@ import {
   invokeWithAbort,
   requestRuntimeCancel,
   throwIfToolInvocationAborted,
+  waitForAbortablePromise,
 } from "./invokeWithAbort";
 import { ToolPathResolver } from "./pathUtils";
 
@@ -124,10 +125,24 @@ type ResolvedSshSession = {
   strategy: SshSessionStrategy | "session_id";
 };
 
+type SshSessionCreateOptions = {
+  title?: string;
+  cols?: number;
+  rows?: number;
+  sftpEnabled: boolean;
+};
+
+// Covers the runtime's automatic reconnect budget (2s+5s+10s backoff plus
+// three 20s attempt timeouts, runtime/terminal/mod.rs): a session that is
+// mid-reconnect comes back under the same session id, so it is waited for
+// instead of being replaced by a second connection to the same host.
+const SSH_RECONNECT_WAIT_MS = 80_000;
+const SSH_RECONNECT_POLL_MS = 300;
+
 const SSH_MANAGER_TOOL: Tool = {
   name: "SSHManager",
   description:
-    'Manage SSH sessions and remote SFTP files for SSH hosts explicitly associated with the current project. Use host_id from list_hosts. If list_hosts reports credential=saved, LiveAgent already has the configured password/private key/passphrase; do not ask the user to paste credentials into chat, and call create_session, exec, or SFTP actions directly. If list_hosts reports credential=missing, ask the user to configure credentials in Settings > SSH instead of requesting secrets in chat. If list_hosts reports credential=interactive, the host uses keyboard-interactive login: SSHManager never connects such hosts itself — create_session fails, and exec/SFTP only reuse a session the user already opened; if none is running, ask the user to connect in the SSH Tunnel tab first. Default session strategy is reuse_or_create: exec and SFTP reuse the same running session for that host before LiveAgent creates a visible session. To intentionally run multiple SSH sessions, call create_session or set session_strategy="new", then use the returned session_id for follow-up operations. Use session_strategy="require_existing" when you want to fail instead of implicitly creating a session. Do not combine session_id with session_strategy="new". Authentication prompts, unknown host keys, changed host keys, and MFA must be completed by the user in the SSH Tunnel tab before retrying.',
+    'Manage SSH sessions and remote SFTP files for SSH hosts explicitly associated with the current project. Use host_id from list_hosts. Sessions are reused by default: exec and SFTP actions called with host_id run on the host\'s already-running session (one connection per host, shared across tasks and turns) and only open a visible session when none is running; create_session likewise returns the running session for that host instead of connecting again. Do not call create_session before every task — call exec or SFTP actions with host_id directly, or keep using a session_id you already have. If list_hosts reports credential=saved, LiveAgent already has the configured password/private key/passphrase; do not ask the user to paste credentials into chat. If list_hosts reports credential=missing, ask the user to configure credentials in Settings > SSH instead of requesting secrets in chat. If list_hosts reports credential=interactive, the host uses keyboard-interactive login: SSHManager never connects such hosts itself and only reuses a session the user already opened; if none is running, ask the user to connect in the SSH Tunnel tab first. Set session_strategy="new" only when an additional, separate SSH connection is really needed, then use the returned session_id for follow-up operations. Use session_strategy="require_existing" to fail instead of implicitly connecting. Do not combine session_id with session_strategy="new". A session that is reconnecting is waited for automatically. Authentication prompts, unknown host keys, changed host keys, and MFA must be completed by the user in the SSH Tunnel tab before retrying.',
   parameters: Type.Object({
     action: Type.Union(
       [
@@ -169,16 +184,19 @@ const SSH_MANAGER_TOOL: Tool = {
         [Type.Literal("reuse_or_create"), Type.Literal("new"), Type.Literal("require_existing")],
         {
           description:
-            'Session resolution strategy for exec and SFTP actions when session_id is omitted. Defaults to "reuse_or_create". Use "new" only when an additional SSH session is intentional; use "require_existing" to avoid implicit creation.',
+            'Session resolution for create_session, exec and SFTP actions when session_id is omitted. Defaults to "reuse_or_create": reuse the host\'s running session and connect only when none is running. Use "new" only when an additional SSH connection is intentional; use "require_existing" to avoid implicit connection.',
         },
       ),
     ),
-    title: Type.Optional(Type.String({ description: "Optional title for create_session." })),
+    title: Type.Optional(
+      Type.String({ description: "Optional title when a new session is opened." }),
+    ),
     cols: Type.Optional(Type.Number({ description: "PTY columns for create/resize." })),
     rows: Type.Optional(Type.Number({ description: "PTY rows for create/resize." })),
     sftp_enabled: Type.Optional(
       Type.Boolean({
-        description: "Whether to enable SFTP for create_session. Defaults to true.",
+        description:
+          "Whether create_session needs SFTP. Defaults to true; a reused session without SFTP gets it enabled in place (no new connection).",
       }),
     ),
     data: Type.Optional(
@@ -412,11 +430,18 @@ function createAllowedHostMap(hosts: SshHostConfig[], associatedHostIds: readonl
   );
 }
 
+function sleepWithAbort(ms: number, signal?: AbortSignal) {
+  return waitForAbortablePromise(new Promise<void>((resolve) => setTimeout(resolve, ms)), signal);
+}
+
+function isReconnecting(session: SshManagerSessionSummary) {
+  return !session.running && session.status === "reconnecting";
+}
+
 async function validateSession(params: {
   sessionId: string;
   projectPathKey: string;
   allowedHostIds: Set<string>;
-  needsSftp?: boolean;
   signal?: AbortSignal;
 }) {
   const session = (await listProjectSessions(params.projectPathKey, params.signal)).find(
@@ -428,24 +453,24 @@ async function validateSession(params: {
   if (!params.allowedHostIds.has(session.host_id)) {
     throw new Error("SSH session host is not authorized for the current project.");
   }
-  if (params.needsSftp && !session.sftpEnabled) {
-    throw new Error(
-      "SSH session does not have SFTP enabled. Use host_id to reuse or create an SFTP-enabled session.",
-    );
-  }
   return session;
 }
 
-function findReusableSession(params: {
-  sessions: SshManagerSessionSummary[];
-  hostId: string;
-  needsSftp: boolean;
-}) {
-  return params.sessions
-    .filter((session) => {
-      if (session.host_id !== params.hostId || !session.running) return false;
-      return !params.needsSftp || session.sftpEnabled;
-    })
+/** SFTP rides on the session's existing connection, so enabling it on a
+ * running session never dials a second connection to the host. */
+async function enableSessionSftp(session: SshManagerSessionSummary, signal?: AbortSignal) {
+  if (session.sftpEnabled) return session;
+  const record = await invokeWithAbort<RawTerminalSession>(
+    "terminal_ssh_enable_sftp",
+    { session_id: session.session_id },
+    signal,
+  );
+  return normalizeSession(record) ?? { ...session, sftpEnabled: true };
+}
+
+function pickReusableSession(sessions: SshManagerSessionSummary[], hostId: string) {
+  return sessions
+    .filter((session) => session.host_id === hostId && session.running)
     .sort((left, right) => {
       const connectedDelta =
         Number(right.status === "connected") - Number(left.status === "connected");
@@ -494,6 +519,104 @@ async function createSession(params: {
   return session;
 }
 
+// One session acquisition per (project, host) at a time. Without it,
+// concurrent runs in the same project (parallel conversations / workbench
+// panes) all list "no session" and each dial their own connection. Every
+// waiter lists again once it holds the slot, so it picks up the session the
+// previous holder just opened.
+const hostSessionAcquisitions = new Map<string, Promise<void>>();
+
+async function withHostSessionLock<T>(
+  key: string,
+  signal: AbortSignal | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = hostSessionAcquisitions.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => released);
+  hostSessionAcquisitions.set(key, tail);
+  try {
+    await waitForAbortablePromise(previous, signal);
+    return await run();
+  } finally {
+    release();
+    if (hostSessionAcquisitions.get(key) === tail) {
+      hostSessionAcquisitions.delete(key);
+    }
+  }
+}
+
+/** Running session for the host; waits out an in-flight automatic reconnect
+ * rather than reporting "none" and letting the caller dial a duplicate. */
+async function findRunningHostSession(params: {
+  projectPathKey: string;
+  hostId: string;
+  signal?: AbortSignal;
+}) {
+  const deadline = Date.now() + SSH_RECONNECT_WAIT_MS;
+  for (;;) {
+    const sessions = (await listProjectSessions(params.projectPathKey, params.signal)).filter(
+      (session) => session.host_id === params.hostId,
+    );
+    const reusable = pickReusableSession(sessions, params.hostId);
+    if (reusable) return reusable;
+    if (!sessions.some(isReconnecting) || Date.now() >= deadline) return undefined;
+    await sleepWithAbort(SSH_RECONNECT_POLL_MS, params.signal);
+  }
+}
+
+async function acquireHostSession(params: {
+  host: SshHostConfig;
+  strategy: SshSessionStrategy;
+  needsSftp: boolean;
+  create: SshSessionCreateOptions;
+  workdir: string;
+  projectPathKey: string;
+  onNewConnectionStarted?: () => void | Promise<void>;
+  signal?: AbortSignal;
+}): Promise<ResolvedSshSession> {
+  const { host, strategy, signal } = params;
+  const connect = async (): Promise<ResolvedSshSession> => {
+    // Keyboard-interactive login needs the user to answer server prompts,
+    // which the tool path cannot do: never dial such hosts, only reuse
+    // sessions the user already opened in the SSH Tunnel tab.
+    if (host.authType === "keyboardInteractive") {
+      throw new Error(keyboardInteractiveConnectErrorMessage());
+    }
+    await params.onNewConnectionStarted?.();
+    throwIfToolInvocationAborted(signal);
+    const session = await createSession({
+      host,
+      workdir: params.workdir,
+      projectPathKey: params.projectPathKey,
+      ...params.create,
+      signal,
+    });
+    return { session, reused: false, created: true, strategy };
+  };
+  if (strategy === "new") {
+    return connect();
+  }
+  return withHostSessionLock(`${params.projectPathKey}\u0000${host.id}`, signal, async () => {
+    const reusable = await findRunningHostSession({
+      projectPathKey: params.projectPathKey,
+      hostId: host.id,
+      signal,
+    });
+    if (reusable) {
+      const session = params.needsSftp ? await enableSessionSftp(reusable, signal) : reusable;
+      return { session, reused: true, created: false, strategy };
+    }
+    if (strategy === "require_existing") {
+      throw new Error("No reusable SSH session exists for this host in the current project.");
+    }
+    return connect();
+  });
+}
+
 async function resolveSession(params: {
   args: Record<string, unknown>;
   workdir: string;
@@ -506,17 +629,27 @@ async function resolveSession(params: {
 }): Promise<ResolvedSshSession> {
   const sessionId = normalizeOptionalString(params.args.session_id);
   const strategy = normalizeSessionStrategy(params.args.session_strategy);
+  const needsSftp = params.needsSftp === true;
   if (sessionId) {
     if (strategy === "new") {
       throw new Error("SSHManager.session_strategy=new cannot be combined with session_id.");
     }
-    const session = await validateSession({
-      sessionId,
-      projectPathKey: params.projectPathKey,
-      allowedHostIds: params.allowedHostIds,
-      needsSftp: params.needsSftp === true,
-      signal: params.signal,
-    });
+    const validate = () =>
+      validateSession({
+        sessionId,
+        projectPathKey: params.projectPathKey,
+        allowedHostIds: params.allowedHostIds,
+        signal: params.signal,
+      });
+    let session = await validate();
+    const deadline = Date.now() + SSH_RECONNECT_WAIT_MS;
+    while (isReconnecting(session) && Date.now() < deadline) {
+      await sleepWithAbort(SSH_RECONNECT_POLL_MS, params.signal);
+      session = await validate();
+    }
+    if (needsSftp) {
+      session = await enableSessionSftp(session, params.signal);
+    }
     return { session, reused: true, created: false, strategy: "session_id" };
   }
   const hostId = requireString(params.args, "host_id");
@@ -524,38 +657,30 @@ async function resolveSession(params: {
   if (!host) {
     throw new Error("SSH host is not associated with the current project.");
   }
-  if (strategy !== "new") {
-    const reusable = findReusableSession({
-      sessions: await listProjectSessions(params.projectPathKey, params.signal),
-      hostId,
-      needsSftp: params.needsSftp === true,
-    });
-    if (reusable) {
-      return { session: reusable, reused: true, created: false, strategy };
-    }
-    if (strategy === "require_existing") {
-      throw new Error("No reusable SSH session exists for this host in the current project.");
-    }
-  }
-  // Keyboard-interactive login needs the user to answer server prompts, which
-  // the tool path cannot do: never dial such hosts, only reuse sessions the
-  // user already opened in the SSH Tunnel tab (handled above).
-  if (host.authType === "keyboardInteractive") {
-    throw new Error(keyboardInteractiveConnectErrorMessage());
-  }
-  await params.onNewConnectionStarted?.();
-  throwIfToolInvocationAborted(params.signal);
-  const session = await createSession({
+  return acquireHostSession({
     host,
+    strategy,
+    needsSftp,
+    create: {
+      title:
+        normalizeOptionalString(params.args.title) ||
+        `SSHManager: ${host.name || host.host || host.id}`,
+      sftpEnabled: true,
+    },
     workdir: params.workdir,
     projectPathKey: params.projectPathKey,
-    title:
-      normalizeOptionalString(params.args.title) ||
-      `SSHManager: ${host.name || host.host || host.id}`,
-    sftpEnabled: true,
+    onNewConnectionStarted: params.onNewConnectionStarted,
     signal: params.signal,
   });
-  return { session, reused: false, created: true, strategy };
+}
+
+function formatSessionResolution(resolved: ResolvedSshSession) {
+  return [
+    `session_id: ${resolved.session.session_id}`,
+    `session_strategy: ${resolved.strategy}`,
+    `session_reused: ${resolved.reused ? "true" : "false"}`,
+    `session_created: ${resolved.created ? "true" : "false"}`,
+  ];
 }
 
 async function executeSSHManager(
@@ -615,7 +740,7 @@ async function executeSSHManager(
         text: hosts.length
           ? [
               "Authorized SSH hosts:",
-              "credential=saved means LiveAgent already has the configured SSH credential; use create_session directly and do not ask the user for that password/key.",
+              "credential=saved means LiveAgent already has the configured SSH credential; do not ask the user for that password/key. Call exec or SFTP actions with host_id directly: they reuse the host's running session and only connect when none is running, so there is no need to call create_session first.",
               "credential=interactive means the host logs in via keyboard-interactive prompts: SSHManager will not connect it itself; ask the user to open the session in the SSH Tunnel tab, then reuse the running session for exec and SFTP.",
               ...hosts.map(formatHostLine),
             ].join("\n")
@@ -648,36 +773,45 @@ async function executeSSHManager(
       if (!host) {
         throw new Error("SSH host is not associated with the current project.");
       }
-      if (host.authType === "keyboardInteractive") {
-        throw new Error(keyboardInteractiveConnectErrorMessage());
-      }
-      const title = normalizeOptionalString(args.title) || undefined;
-      const cols = normalizeOptionalPositiveInt(args.cols, 20, 400);
-      const rows = normalizeOptionalPositiveInt(args.rows, 6, 200);
       const sftpEnabled = normalizeBool(args.sftp_enabled, true);
-      await params.onSshSessionsChanged?.({
-        action: "create",
-        projectPathKey: params.projectPathKey,
-      });
-      const session = await createSession({
+      // Reuse-by-default like exec/SFTP: models tend to open every task with
+      // create_session, and always dialing here gave each task its own
+      // connection to the same host. session_strategy="new" still forces one.
+      const resolvedSession = await acquireHostSession({
         host,
+        strategy: normalizeSessionStrategy(args.session_strategy),
+        needsSftp: sftpEnabled,
+        create: {
+          title: normalizeOptionalString(args.title) || undefined,
+          cols: normalizeOptionalPositiveInt(args.cols, 20, 400),
+          rows: normalizeOptionalPositiveInt(args.rows, 6, 200),
+          sftpEnabled,
+        },
         workdir: params.workdir,
         projectPathKey: params.projectPathKey,
-        title,
-        cols,
-        rows,
-        sftpEnabled,
+        onNewConnectionStarted: () =>
+          params.onSshSessionsChanged?.({
+            action: "create",
+            projectPathKey: params.projectPathKey,
+          }),
         signal,
       });
+      const { session } = resolvedSession;
       return okResult({
         toolCall,
         action,
-        text: ["Created SSH session:", formatSessionLine(session)].join("\n"),
+        text: [
+          resolvedSession.created
+            ? "Created SSH session:"
+            : "Reusing the running SSH session for this host (no new connection was opened):",
+          formatSessionLine(session),
+          ...formatSessionResolution(resolvedSession),
+        ].join("\n"),
         details: {
           session,
-          session_strategy: "new",
-          session_reused: false,
-          session_created: true,
+          session_strategy: resolvedSession.strategy,
+          session_reused: resolvedSession.reused,
+          session_created: resolvedSession.created,
         },
       });
     }
@@ -806,10 +940,7 @@ async function executeSSHManager(
         toolCall,
         action,
         text: [
-          `session_id: ${session.session_id}`,
-          `session_strategy: ${resolvedSession.strategy}`,
-          `session_reused: ${resolvedSession.reused ? "true" : "false"}`,
-          `session_created: ${resolvedSession.created ? "true" : "false"}`,
+          ...formatSessionResolution(resolvedSession),
           `exit_code: ${result.exitCode ?? result.exit_code ?? "unknown"}`,
           `timed_out: ${result.timedOut === true || result.timed_out === true ? "true" : "false"}`,
           "",

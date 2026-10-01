@@ -38,3 +38,31 @@ test("the extension sticks to the last direction when scrolling settles", () => 
   const afterSettle = h.virtualizer.getVirtualItems()[0].index;
   assert.equal(afterSettle, duringScroll, "settling must not churn the mounted range");
 });
+
+test("symmetric pixels warm both sides before a gesture and retain reversal content", () => {
+  const h = createHarness({ overscanPx: 300, directionalOverscanPx: 900, initialOffset: 5000 });
+  let items = h.virtualizer.getVirtualItems();
+  assert.ok(items[0].start <= 4700);
+  assert.ok(items.at(-1).end >= 5900);
+  h.emitScroll(5120, true);
+  items = h.virtualizer.getVirtualItems();
+  assert.ok(items[0].start <= 4820, "keep already visited rows behind the forward scroll");
+  assert.ok(items.at(-1).end >= 6920, "render two viewports ahead");
+  // Reverse within the retained band before the next main-thread event.
+  assert.ok(items[0].start <= 4920);
+  h.emitScroll(4920, true);
+  items = h.virtualizer.getVirtualItems();
+  assert.ok(items[0].start <= 3720);
+  assert.ok(items.at(-1).end >= 5820);
+});
+
+test("fast jumps cover the viewport while mounting a bounded slice of a huge history", () => {
+  const h = createHarness({ count: 10000, overscanPx: 300, directionalOverscanPx: 900, initialOffset: 500000 });
+  for (const offset of [490000, 485000, 300000, 310000, 700000, 0, 999400]) {
+    h.emitScroll(offset, true);
+    const items = h.virtualizer.getVirtualItems();
+    assert.ok(items[0].start <= offset);
+    assert.ok(items.at(-1).end >= offset + 600);
+    assert.ok(items.length <= 24, `pixel budget must stay bounded, got ${items.length}`);
+  }
+});

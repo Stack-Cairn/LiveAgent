@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { Input } from "../ui/input";
 
 export type SshPortForwardDialogProps = {
   sessionId: string;
@@ -34,11 +35,6 @@ export type SshPortForwardDialogProps = {
   /** 转发建立成功；面板收下 action 快照并关闭本对话框。 */
   onStarted: (action: SshLocalForwardAction) => void;
 };
-
-// 模态 portal 到 body，逃出了 dock 的 --zone-font-scale 作用域，
-// 所以这里与 confirm-dialog 一样使用固定字号。
-const FIELD_CLASS =
-  "h-8 w-full min-w-0 rounded-lg border border-border/70 bg-background/80 px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:border-indigo-500/50 focus-visible:ring-1 focus-visible:ring-indigo-500/20 disabled:opacity-50";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -135,8 +131,13 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
       >
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">
-              <Cable className="h-5 w-5" />
+            <div
+              className={cn(
+                "flex size-11 shrink-0 items-center justify-center",
+                "rounded-2xl border border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300",
+              )}
+            >
+              <Cable className="size-5" />
             </div>
             <div className="min-w-0">
               <DialogTitle className="break-words">
@@ -164,7 +165,8 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                 >
                   {t("projectTools.sshLocalForwardLocalPortLabel")}
                 </label>
-                <input
+                <Input
+                  variant="plain"
                   id="ssh-forward-local-port"
                   type="text"
                   inputMode="numeric"
@@ -177,7 +179,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                     setError("");
                   }}
                   onBlur={handleLocalPortBlur}
-                  className={cn(FIELD_CLASS, "font-mono")}
+                  className="font-mono"
                   placeholder={t("projectTools.sshLocalForwardAutoPort")}
                   disabled={submitting}
                 />
@@ -189,7 +191,8 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                 >
                   {t("projectTools.sshLocalForwardRemotePortLabel")}
                 </label>
-                <input
+                <Input
+                  variant="plain"
                   id="ssh-forward-remote-port"
                   type="text"
                   inputMode="numeric"
@@ -200,7 +203,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                     setRemotePort(value);
                     setError("");
                   }}
-                  className={cn(FIELD_CLASS, "font-mono")}
+                  className="font-mono"
                   placeholder={t("projectTools.sshLocalForwardRemotePortLabel")}
                   disabled={submitting}
                 />
@@ -213,7 +216,8 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
               >
                 {t("projectTools.sshLocalForwardRemoteHostLabel")}
               </label>
-              <input
+              <Input
+                variant="plain"
                 id="ssh-forward-remote-host"
                 type="text"
                 value={remoteHost}
@@ -221,13 +225,17 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                   setRemoteHost(event.currentTarget.value);
                   setError("");
                 }}
-                className={FIELD_CLASS}
                 placeholder={t("projectTools.sshLocalForwardHostPlaceholder")}
                 disabled={submitting}
               />
             </div>
 
-            <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
+            <div
+              className={cn(
+                "rounded-lg border border-border/60 bg-muted/25 px-3 py-2",
+                "font-mono text-xs text-muted-foreground",
+              )}
+            >
               127.0.0.1:{previewLocal}
               <span className="mx-1.5 text-muted-foreground/60">→</span>
               {previewHost}:{previewPort}
@@ -250,7 +258,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
                 {t("projectTools.sshLocalForwardCancel")}
               </DialogClose>
               <Button type="submit" disabled={submitting}>
-                {submitting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {submitting ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
                 {t("projectTools.sshLocalForwardSubmit")}
               </Button>
             </DialogActions>

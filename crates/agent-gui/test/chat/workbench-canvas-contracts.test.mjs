@@ -77,6 +77,17 @@ test("workbench canvas separates preview geometry from committed geometry", () =
   assert.match(workbenchCanvasSource, /ResizeObserver/);
 });
 
+test("workbench DOM access flows through the canvas ref", () => {
+  const dragSessionSource = readSource(
+    "../../../agent-ui/src/lib/workbench/useWorkbenchDragSession.ts",
+  );
+  assert.match(workbenchCanvasSource, /canvasRef/);
+  assert.match(dragSessionSource, /canvasRef\.current/);
+  assert.doesNotMatch(dragSessionSource, /document\.querySelector/);
+  assert.doesNotMatch(chatPageSource, /querySelector\(\"\[data-workbench-canvas\]\"\)/);
+  assert.doesNotMatch(gatewayViewSource, /querySelector\(\"\[data-workbench-canvas\]\"\)/);
+});
+
 test("chat page keeps the legacy single-pane path behind the feature flag", () => {
   assert.match(chatPageSource, /sessionWorkbench\.enabled\s*\?/);
   // Legacy path keeps the stable root pane id; the workbench path owns pane
@@ -120,7 +131,7 @@ test("Desktop and Web render the same shared canvas, pane chrome, and drag ghost
     assert.match(source, /<PaneChrome/);
   }
   const dragGhostClass =
-    /className="(layer-popover pointer-events-none fixed max-w-\[220px\][^"]+)"/;
+    /className="(layer-popover pointer-events-none fixed max-w-220px[^"]+)"/;
   assert.equal(chatPageSource.match(dragGhostClass)?.[1], gatewayViewSource.match(dragGhostClass)?.[1]);
 
   const blockedBannerClass =

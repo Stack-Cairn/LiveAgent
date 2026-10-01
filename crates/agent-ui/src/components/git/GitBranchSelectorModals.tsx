@@ -1,12 +1,13 @@
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import {
+  ChevronDown,
   Copy,
   FolderOpen,
   FolderTree,
   GitBranch,
   Loader2,
-  Pencil,
   Plus,
+  SquarePen,
   Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
@@ -98,8 +99,13 @@ export function GitInitModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
-                <GitBranch className="h-5 w-5" />
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+                )}
+              >
+                <GitBranch className="size-5" />
               </div>
               <div className="min-w-0">
                 <DialogTitle className="text-sm leading-normal">
@@ -117,7 +123,10 @@ export function GitInitModal(props: {
                 {t("git.branchSelector.targetDirectory")}
               </Label>
               <div
-                className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
+                className={cn(
+                  "truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2",
+                  "text-xs text-foreground",
+                )}
                 title={workdir}
               >
                 {workdir}
@@ -128,10 +137,11 @@ export function GitInitModal(props: {
                 {t("git.branchSelector.initialBranch")}
               </Label>
               <Input
+                variant="plain"
                 id={branchId}
                 value={branch}
                 onChange={(event) => onBranchChange(event.target.value)}
-                className="git-branch-selector-input h-9 text-sm"
+                className="git-branch-selector-input h-9 text-sm web:text-xs"
                 placeholder="main"
                 autoFocus
                 disabled={loading}
@@ -143,10 +153,11 @@ export function GitInitModal(props: {
                   {t("git.branchSelector.userNameOptional")}
                 </Label>
                 <Input
+                  variant="plain"
                   id={userNameId}
                   value={userName}
                   onChange={(event) => onUserNameChange(event.target.value)}
-                  className="git-branch-selector-input h-9 text-sm"
+                  className="git-branch-selector-input h-9 text-sm web:text-xs"
                   disabled={loading}
                 />
               </div>
@@ -155,10 +166,11 @@ export function GitInitModal(props: {
                   {t("git.branchSelector.userEmailOptional")}
                 </Label>
                 <Input
+                  variant="plain"
                   id={userEmailId}
                   value={userEmail}
                   onChange={(event) => onUserEmailChange(event.target.value)}
-                  className="git-branch-selector-input h-9 text-sm"
+                  className="git-branch-selector-input h-9 text-sm web:text-xs"
                   disabled={loading}
                 />
               </div>
@@ -176,9 +188,9 @@ export function GitInitModal(props: {
               </Button>
               <Button type="submit" size="sm" disabled={loading || !branch.trim()}>
                 {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <GitBranch className="h-3.5 w-3.5" />
+                  <GitBranch className="size-3.5" />
                 )}
                 {t("git.branchSelector.initRepository")}
               </Button>
@@ -230,6 +242,7 @@ export function WorktreeCreateModal(props: {
   } = props;
   const { t } = useLocale();
   const { pickDirectory, directoryPickerElement } = useDirectoryPicker();
+  const startPointInputId = useId();
   const branchInputId = useId();
   const directoryInputId = useId();
   const parentInputId = useId();
@@ -263,13 +276,18 @@ export function WorktreeCreateModal(props: {
             onSubmit();
           }}
         >
-          <DialogHeader className="flex-row items-start gap-4">
+          <DialogHeader className="flex-row items-start gap-4 pr-12">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
-                <FolderTree className="h-5 w-5" />
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-xl bg-muted text-muted-foreground",
+                )}
+              >
+                <FolderTree className="size-5" />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="text-sm leading-normal">
+                <DialogTitle className="text-base leading-normal">
                   {t("git.branchSelector.createWorktreeTitle")}
                 </DialogTitle>
                 <DialogDescription className="mt-1 text-xs leading-5">
@@ -278,20 +296,16 @@ export function WorktreeCreateModal(props: {
               </div>
             </div>
           </DialogHeader>
-          <DialogBody className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                {t("git.branchSelector.repositoryLabel")}
-              </Label>
-              <div
-                className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
-                title={repoRoot}
-              >
+          <DialogBody className="space-y-5">
+            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              <FolderOpen className="size-4 shrink-0" aria-hidden="true" />
+              <span className="shrink-0">{t("git.branchSelector.repositoryLabel")}</span>
+              <span className="truncate text-foreground" title={repoRoot}>
                 {repoRoot}
-              </div>
+              </span>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
+              <Label htmlFor={startPointInputId} className="text-xs">
                 {t("git.branchSelector.worktreeStartPoint")}
               </Label>
               <Select
@@ -299,7 +313,12 @@ export function WorktreeCreateModal(props: {
                 onValueChange={onStartPointChange}
                 disabled={loading || startPointOptions.length === 0}
               >
-                <SelectTrigger type="button" className="h-9 text-xs">
+                <SelectTrigger
+                  id={startPointInputId}
+                  variant="plain"
+                  type="button"
+                  className="h-9 text-sm"
+                >
                   <SelectValue placeholder="HEAD" />
                 </SelectTrigger>
                 <SelectContent className="max-h-60">
@@ -311,88 +330,104 @@ export function WorktreeCreateModal(props: {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor={branchInputId} className="text-xs text-muted-foreground">
-                  {t("git.branchSelector.worktreeBranch")}
-                </Label>
-                <Input
-                  id={branchInputId}
-                  value={branch}
-                  onChange={(event) => onBranchChange(event.target.value)}
-                  className="h-9 text-sm"
-                  placeholder={t("git.branchSelector.worktreeBranchPlaceholder")}
-                  autoFocus
-                  disabled={loading}
-                  spellCheck={false}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={directoryInputId} className="text-xs text-muted-foreground">
-                  {t("git.branchSelector.worktreeDirectoryName")}
-                </Label>
-                <Input
-                  id={directoryInputId}
-                  value={directoryName}
-                  onChange={(event) => onDirectoryNameChange(event.target.value)}
-                  className="h-9 text-sm"
-                  placeholder={t("git.branchSelector.worktreeDirectoryPlaceholder")}
-                  disabled={loading}
-                  spellCheck={false}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                />
-              </div>
-            </div>
             <div className="space-y-1.5">
-              <Label htmlFor={parentInputId} className="text-xs text-muted-foreground">
-                {t("git.branchSelector.worktreeParentDirectory")}
+              <Label htmlFor={branchInputId} className="text-xs">
+                {t("git.branchSelector.worktreeBranch")}
               </Label>
-              <div className="flex gap-2">
-                <Input
-                  id={parentInputId}
-                  value={parentDirectory}
-                  readOnly
-                  className="h-9 min-w-0 flex-1 text-xs"
-                  placeholder={t("git.branchSelector.worktreeDefaultLocation")}
-                  disabled={loading}
-                  title={parentDirectory}
-                />
-                {parentDirectory ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    onClick={() => onParentDirectoryChange("")}
-                    disabled={loading}
-                    title={t("git.branchSelector.worktreeUseDefaultLocation")}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0"
-                  onClick={() => void chooseParentDirectory()}
-                  disabled={loading}
-                >
-                  <FolderOpen className="h-3.5 w-3.5" />
-                  {t("git.branchSelector.worktreeChooseParent")}
-                </Button>
-              </div>
+              <Input
+                variant="plain"
+                id={branchInputId}
+                value={branch}
+                onChange={(event) => onBranchChange(event.target.value)}
+                className="h-9 text-sm"
+                placeholder={t("git.branchSelector.worktreeBranchPlaceholder")}
+                autoFocus
+                disabled={loading}
+                spellCheck={false}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
             </div>
-            <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            <details className="group/advanced border-t border-border/60 pt-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md py-1 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                {t("git.branchSelector.worktreeAdvancedOptions")}
+                <ChevronDown
+                  className="size-4 shrink-0 transition-transform group-open/advanced:rotate-180 motion-reduce:transition-none"
+                  aria-hidden="true"
+                />
+              </summary>
+              <div className="mt-4 space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor={directoryInputId} className="text-xs">
+                    {t("git.branchSelector.worktreeDirectoryName")}
+                  </Label>
+                  <Input
+                    variant="plain"
+                    id={directoryInputId}
+                    value={directoryName}
+                    onChange={(event) => onDirectoryNameChange(event.target.value)}
+                    className="h-9 text-sm"
+                    placeholder={t("git.branchSelector.worktreeDirectoryPlaceholder")}
+                    disabled={loading}
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={parentInputId} className="text-xs">
+                    {t("git.branchSelector.worktreeParentDirectory")}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      variant="plain"
+                      id={parentInputId}
+                      value={parentDirectory}
+                      readOnly
+                      className="h-9 min-w-0 flex-1 text-xs"
+                      placeholder={t("git.branchSelector.worktreeDefaultLocation")}
+                      disabled={loading}
+                      title={parentDirectory}
+                    />
+                    {parentDirectory ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={() => onParentDirectoryChange("")}
+                        disabled={loading}
+                        title={t("git.branchSelector.worktreeUseDefaultLocation")}
+                        aria-label={t("git.branchSelector.worktreeUseDefaultLocation")}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-9 shrink-0"
+                      onClick={() => void chooseParentDirectory()}
+                      disabled={loading}
+                    >
+                      <FolderOpen className="size-3.5" />
+                      {t("git.branchSelector.worktreeChooseParent")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </details>
+            <div className="text-xs leading-5 text-muted-foreground">
               {parentDirectory
                 ? t("git.branchSelector.worktreeCustomLocationHint")
                 : t("git.branchSelector.worktreeLocationHint")}
             </div>
             {error ? (
-              <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <div
+                role="alert"
+                className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              >
                 {error}
               </div>
             ) : null}
@@ -410,9 +445,9 @@ export function WorktreeCreateModal(props: {
                 disabled={loading || !branch.trim() || !directoryName.trim()}
               >
                 {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <FolderTree className="h-3.5 w-3.5" />
+                  <FolderTree className="size-3.5" />
                 )}
                 {t("git.branchSelector.createWorktree")}
               </Button>
@@ -502,8 +537,13 @@ export function BranchActionsModal(props: {
         >
           <DialogHeader className="flex-row items-start gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
-                <GitBranch className="h-5 w-5" />
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center",
+                  "rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+                )}
+              >
+                <GitBranch className="size-5" />
               </div>
               <div className="min-w-0">
                 <DialogTitle className="truncate text-sm leading-normal" title={branch.fullName}>
@@ -524,7 +564,7 @@ export function BranchActionsModal(props: {
                   onClick={onShowCreateFrom}
                   disabled={busy}
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="size-3.5" />
                   <span>{t("git.branchSelector.createFromHere")}</span>
                 </button>
               ) : null}
@@ -535,7 +575,7 @@ export function BranchActionsModal(props: {
                   onClick={onShowRename}
                   disabled={busy}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <SquarePen className="size-3.5" />
                   <span>{t("git.branchSelector.renameBranch")}</span>
                 </button>
               ) : null}
@@ -545,7 +585,7 @@ export function BranchActionsModal(props: {
                 onClick={onCopyName}
                 disabled={busy}
               >
-                <Copy className="h-3.5 w-3.5" />
+                <Copy className="size-3.5" />
                 <span>
                   {copied ? t("git.branchSelector.copied") : t("git.branchSelector.copyName")}
                 </span>
@@ -562,9 +602,9 @@ export function BranchActionsModal(props: {
                     disabled={busy}
                   >
                     {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                     ) : (
-                      <FolderTree className="h-3.5 w-3.5" />
+                      <FolderTree className="size-3.5" />
                     )}
                     <span>{t("git.branchSelector.deleteWorktree")}</span>
                   </button>
@@ -579,9 +619,9 @@ export function BranchActionsModal(props: {
                     disabled={busy}
                   >
                     {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                     ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="size-3.5" />
                     )}
                     <span>{t("git.branchSelector.deleteBranch")}</span>
                   </button>
@@ -601,7 +641,10 @@ export function BranchActionsModal(props: {
                     {t("git.branchSelector.startPointLabel")}
                   </Label>
                   <div
-                    className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
+                    className={cn(
+                      "truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2",
+                      "text-xs text-foreground",
+                    )}
                     title={branch.fullName}
                   >
                     {branch.fullName}
@@ -613,6 +656,7 @@ export function BranchActionsModal(props: {
                   {formTitle}
                 </Label>
                 <Input
+                  variant="plain"
                   id={inputId}
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
@@ -651,11 +695,11 @@ export function BranchActionsModal(props: {
                 </Button>
                 <Button type="submit" size="sm" disabled={busy || !draft.trim()}>
                   {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                   ) : mode === "rename" ? (
-                    <Pencil className="h-3.5 w-3.5" />
+                    <SquarePen className="size-3.5" />
                   ) : (
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="size-3.5" />
                   )}
                   {mode === "rename"
                     ? t("git.branchSelector.renameBranch")

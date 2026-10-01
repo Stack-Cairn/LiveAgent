@@ -1,3 +1,4 @@
+import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type ComponentProps,
@@ -120,8 +121,9 @@ function WorkspacePreviewImage(props: {
   const state = useWorkspaceImageObjectUrl(workdir, path);
   if (state.status === "loading") {
     return (
-      <span
-        className="inline-block h-4 w-20 animate-pulse rounded bg-muted align-middle"
+      <Skeleton
+        render={<span />}
+        className="inline-block h-4 w-20 rounded bg-muted align-middle"
         data-liveagent-markdown-image="loading"
       />
     );

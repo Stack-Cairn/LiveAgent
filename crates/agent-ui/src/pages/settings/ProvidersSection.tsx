@@ -428,7 +428,7 @@ export function ProvidersSection(
 
   return (
     <>
-      <div className="settings-provider-section flex min-h-0 flex-1 flex-col">
+      <div className="settings-provider-section flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="settings-provider-columns grid min-h-0 flex-1 grid-cols-[264px_minmax(0,1fr)] gap-5 max-[720px]:grid-cols-1">
           <aside
             className={cn(
@@ -444,7 +444,6 @@ export function ProvidersSection(
               extraActions={
                 <>
                   <ProviderSettingsExtension
-                    activeTab={selectedProvider?.type}
                     settings={settings}
                     setSettings={setSettings}
                     triggerClassName="h-8 rounded-md px-2 text-xs shadow-none"

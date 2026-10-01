@@ -46,6 +46,7 @@ function BrowserPathPromptDialog(props: {
           <DialogBody className="space-y-2 py-5">
             <Label htmlFor={options.inputId}>{options.label}</Label>
             <Input
+              variant="plain"
               id={options.inputId}
               autoFocus
               className="font-mono"

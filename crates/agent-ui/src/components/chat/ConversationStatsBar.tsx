@@ -1,7 +1,7 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { canManualCompact, contextUsageRatio } from "../../lib/chat/contextUsage";
 import {
   type ConversationStats,
@@ -20,11 +20,39 @@ import { LabelTooltip } from "../ui/label-tooltip";
 /** 心跳与 hook 的重建节流同频（docs/design/composer-context-stats-bar.md §4.2）。 */
 const HEARTBEAT_MS = 1_000;
 
-type StatGroup = {
+type StatGroupKey = "scale" | "context" | "time" | "tokens" | "perf";
+
+/**
+ * 单行分组的收缩档位：undefined 恒显，否则按容器宽度分档显隐。
+ * 抽成常量表，让指标定义只声明自己属于哪个分组。
+ */
+const GROUP_MIN_WIDTH: Record<StatGroupKey, "28rem" | "40rem" | "52rem" | undefined> = {
+  // 恒显档：移动端容器宽度到不了 28rem 断点，这两组是窄屏下唯一还能露出的。
+  scale: undefined,
+  context: undefined,
+  time: "28rem",
+  tokens: "40rem",
+  perf: "52rem",
+};
+
+/**
+ * 一条读数同时服务三个出口，故每个指标带三种写法：
+ * - `short`：单行工程缩写（`TTFT 20.9s`、`↑111M`），宽度优先；
+ * - `label` + `value`：tooltip 两列表的本地化全称与带单位读数，可读性优先；
+ * - aria-label 用 `label value` 拼接：箭头、TTFT 这类缩写屏读读不出人话。
+ */
+type StatMetric = {
   key: string;
-  /** 收缩档位：undefined 恒显，否则按容器宽度分档显隐。 */
+  group: StatGroupKey;
+  label: string;
+  value: string;
+  short: string;
+};
+
+type StatGroup = {
+  key: StatGroupKey;
   minWidth?: "28rem" | "40rem" | "52rem";
-  items: readonly string[];
+  metrics: readonly StatMetric[];
 };
 
 /** 运行中每秒重渲染一次，把 *RunningSinceAt 折算进显示值；空闲时零定时器。 */
@@ -97,83 +125,222 @@ export function ConversationStatsBar(props: {
 
   const durations = resolveStatDurations(stats, now);
   const fill = (key: string, token: string, value: string) => t(key).replace(token, value);
+  const hasContextWindow =
+    typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0;
 
-  // token 类指标只算有 usage 的 step；全都没有时对应分组隐藏（§7）。
-  const tokenItems = [
-    ...(stats.inputTokens > 0
-      ? [fill("chat.stats.inputTokens", "{n}", formatStatTokens(stats.inputTokens, locale))]
-      : []),
-    ...(stats.outputTokens > 0
-      ? [fill("chat.stats.outputTokens", "{n}", formatStatTokens(stats.outputTokens, locale))]
-      : []),
-  ];
-  const perfItems = [
-    ...(stats.ttftAvgMs !== null
-      ? [fill("chat.stats.ttftAvg", "{t}", formatStatLatency(stats.ttftAvgMs))]
-      : []),
-    ...(stats.decodeTokPerSec !== null
-      ? [fill("chat.stats.throughput", "{n}", formatStatThroughput(stats.decodeTokPerSec))]
-      : []),
-    ...(stats.cacheHitRatio !== null
-      ? [fill("chat.stats.cacheHit", "{p}", formatStatPercent(stats.cacheHitRatio))]
-      : []),
-  ];
-  // 与用量环用同一个 contextWindow 判空口径：没有模型上下文窗口信息（老会话/
-  // text 模式）时该分组整个不存在，而不是显示一个假的 0%。
-  const contextUsageItems =
-    typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
-      ? [fill("chat.stats.contextUsage", "{p}", formatStatPercent(ratio))]
-      : [];
-  // 注解写在字面量上：写在 .filter() 结果上会让 minWidth 先宽化成 string。
-  const allGroups: StatGroup[] = [
+  // 指标平铺成一张表，分组只是它们的 groupBy 结果。token 类指标只算有 usage
+  // 的 step，性能类指标只算有采样的 step；数据缺失时整条不入表，而不是显示假的 0（§7）。
+  const metrics: StatMetric[] = [
     {
-      key: "scale",
-      items: [
-        fill("chat.stats.turns", "{n}", String(stats.turns)),
-        fill("chat.stats.steps", "{n}", String(stats.steps)),
-      ],
+      key: "turns",
+      group: "scale",
+      label: t("chat.stats.turnsLabel"),
+      // tooltip 左列已经是名称，右列再带一遍单位就成了「Turns 51 turns」；
+      // 无量纲歧义的计数类读数因此只给裸数字。
+      value: String(stats.turns),
+      short: fill("chat.stats.turns", "{n}", String(stats.turns)),
     },
-    // 恒显档，与 scale 同级：移动端容器宽度到不了 28rem 断点，这是窄屏下
-    // 除轮·步外唯一还能露出的分组。
-    { key: "context", items: contextUsageItems },
     {
-      key: "time",
-      minWidth: "28rem",
-      items: [
-        fill("chat.stats.llmTime", "{t}", formatStatDuration(durations.llmMs)),
-        fill("chat.stats.toolTime", "{t}", formatStatDuration(durations.toolMs)),
-      ],
+      key: "steps",
+      group: "scale",
+      label: t("chat.stats.stepsLabel"),
+      value: String(stats.steps),
+      short: fill("chat.stats.steps", "{n}", String(stats.steps)),
     },
-    { key: "tokens", minWidth: "40rem", items: tokenItems },
-    { key: "perf", minWidth: "52rem", items: perfItems },
-  ];
-  const groups = allGroups.filter((group) => group.items.length > 0);
-
-  const prefix = stats.approximate ? `${t("chat.stats.approximate")} ` : "";
-  const fullText = prefix + groups.map((group) => group.items.join(" · ")).join(" ｜ ");
-
-  // tooltip 给出被容器查询收缩掉的分组，外加只在此处露出的压缩次数与 ≈ 释义。
-  const tooltipLines = [
-    ...groups.map((group) => ({ key: group.key, text: group.items.join(" · ") })),
-    ...(stats.compactions > 0
+    // 与用量环用同一个 contextWindow 判空口径：没有模型上下文窗口信息（老会话/
+    // text 模式）时该条整个不存在，而不是显示一个假的 0%。
+    ...(hasContextWindow
       ? [
           {
-            key: "compactions",
-            text: fill("chat.stats.compactions", "{n}", formatStatCount(stats.compactions, locale)),
+            key: "context",
+            group: "context" as const,
+            label: t("chat.stats.contextUsageLabel"),
+            value: fill("chat.stats.percentValue", "{p}", formatStatPercent(ratio)),
+            short: fill("chat.stats.contextUsage", "{p}", formatStatPercent(ratio)),
+          },
+        ]
+      : []),
+    {
+      key: "llmTime",
+      group: "time",
+      label: t("chat.stats.llmTimeLabel"),
+      value: formatStatDuration(durations.llmMs),
+      short: fill("chat.stats.llmTime", "{t}", formatStatDuration(durations.llmMs)),
+    },
+    {
+      key: "toolTime",
+      group: "time",
+      label: t("chat.stats.toolTimeLabel"),
+      value: formatStatDuration(durations.toolMs),
+      short: fill("chat.stats.toolTime", "{t}", formatStatDuration(durations.toolMs)),
+    },
+    ...(stats.inputTokens > 0
+      ? [
+          {
+            key: "inputTokens",
+            group: "tokens" as const,
+            label: t("chat.stats.inputTokensLabel"),
+            value: fill(
+              "chat.stats.tokenValue",
+              "{n}",
+              formatStatTokens(stats.inputTokens, locale),
+            ),
+            short: fill(
+              "chat.stats.inputTokensShort",
+              "{n}",
+              formatStatTokens(stats.inputTokens, locale),
+            ),
+          },
+        ]
+      : []),
+    ...(stats.outputTokens > 0
+      ? [
+          {
+            key: "outputTokens",
+            group: "tokens" as const,
+            label: t("chat.stats.outputTokensLabel"),
+            value: fill(
+              "chat.stats.tokenValue",
+              "{n}",
+              formatStatTokens(stats.outputTokens, locale),
+            ),
+            short: fill(
+              "chat.stats.outputTokensShort",
+              "{n}",
+              formatStatTokens(stats.outputTokens, locale),
+            ),
+          },
+        ]
+      : []),
+    ...(stats.cacheHitRatio !== null
+      ? [
+          {
+            key: "cacheHit",
+            group: "tokens" as const,
+            label: t("chat.stats.cacheHitLabel"),
+            value: fill("chat.stats.percentValue", "{p}", formatStatPercent(stats.cacheHitRatio)),
+            short: fill("chat.stats.cacheHit", "{p}", formatStatPercent(stats.cacheHitRatio)),
+          },
+        ]
+      : []),
+    ...(stats.ttftAvgMs !== null
+      ? [
+          {
+            key: "ttft",
+            group: "perf" as const,
+            label: t("chat.stats.ttftAvgLabel"),
+            value: formatStatLatency(stats.ttftAvgMs),
+            short: fill("chat.stats.ttftAvg", "{t}", formatStatLatency(stats.ttftAvgMs)),
+          },
+        ]
+      : []),
+    ...(stats.decodeTokPerSec !== null
+      ? [
+          {
+            key: "throughput",
+            group: "perf" as const,
+            label: t("chat.stats.throughputLabel"),
+            value: fill(
+              "chat.stats.throughput",
+              "{n}",
+              formatStatThroughput(stats.decodeTokPerSec),
+            ),
+            short: fill(
+              "chat.stats.throughput",
+              "{n}",
+              formatStatThroughput(stats.decodeTokPerSec),
+            ),
           },
         ]
       : []),
   ];
+
+  const groups: StatGroup[] = (["scale", "context", "time", "tokens", "perf"] as const).flatMap(
+    (key) => {
+      const groupMetrics = metrics.filter((metric) => metric.group === key);
+      if (groupMetrics.length === 0) return [];
+      return [{ key, minWidth: GROUP_MIN_WIDTH[key], metrics: groupMetrics }];
+    },
+  );
+
+  const prefix = stats.approximate ? `${t("chat.stats.approximate")} ` : "";
+  // 屏读拿到的是全称版：单行的 `↑111M` / `TTFT 20.9s` 读出来是噪音。
+  const fullText =
+    prefix +
+    groups
+      .map((group) => group.metrics.map((m) => `${m.label} ${m.value}`).join(" · "))
+      .join(" ｜ ");
+
+  // tooltip 是状态栏的「完整版」：单行受容器分档只露出高优先级分组，且用的是
+  // 工程缩写；这里改用仪表盘式的「分区小标题 + 逐指标一行」，每条都是
+  // 本地化全称。相比把一组数字用 · 粘成一句，逐行才能让名称与读数各自
+  // 成列；右列 tabular-nums 竖直对齐，气泡解除默认 max-w 并 nowrap，读数不被折断。
+  const groupLabelKey: Record<StatGroupKey, string> = {
+    scale: "chat.stats.groupScale",
+    context: "chat.stats.groupContext",
+    time: "chat.stats.groupTime",
+    tokens: "chat.stats.groupTokens",
+    perf: "chat.stats.groupPerf",
+  };
+  const tooltipSections = [
+    ...groups.map((group) => ({
+      key: group.key as string,
+      label: t(groupLabelKey[group.key]),
+      rows: group.metrics.map((metric) => ({
+        key: metric.key,
+        label: metric.label,
+        value: metric.value,
+      })),
+    })),
+    // 压缩次数只在此处露出：它描述的是历史被截断过几次，属于事后追溯信息，
+    // 不值得占用单行宽度（§4.2）。
+    ...(stats.compactions > 0
+      ? [
+          {
+            key: "history",
+            label: t("chat.stats.groupHistory"),
+            rows: [
+              {
+                key: "compactions",
+                label: t("chat.stats.compactionsLabel"),
+                value: fill(
+                  "chat.stats.compactionsValue",
+                  "{n}",
+                  formatStatCount(stats.compactions, locale),
+                ),
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
+  const tooltipFootnotes = [
+    ...(stats.approximate ? [t("chat.stats.approximateHint")] : []),
+    ...(compactAvailable ? [t("chat.manualCompactHint")] : []),
+  ];
   const tooltip = (
-    <span className="flex flex-col gap-0.5">
-      {tooltipLines.map((line) => (
-        <span key={line.key}>{line.text}</span>
+    <span className="flex min-w-48 flex-col gap-2">
+      {tooltipSections.map((section) => (
+        <span key={section.key} className="flex flex-col gap-1">
+          <span className="text-tiny font-medium uppercase tracking-wide text-muted-foreground/70">
+            {section.label}
+          </span>
+          <span className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 whitespace-nowrap">
+            {section.rows.map((row) => (
+              <Fragment key={row.key}>
+                <span className="font-normal text-muted-foreground">{row.label}</span>
+                <span className="text-right tabular-nums">{row.value}</span>
+              </Fragment>
+            ))}
+          </span>
+        </span>
       ))}
-      {stats.approximate ? (
-        <span className="text-muted-foreground">{t("chat.stats.approximateHint")}</span>
-      ) : null}
-      {compactAvailable ? (
-        <span className="text-muted-foreground">{t("chat.manualCompactTitle")}</span>
+      {tooltipFootnotes.length > 0 ? (
+        <span className="flex flex-col gap-0.5 border-t border-border/60 pt-1.5 font-normal text-muted-foreground">
+          {tooltipFootnotes.map((note) => (
+            <span key={note}>{note}</span>
+          ))}
+        </span>
       ) : null}
     </span>
   );
@@ -183,7 +350,10 @@ export function ConversationStatsBar(props: {
   const row = (
     <div
       aria-hidden="true"
-      className="flex min-w-0 items-center overflow-hidden text-[calc(11px*var(--zone-font-scale,1))] leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums"
+      className={cn(
+        "flex min-w-0 items-center overflow-hidden",
+        "text-tiny leading-none whitespace-nowrap text-muted-foreground/65 tabular-nums",
+      )}
     >
       {prefix === "" ? null : <span className="mr-1">{t("chat.stats.approximate")}</span>}
       {groups.map((group, index) => (
@@ -198,8 +368,13 @@ export function ConversationStatsBar(props: {
             group.minWidth === "52rem" && "hidden @min-[52rem]:flex",
           )}
         >
-          {index > 0 ? <span className="px-1.5 text-muted-foreground/40">｜</span> : null}
-          <span>{group.items.join(" · ")}</span>
+          {/* 分隔用 1px 竖线而不是全角「｜」：全角字形自带侧边留白且笔画偏重，
+              一行里重复五次会把读数切成几段孤岛。竖线高度压到 0.625rem 只齐字腰，
+              视觉分量退到读数之后。aria-label 仍用「｜」拼接，不受此处影响。 */}
+          {index > 0 ? (
+            <span aria-hidden="true" className="mx-2.5 h-2.5 w-px shrink-0 bg-border/70" />
+          ) : null}
+          <span>{group.metrics.map((metric) => metric.short).join(" · ")}</span>
         </span>
       ))}
     </div>
@@ -218,7 +393,7 @@ export function ConversationStatsBar(props: {
       />
       {/* overflow-hidden 兜底：tooltip trigger 是 shrink-0，极窄时宁可裁剪也不撑破布局。 */}
       <div className="@container flex h-5 w-full items-center justify-center overflow-hidden">
-        <LabelTooltip label={tooltip}>
+        <LabelTooltip label={tooltip} contentClassName="max-w-none">
           {compactAvailable ? (
             <ConfirmActionPopover
               title={t("chat.manualCompactTitle")}
@@ -236,7 +411,10 @@ export function ConversationStatsBar(props: {
                   type="button"
                   onClick={open}
                   aria-label={t("chat.manualCompactTitle")}
-                  className="flex min-w-0 cursor-pointer items-center rounded-full px-1.5 outline-hidden transition-[background-color] hover:bg-muted/50 focus-visible:bg-muted/50"
+                  className={cn(
+                    "flex min-w-0 cursor-pointer items-center rounded-full px-1.5 outline-hidden transition-[background-color]",
+                    "hover:bg-muted/50 focus-visible:bg-muted/50",
+                  )}
                 >
                   {row}
                 </button>

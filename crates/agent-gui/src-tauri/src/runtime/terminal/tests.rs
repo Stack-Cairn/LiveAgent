@@ -463,6 +463,71 @@ fn ssh_terminal_tab_open_rejects_disabled_sftp() {
 }
 
 #[test]
+fn ssh_enable_sftp_upgrades_existing_session_in_place() {
+    let registry = TerminalSessionRegistry::default();
+    insert_test_ssh_session(
+        &registry,
+        "ssh-1",
+        "/tmp/project",
+        false,
+        SSH_STATUS_CONNECTED,
+    );
+
+    let record = registry
+        .ssh_enable_sftp("  ssh-1  ".to_string())
+        .expect("enable sftp on existing session");
+    assert_eq!(record.id, "ssh-1");
+    assert!(record.ssh.as_ref().expect("ssh metadata").sftp_enabled);
+    assert!(registry.ssh_session_info("ssh-1").unwrap().sftp_enabled);
+    registry
+        .ssh_terminal_tab_open("ssh-1".to_string(), "sftp".to_string())
+        .expect("sftp tab opens once SFTP is enabled");
+
+    let again = registry
+        .ssh_enable_sftp("ssh-1".to_string())
+        .expect("enabling twice is a no-op");
+    assert_eq!(again.updated_at, record.updated_at);
+}
+
+#[test]
+fn ssh_enable_sftp_rejects_missing_session() {
+    let registry = TerminalSessionRegistry::default();
+    assert!(registry.ssh_enable_sftp("missing".to_string()).is_err());
+}
+
+#[test]
+fn ssh_exec_without_live_connection_fails_without_reconnecting() {
+    let registry = Arc::new(TerminalSessionRegistry::default());
+    insert_test_ssh_session(
+        &registry,
+        "ssh-1",
+        "/tmp/project",
+        true,
+        SSH_STATUS_CONNECTED,
+    );
+
+    let error = block_on_test(registry.ssh_exec(
+        "ssh-1".to_string(),
+        "pwd".to_string(),
+        None,
+        Some(1_000),
+        None,
+        None,
+    ))
+    .unwrap_err();
+
+    assert!(error.contains("not connected"), "{error}");
+    let runtime = test_ssh_runtime(&registry, "ssh-1");
+    assert!(
+        runtime.begin_reconnect_runner(),
+        "no reconnect runner may start"
+    );
+    let record = registry.record("ssh-1".to_string()).unwrap();
+    assert!(record.running);
+    assert_eq!(record.ssh.unwrap().status, SSH_STATUS_CONNECTED);
+}
+
+#[test]
 fn ssh_terminal_tabs_prune_when_session_closes() {
     let registry = TerminalSessionRegistry::default();
     insert_test_ssh_session(

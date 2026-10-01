@@ -1,13 +1,10 @@
 import { X } from "@liveagent/ui/components/IconSet";
+import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useMemo, useState } from "react";
 import type { PendingUploadedFile } from "../../lib/chat/uploadedFiles";
-import {
-  ImagePreview,
-  ImagePreviewActionFeedback,
-  ImagePreviewContextMenu,
-  type ImagePreviewSlide,
-} from "./ImagePreview";
+import { ImagePreview, type ImagePreviewSlide } from "./ImagePreview";
+import { ImagePreviewActionFeedback, ImagePreviewContextMenu } from "./ImagePreviewMenu";
 
 export function ComposerAttachmentCard(props: {
   file?: PendingUploadedFile;
@@ -39,7 +36,6 @@ export function ComposerAttachmentCard(props: {
   } = props;
   const [previewOpen, setPreviewOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [imageLoadState, setImageLoadState] = useState<{
     src: string | null;
     status: "loaded" | "error";
@@ -81,53 +77,66 @@ export function ComposerAttachmentCard(props: {
     return (
       <div
         title={fileName}
-        className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color] hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]"
+        className={cn(
+          "group relative size-12 shrink-0 overflow-hidden",
+          "rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color]",
+          "hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]",
+        )}
       >
         {imageSrc && !imageLoadFailed ? (
-          <button
-            type="button"
+          <ImagePreviewContextMenu
+            slide={previewSlide}
             disabled={!canPreview}
-            onClick={() => setPreviewOpen(true)}
-            className={cn(
-              "block h-full w-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60",
-              canPreview ? "cursor-zoom-in" : "cursor-default",
-            )}
-            aria-label={previewLabel ? `${previewLabel}: ${fileName}` : fileName}
-            title={previewLabel}
-            onContextMenu={(event) => {
-              if (!canPreview) return;
-              event.preventDefault();
-              setContextMenu({ x: event.clientX, y: event.clientY });
-            }}
-          >
-            <img
-              src={imageSrc}
-              alt=""
-              draggable={false}
-              className="block h-full w-full object-cover"
-              onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
-              onError={() => {
-                setImageLoadState({ src: imageSrc, status: "error" });
-                setContextMenu(null);
-              }}
-            />
-          </button>
+            onOpen={() => setPreviewOpen(true)}
+            onActionError={setActionError}
+            trigger={
+              <button
+                type="button"
+                disabled={!canPreview}
+                onClick={() => setPreviewOpen(true)}
+                className={cn(
+                  "block size-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60",
+                  canPreview ? "cursor-zoom-in" : "cursor-default",
+                )}
+                aria-label={previewLabel ? `${previewLabel}: ${fileName}` : fileName}
+                title={previewLabel}
+              >
+                <img
+                  src={imageSrc}
+                  alt=""
+                  draggable={false}
+                  className="block size-full object-cover"
+                  onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
+                  onError={() => {
+                    setImageLoadState({ src: imageSrc, status: "error" });
+                  }}
+                />
+              </button>
+            }
+          />
         ) : imageLoadFailed ? (
-          <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+          <span className="flex size-full items-center justify-center text-muted-foreground">
             {fallbackIcon}
           </span>
         ) : (
-          <span className="block h-full w-full animate-pulse bg-black/[0.055] dark:bg-white/[0.09]" />
+          <Skeleton
+            render={<span />}
+            className="block size-full bg-black/[0.055] dark:bg-white/[0.09]"
+          />
         )}
         <button
           type="button"
           disabled={disabled}
           onClick={onRemove}
-          className="absolute right-0.5 top-0.5 z-10 inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale] hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35"
+          className={cn(
+            "absolute right-0.5 top-0.5 z-10 inline-flex size-4 items-center justify-center",
+            "rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale]",
+            "hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35",
+          )}
           aria-label={`${removeLabel} ${fileName}`}
           title={removeLabel}
         >
-          <X className="h-2.5 w-2.5" />
+          <X className="size-2.5" />
         </button>
         {previewOpen ? (
           <ImagePreview
@@ -135,15 +144,6 @@ export function ComposerAttachmentCard(props: {
             slides={previewSlides}
             closeLabel={closePreviewLabel}
             onClose={() => setPreviewOpen(false)}
-          />
-        ) : null}
-        {contextMenu && previewSlide ? (
-          <ImagePreviewContextMenu
-            slide={previewSlide}
-            position={contextMenu}
-            onOpen={() => setPreviewOpen(true)}
-            onClose={() => setContextMenu(null)}
-            onActionError={setActionError}
           />
         ) : null}
         <ImagePreviewActionFeedback message={actionError} onDismiss={() => setActionError(null)} />
@@ -154,13 +154,22 @@ export function ComposerAttachmentCard(props: {
   return (
     <div
       title={pathTitle}
-      className="group flex h-9 w-36 max-w-[calc(100vw-5rem)] shrink-0 items-center gap-1 rounded-lg border border-black/[0.075] bg-black/[0.035] p-1 pr-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.64)] transition-[border-color,background-color] hover:border-black/[0.11] hover:bg-black/[0.05] dark:border-white/[0.11] dark:bg-white/[0.065] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.055)] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.09]"
+      className={cn(
+        "group flex h-9 w-36 max-w-viewport-inset-5rem shrink-0 items-center gap-1",
+        "rounded-lg border border-black/[0.075] bg-black/[0.035] p-1 pr-1.5 shadow-ui-composerattachmentcard-1 transition-[border-color,background-color]",
+        "hover:border-black/[0.11] hover:bg-black/[0.05] dark:border-white/[0.11] dark:bg-white/[0.065] dark:shadow-ui-composerattachmentcard-2 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.09]",
+      )}
     >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/[0.045] text-muted-foreground dark:bg-white/[0.08]">
+      <span
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center overflow-hidden",
+          "rounded-md bg-black/[0.045] text-muted-foreground dark:bg-white/[0.08]",
+        )}
+      >
         {fallbackIcon}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-4 tracking-tight text-foreground/90">
+      <span className="min-w-0 flex-1 truncate text-xs font-medium leading-4 tracking-tight text-foreground/90">
         {fileName}
       </span>
 
@@ -168,11 +177,15 @@ export function ComposerAttachmentCard(props: {
         type="button"
         disabled={disabled}
         onClick={onRemove}
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/75 outline-hidden transition-[background-color,color,scale] hover:bg-foreground/[0.07] hover:text-foreground active:scale-90 focus-visible:bg-foreground/[0.07] focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-35"
+        className={cn(
+          "inline-flex size-5 shrink-0 items-center justify-center",
+          "rounded-full text-muted-foreground/75 outline-hidden transition-[background-color,color,scale]",
+          "hover:bg-foreground/[0.07] hover:text-foreground active:scale-90 focus-visible:bg-foreground/[0.07] focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-35",
+        )}
         aria-label={`${removeLabel} ${fileName}`}
         title={removeLabel}
       >
-        <X className="h-3 w-3" />
+        <X className="size-3" />
       </button>
     </div>
   );

@@ -43,7 +43,7 @@ function CustomSettingsModelField(props: {
         placeholder={followCurrentLabel}
         noneLabel={followCurrentLabel}
         ariaLabel={label}
-        triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+        variant="quiet"
       />
     </div>
   );
@@ -74,11 +74,11 @@ export function ProviderCustomSettingsDrawer(
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         variant="inset"
-        className="settings-provider-custom-sheet max-w-none border-border bg-background sm:max-w-[440px]"
+        className="settings-provider-custom-sheet max-w-none border-border bg-background sm:max-w-[440px] web:max-820:inset-0 web:max-820:h-full web:max-820:max-h-none web:max-820:w-full web:max-820:max-w-none web:max-820:rounded-none web:max-820:border-l-0"
         closeLabel={t("settings.closeCustomSettings")}
         showCloseButton={false}
       >
-        <div className="settings-provider-custom-sheet-header relative flex items-center gap-3 px-6 pb-4 pt-[22px]">
+        <div className="settings-provider-custom-sheet-header relative flex items-center gap-3 px-6 pb-4 pt-[22px] web:max-820:pt-settings-provider-custom-sheet-header-pt">
           <SheetTitle className="min-w-0 flex-1 text-[17px] leading-tight tracking-tight text-foreground/95">
             {t("settings.customSettings")}
           </SheetTitle>
@@ -96,7 +96,7 @@ export function ProviderCustomSettingsDrawer(
           aria-hidden="true"
           className="relative mx-6 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
         />
-        <div className="settings-provider-custom-sheet-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        <div className="settings-provider-custom-sheet-body relative min-h-0 flex-1 overflow-y-auto px-6 pb-6 web:max-820:pb-settings-provider-custom-sheet-body-pb">
           <div className="divide-y divide-foreground/[0.06]">
             <section className="py-5 first:pt-4">
               <DrawerSectionHeader

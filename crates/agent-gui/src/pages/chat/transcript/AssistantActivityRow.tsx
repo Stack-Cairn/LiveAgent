@@ -26,7 +26,6 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
   /** 本对话有工具卡在审批门上（审批发生在执行前，不体现为运行中的工具）。 */
   hasPendingToolApproval?: boolean;
   toolStatus: string | null;
-  actionsVisible?: boolean;
   retryAttempts?: RetryAttemptRecord[];
   workdir?: string;
   onOpenFileLink?: (link: ChatFileLink) => void;
@@ -45,7 +44,6 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
     isCompactionRunning,
     hasPendingToolApproval = false,
     toolStatus,
-    actionsVisible,
     retryAttempts,
     workdir,
     onOpenFileLink,
@@ -71,7 +69,6 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
             isCompactionRunning={unit.mutable ? isCompactionRunning : false}
             awaitingDecision={awaitingDecision}
             toolStatus={unit.mutable ? toolStatus : null}
-            actionsVisible={actionsVisible}
             retryAttempts={unit.mutable ? retryAttempts : undefined}
             workdir={workdir}
             onOpenFileLink={onOpenFileLink}

@@ -39,6 +39,9 @@ import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import {
   ChatComposerBar,
@@ -70,6 +73,7 @@ import { parseHistoryMessagesJsonAsync } from "@/lib/historyParser";
 import { toModelValue } from "@/lib/providers/llm";
 import {
   type AppSettings,
+  applyConversationThinking,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
   isThinkingAlwaysOnForModel,
@@ -82,6 +86,11 @@ import {
   liveTrajectoryEvents,
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
+import {
+  GATEWAY_CHAT_FRAME_CLASS,
+  GATEWAY_SCROLL_TO_BOTTOM_CLASS,
+  GATEWAY_TRANSCRIPT_SCROLL_CLASS,
+} from "@/lib/webStyleClasses";
 import type { SectionId } from "@/pages/settings/types";
 import { ConversationStatsBarHost } from "../ConversationStatsBarHost";
 import {
@@ -210,7 +219,6 @@ export type GatewayConversationPrimarySurface = {
   onBranchConversation: Parameters<typeof GatewayTranscript>[0]["onBranchConversation"];
   branchPendingMessageId: string | null;
   onSuggestionSelect: Parameters<typeof GatewayTranscript>[0]["onSuggestionSelect"];
-  suggestionsDisabled: boolean;
   hasMoreHistory: boolean;
   isLoadingMoreHistory: boolean;
   onLoadEarlierHistory?: () => void;
@@ -243,6 +251,7 @@ export type GatewayConversationPaneHostProps = {
 };
 
 export function GatewayConversationPaneHost(props: GatewayConversationPaneHostProps) {
+  const chatFrameRef = useRef<HTMLDivElement | null>(null);
   const {
     paneId,
     conversationId,
@@ -468,20 +477,31 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         : undefined,
     [selectedProvider, selectedModelId],
   );
+  // 运行期思考档位补充到达会改变档位列表/恒开判定/当前档钳制，版本号计入依赖使
+  // memo 跟进。
+  const thinkingLiveVersion = useThinkingLiveVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档；selection 按字段比较，避免每次解析出新对象触发重算。
   const paneRuntimeControls = useMemo(
     () =>
-      normalizeChatRuntimeControlsForProvider(context.settings.chatRuntimeControls, {
-        providerId: selectedRoute?.adapterProviderId,
-        requestFormat: selectedRoute?.requestFormat,
-        modelId: selection?.model,
-      }),
+      normalizeChatRuntimeControlsForProvider(
+        applyConversationThinking(context.settings.chatRuntimeControls, selection),
+        {
+          providerId: selectedRoute?.adapterProviderId,
+          requestFormat: selectedRoute?.requestFormat,
+          modelId: selection?.model,
+        },
+      ),
     [
       context.settings.chatRuntimeControls,
       selectedRoute?.adapterProviderId,
       selectedRoute?.requestFormat,
       selection?.model,
+      selection?.thinkingEnabled,
+      selection?.reasoning,
+      thinkingLiveVersion,
     ],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重算。
   const paneReasoningOptions = useMemo(
     () =>
       getChatRuntimeReasoningLevelsForProvider({
@@ -489,15 +509,21 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         requestFormat: selectedRoute?.requestFormat,
         modelId: selection?.model,
       }),
-    [selectedRoute?.adapterProviderId, selectedRoute?.requestFormat, selection?.model],
+    [
+      selectedRoute?.requestFormat,
+      selectedRoute?.adapterProviderId,
+      selection?.model,
+      thinkingLiveVersion,
+    ],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重算。
   const paneThinkingAlwaysOn = useMemo(
     () =>
       isThinkingAlwaysOnForModel(
         selectedRoute?.adapterProviderId ?? "claude_code",
         selection?.model,
       ),
-    [selectedRoute?.adapterProviderId, selection?.model],
+    [selectedRoute?.adapterProviderId, selection?.model, thinkingLiveVersion],
   );
 
   // 提示词澄清执行器（桌面端背景 Pane 口径）：模型覆盖/回退/错误拍平在
@@ -631,41 +657,27 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     if (composerRef.current) pageComposerRef.current = composerRef.current;
   });
 
-  // ---- 转录滚动跟随:贴底自动跟进,用户上滚即释放,支持一键回底 ------------
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const followingRef = useRef(true);
-  const [following, setFollowing] = useState(true);
-  const detachScrollRef = useRef<(() => void) | null>(null);
-  const setViewport = useCallback((element: HTMLDivElement | null) => {
-    detachScrollRef.current?.();
-    detachScrollRef.current = null;
-    viewportRef.current = element;
-    if (!element) return;
-    element.scrollTop = element.scrollHeight;
-    const handleScroll = () => {
-      const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
-      followingRef.current = nearBottom;
-      setFollowing(nearBottom);
-    };
-    element.addEventListener("scroll", handleScroll, { passive: true });
-    detachScrollRef.current = () => element.removeEventListener("scroll", handleScroll);
-  }, []);
-  useEffect(() => () => detachScrollRef.current?.(), []);
+  // ---- 转录滚动跟随 -----------------------------------------------------
+  // 背景 Pane 与主 Pane 共用同一套滚动跟随引擎：主 Pane 的视口由 GatewayApp
+  // 持有的引擎接管（经 primary.setTranscriptViewport 接线），本地这套只在
+  // 非主态生效。回贴区为 0：只有真正到达底部才恢复跟随。此前这里手写了一套
+  // "距底不足 48px 即视为跟随、行数一变就写 scrollTop" 的逻辑，读者停在底部
+  // 附近时会被每次流式增量吸回底部，而且与桌面端各 Pane 的引擎语义不一致。
+  const usePrimary = Boolean(isPrimary && primary);
+  const [paneScrollAreaRoot, setPaneScrollAreaRoot] = useState<HTMLDivElement | null>(null);
+  const [paneViewport, setPaneViewport] = useState<HTMLDivElement | null>(null);
+  const { handle: paneFollow, following: paneFollowing } = useScrollFollow({
+    viewport: paneViewport,
+    listenerRoot: paneScrollAreaRoot,
+    enabled: !usePrimary,
+    config: { reattachZonePx: 0 },
+  });
+  // 会话切换后落在最新消息上，与桌面端 ChatTranscript 一致。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversationId 是有意的重置信号，动作由 handle 执行。
+  useLayoutEffect(() => {
+    if (!usePrimary) paneFollow.stickToBottom();
+  }, [conversationId, paneFollow, usePrimary]);
   const rowCount = transcript.rows.length;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 行数/修订变化时按跟随态贴底,效果体不直接读取它们。
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || !followingRef.current) return;
-    viewport.scrollTop = viewport.scrollHeight;
-  }, [rowCount, transcript.revision]);
-  const jumpToBottom = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    viewport.scrollTop = viewport.scrollHeight;
-    followingRef.current = true;
-    setFollowing(true);
-  }, []);
-  const isViewportFollowing = useCallback(() => followingRef.current, []);
 
   // ---- 每会话模型/用量/进度/审批 -------------------------------------------
   const selectedValue = selection
@@ -746,19 +758,22 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         data-workbench-pane-id={paneId}
         data-workbench-surface="conversation"
         data-workbench-surface-id={`conversation:${conversationId}`}
-        className="flex h-full min-h-0 w-full items-center justify-center"
+        className="flex size-full min-h-0 items-center justify-center"
       >
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  const usePrimary = Boolean(isPrimary && primary);
-  const transcriptFollowing = usePrimary ? (primary?.viewportFollowing ?? following) : following;
+  const transcriptFollowing = usePrimary
+    ? (primary?.viewportFollowing ?? paneFollowing)
+    : paneFollowing;
   const transcriptIsViewportFollowing =
-    usePrimary && primary?.isViewportFollowing ? primary.isViewportFollowing : isViewportFollowing;
+    usePrimary && primary?.isViewportFollowing
+      ? primary.isViewportFollowing
+      : paneFollow.isFollowing;
   const handleJumpToBottom =
-    usePrimary && primary?.onJumpToBottom ? primary.onJumpToBottom : jumpToBottom;
+    usePrimary && primary?.onJumpToBottom ? primary.onJumpToBottom : paneFollow.jumpToBottom;
   const transcriptTree = (
     <GatewayTranscript
       conversationId={conversationId}
@@ -800,13 +815,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         usePrimary ? (primary?.branchPendingMessageId ?? undefined) : undefined
       }
       onSuggestionSelect={usePrimary ? primary?.onSuggestionSelect : () => onFocusPane()}
-      suggestionsDisabled={usePrimary ? primary?.suggestionsDisabled : undefined}
     />
   );
 
-  // 嵌套一层 .gateway-chat-frame:ChatComposerBar(surface="web")把输入框
-  // 高度写到最近的 chat-frame CSS 变量上,这里让变量按 Pane 独立作用,多个
-  // 输入框互不干扰;DOM 结构与桌面端 ConversationSurface 一致。
+  // Each pane explicitly owns its composer-height variable, so concurrent
+  // panes never discover or update one another through a DOM ancestor query.
   return (
     <div
       data-workbench-pane-id={paneId}
@@ -817,15 +830,25 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       {blockedMessage ? (
         <div
           data-workbench-pane-blocked=""
-          className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400"
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            "border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400",
+          )}
         >
           {blockedMessage}
         </div>
       ) : null}
-      <div className="gateway-chat-frame relative flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div
+        ref={chatFrameRef}
+        className={cn(
+          GATEWAY_CHAT_FRAME_CLASS,
+          "relative flex size-full h-full min-h-0 min-w-0 flex-1",
+          "flex-col overflow-hidden max-820:h-full",
+        )}
+      >
         <section
           ref={usePrimary ? primary?.stageRef : undefined}
-          className="gateway-transcript-stage"
+          className="gateway-transcript-stage relative min-h-0 flex-1 overflow-hidden @container"
           style={
             {
               [CHAT_TRANSCRIPT_WIDTH_CSS_VAR]: `${context.transcriptContentWidth}px`,
@@ -850,15 +873,15 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               authoritativeRevision={trajectoryAuthoritativeRevision}
             />
           ) : (
-            <div className="gateway-transcript-scroll-shell">
+            <div className="relative h-full min-h-0">
               <ScrollArea
-                ref={usePrimary ? primary?.setTranscriptScrollAreaRoot : undefined}
+                ref={usePrimary ? primary?.setTranscriptScrollAreaRoot : setPaneScrollAreaRoot}
                 viewportRef={
                   usePrimary && primary?.setTranscriptViewport
                     ? primary.setTranscriptViewport
-                    : setViewport
+                    : setPaneViewport
                 }
-                className="gateway-transcript-scroll"
+                className={GATEWAY_TRANSCRIPT_SCROLL_CLASS}
               >
                 {usePrimary && primary ? (
                   <ChangedFilesActionsProvider value={primary.changedFilesActions}>
@@ -882,18 +905,19 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               {!transcriptFollowing && rowCount > 0 ? (
                 <button
                   type="button"
-                  className="gateway-scroll-to-bottom"
+                  className={GATEWAY_SCROLL_TO_BOTTOM_CLASS}
                   onClick={handleJumpToBottom}
                   aria-label="滚动到底部"
                   title="滚动到底部"
                 >
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDown className="size-4" />
                 </button>
               ) : null}
             </div>
           )}
           <ChatComposerBar
             surface="web"
+            overlayHeightOwnerRef={chatFrameRef}
             runClarifyTurn={
               context.settings.customSettings.promptClarifyEnabled ? runClarifyTurn : undefined
             }

@@ -496,6 +496,54 @@ function splitInteractionEntries(entries: readonly AssistantTurnLayoutEntry[]) {
   };
 }
 
+// Per-round layout entries are a pure function of the (immutable) round
+// object: roundKey, meta, runningToolCallIds, thinkingOpen and the grouped
+// blocks are all derived from it. Streaming replaces only the mutated
+// round's reference (updateLiveRound / appendTextDeltaToRound keep every
+// other round identical), so caching by round identity turns each rebuild
+// of a long reply from O(whole reply) into O(changed round). Reference-
+// stable entries also let downstream reuse checks (canReuseLiveUnit, memo
+// comparators) short-circuit on identity instead of deep-comparing text.
+const roundLayoutEntriesCache = new WeakMap<object, AssistantTurnLayoutEntry[]>();
+
+function buildRoundLayoutEntries(round: AssistantTurnRound): AssistantTurnLayoutEntry[] {
+  const cached = roundLayoutEntriesCache.get(round);
+  if (cached) return cached;
+  const roundKey = round.key?.trim() || `r${round.round}`;
+  const runningToolCallIds = round.runningToolCallIds ?? [];
+  const thinkingOpen = round.thinkingOpen ?? false;
+  const seam = getCompactionSeam(round);
+  let entries: AssistantTurnLayoutEntry[];
+  if (seam) {
+    // A compaction seam is a stage boundary of its own: it renders as a
+    // milestone row in the work trace and, like a thinking segment, keeps
+    // the tool batches on either side from merging into one group.
+    entries = [
+      {
+        key: `${roundKey}:checkpoint`,
+        roundKey,
+        roundMeta: round.meta,
+        block: { kind: "checkpoint" as const, key: `checkpoint-${seam.key}`, seam },
+        runningToolCallIds,
+        thinkingOpen,
+      },
+    ];
+  } else {
+    entries = groupRoundBlocks(round.blocks)
+      .filter(isVisibleTurnBlock)
+      .map((block) => ({
+        key: `${roundKey}:${block.key}`,
+        roundKey,
+        roundMeta: round.meta,
+        block,
+        runningToolCallIds,
+        thinkingOpen,
+      }));
+  }
+  roundLayoutEntriesCache.set(round, entries);
+  return entries;
+}
+
 /**
  * Project every model/tool round produced by one user request into the three
  * visual layers used by the transcript:
@@ -517,37 +565,7 @@ export function resolveAssistantTurnLayout(
   rounds: readonly AssistantTurnRound[],
   options: { live: boolean },
 ): AssistantTurnLayout {
-  const entries = rounds.flatMap((round) => {
-    const roundKey = round.key?.trim() || `r${round.round}`;
-    const runningToolCallIds = round.runningToolCallIds ?? [];
-    const thinkingOpen = round.thinkingOpen ?? false;
-    const seam = getCompactionSeam(round);
-    if (seam) {
-      // A compaction seam is a stage boundary of its own: it renders as a
-      // milestone row in the work trace and, like a thinking segment, keeps
-      // the tool batches on either side from merging into one group.
-      return [
-        {
-          key: `${roundKey}:checkpoint`,
-          roundKey,
-          roundMeta: round.meta,
-          block: { kind: "checkpoint" as const, key: `checkpoint-${seam.key}`, seam },
-          runningToolCallIds,
-          thinkingOpen,
-        },
-      ];
-    }
-    return groupRoundBlocks(round.blocks)
-      .filter(isVisibleTurnBlock)
-      .map((block) => ({
-        key: `${roundKey}:${block.key}`,
-        roundKey,
-        roundMeta: round.meta,
-        block,
-        runningToolCallIds,
-        thinkingOpen,
-      }));
-  });
+  const entries = rounds.flatMap((round) => buildRoundLayoutEntries(round));
 
   if (entries.length === 0) return { work: [], interaction: [], answer: [] };
 

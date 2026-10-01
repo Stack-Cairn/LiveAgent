@@ -396,6 +396,9 @@ export interface VirtualizerOptions<
   // user is scrolling (sticky to the last known direction), so
   // compositor-async scrolling has pre-rendered content to reveal before
   // the main thread catches up. 0 disables.
+  // Keep a pixel buffer on both sides, including before the first gesture
+  // and after an abrupt direction reversal.
+  overscanPx?: number
   directionalOverscanPx?: number
   scrollEndThreshold?: number
   isScrollingResetDelay?: number
@@ -529,8 +532,12 @@ export class Virtualizer<
       ) => boolean)
   elementsCache = new Map<Key, TItemElement>()
   private now = () => this.targetWindow?.performance?.now?.() ?? Date.now()
+  private resizeBatchDepth = 0
+  private resizeBatchChanged = false
   private observer = (() => {
     let _ro: ResizeObserver | null = null
+    let frame: number | null = null
+    const pending = new Map<Element, ResizeObserverEntry>()
 
     const get = () => {
       if (_ro) {
@@ -541,31 +548,35 @@ export class Virtualizer<
         return null
       }
 
-      return (_ro = new this.targetWindow.ResizeObserver((entries) => {
-        entries.forEach((entry) => {
-          const run = () => {
+      const flush = () => {
+        frame = null
+        const entries = [...pending.values()]
+        pending.clear()
+        // Offset compensation and end pinning publish between writes so the
+        // browser can clamp each write against the corresponding sizer.
+        const batch =
+          this.options.scrollAnchoring === 'origin' &&
+          !(
+            this.options.anchorTo === 'end' &&
+            this.isAtEnd(this.options.scrollEndThreshold)
+          )
+        if (batch) this.resizeBatchDepth++
+        try {
+          for (const entry of entries) {
             const node = entry.target as TItemElement
             const index = this.indexFromElement(node)
-
             if (!node.isConnected) {
               this.observer.unobserve(node)
-              // Find the cache entry pointing to this exact node and remove
-              // it. We can't call getItemKey(index) here because items may
-              // have been removed since this node was rendered — the index
-              // could be stale and out-of-bounds in the user's data array
-              // (regression test in e2e/.../stale-index.spec.ts, fix #1148).
-              // The === comparison naturally handles the React-replaced-
-              // a-node-for-the-same-key case: that entry now points to a
-              // different node, so this loop won't match.
+              // The index may be stale after removal or replacement; only
+              // evict the cache entry still pointing at this exact node.
               for (const [cacheKey, cachedNode] of this.elementsCache) {
                 if (cachedNode === node) {
                   this.elementsCache.delete(cacheKey)
                   break
                 }
               }
-              return
+              continue
             }
-
             if (this.shouldMeasureDuringScroll(index)) {
               this.resizeItem(
                 index,
@@ -573,16 +584,34 @@ export class Virtualizer<
               )
             }
           }
-          this.options.useAnimationFrameWithResizeObserver
-            ? requestAnimationFrame(run)
-            : run()
-        })
+        } finally {
+          if (batch) this.resizeBatchDepth--
+          if (this.resizeBatchDepth === 0 && this.resizeBatchChanged) {
+            this.resizeBatchChanged = false
+            this.notify(false)
+          }
+        }
+      }
+      return (_ro = new this.targetWindow.ResizeObserver((entries) => {
+        for (const entry of entries) pending.set(entry.target, entry)
+        // Width changes resize many rows together. Preserve each row's
+        // anchoring correction, but publish the resulting layout only once.
+        if (this.options.useAnimationFrameWithResizeObserver) {
+          if (frame === null) {
+            frame = this.targetWindow!.requestAnimationFrame(flush)
+          }
+        } else {
+          flush()
+        }
       }))
     }
 
     return {
       disconnect: () => {
-        get()?.disconnect()
+        if (frame !== null) this.targetWindow?.cancelAnimationFrame(frame)
+        frame = null
+        pending.clear()
+        _ro?.disconnect()
         _ro = null
       },
       observe: (target: Element) =>
@@ -621,6 +650,7 @@ export class Virtualizer<
       anchorTo: 'start',
       followOnAppend: false,
       scrollAnchoring: 'offset',
+      overscanPx: 0,
       directionalOverscanPx: 0,
       scrollEndThreshold: 1,
       isScrollingResetDelay: 150,
@@ -763,6 +793,10 @@ export class Virtualizer<
   private _lastMirrorWarnAt = 0
 
   private notify = (sync: boolean) => {
+    if (!sync && this.resizeBatchDepth > 0) {
+      this.resizeBatchChanged = true
+      return
+    }
     if (process.env.NODE_ENV !== 'production') {
       this.assertScrollMirrorInvariant()
     }
@@ -1624,9 +1658,18 @@ export class Virtualizer<
       this.getScrollOffset(),
       this.options.lanes,
       this.options.directionalOverscanPx,
+      this.options.overscanPx,
       this.lastScrollDirection,
     ],
-    (measurements, outerSize, scrollOffset, lanes, overscanPx, direction) => {
+    (
+      measurements,
+      outerSize,
+      scrollOffset,
+      lanes,
+      overscanPx,
+      symmetricOverscanPx,
+      direction,
+    ) => {
       if (measurements.length === 0 || outerSize === 0) {
         this.range = null
         return null
@@ -1635,10 +1678,11 @@ export class Virtualizer<
       // is heading (sticky to the last known direction so a settling scroll
       // doesn't churn row mounts). Compositor-async viewports reveal this
       // pre-rendered band before the main thread processes the next event.
+      const base = Math.max(0, symmetricOverscanPx)
       const backwardExtra =
-        overscanPx > 0 && direction === 'backward' ? overscanPx : 0
+        base + (overscanPx > 0 && direction === 'backward' ? overscanPx : 0)
       const forwardExtra =
-        overscanPx > 0 && direction === 'forward' ? overscanPx : 0
+        base + (overscanPx > 0 && direction === 'forward' ? overscanPx : 0)
       this.range = calculateRangeImpl(
         measurements,
         outerSize + backwardExtra + forwardExtra,
@@ -1798,10 +1842,19 @@ export class Virtualizer<
     const delta = size - itemSize
 
     if (delta !== 0) {
+      // "At the end" is measured against the real scroll clamp
+      // (getDistanceFromEnd → DOM scrollHeight), the same coordinate the
+      // followOnAppend check in _willUpdate reads. The virtual list's own end
+      // can sit well above that clamp — this repo's transcripts render a
+      // fixed spacer below the sizer — and the virtual-distance check treated
+      // the whole band under it as "at end": a detached reader parked there
+      // was dragged along by every bottom-row growth (300px+ visible jumps
+      // when a question card or an approval chip arrived).
       const wasAtEnd =
         this.options.anchorTo === 'end' &&
         this.scrollState?.behavior !== 'smooth' &&
-        this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold
+        this.scrollElement !== null &&
+        this.getDistanceFromEnd() <= this.options.scrollEndThreshold
       const prevTotalSize = wasAtEnd ? this.getTotalSize() : 0
       const shouldAdjustScroll =
         this.scrollState?.behavior !== 'smooth' &&
@@ -2060,13 +2113,6 @@ export class Virtualizer<
         ? doc.scrollWidth - this.scrollElement.innerWidth
         : doc.scrollHeight - this.scrollElement.innerHeight
     }
-  }
-
-  private getVirtualDistanceFromEnd = () => {
-    return Math.max(
-      this.getTotalSize() - this.getSize() - this.getScrollOffset(),
-      0,
-    )
   }
 
   getDistanceFromEnd = () => {

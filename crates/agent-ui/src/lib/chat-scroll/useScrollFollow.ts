@@ -55,6 +55,8 @@ function isFollowScrollKey(event: KeyboardEvent) {
 }
 
 export type ScrollFollowHandle = {
+  saveReadingPosition?: () => void;
+  restoreFollowing: (following: boolean) => void;
   // Force follow mode and pin now (or on viewport arrival if not bound yet).
   stickToBottom: () => void;
   // Animate to the bottom, then force follow. For user-facing affordances
@@ -110,6 +112,7 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
 
   const stateRef = useRef<FollowState>(createFollowState());
   const boundViewportRef = useRef<HTMLElement | null>(null);
+  const pendingFollowRestoreRef = useRef<boolean | null>(null);
   const configRef = useRef<FollowConfig>(DEFAULT_FOLLOW_CONFIG);
   configRef.current = { ...DEFAULT_FOLLOW_CONFIG, ...args.config };
   const [following, setFollowing] = useState(true);
@@ -222,9 +225,11 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
     // re-enabled thinking block starts pinned, and a forceFollow dispatched
     // before the element arrived is honored by the same reset.
     boundViewportRef.current = viewport;
-    stateRef.current = createFollowState();
-    setFollowing(true);
-    pinToBottom();
+    const restoredFollowing = pendingFollowRestoreRef.current ?? true;
+    pendingFollowRestoreRef.current = null;
+    stateRef.current = { ...createFollowState(), following: restoredFollowing };
+    setFollowing(restoredFollowing);
+    if (restoredFollowing) pinToBottom();
 
     const getGap = () =>
       Math.max(0, viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight);
@@ -447,14 +452,26 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
     dispatch({ type: "historyKey", hasOverflow, now: Date.now() });
   }, [cancelJumpAnimation, dispatch]);
 
+  const restoreFollowing = useCallback(
+    (value: boolean) => {
+      cancelJumpAnimation();
+      pinController.cancel();
+      if (!boundViewportRef.current) pendingFollowRestoreRef.current = value;
+      stateRef.current = { ...createFollowState(), following: value };
+      setFollowing(value);
+    },
+    [cancelJumpAnimation, pinController],
+  );
+
   const handle = useMemo<ScrollFollowHandle>(
     () => ({
       stickToBottom,
       jumpToBottom,
       breakFollow,
+      restoreFollowing,
       isFollowing: () => stateRef.current.following,
     }),
-    [breakFollow, jumpToBottom, stickToBottom],
+    [breakFollow, jumpToBottom, stickToBottom, restoreFollowing],
   );
 
   return { handle, following };

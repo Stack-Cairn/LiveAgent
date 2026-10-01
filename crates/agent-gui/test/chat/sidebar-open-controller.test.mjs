@@ -141,3 +141,26 @@ test("cancel resets to idle and invalidates an in-flight window load", async () 
     errorCode: null,
   });
 });
+
+test("switching again keeps the visible overlay until the latest history is ready", async () => {
+  const pending = new Map();
+  const { controller, states } = createHarness({
+    overlayDelayMs: 5,
+    openInitial: (id) => new Promise((resolve) => pending.set(id, resolve)),
+  });
+  controller.open("first");
+  await sleep(15);
+  assert.equal(controller.getState().showOverlay, true);
+  const coveredFrom = states.length;
+  controller.open("second");
+  assert.equal(controller.getState().showOverlay, true);
+  pending.get("first")("painted");
+  await sleep(0);
+  assert.equal(controller.getState().conversationId, "second");
+  assert.equal(controller.getState().phase, "opening");
+  assert.equal(states.slice(coveredFrom).every((state) => state.showOverlay), true);
+  pending.get("second")("painted");
+  await sleep(0);
+  assert.equal(controller.getState().phase, "ready");
+  assert.equal(controller.getState().showOverlay, false);
+});

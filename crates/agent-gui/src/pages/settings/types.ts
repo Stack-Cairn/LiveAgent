@@ -1,5 +1,6 @@
 import type { SttSettingsService } from "@liveagent/ui/lib/stt/types";
 import type { AppUpdateController } from "../../lib/appUpdates";
+import type { ReleaseAnnouncementController } from "../../lib/releaseAnnouncement";
 import type { AppSettings, SttProviderId } from "../../lib/settings";
 import type { SettingsSaveState } from "../../lib/settings/storage";
 
@@ -31,6 +32,7 @@ export type SettingsPageProps = {
   initialProviderId?: string;
   hiddenSections?: SectionId[];
   appUpdate: AppUpdateController;
+  releaseAnnouncement: ReleaseAnnouncementController;
   sttSettingsService: SttSettingsService;
   /** 临时切换语音输入运行供应商，不触发配置保存。 */
   onSttProviderChange?: (provider: SttProviderId) => void;

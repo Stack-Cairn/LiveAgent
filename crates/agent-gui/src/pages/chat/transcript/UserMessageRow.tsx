@@ -19,8 +19,6 @@ import { UserAttachmentCards } from "./UserAttachmentCards";
 export type UserMessageRowProps = {
   row: UserRow;
   isEditing: boolean;
-  // True only in the row's birth window — never on virtualizer re-entry.
-  animateEntrance: boolean;
   workspaceRoot?: string;
   loadCommitDetails: CommitDetailsLoader;
   onStartEdit: (key: string) => void;
@@ -37,7 +35,6 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
   const {
     row,
     isEditing,
-    animateEntrance,
     workspaceRoot,
     loadCommitDetails,
     onStartEdit,
@@ -79,14 +76,16 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
   return (
     <div
       className={cn(
-        "chat-user-bubble-wrap group relative ml-auto max-w-[min(85%,calc(50em+2rem))]",
+        "chat-user-bubble-wrap group relative ml-auto max-w-user-bubble-web",
         compactedClass,
       )}
+      data-user-bubble-wrap
     >
       <div
         className={cn(
-          animateEntrance && "chat-bubble-enter",
-          "chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))]",
+          "ml-auto w-fit max-w-full",
+          "whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5",
+          "font-chat text-sm leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
         )}
       >
         <UserAttachmentCards files={visibleFiles} workspaceRoot={workspaceRoot} />

@@ -103,6 +103,32 @@ test("an empty successful TaskList clears the progress indicator", () => {
   );
 });
 
+test("selectRoundsTaskProgress is tri-state: absent / explicit clear / snapshot", () => {
+  assert.equal(taskProgress.selectRoundsTaskProgress([{ blocks: [] }]), undefined);
+  assert.equal(
+    taskProgress.selectRoundsTaskProgress([
+      { blocks: [block({ name: "TaskList", tasks: [], revision: 0 })] },
+    ]),
+    null,
+  );
+  const snapshot = taskProgress.selectRoundsTaskProgress([
+    { blocks: [block({ tasks: [task("1", "Active", "pending")] })] },
+  ]);
+  assert.equal(snapshot?.totalCount, 1);
+});
+
+test("an explicit clear in the live tail overrides a history baseline", () => {
+  // 中途压缩把带任务的前半段回合提交进历史后，live 里的空 TaskList 必须清空
+  // 指示器，而不是回退到历史里的旧列表。
+  assert.equal(
+    taskProgress.selectLatestTaskProgress(
+      [row([block({ tasks: [task("1", "Active", "pending")] })])],
+      [{ blocks: [block({ name: "TaskList", tasks: [], revision: 0 })] }],
+    ),
+    null,
+  );
+});
+
 test("all task tools are standalone transcript-hidden blocks", () => {
   for (const name of ["TaskCreate", "TaskUpdate", "TaskList"]) {
     assert.equal(taskProgress.isTaskToolBlock(block({ name, settled: false })), true);
@@ -127,6 +153,11 @@ test("GUI projects canonical live results without a sequencing compatibility lay
     )
     .join("\n");
   assert.match(source, /liveTranscriptStore\.subscribe/);
-  assert.match(source, /selectLatestTaskProgress\(historyItems, liveRounds\)/);
+  // 历史基线与 live 尾部分开记忆（性能：避免每帧全量扫历史），但仍直接
+  // 投影 canonical live 结果，无时序兼容层。
+  assert.match(source, /selectLatestTaskProgress\(historyItems\)/);
+  assert.match(source, /selectRoundsTaskProgress\(liveRounds\)/);
+  // live 的三态：undefined 才回退基线；null（明确清空）必须覆盖基线。
+  assert.match(source, /liveSnapshot === undefined \? historyBaseline : liveSnapshot/);
   assert.match(source, /key=\{snapshot\.conversationId\}/);
 });

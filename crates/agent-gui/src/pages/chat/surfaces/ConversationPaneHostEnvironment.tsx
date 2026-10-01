@@ -100,6 +100,19 @@ export type ConversationPaneRegistration = {
   binding: ConversationPaneBinding;
 };
 
+/** Compare only stable pane identity and the complete binding, including callbacks. */
+export function sameConversationPaneRegistration(
+  left: ConversationPaneRegistration,
+  right: ConversationPaneRegistration,
+) {
+  return (
+    left.binding === right.binding &&
+    left.identity.paneId === right.identity.paneId &&
+    left.identity.conversationId === right.identity.conversationId &&
+    left.identity.project === right.identity.project
+  );
+}
+
 export function createConversationPaneHostEnvironment(
   registrations: readonly ConversationPaneRegistration[],
 ): ConversationPaneHostEnvironment {

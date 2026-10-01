@@ -1,3 +1,4 @@
+import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { type MutableRefObject, useCallback, useEffect, useMemo } from "react";
@@ -6,6 +7,8 @@ import { buildModelOptions } from "../../../lib/chat/page/chatPageHelpers";
 import { toModelValue } from "../../../lib/providers/llm";
 import {
   type AppSettings,
+  applyConversationThinking,
+  applyThinkingPatchToSelection,
   type ChatRuntimeControls,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
@@ -22,7 +25,6 @@ import {
 import { asErrorMessage } from "../chatPageUtils";
 import type { ConversationRuntimeEntry } from "./chatPageRuntime";
 import { resolveActiveModelSelection } from "./modelSelection";
-import { selectedModelsMatch } from "./providerRuntimeConfig";
 
 type UseChatModelSelectionParams = {
   settings: AppSettings;
@@ -61,8 +63,12 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
   } = params;
 
   const modelOptions = useMemo(
-    () => buildModelOptions(settings, { floatSelectedFirst: false }),
-    [settings],
+    () =>
+      buildModelOptions(
+        { customProviders: settings.customProviders },
+        { floatSelectedFirst: false },
+      ),
+    [settings.customProviders],
   );
   const activeSelectedModel = resolveActiveModelSelection(
     settings,
@@ -102,11 +108,11 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     [currentChatProvider, currentChatModelId],
   );
 
-  const handleSelectModel = useCallback(
-    (selection: SelectedModel) => {
-      const conversationId = currentConversationIdRef.current;
+  // 模型与思考设置作为会话选择一起保存：写入 runtime entry，并持久化到会话历史。
+  const saveConversationSelection = useCallback(
+    (conversationId: string, selection: SelectedModel) => {
       updateConversationRuntimeEntry(conversationId, (prev) =>
-        selectedModelsMatch(prev.selectedModel, selection)
+        serializeSelectedModelJson(prev.selectedModel) === serializeSelectedModelJson(selection)
           ? prev
           : { ...prev, selectedModel: selection },
       );
@@ -122,9 +128,19 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
             }));
           });
       }
+    },
+    [sidebarStore, updateConversationRuntimeEntry],
+  );
+
+  const handleSelectModel = useCallback(
+    (selection: SelectedModel) => {
+      const conversationId = currentConversationIdRef.current;
+      // 切换模型保留会话已有的思考设置；全局默认只记录模型。
+      const previous = conversationRuntimeCacheRef.current.get(conversationId)?.selectedModel;
+      saveConversationSelection(conversationId, { ...previous, ...selection });
       setSettings((prev) => setSelectedModel(prev, selection));
     },
-    [currentConversationIdRef, setSettings, sidebarStore, updateConversationRuntimeEntry],
+    [conversationRuntimeCacheRef, currentConversationIdRef, saveConversationSelection, setSettings],
   );
 
   // 跨端收敛：history-sync 带回的会话模型选择（如 WebUI 发消息后落库）
@@ -139,7 +155,9 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     if (!parsed) return;
     const entry = conversationRuntimeCacheRef.current.get(currentConversationId);
     if (!entry || entry.isSending) return;
-    if (selectedModelsMatch(entry.selectedModel, parsed)) return;
+    if (serializeSelectedModelJson(entry.selectedModel) === serializeSelectedModelJson(parsed)) {
+      return;
+    }
     updateConversationRuntimeEntry(currentConversationId, (prev) => ({
       ...prev,
       selectedModel: parsed,
@@ -160,28 +178,47 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     }),
     [currentChatModelId, currentChatRoute?.adapterProviderId, currentChatRoute?.requestFormat],
   );
+  // 运行期思考档位补充到达会改变档位列表/恒开判定，版本号计入依赖使 memo 跟进。
+  const thinkingLiveVersion = useThinkingLiveVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重算。
   const chatRuntimeReasoningOptions = useMemo(
     () => getChatRuntimeReasoningLevelsForProvider(chatRuntimeReasoningParams),
-    [chatRuntimeReasoningParams],
+    [chatRuntimeReasoningParams, thinkingLiveVersion],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重算。
   const chatRuntimeThinkingAlwaysOn = useMemo(
     () =>
       isThinkingAlwaysOnForModel(
         currentChatRoute?.adapterProviderId ?? "claude_code",
         currentChatModelId,
       ),
-    [currentChatModelId, currentChatRoute?.adapterProviderId],
+    [currentChatModelId, currentChatRoute?.adapterProviderId, thinkingLiveVersion],
   );
+  // normalizeChatRuntimeControlsForProvider 会按模型档位表钳制当前选中档：档位表
+  // 随运行期补充变化时，选中档必须同步重钳，否则出现「选中档不在选项里」。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档。
   const chatRuntimeControlsForCurrentProvider = useMemo(
     () =>
       normalizeChatRuntimeControlsForProvider(
-        settings.chatRuntimeControls,
+        applyConversationThinking(settings.chatRuntimeControls, activeSelectedModel),
         chatRuntimeReasoningParams,
       ),
-    [chatRuntimeReasoningParams, settings.chatRuntimeControls],
+    [
+      activeSelectedModel,
+      chatRuntimeReasoningParams,
+      settings.chatRuntimeControls,
+      thinkingLiveVersion,
+    ],
   );
   const handleChatRuntimeControlsChange = useCallback(
     (patch: Partial<ChatRuntimeControls>) => {
+      const selection = applyThinkingPatchToSelection(
+        activeSelectedModel,
+        chatRuntimeControlsForCurrentProvider,
+        patch,
+      );
+      if (selection) saveConversationSelection(currentConversationIdRef.current, selection);
+      // 全局设置继续记录最近的调整，作为新会话的默认值。
       setSettings((prev) => ({
         ...prev,
         chatRuntimeControls: updateChatRuntimeControlsForProvider(
@@ -191,7 +228,14 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
         ),
       }));
     },
-    [chatRuntimeReasoningParams, setSettings],
+    [
+      activeSelectedModel,
+      chatRuntimeControlsForCurrentProvider,
+      chatRuntimeReasoningParams,
+      currentConversationIdRef,
+      saveConversationSelection,
+      setSettings,
+    ],
   );
 
   return {

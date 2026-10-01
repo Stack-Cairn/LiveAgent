@@ -1,4 +1,5 @@
 import type { ModelType } from "../settings/types";
+import { findCatalogModelAcrossProviders } from "./modelCatalog";
 import { isImageGenerationModel } from "./modelType";
 import { toModelValue } from "./modelValue";
 
@@ -9,6 +10,9 @@ export type SharedModelOption<TProviderType extends string = string> = {
   providerName: string;
   providerType: TProviderType;
   model: string;
+  reasoning?: boolean;
+  vision?: boolean;
+  contextWindow?: number;
 };
 
 export type ModelOptionGroup<TProviderType extends string = string> = {
@@ -30,8 +34,15 @@ export type ModelOptionsSettings<TProviderType extends string = string> = {
     /** 目录分区定位（生图模型判定要按预设的分区查目录）；缺省按 type 回退。 */
     presetId?: string;
     // --- image generation (end) ---------------------------------------------
-    /** 可选：带 displayName 时选择器用它做标签 */
-    models?: readonly { id: string; displayName?: string; modelType?: ModelType }[];
+    /** 可选：带 displayName 时选择器用它做标签；限额与模态用于选择器里的能力提示 */
+    models?: readonly {
+      id: string;
+      displayName?: string;
+      modelType?: ModelType;
+      contextWindow?: number;
+      limitsSource?: string;
+      inputModalities?: readonly string[];
+    }[];
   }[];
   selectedModel?: {
     customProviderId: string;
@@ -108,23 +119,26 @@ export function buildModelOptions<TProviderType extends string>(
   const modelOptions: SharedModelOption<TProviderType>[] = [];
   for (const provider of settings.customProviders) {
     if (provider.enabled === false) continue;
-    const displayNames = new Map(
-      (provider.models ?? [])
-        .filter((item) => item.displayName?.trim())
-        .map((item) => [item.id, item.displayName?.trim() ?? ""]),
-    );
     for (const model of provider.activeModels) {
       // --- image generation (begin) -----------------------------------------
       // 生图模型不进聊天选择器：它们不走四类聊天接口，选中也发不出请求。
       if (isImageGenerationModel(provider, model)) continue;
       // --- image generation (end) -------------------------------------------
+      const configured = provider.models?.find((item) => item.id === model);
+      const catalog = findCatalogModelAcrossProviders(model);
       modelOptions.push({
         providerType: provider.type,
         providerId: provider.id,
         providerName: provider.name,
         model,
         value: toModelValue(provider.id, model),
-        label: displayNames.get(model) || model,
+        label: configured?.displayName?.trim() || model,
+        reasoning: Boolean(catalog?.thinking),
+        vision: (configured?.inputModalities ?? catalog?.inputModalities)?.includes("image"),
+        contextWindow:
+          configured?.limitsSource === "fallback"
+            ? catalog?.contextWindow
+            : (configured?.contextWindow ?? catalog?.contextWindow),
       });
     }
   }

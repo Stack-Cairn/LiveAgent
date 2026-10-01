@@ -8,7 +8,6 @@ const packageJson = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ) as { version?: string };
 
-// @ts-expect-error process is a nodejs global
 const env = process.env as Record<string, string | undefined>;
 const appVersion = env.LIVEAGENT_APP_VERSION?.trim() || packageJson.version || "0.0.0";
 const host = env.TAURI_DEV_HOST;

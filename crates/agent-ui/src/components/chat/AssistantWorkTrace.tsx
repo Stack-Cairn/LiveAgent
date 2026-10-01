@@ -2,7 +2,7 @@ import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
 import { useAttentionDisclosure } from "./useAttentionDisclosure";
 
@@ -18,16 +18,6 @@ const PIXEL_KEYS = [
   "bottom-end",
 ] as const;
 
-const PIXEL_DELAYS = Array.from({ length: 9 }, (_, index) => {
-  const row = Math.floor(index / 3);
-  const column = index % 3;
-  return (column + Math.abs(row - 1)) * 90;
-});
-
-type LoadingPixelStyle = CSSProperties & {
-  "--chat-work-delay": `${number}ms`;
-};
-
 function WorkPixelGrid({ active }: { active: boolean }) {
   return (
     // 3×4px + 2×1.5px = 15px，比下方活动行的 12px 图标列宽：居中溢出到图标列
@@ -37,13 +27,12 @@ function WorkPixelGrid({ active }: { active: boolean }) {
       className="flex w-3 shrink-0 items-center justify-center"
       data-chat-work-grid=""
     >
-      <span className="grid shrink-0 grid-cols-[repeat(3,4px)] gap-[1.5px]">
-        {PIXEL_DELAYS.map((delay, index) => (
+      <span className="grid shrink-0 grid-cols-activity-dots gap-1p5px">
+        {PIXEL_KEYS.map((key) => (
           <span
-            key={PIXEL_KEYS[index]}
-            className="chat-work-pixel size-1 bg-foreground"
+            key={key}
+            className={cn("size-1 bg-foreground opacity-15", "data-paused:opacity-45")}
             data-paused={active ? undefined : ""}
-            style={{ "--chat-work-delay": `${delay}ms` } as LoadingPixelStyle}
           />
         ))}
       </span>
@@ -71,6 +60,7 @@ export function AssistantWorkTrace({
   attentionRequired = false,
   awaitingDecision = false,
   running,
+  startedAtMs,
   collapseAfterAnswer = false,
 }: {
   children: ReactNode;
@@ -90,6 +80,12 @@ export function AssistantWorkTrace({
    */
   awaitingDecision?: boolean;
   running: boolean;
+  /**
+   * 回合真实起点（epoch ms，通常是触发本回合的用户消息时间戳）。组件会随
+   * 切换会话、虚拟列表回收而卸载重挂；只靠挂载时刻计时会让「处理中」归零。
+   * 缺省时退回挂载时刻。
+   */
+  startedAtMs?: number;
   /** 回复有总结文案（answer）时：回合结束（流停止）后自动折叠一次。 */
   collapseAfterAnswer?: boolean;
 }) {
@@ -102,8 +98,12 @@ export function AssistantWorkTrace({
   useEffect(() => {
     if (!running && !attentionRequired && collapseAfterAnswer) setExpanded(false);
   }, [running, attentionRequired, collapseAfterAnswer, setExpanded]);
-  const [elapsedMs, setElapsedMs] = useState(durationMs ?? 0);
-  const startedAtRef = useRef<number | null>(running ? Date.now() : null);
+  const [elapsedMs, setElapsedMs] = useState(
+    () =>
+      durationMs ??
+      (running && startedAtMs !== undefined ? Math.max(0, Date.now() - startedAtMs) : 0),
+  );
+  const startedAtRef = useRef<number | null>(running ? (startedAtMs ?? Date.now()) : null);
 
   useEffect(() => {
     if (!running) {
@@ -115,7 +115,8 @@ export function AssistantWorkTrace({
       return;
     }
 
-    if (startedAtRef.current === null) startedAtRef.current = Date.now();
+    if (startedAtMs !== undefined) startedAtRef.current = startedAtMs;
+    else if (startedAtRef.current === null) startedAtRef.current = Date.now();
     const updateElapsed = () => {
       const startedAt = startedAtRef.current;
       if (startedAt !== null) setElapsedMs(Math.max(0, Date.now() - startedAt));
@@ -128,7 +129,7 @@ export function AssistantWorkTrace({
       updateElapsed();
     }, 1_000);
     return () => window.clearInterval(timer);
-  }, [durationMs, running]);
+  }, [durationMs, running, startedAtMs]);
 
   const elapsedLabel = formatElapsedTime(elapsedMs);
   const label = `${running ? t("chat.work.running") : t("chat.work.activity")}${
@@ -143,7 +144,8 @@ export function AssistantWorkTrace({
       {hasDetails ? (
         <ChevronDown
           className={cn(
-            "h-3 w-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150 group-hover/work-trace:opacity-100 group-focus-visible/work-trace:opacity-100 motion-reduce:transition-none",
+            "size-3 shrink-0 text-foreground/40 opacity-0 transition-[opacity,transform] duration-150",
+            "group-hover/work-trace:opacity-100 group-focus-visible/work-trace:opacity-100 motion-reduce:transition-none",
             !expanded && "-rotate-90",
           )}
         />
@@ -162,16 +164,18 @@ export function AssistantWorkTrace({
       {hasDetails ? (
         <button
           type="button"
-          className="group/work-trace flex w-full items-center gap-2 rounded-lg py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450] transition-colors hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            "group/work-trace flex w-full items-center gap-2 rounded-lg py-1",
+            "text-sm font-[450] transition-colors",
+            "hover:text-foreground/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
         >
           {header}
         </button>
       ) : (
-        <div className="flex items-center gap-2 py-1 text-[calc(13px*var(--zone-font-scale,1))] font-[450]">
-          {header}
-        </div>
+        <div className="flex items-center gap-2 py-1 text-sm font-[450]">{header}</div>
       )}
 
       {hasDetails ? (

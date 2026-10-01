@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+const graphStyleSource = readFileSync(new URL("../../../agent-ui/src/components/project-tools/git-review/HistoryView.css", import.meta.url), "utf8");
+const laneColors = new Map([...graphStyleSource.matchAll(/(--git-review-graph-lane-\d+):\s*([^;]+);/g)].map(([, name, value]) => [name, value]));
 
 const guiRoot = fileURLToPath(new URL("../..", import.meta.url));
 const graphModules = {
@@ -27,7 +30,7 @@ function simplifyRows(rows) {
 
 for (const [surface, graph] of Object.entries(graphModules)) {
   test(`${surface} git graph uses VS Code source control graph colors`, () => {
-    assert.deepEqual(graph.GRAPH_COLORS, [
+    assert.deepEqual(graph.GRAPH_COLORS.map((value) => laneColors.get(value.slice(4, -1))), [
       "#ffb000",
       "#dc267f",
       "#994f00",

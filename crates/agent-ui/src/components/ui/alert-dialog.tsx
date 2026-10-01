@@ -40,9 +40,9 @@ export function AlertDialogCloseButton({
       title={label}
       disabled={disabled}
       className={className}
-      render={<Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-lg" />}
+      render={<Button variant="ghost" size="icon-sm" className="shrink-0 rounded-lg" />}
     >
-      <X className="h-4 w-4" />
+      <X className="size-4" />
     </AlertDialogPrimitive.Close>
   );
 }
@@ -55,7 +55,8 @@ const AlertDialogOverlay = React.forwardRef<
     ref={ref}
     data-slot="alert-dialog-overlay"
     className={cn(
-      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-150",
+      "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
     {...props}
@@ -77,7 +78,10 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
         <AlertDialogOverlay />
         <AlertDialogPrimitive.Viewport
           data-slot="alert-dialog-viewport"
-          className="layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
+          className={cn(
+            "layer-modal fixed inset-0 flex min-h-0 flex-col items-center overflow-y-auto",
+            "overscroll-contain px-4 pb-safe-bottom pt-safe-top",
+          )}
         >
           <AlertDialogPrimitive.Popup
             ref={ref}
@@ -90,7 +94,10 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
               // 与 dialog.tsx 同源：弹窗自成一个字号缩放 zone（portal 渲染，
               // 落在所有 zone 之外），且 padding 由 header/body/footer 各自负责。
               "zone-font-scale",
-              "relative my-auto w-full max-w-md rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+              "relative my-auto w-full max-w-md",
+              "rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none",
+              "transition-[transform,opacity] duration-150 ease-out",
+              "data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
               className,
             )}
             {...props}
@@ -114,7 +121,8 @@ export const AlertDialogHeader = React.forwardRef<
     ref={ref}
     data-slot="alert-dialog-header"
     className={cn(
-      "relative flex shrink-0 flex-col min-h-13 gap-1.5 border-b border-border/60 px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-2",
+      "relative flex shrink-0 flex-col min-h-13 gap-1.5",
+      "px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-2",
       className,
     )}
     {...props}
@@ -129,7 +137,7 @@ export const AlertDialogBody = React.forwardRef<
   <div
     ref={ref}
     data-slot="alert-dialog-body"
-    className={cn("px-4 py-3 max-[820px]:px-3.5 max-[820px]:py-3.5", className)}
+    className={cn("px-4 py-3 max-[820px]:p-3.5", className)}
     {...props}
   />
 ));
@@ -143,7 +151,9 @@ export const AlertDialogFooter = React.forwardRef<
     ref={ref}
     data-slot="alert-dialog-footer"
     className={cn(
-      "flex shrink-0 flex-row items-center justify-end min-h-13 gap-2 border-t border-border/60 px-4 py-3 max-[820px]:flex-col-reverse max-[820px]:items-stretch max-[820px]:px-3.5 max-[820px]:py-3",
+      "flex shrink-0 flex-row items-center justify-end min-h-13 gap-2",
+      "px-4 py-3",
+      "max-[820px]:flex-col-reverse max-[820px]:items-stretch max-[820px]:px-3.5 max-[820px]:py-3",
       className,
     )}
     {...props}
@@ -159,7 +169,8 @@ export const AlertDialogActions = React.forwardRef<
     ref={ref}
     data-slot="alert-dialog-actions"
     className={cn(
-      "flex min-w-0 items-center justify-end gap-2 max-[820px]:w-full max-sm:grid max-sm:grid-cols-2 max-sm:has-[>:only-child]:grid-cols-1 max-sm:[&>button]:w-full",
+      "flex min-w-0 items-center justify-end gap-2",
+      "max-[820px]:w-full max-sm:grid max-sm:grid-cols-2 max-sm:has-[>:only-child]:grid-cols-1 max-sm:[&>button]:w-full",
       className,
     )}
     {...props}

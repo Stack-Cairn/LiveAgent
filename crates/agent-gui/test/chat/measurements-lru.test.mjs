@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { normalizeClassGroups } from "../../../agent-ui/test-support/source-class-groups.mjs";
 
 const loader = createTsModuleLoader();
 const { buildTranscriptLayoutKey, createTranscriptMeasurementsLru } = loader.loadModule(
@@ -50,12 +51,12 @@ test("width handle hit targets span the full transcript height", () => {
   // #749 follow-up: the 96px-tall, 12px-wide grips were hard to acquire, so
   // the transparent hit area now spans the whole column edge at 17px wide.
   // Only the hit target grew — the visible pill stays small.
-  const handleClass = transcriptWidthControlsSource.match(
+  const handleClass = normalizeClassGroups(transcriptWidthControlsSource).match(
     /group pointer-events-auto absolute ([^"]+) touch-none cursor-col-resize/,
   );
   assert.ok(handleClass, "transcript width handle class not found");
   assert.match(handleClass[1], /inset-y-0/);
-  assert.match(handleClass[1], /w-\[17px\]/);
+  assert.match(handleClass[1], /w-17px/);
   assert.equal(
     handleClass[1].includes("h-24"),
     false,

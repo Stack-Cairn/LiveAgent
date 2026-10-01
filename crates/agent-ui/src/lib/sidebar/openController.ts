@@ -68,12 +68,17 @@ export function createConversationOpenController(
       sequence += 1;
       const requestSequence = sequence;
       clearOverlayTimer();
-      setState({ conversationId, phase: "opening", showOverlay: false, errorCode: null });
-      overlayTimer = setTimeout(() => {
-        overlayTimer = null;
-        if (requestSequence !== sequence || state.phase !== "opening") return;
-        setState({ conversationId, phase: "opening", showOverlay: true, errorCode: null });
-      }, overlayDelayMs);
+      // Retarget an already covered load without exposing the previous transcript.
+      // Only the first load waits before showing the overlay, so cache hits stay instant.
+      const keepOverlay = state.phase === "opening" && state.showOverlay;
+      setState({ conversationId, phase: "opening", showOverlay: keepOverlay, errorCode: null });
+      if (!keepOverlay) {
+        overlayTimer = setTimeout(() => {
+          overlayTimer = null;
+          if (requestSequence !== sequence || state.phase !== "opening") return;
+          setState({ conversationId, phase: "opening", showOverlay: true, errorCode: null });
+        }, overlayDelayMs);
+      }
 
       deps
         .openInitial(conversationId, { ...options, isCurrent: () => requestSequence === sequence })

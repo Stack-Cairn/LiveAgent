@@ -151,8 +151,7 @@ pub(crate) async fn ssh_connection_alive(
         return false;
     }
     let ping = timeout(Duration::from_secs(2), async {
-        let handle = runtime.handle.lock().await;
-        let Some(handle) = handle.as_ref() else {
+        let Some(handle) = runtime.current_handle().await else {
             return Err(russh::Error::Disconnect);
         };
         handle.send_ping().await

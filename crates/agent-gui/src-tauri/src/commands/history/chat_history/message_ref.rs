@@ -361,15 +361,13 @@ pub(crate) struct HistoryMessageWindow {
 
 const MAX_HISTORY_WINDOW_BOUNDARY_OVERSHOOT: usize = 64;
 
+// Borrow raw messages from the segment: paging must not allocate (and clone)
+// every tool payload in a multi-megabyte segment just to return one window.
 fn parse_history_window_segment_messages(
     segment: &ChatHistorySegmentRecord,
-) -> Result<Vec<Value>, String> {
-    let parsed = serde_json::from_str::<Value>(&segment.messages_json)
+) -> Result<Vec<&serde_json::value::RawValue>, String> {
+    let messages = serde_json::from_str::<Vec<&serde_json::value::RawValue>>(&segment.messages_json)
         .map_err(|e| format!("parse history segment {} failed: {e}", segment.segment_id))?;
-    let messages = parsed
-        .as_array()
-        .cloned()
-        .ok_or_else(|| format!("history segment {} is not an array", segment.segment_id))?;
     if i64::try_from(messages.len()).unwrap_or(i64::MAX) != segment.message_count.max(0) {
         return Err(format!(
             "history segment {} messageCount does not match messagesJson",
@@ -379,12 +377,15 @@ fn parse_history_window_segment_messages(
     Ok(messages)
 }
 
-fn history_window_message_role(message: &Value) -> Option<&str> {
-    message
-        .as_object()
-        .and_then(|object| object.get("role"))
-        .and_then(Value::as_str)
-        .map(str::trim)
+fn history_window_message_role(message: &serde_json::value::RawValue) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Role {
+        role: Option<String>,
+    }
+    serde_json::from_str::<Role>(message.get())
+        .ok()
+        .and_then(|message| message.role)
+        .map(|role| role.trim().to_owned())
 }
 
 pub(crate) fn build_history_message_window(
@@ -405,7 +406,7 @@ pub(crate) fn build_history_message_window(
         0
     };
     let mut oldest_offset = strict_oldest_offset;
-    let mut parsed_messages_by_position: HashMap<usize, Vec<Value>> = HashMap::new();
+    let mut parsed_messages_by_position: HashMap<usize, Vec<&serde_json::value::RawValue>> = HashMap::new();
     if align_to_render_boundary && strict_oldest_offset < end_offset {
         let mut segment_start_offset = 0_i64;
         for (segment_position, segment) in segments.iter().enumerate() {
@@ -425,10 +426,10 @@ pub(crate) fn build_history_message_window(
                 let candidates = &messages[bounded_start..=local_start];
                 let aligned_local_start = candidates
                     .iter()
-                    .rposition(|message| history_window_message_role(message) == Some("user"))
+                    .rposition(|message| history_window_message_role(message).as_deref() == Some("user"))
                     .or_else(|| {
                         candidates.iter().rposition(|message| {
-                            history_window_message_role(message) == Some("assistant")
+                            history_window_message_role(message).as_deref() == Some("assistant")
                         })
                     })
                     .map(|offset| bounded_start + offset)
@@ -487,15 +488,13 @@ pub(crate) fn build_history_message_window(
             .take(end_message_index)
             .skip(start_message_index)
         {
-            let mut cloned = message.clone();
-            if let Some(object) = cloned.as_object_mut() {
-                if let Some(history_ref) =
-                    build_history_message_ref_value(segment, message_index, message)
-                {
-                    object.insert("liveAgentHistoryRef".to_string(), history_ref);
-                }
+            let mut parsed: Value = serde_json::from_str(message.get())
+                .map_err(|e| format!("parse history window message failed: {e}"))?;
+            let history_ref = build_history_message_ref_value(segment, message_index, &parsed);
+            if let (Some(object), Some(history_ref)) = (parsed.as_object_mut(), history_ref) {
+                object.insert("liveAgentHistoryRef".to_string(), history_ref);
             }
-            messages.push(cloned);
+            messages.push(parsed);
         }
         returned_message_count = returned_message_count
             .saturating_add(i64::try_from(messages.len()).unwrap_or(i64::MAX));

@@ -1,3 +1,4 @@
+import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 
 export type PaneLoadingSkeletonProps = {
@@ -13,7 +14,7 @@ export function PaneLoadingSkeleton(props: PaneLoadingSkeletonProps) {
       data-pane-loading-skeleton={variant}
       data-pane-loading-motion="static"
       className={cn(
-        "relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background",
+        "relative flex size-full min-h-0 flex-col overflow-hidden bg-background",
         className,
       )}
       role="status"
@@ -21,33 +22,37 @@ export function PaneLoadingSkeleton(props: PaneLoadingSkeletonProps) {
       aria-label={label}
       aria-busy="true"
     >
-      <div
-        className="flex h-10 shrink-0 items-center gap-2 border-b border-border/45 px-4"
-        aria-hidden
-      >
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/25" />
-        <span className="h-1.5 w-20 rounded-full bg-muted-foreground/15" />
-      </div>
+      {variant === "terminal" ? (
+        <div
+          className="flex h-10 shrink-0 items-center gap-2 border-b border-border/45 px-4"
+          aria-hidden
+        >
+          <Skeleton className="animate-none size-1.5 rounded-full bg-muted-foreground/25" />
+          <Skeleton className="animate-none h-1.5 w-20 rounded-full bg-muted-foreground/15" />
+        </div>
+      ) : null}
       {variant === "terminal" ? (
         <div className="space-y-3 px-4 py-5 font-mono" aria-hidden>
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-sm bg-emerald-500/35" />
-            <span className="h-2 w-40 rounded-sm bg-muted-foreground/12" />
+            <Skeleton className="animate-none size-2 rounded-sm bg-emerald-500/35" />
+            <Skeleton className="animate-none h-2 w-40 rounded-sm bg-muted-foreground/12" />
           </div>
-          <div className="h-2 w-56 rounded-sm bg-muted-foreground/10" />
-          <div className="h-2 w-36 rounded-sm bg-muted-foreground/10" />
+          <Skeleton className="animate-none h-2 w-56 rounded-sm bg-muted-foreground/10" />
+          <Skeleton className="animate-none h-2 w-36 rounded-sm bg-muted-foreground/10" />
         </div>
       ) : (
-        <div className="flex flex-1 flex-col gap-5 px-[8%] py-7" aria-hidden>
-          <div className="space-y-2">
-            <div className="h-2 w-[58%] rounded-full bg-muted-foreground/12" />
-            <div className="h-2 w-[42%] rounded-full bg-muted-foreground/9" />
-          </div>
-          <div className="ml-auto h-10 w-[36%] rounded-2xl rounded-br-md bg-muted-foreground/8" />
-          <div className="space-y-2">
-            <div className="h-2 w-[72%] rounded-full bg-muted-foreground/12" />
-            <div className="h-2 w-[64%] rounded-full bg-muted-foreground/9" />
-            <div className="h-2 w-[48%] rounded-full bg-muted-foreground/9" />
+        <div className="mx-1.5 min-h-0 flex-1 overflow-hidden" aria-hidden>
+          <div className="mx-auto flex w-full max-w-transcript-web flex-col gap-8 px-5 py-4">
+            <div className="space-y-2.5">
+              <Skeleton className="h-2 w-3/4 animate-none rounded-full" />
+              <Skeleton className="h-2 w-1/2 animate-none rounded-full" />
+            </div>
+            <Skeleton className="ml-auto h-12 w-[55%] animate-none rounded-2xl" />
+            <div className="space-y-2.5">
+              <Skeleton className="h-2 w-full animate-none rounded-full" />
+              <Skeleton className="h-2 w-5/6 animate-none rounded-full" />
+              <Skeleton className="h-2 w-2/3 animate-none rounded-full" />
+            </div>
           </div>
         </div>
       )}

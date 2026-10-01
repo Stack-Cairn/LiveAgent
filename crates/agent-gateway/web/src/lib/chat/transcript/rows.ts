@@ -531,3 +531,21 @@ export function dedupeRowKeys(
   }
   return next ?? rows;
 }
+
+/**
+ * 运行中回合的计时起点：只认紧挨在 live 回复之前、属于本回合的用户消息。
+ * 回复先于用户消息到达（store 建出 `user: null` 的 live 回合）时，往前会
+ * 越过上一轮回复摸到旧用户消息，用它计时会让「处理中」跳成旧消息的年龄；
+ * 此时返回 undefined，由 work trace 退回挂载时刻。
+ */
+export function findLiveTurnStartTimestamp(
+  rows: readonly TranscriptRow[],
+  assistantIndex: number,
+): number | undefined {
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row?.kind === "user") return row.timestamp;
+    if (row?.kind !== "checkpoint") return undefined;
+  }
+  return undefined;
+}

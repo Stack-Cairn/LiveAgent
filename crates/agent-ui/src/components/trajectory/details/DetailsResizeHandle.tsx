@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useLocale } from "../../../i18n/index";
+import { acquireGlobalPointerStyle } from "../../../lib/shared/globalPointerStyle";
 import { cn } from "../../../lib/shared/utils";
 import {
   clampTrajectoryDetailsWidth,
@@ -33,7 +34,7 @@ export function DetailsResizeHandle(props: {
   const [dragging, setDragging] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
   const dragRef = useRef<DragState | null>(null);
-  const previousBodyStyleRef = useRef<{ cursor: string; userSelect: string } | null>(null);
+  const releaseGlobalStyleRef = useRef<(() => void) | null>(null);
   const widthRef = useRef(props.width);
   widthRef.current = props.width;
   const onWidthChangeRef = useRef(props.onWidthChange);
@@ -55,24 +56,16 @@ export function DetailsResizeHandle(props: {
     const drag = dragRef.current;
     if (drag === null || (pointerId !== undefined && drag.pointerId !== pointerId)) return;
     dragRef.current = null;
-    const previousBodyStyle = previousBodyStyleRef.current;
-    if (previousBodyStyle !== null) {
-      document.body.style.cursor = previousBodyStyle.cursor;
-      document.body.style.userSelect = previousBodyStyle.userSelect;
-      previousBodyStyleRef.current = null;
-    }
+    releaseGlobalStyleRef.current?.();
+    releaseGlobalStyleRef.current = null;
     setDragging(false);
   }, []);
 
   useEffect(
     () => () => {
       dragRef.current = null;
-      const previousBodyStyle = previousBodyStyleRef.current;
-      if (previousBodyStyle !== null) {
-        document.body.style.cursor = previousBodyStyle.cursor;
-        document.body.style.userSelect = previousBodyStyle.userSelect;
-        previousBodyStyleRef.current = null;
-      }
+      releaseGlobalStyleRef.current?.();
+      releaseGlobalStyleRef.current = null;
     },
     [],
   );
@@ -107,12 +100,10 @@ export function DetailsResizeHandle(props: {
         startX: event.clientX,
         containerWidth,
       };
-      previousBodyStyleRef.current = {
-        cursor: document.body.style.cursor,
-        userSelect: document.body.style.userSelect,
-      };
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
+      releaseGlobalStyleRef.current = acquireGlobalPointerStyle({
+        cursor: "col-resize",
+        userSelect: "none",
+      });
       setDragging(true);
     },
     [measureContainerWidth, props.width],
@@ -182,12 +173,16 @@ export function DetailsResizeHandle(props: {
       onKeyDown={handleKeyDown}
       onDoubleClick={() => commitWidth(DEFAULT_TRAJECTORY_DETAILS_WIDTH)}
       // 水平拖拽只在左右分栏下有意义；窄容器上下排布时隐藏。
-      className="group absolute inset-y-0 left-0 z-30 flex w-3 touch-none cursor-col-resize items-center justify-start border-0 bg-transparent p-0 focus-visible:outline-none @max-[640px]:hidden"
+      className={cn(
+        "group absolute inset-y-0 left-0 z-30 flex w-3 touch-none",
+        "cursor-col-resize items-center justify-start border-0 bg-transparent p-0 focus-visible:outline-none @max-[640px]:hidden",
+      )}
     >
       <span
         aria-hidden="true"
         className={cn(
-          "h-12 w-0.5 -translate-x-px rounded-full bg-muted-foreground/30 opacity-0 shadow-sm transition-[height,background-color,opacity] duration-150",
+          "h-12 w-0.5 -translate-x-px",
+          "rounded-full bg-muted-foreground/30 opacity-0 shadow-sm transition-[height,background-color,opacity] duration-150",
           "group-hover:h-20 group-hover:bg-primary/60 group-hover:opacity-100 group-focus-visible:h-20 group-focus-visible:bg-primary group-focus-visible:opacity-100",
           dragging && "h-24 bg-primary opacity-100",
         )}
