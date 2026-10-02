@@ -161,12 +161,12 @@ function CatalogPricing(props: { entry: CatalogModelEntry }) {
     <span className="flex min-w-0 flex-col gap-0.5">
       <span className="tabular-nums">
         {[main, extra].filter(Boolean).join(" · ") || t("settings.modelCatalogUnpublished")}
-        <span className="ml-1.5 text-[10.5px] text-muted-foreground">
+        <span className="ml-1.5 text-[11px] text-muted-foreground">
           {t("settings.modelCatalogPricingUnit")}
         </span>
       </span>
       {ladder.map((tier) => (
-        <span key={tier.contextOver} className="text-[10.5px] tabular-nums text-muted-foreground">
+        <span key={tier.contextOver} className="text-[11px] tabular-nums text-muted-foreground">
           {t("settings.modelCatalogPriceTier").replace(
             "{size}",
             formatTokenCount(tier.contextOver),
@@ -209,7 +209,7 @@ export function CatalogEntryDetails(props: {
             {t("settings.modelCatalogMatchedAs").replace("{id}", matchedId)}
           </Chip>
         ) : null}
-        <span className="text-[10.5px] text-muted-foreground">
+        <span className="text-[11px] text-muted-foreground">
           {t("settings.modelCatalogSnapshot")} {MODEL_CATALOG_SNAPSHOT_DATE}
         </span>
       </Row>
@@ -342,7 +342,7 @@ export function ModelCatalogSummary(props: {
             {price ?? t("settings.modelCatalogPricingMissing")}
           </span>
           {price ? (
-            <span className="text-[10.5px] text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground">
               {t("settings.modelCatalogPrice.input")} / {t("settings.modelCatalogPrice.output")}
             </span>
           ) : null}

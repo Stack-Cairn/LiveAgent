@@ -151,7 +151,7 @@ export function ModelCatalogDrawer(props: {
           <SheetTitle className="min-w-0 flex-1 truncate text-[17px] leading-tight tracking-tight text-foreground/95">
             {t("settings.modelCatalogBrowser")}
           </SheetTitle>
-          <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground">
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
             {t("settings.modelCatalogSnapshot")} {MODEL_CATALOG_SNAPSHOT_DATE}
           </span>
           <button
@@ -267,7 +267,7 @@ export function ModelCatalogDrawer(props: {
                 {t(`settings.modelCatalogBrowserFilter.${filter}`)}
               </ChipButton>
             ))}
-            <span className="ml-auto tabular-nums text-[10.5px] text-muted-foreground">
+            <span className="ml-auto tabular-nums text-[11px] text-muted-foreground">
               {t("settings.modelCatalogBrowserCount")
                 .replace("{count}", String(rows.length))
                 .replace("{total}", String(total))}
@@ -310,7 +310,7 @@ export function ModelCatalogDrawer(props: {
                             ) : null}
                             {entry.status ? <CatalogStatusChip entry={entry} /> : null}
                           </span>
-                          <span className="block truncate text-[10.5px] text-muted-foreground">
+                          <span className="block truncate text-[11px] text-muted-foreground">
                             {[
                               entry.name && entry.name !== entry.id ? entry.name : null,
                               entry.family

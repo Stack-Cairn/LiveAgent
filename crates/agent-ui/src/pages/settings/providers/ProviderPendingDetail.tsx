@@ -13,8 +13,16 @@ import {
   type ProviderPreset,
   presetUsesCatalogModels,
 } from "@liveagent/ui/lib/providers/registry";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
-import { Chip, ProviderAvatar, protocolLabel, SecretInput, SectionTitle } from "./providerChips";
+import {
+  Chip,
+  dialectLabel,
+  ProviderAvatar,
+  protocolLabel,
+  SecretInput,
+  SectionTitle,
+} from "./providerChips";
 
 export function ProviderPendingDetail(props: {
   preset: ProviderPreset;
@@ -28,9 +36,22 @@ export function ProviderPendingDetail(props: {
   const [apiKey, setApiKey] = useState("");
   const declared = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => preset.endpoints[protocol]);
   const needsAddress = preset.input !== "key";
-  const canSetup =
-    (!needsAddress || origin.trim().length > 0) &&
-    (preset.authOptional || apiKey.trim().length > 0);
+  // 提交按钮保持可用：点击时校验，错误贴在对应字段下并把焦点移过去。
+  const [setupError, setSetupError] = useState<"origin" | "key" | null>(null);
+  function submitSetup() {
+    if (needsAddress && !origin.trim()) {
+      setSetupError("origin");
+      document.getElementById("channel-setup-origin")?.focus();
+      return;
+    }
+    if (!preset.authOptional && !apiKey.trim()) {
+      setSetupError("key");
+      document.getElementById("channel-setup-key")?.focus();
+      return;
+    }
+    setSetupError(null);
+    onSetup({ origin: origin.trim(), apiKey: apiKey.trim() });
+  }
 
   return (
     <div className="space-y-5">
@@ -84,7 +105,7 @@ export function ProviderPendingDetail(props: {
                     </span>
                   )}
                   {endpoint.note ? (
-                    <span className="text-[10.5px] text-muted-foreground/70">{endpoint.note}</span>
+                    <span className="text-[11px] text-muted-foreground/70">{endpoint.note}</span>
                   ) : null}
                 </div>
               );
@@ -100,7 +121,7 @@ export function ProviderPendingDetail(props: {
           </span>
           {preset.dialect ? (
             <span>
-              {t("settings.providerDialect")}: {preset.dialect}
+              {t("settings.providerDialect")}: {dialectLabel(t, preset.dialect)}
             </span>
           ) : null}
           {preset.apiKeyUrl ? (
@@ -148,7 +169,14 @@ export function ProviderPendingDetail(props: {
               </Label>
               <Input
                 id="channel-setup-origin"
-                className="h-8 font-mono text-xs shadow-none"
+                className={cn(
+                  "h-8 font-mono text-xs shadow-none",
+                  setupError === "origin" && "border-destructive",
+                )}
+                aria-invalid={setupError === "origin" ? true : undefined}
+                aria-describedby={
+                  setupError === "origin" ? "channel-setup-origin-error" : undefined
+                }
                 value={origin}
                 placeholder={
                   preset.input === "origin"
@@ -157,8 +185,20 @@ export function ProviderPendingDetail(props: {
                 }
                 autoComplete="off"
                 spellCheck={false}
-                onChange={(event) => setOrigin(event.currentTarget.value)}
+                onChange={(event) => {
+                  setOrigin(event.currentTarget.value);
+                  if (setupError === "origin") setSetupError(null);
+                }}
               />
+              {setupError === "origin" ? (
+                <p
+                  id="channel-setup-origin-error"
+                  role="alert"
+                  className="text-[11px] text-destructive"
+                >
+                  {t("settings.channelSetupAddressRequired")}
+                </p>
+              ) : null}
             </div>
           ) : null}
           <div className="space-y-1.5">
@@ -176,17 +216,21 @@ export function ProviderPendingDetail(props: {
               configured={false}
               redacted={false}
               ariaLabel="API Key"
-              onCommit={setApiKey}
+              invalid={setupError === "key"}
+              describedBy={setupError === "key" ? "channel-setup-key-error" : undefined}
+              onCommit={(value) => {
+                setApiKey(value);
+                if (setupError === "key" && value.trim()) setSetupError(null);
+              }}
             />
+            {setupError === "key" ? (
+              <p id="channel-setup-key-error" role="alert" className="text-[11px] text-destructive">
+                {t("settings.channelSetupKeyRequired")}
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 shadow-none"
-              disabled={!canSetup}
-              onClick={() => onSetup({ origin: origin.trim(), apiKey: apiKey.trim() })}
-            >
+            <Button type="button" size="sm" className="h-8 shadow-none" onClick={submitSetup}>
               {t("settings.channelProbeAndEnable")}
             </Button>
             <Button

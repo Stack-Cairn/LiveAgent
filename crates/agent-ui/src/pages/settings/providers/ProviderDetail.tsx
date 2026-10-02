@@ -134,7 +134,7 @@ function ModelCheckChip(props: {
   if (check.state === "checking") {
     return (
       <Chip tone="default">
-        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
         {t("settings.modelCheckState.checking")}
       </Chip>
     );
@@ -247,6 +247,7 @@ const ModelRow = memo(function ModelRow(props: {
   onOpenDrawer: (drawer: ProviderDrawerState) => void;
   onCheck: (modelId: string) => void;
   onToggleImageDefault: (modelId: string, next: boolean) => void;
+  onRemove: (modelId: string) => void;
   dragHandle: ReactNode;
 }) {
   const {
@@ -259,6 +260,7 @@ const ModelRow = memo(function ModelRow(props: {
     onOpenDrawer,
     onCheck,
     onToggleImageDefault,
+    onRemove,
     dragHandle,
   } = props;
   const { t } = useLocale();
@@ -290,7 +292,10 @@ const ModelRow = memo(function ModelRow(props: {
         aria-label={model.id}
       />
       <span className="min-w-0 flex-1 leading-tight">
-        <span className="block truncate font-mono text-[12.5px] text-foreground/90">
+        <span
+          className="block truncate font-mono text-[12.5px] text-foreground/90"
+          title={model.displayName ? `${model.displayName} · ${model.id}` : model.id}
+        >
           {model.displayName ? (
             <>
               <span className="font-sans font-medium">{model.displayName}</span>
@@ -300,8 +305,10 @@ const ModelRow = memo(function ModelRow(props: {
             model.id
           )}
         </span>
-        <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground/70">
-          {formatTokenCount(model.contextWindow)} ctx · {formatTokenCount(model.maxOutputToken)} out
+        <span className="block truncate text-[11px] tabular-nums text-muted-foreground/70">
+          {t("settings.modelLimitsLine")
+            .replace("{ctx}", formatTokenCount(model.contextWindow))
+            .replace("{out}", formatTokenCount(model.maxOutputToken))}
           {model.limitsSource === "fallback" ? ` · ${t("settings.estimatedLimitsBadge")}` : ""}
         </span>
       </span>
@@ -422,7 +429,7 @@ const ModelRow = memo(function ModelRow(props: {
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => onChange((current) => removeProviderModel(current, model.id))}
+          onClick={() => onRemove(model.id)}
           title={t("settings.delete")}
           aria-label={`${t("settings.delete")} ${model.id}`}
         >
@@ -489,6 +496,28 @@ function ModelGroup(props: {
   );
 
   const groupLabel = group.key === "other" ? t("settings.modelGroupOther") : group.key;
+
+  // 单个模型删除也要确认：会一并丢掉该模型的接口 / 参数 / 能力覆盖，和整组删除、
+  // Key 删除保持同一套处理。
+  const removeOne = useCallback(
+    async (modelId: string) => {
+      const model = modelById.get(modelId);
+      const confirmed = await confirm({
+        title: t("settings.delete"),
+        description: t("settings.modelRemoveConfirm").replace(
+          "{model}",
+          model?.displayName || modelId,
+        ),
+        detail: t("settings.modelRemoveConfirmDesc"),
+        confirmLabel: t("settings.delete"),
+        cancelLabel: t("settings.cancel"),
+        preferCancel: true,
+      });
+      if (!confirmed) return;
+      onChange((current) => removeProviderModel(current, modelId));
+    },
+    [confirm, modelById, onChange, t],
+  );
 
   // 一键删除整组：搜索 / 过滤生效时只删当前可见的那些，确认框写明数量，避免误删
   // 被过滤掉的模型。
@@ -570,6 +599,7 @@ function ModelGroup(props: {
                 onOpenDrawer={onOpenDrawer}
                 onCheck={onCheck}
                 onToggleImageDefault={onToggleImageDefault}
+                onRemove={removeOne}
                 dragHandle={dragHandle}
               />
             );
@@ -779,9 +809,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
             }}
           />
         ) : (
-          <span className="min-w-0 max-w-full truncate px-2 text-base font-semibold tracking-tight">
+          <h2
+            className="min-w-0 max-w-full truncate px-2 text-base font-semibold tracking-tight"
+            title={provider.name}
+          >
             {provider.name}
-          </span>
+          </h2>
         )}
         <span className="settings-provider-detail-actions ml-auto flex items-center gap-2">
           <ProviderCopyConfigButton provider={provider} />
@@ -817,7 +850,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
 
       {!enabled ? (
         <p
-          className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300"
+          className="rounded-lg border border-warning/25 bg-warning/[0.08] px-3 py-2 text-[11px] text-warning"
           role="status"
         >
           {t("settings.providerDisabledBanner")}
@@ -829,7 +862,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
           className={cn(
             "rounded-lg border px-3 py-2 text-[11px]",
             notice.tone === "ok"
-              ? "border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-700 dark:text-emerald-300"
+              ? "border-success/25 bg-success/[0.08] text-success"
               : "border-destructive/30 bg-destructive/10 text-destructive",
           )}
           role="status"
@@ -867,7 +900,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
                 disabled={busy !== null}
                 onClick={onQuickCheck}
               >
-                <RefreshCw className={cn("h-3 w-3", busy === "check" && "animate-spin")} />
+                <RefreshCw
+                  className={cn(
+                    "h-3 w-3",
+                    busy === "check" && "animate-spin motion-reduce:animate-none",
+                  )}
+                />
                 {t("settings.providerCheck")}
               </Button>
               <Button
@@ -968,7 +1006,10 @@ export function ProviderDetail(props: ProviderDetailProps) {
                         </span>
                         <ProbeStatusChip probe={view?.config.lastProbe} />
                       </div>
-                      <p className="truncate font-mono text-[10.5px] leading-4 text-muted-foreground/70">
+                      <p
+                        className="truncate font-mono text-[11px] leading-4 text-muted-foreground/70"
+                        title={resolved || undefined}
+                      >
                         <span className="font-sans">{t("settings.providerOriginResolved")}: </span>
                         {resolved || t("settings.providerOriginUnresolved")}
                       </p>
@@ -1183,7 +1224,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
                 title={t("settings.providerUsageRefresh")}
                 aria-label={t("settings.providerUsageRefresh")}
               >
-                <RefreshCw className={cn("h-3.5 w-3.5", usage.refreshing && "animate-spin")} />
+                <RefreshCw
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    usage.refreshing && "animate-spin motion-reduce:animate-none",
+                  )}
+                />
               </Button>
             ) : null
           }

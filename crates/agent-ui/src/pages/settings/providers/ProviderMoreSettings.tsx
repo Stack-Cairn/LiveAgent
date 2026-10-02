@@ -43,9 +43,7 @@ function ToggleRow(props: {
       <span className="min-w-0">
         <span className="block text-xs text-foreground/90">{label}</span>
         {hint ? (
-          <span className="block text-[10.5px] leading-relaxed text-muted-foreground/70">
-            {hint}
-          </span>
+          <span className="block text-[11px] leading-relaxed text-muted-foreground/70">{hint}</span>
         ) : null}
       </span>
       <Switch
@@ -82,10 +80,13 @@ export function ProviderMoreSettings(props: {
     <div className="space-y-3 rounded-xl border bg-card p-4">
       <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
         <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">
+          <Label id="provider-stream-retry-label" className="text-[11px] text-muted-foreground">
             {t("settings.providerStreamRetry")}
           </Label>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <fieldset
+            aria-labelledby="provider-stream-retry-label"
+            className="min-w-0 flex flex-wrap items-center gap-1.5"
+          >
             {(
               [
                 ["default", "settings.providerStreamRetryDefault"],
@@ -129,7 +130,7 @@ export function ProviderMoreSettings(props: {
                 }
               />
             ) : null}
-          </div>
+          </fieldset>
         </div>
         <ToggleRow
           label={t("settings.providerUseSystemProxy")}
@@ -141,7 +142,7 @@ export function ProviderMoreSettings(props: {
         {supportsCaching ? (
           type === "codex" ? (
             <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">
+              <Label id="provider-cache-hint-label" className="text-[11px] text-muted-foreground">
                 {t("settings.promptCacheHintMode")}
               </Label>
               <Select
@@ -155,7 +156,7 @@ export function ProviderMoreSettings(props: {
               >
                 <SelectTrigger
                   className="h-8 text-xs shadow-none"
-                  aria-label={t("settings.promptCacheHintMode")}
+                  aria-labelledby="provider-cache-hint-label"
                 >
                   <SelectValue>
                     {t(PROMPT_CACHE_HINT_LABEL_KEYS[provider.promptCacheHintMode ?? "auto"])}

@@ -3,7 +3,14 @@
 // "用此 Key 重新拉取"。首把即旧字段 apiKey。从详情页的范围芯片打开时定位到那把 Key。
 
 import type { CustomProvider, ProviderCredential } from "@liveagent/app/lib/settings";
-import { ArrowUp, ChevronDown, Plus, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
+import {
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Label } from "@liveagent/ui/components/ui/label";
@@ -195,7 +202,7 @@ export function CredentialsDrawer(props: {
                           ? t("settings.providerCredentialPrimary")
                           : `${t("settings.providerCredentialBackup")} ${index}`
                       }
-                      aria-label={t("settings.providerCredentialLabel")}
+                      aria-label={`${t("settings.providerCredentialLabel")} ${index + 1}`}
                       onCommit={(value) => patch(credential.id, { label: value.trim() })}
                     />
                     <SecretInput
@@ -227,7 +234,7 @@ export function CredentialsDrawer(props: {
                       title={t("settings.providerCredentialMoveUp")}
                       aria-label={t("settings.providerCredentialMoveUp")}
                     >
-                      <ArrowUp className="h-3.5 w-3.5" />
+                      <ChevronUp className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       type="button"
@@ -257,7 +264,10 @@ export function CredentialsDrawer(props: {
                   <div className="space-y-3 border-t px-3 py-3">
                     <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                       <div className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground">
+                        <Label
+                          id={`credential-${credential.id}-scope-label`}
+                          className="text-[11px] text-muted-foreground"
+                        >
                           {t("settings.providerCredentialScope")}
                         </Label>
                         <Select
@@ -279,7 +289,10 @@ export function CredentialsDrawer(props: {
                             })
                           }
                         >
-                          <SelectTrigger className="h-8 text-xs shadow-none">
+                          <SelectTrigger
+                            aria-labelledby={`credential-${credential.id}-scope-label`}
+                            className="h-8 text-xs shadow-none"
+                          >
                             <SelectValue>
                               {t(`settings.providerCredentialScope.${scope.mode}`)}
                             </SelectValue>
@@ -295,9 +308,9 @@ export function CredentialsDrawer(props: {
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Label className="text-[11px] text-muted-foreground">
+                          <span className="text-[11px] font-medium leading-none text-muted-foreground">
                             {t("settings.providerCredentialLastFetch")}
-                          </Label>
+                          </span>
                           <span className="flex-1" />
                           <Button
                             type="button"
@@ -310,7 +323,8 @@ export function CredentialsDrawer(props: {
                             <RefreshCw
                               className={cn(
                                 "h-3 w-3",
-                                refreshing.has(credential.id) && "animate-spin",
+                                refreshing.has(credential.id) &&
+                                  "animate-spin motion-reduce:animate-none",
                               )}
                             />
                             {t("settings.providerCredentialRefetch")}
@@ -350,10 +364,14 @@ export function CredentialsDrawer(props: {
                     </div>
                     {scope.mode === "manual" ? (
                       <div className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground">
+                        <Label
+                          htmlFor={`credential-${credential.id}-manual-models`}
+                          className="text-[11px] text-muted-foreground"
+                        >
                           {t("settings.providerCredentialManualModels")}
                         </Label>
                         <CommittedInput
+                          id={`credential-${credential.id}-manual-models`}
                           value={scope.models.join(", ")}
                           className="h-8 font-mono text-xs shadow-none"
                           placeholder="claude-*, gpt-5"
@@ -412,7 +430,7 @@ export function CredentialsDrawer(props: {
               <Plus className="h-3.5 w-3.5" />
               {t("settings.providerCredentialAdd")}
             </Button>
-            <p className="text-[10.5px] leading-relaxed text-muted-foreground/70">
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">
               {t("settings.providerCredentialsFooter")}
             </p>
           </div>

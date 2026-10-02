@@ -304,7 +304,7 @@ export function RequestConfigDrawer(props: {
                 hint={t("settings.providerEndpointsHint")}
               />
               {notice ? (
-                <p className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                <p className="rounded-lg border border-warning/25 bg-warning/[0.08] px-3 py-2 text-[11px] text-warning">
                   {notice}
                 </p>
               ) : null}
@@ -375,7 +375,10 @@ export function RequestConfigDrawer(props: {
                         aria-label={t("settings.providerEndpointRetest")}
                       >
                         <RefreshCw
-                          className={cn("h-3.5 w-3.5", probing.has(protocol) && "animate-spin")}
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            probing.has(protocol) && "animate-spin motion-reduce:animate-none",
+                          )}
                         />
                       </Button>
                       {!isDefault ? (
@@ -401,16 +404,20 @@ export function RequestConfigDrawer(props: {
                       <div className="space-y-3 border-t px-3 py-3">
                         <div className="space-y-1.5">
                           <div className="flex items-center gap-2">
-                            <Label className="text-xs text-muted-foreground">
+                            <Label
+                              htmlFor={`endpoint-${protocol}-base-url`}
+                              className="text-xs text-muted-foreground"
+                            >
                               {t("settings.baseUrl")}
                             </Label>
                             {preset.endpoints[protocol]?.note ? (
-                              <span className="text-[10.5px] text-muted-foreground/70">
+                              <span className="text-[11px] text-muted-foreground/70">
                                 {preset.endpoints[protocol]?.note}
                               </span>
                             ) : null}
                           </div>
                           <CommittedInput
+                            id={`endpoint-${protocol}-base-url`}
                             value={config.baseUrl}
                             className="h-8 font-mono text-xs shadow-none"
                             aria-label={`${protocolLabel(protocol)} ${t("settings.baseUrl")}`}
@@ -422,12 +429,15 @@ export function RequestConfigDrawer(props: {
                               )
                             }
                           />
-                          <p className="truncate font-mono text-[10.5px] text-muted-foreground/70">
+                          <p
+                            className="truncate font-mono text-[11px] text-muted-foreground/70"
+                            title={fullUrl || undefined}
+                          >
                             {t("settings.channelRequestPathPreview")}
                             {fullUrl || t("settings.providerOriginUnresolved")}
                           </p>
                           {!config.isFullUrl ? (
-                            <p className="text-[10.5px] leading-relaxed text-muted-foreground/60">
+                            <p className="text-[11px] leading-relaxed text-muted-foreground/60">
                               {t("settings.providerBaseUrlVersionHint")}
                             </p>
                           ) : null}
@@ -466,7 +476,10 @@ export function RequestConfigDrawer(props: {
                         </div>
                         <div className="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2 max-[720px]:grid-cols-1">
                           <div className="space-y-1">
-                            <Label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <Label
+                              id={`endpoint-${protocol}-dialect-label`}
+                              className="flex items-center gap-1 text-[11px] text-muted-foreground"
+                            >
                               {t("settings.providerDialect")}
                               <HintTip
                                 text={t("settings.providerDialectHint")}
@@ -486,7 +499,10 @@ export function RequestConfigDrawer(props: {
                                 )
                               }
                             >
-                              <SelectTrigger className="h-8 text-xs shadow-none">
+                              <SelectTrigger
+                                aria-labelledby={`endpoint-${protocol}-dialect-label`}
+                                className="h-8 text-xs shadow-none"
+                              >
                                 <SelectValue>
                                   {config.dialect
                                     ? dialectLabel(t, config.dialect)
@@ -513,6 +529,7 @@ export function RequestConfigDrawer(props: {
                           </div>
                           <div className="space-y-1">
                             <Label
+                              id={`endpoint-${protocol}-identity-label`}
                               className="text-[11px] text-muted-foreground"
                               title={t("settings.providerEndpointIdentityHint")}
                             >
@@ -569,11 +586,18 @@ export function RequestConfigDrawer(props: {
                               );
                             })()}
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-[11px] text-muted-foreground">
+                          <fieldset
+                            aria-labelledby={`endpoint-${protocol}-identity-label`}
+                            className="min-w-0 space-y-1"
+                          >
+                            <Label
+                              htmlFor={`endpoint-${protocol}-auth-header`}
+                              className="text-[11px] text-muted-foreground"
+                            >
                               {t("settings.providerAuthHeader")}
                             </Label>
                             <CommittedInput
+                              id={`endpoint-${protocol}-auth-header`}
                               value={config.auth?.headerName ?? ""}
                               className="h-8 font-mono text-xs shadow-none"
                               placeholder={authDefault.headerName}
@@ -592,9 +616,12 @@ export function RequestConfigDrawer(props: {
                                 )
                               }
                             />
-                          </div>
+                          </fieldset>
                           <div className="space-y-1">
-                            <Label className="text-[11px] text-muted-foreground">
+                            <Label
+                              id={`endpoint-${protocol}-credential-label`}
+                              className="text-[11px] text-muted-foreground"
+                            >
                               {t("settings.providerEndpointCredential")}
                             </Label>
                             <Select
@@ -607,7 +634,10 @@ export function RequestConfigDrawer(props: {
                                 )
                               }
                             >
-                              <SelectTrigger className="h-8 text-xs shadow-none">
+                              <SelectTrigger
+                                aria-labelledby={`endpoint-${protocol}-credential-label`}
+                                className="h-8 text-xs shadow-none"
+                              >
                                 <SelectValue>
                                   {config.credentialId
                                     ? credentialLabel(
@@ -632,10 +662,16 @@ export function RequestConfigDrawer(props: {
                         </div>
                         {showQuirks ? (
                           <div className="space-y-1">
-                            <Label className="text-[11px] text-muted-foreground">
+                            <Label
+                              id={`endpoint-${protocol}-quirks-label`}
+                              className="text-[11px] text-muted-foreground"
+                            >
                               {t("settings.providerQuirks")}
                             </Label>
-                            <div className="flex flex-wrap gap-1.5">
+                            <fieldset
+                              aria-labelledby={`endpoint-${protocol}-quirks-label`}
+                              className="min-w-0 flex flex-wrap gap-1.5"
+                            >
                               {QUIRK_KEYS.map((key) => {
                                 const value = config.quirks?.[key];
                                 return (
@@ -669,7 +705,7 @@ export function RequestConfigDrawer(props: {
                                   </ChipButton>
                                 );
                               })}
-                            </div>
+                            </fieldset>
                           </div>
                         ) : null}
                         <CustomHeadersEditor
@@ -697,10 +733,13 @@ export function RequestConfigDrawer(props: {
               })}
               {missing.length > 0 || missingCustom.length > 0 ? (
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">
+                  <Label id="endpoint-add-label" className="text-[11px] text-muted-foreground">
                     {t("settings.providerEndpointAdd")}
                   </Label>
-                  <div className="flex flex-wrap gap-1.5">
+                  <fieldset
+                    aria-labelledby="endpoint-add-label"
+                    className="min-w-0 flex flex-wrap gap-1.5"
+                  >
                     {missing.map((protocol) => (
                       <ChipButton key={protocol} onClick={() => addEndpoint(protocol)}>
                         ＋ {protocolLabel(protocol)}
@@ -714,7 +753,7 @@ export function RequestConfigDrawer(props: {
                         ＋ {protocolLabel(protocol)}
                       </ChipButton>
                     ))}
-                  </div>
+                  </fieldset>
                 </div>
               ) : null}
             </div>
@@ -734,7 +773,7 @@ export function RequestConfigDrawer(props: {
                 }
               />
               {providerLevelIdentity ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-[11px] text-warning">
                   <span className="min-w-0 flex-1">
                     {t("settings.providerHeadersIdentityNotice").replace(
                       "{cli}",

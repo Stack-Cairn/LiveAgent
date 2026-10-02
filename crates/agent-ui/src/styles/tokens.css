@@ -482,6 +482,8 @@
     --destructive-foreground: var(--color-white);
     --success: var(--color-emerald-800);
     --success-foreground: var(--color-white);
+    --warning: var(--color-amber-700);
+    --warning-foreground: var(--color-white);
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
@@ -577,6 +579,8 @@
     --destructive-foreground: var(--color-red-950);
     --success: var(--color-emerald-300);
     --success-foreground: var(--color-emerald-950);
+    --warning: var(--color-amber-300);
+    --warning-foreground: var(--color-amber-950);
 
     --border: 0 0% 26%;
     --input: 0 0% 26%;

@@ -130,6 +130,16 @@ function Section(props: { title: ReactNode; hint?: ReactNode; children: ReactNod
   );
 }
 
+/** 字段下方的错误行：有内容才渲染，带 role="alert" 让读屏即时播报。 */
+function FieldError(props: { id: string; message: string | null }) {
+  if (!props.message) return null;
+  return (
+    <p id={props.id} role="alert" className="text-[11px] leading-4 text-destructive">
+      {props.message}
+    </p>
+  );
+}
+
 /** 左列标签：与输入框首行对齐（h-8 输入框 → 标签行高 2rem）；可带一行小字说明。 */
 function FieldLabel(props: {
   htmlFor?: string;
@@ -147,7 +157,7 @@ function FieldLabel(props: {
         {props.required ? <span className="ml-0.5 text-destructive">*</span> : null}
       </Label>
       {props.hint ? (
-        <p className="-mt-1 truncate text-[10.5px] leading-4 text-muted-foreground/70 max-[520px]:mt-0">
+        <p className="-mt-1 truncate text-[11px] leading-4 text-muted-foreground/70 max-[520px]:mt-0">
           {props.hint}
         </p>
       ) : null}
@@ -181,7 +191,13 @@ export function AddChannelDialog(props: {
   const [origins, setOrigins] = useState<OriginRow[]>(() => [
     emptyOriginRow(initialPreset ? endpointsFromPreset(initialPreset).origin : ""),
   ]);
-  const [error, setError] = useState<string | null>(null);
+  // 错误贴在出错字段下并聚焦该字段；页脚不再单独放一份。
+  type FormErrorField = "name" | "endpoints" | "origin";
+  const [error, setError] = useState<{ field: FormErrorField; message: string } | null>(null);
+  function fail(field: FormErrorField, message: string, focusId: string) {
+    setError({ field, message });
+    window.requestAnimationFrame(() => document.getElementById(focusId)?.focus());
+  }
   const presets = listProviderPresets();
   const preset = findProviderPreset(presetId);
   const primaryOrigin = origins[0]?.url ?? "";
@@ -226,12 +242,16 @@ export function AddChannelDialog(props: {
 
   function submit() {
     if (!name.trim()) {
-      setError(t("settings.channelNameRequired"));
+      fail("name", t("settings.channelNameRequired"), "add-channel-name");
       return;
     }
     const filled = PROVIDER_CHAT_PROTOCOLS.filter((protocol) => endpoints[protocol]?.trim());
     if (filled.length === 0) {
-      setError(t("settings.channelEndpointRequired"));
+      fail(
+        "endpoints",
+        t("settings.channelEndpointRequired"),
+        `add-channel-endpoint-${ENDPOINT_ORDER[0]}`,
+      );
       return;
     }
     const originUrls = origins.map((row) => row.url.trim()).filter(Boolean);
@@ -239,7 +259,11 @@ export function AddChannelDialog(props: {
       originUrls.length === 0 &&
       filled.some((protocol) => endpointUsesOrigin(endpoints[protocol]))
     ) {
-      setError(t("settings.channelOriginRequired"));
+      fail(
+        "origin",
+        t("settings.channelOriginRequired"),
+        `add-channel-origin-${origins[0]?.id ?? ""}`,
+      );
       return;
     }
     onCreate(
@@ -288,16 +312,24 @@ export function AddChannelDialog(props: {
             <FieldLabel htmlFor="add-channel-name" required>
               {t("settings.channelName")}
             </FieldLabel>
-            <Input
-              id="add-channel-name"
-              className="h-8 shadow-none"
-              value={name}
-              placeholder={t("settings.channelNamePlaceholder")}
-              onChange={(event) => {
-                setName(event.currentTarget.value);
-                setError(null);
-              }}
-            />
+            <div className="min-w-0 space-y-1">
+              <Input
+                id="add-channel-name"
+                className={cn("h-8 shadow-none", error?.field === "name" && "border-destructive")}
+                value={name}
+                placeholder={t("settings.channelNamePlaceholder")}
+                aria-invalid={error?.field === "name" ? true : undefined}
+                aria-describedby={error?.field === "name" ? "add-channel-name-error" : undefined}
+                onChange={(event) => {
+                  setName(event.currentTarget.value);
+                  setError(null);
+                }}
+              />
+              <FieldError
+                id="add-channel-name-error"
+                message={error?.field === "name" ? error.message : null}
+              />
+            </div>
           </Section>
 
           <Section title="API Key" hint={t("settings.channelKeysHint")}>
@@ -372,15 +404,32 @@ export function AddChannelDialog(props: {
                 <div key={row.id} className="contents">
                   <FieldLabel htmlFor={inputId}>{rowLabel}</FieldLabel>
                   <div className="flex min-w-0 items-center gap-2">
-                    <Input
-                      id={inputId}
-                      className="h-8 font-mono text-xs shadow-none"
-                      value={row.url}
-                      placeholder={t("settings.providerOriginPlaceholder")}
-                      autoComplete="off"
-                      spellCheck={false}
-                      onChange={(event) => patchOrigin(row.id, event.currentTarget.value)}
-                    />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <Input
+                        id={inputId}
+                        className={cn(
+                          "h-8 font-mono text-xs shadow-none",
+                          index === 0 && error?.field === "origin" && "border-destructive",
+                        )}
+                        value={row.url}
+                        placeholder={t("settings.providerOriginPlaceholder")}
+                        aria-invalid={index === 0 && error?.field === "origin" ? true : undefined}
+                        aria-describedby={
+                          index === 0 && error?.field === "origin"
+                            ? "add-channel-origin-error"
+                            : undefined
+                        }
+                        autoComplete="off"
+                        spellCheck={false}
+                        onChange={(event) => patchOrigin(row.id, event.currentTarget.value)}
+                      />
+                      {index === 0 ? (
+                        <FieldError
+                          id="add-channel-origin-error"
+                          message={error?.field === "origin" ? error.message : null}
+                        />
+                      ) : null}
+                    </div>
                     {index > 0 ? (
                       <Button
                         type="button"
@@ -430,7 +479,14 @@ export function AddChannelDialog(props: {
                   <div className="min-w-0 space-y-1">
                     <Input
                       id={id}
-                      className="h-8 font-mono text-xs shadow-none"
+                      className={cn(
+                        "h-8 font-mono text-xs shadow-none",
+                        error?.field === "endpoints" && "border-destructive",
+                      )}
+                      aria-invalid={error?.field === "endpoints" ? true : undefined}
+                      aria-describedby={
+                        error?.field === "endpoints" ? "add-channel-endpoints-error" : undefined
+                      }
                       value={value}
                       placeholder={
                         primaryOrigin.trim()
@@ -445,7 +501,10 @@ export function AddChannelDialog(props: {
                         setEndpoints((previous) => ({ ...previous, [protocol]: next }));
                       }}
                     />
-                    <p className="truncate font-mono text-[10.5px] leading-4 text-muted-foreground/70">
+                    <p
+                      className="truncate font-mono text-[11px] leading-4 text-muted-foreground/70"
+                      title={resolved.requestUrl || undefined}
+                    >
                       {resolved.requestUrl ? (
                         <>
                           <span className="font-sans">
@@ -461,6 +520,11 @@ export function AddChannelDialog(props: {
                 </div>
               );
             })}
+            {error?.field === "endpoints" ? (
+              <div className="min-[521px]:col-start-2">
+                <FieldError id="add-channel-endpoints-error" message={error.message} />
+              </div>
+            ) : null}
           </Section>
 
           <section className="rounded-xl border bg-muted/20">
@@ -486,7 +550,7 @@ export function AddChannelDialog(props: {
             </button>
             {presetOpen ? (
               <div id="add-channel-preset" className="space-y-2.5 border-t px-3 py-3">
-                <p className="text-[10.5px] leading-relaxed text-muted-foreground/75">
+                <p className="text-[11px] leading-relaxed text-muted-foreground/75">
                   {t("settings.channelFromPresetHint")}
                 </p>
                 <Select value={presetId} onValueChange={applyPreset}>
@@ -516,7 +580,7 @@ export function AddChannelDialog(props: {
                   </SelectContent>
                 </Select>
                 {preset ? (
-                  <div className="space-y-1 text-[10.5px] leading-4 text-muted-foreground/75">
+                  <div className="space-y-1 text-[11px] leading-4 text-muted-foreground/75">
                     <p>{t("settings.channelPresetApplied")}</p>
                     {filledFromPreset.length > 0 ? (
                       <ul className="space-y-0.5">
@@ -541,11 +605,6 @@ export function AddChannelDialog(props: {
           </section>
         </DialogBody>
         <DialogFooter className="bg-muted/20">
-          {error ? (
-            <p className="min-w-0 flex-1 text-xs text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
           <DialogActions>
             <Button variant="outline" className="h-8" onClick={() => setOpen(false)}>
               {t("settings.cancel")}

@@ -358,9 +358,7 @@ export function ProviderProbeDialog(props: {
                           : probeModelsUrl(candidate)}
                     </span>
                     {candidate.note ? (
-                      <span className="text-[10.5px] text-muted-foreground/70">
-                        {candidate.note}
-                      </span>
+                      <span className="text-[11px] text-muted-foreground/70">{candidate.note}</span>
                     ) : null}
                     <ProbeStatusChip probe={summary} pending={!probed} />
                   </div>
@@ -378,7 +376,7 @@ export function ProviderProbeDialog(props: {
                             <span className="font-medium text-muted-foreground">
                               {originHostLabel({ url: item.baseUrl })}
                             </span>
-                            <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted-foreground/70">
+                            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground/70">
                               {probeModelsUrl(item)}
                             </span>
                             <ProbeStatusChip probe={originSummary} pending={!probed} />
@@ -388,7 +386,7 @@ export function ProviderProbeDialog(props: {
                       })
                     : null}
                   {fromCatalog ? (
-                    <p className="text-[10.5px] leading-relaxed text-muted-foreground/70">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground/70">
                       {t("settings.providerProbeCatalogEndpointHint")}
                     </p>
                   ) : null}
@@ -455,7 +453,7 @@ export function ProviderProbeDialog(props: {
                       </span>
                       <Chip className="tabular-nums">{group.models.length}</Chip>
                       {group.protocol ? (
-                        <span className="text-[10.5px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           → {protocolLabel(group.protocol)}
                           {group.dialect !== "generic"
                             ? ` · ${dialectLabel(t, group.dialect)}`
@@ -467,7 +465,7 @@ export function ProviderProbeDialog(props: {
                           {t("settings.providerProbeGroupUnverified")}
                         </Chip>
                       ) : null}
-                      <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-muted-foreground/70">
+                      <span className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-muted-foreground/70">
                         {group.models
                           .slice(0, 3)
                           .map((model) => model.id)
@@ -478,7 +476,7 @@ export function ProviderProbeDialog(props: {
                   );
                 })
               )}
-              <p className="text-[10.5px] leading-relaxed text-muted-foreground/70">
+              <p className="text-[11px] leading-relaxed text-muted-foreground/70">
                 {t("settings.providerProbeAcceptHint")}
               </p>
             </section>

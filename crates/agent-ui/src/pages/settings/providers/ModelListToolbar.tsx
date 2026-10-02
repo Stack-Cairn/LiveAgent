@@ -70,7 +70,7 @@ function toggleInList<T>(list: readonly T[], item: T, checked: boolean): T[] {
 function FilterGroup(props: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-0.5">
-      <div className="px-1.5 pb-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/65">
+      <div className="px-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/65">
         {props.label}
       </div>
       {props.children}
@@ -234,7 +234,7 @@ export function ModelListToolbar(props: {
               {filterCount > 0 ? (
                 <span
                   aria-hidden="true"
-                  className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none tabular-nums text-primary-foreground"
+                  className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none tabular-nums text-primary-foreground"
                 >
                   {filterCount}
                 </span>
@@ -353,7 +353,7 @@ export function ModelListActions(props: {
         aria-label={checkAllLabel}
       >
         {checkingAll ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
+          <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
         ) : (
           <Activity className="h-3 w-3" />
         )}
@@ -369,7 +369,9 @@ export function ModelListActions(props: {
         title={refreshLabel}
         aria-label={refreshLabel}
       >
-        <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
+        <RefreshCw
+          className={cn("h-3 w-3", refreshing && "animate-spin motion-reduce:animate-none")}
+        />
         <span className={NARROW_HIDDEN_CLASS}>{refreshLabel}</span>
       </Button>
       <Button

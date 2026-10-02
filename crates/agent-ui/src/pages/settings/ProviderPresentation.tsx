@@ -138,7 +138,7 @@ export function HintTip(props: { text: string; label?: string }) {
         render={
           <button
             type="button"
-            aria-label={label ?? text}
+            aria-label={label ? `${label}: ${text}` : text}
             className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         }

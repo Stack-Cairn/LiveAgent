@@ -58,7 +58,16 @@ import {
 import { buildBuiltinRequestHeaders } from "@liveagent/ui/lib/providers/requestHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { formatTokenCount } from "@liveagent/ui/pages/settings/providerUtils";
-import { Fragment, type ReactNode, useMemo, useState } from "react";
+import {
+  type ComponentProps,
+  createContext,
+  Fragment,
+  type ReactNode,
+  useContext,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { DrawerGroupLabel, HintTip, PROMPT_CACHE_HINT_LABEL_KEYS } from "../ProviderPresentation";
 import { ModelCatalogSummary } from "./ModelCatalogInfoPanel";
 import { originHostLabel } from "./ProviderOriginList";
@@ -126,20 +135,53 @@ function parsePositiveInteger(input: string): number | null {
   return normalized > 0 ? normalized : null;
 }
 
+// 字段标签要和控件绑定（点标签聚焦、读屏报字段名）：Field 生成一对 id，输入框 /
+// Select 触发器 / 分段控件通过下面三个薄包装从上下文取用，调用处不用手写 id。
+const FieldIdsContext = createContext<{ controlId: string; labelId: string } | null>(null);
+
+function useFieldIds() {
+  const ids = useContext(FieldIdsContext);
+  if (!ids) throw new Error("Field* controls must render inside <Field>");
+  return ids;
+}
+
 function Field(props: { label: string; hint?: string; source?: ReactNode; children: ReactNode }) {
+  const base = useId();
+  const ids = { controlId: `${base}-control`, labelId: `${base}-label` };
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <Label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-          {props.label}
-          {props.hint ? <HintTip text={props.hint} label={props.label} /> : null}
-        </Label>
-        <span className="flex-1" />
-        {props.source}
+    <FieldIdsContext.Provider value={ids}>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Label
+            id={ids.labelId}
+            htmlFor={ids.controlId}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground"
+          >
+            {props.label}
+            {props.hint ? <HintTip text={props.hint} label={props.label} /> : null}
+          </Label>
+          <span className="flex-1" />
+          {props.source}
+        </div>
+        {props.children}
       </div>
-      {props.children}
-    </div>
+    </FieldIdsContext.Provider>
   );
+}
+
+function FieldCommittedInput(props: ComponentProps<typeof CommittedInput>) {
+  const { controlId } = useFieldIds();
+  return <CommittedInput id={controlId} {...props} />;
+}
+
+function FieldSelectTrigger(props: ComponentProps<typeof SelectTrigger>) {
+  const { controlId, labelId } = useFieldIds();
+  return <SelectTrigger id={controlId} aria-labelledby={labelId} {...props} />;
+}
+
+function FieldFieldset(props: ComponentProps<"fieldset">) {
+  const { labelId } = useFieldIds();
+  return <fieldset aria-labelledby={labelId} {...props} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +207,7 @@ function PropertyTable(props: {
         <div
           className={cn(
             props.rowClass,
-            "bg-muted/30 text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground/70 @max-[500px]:hidden",
+            "bg-muted/30 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground/70 @max-[500px]:hidden",
           )}
         >
           {props.columns.map((column, index) => (
@@ -189,7 +231,7 @@ function Cell(props: { column: string; className?: string; children: ReactNode }
     <div
       className={cn("flex min-h-[22px] min-w-0 flex-wrap items-center gap-1.5", props.className)}
     >
-      <span className="hidden w-14 shrink-0 text-[10.5px] text-muted-foreground/70 @max-[500px]:inline">
+      <span className="hidden w-14 shrink-0 text-[11px] text-muted-foreground/70 @max-[500px]:inline">
         {props.column}
       </span>
       {props.children}
@@ -248,10 +290,8 @@ function CandidateMark(props: {
       <span
         aria-hidden="true"
         className={cn(
-          "text-[9px] leading-none",
-          props.conflict
-            ? "font-semibold text-amber-600 dark:text-amber-400"
-            : "text-muted-foreground/70",
+          "text-[10px] leading-none",
+          props.conflict ? "font-semibold text-warning" : "text-muted-foreground/70",
         )}
       >
         +{props.extras.length}
@@ -264,7 +304,7 @@ function CandidateMark(props: {
 function CandidateDetailRow(props: { entries: readonly CandidateEntry[] }) {
   const { t } = useLocale();
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/30 px-3 py-1.5 text-[10.5px]">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/30 px-3 py-1.5 text-[11px]">
       {props.entries.map((entry) => (
         <span key={entry.source} className="inline-flex items-center gap-1">
           <span className="text-muted-foreground/70">
@@ -311,6 +351,9 @@ function ModelParameterFields(props: {
 }) {
   const { t } = useLocale();
   const { model, protocol } = props;
+  // 非法输入不再静默弹回：草稿留在框里，标 aria-invalid 并给一行说明。
+  const [invalid, setInvalid] = useState<Partial<Record<ModelParameterKey, boolean>>>({});
+  const errorId = useId();
   const range = PROTOCOL_TEMPERATURE_RANGE[protocol];
   const hint: Record<ModelParameterKey, string> = {
     temperature: `${range.min}–${range.max}`,
@@ -339,19 +382,33 @@ function ModelParameterFields(props: {
                 />
               }
             >
-              <CommittedInput
+              <FieldCommittedInput
                 value={value === undefined ? "" : String(value)}
                 inputMode="decimal"
                 disabled={!applies}
-                className="h-7 w-full text-xs shadow-none"
+                className={cn(
+                  "h-7 w-full text-xs shadow-none",
+                  invalid[key] && "border-destructive",
+                )}
                 placeholder={t("settings.modelParameterUnset")}
                 aria-label={t(PARAMETER_LABEL_KEYS[key])}
+                aria-invalid={invalid[key] ? true : undefined}
+                aria-describedby={invalid[key] ? `${errorId}-${key}` : undefined}
                 onCommit={(input) => {
                   const parsed = parseParameterInput(key, input);
-                  if (parsed === null) return;
+                  if (parsed === null) {
+                    setInvalid((previous) => ({ ...previous, [key]: true }));
+                    return false;
+                  }
+                  setInvalid((previous) => ({ ...previous, [key]: false }));
                   props.onChange(key, parsed);
                 }}
               />
+              {invalid[key] ? (
+                <p id={`${errorId}-${key}`} role="alert" className="text-[11px] text-destructive">
+                  {t("settings.modelParameterInvalid")}
+                </p>
+              ) : null}
             </Field>
           );
         })}
@@ -417,7 +474,7 @@ function CollapsibleBlock(props: {
           type="button"
           aria-expanded={open}
           onClick={() => setOpen((previous) => !previous)}
-          className="flex shrink-0 items-center gap-1 text-[10.5px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground/65 transition-colors hover:text-foreground"
+          className="flex shrink-0 items-center gap-1 text-[11px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground/65 transition-colors hover:text-foreground"
         >
           <ChevronDown
             className={cn("h-3 w-3 transition-transform", !open && "-rotate-90")}
@@ -442,6 +499,10 @@ export function ModelEditDrawer(props: {
   /** 打开"模型目录"浏览抽屉，预选该模型所在分区并以模型 id 作为搜索词 */
   onOpenCatalog?: (target: { sectionId?: CatalogProviderId; query: string }) => void;
 }) {
+  // 限额输入的校验态：非法值保留在输入框里并标红，不再静默弹回旧值。
+  const [limitInvalid, setLimitInvalid] = useState<Partial<Record<ModelLimitField, boolean>>>({});
+  const limitInputId = useId();
+
   const { settings, provider, modelId, onChange, onClose, onOpenCatalog } = props;
   const { t } = useLocale();
   const model = provider.models.find((item) => item.id === modelId);
@@ -557,7 +618,7 @@ export function ModelEditDrawer(props: {
                     />
                   }
                 >
-                  <CommittedInput
+                  <FieldCommittedInput
                     value={model.wireModelId ?? ""}
                     className="h-8 font-mono text-xs shadow-none"
                     placeholder={t("settings.modelWireIdPlaceholder")}
@@ -574,7 +635,7 @@ export function ModelEditDrawer(props: {
                   />
                 </Field>
                 <Field label={t("settings.modelDisplayName")}>
-                  <CommittedInput
+                  <FieldCommittedInput
                     value={model.displayName ?? ""}
                     className="h-8 text-xs shadow-none"
                     placeholder={model.id}
@@ -594,7 +655,7 @@ export function ModelEditDrawer(props: {
                     />
                   }
                 >
-                  <CommittedInput
+                  <FieldCommittedInput
                     value={modelGroupKey(model)}
                     className="h-8 text-xs shadow-none"
                     aria-label={t("settings.modelGroup")}
@@ -616,7 +677,7 @@ export function ModelEditDrawer(props: {
                 }
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <fieldset className="inline-flex h-[22px] items-stretch overflow-hidden rounded-md border border-border/70 p-0">
+                  <FieldFieldset className="inline-flex h-[22px] items-stretch overflow-hidden rounded-md border border-border/70 p-0">
                     {(["chat", "image"] as const).map((value) => {
                       const active = modelType.type === value;
                       return (
@@ -647,8 +708,8 @@ export function ModelEditDrawer(props: {
                         </button>
                       );
                     })}
-                  </fieldset>
-                  <span className="text-[10.5px] text-muted-foreground">
+                  </FieldFieldset>
+                  <span className="text-[11px] text-muted-foreground">
                     {t(`settings.modelCapabilitySource.${modelType.source}`)}
                   </span>
                 </div>
@@ -729,7 +790,7 @@ export function ModelEditDrawer(props: {
                           <StateChip state={view.state} overridden={view.overridden}>
                             {t(`settings.modelCapabilityState.${row.effective.state}`)}
                           </StateChip>
-                          <span className="text-[10.5px] text-muted-foreground">
+                          <span className="text-[11px] text-muted-foreground">
                             {t(`settings.modelCapabilitySource.${row.effective.source}`)}
                           </span>
                           {row.conflict && row.editable ? (
@@ -783,7 +844,7 @@ export function ModelEditDrawer(props: {
                   );
                 })}
                 <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-                  <span className="text-[10.5px] text-muted-foreground/70">
+                  <span className="text-[11px] text-muted-foreground/70">
                     {t("settings.modelCapabilitiesFootnote")}
                   </span>
                   <ChipButton
@@ -823,10 +884,13 @@ export function ModelEditDrawer(props: {
                   }));
                   const extras = all.filter((item) => item.source !== "catalog");
                   const expanded = openCandidates === `limit:${field}`;
+                  const inputId = `${limitInputId}-${field}`;
                   return (
                     <Fragment key={field}>
                       <div className={LIMIT_ROW_CLASS}>
-                        <span className="text-foreground/90">{label}</span>
+                        <label htmlFor={inputId} className="text-foreground/90">
+                          {label}
+                        </label>
                         <Cell column={columnCatalog}>
                           <CandidateMark
                             primary={
@@ -846,21 +910,31 @@ export function ModelEditDrawer(props: {
                         </Cell>
                         <Cell column={t("settings.modelPropertyColumn.current")}>
                           <CommittedInput
+                            id={inputId}
                             value={value === undefined ? "" : String(value)}
                             inputMode="numeric"
-                            className="h-7 w-full max-w-[160px] text-xs shadow-none"
+                            className={cn(
+                              "h-7 w-full max-w-[160px] text-xs shadow-none",
+                              limitInvalid[field] && "border-destructive",
+                            )}
                             placeholder={
                               field === "maxInputTokens"
                                 ? t("settings.modelMaxInputTokensUnset")
                                 : undefined
                             }
                             aria-label={label}
+                            aria-invalid={limitInvalid[field] ? true : undefined}
+                            aria-describedby={limitInvalid[field] ? `${inputId}-error` : undefined}
                             onCommit={(input) => {
                               const parsed =
                                 field === "maxInputTokens" && !input.trim()
                                   ? undefined
                                   : parsePositiveInteger(input);
-                              if (parsed === null) return;
+                              if (parsed === null) {
+                                setLimitInvalid((previous) => ({ ...previous, [field]: true }));
+                                return false;
+                              }
+                              setLimitInvalid((previous) => ({ ...previous, [field]: false }));
                               patch((current) => ({
                                 ...current,
                                 [field]: parsed,
@@ -868,6 +942,15 @@ export function ModelEditDrawer(props: {
                               }));
                             }}
                           />
+                          {limitInvalid[field] ? (
+                            <p
+                              id={`${inputId}-error`}
+                              role="alert"
+                              className="basis-full text-[11px] text-destructive"
+                            >
+                              {t("settings.modelLimitInvalid")}
+                            </p>
+                          ) : null}
                           {info.conflict ? (
                             <>
                               <Chip tone="warn" title={candidateSummary(all, t)}>
@@ -991,7 +1074,7 @@ export function ModelEditDrawer(props: {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-8 text-xs shadow-none">
+                    <FieldSelectTrigger className="h-8 text-xs shadow-none">
                       <SelectValue>
                         {model.chatProtocol
                           ? protocolLabel(model.chatProtocol)
@@ -1000,7 +1083,7 @@ export function ModelEditDrawer(props: {
                               protocolLabel(route.protocol),
                             )}
                       </SelectValue>
-                    </SelectTrigger>
+                    </FieldSelectTrigger>
                     <SelectContent>
                       <SelectItem value="auto">
                         {t("settings.modelChatProtocolAutoOption").replace(
@@ -1056,7 +1139,7 @@ export function ModelEditDrawer(props: {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-8 text-xs shadow-none">
+                    <FieldSelectTrigger className="h-8 text-xs shadow-none">
                       <SelectValue>
                         {model.dialect
                           ? dialectLabel(t, model.dialect)
@@ -1065,7 +1148,7 @@ export function ModelEditDrawer(props: {
                               dialectLabel(t, inheritedDialect),
                             )}
                       </SelectValue>
-                    </SelectTrigger>
+                    </FieldSelectTrigger>
                     <SelectContent>
                       <SelectItem value="inherit">
                         {t("settings.providerDialectInherit").replace(
@@ -1099,14 +1182,14 @@ export function ModelEditDrawer(props: {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-8 text-xs shadow-none">
+                    <FieldSelectTrigger className="h-8 text-xs shadow-none">
                       <SelectValue>
                         {model.credentialId
                           ? credentials.find((item) => item.id === model.credentialId)?.label ||
                             t("settings.providerCredentialPrimary")
                           : t("settings.modelCredentialAuto")}
                       </SelectValue>
-                    </SelectTrigger>
+                    </FieldSelectTrigger>
                     <SelectContent>
                       <SelectItem value="auto">{t("settings.modelCredentialAuto")}</SelectItem>
                       {credentials.map((item, index) => (
@@ -1122,7 +1205,7 @@ export function ModelEditDrawer(props: {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[10.5px] text-muted-foreground/70">
+                  <p className="text-[11px] text-muted-foreground/70">
                     {t("settings.modelCredentialCovering")}
                     {coveringCredentials.length > 0
                       ? coveringCredentials
@@ -1151,7 +1234,7 @@ export function ModelEditDrawer(props: {
                         }))
                       }
                     >
-                      <SelectTrigger className="h-8 text-xs shadow-none">
+                      <FieldSelectTrigger className="h-8 text-xs shadow-none">
                         <SelectValue>
                           {t(
                             model.promptCacheHintMode
@@ -1159,7 +1242,7 @@ export function ModelEditDrawer(props: {
                               : "settings.promptCacheHintMode.inherit",
                           )}
                         </SelectValue>
-                      </SelectTrigger>
+                      </FieldSelectTrigger>
                       <SelectContent>
                         <SelectItem value="inherit">
                           {t("settings.promptCacheHintMode.inherit")}
@@ -1184,14 +1267,14 @@ export function ModelEditDrawer(props: {
                   <span className="flex flex-wrap items-center gap-1.5 font-mono">
                     {route.protocol}
                     <SourceTag source={route.protocolSource === "model" ? "user" : "auto"} />
-                    <span className="font-sans text-[10.5px] text-muted-foreground">
+                    <span className="font-sans text-[11px] text-muted-foreground">
                       {protocolSourceLabel}
                     </span>
                   </span>
                   <span className="text-muted-foreground">{t("settings.providerDialect")}</span>
                   <span className="flex flex-wrap items-center gap-1.5 font-mono">
                     {route.dialect}
-                    <span className="font-sans text-[10.5px] text-muted-foreground">
+                    <span className="font-sans text-[11px] text-muted-foreground">
                       {dialectLabel(t, route.dialect)}
                     </span>
                   </span>
@@ -1217,7 +1300,7 @@ export function ModelEditDrawer(props: {
                   <span className="text-muted-foreground">{t("settings.modelCredential")}</span>
                   <span className="flex flex-wrap items-center gap-1.5 font-mono">
                     {credential?.label || t("settings.providerCredentialPrimary")}
-                    <span className="font-sans text-[10.5px] text-muted-foreground">
+                    <span className="font-sans text-[11px] text-muted-foreground">
                       {t(`settings.modelRouteCredentialSource.${route.credentialSource}`)}
                     </span>
                   </span>

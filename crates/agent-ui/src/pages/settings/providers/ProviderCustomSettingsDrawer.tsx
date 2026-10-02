@@ -121,7 +121,7 @@ export function ProviderCustomSettingsDrawer(
                   onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
                 />
                 {modelOptions.length === 0 ? (
-                  <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                  <div className="rounded-lg border border-warning/25 bg-warning/[0.08] px-3 py-2 text-[11px] leading-relaxed text-warning">
                     {t("settings.customSettingsModelEmpty")}
                   </div>
                 ) : null}

@@ -234,14 +234,17 @@ export function ProviderUsageQueryPanel(props: {
             <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-border" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <Label id="provider-usage-mode-label" className="text-xs text-muted-foreground">
               {t("settings.providerUsageMode")}
             </Label>
             <Select
               value={draft.mode}
               onValueChange={(mode) => void setMode(mode as UsageQueryMode)}
             >
-              <SelectTrigger className="h-8 w-full text-xs shadow-none">
+              <SelectTrigger
+                aria-labelledby="provider-usage-mode-label"
+                className="h-8 w-full text-xs shadow-none"
+              >
                 <SelectValue>
                   {t(
                     draft.mode === "coding-plan"
@@ -300,9 +303,7 @@ export function ProviderUsageQueryPanel(props: {
                 {t("settings.providerUsageVariables")}
               </div>
               <div className="mt-2 flex min-w-0 items-center gap-2">
-                <code className="shrink-0 font-mono text-emerald-600 dark:text-emerald-400">
-                  {"{{baseUrl}}"}
-                </code>
+                <code className="shrink-0 font-mono text-success">{"{{baseUrl}}"}</code>
                 <span className="text-muted-foreground/60">=</span>
                 {variableBaseUrl ? (
                   <code className="break-all font-mono text-muted-foreground">
@@ -315,9 +316,7 @@ export function ProviderUsageQueryPanel(props: {
                 )}
               </div>
               <div className="mt-1 flex min-w-0 items-center gap-2">
-                <code className="shrink-0 font-mono text-emerald-600 dark:text-emerald-400">
-                  {"{{apiKey}}"}
-                </code>
+                <code className="shrink-0 font-mono text-success">{"{{apiKey}}"}</code>
                 <span className="text-muted-foreground/60">=</span>
                 {variableApiKey || (isGatewayWebui && provider.apiKeyConfigured) ? (
                   <>
@@ -478,7 +477,7 @@ export function ProviderUsageQueryPanel(props: {
                 onChange={(event) => setTimeoutInput(event.currentTarget.value)}
                 onBlur={commitTimeout}
               />
-              <p className="text-[10.5px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 {t("settings.providerUsageTimeoutHint")}
               </p>
             </div>
@@ -513,7 +512,10 @@ export function ProviderUsageQueryPanel(props: {
               aria-label={t("settings.providerUsageTest")}
             >
               <RefreshCw
-                className={cn("h-3.5 w-3.5", test.status === "running" && "animate-spin")}
+                className={cn(
+                  "h-3.5 w-3.5",
+                  test.status === "running" && "animate-spin motion-reduce:animate-none",
+                )}
               />
               {t("settings.providerUsageTest")}
             </Button>

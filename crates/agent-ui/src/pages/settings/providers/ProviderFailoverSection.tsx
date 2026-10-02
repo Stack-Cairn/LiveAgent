@@ -214,11 +214,14 @@ function FailoverFamilyCard(
                         P{index + 1}
                       </span>
                       <span className="min-w-0 flex-1 leading-tight">
-                        <span className="block truncate text-[12.5px] font-medium text-foreground/90">
+                        <span
+                          className="block truncate text-[12.5px] font-medium text-foreground/90"
+                          title={queueEntryLabel(entry)}
+                        >
                           {queueEntryLabel(entry)}
                         </span>
                         {queueEntryDetail(entry) ? (
-                          <span className="block truncate text-[10.5px] text-muted-foreground/70">
+                          <span className="block truncate text-[11px] text-muted-foreground/70">
                             {queueEntryDetail(entry)}
                           </span>
                         ) : null}
@@ -238,7 +241,7 @@ function FailoverFamilyCard(
                   )}
                 </VerticalReorderList>
               ) : (
-                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                <div className="rounded-lg border border-warning/25 bg-warning/[0.08] px-3 py-2 text-[11px] leading-relaxed text-warning">
                   {t("settings.failoverQueueEmpty")}
                 </div>
               )}
@@ -259,7 +262,7 @@ function FailoverFamilyCard(
                 />
               ) : null}
               {unavailableProviderCount > 0 ? (
-                <p className="text-[10.5px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-[11px] leading-relaxed text-warning">
                   {t("settings.failoverQueueUnavailableCandidates").replace(
                     "{count}",
                     String(unavailableProviderCount),
@@ -267,7 +270,7 @@ function FailoverFamilyCard(
                 </p>
               ) : null}
               {unavailableQueuedProviderCount > 0 ? (
-                <p className="text-[10.5px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-[11px] leading-relaxed text-warning">
                   {t("settings.failoverQueueUnavailableExisting").replace(
                     "{count}",
                     String(unavailableQueuedProviderCount),

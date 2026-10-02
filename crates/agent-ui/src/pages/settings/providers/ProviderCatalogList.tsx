@@ -99,7 +99,7 @@ export function ProviderCatalogList(props: {
         </Button>
         {extraActions}
       </div>
-      <p className="px-0.5 text-[10.5px] leading-relaxed text-muted-foreground/70">
+      <p className="px-0.5 text-[11px] leading-relaxed text-muted-foreground/70">
         {t("settings.channelCatalogHint")}
       </p>
       <div className="settings-provider-catalog-scroll min-h-0 flex-1 overflow-y-auto pr-0.5">
@@ -172,10 +172,16 @@ export function ProviderCatalogList(props: {
                         row.kind === "preset" && "opacity-70 group-hover:opacity-100",
                       )}
                     >
-                      <span className="block truncate text-[12.5px] font-medium text-foreground/90">
+                      <span
+                        className="block truncate text-[12.5px] font-medium text-foreground/90"
+                        title={name}
+                      >
                         {name}
                       </span>
-                      <span className="block truncate text-[10.5px] text-muted-foreground/75">
+                      <span
+                        className="block truncate text-[11px] text-muted-foreground/75"
+                        title={rowSubtitle}
+                      >
                         {rowSubtitle}
                       </span>
                     </span>
@@ -186,7 +192,7 @@ export function ProviderCatalogList(props: {
                         title={statusLabel}
                         className={cn(
                           "h-2 w-2 shrink-0 rounded-full",
-                          !enabled ? "bg-muted-foreground/30" : "bg-emerald-500",
+                          !enabled ? "bg-muted-foreground/30" : "bg-success",
                         )}
                       />
                     ) : null}

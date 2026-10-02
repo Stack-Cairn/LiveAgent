@@ -34,8 +34,8 @@ export type ChipTone = "default" | "on" | "ok" | "warn" | "bad";
 const CHIP_TONE_CLASS: Record<ChipTone, string> = {
   default: "border-border/70 bg-muted/50 text-muted-foreground",
   on: "border-primary/30 bg-primary/10 text-primary",
-  ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  warn: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  ok: "border-success/30 bg-success/10 text-success",
+  warn: "border-warning/30 bg-warning/10 text-warning",
   bad: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 
@@ -100,7 +100,7 @@ const STATE_CHIP_CLASS: Record<ChipState, string> = {
 
 function StateMark({ state }: { state: ChipState }) {
   if (state === "supported") {
-    return <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />;
+    return <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />;
   }
   if (state === "unsupported") {
     return (
@@ -169,7 +169,7 @@ export function SourceTag(props: { source: ValueSource; onReset?: () => void }) 
   const { t } = useLocale();
   const label = t(`settings.providerSource.${source}`);
   return (
-    <span className="inline-flex items-center gap-1.5 text-[10.5px] leading-none">
+    <span className="inline-flex items-center gap-1.5 text-[11px] leading-none">
       <span
         className={cn(
           "font-medium",
@@ -181,7 +181,8 @@ export function SourceTag(props: { source: ValueSource; onReset?: () => void }) 
       {source === "user" && onReset ? (
         <button
           type="button"
-          className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          // 视觉仍是一行小字，但命中区撑到 24px（WCAG 2.5.8），负边距抵消占位。
+          className="-my-2 inline-flex h-6 items-center rounded px-1 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           onClick={onReset}
         >
           {t("settings.providerSourceReset")}
@@ -252,11 +253,7 @@ export function probeReason(probe: ProviderEndpointProbe | undefined): string | 
 export function ProbeReason(props: { probe: ProviderEndpointProbe | undefined }) {
   const reason = probeReason(props.probe);
   if (!reason) return null;
-  return (
-    <p className="break-all text-[10.5px] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
-      {reason}
-    </p>
-  );
+  return <p className="break-all text-[11px] leading-relaxed text-warning">{reason}</p>;
 }
 
 /** 方言的界面文案（中英各一套）；"generic" 显示为"通用"。 */
@@ -322,7 +319,9 @@ export function ProviderAvatar(props: { preset: ProviderPreset | undefined; clas
 export function CommittedInput(
   props: Omit<ComponentProps<typeof Input>, "value" | "onChange" | "onBlur"> & {
     value: string;
-    onCommit: (value: string) => void;
+    /** 返回 false 表示拒绝本次提交：草稿保留在输入框里，由调用方展示错误。 */
+    // biome-ignore lint/suspicious/noConfusingVoidType: 只有 false 有意义，其余调用方省略返回值
+    onCommit: (value: string) => void | boolean;
     /** 每次按键即写入（少数场景，例如名称） */
     commitOnChange?: boolean;
   },
@@ -335,10 +334,13 @@ export function CommittedInput(
   }, [value]);
 
   function commit() {
+    if (draft === value) {
+      editingRef.current = false;
+      return;
+    }
+    if (onCommit(draft) === false) return;
     editingRef.current = false;
-    if (draft === value) return;
-    onCommit(draft);
-    // 调用方可能拒绝写入（例如清空地址）：草稿回到当前值，被接受时上面的效果会
+    // 调用方可能静默丢弃写入（例如清空地址）：草稿回到当前值，被接受时上面的效果会
     // 再同步到归一化后的新值。
     setDraft(value);
   }
@@ -380,9 +382,23 @@ export function SecretInput(props: {
   placeholder?: string;
   className?: string;
   ariaLabel: string;
+  /** 校验失败：标 aria-invalid 并指向错误文案 */
+  invalid?: boolean;
+  describedBy?: string;
   onCommit: (value: string) => void;
 }) {
-  const { id, value, configured, redacted, placeholder, className, ariaLabel, onCommit } = props;
+  const {
+    id,
+    value,
+    configured,
+    redacted,
+    placeholder,
+    className,
+    ariaLabel,
+    invalid,
+    describedBy,
+    onCommit,
+  } = props;
   const { t } = useLocale();
   const [show, setShow] = useState(false);
   return (
@@ -395,9 +411,11 @@ export function SecretInput(props: {
           redacted && configured ? t("settings.providerSecretConfigured") : (placeholder ?? "sk-…")
         }
         aria-label={ariaLabel}
+        aria-invalid={invalid ? true : undefined}
+        aria-describedby={describedBy}
         autoComplete="off"
         spellCheck={false}
-        className="h-8 pr-9 font-mono text-xs shadow-none"
+        className={cn("h-8 pr-9 font-mono text-xs shadow-none", invalid && "border-destructive")}
         onCommit={(next) => {
           if (redacted && configured && next.trim() === "") return;
           onCommit(next);
@@ -429,7 +447,7 @@ export function SectionTitle(props: {
   const { title, badge, actions, className } = props;
   return (
     <div className={cn("flex min-h-7 flex-wrap items-center gap-2", className)}>
-      <span className="text-[13px] font-semibold tracking-tight text-foreground/90">{title}</span>
+      <h3 className="text-[13px] font-semibold tracking-tight text-foreground/90">{title}</h3>
       {badge}
       {actions ? (
         <span className="ml-auto flex flex-wrap items-center justify-end gap-1">{actions}</span>
