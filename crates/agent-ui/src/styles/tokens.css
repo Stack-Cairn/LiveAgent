@@ -1,6 +1,6 @@
 /* Shared style values. Typography uses Tailwind rem scales; other values retain existing units.
  * Standard py-*, px-*, gap-*, w-* and h-* utilities use --spacing.
- * See docs/ui-refactor/ui-style-variables.md for temporary migration notes. */
+ * Usage rules and token vocabulary: see DESIGN.md at the repository root. */
 
 @theme {
   --spacing: 0.25rem;

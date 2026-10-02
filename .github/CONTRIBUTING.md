@@ -17,6 +17,7 @@ Run the checks for the modules you touched. The CI definition in [`.github/workf
 
 ## Code requirements
 
+- **Follow DESIGN.md for UI work**: [DESIGN.md](../DESIGN.md) is the single source for design rules, tokens, shared components and frontend conventions across the GUI, Gateway WebUI and `agent-ui`.
 - **Stay focused**: one PR does one thing. No unrelated refactors or reformatting.
 - **Keep comments and docs in sync**: match the comment language of the surrounding code; update affected comments and docs when you change code — stale comments are worse than none.
 - **Never hand-edit generated code**: proto-generated Go code, WebUI build output, etc. must be regenerated via their commands (CI verifies they are in sync).
