@@ -12,6 +12,7 @@ fn service() -> (NotificationService, Calls) {
         labels: RwLock::new(HashMap::new()),
         last_sent: Mutex::new(HashMap::new()),
         disabled_by_env: false,
+        native: AtomicBool::new(false),
     };
     let calls = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&calls);
@@ -191,4 +192,19 @@ fn notifications_system_settings_url_is_platform_specific() {
     } else {
         assert_eq!(url, Err("E:unsupported".to_string()));
     }
+}
+
+#[test]
+fn notifications_permission_denied_is_reported_but_not_an_error() {
+    let (service, _) = service();
+    service.set_sender(Arc::new(|_: &str, _: &str| {
+        Err(PERMISSION_DENIED.to_string())
+    }));
+    let outcome = service.notify_with(
+        &NotificationPreferences::default(),
+        0,
+        Notice::new(NotificationKind::PlanningReminder, "t", "b"),
+    );
+    assert_eq!(outcome, Ok(NotifyOutcome::PermissionDenied));
+    assert_eq!(service.permission(), PermissionState::Unknown);
 }

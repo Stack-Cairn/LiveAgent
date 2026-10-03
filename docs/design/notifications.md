@@ -6,8 +6,8 @@
 | --- | --- |
 | 历史记录、未读 | 操作系统通知中心 |
 | 免打扰 | 系统专注模式 / 勿扰（macOS、Windows、Linux 桌面环境） |
-| 点击回到应用 | 系统激活应用；Windows 再次启动的 exe 由单实例插件转发到已运行实例 |
-| 投递 | `tauri-plugin-notification` |
+| 点击回到应用 | macOS 由通知委托调出主窗口；Windows 再次启动的 exe 由单实例插件转发到已运行实例 |
+| 投递与权限 | macOS（从 .app 运行）：`UNUserNotificationCenter`；其它平台与 `tauri dev`：`tauri-plugin-notification` |
 | 类别开关 | 系统设置 `notifications` 键（与 `defaultTimeZone` 同一套存储与同步） |
 | 本地化文案 | 前端按界面语言经 `notifications_set_labels` 推送（后端没有界面语言） |
 
@@ -19,7 +19,16 @@
 - 类别与默认值：日程提醒开、定时任务失败（含超时）开、定时任务成功关、Agent 消息开；测试通知不受开关影响。
 - 节流只用内存时间戳：定时任务按「任务 + 结果」5 分钟一条，Agent `Notify` 30 秒一条。节流只在投递成功后开始计时。
 - `LIVEAGENT_DISABLE_NOTIFICATIONS=1` 时不调用插件（测试 / 自动化环境）。
-- 命令：`notifications_set_labels`、`notifications_test`、`notifications_notify`（Agent 工具）、`notifications_open_settings`（macOS 定位到本应用，Windows 打开通知总页，Linux 返回 `E:unsupported`）。
+- 命令：`notifications_set_labels`、`notifications_test`、`notifications_notify`（Agent 工具）、`notifications_permission` / `notifications_request_permission`、`notifications_open_settings`（macOS 定位到本应用，Windows 打开通知总页，Linux 返回 `E:unsupported`）。投递与权限命令会等待系统回调，在后台线程执行。
+
+### macOS 原生通道（`services/notifications/macos.rs`）
+
+插件在 macOS 上走已弃用的 `NSUserNotificationCenter`：从不请求授权，应用不会出现在「系统设置 → 通知」中，也读不到真实权限。从 .app 运行时改用 `UNUserNotificationCenter`：
+
+- 首次发送（或设置页「允许通知」）时请求授权；被拒绝返回 `permissionDenied`，计为已处理而不重试。
+- 委托 `willPresentNotification` 返回 banner + list + sound，应用在前台时也显示横幅；`didReceiveNotificationResponse` 调出主窗口。
+- `tauri dev` 的裸二进制没有 bundle（`currentNotificationCenter` 会抛异常），此时回退插件，并以「终端」身份发送。
+- 系统只给签名标识与 bundle id 一致、Info.plist 已绑定的 .app 授权（否则 `UNErrorDomain error 1`）。`tauri.macos.conf.json` 设 `signingIdentity: "-"`，本地 `tauri build` 自动做临时签名；发版流程以 `APPLE_SIGNING_IDENTITY` 覆盖为开发者证书。
 
 ## 接入
 
@@ -33,6 +42,6 @@
 
 ## 已知限制
 
-- `tauri-plugin-notification` 在桌面端把真正的发送放进后台任务并丢弃结果：系统层面未展示（用户关闭了通知、Windows 绿色版未注册应用标识、Linux 没有通知守护进程）时仍返回成功，权限状态也无法读取。设置页因此提供测试通知与系统设置入口。
-- macOS 开发构建（`tauri dev`）以「终端」身份发送；打包后的 .app 以本应用身份发送。
-- 需要通知上的按钮、点击后跳到具体日程 / 运行，或真实权限状态时，再按平台换成原生实现（macOS `UNUserNotificationCenter`、Windows toast 激活回调、Linux D-Bus action）。
+- Windows / Linux 仍用插件：插件把真正的发送放进后台任务并丢弃结果，系统层面未展示（Windows 绿色版未注册应用标识、Linux 没有通知守护进程）时仍返回成功，也读不到权限。设置页因此提供测试通知与系统设置入口。
+- 开发实例（`tauri dev`）与已安装的正式版默认共用 `~/.liveagent/config.sqlite`，两边的日程 worker 都会领取提醒；被开发实例领走的提醒以「终端」身份发出。同时运行时请给开发实例设置 `LIVEAGENT_CONFIG_DIR`。
+- 通知上的按钮（稍后提醒等）、点击后跳到具体日程 / 运行尚未实现；需要时可在 macOS 委托与 Windows toast 激活回调里扩展。

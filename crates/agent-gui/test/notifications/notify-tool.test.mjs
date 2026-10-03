@@ -36,6 +36,7 @@ test("Notify explains every outcome to the model", async () => {
     ["disabled", /turned off/],
     ["throttled", /30 seconds/],
     ["disabledByEnv", /disabled in this environment/],
+    ["permissionDenied", /turned off in the system settings/],
   ]) {
     const { module } = harness(() => outcome);
     const result = await module.createNotifyTools().executeToolCall(call({ title: "Done" }));

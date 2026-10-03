@@ -7,7 +7,7 @@ export const NOTIFY_TOOL_NAME = "Notify";
 export const NOTIFY_TITLE_MAX_CHARS = 80;
 export const NOTIFY_BODY_MAX_CHARS = 300;
 
-type NotifyOutcome = "sent" | "disabled" | "throttled" | "disabledByEnv";
+type NotifyOutcome = "sent" | "disabled" | "throttled" | "disabledByEnv" | "permissionDenied";
 
 const notifyTool: Tool = {
   name: NOTIFY_TOOL_NAME,
@@ -38,6 +38,8 @@ export function describeNotifyOutcome(outcome: NotifyOutcome) {
       return "Not sent: the user turned off Agent notifications.";
     case "throttled":
       return "Not sent: another Agent notification was sent less than 30 seconds ago.";
+    case "permissionDenied":
+      return "Not sent: notifications for LiveAgent are turned off in the system settings.";
     default:
       return "Not sent: system notifications are disabled in this environment.";
   }

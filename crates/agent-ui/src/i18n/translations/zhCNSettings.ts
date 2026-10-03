@@ -1398,6 +1398,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.notifications.agentDesc": "Agent 通过 Notify 工具发送的提醒",
   "settings.notifications.system": "系统通知",
   "settings.notifications.check": "检查系统通知",
+  "settings.notifications.permissionGranted":
+    "系统已允许 LiveAgent 发送通知。横幅样式与声音可在系统设置中调整。",
+  "settings.notifications.permissionDenied":
+    "系统已关闭 LiveAgent 的通知，请在系统设置中允许后再试。",
+  "settings.notifications.permissionNotDetermined":
+    "尚未授权。点击「允许通知」或发送测试通知时，系统会询问是否允许。",
+  "settings.notifications.requestPermission": "允许通知",
   "settings.notifications.systemDesc": "没有收到通知时，检查系统是否允许 LiveAgent 发送通知",
   "settings.notifications.test": "发送测试通知",
   "settings.notifications.testSent":

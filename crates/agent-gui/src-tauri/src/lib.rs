@@ -210,6 +210,8 @@ macro_rules! app_invoke_handler {
             commands::notifications::notifications_set_labels,
             commands::notifications::notifications_test,
             commands::notifications::notifications_notify,
+            commands::notifications::notifications_permission,
+            commands::notifications::notifications_request_permission,
             commands::notifications::notifications_open_settings,
             commands::planning::planning_subscription,
             commands::planning::planning_subscription_due,
@@ -997,7 +999,13 @@ pub fn run() {
                     scheduler: Arc::downgrade(&automation_scheduler),
                 });
                 Arc::clone(&automation_scheduler).start();
-                notification_service.attach(app.handle().clone());
+                // 点击系统通知（macOS 原生通道支持回调）时调出主窗口。
+                let activate_handle = app.handle().clone();
+                notification_service.attach(app.handle().clone(), move || {
+                    if let Err(error) = show_main_window(&activate_handle) {
+                        eprintln!("failed to show LiveAgent window from notification: {error}");
+                    }
+                });
                 services::planning::start(
                     app.handle().clone(),
                     Arc::clone(&planning_store),

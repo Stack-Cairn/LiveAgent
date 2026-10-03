@@ -1470,6 +1470,13 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.notifications.agentDesc": "Sent by the Agent with the Notify tool",
   "settings.notifications.system": "System notifications",
   "settings.notifications.check": "Check system notifications",
+  "settings.notifications.permissionGranted":
+    "LiveAgent is allowed to send notifications. Adjust the banner style and sound in system settings.",
+  "settings.notifications.permissionDenied":
+    "Notifications for LiveAgent are turned off in system settings. Allow them there and try again.",
+  "settings.notifications.permissionNotDetermined":
+    "Not authorized yet. The system will ask when you click Allow notifications or send a test notification.",
+  "settings.notifications.requestPermission": "Allow notifications",
   "settings.notifications.systemDesc":
     "If nothing shows up, check that the system allows LiveAgent to send notifications",
   "settings.notifications.test": "Send test notification",

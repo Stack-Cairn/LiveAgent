@@ -3,11 +3,19 @@
 //! 日程提醒、定时任务结果与 Agent `Notify` 都经 [`NotificationService::notify`]：按设置里的
 //! 类别开关与节流决定是否调用系统通知。历史记录、免打扰与点击回到应用交给操作系统
 //! （通知中心、专注模式 / 勿扰、激活应用），这里不重复实现。
+//!
+//! 投递方式：macOS 从 .app 运行时用 `UNUserNotificationCenter`（见 `macos.rs`）；
+//! 其它平台与 `tauri dev` 用 tauri-plugin-notification。
 
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(test)]
 mod tests;
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+#[cfg(target_os = "macos")]
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, RwLock};
 
 use serde::{Deserialize, Serialize};
@@ -118,7 +126,22 @@ pub enum NotifyOutcome {
     Throttled,
     /// `LIVEAGENT_DISABLE_NOTIFICATIONS=1`：测试 / 自动化环境不弹。
     DisabledByEnv,
+    /// 用户在系统设置里拒绝了 LiveAgent 的通知（重试也不会成功，视为已处理）。
+    PermissionDenied,
 }
+
+/// 系统通知权限。只有 macOS 原生通道能读到真实状态，其余为 `Unknown`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PermissionState {
+    Granted,
+    Denied,
+    NotDetermined,
+    Unknown,
+}
+
+/// 系统通知通道拒绝投递（未授权）时返回的错误码。
+pub const PERMISSION_DENIED: &str = "E:permission_denied";
 
 type Sender = dyn Fn(&str, &str) -> Result<(), String> + Send + Sync;
 
@@ -127,6 +150,9 @@ pub struct NotificationService {
     labels: RwLock<HashMap<String, String>>,
     last_sent: Mutex<HashMap<String, i64>>,
     disabled_by_env: bool,
+    /// 是否走 macOS 原生通道（能读写真实权限）。
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    native: AtomicBool,
 }
 
 impl Default for NotificationService {
@@ -142,11 +168,21 @@ impl NotificationService {
             labels: RwLock::new(HashMap::new()),
             last_sent: Mutex::new(HashMap::new()),
             disabled_by_env: std::env::var("LIVEAGENT_DISABLE_NOTIFICATIONS").as_deref() == Ok("1"),
+            native: AtomicBool::new(false),
         }
     }
 
-    /// 接入桌面：经 tauri-plugin-notification 投递。
-    pub fn attach(&self, app: tauri::AppHandle) {
+    /// 接入桌面。`on_activate` 在用户点击通知时调用（调出主窗口）。macOS 从 .app 运行时
+    /// 用原生通道；否则经 tauri-plugin-notification 投递（插件没有点击回调）。
+    pub fn attach(&self, app: tauri::AppHandle, on_activate: impl Fn() + Send + Sync + 'static) {
+        #[cfg(target_os = "macos")]
+        if macos::available() {
+            macos::install(Box::new(on_activate));
+            self.native.store(true, Ordering::SeqCst);
+            self.set_sender(Arc::new(macos::show));
+            return;
+        }
+        let _ = on_activate;
         self.set_sender(Arc::new(move |title: &str, body: &str| {
             use tauri_plugin_notification::NotificationExt;
             app.notification()
@@ -156,6 +192,27 @@ impl NotificationService {
                 .show()
                 .map_err(|error| error.to_string())
         }));
+    }
+
+    /// 系统通知权限（阻塞查询，调用方放在后台线程）。
+    pub fn permission(&self) -> PermissionState {
+        #[cfg(target_os = "macos")]
+        if self.native.load(Ordering::SeqCst) {
+            return match macos::permission() {
+                Ok(permission) => permission.into(),
+                Err(_) => PermissionState::Unknown,
+            };
+        }
+        PermissionState::Unknown
+    }
+
+    /// 请求系统通知权限（macOS 首次会弹出系统授权对话框；阻塞到用户作出选择）。
+    pub fn request_permission(&self) -> Result<PermissionState, String> {
+        #[cfg(target_os = "macos")]
+        if self.native.load(Ordering::SeqCst) {
+            return macos::request_permission().map(Into::into);
+        }
+        Ok(PermissionState::Unknown)
     }
 
     pub fn set_sender(&self, sender: Arc<Sender>) {
@@ -229,8 +286,13 @@ impl NotificationService {
                 .ok()
                 .and_then(|slot| slot.clone())
                 .ok_or("E:unavailable")?;
-            sender(&title, &body)?;
-            NotifyOutcome::Sent
+            match sender(&title, &body) {
+                Ok(()) => NotifyOutcome::Sent,
+                Err(error) if error == PERMISSION_DENIED => {
+                    return Ok(NotifyOutcome::PermissionDenied)
+                }
+                Err(error) => return Err(error),
+            }
         };
         if let Some((key, _)) = notice.throttle {
             if let Ok(mut sent) = self.last_sent.lock() {
@@ -279,5 +341,16 @@ pub fn system_settings_url(identifier: &str) -> Result<String, String> {
         Ok("ms-settings:notifications".into())
     } else {
         Err("E:unsupported".into())
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl From<macos::Permission> for PermissionState {
+    fn from(permission: macos::Permission) -> Self {
+        match permission {
+            macos::Permission::Granted => Self::Granted,
+            macos::Permission::Denied => Self::Denied,
+            macos::Permission::NotDetermined => Self::NotDetermined,
+        }
     }
 }
