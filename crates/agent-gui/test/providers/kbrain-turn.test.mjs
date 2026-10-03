@@ -288,3 +288,53 @@ test("only explicitly edit-pending users resume a persisted turn; ordinary repea
     assert.equal(calls.some(({ url, init }) => url.pathname === "/v1/sessions" && init.method === "POST"), false);
   }
 });
+
+test("client tool requests run the desktop executor once and post the result back", async () => {
+  storage.clear();
+  const calls = [];
+  const executed = [];
+  let posted;
+  const postedOnce = new Promise((resolve) => { posted = resolve; });
+  const request = { call_id: "call-1", tool_call_id: "browser-call", run_id: "run-1", tool: "Browser", arguments: { action: "navigate", url: "https://example.com" }, deadline_at: Date.now() + 60_000 };
+  const base = makeFetch({ calls, streams: [() => new ReadableStream({
+    async start(controller) {
+      const encode = (text) => controller.enqueue(new TextEncoder().encode(text));
+      // The replayed request (same call_id) must not run the action a second time.
+      encode(event(2, "client_tool.requested", request) + event(3, "client_tool.requested", request));
+      await postedOnce;
+      encode(event(4, "client_tool.resolved", { call_id: "call-1", run_id: "run-1", tool: "Browser", text: "Page: Example Domain" }) + event(5, "assistant.text.delta", { text: "Opened it." }) + event(6, "run.completed"));
+      controller.close();
+    },
+  })] });
+  const fetch = async (url, init = {}) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname.includes("/client-tools/")) {
+      calls.push({ url: parsed, init });
+      posted();
+      return json({ ok: true });
+    }
+    return base(url, init);
+  };
+  const result = await runKBrainTurn({
+    ...baseParams,
+    fetch,
+    options: { mode: "agent", client_tools: [{ name: "Browser", description: "Drive the browser.", parameters: { type: "object" } }] },
+    onClientToolRequest: async (incoming) => {
+      executed.push(incoming);
+      return { text: "Page: Example Domain", images: [{ mime_type: "image/png", data: "AA==" }] };
+    },
+  });
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+  assert.equal(executed.length, 1);
+  assert.deepEqual(executed[0].arguments, request.arguments);
+  const runCall = calls.find((call) => call.url.pathname.endsWith("/runs"));
+  assert.equal(JSON.parse(runCall.init.body).options.client_tools[0].name, "Browser");
+  const post = calls.find((call) => call.url.pathname.includes("/client-tools/"));
+  assert.equal(post.url.pathname, "/v1/sessions/backend-session-1/client-tools/call-1");
+  assert.deepEqual(JSON.parse(post.init.body), {
+    conversation_id: "backend-session-1",
+    run_id: "run-1",
+    text: "Page: Example Domain",
+    images: [{ mime_type: "image/png", data: "AA==" }],
+  });
+});

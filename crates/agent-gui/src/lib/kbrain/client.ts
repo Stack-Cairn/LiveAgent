@@ -3,6 +3,7 @@ import {
   KBRAIN_PROTOCOL_VERSION,
   type KBrainBranchRequest,
   type KBrainClientOptions,
+  type KBrainClientToolResult,
   type KBrainCreateSessionRequest,
   type KBrainEditRequest,
   type KBrainEvent,
@@ -597,6 +598,21 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     );
   }
 
+  async function resolveClientTool(
+    conversationId: string,
+    callId: string,
+    runId: string,
+    result: KBrainClientToolResult,
+  ): Promise<void> {
+    await request<unknown>(
+      `/v1/sessions/${encodeURIComponent(conversationId)}/client-tools/${encodeURIComponent(callId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ conversation_id: conversationId, run_id: runId, ...result }),
+      },
+    );
+  }
+
   async function resolvePermission(
     conversationId: string,
     permissionId: string,
@@ -712,6 +728,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     closeSession,
     resolvePermission,
     resolveQuestion,
+    resolveClientTool,
     getHistory,
     listCheckpoints,
     checkpointPreview,

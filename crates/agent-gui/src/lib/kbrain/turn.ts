@@ -13,6 +13,8 @@ import { getKBrainSessionId, setKBrainSessionId } from "./mapping";
 import { questionResultDetails } from "./questions";
 import { getConfiguredKBrainConnection } from "./runtimeConnection";
 import type {
+  KBrainClientToolRequest,
+  KBrainClientToolResult,
   KBrainContentBlock,
   KBrainEvent,
   KBrainHostedSearch,
@@ -144,6 +146,11 @@ export type KBrainTurnParams = {
     request: KBrainQuestionRequest,
     signal?: AbortSignal,
   ) => Promise<KBrainQuestionAnswer[]>;
+  /** Executes a desktop tool K-brain delegated to this client (see options.client_tools). */
+  onClientToolRequest?: (
+    request: KBrainClientToolRequest,
+    signal?: AbortSignal,
+  ) => Promise<KBrainClientToolResult>;
   onPermissionRequest?: (
     request: {
       permission_id: string;
@@ -417,12 +424,17 @@ export async function runKBrainTurn(params: KBrainTurnParams): Promise<Assistant
   let permissionFailure: Error | undefined;
   const pendingPermissions = new Set<AbortController>();
   const pendingQuestions = new Map<string, AbortController>();
+  const pendingClientTools = new Map<string, AbortController>();
+  // Never cleared: replayed events after a reconnect must not run the same action twice.
+  const handledClientTools = new Set<string>();
   const streamAbortController = new AbortController();
   const cancelPendingPermissions = () => {
     for (const controller of pendingPermissions) controller.abort();
     pendingPermissions.clear();
     for (const controller of pendingQuestions.values()) controller.abort();
     pendingQuestions.clear();
+    for (const controller of pendingClientTools.values()) controller.abort();
+    pendingClientTools.clear();
   };
   const abortStream = () => streamAbortController.abort();
   params.signal.addEventListener("abort", abortStream, { once: true });
@@ -575,6 +587,50 @@ export async function runKBrainTurn(params: KBrainTurnParams): Promise<Assistant
             );
         }
         params.onStatus?.(null);
+        break;
+      }
+      case "client_tool.requested": {
+        const request = eventPayload<KBrainClientToolRequest>(event);
+        if (!request?.call_id || request.run_id !== accepted.run_id) break;
+        if (handledClientTools.has(request.call_id)) break;
+        handledClientTools.add(request.call_id);
+        const controller = new AbortController();
+        pendingClientTools.set(request.call_id, controller);
+        const execute = params.onClientToolRequest;
+        void Promise.resolve()
+          .then((): Promise<KBrainClientToolResult> | KBrainClientToolResult =>
+            execute
+              ? execute(request, controller.signal)
+              : { text: `${request.tool} is not available in this client.`, is_error: true },
+          )
+          .catch(
+            (error: unknown): KBrainClientToolResult => ({
+              text: `${request.tool} failed: ${error instanceof Error ? error.message : String(error)}`,
+              is_error: true,
+            }),
+          )
+          .then((result) => {
+            if (controller.signal.aborted) return;
+            return client.resolveClientTool(
+              kbrainSessionId,
+              request.call_id,
+              accepted.run_id,
+              result,
+            );
+          })
+          // A late post (call already settled by timeout or cancel) gets 409; K-brain has
+          // already handed the model a result, so there is nothing left to do here.
+          .catch(() => undefined)
+          .finally(() => pendingClientTools.delete(request.call_id));
+        break;
+      }
+      case "client_tool.resolved": {
+        const resolution = eventPayload<{ call_id?: string }>(event);
+        if (resolution?.call_id) {
+          handledClientTools.add(resolution.call_id);
+          pendingClientTools.get(resolution.call_id)?.abort();
+          pendingClientTools.delete(resolution.call_id);
+        }
         break;
       }
       case "permission.requested": {

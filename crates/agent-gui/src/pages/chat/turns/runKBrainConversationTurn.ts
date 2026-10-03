@@ -15,11 +15,15 @@ import { getKBrainHistoryWindow } from "../../../lib/kbrain/history";
 import { getConfiguredKBrainConnection } from "../../../lib/kbrain/runtimeConnection";
 import { runKBrainTurn } from "../../../lib/kbrain/turn";
 import type {
+  KBrainClientToolDefinition,
+  KBrainClientToolRequest,
+  KBrainClientToolResult,
   KBrainQuestionAnswer,
   KBrainQuestionRequest,
   KBrainRunOptions,
 } from "../../../lib/kbrain/types";
 import { requestBackendQuestion } from "../../../lib/tools/askUserQuestionTools";
+import { createBrowserTools } from "../../../lib/tools/browserTools";
 import { createExitPlanModeTools } from "../../../lib/tools/planModeTools";
 import { requestToolApproval } from "../../../lib/tools/toolApproval";
 import type { RunAgentConversationTurnParams } from "./runAgentConversationTurn";
@@ -27,7 +31,53 @@ import type { RunTextConversationTurnParams } from "./runTextConversationTurn";
 
 type Params = RunAgentConversationTurnParams | RunTextConversationTurnParams;
 
-function canonicalRunOptions(params: Params): KBrainRunOptions {
+// Desktop-only tools K-brain cannot run itself. They are declared per run as client tools;
+// K-brain offers them to the model and hands each call back through client_tool.requested.
+function createDesktopClientTools() {
+  return createBrowserTools({});
+}
+
+function clientToolDefinitions(
+  bundle: ReturnType<typeof createDesktopClientTools>,
+): KBrainClientToolDefinition[] {
+  return bundle.tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters as unknown as Record<string, unknown>,
+  }));
+}
+
+async function executeDesktopClientTool(
+  bundle: ReturnType<typeof createDesktopClientTools>,
+  request: KBrainClientToolRequest,
+  signal?: AbortSignal,
+): Promise<KBrainClientToolResult> {
+  const result = await bundle.executeToolCall(
+    {
+      type: "toolCall",
+      id: request.tool_call_id,
+      name: request.tool,
+      arguments: request.arguments,
+    },
+    signal,
+  );
+  const text: string[] = [];
+  const images: NonNullable<KBrainClientToolResult["images"]> = [];
+  for (const part of result.content) {
+    if (part.type === "text") text.push(part.text);
+    else if (part.type === "image") images.push({ mime_type: part.mimeType, data: part.data });
+  }
+  return {
+    text: text.join("\n"),
+    ...(images.length ? { images } : {}),
+    ...(result.isError ? { is_error: true } : {}),
+  };
+}
+
+function canonicalRunOptions(
+  params: Params,
+  clientTools: KBrainClientToolDefinition[] = [],
+): KBrainRunOptions {
   const agentMode = "effectiveWorkdir" in params;
   const roots = [
     {
@@ -58,6 +108,7 @@ function canonicalRunOptions(params: Params): KBrainRunOptions {
     approval_policy: safety === "auto" ? "auto" : "ask",
     ...(roots.length ? { workspace_roots: roots } : {}),
     ...(Object.keys(policies).length ? { tools: { policies } } : {}),
+    ...(agentMode && clientTools.length ? { client_tools: clientTools } : {}),
     ...(agentMode && params.planModeEnabled !== undefined
       ? { plan_mode_enabled: params.planModeEnabled }
       : {}),
@@ -154,6 +205,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   hookLifecycle.startTurn(round);
   try {
     const runtimeConnection = getConfiguredKBrainConnection();
+    const desktopClientTools = createDesktopClientTools();
     const assistant = await runKBrainTurn({
       conversationId: params.conversationId,
       sessionId: params.sessionId,
@@ -167,7 +219,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       },
       prompt,
       context,
-      options: canonicalRunOptions(params),
+      options: canonicalRunOptions(params, clientToolDefinitions(desktopClientTools)),
       signal: cancellation.userStop.signal,
       hook_policy: "backend",
       hook_scope_id: params.conversationId,
@@ -209,6 +261,8 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           ...(answer.custom ? { custom: true } : {}),
         }));
       },
+      onClientToolRequest: (request, signal) =>
+        executeDesktopClientTool(desktopClientTools, request, signal),
       onPermissionRequest: async (request) => {
         const settlement = await requestToolApproval({
           toolCallId: request.permission_id,

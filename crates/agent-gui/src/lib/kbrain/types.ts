@@ -267,6 +267,30 @@ export type KBrainRunOptions = {
   workspace_roots?: Array<{ path: string; access: "read" | "write" }>;
   tools?: { policies?: Record<string, "ask" | "allow" | "deny"> };
   plan_mode_enabled?: boolean;
+  /** Desktop-executed tools offered to the model for this run (e.g. Browser). */
+  client_tools?: KBrainClientToolDefinition[];
+};
+
+export type KBrainClientToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+};
+
+/** Payload of the client_tool.requested event. */
+export type KBrainClientToolRequest = {
+  call_id: string;
+  tool_call_id: string;
+  run_id: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  deadline_at: number;
+};
+
+export type KBrainClientToolResult = {
+  text: string;
+  images?: Array<{ mime_type: string; data: string }>;
+  is_error?: boolean;
 };
 
 export type KBrainPromptRequest = {
