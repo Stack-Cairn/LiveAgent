@@ -61,6 +61,8 @@ type McpRuntimeTestResponse = {
   tools: McpDiagnosticToolInfo[];
   error?: string | null;
   stderrTail?: string | null;
+  /** 实际使用的 MCP 协议版本：modern（如 2026-07-28）或 legacy 握手协商结果。 */
+  protocolVersion?: string | null;
 };
 
 type McpStopServerResponse = {
