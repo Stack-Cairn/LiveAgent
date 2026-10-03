@@ -233,30 +233,6 @@ export function buildErrorAssistantMessage(params: {
   };
 }
 
-export function buildPartialAssistantMessage(params: {
-  model: {
-    api: AssistantMessage["api"];
-    provider: AssistantMessage["provider"];
-    id: string;
-  };
-  text: string;
-  timestamp?: number;
-  stopReason?: AssistantMessage["stopReason"];
-}): AssistantMessage | null {
-  const content = params.text.trim();
-  if (!content) return null;
-  return {
-    role: "assistant",
-    content: [{ type: "text", text: content }],
-    api: params.model.api,
-    provider: params.model.provider,
-    model: params.model.id,
-    usage: createEmptyAssistantUsage(),
-    stopReason: params.stopReason ?? "aborted",
-    timestamp: params.timestamp ?? Date.now(),
-  };
-}
-
 export function appendSystemPrompt(base: string | undefined, suffix: string) {
   const head = (base || "").trim();
   const tail = (suffix || "").trim();

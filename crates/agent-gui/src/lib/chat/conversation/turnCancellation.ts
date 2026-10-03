@@ -12,8 +12,8 @@ export type TurnCancellation = {
 
 /**
  * 两级取消：userStop 是轮次级信号；每个 LLM 请求（主请求、压缩摘要、标题任务）
- * 各自 deriveScope() 拿子 controller。局部 abort（如 mid-stream 压缩打断主请求）
- * 只影响自己的 scope；userStop 触发时链式传导到所有存活 scope。
+ * 各自 deriveScope() 拿子 controller。局部 abort 只影响自己的 scope；userStop
+ * 触发时链式传导到所有存活 scope。
  * 不用 AbortSignal.any：避免对 Tauri webview WebKit 版本的假设。
  */
 // 把外部给定的 AbortSignal（如子代理的运行信号）桥接成 userStop。

@@ -15,7 +15,7 @@ import {
 import { resolveMaxTokens } from "../runtime/common";
 import { wrapInlineThinkTagStream } from "../runtime/inlineThinkTagStream";
 import { rejectEmptyOpenAICompletionsResponse } from "../runtime/openAICompletionsStream";
-import { withStreamRetry } from "../runtime/streamRetry";
+import { withAttemptSignal, withStreamRetry } from "../runtime/streamRetry";
 import {
   clampOpenAIReasoningEffort,
   resolveAnthropicThinkingRuntime,
@@ -31,6 +31,8 @@ import type { LlmAdapter } from "./types";
 // 各分支为 streamByApi.ts 原实现的原样搬移（PR-1 行为等价不变量）：分支内的
 // withStreamRetry 包装位置、toolChoice 映射、thinking runtime 解析、注释
 // 一并保留，不做任何重写。判定基准是 PR-0 golden 快照零修改通过。
+// 传输层 P0 起工厂接收 attemptSignal（经 withAttemptSignal 注入）；未启用
+// watchdog 时它为 undefined，请求选项逐字不变。
 //
 // 唯一的入口侧处理：对 openai-completions / openai-responses / google 三协议，
 // 纯文本模型（model.input 不含 "image"）的工具结果图片在进 pi-ai 前替换为
@@ -91,11 +93,11 @@ function streamAnthropicMessages(model: Model<Api>, context: Context, options: S
       ? "auto"
       : requestedToolChoice;
   return withStreamRetry(
-    () => {
+    (attemptSignal) => {
       return streamAnthropic(model as Model<"anthropic-messages">, context, {
         temperature: options.temperature,
         maxTokens: anthropicThinking.maxTokens,
-        signal: options.signal,
+        signal: attemptSignal ?? options.signal,
         apiKey: options.apiKey,
         cacheRetention: options.cacheRetention,
         sessionId: options.sessionId,
@@ -126,10 +128,14 @@ function streamOpenAICompletionsApi(model: Model<Api>, context: Context, options
     toolChoice: context.tools?.length ? mapToolChoiceToOpenAI(options.toolChoice) : undefined,
   };
   return withStreamRetry(
-    () => {
+    (attemptSignal) => {
       return wrapInlineThinkTagStream(
         rejectEmptyOpenAICompletionsResponse(
-          streamOpenAICompletions(model as Model<"openai-completions">, context, openAIOptions),
+          streamOpenAICompletions(
+            model as Model<"openai-completions">,
+            context,
+            withAttemptSignal(openAIOptions, attemptSignal),
+          ),
         ),
       );
     },
@@ -143,9 +149,13 @@ function streamOpenAIResponsesApi(model: Model<Api>, context: Context, options: 
     reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
   };
   return withStreamRetry(
-    () =>
+    (attemptSignal) =>
       wrapInlineThinkTagStream(
-        streamOpenAIResponses(model as Model<"openai-responses">, context, openAIOptions),
+        streamOpenAIResponses(
+          model as Model<"openai-responses">,
+          context,
+          withAttemptSignal(openAIOptions, attemptSignal),
+        ),
       ),
     {
       signal: options.signal,
@@ -168,7 +178,12 @@ function streamGoogleGenerativeAi(model: Model<Api>, context: Context, options: 
     toolChoice: mapToolChoiceToGoogle(options.toolChoice) ?? "none",
   };
   return withStreamRetry(
-    () => streamGoogle(model as Model<"google-generative-ai">, context, googleOptions),
+    (attemptSignal) =>
+      streamGoogle(
+        model as Model<"google-generative-ai">,
+        context,
+        withAttemptSignal(googleOptions, attemptSignal),
+      ),
     {
       signal: options.signal,
       ...options.streamRetry,

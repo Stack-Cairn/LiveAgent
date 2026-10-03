@@ -11,10 +11,16 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde_json::Value;
 use std::net::Ipv6Addr;
 use std::sync::{OnceLock, RwLock};
+use std::time::Duration;
 
 const SYSTEM_PROXY_TYPE_HTTP: &str = "http";
 pub const SYSTEM_PROXY_TYPE_SOCKS5: &str = "socks5";
 const NO_PROXY_DEFAULT: &str = "localhost,127.0.0.1,::1";
+const TRANSPORT_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+const TRANSPORT_TCP_KEEPALIVE: Duration = Duration::from_secs(30);
+const TRANSPORT_TCP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+const TRANSPORT_TCP_KEEPALIVE_RETRIES: u32 = 3;
+const TRANSPORT_READ_TIMEOUT: Duration = Duration::from_secs(1800);
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -227,8 +233,27 @@ fn build_proxy(config: &SystemProxyConfig) -> Result<reqwest::Proxy, String> {
         .map_err(|_| format!("应用代理地址无效：{}", config.display_target()))
 }
 
+/// async 出网 client 的传输层默认值：本地反代上游直连 client（`proxy.rs`）与
+/// 本模块产出的全部 async builder（含承载 LLM 代理流量的 `cached_client()`）共用；
+/// 调用方之后显式设置的同名选项（如 `connect_timeout`）会覆盖这里。
+/// - TCP keepalive 约 60s 判定死对端（macOS/Linux；Windows 不支持设置重试次数，
+///   固定 10 次探测，约 130s），但只探测第一跳：走应用代理时探测的是到本地回环
+///   代理（Clash/V2Ray 等）的连接，代理到上游那段断了它感知不到。
+/// - `read_timeout` 是单次读的空闲超时（读到数据即重置），作为死流兜底；
+///   reqwest 0.13 在收到响应头之前也按它计时。必须长于 LLM 流任何合法的
+///   静默阶段（首 token 前的长推理、上游排队、中转缓冲整段输出的 pro 档模型等），
+///   否则会切断正常回复并让重试重付整段推理，所以取 30 分钟。
+pub(crate) fn with_transport_defaults(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    builder
+        .connect_timeout(TRANSPORT_CONNECT_TIMEOUT)
+        .tcp_keepalive(TRANSPORT_TCP_KEEPALIVE)
+        .tcp_keepalive_interval(TRANSPORT_TCP_KEEPALIVE_INTERVAL)
+        .tcp_keepalive_retries(TRANSPORT_TCP_KEEPALIVE_RETRIES)
+        .read_timeout(TRANSPORT_READ_TIMEOUT)
+}
+
 fn async_client_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::ClientBuilder, String> {
-    let builder = reqwest::Client::builder().no_proxy();
+    let builder = with_transport_defaults(reqwest::Client::builder().no_proxy());
     match mode {
         ProxyMode::Disabled => Ok(builder),
         ProxyMode::Invalid(error) => Err(error.clone()),
@@ -281,7 +306,7 @@ fn os_proxy_fallback_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::Clien
     match mode {
         // 不调 no_proxy()：保留 reqwest 默认代理探测（OS 代理环境变量与
         // macOS/Windows 系统代理设置，system-proxy 默认特性），无系统代理即直连。
-        ProxyMode::Disabled => Ok(reqwest::Client::builder()),
+        ProxyMode::Disabled => Ok(with_transport_defaults(reqwest::Client::builder())),
         mode => async_client_builder_for_mode(mode),
     }
 }
@@ -412,6 +437,31 @@ mod tests {
         })));
         assert!(matches!(enabled, ProxyMode::Enabled(_)));
         assert!(os_proxy_fallback_builder_for_mode(&enabled).is_ok());
+    }
+
+    #[test]
+    fn transport_defaults_build_for_every_usable_mode() {
+        let modes = [
+            ProxyMode::Disabled,
+            parse_proxy_mode(Some(&json!({
+                "enabled": true, "type": "http", "host": "proxy.local", "port": 8080
+            }))),
+            parse_proxy_mode(Some(&json!({
+                "enabled": true, "type": "socks5", "host": "127.0.0.2", "port": 1080
+            }))),
+        ];
+        for mode in &modes {
+            assert!(matches!(mode, ProxyMode::Disabled | ProxyMode::Enabled(_)));
+            // 传输层默认值不得让任何可用模式（含更新链路回退 builder）建 client 失败；
+            // read_timeout 是 Debug 里唯一可观测的字段，借它确认默认值已挂上。
+            for builder in [
+                async_client_builder_for_mode(mode).expect("async builder"),
+                os_proxy_fallback_builder_for_mode(mode).expect("fallback builder"),
+            ] {
+                let client = builder.build().expect("client with transport defaults");
+                assert!(format!("{client:?}").contains("read_timeout"));
+            }
+        }
     }
 
     #[test]

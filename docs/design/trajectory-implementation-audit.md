@@ -61,7 +61,7 @@ revision so both desktop and WebUI replace their tail from SQLite.
 
 All successful, failed and aborted compactions close their trajectory interval. Abort cleanup clears
 observer token state, so a later compaction cannot inherit stale `tokensBefore/tokensAfter` values.
-Manual, pre-send, mid-stream and post-tool paths all use the controller observer.
+Manual, pre-send, overflow and post-tool paths all use the controller observer.
 
 ### Exact request prompt and CONTEXT diagnostics
 

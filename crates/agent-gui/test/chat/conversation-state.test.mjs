@@ -328,9 +328,17 @@ test("compaction advances absolute segment indexes and preserves the active visi
     if (item.kind !== "summary") assert.equal(item.isFromCompactedSegment, true);
   }
 
+  // system prompt 不再承载摘要（前缀跨压缩稳定）；摘要只经显式开启的 checkpoint bridge 进入请求。
   const requestContext = conversationState.buildRequestContext(compacted);
-  assert.match(requestContext.systemPrompt, /Compressed absolute history/);
+  assert.equal(requestContext.systemPrompt, undefined);
   assert.deepEqual(requestContext.messages, []);
+  const bridged = conversationState.buildRequestContext(compacted, {
+    includeCheckpointBridge: true,
+  });
+  assert.equal(bridged.systemPrompt, undefined);
+  assert.equal(bridged.messages.length, 1);
+  assert.equal(bridged.messages[0].role, "user");
+  assert.match(bridged.messages[0].content[0].text, /Compressed absolute history/);
 });
 
 test("partial assistant append rebuilds only the visible trailing run with absolute offsets", () => {

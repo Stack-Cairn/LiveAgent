@@ -201,7 +201,15 @@ function createBusStore(initialMessages = []) {
   };
 }
 
-function createHarness({ busMessages, compactDuringRun } = {}) {
+// 压缩后的状态：新 segment 为空（本组用例只关心续跑上下文的 systemPrompt）。
+function compactedState() {
+  return conversationState.createConversationStateFromContext({
+    systemPrompt: BASE_SYSTEM_PROMPT,
+    messages: [],
+  });
+}
+
+function createHarness({ busMessages, compactPostTool } = {}) {
   let current = conversationState.createConversationStateFromContext({
     systemPrompt: BASE_SYSTEM_PROMPT,
     messages: [],
@@ -266,20 +274,15 @@ function createHarness({ busMessages, compactDuringRun } = {}) {
       }),
       compaction: {
         noteFixedOverheadTokens() {},
-        async maybeCompactPreSend({ budgetContext }) {
-          record("pre-send", budgetContext);
+        async compact({ trigger, state, buildContext }) {
+          record(trigger === "pre-send" ? "pre-send" : "during-run", buildContext(state));
+          const compacted = trigger === "pre-send" ? null : compactPostTool?.();
+          return compacted ?? { outcome: "skipped", reason: "below-threshold" };
         },
         beginRequest(context) {
           record("request", context);
         },
         observeContextMessages: () => 0,
-        shouldProtectMidStream: () => false,
-        async compactDuringRun({ budgetContext }) {
-          record("during-run", budgetContext);
-          return compactDuringRun
-            ? compactDuringRun()
-            : { context: null, shouldDisableProtection: false };
-        },
       },
       cancellation: {
         userStop: new AbortController(),
@@ -344,6 +347,7 @@ function toolRounds(harness, { rounds = 2, beforeRound = {}, anchorOverrides = {
         toolResults: [result],
         emittedMessages: emitted,
         runtimeContext: params.context,
+        willContinue: true,
         signal: params.signal,
       });
       harness.overrides.push(override ?? null);
@@ -571,13 +575,8 @@ test("尾部只有 display-image 工具结果时不投递，下一轮补投且�
 test("run 内压缩后 bus 快照重新冻结，增量不重复投递", async () => {
   let compactionsLeft = 1;
   const harness = createHarness({
-    compactDuringRun: () =>
-      compactionsLeft-- > 0
-        ? {
-            context: { systemPrompt: BASE_SYSTEM_PROMPT, messages: [] },
-            shouldDisableProtection: false,
-          }
-        : { context: null, shouldDisableProtection: false },
+    compactPostTool: () =>
+      compactionsLeft-- > 0 ? { outcome: "compacted", state: compactedState() } : null,
   });
 
   await runWithScenario(
@@ -609,13 +608,8 @@ test("run 内压缩后 bus 快照重新冻结，增量不重复投递", async ()
 test("压缩边界重新冻结读失败时游标退回，增量下一轮补投", async () => {
   let compactionsLeft = 1;
   const harness = createHarness({
-    compactDuringRun: () =>
-      compactionsLeft-- > 0
-        ? {
-            context: { systemPrompt: BASE_SYSTEM_PROMPT, messages: [] },
-            shouldDisableProtection: false,
-          }
-        : { context: null, shouldDisableProtection: false },
+    compactPostTool: () =>
+      compactionsLeft-- > 0 ? { outcome: "compacted", state: compactedState() } : null,
   });
 
   await runWithScenario(

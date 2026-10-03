@@ -59,12 +59,12 @@ function loadTurn(streamImpl) {
         assistantMessageToText: (message) => message.content[0]?.text ?? "",
         streamAssistantMessage: streamImpl,
       },
-      [resolve("src/pages/chat/runtime/chatPageRuntime.ts")]: {
-        buildPartialAssistantMessage: () => null,
-      },
     },
   });
-  return loader.loadModule("src/pages/chat/turns/runTextConversationTurn.ts");
+  return {
+    ...loader.loadModule("src/pages/chat/turns/runTextConversationTurn.ts"),
+    overflow: loader.loadModule("src/lib/providers/runtime/overflow.ts"),
+  };
 }
 
 function recorderHarness() {
@@ -131,10 +131,8 @@ function baseParams(recorder) {
       contextUsageTokens: 11,
       noteFixedOverheadTokens() {},
       observeContextMessages: () => 14,
-      maybeCompactPreSend: async () => {},
+      compact: async () => ({ outcome: "skipped", reason: "below-threshold" }),
       beginRequest() {},
-      shouldProtectMidStream: () => false,
-      compactDuringRun: async () => ({ context: null, shouldDisableProtection: false }),
     },
     cancellation: {
       userStop: stop,
@@ -228,5 +226,41 @@ test("text mode preserves error and aborted assistant outcomes at both terminal 
       "endTurn",
       { status: expectedStatus, error: "provider exploded" },
     ]);
+  }
+});
+
+test("text mode compacts on overflow before any generic retry, and recovers at most once", async () => {
+  for (const [secondAttempt, shouldReject] of [
+    ["final", false],
+    ["overflow", true],
+  ]) {
+    const order = [];
+    let streams = 0;
+    const turn = loadTurn(async (params) => {
+      streams += 1;
+      order.push("stream");
+      params.onRequestStart?.({ context: params.context });
+      if (streams === 1 || secondAttempt === "overflow") {
+        throw new turn.overflow.AssistantResponseError(
+          "prompt is too long",
+          assistant("", "error", "prompt is too long: 210000 tokens > 200000 maximum"),
+        );
+      }
+      return assistant();
+    });
+    const params = baseParams(recorderHarness().recorder);
+    params.compaction.compact = async ({ trigger }) => {
+      order.push(`compact:${trigger}`);
+      return trigger === "overflow"
+        ? { outcome: "compacted", state: { messages: [] } }
+        : { outcome: "skipped", reason: "below-threshold" };
+    };
+
+    const run = turn.runTextConversationTurn(params);
+    if (shouldReject) await assert.rejects(run, /prompt is too long/);
+    else await run;
+
+    // 同样的输入重发必然再溢出：压缩排在通用重试之前，且每次至多恢复一次。
+    assert.deepEqual(order, ["compact:pre-send", "stream", "compact:overflow", "stream"]);
   }
 });

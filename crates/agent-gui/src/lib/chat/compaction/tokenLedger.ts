@@ -268,15 +268,6 @@ export class TokenLedger {
     return this.observedTokens + this.trailingTokens;
   }
 
-  /**
-   * pendingTokenUnits 是流式增量的分数 token 估算（调用方按 delta 用
-   * estimateTextTokenUnits 累加），避免每次判定重扫全文。
-   */
-  totalWithPendingTokens(pendingTokenUnits: number): number {
-    if (!Number.isFinite(pendingTokenUnits) || pendingTokenUnits <= 0) return this.total();
-    return this.total() + Math.ceil(pendingTokenUnits);
-  }
-
   snapshot(): TokenLedgerSnapshot {
     return {
       fixedTokens: this.fixedTokens,

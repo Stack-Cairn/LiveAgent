@@ -133,7 +133,7 @@ function normalizeFileOps(ops: FileOp[]): FileLedger {
 }
 
 // 按发生顺序收集消息里的 fs 文件操作。只看 assistant 的 toolCall block（不看 toolResult
-// 正文——仅读其 isError 以剔除失败调用；与 prune 改写 toolResult 正文正交）。
+// 正文——仅读其 isError 以剔除失败调用）。
 function collectFileOpsFromMessages(messages: Message[]): FileOp[] {
   const failedCallIds = new Set<string>();
   for (const message of messages) {

@@ -370,7 +370,7 @@ test("resume reuses the hydrated private context from the store cache", async ()
   // Cache hit: resume never needed ipc.loadRun.
   assert.deepEqual(harness.storeIpc.loadRunIds, []);
   // Pre-compaction ran against the resumed context.
-  assert.ok(harness.compactionCalls.some((call) => call.phase === "pre"));
+  assert.ok(harness.compactionCalls.some((call) => call.trigger === "pre-send"));
   // Resumed session id sticks to the first run's session.
   assert.equal(harness.runnerCalls[1].sessionId, "parent-session:subagent:historian");
 });
@@ -393,7 +393,7 @@ test("resume falls back to ipc.loadRun when the in-memory cache is cold", async 
   const texts = second.runnerCalls[0].context.messages.map(contextMessageText);
   assert.ok(texts.some((text) => /collect wisdom/.test(text)));
   assert.match(texts.at(-1), /Continue your existing delegated agent session\./);
-  assert.ok(second.compactionCalls.some((call) => call.phase === "pre"));
+  assert.ok(second.compactionCalls.some((call) => call.trigger === "pre-send"));
 });
 
 test("stored context schema version mismatch resumes with a fresh context", async () => {

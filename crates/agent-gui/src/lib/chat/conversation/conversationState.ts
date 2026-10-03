@@ -11,11 +11,8 @@ import {
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { assistantMessageToText } from "../../providers/llm";
 import type { TaskListState } from "../../tools/builtinTypes";
-import {
-  type FileLedger,
-  formatFileLedgerBlock,
-  mergeMessagesIntoLedger,
-} from "../compaction/fileLedger";
+import { attachCheckpointBridge, stripCheckpointBridges } from "../compaction/bridge";
+import { type FileLedger, mergeMessagesIntoLedger } from "../compaction/fileLedger";
 import {
   sanitizeMessagesForContinuation,
   sanitizeMessagesForModelContext,
@@ -27,11 +24,23 @@ export const INTERNAL_RESUME_MESSAGE_TEXT =
   "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.";
 const SILENT_MEMORY_EXTRACTION_FINAL_TEXTS = new Set(["记忆整理完成。", "本轮无需更新记忆。"]);
 
+// checkpoint 保留的用户原话（Codex 风格，按时间正序）。只在请求时经 bridge 渲染进
+// <user_messages>，对 Rust 的 summary_json 不透明；旧 checkpoint 缺失即视为无。
+// 存在 summary 顶层而非 summaryMeta：旧版本 summarizer payload 原样带上 summaryMeta
+// （只剔 fileLedger）且不裁剪它，降级后最多 20k token 会塞进每次压缩请求。
+export type RetainedUserMessage = {
+  id?: string;
+  timestamp: number;
+  text: string;
+  truncated?: true;
+};
+
 export type StoredSummaryMessage = {
   role: "summary";
   id: string;
   timestamp: number;
   content: string;
+  retainedUserMessages?: RetainedUserMessage[];
   summaryMeta: {
     format: "plain-text-v1";
     strategy: "cumulative-checkpoint";
@@ -54,6 +63,7 @@ export type StoredSummaryMessage = {
       summarizer?: {
         inputTokens?: number;
         outputTokens?: number;
+        cacheReadTokens?: number;
       };
     };
   };
@@ -67,6 +77,7 @@ export type CompactionCheckpointStats = {
   summarizer?: {
     inputTokens?: number;
     outputTokens?: number;
+    cacheReadTokens?: number;
   };
 };
 
@@ -515,6 +526,9 @@ function createSummaryFromAssistant(
   },
 ): StoredSummaryMessage {
   const content = assistantMessageToText(assistant).trim();
+  const retainedUserMessages = (
+    assistant as AssistantMessage & { retainedUserMessages?: RetainedUserMessage[] }
+  ).retainedUserMessages;
   const summaryId =
     (typeof assistant.responseId === "string" && assistant.responseId.trim()) ||
     `summary-${params.segmentIndex}-${assistant.timestamp ?? Date.now()}`;
@@ -524,6 +538,9 @@ function createSummaryFromAssistant(
     id: summaryId,
     timestamp: assistant.timestamp ?? Date.now(),
     content,
+    ...(Array.isArray(retainedUserMessages) && retainedUserMessages.length > 0
+      ? { retainedUserMessages }
+      : {}),
     summaryMeta: {
       format: "plain-text-v1",
       strategy: "cumulative-checkpoint",
@@ -587,30 +604,6 @@ function normalizeSegment(
     createdAt: segment.createdAt || updatedAt,
     updatedAt,
   };
-}
-
-export function appendSummaryToSystemPrompt(
-  baseSystemPrompt: string | undefined,
-  summaryContent: string | undefined,
-  fileLedger?: FileLedger,
-) {
-  if (!summaryContent?.trim()) return baseSystemPrompt;
-
-  const ledgerBlock = formatFileLedgerBlock(fileLedger);
-  const summaryBlock = [
-    "",
-    "## Previous Conversation Summary",
-    "",
-    "The following is a compressed summary of the earlier conversation. Use it to understand the context,",
-    "but do not repeat work that has already been completed.",
-    "",
-    summaryContent.trim(),
-    ...(ledgerBlock ? ["", ledgerBlock] : []),
-    "",
-  ].join("\n");
-
-  const base = (baseSystemPrompt || "").trim();
-  return base ? `${base}\n${summaryBlock}` : summaryBlock.trim();
 }
 
 function buildTimelineItemsForSegment(
@@ -1055,26 +1048,32 @@ export function createConversationStateFromContext(context: Context): Conversati
 
 export function buildRequestContext(
   state: ConversationViewState,
-  options?: { includeAbortedMessages?: boolean; includeUploadedFilesMetadata?: boolean },
+  options?: {
+    includeAbortedMessages?: boolean;
+    includeUploadedFilesMetadata?: boolean;
+    // 摘要只经 checkpoint bridge 进入请求（system prompt 不再含摘要）。显式开启：
+    // 只有发给模型的请求 / 账本 / 压缩估值才要；标题、记忆抽取、App 级 context
+    // 等旁路若带上，bridge 会被当成真实用户消息（甚至被种进新会话落库）。
+    includeCheckpointBridge?: boolean;
+  },
 ): Context {
   const activeSegment = state.segments[state.activeSegmentIndex] ?? createEmptySegment(0);
   const contextMessages = stripLegacySilentMemoryExtractionMessages(activeSegment.messages);
   const runtimeMessages = options?.includeUploadedFilesMetadata
     ? contextMessages
     : contextMessages.map(stripUploadedFilesMessageMetadata);
+  const sanitizedMessages = options?.includeAbortedMessages
+    ? sanitizeMessagesForModelContext(runtimeMessages)
+    : sanitizeMessagesForContinuation(runtimeMessages);
   const next: Context = {
-    messages: options?.includeAbortedMessages
-      ? sanitizeMessagesForModelContext(runtimeMessages)
-      : sanitizeMessagesForContinuation(runtimeMessages),
+    messages:
+      options?.includeCheckpointBridge && activeSegment.summary
+        ? attachCheckpointBridge(sanitizedMessages, activeSegment.summary)
+        : sanitizedMessages,
   };
 
-  const systemPrompt = appendSummaryToSystemPrompt(
-    state.meta.systemPrompt,
-    activeSegment.summary?.content,
-    activeSegment.summary?.summaryMeta.fileLedger,
-  );
-  if (typeof systemPrompt === "string") {
-    next.systemPrompt = systemPrompt;
+  if (typeof state.meta.systemPrompt === "string") {
+    next.systemPrompt = state.meta.systemPrompt;
   }
   if (Array.isArray(state.meta.tools)) {
     next.tools = state.meta.tools;
@@ -1099,9 +1098,11 @@ export function applyCompactionCheckpoint(
 
 export function appendMessagesToConversation(
   state: ConversationViewState,
-  incomingMessages: Message[],
+  messages: Message[],
 ): ConversationViewState {
-  if (incomingMessages.length === 0) return state;
+  if (messages.length === 0) return state;
+  // bridge 只存在于请求里：任何漏剥 bridge 的写入路径都在这里兜底，在计数之前剥掉。
+  const incomingMessages = stripCheckpointBridges(messages);
 
   const segments = state.segments.map((segment) => ({
     ...segment,

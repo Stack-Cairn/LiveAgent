@@ -1157,6 +1157,98 @@ mod tests {
     }
 
     #[test]
+    fn append_checkpoint_moves_pending_user_message_into_next_segment() {
+        // 发送前压缩：首次持久化已把待发送的用户消息写进 N；一次 append 把 N 封存为不含
+        // 它的版本，并在 N+1 里插入它。总消息数不变，一致性校验与 FTS 都必须跟着走。
+        let mut conn = open_test_db().expect("open test db");
+        let mut initial_conversation = sample_conversation();
+        initial_conversation.total_message_count = 2;
+        upsert_chat_history_header(&conn, &initial_conversation).expect("upsert initial header");
+        upsert_single_segment(
+            &conn,
+            "conv-1",
+            &ChatHistorySegmentInput {
+                segment_index: 0,
+                segment_id: "segment-0".to_string(),
+                summary_json: None,
+                messages_json: r#"[
+                  {"id":"m-user","role":"user","content":"start","timestamp":1},
+                  {"id":"m-pending","role":"user","content":"pendingmarker question","timestamp":2}
+                ]"#
+                .to_string(),
+                message_count: 2,
+                start_message_id: Some("m-user".to_string()),
+                end_message_id: Some("m-pending".to_string()),
+                created_at: 1,
+                updated_at: 2,
+            },
+        )
+        .expect("seed active segment with the pending message");
+
+        let mut checkpoint_conversation = initial_conversation;
+        checkpoint_conversation.context_meta_json =
+            r#"{"activeSegmentIndex":1,"totalSegmentCount":2,"totalMessageCount":2}"#.to_string();
+        checkpoint_conversation.active_segment_index = 1;
+        checkpoint_conversation.total_segment_count = 2;
+        checkpoint_conversation.updated_at = 3;
+        append_chat_history_segment_sync(
+            &mut conn,
+            &ChatHistoryAppendSegmentInput {
+                conversation: checkpoint_conversation,
+                previous_segment: ChatHistorySegmentInput {
+                    segment_index: 0,
+                    segment_id: "segment-0".to_string(),
+                    summary_json: None,
+                    messages_json: r#"[{"id":"m-user","role":"user","content":"start","timestamp":1}]"#
+                        .to_string(),
+                    message_count: 1,
+                    start_message_id: Some("m-user".to_string()),
+                    end_message_id: Some("m-user".to_string()),
+                    created_at: 1,
+                    updated_at: 1,
+                },
+                segment: ChatHistorySegmentInput {
+                    segment_index: 1,
+                    segment_id: "segment-1".to_string(),
+                    summary_json: Some(r#"{"role":"summary","content":"checkpoint"}"#.to_string()),
+                    messages_json: r#"[{"id":"m-pending","role":"user","content":"pendingmarker question","timestamp":2}]"#
+                        .to_string(),
+                    message_count: 1,
+                    start_message_id: Some("m-pending".to_string()),
+                    end_message_id: Some("m-pending".to_string()),
+                    created_at: 3,
+                    updated_at: 3,
+                },
+            },
+        )
+        .expect("append checkpoint that moves the pending message");
+
+        verify_chat_history_consistency(&conn, "conv-1").expect("history stays consistent");
+        let record = get_record_by_id(&conn, "conv-1").expect("load checkpointed history");
+        assert_eq!(record.active_segment_index, 1);
+        assert_eq!(record.total_message_count, 2);
+        let segments = load_segments(&conn, "conv-1").expect("load checkpointed segments");
+        assert_eq!(segments[0].message_count, 1);
+        assert!(!segments[0].messages_json.contains("m-pending"));
+        assert_eq!(segments[1].message_count, 1);
+        assert!(segments[1].messages_json.contains("m-pending"));
+
+        let filter = HistorySearchFilter {
+            since: None,
+            until: None,
+            time_mode: HistorySearchTimeMode::Message,
+        };
+        let matches = search_chat_history_fts(&conn, "pendingmarker", 8, &filter)
+            .expect("search moved message");
+        // 封存后的 N 不再留有它的索引行（段级与消息级都只在 N+1）。
+        assert!(!matches.is_empty());
+        assert!(
+            matches.iter().all(|item| item.segment_index == 1),
+            "moved message must only be indexed in the new segment: {matches:?}"
+        );
+    }
+
+    #[test]
     fn chat_history_time_overview_query_falls_back_to_time_window() {
         let conn = open_test_db().expect("open test db");
         let mut conversation = sample_conversation();

@@ -5,7 +5,12 @@ import {
   createAssistantMessageEventStream,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
-import { isExtensionRetryableError, type RetryErrorExtension } from "./streamRetry";
+import { isOverflowError } from "./overflow";
+import {
+  isExtensionRetryableError,
+  isStreamStallError,
+  type RetryErrorExtension,
+} from "./streamRetry";
 
 /**
  * Provider auto-failover runtime (cc-switch inspired).
@@ -46,6 +51,21 @@ export const MODEL_FAILOVER_BREAKER_LIMITS = {
 
 export function failoverBreakerKey(customProviderId: string, model: string) {
   return `${customProviderId}::${model}`;
+}
+
+/**
+ * Breaker identity of target 0 (the primary). Same-vendor fallbacks share the
+ * primary's providerId and model id, so this key is the only thing that tells
+ * which provider actually served a request.
+ */
+export function primaryFailoverBreakerKey(
+  providerId: string,
+  model: string,
+  primary?: { selectedModel?: { customProviderId: string; model: string } },
+) {
+  return primary?.selectedModel
+    ? failoverBreakerKey(primary.selectedModel.customProviderId, primary.selectedModel.model)
+    : failoverBreakerKey(providerId, model.trim());
 }
 
 type BreakerEntry = {
@@ -119,7 +139,8 @@ export function getFailoverBreakerSnapshot(
 /**
  * Client-request-class failures where every provider would reject the same
  * payload (cc-switch's NonRetryable bucket: 400/413/422-style semantic
- * errors). Context-window overflow belongs to compaction, not failover.
+ * errors). Context-window overflow belongs to compaction, not failover; the
+ * shared {@link isOverflowError} classifier is OR-ed in on top of this list.
  */
 const FAILOVER_INELIGIBLE_ERROR_PATTERN = new RegExp(
   [
@@ -182,14 +203,23 @@ const FAILOVER_EXTRA_ELIGIBLE_ERROR_PATTERN = new RegExp(
  * Order matters: the ineligible guard runs first so "prompt is too long"
  * style client errors never fail over even though they may contain digits
  * that look like status codes.
+ *
+ * A withStreamRetry watchdog stall is decided up front: its text embeds the
+ * configured timeout ("…for 500s…"), which the digit patterns below would
+ * otherwise classify by accident. Like `retryOnStall`'s default, a stall is
+ * not re-sent elsewhere — a slow prefill would be billed again on the next
+ * provider — and it leaves breaker health untouched.
  */
 export function isFailoverEligibleAssistantError(
   message: AssistantMessage | undefined,
   retryExtension?: RetryErrorExtension,
 ): boolean {
   if (!message) return false;
+  if (isStreamStallError(message)) return false;
   const errorMessage = (message as { errorMessage?: string }).errorMessage ?? "";
-  if (FAILOVER_INELIGIBLE_ERROR_PATTERN.test(errorMessage)) return false;
+  if (FAILOVER_INELIGIBLE_ERROR_PATTERN.test(errorMessage) || isOverflowError(message)) {
+    return false;
+  }
   if (isRetryableAssistantError(message)) return true;
   // Same LiveAgent extension as withStreamRetry: a transient relay 5xx (#608)
   // or a user-defined pattern is worth trying a different provider for — a

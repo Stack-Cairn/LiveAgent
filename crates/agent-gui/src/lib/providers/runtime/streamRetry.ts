@@ -6,6 +6,8 @@ import {
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
 import { RETRYABLE_PRESET_HTTP_STATUS_CODES } from "@liveagent/ui/lib/settings/types";
+import { createLinkedAbortSignal } from "./abortLink";
+import { isOverflowError } from "./overflow";
 
 export type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
 
@@ -114,6 +116,24 @@ export type StreamRetryConfig = {
    * to exercise the classifier without touching shared module state.
    */
   retryExtension?: RetryErrorExtension;
+  /**
+   * Transport watchdog, opt-in. Max wait from dispatch until the attempt's
+   * first committing event (text_delta / thinking_delta / toolcall_start).
+   * Non-committing events such as `start` (headers arrived) don't reset it.
+   */
+  firstEventTimeoutMs?: number;
+  /**
+   * Transport watchdog, opt-in. Max gap between any two events once the
+   * attempt has committed. Not armed before the first committing event —
+   * that phase belongs to `firstEventTimeoutMs`.
+   */
+  idleTimeoutMs?: number;
+  /**
+   * Whether a stalled attempt that never committed is retried here. Defaults
+   * to false: a deterministic silence (slow prefill, long reasoning) bills the
+   * whole request again on every retry, so callers opt in deliberately.
+   */
+  retryOnStall?: boolean;
 };
 
 export type StreamRetryOptions = StreamRetryConfig & {
@@ -136,10 +156,139 @@ function terminalMessage(event: TerminalEvent) {
   return event.type === "done" ? event.message : event.error;
 }
 
+type StreamStallKind = "first-event" | "idle";
+
+const STREAM_STALL_ERROR_PREFIX = "stream stalled:";
+
+function formatStallDuration(ms: number): string {
+  return ms >= 1000 ? `${Math.round(ms / 1000)}s` : `${ms}ms`;
+}
+
+function buildStallErrorMessage(kind: StreamStallKind, timeoutMs: number): string {
+  const duration = formatStallDuration(timeoutMs);
+  return kind === "first-event"
+    ? `${STREAM_STALL_ERROR_PREFIX} no content for ${duration} after the request was sent`
+    : `${STREAM_STALL_ERROR_PREFIX} no events for ${duration}`;
+}
+
+/**
+ * Whether a failed assistant message is a watchdog stall rewritten by
+ * withStreamRetry (as opposed to a provider error or a user stop). Runners
+ * throw it as AssistantResponseError, so `readAssistantFromError` feeds this.
+ */
+export function isStreamStallError(message: AssistantMessage | undefined): boolean {
+  return (
+    message?.stopReason === "error" &&
+    (message.errorMessage ?? "").startsWith(STREAM_STALL_ERROR_PREFIX)
+  );
+}
+
+/** setTimeout's ceiling; larger delays overflow to ~1ms in Node and WebViews. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+function positiveTimeoutMs(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.min(value, MAX_TIMER_DELAY_MS)
+    : undefined;
+}
+
+/**
+ * Per-attempt watchdog: an AbortController linked to the caller's signal plus
+ * one timer (first-event before commit, idle after). A fired timer records the
+ * stall text and aborts only this attempt; the caller's signal is untouched.
+ */
+type AttemptWatchdog = {
+  signal: AbortSignal | undefined;
+  /** Set once a timer fired; the attempt's terminal is rewritten to it. */
+  readonly stallErrorMessage: string | undefined;
+  observe: (event: AssistantMessageEvent) => void;
+  /** Clears the timer and unlinks from the caller's signal. Idempotent. */
+  dispose: () => void;
+};
+
+function createAttemptWatchdog(
+  parentSignal: AbortSignal | undefined,
+  firstEventTimeoutMs: number | undefined,
+  idleTimeoutMs: number | undefined,
+): AttemptWatchdog {
+  const controller = new AbortController();
+  const link = createLinkedAbortSignal([parentSignal, controller.signal]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let committed = false;
+  let stallErrorMessage: string | undefined;
+
+  const clearTimer = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  const arm = (kind: StreamStallKind, timeoutMs: number | undefined) => {
+    clearTimer();
+    if (timeoutMs === undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      // A user stop owns the terminal; never relabel it as a stall.
+      if (parentSignal?.aborted || controller.signal.aborted) return;
+      stallErrorMessage = buildStallErrorMessage(kind, timeoutMs);
+      controller.abort(new Error(stallErrorMessage));
+    }, timeoutMs);
+  };
+
+  arm("first-event", firstEventTimeoutMs);
+  return {
+    signal: link.signal,
+    get stallErrorMessage() {
+      return stallErrorMessage;
+    },
+    observe(event) {
+      if (isTerminalEvent(event)) {
+        clearTimer();
+        return;
+      }
+      if (!committed) {
+        if (!COMMITTING_EVENT_TYPES.has(event.type)) return;
+        committed = true;
+      }
+      arm("idle", idleTimeoutMs);
+    },
+    dispose() {
+      clearTimer();
+      link.cleanup();
+    },
+  };
+}
+
+/**
+ * A stalled attempt ends as `aborted` (pi-ai maps any signal abort to that),
+ * which nothing ever retries and every consumer reads as a user stop. Rewrite
+ * it to an `error` carrying the stall text — unless the caller's own signal
+ * aborted, in which case the stop is real and stays `aborted`.
+ */
+function rewriteStalledMessage(
+  message: AssistantMessage,
+  stallErrorMessage: string | undefined,
+  parentSignal: AbortSignal | undefined,
+): AssistantMessage {
+  if (!stallErrorMessage || parentSignal?.aborted) return message;
+  if (message.stopReason !== "aborted" && message.stopReason !== "error") return message;
+  return { ...message, stopReason: "error", errorMessage: stallErrorMessage };
+}
+
 /** Codex-style backoff: base * factor^(attempt-1) * uniform(0.9, 1.1), uncapped. */
 export function computeStreamRetryBackoffMs(attempt: number): number {
   const base = STREAM_RETRY_BASE_DELAY_MS * STREAM_RETRY_BACKOFF_FACTOR ** (attempt - 1);
   return base * (0.9 + Math.random() * 0.2);
+}
+
+/**
+ * Swaps an adapter's prebuilt options' signal for the attempt signal handed to
+ * a withStreamRetry factory. Returns the options untouched when there is none
+ * (watchdog off), so the no-watchdog request is exactly what it was before.
+ */
+export function withAttemptSignal<T extends { signal?: AbortSignal }>(
+  options: T,
+  attemptSignal: AbortSignal | undefined,
+): T {
+  return attemptSignal ? { ...options, signal: attemptSignal } : options;
 }
 
 /**
@@ -174,6 +323,31 @@ function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<vo
 }
 
 /**
+ * Whether an uncommitted failed attempt is worth another try at this layer.
+ */
+function shouldRetryFailedAttempt(
+  failedMessage: AssistantMessage,
+  stalled: boolean,
+  options: StreamRetryOptions | undefined,
+): boolean {
+  if (stalled) return options?.retryOnStall ?? false;
+  // A user-configured substring wins over the overflow guard: the user knows
+  // their relay's wording better than pi-ai's catch-all overflow patterns.
+  const { patterns } = options?.retryExtension ?? getRetryErrorExtension();
+  if (isExtensionRetryableError(failedMessage, { patterns })) return true;
+  // Overflow never heals by resending the same payload — and pi-ai's
+  // unanchored "503" pattern would otherwise retry "205031 tokens > 200000".
+  if (isOverflowError(failedMessage)) return false;
+  // pi-ai's classifier first (preserves its non-retryable quota/billing
+  // guard), then LiveAgent's extension: preset HTTP status codes (Cloudflare
+  // 520-527 for relays, #608) + user-defined substrings from settings.
+  return (
+    isRetryableAssistantError(failedMessage) ||
+    isExtensionRetryableError(failedMessage, options?.retryExtension)
+  );
+}
+
+/**
  * Wraps a fresh-stream factory with attempt-scoped retry for transient
  * provider/transport failures.
  *
@@ -194,54 +368,88 @@ function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<vo
  * soon as they're called, independent of consumer iteration — some callers
  * only await `.result()` without ever iterating events, and that pattern must
  * keep working through this wrapper.
+ *
+ * Opt-in watchdog (`firstEventTimeoutMs` / `idleTimeoutMs`): each attempt then
+ * gets its own AbortController linked to `options.signal`, handed to the
+ * factory as `attemptSignal`. A fired timer aborts only that attempt and its
+ * terminal — both the pushed event and `result()` — becomes a stall `error`
+ * (see `isStreamStallError`) before the retry decision; it is retried only
+ * when uncommitted and `retryOnStall` is set. With no timer configured the
+ * factory gets no attempt signal and behaves exactly as before.
  */
 export function withStreamRetry(
-  factory: () => AssistantMessageEventStream,
+  factory: (attemptSignal?: AbortSignal) => AssistantMessageEventStream,
   options?: StreamRetryOptions,
 ): AssistantMessageEventStream {
   const maxAttempts = Math.max(1, options?.maxAttempts ?? DEFAULT_STREAM_RETRY_MAX_ATTEMPTS);
   const disabled = options?.disabled ?? false;
   const signal = options?.signal;
+  const firstEventTimeoutMs = positiveTimeoutMs(options?.firstEventTimeoutMs);
+  const idleTimeoutMs = positiveTimeoutMs(options?.idleTimeoutMs);
+  const watchdogEnabled = firstEventTimeoutMs !== undefined || idleTimeoutMs !== undefined;
+
+  const startAttempt = (): {
+    source: AssistantMessageEventStream;
+    watchdog: AttemptWatchdog | undefined;
+  } => {
+    if (!watchdogEnabled) return { source: factory(), watchdog: undefined };
+    const watchdog = createAttemptWatchdog(signal, firstEventTimeoutMs, idleTimeoutMs);
+    try {
+      return { source: factory(watchdog.signal), watchdog };
+    } catch (error) {
+      watchdog.dispose();
+      throw error;
+    }
+  };
 
   const output = createAssistantMessageEventStream();
-  const firstSource = factory();
+  const firstAttempt = startAttempt();
 
   void (async () => {
     let attempt = 1;
-    let source = firstSource;
+    let { source, watchdog } = firstAttempt;
     let hasRetried = false;
 
     while (true) {
       let committed = false;
+      let stalled = false;
       const buffered: AssistantMessageEvent[] = [];
       let terminal: TerminalEvent | undefined;
 
-      for await (const event of source) {
-        if (!committed && COMMITTING_EVENT_TYPES.has(event.type)) {
-          committed = true;
-          for (const bufferedEvent of buffered.splice(0)) output.push(bufferedEvent);
-          if (hasRetried) {
-            hasRetried = false;
-            options?.onRetryRecovered?.();
+      try {
+        for await (const sourceEvent of source) {
+          let event = sourceEvent;
+          if (watchdog && isTerminalEvent(event)) {
+            const message = terminalMessage(event);
+            const rewritten = rewriteStalledMessage(message, watchdog.stallErrorMessage, signal);
+            if (rewritten !== message) {
+              event = { type: "error", reason: "error", error: rewritten };
+              stalled = true;
+            }
           }
+          watchdog?.observe(event);
+          if (!committed && COMMITTING_EVENT_TYPES.has(event.type)) {
+            committed = true;
+            for (const bufferedEvent of buffered.splice(0)) output.push(bufferedEvent);
+            if (hasRetried) {
+              hasRetried = false;
+              options?.onRetryRecovered?.();
+            }
+          }
+          if (committed) {
+            output.push(event);
+          } else {
+            buffered.push(event);
+          }
+          if (isTerminalEvent(event)) terminal = event;
         }
-        if (committed) {
-          output.push(event);
-        } else {
-          buffered.push(event);
-        }
-        if (isTerminalEvent(event)) terminal = event;
+      } finally {
+        watchdog?.dispose();
       }
 
       if (terminal?.type === "error" && !committed && !disabled && attempt < maxAttempts) {
         const failedMessage = terminalMessage(terminal);
-        // pi-ai's classifier first (preserves its non-retryable quota/billing
-        // guard), then LiveAgent's extension: preset HTTP status codes (Cloudflare
-        // 520-527 for relays, #608) + user-defined substrings from settings.
-        if (
-          isRetryableAssistantError(failedMessage) ||
-          isExtensionRetryableError(failedMessage, options?.retryExtension)
-        ) {
+        if (shouldRetryFailedAttempt(failedMessage, stalled, options)) {
           const errorMessage = terminalMessage(terminal)?.errorMessage || "Unknown error";
           attempt += 1;
           // Computed before the callback so the audit trail records the exact
@@ -255,7 +463,7 @@ export function withStreamRetry(
           hasRetried = true;
           try {
             await sleepWithAbort(plannedDelayMs, signal);
-            source = factory();
+            ({ source, watchdog } = startAttempt());
             continue;
           } catch {
             // Stopped mid-backoff: the terminal must say "aborted", not replay
@@ -285,7 +493,10 @@ export function withStreamRetry(
       // done/error event through iteration and only expose the final message
       // via result(). output.end() is idempotent once a terminal event has
       // already been pushed above, so this also safety-nets that case.
-      output.end(await source.result());
+      const final = await source.result();
+      output.end(
+        watchdog ? rewriteStalledMessage(final, watchdog.stallErrorMessage, signal) : final,
+      );
       return;
     }
   })();

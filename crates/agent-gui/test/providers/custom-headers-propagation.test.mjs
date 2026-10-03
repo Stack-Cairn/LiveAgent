@@ -183,51 +183,53 @@ test("completeAssistantMessage sends provider custom headers (compaction summari
   assert.equal(decodeOverrides(headers).Cookie, "session=abc");
 });
 
-test("compaction summarizer forwards the whole runtime config untouched", async () => {
-  // 摘要器只改 reasoning 档位（展开派生），其余字段必须原样透传——曾经的
-  // 逐字段转抄正是在这一层之上把 customHeaders 抹掉的。
-  const loader = createTsModuleLoader();
-  const { summarizeConversation } = loader.loadModule("src/lib/chat/compaction/summarizer.ts");
-  const runtime = buildRuntime();
+test("compaction transcript stage forwards the whole runtime config untouched", async () => {
+  // 摘要只把推理降到 low（展开派生），其余字段必须原样透传——曾经的逐字段转抄
+  // 正是在这一层之上把 customHeaders 抹掉的。
   const seen = [];
-
-  await summarizeConversation({
-    providerId: "codex",
-    model: "gpt-5",
-    runtime,
-    payload: {
-      active_segment_messages: [{ role: "user", content: "hello" }],
-      compaction_reason: { omitted_message_count: 0 },
-    },
-    async complete(params) {
-      seen.push(params.runtime);
-      return {
-        role: "assistant",
-        content: [{ type: "text", text: SUMMARY_TEXT }],
-        api: "liveagent-compaction",
-        provider: "codex",
-        model: "gpt-5",
-        usage: createUsage(),
-        stopReason: "stop",
-        timestamp: 1,
-      };
+  const loader = createTsModuleLoader({
+    mocks: {
+      [powerActivityModulePath]: { withPowerActivity: (_scope, _reason, run) => run() },
+      [path.join(rootDir, "src/lib/providers/runtime/textOnlyRuntime.ts")]: {
+        async streamAssistantMessage(params) {
+          seen.push(params.runtime);
+          return {
+            role: "assistant",
+            content: [{ type: "text", text: "<summary>\n## Goal\nKeep custom headers\n</summary>" }],
+            api: "openai-responses",
+            provider: "codex",
+            model: "gpt-5",
+            usage: createUsage(),
+            stopReason: "stop",
+            timestamp: 1,
+          };
+        },
+      },
     },
   });
+  const { summarize } = loader.loadModule("src/lib/chat/compaction/summarize.ts");
+  const { resolveCompactionLimits } = loader.loadModule("src/lib/chat/compaction/policy.ts");
 
+  // 没有配方：fork 不可用，直接走 transcript 档。
+  const result = await summarize({
+    providerId: "codex",
+    model: "gpt-5",
+    runtime: { ...buildRuntime(), reasoning: "high" },
+    recipe: null,
+    messages: [{ role: "user", content: "hello", timestamp: 1 }],
+    segmentMessages: [],
+    startAt: "fork",
+    automatic: true,
+    mustProgress: false,
+    tokensBefore: 1_000,
+    limits: resolveCompactionLimits({ contextWindow: 400_000, maxOutputToken: 128_000 }),
+    deadlineAt: Date.now() + 600_000,
+    signal: new AbortController().signal,
+  });
+
+  assert.ok("ok" in result);
   assert.equal(seen.length, 1);
   assert.deepEqual(seen[0].customHeaders, CUSTOM_HEADERS);
   assert.equal(seen[0].promptCacheRetention, "long");
-  // Codex 摘要固定用 medium 档，其余字段来自原 runtime。
-  assert.equal(seen[0].reasoning, "medium");
+  assert.equal(seen[0].reasoning, "low");
 });
-
-const SUMMARY_TEXT = `<summary>
-<task>Verify that custom request headers survive the compaction path</task>
-<state>Runtime config is forwarded whole to the summarizer request ${"x".repeat(300)}</state>
-<artifacts>
-- [file] src/lib/chat/compaction/summarizer.ts | reviewed | forwards runtime untouched
-</artifacts>
-<next_steps>
-1. keep the runtime object intact across every provider entry point
-</next_steps>
-</summary>`;

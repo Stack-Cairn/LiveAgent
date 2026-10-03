@@ -2406,6 +2406,17 @@ test("chat page helpers keep model options stable and normalize status/title edg
     assistantStatus.VIBING_STATUS,
   );
   assert.equal(assistantStatus.normalizeLiveToolStatus("Running"), "Running");
+  assert.equal(assistantStatus.compactionProgressDetail(" 12.3k · 0:41 "), "12.3k · 0:41");
+  assert.equal(
+    assistantStatus.compactionProgressDetail("→ transcript · ↻2/3 · 1:10"),
+    "→ transcript · ↻2/3 · 1:10",
+  );
+  // 旧桌面端在同一标志下发整句中文状态：不作为进度后缀显示。
+  assert.equal(
+    assistantStatus.compactionProgressDetail("上下文接近上限（判定 1/2 tokens），正在压缩历史..."),
+    null,
+  );
+  assert.equal(assistantStatus.compactionProgressDetail(null), null);
   assert.equal(chatHelpers.isAbortLikeError(new Error("AbortError: aborted")), true);
   assert.equal(chatHelpers.isAbortLikeError("network failed"), false);
 });

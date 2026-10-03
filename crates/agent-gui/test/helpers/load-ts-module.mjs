@@ -31,6 +31,9 @@ const piAiEventStream = await import(
 const piAiRetry = await import(
   new URL("../../node_modules/@earendil-works/pi-ai/dist/utils/retry.js", import.meta.url).href
 );
+const piAiOverflow = await import(
+  new URL("../../node_modules/@earendil-works/pi-ai/dist/utils/overflow.js", import.meta.url).href
+);
 const piAiProvidersAll = await import(
   new URL(
     "../../node_modules/@earendil-works/pi-ai/dist/providers/all.js",
@@ -107,6 +110,7 @@ function createDefaultMocks() {
       getSupportedThinkingLevels: piAiModels.getSupportedThinkingLevels,
       clampThinkingLevel: piAiModels.clampThinkingLevel,
       isRetryableAssistantError: piAiRetry.isRetryableAssistantError,
+      isContextOverflow: piAiOverflow.isContextOverflow,
       createAssistantMessageEventStream: piAiEventStream.createAssistantMessageEventStream,
       EventStream: class EventStream {
         constructor() {

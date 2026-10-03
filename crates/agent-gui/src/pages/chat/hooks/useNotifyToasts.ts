@@ -1,4 +1,5 @@
 import { type ToastTone, toast } from "@liveagent/ui/components/ui/toast-manager";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useId } from "react";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 
@@ -10,10 +11,11 @@ type UseNotifyToastsParams = {
 
 /**
  * Bridges errorMessage / hookWarning /
- * compaction-failed transitions into toast notifications.
+ * compaction failed / degraded transitions into toast notifications.
  */
 export function useNotifyToasts(params: UseNotifyToastsParams) {
   const { errorMessage, hookWarning, compactionStatus } = params;
+  const { t } = useLocale();
   const scope = useId();
   useEffect(() => {
     if (errorMessage) toast.error(errorMessage, { id: `${scope}-error` });
@@ -25,9 +27,19 @@ export function useNotifyToasts(params: UseNotifyToastsParams) {
 
   useEffect(() => {
     if (compactionStatus.phase === "failed") {
-      toast.error(`上下文压缩失败：${compactionStatus.message}`, { id: `${scope}-compaction` });
+      // 函数替换：供应商错误里的 $& / $' 不得被当成替换模式。
+      const { message } = compactionStatus;
+      toast.error(
+        message
+          ? t("chat.compactionFailed").replace("{message}", () => message)
+          : t("chat.manualCompactFailed"),
+        { id: `${scope}-compaction` },
+      );
+    } else if (compactionStatus.phase === "completed" && compactionStatus.degraded) {
+      // LLM 档全部失败、由 deterministic 兜底：压缩成功但摘要有损，提醒用户留意质量。
+      toast.warning(t("chat.compactionDegraded"), { id: `${scope}-compaction` });
     }
-  }, [compactionStatus, scope]);
+  }, [compactionStatus, scope, t]);
 
   return { addNotify };
 }

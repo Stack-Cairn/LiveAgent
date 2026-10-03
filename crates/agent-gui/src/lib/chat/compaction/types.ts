@@ -1,9 +1,7 @@
 export type { ProviderRuntimeConfig } from "../../providers/runtime/types";
 
-export type CompactionTrigger = "pre-send" | "mid-stream" | "post-tool" | "manual";
-
-// optimization = 发送前的从容压缩（阈值更宽），protection = 运行中的保护性压缩（阈值更紧）。
-export type CompactionIntent = "optimization" | "protection";
+// overflow = 供应商报上下文溢出后的反应式压缩（取代已删除的 mid-stream 中止）。
+export type CompactionTrigger = "pre-send" | "overflow" | "post-tool" | "manual";
 
 export type CompactionStatus =
   | { phase: "idle" }
@@ -18,6 +16,8 @@ export type CompactionStatus =
       trigger: CompactionTrigger;
       newSegmentIndex: number;
       completedAt: number;
+      /** LLM 档全部失败、由 deterministic 兜底时的失败说明。 */
+      degraded?: string;
     }
   | {
       phase: "failed";
@@ -32,15 +32,6 @@ export type CompactionDecisionReason =
   | "in-flight"
   | "below-threshold"
   | "below-manual-threshold"
-  | "cooldown"
+  | "prefix-too-large"
+  | "circuit-open"
   | "threshold-exceeded";
-
-export type CompactionDecision = {
-  shouldCompact: boolean;
-  intent: CompactionIntent;
-  reason: CompactionDecisionReason;
-  totalTokens: number;
-  threshold: number;
-  contextWindow: number;
-  maxOutputToken: number;
-};

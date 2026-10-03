@@ -503,6 +503,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.changedFiles.expand": "Show {count} more files",
   "chat.compactingContext": "Compressing context",
   "chat.compactingContextWait": "Compressing context, please wait...",
+  "chat.compactionFailed": "Context compaction failed: {message}",
+  "chat.compactionDegraded":
+    "Automatic summary unavailable; context was compacted with a simplified summary and some details may be lost. Consider starting a new conversation if replies degrade.",
   "chat.contextCheckpoint.title": "Context Checkpoint",
   "chat.contextCheckpoint.messageCount": "{count} msgs",
   "chat.contextCheckpoint.compressed": "Compressed",

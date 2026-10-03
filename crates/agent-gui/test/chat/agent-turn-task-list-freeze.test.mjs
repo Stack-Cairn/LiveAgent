@@ -10,6 +10,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 //   ① run 内任务状态推进不改变 systemPrompt 字节（且快照并未被丢掉）
 //   ② runId 不匹配时依然不注入（沿用工具层口径，语义不得改变）
 //   ③ 压缩之后快照刷新为当前状态（那一刻前缀本来就要重建，重新冻结是免费的）
+//   ④ 反应式溢出恢复：先提交已发出的轮次再压缩，每次成功请求至多一次，不成就原样抛出
 
 const agentRunnerPath = fileURLToPath(
   new URL("../../src/lib/chat/runner/agentRunner.ts", import.meta.url),
@@ -95,6 +96,7 @@ const { runAgentConversationTurn } = loader.loadModule(
   "src/pages/chat/turns/runAgentConversationTurn.ts",
 );
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
+const { AssistantResponseError } = loader.loadModule("src/lib/providers/runtime/overflow.ts");
 const { formatTaskListRuntimeContext } = loader.loadModule("src/lib/tools/taskTools.ts");
 
 const RUN_ID = "run-1";
@@ -166,7 +168,15 @@ function createHookLifecycle() {
  * 采集每一次真正喂给模型/压缩决策的 systemPrompt。三个采集点覆盖了
  * withAgentRuntimeContext 的全部产物：发送前预算、每轮请求、run 内压缩预算。
  */
-function createHarness({ initialTaskList, compactDuringRun } = {}) {
+// 压缩后的状态：新 segment 为空（本组用例只关心续跑上下文的 systemPrompt）。
+function compactedState() {
+  return conversationState.createConversationStateFromContext({
+    systemPrompt: BASE_SYSTEM_PROMPT,
+    messages: [],
+  });
+}
+
+function createHarness({ initialTaskList, compactPostTool, compactOverflow } = {}) {
   let current = conversationState.createConversationStateFromContext({
     systemPrompt: BASE_SYSTEM_PROMPT,
     messages: [],
@@ -181,8 +191,11 @@ function createHarness({ initialTaskList, compactDuringRun } = {}) {
     return context;
   };
 
+  const compactCalls = [];
+
   return {
     systemPrompts,
+    compactCalls,
     // onBeforeNextTurn 交回的续跑上下文，压缩发生时才非空。
     overrides: [],
     // 模拟 TaskUpdate 落库：taskStateStore.commitState 最终走 applyConversationState。
@@ -229,20 +242,21 @@ function createHarness({ initialTaskList, compactDuringRun } = {}) {
       }),
       compaction: {
         noteFixedOverheadTokens() {},
-        async maybeCompactPreSend({ budgetContext }) {
-          record("pre-send", budgetContext);
+        async compact({ trigger, state, buildContext }) {
+          compactCalls.push({ trigger, state });
+          record(trigger === "pre-send" ? "pre-send" : "during-run", buildContext(state));
+          const compacted =
+            trigger === "pre-send"
+              ? null
+              : trigger === "overflow"
+                ? compactOverflow?.()
+                : compactPostTool?.();
+          return compacted ?? { outcome: "skipped", reason: "below-threshold" };
         },
         beginRequest(context) {
           record("request", context);
         },
         observeContextMessages: () => 0,
-        shouldProtectMidStream: () => false,
-        async compactDuringRun({ budgetContext }) {
-          record("during-run", budgetContext);
-          return compactDuringRun
-            ? compactDuringRun()
-            : { context: null, shouldDisableProtection: false };
-        },
       },
       cancellation: {
         userStop: new AbortController(),
@@ -282,6 +296,7 @@ function threeToolRounds(harness, nextTaskListByRound) {
           toolResults: [taskUpdateResult],
           emittedMessages: [taskUpdateAssistant, taskUpdateResult],
           runtimeContext: params.context,
+          willContinue: true,
           signal: params.signal,
         }),
       );
@@ -366,13 +381,8 @@ test("run 内压缩之后快照刷新为当前任务状态", async () => {
   let compactionsLeft = 1;
   const harness = createHarness({
     initialTaskList: PENDING_TASKS,
-    compactDuringRun: () =>
-      compactionsLeft-- > 0
-        ? {
-            context: { systemPrompt: BASE_SYSTEM_PROMPT, messages: [] },
-            shouldDisableProtection: false,
-          }
-        : { context: null, shouldDisableProtection: false },
+    compactPostTool: () =>
+      compactionsLeft-- > 0 ? { outcome: "compacted", state: compactedState() } : null,
   });
 
   await runWithScenario(threeToolRounds(harness, { 1: ADVANCED_TASKS }), harness.params);
@@ -423,4 +433,125 @@ test("主 Agent turn 将每种命令安全模式传给工具 registry", async ()
     assert.ok(call, `registry was not built for mode ${commandSafetyMode ?? "undefined"}`);
     assert.deepEqual(call.sandbox, expectedSandbox, `sandbox mapping for ${commandSafetyMode}`);
   }
+});
+
+test("批内全部 terminate（willContinue=false）时不为不存在的下一轮做 post-tool 压缩", async () => {
+  const harness = createHarness({
+    compactPostTool: () => ({ outcome: "compacted", state: compactedState() }),
+  });
+  await runWithScenario(async (params) => {
+    params.onTurnStart?.(1);
+    params.onAssistantMessage?.(taskUpdateAssistant, 1);
+    harness.overrides.push(
+      await params.onBeforeNextTurn?.({
+        round: 1,
+        assistant: taskUpdateAssistant,
+        toolResults: [taskUpdateResult],
+        emittedMessages: [taskUpdateAssistant, taskUpdateResult],
+        runtimeContext: params.context,
+        willContinue: false,
+        signal: params.signal,
+      }),
+    );
+    const emitted = [taskUpdateAssistant, taskUpdateResult];
+    return { assistant: taskUpdateAssistant, messages: emitted, emittedMessages: emitted };
+  }, harness.params);
+
+  assert.deepEqual(
+    harness.compactCalls.map((call) => call.trigger),
+    ["pre-send"],
+  );
+  assert.deepEqual(harness.overrides, [null]);
+});
+
+// ---------------------------------------------------------------------------
+// ④ 反应式溢出恢复
+
+function overflowError() {
+  return new AssistantResponseError("prompt is too long", {
+    ...assistantMessage([], "error"),
+    errorMessage: "prompt is too long: 210000 tokens > 200000 maximum",
+  });
+}
+
+/** 第 1 轮工具轮正常结束，第 2 次请求溢出；之后的每次调用按 rest 依次决定。 */
+function overflowAfterToolRound(...rest) {
+  const errors = [];
+  const raise = () => {
+    errors.push(overflowError());
+    throw errors.at(-1);
+  };
+  let calls = 0;
+  const scenario = async (params) => {
+    calls += 1;
+    if (calls === 1) {
+      params.onTurnStart?.(1);
+      params.onAssistantMessage?.(taskUpdateAssistant, 1);
+      await params.onBeforeNextTurn?.({
+        round: 1,
+        assistant: taskUpdateAssistant,
+        toolResults: [taskUpdateResult],
+        emittedMessages: [taskUpdateAssistant, taskUpdateResult],
+        runtimeContext: params.context,
+        willContinue: true,
+        signal: params.signal,
+      });
+      params.onTurnStart?.(2);
+      raise();
+    }
+    const next = rest[calls - 2];
+    if (next === "overflow") raise();
+    params.onTurnStart?.(1);
+    if (next === "recovered-overflow") {
+      // 一次成功的请求之后复位：之后的溢出可以再恢复一次。
+      params.onAssistantMessage?.(taskUpdateAssistant, 1);
+      raise();
+    }
+    params.onAssistantMessage?.(finalAssistant, 1);
+    return { assistant: finalAssistant, messages: [finalAssistant], emittedMessages: [finalAssistant] };
+  };
+  return Object.assign(scenario, { errors });
+}
+
+test("溢出恢复先提交已发出的轮次再压缩一次，然后从压缩后的状态续跑", async () => {
+  const harness = createHarness({
+    compactOverflow: () => ({ outcome: "compacted", state: compactedState() }),
+  });
+  await runWithScenario(overflowAfterToolRound("final"), harness.params);
+
+  const overflow = harness.compactCalls.filter((call) => call.trigger === "overflow");
+  assert.equal(overflow.length, 1);
+  // 已发出的工具轮落进被压缩的状态；溢出的那条 error assistant 不落地。
+  assert.deepEqual(
+    overflow[0].state.segments.flatMap((segment) => segment.messages),
+    [taskUpdateAssistant, taskUpdateResult],
+  );
+});
+
+test("溢出后压缩没有成功就原样抛出原错误", async () => {
+  const harness = createHarness();
+  const scenario = overflowAfterToolRound("final");
+  await assert.rejects(runWithScenario(scenario, harness.params), (error) => {
+    return error === scenario.errors[0];
+  });
+  assert.equal(harness.compactCalls.filter((call) => call.trigger === "overflow").length, 1);
+});
+
+test("成功请求之后的溢出可以再恢复一次", async () => {
+  const harness = createHarness({
+    compactOverflow: () => ({ outcome: "compacted", state: compactedState() }),
+  });
+  await runWithScenario(overflowAfterToolRound("recovered-overflow", "final"), harness.params);
+  assert.equal(harness.compactCalls.filter((call) => call.trigger === "overflow").length, 2);
+});
+
+test("同一次成功请求之前的第二次溢出不再压缩，直接抛出", async () => {
+  const harness = createHarness({
+    compactOverflow: () => ({ outcome: "compacted", state: compactedState() }),
+  });
+  const scenario = overflowAfterToolRound("overflow");
+  await assert.rejects(runWithScenario(scenario, harness.params), (error) => {
+    return error === scenario.errors[1];
+  });
+  assert.equal(harness.compactCalls.filter((call) => call.trigger === "overflow").length, 1);
 });

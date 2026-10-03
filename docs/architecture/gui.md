@@ -45,7 +45,7 @@
 | text 模式 | 只做模型文本流式，不注入本地工具。 | `pages/chat/turns/runTextConversationTurn.ts`、`lib/providers/llm.ts` |
 | tools/agent-dev 模式 | 构造 builtin tools，执行模型 tool loop，写工具 trace，并同步 Gateway chat event。 | `pages/chat/turns/runAgentConversationTurn.ts`、`lib/chat/conversation/run/*` |
 | 历史持久化 | V3 segment 写入 Tauri SQLite，支持 append segment、active segment update、rename/delete/pin/share。 | `lib/chat/conversation/conversationState.ts`、`src-tauri/src/commands/history/chat_history/*` |
-| 上下文压缩 | 在 pre-send、mid-stream、post-tool 等阶段生成 summary checkpoint，避免超上下文。 | `pages/chat/runtime/conversationContextBuilders.ts`、`lib/chat/compaction/*` |
+| 上下文压缩 | 在 pre-send、post-tool、反应式 overflow 与手动触发时生成 summary checkpoint，避免超上下文。 | `pages/chat/runtime/conversationContextBuilders.ts`、`lib/chat/compaction/*` |
 | 记忆注入 | 每轮根据 workdir 读取 memory overview，并附加到 system prompt。 | `lib/chat/memory/*`、`src-tauri/src/services/memory/*` |
 | Skills 注入 | 根据 Settings Skills 选择与 always-on builtin skills 生成 skills prompt。 | `crates/agent-ui/src/lib/skills/index.ts`、`crates/agent-ui/src/lib/skills/useChatSkills.ts` |
 | 上传 | GUI 直接调用 Tauri import readable files/image preview；工作区外文件复制到 `~/.liveagent/uploads` 暂存区（不污染工作区），工作区内文件原地引用。 | `pages/chat/hooks/usePendingUploads.ts`、`src-tauri/src/commands/app/system.rs` |

@@ -96,10 +96,12 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
             base_url: format!("http://{addr}"),
             token: Uuid::new_v4().to_string(),
         },
-        client: reqwest::Client::builder()
-            .no_proxy()
-            .build()
-            .map_err(|err| format!("创建本地代理 HTTP 客户端失败：{err}"))?,
+        // 未勾选 use-system-proxy 时的 LLM 上游直连 client，与 cached_client() 共用传输层默认值。
+        client: crate::services::system_proxy::with_transport_defaults(
+            reqwest::Client::builder().no_proxy(),
+        )
+        .build()
+        .map_err(|err| format!("创建本地代理 HTTP 客户端失败：{err}"))?,
     });
 
     let app = Router::new()

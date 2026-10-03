@@ -27,6 +27,7 @@ function createMultiRoundRunner(options = {}) {
         toolResults: [toolResult],
         runtimeContext: params.context,
         emittedMessages: [...emitted],
+        willContinue: !(options.terminateLastRound && round === roundCount),
         signal: params.signal,
       });
       if (options.repeatBoundary && round === 1) {
@@ -37,6 +38,7 @@ function createMultiRoundRunner(options = {}) {
           toolResults: [],
           runtimeContext: params.context,
           emittedMessages: [...emitted],
+          willContinue: true,
           signal: params.signal,
         });
       }
@@ -49,6 +51,24 @@ function createMultiRoundRunner(options = {}) {
     return { assistant: finalAssistant, messages: emitted, emittedMessages: [...emitted] };
   };
 }
+
+test("a batch that ends the run (willContinue=false) skips post-tool compaction but still persists", async () => {
+  const harness = await createSubagentHarness({
+    runner: createMultiRoundRunner({ rounds: 2, terminateLastRound: true }),
+  });
+  const result = await harness.bundle.executeToolCall(
+    createAgentToolCall({ agents: [{ id: "closer", prompt: "finish in two rounds" }] }),
+  );
+  assert.equal(result.isError, false);
+  assert.equal(harness.compactionCalls.filter((call) => call.trigger === "post-tool").length, 1);
+  const saves = harness.storeIpc.issuedSaves.filter(
+    (save) => save.run.id === result.details.agents[0].runId,
+  );
+  assert.deepEqual(
+    saves.map((save) => save.run.totalMessageCount),
+    [1, 3, 5, 6],
+  );
+});
 
 function savesForRun(harness, runId) {
   return harness.storeIpc.issuedSaves.filter((save) => save.run.id === runId);
@@ -209,6 +229,7 @@ test("a cancelled run persists status cancelled, not failed", async () => {
         toolResults: [toolResult],
         runtimeContext: params.context,
         emittedMessages: [assistant, toolResult],
+        willContinue: true,
         signal: params.signal,
       });
       throw new Error("Cancelled");

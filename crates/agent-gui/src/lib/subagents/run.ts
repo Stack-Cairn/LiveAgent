@@ -22,6 +22,7 @@ import {
   buildSubagentContext,
   buildSubagentContinuationMessage,
   buildSubagentSystemPrompt,
+  resolveSubagentRetainedUserText,
 } from "./prompts";
 import { createSubagentIdentity } from "./roster";
 import type { SubagentScheduler } from "./scheduler";
@@ -473,43 +474,25 @@ export async function executeSubagentRun(
       agentTotal: request.total,
       messageBusEnabled: env.messageBusEnabled,
     });
-    // 子代理复用同一压缩状态机：sinks 只捕获结果状态与触发运行期持久化。
+    // 发给模型的请求上下文：与主会话同口径带上 checkpoint bridge（摘要只经它进入请求）。
+    const buildChildRequestContext = (state: ConversationViewState) =>
+      buildRequestContext(state, { includeCheckpointBridge: true });
+    // 子代理复用同一压缩状态机：结果状态经 compact 的返回值落地，sinks 只触发运行期持久化。
     const compaction = new CompactionController();
-    const compactionCancellation = createTurnCancellationFromSignal(signal);
-    let compactionAppliedState: ConversationViewState | null = null;
-    const bindCompactionTurn = (presend?: {
-      baseState: ConversationViewState;
-      pendingUserText: string;
-      composeAppliedState: (state: ConversationViewState) => ConversationViewState;
-    }) => {
-      compaction.bindTurn({
-        providerId: env.providerId,
-        model: env.model,
-        runtime: env.runtime,
-        cancellation: compactionCancellation,
-        sinks: {
-          applyState: (state) => {
-            compactionAppliedState = state;
-          },
-          applyStateMidRun: (state) => {
-            compactionAppliedState = state;
-          },
-          persist: async (state) => {
-            schedulePersist("running", state);
-            return undefined;
-          },
+    compaction.bindTurn({
+      providerId: env.providerId,
+      model: env.model,
+      runtime: env.runtime,
+      sessionId: subagentSessionId,
+      cancellation: createTurnCancellationFromSignal(signal),
+      sinks: {
+        persist: async (state) => {
+          schedulePersist("running", state);
+          return undefined;
         },
-        buildPreparedContext: (state) => buildRequestContext(state),
-        buildResumeContext: (state, resumeMessage) => {
-          const context = buildRequestContext(state);
-          return resumeMessage
-            ? { ...context, messages: [...context.messages, resumeMessage] }
-            : context;
-        },
-        presend,
-      });
-    };
-    bindCompactionTurn();
+      },
+      resolveRetainedUserText: resolveSubagentRetainedUserText,
+    });
 
     let restoredState: ConversationViewState | null = null;
     if (existingRunSummary) {
@@ -519,30 +502,25 @@ export async function executeSubagentRun(
         tools: childTools,
       });
       if (restored) {
-        let resumedState = restored;
-        bindCompactionTurn({
-          baseState: resumedState,
-          pendingUserText: spec.prompt,
-          composeAppliedState: (state) => state,
+        // 续跑消息追加之前先按恢复出的上下文做一次发送前压缩。
+        const compacted = await compaction.compact({
+          trigger: "pre-send",
+          state: restored,
+          buildContext: buildChildRequestContext,
         });
-        compactionAppliedState = null;
-        const applied = await compaction.maybeCompactPreSend({
-          budgetContext: buildRequestContext(resumedState),
-        });
-        if (applied && compactionAppliedState) {
-          resumedState = compactionAppliedState;
-        }
         compactions = compaction.stats.compactionsApplied;
-        bindCompactionTurn();
-        restoredState = appendMessagesToConversation(resumedState, [
-          buildSubagentContinuationMessage({
-            spec,
-            identity,
-            resumedFrom: existingRunSummary,
-            messageBusSnapshot: await renderBusSnapshot(),
-            messageBusEnabled: env.messageBusEnabled,
-          }),
-        ]);
+        restoredState = appendMessagesToConversation(
+          compacted.outcome === "compacted" ? compacted.state : restored,
+          [
+            buildSubagentContinuationMessage({
+              spec,
+              identity,
+              resumedFrom: existingRunSummary,
+              messageBusSnapshot: await renderBusSnapshot(),
+              messageBusEnabled: env.messageBusEnabled,
+            }),
+          ],
+        );
       }
     }
     // The state whose request context is the runner's current message
@@ -572,7 +550,7 @@ export async function executeSubagentRun(
       model: env.model,
       runtime: env.runtime,
       runtimePlatform: env.runtimePlatform,
-      context: buildRequestContext(baseState),
+      context: buildChildRequestContext(baseState),
       workdir: childWorkdir,
       additionalRoots: env.additionalRoots,
       sessionId: subagentSessionId,
@@ -590,6 +568,7 @@ export async function executeSubagentRun(
         }
         return childExecute(childToolCall, childSignal);
       },
+      onRequestPrepared: (recipe) => compaction.noteRequest(recipe),
       onTurnStart: (round) => {
         rounds = Math.max(rounds, round);
       },
@@ -597,39 +576,46 @@ export async function executeSubagentRun(
       onToolExecutionStart: () => {
         toolCalls += 1;
       },
-      onBeforeNextTurn: async ({ emittedMessages }) => {
+      onBeforeNextTurn: async ({ emittedMessages, runtimeContext, willContinue }) => {
         const view = appendMessagesToConversation(baseState, emittedMessages);
         lastView = view;
+        if (!willContinue) {
+          schedulePersist("running", view);
+          return null;
+        }
         const busUpdateMessage = buildMessageBusUpdateMessage(await renderBusSnapshot());
-        const appendBus = (context: ReturnType<typeof buildRequestContext>) =>
-          busUpdateMessage
-            ? { ...context, messages: [...context.messages, busUpdateMessage] }
-            : context;
 
-        // controller 内部消化非中止失败（含 prune 降级）；用户中止会原样抛出。
-        compactionAppliedState = null;
-        const { context: compactedContext } = await compaction.compactDuringRun({
+        // controller 内部消化非中止失败；用户中止会原样抛出。
+        const compacted = await compaction.compact({
           trigger: "post-tool",
           state: view,
+          buildContext: buildChildRequestContext,
+          forkMessages: runtimeContext.messages,
         });
 
-        if (!compactedContext) {
+        if (compacted.outcome !== "compacted") {
           schedulePersist("running", view);
-          return busUpdateMessage
-            ? {
-                context: appendBus(buildRequestContext(view)),
-                emittedMessages: [...emittedMessages, busUpdateMessage],
-              }
-            : null;
+          if (!busUpdateMessage) return null;
+          const context = buildChildRequestContext(view);
+          return {
+            context: { ...context, messages: [...context.messages, busUpdateMessage] },
+            emittedMessages: [...emittedMessages, busUpdateMessage],
+          };
         }
 
-        const nextState: ConversationViewState = compactionAppliedState ?? view;
+        const nextState = compacted.state;
         compactions = compaction.stats.compactionsApplied;
         baseState = nextState;
         lastView = nextState;
         schedulePersist("running", nextState);
+        // 带 bus 刷新时从状态重建：压缩后 segment 为空，bus 消息成为首条 user、bridge
+        // 合入它——不出现连续两条 user，且与下一轮从 view 重建的请求字节一致。
         return {
-          context: appendBus(compactedContext),
+          context: buildChildRequestContext(
+            busUpdateMessage
+              ? appendMessagesToConversation(nextState, [busUpdateMessage])
+              : nextState,
+          ),
           emittedMessages: busUpdateMessage ? [busUpdateMessage] : [],
         };
       },

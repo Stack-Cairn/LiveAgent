@@ -20,15 +20,13 @@ test("aborting a running compaction closes the trajectory observer interval", as
 
   // These are deliberately set as the state immediately after publishRunning; private is a
   // TypeScript visibility boundary, not a runtime one, and avoids invoking the decision engine.
-  controller.observedTrigger = "mid-stream";
-  controller.observedTokensBefore = 72_000;
+  controller.observed = { id: 1, trigger: "overflow", tokensBefore: 72_000 };
   controller.statusPhase = "running";
 
   assert.equal(await controller.handleTurnAbort(), false);
   assert.deepEqual(ended, [
-    { trigger: "mid-stream", status: "aborted", tokensBefore: 72_000 },
+    { trigger: "overflow", status: "aborted", tokensBefore: 72_000 },
   ]);
   assert.equal(statuses.at(-1)?.phase, "idle");
-  assert.equal(controller.observedTrigger, undefined);
-  assert.equal(controller.observedTokensBefore, undefined);
+  assert.equal(controller.observed, null);
 });

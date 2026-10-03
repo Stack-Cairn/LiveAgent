@@ -28,7 +28,6 @@ import {
   createModelFromConfig,
   createStreamingTextReconciler,
   describeProviderCacheShape,
-  finalizeProviderStreamOptions,
   llm,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
@@ -46,11 +45,22 @@ import {
   isProviderNativeWebFetchToolName,
   isProviderNativeWebSearchToolName,
 } from "../../providers/nativeWebSearch";
+import { createLinkedAbortSignal } from "../../providers/runtime/abortLink";
 import { sanitizeAssistantMessage } from "../../providers/runtime/messageUtils";
+import {
+  finalizeRequest,
+  pickRequestRecipeOptions,
+  type RequestContextShape,
+  type RequestRecipe,
+  shapeRequestContext,
+  toRecipeTools,
+} from "../../providers/runtime/modelRequest";
+import { AssistantResponseError } from "../../providers/runtime/overflow";
 import {
   failoverBreakerKey,
   type ModelFailoverRuntimeConfig,
   type ProviderFailoverCandidate,
+  primaryFailoverBreakerKey,
   withProviderFailover,
 } from "../../providers/runtime/providerFailover";
 import { resolveStreamRetryConfig } from "../../providers/runtime/retryPolicy";
@@ -64,12 +74,8 @@ import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
 import type { AdditionalProjectRoot } from "../../tools/additionalProjectRoots";
-import {
-  attachPinnedTailBlocks,
-  type PinnedTailBlock,
-  resolveTailBlockAnchorId,
-} from "../context/contextTailBlock";
-import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
+import { stripCheckpointBridges } from "../compaction/bridge";
+import { type PinnedTailBlock, resolveTailBlockAnchorId } from "../context/contextTailBlock";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {
   createDeferredProviderNativeWebSearchStatus,
@@ -89,43 +95,6 @@ function throwIfRunnerCancelled(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new Error("Cancelled");
   }
-}
-
-function createLinkedAbortSignal(signals: Array<AbortSignal | undefined>): {
-  signal?: AbortSignal;
-  cleanup: () => void;
-} {
-  const activeSignals = Array.from(
-    new Set(signals.filter((signal): signal is AbortSignal => Boolean(signal))),
-  );
-  if (activeSignals.length <= 1) {
-    return { signal: activeSignals[0], cleanup: () => undefined };
-  }
-
-  const controller = new AbortController();
-  const cleanupFns: Array<() => void> = [];
-  const cleanup = () => {
-    while (cleanupFns.length > 0) {
-      cleanupFns.pop()?.();
-    }
-  };
-  const abort = () => {
-    if (!controller.signal.aborted) {
-      controller.abort();
-    }
-    cleanup();
-  };
-
-  for (const sourceSignal of activeSignals) {
-    if (sourceSignal.aborted) {
-      abort();
-      break;
-    }
-    sourceSignal.addEventListener("abort", abort, { once: true });
-    cleanupFns.push(() => sourceSignal.removeEventListener("abort", abort));
-  }
-
-  return { signal: controller.signal, cleanup };
 }
 
 async function runWithConcurrency<T, R>(
@@ -383,11 +352,15 @@ function getAgentMessages(agent: Agent | null): Message[] {
   return agent ? (agent.state.messages as Message[]) : [];
 }
 
-function getMessagesSinceBaseline(agent: Agent | null, baselineIndex: number): Message[] {
-  const messages = getAgentMessages(agent);
-  if (baselineIndex <= 0) return messages.slice();
+// emitted 切片一律剥掉 checkpoint bridge：基线落在 0 时切片会带上合入形态的首条
+// user 消息（见 stripCheckpointBridges），bridge 只能存在于请求里。
+function sliceEmittedMessages(messages: Message[], baselineIndex: number): Message[] {
   if (baselineIndex >= messages.length) return [];
-  return messages.slice(baselineIndex);
+  return stripCheckpointBridges(baselineIndex <= 0 ? messages : messages.slice(baselineIndex));
+}
+
+function getMessagesSinceBaseline(agent: Agent | null, baselineIndex: number): Message[] {
+  return sliceEmittedMessages(getAgentMessages(agent), baselineIndex);
 }
 
 function findLastAssistantMessage(messages: Message[]): AssistantMessage | null {
@@ -460,6 +433,12 @@ export async function runAssistantWithTools(params: {
     toolResults: ToolResultMessage[];
     runtimeContext: Context;
     emittedMessages: Message[];
+    /**
+     * 本批之后是否还有下一次模型请求：批内每个调用都 terminate（如 ExitPlanMode）时
+     * 为 false——pi-agent-core 先 prepareNextTurn 后才按批终止收尾，为不存在的下一轮
+     * 做压缩只会白付一次摘要。
+     */
+    willContinue: boolean;
     signal?: AbortSignal;
   }) => Promise<{
     context: Context;
@@ -484,6 +463,12 @@ export async function runAssistantWithTools(params: {
     round: number,
     snapshot: TransportSnapshot & { providerLabel: string },
   ) => void;
+  /**
+   * 每个实际尝试的候选各 fire 一次（finalize 之后、出站之前）：本次请求的内容 /
+   * 缓存配方（不含凭证、传输与 loop 配置），最后一次即本轮最后尝试的目标。观察
+   * 失败不影响请求。
+   */
+  onRequestPrepared?: (recipe: RequestRecipe) => void;
   signal?: AbortSignal;
   debugLogger?: StreamDebugLogger;
   subagentScheduler?: SubagentScheduler;
@@ -584,12 +569,7 @@ export async function runAssistantWithTools(params: {
     const failoverParams = params.failover;
     const primaryTarget: PreparedFailoverTarget = {
       index: 0,
-      key: failoverParams?.primary.selectedModel
-        ? failoverBreakerKey(
-            failoverParams.primary.selectedModel.customProviderId,
-            failoverParams.primary.selectedModel.model,
-          )
-        : failoverBreakerKey(params.providerId, modelId),
+      key: primaryFailoverBreakerKey(params.providerId, modelId, failoverParams?.primary),
       label: failoverParams?.primary.label ?? `${params.providerId} · ${modelId}`,
       selectedModel: failoverParams?.primary.selectedModel,
       providerId: params.providerId,
@@ -668,6 +648,9 @@ export async function runAssistantWithTools(params: {
     // ------------------------------------------------------------------------
 
     const toolResultErrorFlags = new Map<string, boolean>();
+    // afterToolCall 裁决为 terminate 的调用；被 beforeToolCall 拦下的调用不经过它，
+    // 与 pi-agent-core 的批终止判定（全部 terminate 才终止）同口径。
+    const terminatingToolCallIds = new Set<string>();
     const toolCallsById = new Map<string, ToolCall>();
     const incompleteToolCallArguments = new Map<string, string>();
     const refusedTruncatedToolCallIds = new Set<string>();
@@ -1230,18 +1213,17 @@ export async function runAssistantWithTools(params: {
       // 增量的逐请求重建同口径），agent.state.messages 始终不含它。挂在 sanitize
       // 之前、capturePrefixShape 之后读取 effectiveContext，归因看到的就是真实
       // 出站字节。
-      const outboundMessages =
-        accumulatedWireTailBlocks.length > 0
-          ? attachPinnedTailBlocks(streamContext.messages.slice(), accumulatedWireTailBlocks)
-          : streamContext.messages.slice();
-      const effectiveContext = sanitizeContextForModelRequest({
-        ...streamContext,
+      const requestShape: RequestContextShape = {
+        shape: "agent",
         // Keep the runtime-only tool rules out of compaction and persistence,
         // then reattach them at the provider boundary on every model round.
         systemPrompt: buildSystemPrompt(currentSystemPrompt, toolsSuffix),
-        messages: outboundMessages,
         tools: filterRequestTools(streamTools),
-      });
+        wireTail: accumulatedWireTailBlocks,
+      };
+      const effectiveContext = shapeRequestContext(requestShape, streamContext.messages);
+      // 配方另存一份只含线上字段的工具，出站与前缀归因仍用原工具。
+      const recipeTools = toRecipeTools(requestShape.tools);
       try {
         params.onRequestStart?.({ round, context: effectiveContext, toolsSuffix });
       } catch (error) {
@@ -1282,7 +1264,7 @@ export async function runAssistantWithTools(params: {
           modelApi: primaryRoundTarget.model.api,
           sessionId: roundSessionId,
           cacheRetention: roundCacheRetention,
-          // 与下方 streamOptions 的 headers 合并口径一致:注入侧看到的就是这份。
+          // 与下方传输头的合并口径一致:注入侧看到的就是这份。
           headers: {
             ...(options?.headers ?? {}),
             ...primaryRoundTarget.proxyRequest.headers,
@@ -1319,76 +1301,93 @@ export async function runAssistantWithTools(params: {
         const hostedSearchProbeId = shouldProbeHostedSearch
           ? createHostedSearchProbeId(target.providerId)
           : undefined;
-        let streamOptions: StreamOptionsEx = {
-          ...(options ?? {}),
-          apiKey: options?.apiKey ?? target.runtime.apiKey,
-          headers: withHostedSearchProbeHeader(
-            {
-              ...(options?.headers ?? {}),
-              ...target.proxyRequest.headers,
-            },
-            hostedSearchProbeId,
-          ),
-          signal: options?.signal,
-          sessionId: options?.sessionId ?? params.sessionId,
-          cacheRetention:
-            options?.cacheRetention ??
-            resolveProviderCacheRetention(
-              target.providerId,
-              target.runtime.promptCachingEnabled,
-              undefined,
-              target.runtime.promptCacheRetention,
-            ),
-          metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
-          toolChoice:
-            params.resolveToolChoice?.(round) ??
-            options?.toolChoice ??
-            (effectiveContext.tools?.length ? "auto" : undefined),
-          reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
-          workdir: params.workdir,
-          streamRetry: {
-            ...resolveStreamRetryConfig(target.runtime.retryPolicy),
-            onRetry: (attempt, maxAttempts, errorMessage, plannedDelayMs) => {
-              params.onToolStatus?.(
-                `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
-              );
-              retryAttemptsForRound.push({
-                attempt,
-                maxAttempts,
-                errorMessage,
-                ...(plannedDelayMs === undefined ? {} : { plannedDelayMs }),
-                providerLabel: target.label,
-              });
-              params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
-            },
-            onRetryRecovered: () => {
-              params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
-            },
-          },
-        };
-
-        streamOptions = finalizeProviderStreamOptions({
+        // 配方只收内容 / 缓存形状：loop 配置、signal、streamRetry、探针头与凭证
+        // 都在 finalizeRequest 处逐次补上，记下的配方才能原样重放这一请求。
+        const recipe: RequestRecipe = {
           providerId: target.providerId,
-          baseUrl: target.runtime.baseUrl,
-          options: streamOptions,
-          context: effectiveContext,
-          model: targetModel,
-          workdir: params.workdir,
+          modelId: target.modelId,
+          targetKey: target.key,
+          api: targetModel.api,
+          ...requestShape,
+          tools: recipeTools,
+          messages: streamContext.messages,
+          options: {
+            ...pickRequestRecipeOptions(options),
+            sessionId: options?.sessionId ?? params.sessionId,
+            cacheRetention:
+              options?.cacheRetention ??
+              resolveProviderCacheRetention(
+                target.providerId,
+                target.runtime.promptCachingEnabled,
+                undefined,
+                target.runtime.promptCacheRetention,
+              ),
+            metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
+            toolChoice:
+              params.resolveToolChoice?.(round) ??
+              options?.toolChoice ??
+              (effectiveContext.tools?.length ? "auto" : undefined),
+            reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
+            workdir: params.workdir,
+          },
           nativeWebSearch: params.nativeWebSearch,
           promptCacheHintMode:
             target.runtime.modelConfig?.promptCacheHintMode ?? target.runtime.promptCacheHintMode,
-          debugLogger: params.debugLogger,
-          extra: {
-            round,
-            sessionId: params.sessionId,
+          recordedAt: Date.now(),
+        };
+
+        const request = finalizeRequest(
+          recipe,
+          effectiveContext,
+          // 与 prepareTransport 同口径（复用已备好的 proxyRequest），model-request.test 锁定。
+          {
+            model: targetModel,
+            apiKey: options?.apiKey ?? target.runtime.apiKey,
+            headers: {
+              ...(options?.headers ?? {}),
+              ...target.proxyRequest.headers,
+            },
+            baseUrl: target.runtime.baseUrl,
           },
-        });
+          {
+            signal: options?.signal,
+            streamRetry: {
+              ...resolveStreamRetryConfig(target.runtime.retryPolicy),
+              onRetry: (attempt, maxAttempts, errorMessage, plannedDelayMs) => {
+                params.onToolStatus?.(
+                  `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
+                );
+                retryAttemptsForRound.push({
+                  attempt,
+                  maxAttempts,
+                  errorMessage,
+                  ...(plannedDelayMs === undefined ? {} : { plannedDelayMs }),
+                  providerLabel: target.label,
+                });
+                params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
+              },
+              onRetryRecovered: () => {
+                params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
+              },
+            },
+            headers: withHostedSearchProbeHeader(undefined, hostedSearchProbeId),
+            debugLogger: params.debugLogger,
+            round,
+          },
+        );
+        // finalize 之后、出站之前交出配方（与 text 模式同序）：观察者不夹在装配途中，
+        // finalize 抛错也不会留下一份从未发出的配方。
+        try {
+          params.onRequestPrepared?.(recipe);
+        } catch (error) {
+          console.warn("[agent-runner] recipe observer threw; request is unaffected", error);
+        }
 
         try {
           // 逐候选独立采样：failover 各目标的装配头集互不泄漏是核心正确性
           // 要求，快照按实际尝试的目标各记一份，观察失败不影响请求。
           params.onTransportAttempt?.(round, {
-            ...captureTransportSnapshot(streamOptions.headers),
+            ...captureTransportSnapshot(request.options.headers),
             providerLabel: target.label,
           });
         } catch (error) {
@@ -1440,17 +1439,13 @@ export async function runAssistantWithTools(params: {
           buildStreamRequestDebugPayload({
             runtime: target.runtime,
             context: effectiveContext,
-            options: streamOptions,
+            options: request.options,
             round,
             prefixCache: prefixCacheDiagnostics,
           }),
         );
 
-        return llm.stream({
-          model: targetModel,
-          context: effectiveContext,
-          options: streamOptions,
-        });
+        return llm.stream(request);
       };
 
       const wrapWithGuard = (stream: ReturnType<typeof llm.stream>) =>
@@ -1565,8 +1560,7 @@ export async function runAssistantWithTools(params: {
       sessionId: params.sessionId,
       streamFn,
       toolExecution: "sequential",
-      afterToolCall: async ({ assistantMessage, toolCall }) => ({
-        isError: toolResultErrorFlags.get(toolCall.id) ?? false,
+      afterToolCall: async ({ assistantMessage, toolCall }) => {
         // The batch only terminates when *every* call terminates. A terminating
         // call (ExitPlanMode) can arrive batched with ordinary parallel calls,
         // so the predicate must spread across the whole batch: every sibling
@@ -1575,15 +1569,17 @@ export async function runAssistantWithTools(params: {
         // "submitting ends this turn" guarantee and run a wrap-up round.
         // maxRounds is the run-level circuit breaker: once the cap is reached
         // the current batch finishes normally, then the run ends gracefully.
-        terminate:
+        const terminate =
           (params.maxRounds !== undefined && currentRound >= params.maxRounds) ||
           (params.resolveToolTermination
             ? getAssistantToolCalls(assistantMessage).some((call) =>
                 params.resolveToolTermination?.(call),
               )
             : false) ||
-          (await shouldTerminateBridgedProviderNativeToolCall(assistantMessage, toolCall)),
-      }),
+          (await shouldTerminateBridgedProviderNativeToolCall(assistantMessage, toolCall));
+        if (terminate) terminatingToolCallIds.add(toolCall.id);
+        return { isError: toolResultErrorFlags.get(toolCall.id) ?? false, terminate };
+      },
       beforeToolCall: async ({ assistantMessage, toolCall }) => {
         const effectiveToolCall = normalizeToolCallNameForExecution(toolCall);
         const effectiveAssistantMessage =
@@ -1662,9 +1658,11 @@ export async function runAssistantWithTools(params: {
               ? { ...context, messages: agent ? stateMessages.slice() : context.messages }
               : context;
         const contextChanged = currentContext !== context;
+        // "length" 截断的工具轮由 pi-agent-core 判失败后照样续跑：同样要发布进度、
+        // 推进 emitted 基线并做 post-tool 压缩检查，否则溢出恢复会把这一轮整个丢掉。
         if (
           !params.onBeforeNextTurn ||
-          message.stopReason !== "toolUse" ||
+          (message.stopReason !== "toolUse" && message.stopReason !== "length") ||
           toolResults.length === 0
         ) {
           return contextChanged ? { context: currentContext } : undefined;
@@ -1680,10 +1678,10 @@ export async function runAssistantWithTools(params: {
             messages: runtimeMessages.slice(),
             tools: llmTools,
           },
-          emittedMessages:
-            emittedBaselineIndex <= 0
-              ? runtimeMessages.slice()
-              : runtimeMessages.slice(emittedBaselineIndex),
+          emittedMessages: sliceEmittedMessages(runtimeMessages, emittedBaselineIndex),
+          willContinue: !toolResults.every((result) =>
+            terminatingToolCallIds.has(result.toolCallId),
+          ),
           signal: signal ?? params.signal,
         });
         if (!override) {
@@ -1700,6 +1698,9 @@ export async function runAssistantWithTools(params: {
       switch (event.type) {
         case "turn_start":
           currentRound += 1;
+          // 终止标记只裁决本轮批次：按响应复用 tool-call id 的供应商（本地 OpenAI 兼容
+          // 服务的 call_0）不得让上一轮的标记把本轮误判成不再续跑。
+          terminatingToolCallIds.clear();
           params.onTurnStart?.(currentRound);
           params.onToolStatus?.(`第 ${currentRound} 轮：模型生成中...`);
           break;
@@ -1982,6 +1983,8 @@ export async function runAssistantWithTools(params: {
               tools: llmTools,
             },
             emittedMessages: getMessagesSinceBaseline(agent, emittedBaselineIndex),
+            // 恢复出的 seed 工具结果之后循环必定再 continue 一轮。
+            willContinue: true,
             signal: params.signal,
           });
           throwIfRunnerCancelled(params.signal);
@@ -2004,10 +2007,16 @@ export async function runAssistantWithTools(params: {
       }
 
       if (assistant.stopReason === "error") {
-        throw new Error(normalizeErrorMessage(assistant.errorMessage, "Request failed"));
+        throw new AssistantResponseError(
+          normalizeErrorMessage(assistant.errorMessage, "Request failed"),
+          assistant,
+        );
       }
       if (assistant.stopReason === "aborted") {
-        throw new Error(normalizeErrorMessage(assistant.errorMessage, "Cancelled"));
+        throw new AssistantResponseError(
+          normalizeErrorMessage(assistant.errorMessage, "Cancelled"),
+          assistant,
+        );
       }
 
       await params.debugLogger?.flush();

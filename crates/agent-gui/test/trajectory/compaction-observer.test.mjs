@@ -23,16 +23,8 @@ test("a cancelled running compaction closes its trajectory observer as aborted e
   });
 
   // TypeScript `private` is intentionally exercised through the compiled JS here: this is the
-  // single transition point every real pre-send/mid-stream/post-tool/manual path uses.
-  controller.publishRunning("manual", 0, {
-    intent: "optimization",
-    reason: "threshold",
-    shouldCompact: true,
-    totalTokens: 900,
-    threshold: 800,
-    contextWindow: 1_000,
-    maxOutputToken: 100,
-  });
+  // single transition point every real pre-send/overflow/post-tool/manual path uses.
+  controller.publishRunning("manual", 0, 900);
 
   assert.equal(await controller.handleTurnAbort(), false);
   assert.deepEqual(

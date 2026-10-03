@@ -20,20 +20,29 @@ import { appendSystemPrompt, normalizeSessionId } from "./common";
 import { normalizeErrorMessage } from "./errors";
 import { createStreamingTextReconciler, sanitizeAssistantMessage } from "./messageUtils";
 import { createModelFromConfig } from "./modelFactory";
-import { finalizeProviderStreamOptions } from "./payloadPipeline";
+import {
+  finalizeRequest,
+  type PreparedTransport,
+  prepareTransport,
+  type RequestRecipe,
+  shapeRequestContext,
+  toRecipeTools,
+} from "./modelRequest";
+import { AssistantResponseError } from "./overflow";
 import {
   failoverBreakerKey,
   type ModelFailoverRuntimeConfig,
   type ProviderFailoverCandidate,
+  primaryFailoverBreakerKey,
   withProviderFailover,
 } from "./providerFailover";
 import {
   buildProviderRequestMetadata,
-  prepareProviderRequest,
   resolveProviderCacheRetention,
   toSimpleStreamReasoning,
 } from "./requestOptions";
-import { resolveStreamRetryConfig } from "./retryPolicy";
+import { resolveCappedStreamRetryConfig, resolveStreamRetryConfig } from "./retryPolicy";
+import type { StreamRetryConfig } from "./streamRetry";
 import { buildTextModeToolResultsForAssistant } from "./textModeToolRecovery";
 import { captureTransportSnapshot, type TransportSnapshot } from "./transportSnapshot";
 import type { ProviderRuntimeConfig, StreamOptionsEx } from "./types";
@@ -56,28 +65,91 @@ function buildTextOnlyCallContext(
   context: Context,
   options?: { allowJsonOutput?: boolean },
 ): Context {
-  return {
-    ...context,
-    systemPrompt: appendSystemPrompt(
-      context.systemPrompt,
-      buildTextOnlySystemSuffix(options?.allowJsonOutput),
-    ),
-  };
+  return shapeRequestContext(
+    {
+      shape: "text",
+      systemPrompt: appendSystemPrompt(
+        context.systemPrompt,
+        buildTextOnlySystemSuffix(options?.allowJsonOutput),
+      ),
+      tools: context.tools,
+    },
+    context.messages,
+  );
 }
 
-function buildTextOnlyStreamOptions(params: {
+function buildTextOnlyRequestRecipe(params: {
   providerId: ProviderId;
+  modelId: string;
+  targetKey: string;
   runtime: ProviderRuntimeConfig;
   model: Model<Api>;
-  context?: Context;
+  context: Context;
   workdir?: string;
-  headers: Record<string, string>;
-  hostedSearchProbeId?: string;
-  signal?: AbortSignal;
   sessionId?: string;
   cacheRetention?: CacheRetention;
   nativeWebSearch?: boolean;
-  debugLogger?: StreamDebugLogger;
+  maxTokens?: number;
+}): RequestRecipe {
+  const sessionId = normalizeSessionId(params.sessionId);
+  const nativeWebSearch =
+    providerSupportsNativeWebSearch(params.providerId, params.model.api, {
+      baseUrl: params.runtime.baseUrl,
+      modelId: params.model.id,
+    }) && params.nativeWebSearch;
+  const usesOpenAIChatNativeWebSearch =
+    nativeWebSearch && params.providerId === "codex" && params.model.api === "openai-completions";
+  return {
+    providerId: params.providerId,
+    modelId: params.modelId,
+    targetKey: params.targetKey,
+    api: params.model.api,
+    shape: "text",
+    systemPrompt: params.context.systemPrompt,
+    tools: toRecipeTools(params.context.tools),
+    messages: params.context.messages,
+    options: {
+      sessionId,
+      cacheRetention: resolveProviderCacheRetention(
+        params.providerId,
+        params.runtime.promptCachingEnabled,
+        params.cacheRetention,
+        params.runtime.promptCacheRetention,
+      ),
+      metadata: buildProviderRequestMetadata(params.providerId, sessionId),
+      reasoning:
+        ((params.providerId === "codex" || params.providerId === "xai") &&
+          (params.model.api === "openai-responses" || params.model.api === "openai-completions")) ||
+        (params.providerId === "claude_code" && params.model.api === "anthropic-messages") ||
+        (params.providerId === "gemini" && params.model.api === "google-generative-ai") ||
+        params.providerId === "deepseek"
+          ? toSimpleStreamReasoning(params.runtime.reasoning)
+          : undefined,
+      deepSeekThinking:
+        params.providerId === "deepseek" && params.runtime.reasoning === "off"
+          ? "disabled"
+          : undefined,
+      workdir: params.workdir,
+      // Text-only mode cannot execute local tools. Provider-native web search is
+      // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
+      toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",
+      ...(params.maxTokens === undefined ? {} : { maxTokens: params.maxTokens }),
+    },
+    nativeWebSearch: params.nativeWebSearch,
+    promptCacheHintMode:
+      params.runtime.modelConfig?.promptCacheHintMode ?? params.runtime.promptCacheHintMode,
+    recordedAt: Date.now(),
+  };
+}
+
+/** 叠加在供应商重试策略之上的流参数：maxAttempts 是上限（与策略取小），看门狗原样透传。 */
+type TextStreamRetryOverrides = Pick<
+  StreamRetryConfig,
+  "maxAttempts" | "firstEventTimeoutMs" | "idleTimeoutMs" | "retryOnStall"
+>;
+
+function buildTextOnlyStreamRetry(params: {
+  runtime: ProviderRuntimeConfig;
   /** 本组 options 所属候选的展示标签（"Provider · model"），随 onRetryStatus 回传。 */
   providerLabel?: string;
   onRetryStatus?: (
@@ -88,68 +160,23 @@ function buildTextOnlyStreamOptions(params: {
     providerLabel?: string,
   ) => void;
   onRetryRecovered?: () => void;
-}): StreamOptionsEx {
-  const sessionId = normalizeSessionId(params.sessionId);
-  const nativeWebSearch =
-    providerSupportsNativeWebSearch(params.providerId, params.model.api, {
-      baseUrl: params.runtime.baseUrl,
-      modelId: params.model.id,
-    }) && params.nativeWebSearch;
-  const usesOpenAIChatNativeWebSearch =
-    nativeWebSearch && params.providerId === "codex" && params.model.api === "openai-completions";
+  overrides?: TextStreamRetryOverrides;
+}): StreamRetryConfig {
   const onRetryStatus = params.onRetryStatus;
-  const options: StreamOptionsEx = {
-    apiKey: params.runtime.apiKey,
-    headers: withHostedSearchProbeHeader(params.headers, params.hostedSearchProbeId),
-    signal: params.signal,
-    sessionId,
-    cacheRetention: resolveProviderCacheRetention(
-      params.providerId,
-      params.runtime.promptCachingEnabled,
-      params.cacheRetention,
-      params.runtime.promptCacheRetention,
-    ),
-    metadata: buildProviderRequestMetadata(params.providerId, sessionId),
-    reasoning:
-      ((params.providerId === "codex" || params.providerId === "xai") &&
-        (params.model.api === "openai-responses" || params.model.api === "openai-completions")) ||
-      (params.providerId === "claude_code" && params.model.api === "anthropic-messages") ||
-      (params.providerId === "gemini" && params.model.api === "google-generative-ai") ||
-      params.providerId === "deepseek"
-        ? toSimpleStreamReasoning(params.runtime.reasoning)
-        : undefined,
-    deepSeekThinking:
-      params.providerId === "deepseek" && params.runtime.reasoning === "off"
-        ? "disabled"
-        : undefined,
-    workdir: params.workdir,
-    // Text-only mode cannot execute local tools. Provider-native web search is
-    // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
-    toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",
-    streamRetry: {
-      ...resolveStreamRetryConfig(params.runtime.retryPolicy),
-      // 绑定当前候选标签：failover 下备用供应商的流内重试才能在轨迹里归属
-      // 到具体候选，与 agent 模式 retryAttempts 携带 providerLabel 的口径一致。
-      onRetry: onRetryStatus
-        ? (attempt, maxAttempts, errorMessage, plannedDelayMs) =>
-            onRetryStatus(attempt, maxAttempts, errorMessage, plannedDelayMs, params.providerLabel)
-        : undefined,
-      onRetryRecovered: params.onRetryRecovered,
-    },
+  const { maxAttempts, ...watchdog } = params.overrides ?? {};
+  return {
+    ...(maxAttempts === undefined
+      ? resolveStreamRetryConfig(params.runtime.retryPolicy)
+      : resolveCappedStreamRetryConfig(params.runtime.retryPolicy, maxAttempts)),
+    ...watchdog,
+    // 绑定当前候选标签：failover 下备用供应商的流内重试才能在轨迹里归属
+    // 到具体候选，与 agent 模式 retryAttempts 携带 providerLabel 的口径一致。
+    onRetry: onRetryStatus
+      ? (attempt, maxAttempts, errorMessage, plannedDelayMs) =>
+          onRetryStatus(attempt, maxAttempts, errorMessage, plannedDelayMs, params.providerLabel)
+      : undefined,
+    onRetryRecovered: params.onRetryRecovered,
   };
-  return finalizeProviderStreamOptions({
-    providerId: params.providerId,
-    baseUrl: params.runtime.baseUrl,
-    options,
-    context: params.context,
-    model: params.model,
-    workdir: params.workdir,
-    nativeWebSearch: params.nativeWebSearch,
-    promptCacheHintMode:
-      params.runtime.modelConfig?.promptCacheHintMode ?? params.runtime.promptCacheHintMode,
-    debugLogger: params.debugLogger,
-    extra: { sessionId },
-  });
 }
 
 export type TextStreamFailoverTarget = {
@@ -208,7 +235,17 @@ export async function streamAssistantMessage(params: {
   onTransportAttempt?: (snapshot: TransportSnapshot & { providerLabel: string }) => void;
   /** Exact text-only provider boundary after its mandatory system suffix is appended. */
   onRequestStart?: (info: { context: Context; systemSuffix: string }) => void;
+  /**
+   * 每个实际尝试的候选各 fire 一次：本次请求的内容 / 缓存配方（不含凭证与传输）。
+   * 工具恢复轮复用首轮按 callContext finalize 的 options，读 context 的拦截器
+   * （原生附件、DeepSeek 对齐）因此只有首轮能与配方重放逐字节一致。
+   */
+  onRequestPrepared?: (recipe: RequestRecipe) => void;
   failover?: TextStreamFailoverParams;
+  /** 输出上限（压缩 transcript 档）；缺省沿用模型目录。 */
+  maxTokens?: number;
+  /** 逐候选叠加在各自重试策略之上（压缩 transcript 档：上限 + 看门狗）。 */
+  streamRetry?: TextStreamRetryOverrides;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -226,18 +263,10 @@ export async function streamAssistantMessage(params: {
     console.warn("text-only request observer failed; continuing without diagnostics", error);
   }
 
-  const proxyRequest = await prepareProviderRequest(params.providerId, params.runtime, {
+  const transport = await prepareTransport(params.providerId, modelId, params.runtime, {
     sessionId: params.sessionId,
   });
-
-  const m = createModelFromConfig(
-    params.providerId,
-    modelId,
-    proxyRequest.baseUrl,
-    params.runtime.requestFormat,
-    params.runtime.modelConfig,
-    params.runtime.baseUrl.trim(),
-  );
+  const m = transport.model;
 
   const shouldProbeHostedSearch =
     Boolean(params.nativeWebSearch) &&
@@ -250,29 +279,70 @@ export async function streamAssistantMessage(params: {
     : undefined;
   const primaryFailoverLabel =
     params.failover?.primary.label ?? `${params.providerId} · ${modelId}`;
-  const options = buildTextOnlyStreamOptions({
-    providerId: params.providerId,
-    runtime: params.runtime,
-    model: m,
-    context: callContext,
-    workdir: params.workdir,
-    headers: proxyRequest.headers,
-    hostedSearchProbeId,
-    signal: params.signal,
-    sessionId: params.sessionId,
-    cacheRetention: params.cacheRetention,
-    nativeWebSearch: params.nativeWebSearch,
-    debugLogger: params.debugLogger,
-    providerLabel: primaryFailoverLabel,
-    onRetryStatus: params.onRetryStatus,
-    onRetryRecovered: params.onRetryRecovered,
-  });
+  const primaryFailoverKey = primaryFailoverBreakerKey(
+    params.providerId,
+    modelId,
+    params.failover?.primary,
+  );
+
+  /** 候选的配方与 finalize 结果；探针头逐次追加在传输头之后，不入配方。 */
+  const prepareTextTarget = (
+    target: {
+      providerId: ProviderId;
+      modelId: string;
+      runtime: ProviderRuntimeConfig;
+      label: string;
+      key: string;
+    },
+    targetTransport: PreparedTransport,
+  ) => {
+    const recipe = buildTextOnlyRequestRecipe({
+      providerId: target.providerId,
+      modelId: target.modelId,
+      targetKey: target.key,
+      runtime: target.runtime,
+      model: targetTransport.model,
+      context: callContext,
+      workdir: params.workdir,
+      sessionId: params.sessionId,
+      cacheRetention: params.cacheRetention,
+      nativeWebSearch: params.nativeWebSearch,
+      maxTokens: params.maxTokens,
+    });
+    return {
+      recipe,
+      ...finalizeRequest(recipe, callContext, targetTransport, {
+        signal: params.signal,
+        streamRetry: buildTextOnlyStreamRetry({
+          runtime: target.runtime,
+          providerLabel: target.label,
+          onRetryStatus: params.onRetryStatus,
+          onRetryRecovered: params.onRetryRecovered,
+          overrides: params.streamRetry,
+        }),
+        headers: withHostedSearchProbeHeader(undefined, hostedSearchProbeId),
+        debugLogger: params.debugLogger,
+      }),
+    };
+  };
+  type PreparedTextFailoverTarget = ReturnType<typeof prepareTextTarget>;
+
+  const primaryTarget = prepareTextTarget(
+    {
+      providerId: params.providerId,
+      modelId,
+      runtime: params.runtime,
+      label: primaryFailoverLabel,
+      key: primaryFailoverKey,
+    },
+    transport,
+  );
 
   params.debugLogger?.logRequest(
     buildStreamRequestDebugPayload({
       runtime: params.runtime,
       context: callContext,
-      options,
+      options: primaryTarget.options,
     }),
   );
 
@@ -283,17 +353,7 @@ export async function streamAssistantMessage(params: {
   // never touch the hot path. Sticky winner: recovery turns within this call
   // start on the target that actually answered.
   const failover = params.failover;
-  const primaryFailoverKey = failover?.primary.selectedModel
-    ? failoverBreakerKey(
-        failover.primary.selectedModel.customProviderId,
-        failover.primary.selectedModel.model,
-      )
-    : failoverBreakerKey(params.providerId, modelId);
 
-  type PreparedTextFailoverTarget = {
-    model: ReturnType<typeof createModelFromConfig>;
-    options: StreamOptionsEx;
-  };
   const preparedFallbackTargets = new Map<number, Promise<PreparedTextFailoverTarget>>();
   const prepareFallbackTarget = (index: number): Promise<PreparedTextFailoverTarget> => {
     const existing = preparedFallbackTargets.get(index);
@@ -302,41 +362,22 @@ export async function streamAssistantMessage(params: {
     if (!fallback) {
       return Promise.reject(new Error(`Unknown failover target index: ${index}`));
     }
-    const prepared = (async () => {
-      const fallbackProxyRequest = await prepareProviderRequest(
-        fallback.providerId,
-        fallback.runtime,
-        { sessionId: params.sessionId },
-      );
-      const fallbackModel = createModelFromConfig(
-        fallback.providerId,
-        fallback.model,
-        fallbackProxyRequest.baseUrl,
-        fallback.runtime.requestFormat,
-        fallback.runtime.modelConfig,
-        fallback.runtime.baseUrl.trim(),
-      );
-      return {
-        model: fallbackModel,
-        options: buildTextOnlyStreamOptions({
+    const prepared = (async () =>
+      prepareTextTarget(
+        {
           providerId: fallback.providerId,
+          modelId: fallback.model,
           runtime: fallback.runtime,
-          model: fallbackModel,
-          context: callContext,
-          workdir: params.workdir,
-          headers: fallbackProxyRequest.headers,
-          hostedSearchProbeId,
-          signal: params.signal,
+          label: fallback.label,
+          key: failoverBreakerKey(
+            fallback.selectedModel.customProviderId,
+            fallback.selectedModel.model,
+          ),
+        },
+        await prepareTransport(fallback.providerId, fallback.model, fallback.runtime, {
           sessionId: params.sessionId,
-          cacheRetention: params.cacheRetention,
-          nativeWebSearch: params.nativeWebSearch,
-          debugLogger: params.debugLogger,
-          providerLabel: fallback.label,
-          onRetryStatus: params.onRetryStatus,
-          onRetryRecovered: params.onRetryRecovered,
         }),
-      } satisfies PreparedTextFailoverTarget;
-    })();
+      ))();
     // A failed preparation must not be cached forever; allow later retries.
     preparedFallbackTargets.set(
       index,
@@ -381,10 +422,26 @@ export async function streamAssistantMessage(params: {
     }
   };
 
+  const startTarget = (target: PreparedTextFailoverTarget, label: string, context: Context) => {
+    if (params.onRequestPrepared) {
+      try {
+        // 配方的 messages 换成本次实际发出的那份：工具恢复轮会在其后追加。
+        params.onRequestPrepared({
+          ...target.recipe,
+          messages: context.messages,
+          recordedAt: Date.now(),
+        });
+      } catch (error) {
+        console.warn("text-only recipe observer failed; continuing without recording", error);
+      }
+    }
+    noteTransportAttempt(label, target.options);
+    return llm.stream({ model: target.model, context, options: target.options });
+  };
+
   const startAttemptStream = (activeContext: Context) => {
     if (!failover || failover.fallbacks.length === 0) {
-      noteTransportAttempt(primaryFailoverLabel, options);
-      return llm.stream({ model: m, context: activeContext, options });
+      return startTarget(primaryTarget, primaryFailoverLabel, activeContext);
     }
     // Candidate order: sticky active target first, then the rest in
     // primary→queue order. Breaker-open targets are skipped inside
@@ -413,8 +470,7 @@ export async function streamAssistantMessage(params: {
             : fallbackTargetIdentity(targetIndex),
         start: async () => {
           if (targetIndex === 0 || !fallback) {
-            noteTransportAttempt(primaryFailoverLabel, options);
-            return llm.stream({ model: m, context: activeContext, options });
+            return startTarget(primaryTarget, primaryFailoverLabel, activeContext);
           }
           const prepared = await prepareFallbackTarget(targetIndex);
           params.debugLogger?.logRequest(
@@ -424,12 +480,7 @@ export async function streamAssistantMessage(params: {
               options: prepared.options,
             }),
           );
-          noteTransportAttempt(fallback.label, prepared.options);
-          return llm.stream({
-            model: prepared.model,
-            context: activeContext,
-            options: prepared.options,
-          });
+          return startTarget(prepared, fallback.label, activeContext);
         },
       } satisfies ProviderFailoverCandidate;
     });
@@ -535,11 +586,12 @@ export async function streamAssistantMessage(params: {
 
         let final = sanitizeAssistantMessage(await s.result());
         if (final.stopReason === "error" || final.stopReason === "aborted") {
-          throw new Error(
+          throw new AssistantResponseError(
             normalizeErrorMessage(
               final.errorMessage,
               final.stopReason === "aborted" ? "Cancelled" : "Request failed",
             ),
+            final,
           );
         }
 
@@ -602,33 +654,34 @@ export async function completeAssistantMessage(params: {
   if (!params.runtime.baseUrl.trim()) throw new Error("Base URL cannot be empty");
   if (!params.runtime.apiKey.trim()) throw new Error("API Key cannot be empty");
 
-  const proxyRequest = await prepareProviderRequest(params.providerId, params.runtime, {
+  const transport = await prepareTransport(params.providerId, modelId, params.runtime, {
     sessionId: params.sessionId,
   });
-
-  const m = createModelFromConfig(
-    params.providerId,
-    modelId,
-    proxyRequest.baseUrl,
-    params.runtime.requestFormat,
-    params.runtime.modelConfig,
-    params.runtime.baseUrl.trim(),
-  );
+  const m = transport.model;
 
   const callContext = buildTextOnlyCallContext(params.context, {
     allowJsonOutput: params.allowJsonOutput,
   });
-  const options = buildTextOnlyStreamOptions({
-    providerId: params.providerId,
-    runtime: params.runtime,
-    model: m,
-    context: callContext,
-    headers: proxyRequest.headers,
-    signal: params.signal,
-    sessionId: params.sessionId,
-    cacheRetention: params.cacheRetention,
-    debugLogger: params.debugLogger,
-  });
+  // 辅助请求（摘要 / 标题等）不记配方：只复用装配路径。
+  const { options } = finalizeRequest(
+    buildTextOnlyRequestRecipe({
+      providerId: params.providerId,
+      modelId,
+      targetKey: primaryFailoverBreakerKey(params.providerId, modelId),
+      runtime: params.runtime,
+      model: m,
+      context: callContext,
+      sessionId: params.sessionId,
+      cacheRetention: params.cacheRetention,
+    }),
+    callContext,
+    transport,
+    {
+      signal: params.signal,
+      streamRetry: buildTextOnlyStreamRetry({ runtime: params.runtime }),
+      debugLogger: params.debugLogger,
+    },
+  );
 
   params.debugLogger?.logRequest(
     buildStreamRequestDebugPayload({
@@ -644,11 +697,12 @@ export async function completeAssistantMessage(params: {
       const final = await s.result();
 
       if (final.stopReason === "error" || final.stopReason === "aborted") {
-        throw new Error(
+        throw new AssistantResponseError(
           normalizeErrorMessage(
             final.errorMessage,
             final.stopReason === "aborted" ? "Cancelled" : "Request failed",
           ),
+          final,
         );
       }
 

@@ -1,4 +1,4 @@
-import type { Context, UserMessage } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/pi-ai";
 
 import {
   buildRequestContext,
@@ -14,6 +14,11 @@ import { appendSystemPrompt } from "./chatPageRuntime";
 export type ConversationContextBuildOptions = {
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
+  /**
+   * 默认带上 checkpoint bridge：主请求、账本、用量环与压缩估值都按真实请求口径。
+   * 记忆抽取这类复用消息的旁路必须显式传 false，否则 bridge 会被当成用户发言。
+   */
+  includeCheckpointBridge?: boolean;
 };
 
 /**
@@ -57,7 +62,10 @@ export function buildCompactionContext(
   tools?: Context["tools"],
   options?: ConversationContextBuildOptions,
 ): Context {
-  const baseContext = buildRequestContext(state, options);
+  const baseContext = buildRequestContext(state, {
+    ...options,
+    includeCheckpointBridge: options?.includeCheckpointBridge !== false,
+  });
   return Array.isArray(tools) && tools.length > 0
     ? {
         ...baseContext,
@@ -76,6 +84,7 @@ export function buildPreparedContext(params: {
   skillMentionUpdates?: SkillMentionUpdateMap | null;
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
+  includeCheckpointBridge?: boolean;
   /** 轨迹埋点用的分段回调；不传时零开销。 */
   captureSlots?: (slots: PreparedSystemPromptSlots) => void;
 }): Context {
@@ -84,6 +93,7 @@ export function buildPreparedContext(params: {
   const withTools = buildCompactionContext(params.state, params.tools, {
     includeAbortedMessages: params.includeAbortedMessages,
     includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,
+    includeCheckpointBridge: params.includeCheckpointBridge,
   });
 
   params.captureSlots?.({
@@ -119,30 +129,4 @@ export function buildPreparedContext(params: {
         systemPrompt,
       }
     : withMessages;
-}
-
-export function buildResumeContext(params: {
-  state: ConversationViewState;
-  resumeMessage?: UserMessage;
-  tools?: Context["tools"];
-  activeAgentPrompt: string;
-  skillsPrompt: string;
-  memoryPrompt?: string;
-  memoryTurnUpdates?: MemoryTurnUpdateMap | null;
-  skillMentionUpdates?: SkillMentionUpdateMap | null;
-  includeAbortedMessages?: boolean;
-  includeUploadedFilesMetadata?: boolean;
-  captureSlots?: (slots: PreparedSystemPromptSlots) => void;
-}): Context {
-  const baseContext = buildPreparedContext({
-    ...params,
-    includeAbortedMessages: params.includeAbortedMessages,
-  });
-  if (!params.resumeMessage) {
-    return baseContext;
-  }
-  return {
-    ...baseContext,
-    messages: [...baseContext.messages, params.resumeMessage],
-  };
 }

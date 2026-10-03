@@ -5,9 +5,16 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const fileLedger = loader.loadModule("src/lib/chat/compaction/fileLedger.ts");
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
-const payload = loader.loadModule("src/lib/chat/compaction/payload.ts");
+const transcript = loader.loadModule("src/lib/chat/compaction/transcript.ts");
 
 const MAX = fileLedger.FILE_LEDGER_MAX_ENTRIES;
+
+// 摘要与账本只经 checkpoint bridge 进入请求：取首条消息的前置 bridge 块。
+function bridgeTextOf(state) {
+  const context = conversationState.buildRequestContext(state, { includeCheckpointBridge: true });
+  assert.equal(context.systemPrompt, "Base prompt");
+  return context.messages[0].content[0].text;
+}
 
 function user(content, timestamp) {
   return { role: "user", content, timestamp };
@@ -285,13 +292,13 @@ test("checkpoint stores a merged ledger and buildRequestContext injects it", () 
   assert.deepEqual(ledger.readFiles, ["src/a.ts"]);
   assert.deepEqual(ledger.modifiedFiles, ["src/b.ts"]);
 
-  const requestContext = conversationState.buildRequestContext(state1);
-  assert.match(requestContext.systemPrompt, /Files touched/);
-  assert.match(requestContext.systemPrompt, /Modified: "src\/b\.ts"/);
-  assert.match(requestContext.systemPrompt, /Read: "src\/a\.ts"/);
+  const bridge = bridgeTextOf(state1);
+  assert.match(bridge, /<files>\n### Files touched/);
+  assert.match(bridge, /Modified: "src\/b\.ts"/);
+  assert.match(bridge, /Read: "src\/a\.ts"/);
 });
 
-test("compaction payload strips fileLedger (summarizer never sees it) but injection keeps it", () => {
+test("the summary request sees the ledger only through the bridge's previous checkpoint", () => {
   let state = conversationState.createConversationStateFromContext({
     systemPrompt: "Base prompt",
     tools: [],
@@ -302,20 +309,18 @@ test("compaction payload strips fileLedger (summarizer never sees it) but inject
   });
   state = conversationState.appendMessagesToConversation(state, [
     checkpoint("<summary><task>x</task></summary>", 3),
+    user("next", 4),
   ]);
 
-  const built = payload.buildCompactionPayload({
-    state,
-    intent: "optimization",
-    contextTokens: 1000,
-    threshold: 500,
-  });
-  assert.ok(built.previous_summary, "previous_summary present");
-  assert.equal(built.previous_summary.summaryMeta.fileLedger, undefined);
-  // Other summaryMeta fields are preserved.
-  assert.ok("coversThroughMessageId" in built.previous_summary.summaryMeta);
-  // The ledger is still injected for the downstream model.
-  assert.match(conversationState.buildRequestContext(state).systemPrompt, /Files touched/);
+  const messages = conversationState.buildRequestContext(state, {
+    includeCheckpointBridge: true,
+  }).messages;
+  const serialized = transcript.serializeTranscript(messages, { budgetTokens: 4_000 });
+  assert.match(serialized, /^<previous_checkpoint>\n<context_checkpoint>/);
+  assert.match(serialized, /<files>\n### Files touched[\s\S]*Modified: "src\/b\.ts"/);
+  // 合入首条 user 的 bridge 只出现一次，原话照常作为 [User] 输出。
+  assert.equal(serialized.match(/Files touched/g).length, 1);
+  assert.match(serialized, /\[User\]\nnext$/);
 });
 
 test("three compactions accumulate file operations across checkpoints", () => {
@@ -368,7 +373,8 @@ test("old summaries lacking fileLedger load and inject without error", () => {
   const seg = withCheckpoint.segments[withCheckpoint.activeSegmentIndex];
   delete seg.summary.summaryMeta.fileLedger;
 
-  const requestContext = conversationState.buildRequestContext(withCheckpoint);
-  assert.match(requestContext.systemPrompt, /Previous Conversation Summary/);
-  assert.doesNotMatch(requestContext.systemPrompt, /Files touched/);
+  const bridge = bridgeTextOf(withCheckpoint);
+  // 旧摘要正文里的 </summary> 被中和，不会提前闭合信封。
+  assert.match(bridge, /<summary>\n<summary><task>x<\/task><\\\/summary>\n<\/summary>/);
+  assert.doesNotMatch(bridge, /Files touched|<files>/);
 });

@@ -1,181 +1,176 @@
-import type { ProviderModelConfig } from "../../settings";
-import type { CompactionDecision, CompactionIntent } from "./types";
+import { canManualCompact, contextUsageRatio } from "@liveagent/ui/lib/chat/contextUsage";
+import type { ProviderModelConfig, ReasoningLevel } from "../../settings";
+import type { CompactionDecisionReason, CompactionTrigger } from "./types";
 
-export const OPTIMIZATION_THRESHOLD_FACTOR = 1.5;
-export const PROTECTION_THRESHOLD_FACTOR = 1.2;
-export const MIN_COMPACTION_INTERVAL_MS = 60_000;
-export const MIN_COMPACTION_USER_MESSAGES = 3;
-export const RECENT_COMPACTION_WINDOW_MS = 5 * 60_000;
-// 压缩后仍高于阈值的 90% 视为"低效压缩"，推动压力升级。
-export const INEFFECTIVE_COMPACTION_RATIO = 0.9;
-export const MAX_PRESSURE_LEVEL = 2;
+// ============================================================================
+// 限额与决策。
+//
+// W = 目录 contextWindow（含输出），O = maxOutputToken（主请求 max_tokens = O）：
+//   inputCap = W − O                       Anthropic 要求 input + max_tokens ≤ W；OpenAI 有独立输入上限
+//   reserve  = clamp(⌊0.05W⌋, 4k, 20k)     两次 usage 锚点之间的估算漂移
+//   hard     = inputCap − reserve          达到即 mustProgress
+//   soft     = hard − clamp(⌊0.05W⌋, 4k, 16k)   唯一的自动触发线
+// ============================================================================
 
-export const PRUNE_MINIMUM_TOKENS = 20_000;
-const PRUNE_PROTECT_TOKENS_BY_LEVEL = [40_000, 20_000, 10_000] as const;
-const PRUNE_PROTECT_USER_TURNS_BY_LEVEL = [2, 2, 1] as const;
-
-export type PressureLevel = 0 | 1 | 2;
-
-/**
- * 压力升级阶梯：替代旧的 MAX_SESSION_COMPACTIONS 硬顶。连续低效压缩推高
- * level（加大 prune 力度、收紧保护阈值、给出建议性提示），但永不硬性拒绝。
- * 纯数据 + 纯转移函数，由 controller 持有并推进。
- */
-export type CompactionPressure = {
-  level: PressureLevel;
-  consecutiveIneffective: number;
-  compactionsApplied: number;
-  lastCompactionAt: number;
+export type CompactionLimits = {
+  inputCap: number;
+  reserve: number;
+  hard: number;
+  soft: number;
 };
 
-export function createCompactionPressure(): CompactionPressure {
-  return {
-    level: 0,
-    consecutiveIneffective: 0,
-    compactionsApplied: 0,
-    lastCompactionAt: 0,
-  };
+// fork 在主请求上下文之后追加一条指令：给它留出余量，同一窗口才不会拒收。
+const FORK_INSTRUCTION_RESERVE_TOKENS = 2_000;
+// fixed（system + tools + 边界追加段）距 soft 不足这么多时，压缩腾不出有效空间。
+const PREFIX_HEADROOM_TOKENS = 20_000;
+// 连续失败达到它即熔断（仅 [soft, hard) 区间）。
+const CIRCUIT_FAILURE_STREAK = 2;
+// 保留原话的总预算上限（Codex 风格）；调用方给出的预算一律钳到 [0, 上限]。
+export const RETAINED_USER_MESSAGES_MAX_TOKENS = 20_000;
+
+/** 摘要流的空闲看门狗：有内容之后两个事件间的最长间隔。 */
+export const IDLE_TIMEOUT_MS = 180_000;
+/** 手动压缩的总时限：低于 WebUI 5 分钟的 pending 超时。 */
+export const DEADLINE_MANUAL_MS = 270_000;
+export const DEADLINE_AUTO_MS = 600_000;
+/** 距总时限不足它时不再进入 transcript 档。 */
+export const TRANSCRIPT_MIN_REMAINING_MS = 45_000;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
-export function normalizeCompactionPressure(
-  pressure: CompactionPressure,
-  now: number,
-): CompactionPressure {
-  if (
-    pressure.lastCompactionAt > 0 &&
-    now - pressure.lastCompactionAt > RECENT_COMPACTION_WINDOW_MS &&
-    (pressure.level > 0 || pressure.consecutiveIneffective > 0)
-  ) {
-    return { ...pressure, level: 0, consecutiveIneffective: 0 };
-  }
-  return pressure;
-}
-
-export function notePressureAfterCompaction(
-  pressure: CompactionPressure,
-  params: { totalTokensAfter: number; threshold: number; now: number },
-): CompactionPressure {
-  const ineffective =
-    params.threshold > 0 &&
-    params.totalTokensAfter > params.threshold * INEFFECTIVE_COMPACTION_RATIO;
-  const consecutiveIneffective = ineffective ? pressure.consecutiveIneffective + 1 : 0;
-  return {
-    level: Math.min(MAX_PRESSURE_LEVEL, consecutiveIneffective) as PressureLevel,
-    consecutiveIneffective,
-    compactionsApplied: pressure.compactionsApplied + 1,
-    lastCompactionAt: params.now,
-  };
-}
-
-export function shouldPruneBeforeCompaction(pressure: CompactionPressure, now: number): boolean {
-  if (pressure.level >= 1) return true;
-  return (
-    pressure.lastCompactionAt > 0 && now - pressure.lastCompactionAt <= RECENT_COMPACTION_WINDOW_MS
-  );
-}
-
-export function isNearModelLimit(pressure: CompactionPressure): boolean {
-  return pressure.level >= MAX_PRESSURE_LEVEL;
-}
-
-export type PruneOptions = {
-  minimumReleasedTokens: number;
-  protectedToolTokens: number;
-  protectedRecentUserTurns: number;
-};
-
-export function resolvePruneOptions(pressure: CompactionPressure): PruneOptions {
-  return {
-    minimumReleasedTokens: PRUNE_MINIMUM_TOKENS,
-    protectedToolTokens: PRUNE_PROTECT_TOKENS_BY_LEVEL[pressure.level],
-    protectedRecentUserTurns: PRUNE_PROTECT_USER_TURNS_BY_LEVEL[pressure.level],
-  };
-}
-
-// contextWindow 是含输出的总窗口语义（目录/兜底统一口径；Codex 源的输入侧
-// 预算已在目录生成期换算），因此"窗口 − 输出预留"对所有供应商一致成立。
-// OpenAI 系"输入上限 = 总窗口 − 输出上限"（GPT-5：400K = 272K + 128K），
-// factor ≥ 1 保证阈值恒不超过真实输入上限。
-export function resolveCompactionThreshold(params: {
-  intent: CompactionIntent;
+export function resolveCompactionLimits(params: {
   contextWindow: number;
   maxOutputToken: number;
-  pressureLevel: PressureLevel;
-}): number {
-  const factor =
-    params.intent === "optimization" ? OPTIMIZATION_THRESHOLD_FACTOR : PROTECTION_THRESHOLD_FACTOR;
-  const effectiveFactor =
-    params.intent === "protection" && params.pressureLevel >= MAX_PRESSURE_LEVEL ? 1.0 : factor;
-  return Math.max(1024, Math.floor(params.contextWindow - params.maxOutputToken * effectiveFactor));
+}): CompactionLimits {
+  const contextWindow = Math.max(0, Math.floor(params.contextWindow));
+  const margin = Math.floor(0.05 * contextWindow);
+  const inputCap = contextWindow - Math.max(0, Math.floor(params.maxOutputToken));
+  const reserve = clamp(margin, 4_000, 20_000);
+  const hard = inputCap - reserve;
+  return { inputCap, reserve, hard, soft: hard - clamp(margin, 4_000, 16_000) };
 }
 
+export function forkFits(totalTokens: number, limits: CompactionLimits): boolean {
+  return totalTokens + FORK_INSTRUCTION_RESERVE_TOKENS <= limits.inputCap;
+}
+
+export type CompactionStage = "fork" | "transcript";
+
+export type CompactionVerdict =
+  | {
+      shouldCompact: false;
+      reason: CompactionDecisionReason;
+      totalTokens: number;
+      limits: CompactionLimits;
+    }
+  | {
+      shouldCompact: true;
+      reason: "threshold-exceeded";
+      totalTokens: number;
+      limits: CompactionLimits;
+      /** ≥ hard 或溢出：必须产出 checkpoint，自动触发的降级梯可走到 deterministic。 */
+      mustProgress: boolean;
+      startAt: CompactionStage;
+    };
+
+/**
+ * 纯决策，按序判断：disabled → no-active-messages → in-flight → manual（50% 门槛）
+ * → overflow（mustProgress，从 transcript 开始）→ below-threshold → prefix-too-large
+ * → circuit-open → 压缩。熔断与防抖动只拦 [soft, hard)：≥ hard 不受它们拦截
+ *（prefix-too-large 除外，压缩腾不出空间），never hard-reject。
+ */
 export function decideCompaction(params: {
-  intent: CompactionIntent;
+  trigger: CompactionTrigger;
   totalTokens: number;
+  /** 账本的 fixed（system + tools + 边界追加段）。 */
+  fixedTokens: number;
   modelConfig?: ProviderModelConfig;
   activeMessageCount: number;
-  userMessageCount: number;
-  // 上一次 checkpoint 的时间（无则 0）；controller 传 max(段 summary 时间, 压力 lastCompactionAt)。
-  lastCompactionAt: number;
-  pressure: CompactionPressure;
   inFlight: boolean;
-  now: number;
-  // 手动触发：用户明确要压，跳过阈值与冷却两个短路；disabled /
-  // no-active-messages / in-flight 硬守卫仍然生效。
-  bypassThresholdAndCooldown?: boolean;
-}): CompactionDecision {
+  failureStreak: number;
+  thrashing: boolean;
+}): CompactionVerdict {
   const contextWindow = Math.max(0, Math.floor(params.modelConfig?.contextWindow ?? 0));
   const maxOutputToken = Math.max(0, Math.floor(params.modelConfig?.maxOutputToken ?? 0));
-
-  const base = {
-    intent: params.intent,
-    totalTokens: Math.max(0, Math.floor(params.totalTokens)),
-    contextWindow,
-    maxOutputToken,
-  };
-
-  if (contextWindow <= 0 || maxOutputToken <= 0) {
-    return {
-      ...base,
-      shouldCompact: false,
-      reason: "disabled",
-      threshold: 0,
-    };
-  }
-
-  const threshold = resolveCompactionThreshold({
-    intent: params.intent,
-    contextWindow,
-    maxOutputToken,
-    pressureLevel: params.pressure.level,
+  const totalTokens = Math.max(0, Math.floor(params.totalTokens));
+  const limits = resolveCompactionLimits({ contextWindow, maxOutputToken });
+  const skip = (reason: CompactionDecisionReason): CompactionVerdict => ({
+    shouldCompact: false,
+    reason,
+    totalTokens,
+    limits,
+  });
+  const compact = (mustProgress: boolean, startAt: CompactionStage): CompactionVerdict => ({
+    shouldCompact: true,
+    reason: "threshold-exceeded",
+    totalTokens,
+    limits,
+    mustProgress,
+    startAt,
   });
 
-  if (params.activeMessageCount <= 0) {
-    return {
-      ...base,
-      shouldCompact: false,
-      reason: "no-active-messages",
-      threshold,
-    };
+  if (contextWindow <= 0 || maxOutputToken <= 0) return skip("disabled");
+  if (params.activeMessageCount <= 0) return skip("no-active-messages");
+  if (params.inFlight) return skip("in-flight");
+  const startAt = forkFits(totalTokens, limits) ? "fork" : "transcript";
+  if (params.trigger === "manual") {
+    return canManualCompact(contextUsageRatio(totalTokens, contextWindow))
+      ? compact(false, startAt)
+      : skip("below-manual-threshold");
   }
-
-  if (params.inFlight) {
-    return { ...base, shouldCompact: false, reason: "in-flight", threshold };
-  }
-
-  if (!params.bypassThresholdAndCooldown && base.totalTokens < threshold) {
-    return { ...base, shouldCompact: false, reason: "below-threshold", threshold };
-  }
-
-  // 冷却窗只拦"刚压缩完又立即越阈值"的超大单轮；正常自触发已被账本重置阻断。
+  // 同样的输入必然再次溢出，fork 没有意义。
+  if (params.trigger === "overflow") return compact(true, "transcript");
+  if (totalTokens < limits.soft) return skip("below-threshold");
+  // 压缩帮不上忙：让溢出错误自然暴露。
+  if (params.fixedTokens + PREFIX_HEADROOM_TOKENS >= limits.soft) return skip("prefix-too-large");
   if (
-    !params.bypassThresholdAndCooldown &&
-    params.lastCompactionAt > 0 &&
-    params.now - params.lastCompactionAt < MIN_COMPACTION_INTERVAL_MS &&
-    params.userMessageCount < MIN_COMPACTION_USER_MESSAGES
+    totalTokens < limits.hard &&
+    (params.failureStreak >= CIRCUIT_FAILURE_STREAK || params.thrashing)
   ) {
-    return { ...base, shouldCompact: false, reason: "cooldown", threshold };
+    return skip("circuit-open");
   }
+  return compact(totalTokens >= limits.hard, startAt);
+}
 
-  return { ...base, shouldCompact: true, reason: "threshold-exceeded", threshold };
+/**
+ * 保留原话预算 B = clamp(⌊0.5·soft⌋ − fixed − summary, 0, 20k)：压缩后上下文
+ * ≈ fixed + summary + B 稳在 soft 一半以下；thrashing 时为 0，否则保留集被逐次
+ * 带进下一份 checkpoint 压在阈值上。
+ */
+export function retainedBudgetTokens(
+  soft: number,
+  fixedTokens: number,
+  summaryTokens: number,
+  thrashing: boolean,
+): number {
+  if (thrashing) return 0;
+  const budget = Math.floor(0.5 * soft) - Math.max(0, fixedTokens) - Math.max(0, summaryTokens);
+  return Number.isFinite(budget) ? clamp(budget, 0, RETAINED_USER_MESSAGES_MAX_TOKENS) : 0;
+}
+
+/**
+ * 首个内容事件的预算：按冷缓存保守估算（post-tool fork 在不跨轮保留 thinking 的
+ * Claude 上只能命中到最后一条真实用户消息；首 token 前的 ping / SSE 注释也不产生
+ * 事件）。60s + 30s/100k 输入，high 及以上推理再加 60s，上限 300s。
+ */
+export function firstEventBudgetMs(
+  inputTokens: number,
+  reasoningLevel: ReasoningLevel | undefined,
+): number {
+  const perHundredK = Math.ceil(Math.max(0, inputTokens) / 100_000);
+  const reasoningMs =
+    reasoningLevel === "high" || reasoningLevel === "xhigh" || reasoningLevel === "max"
+      ? 60_000
+      : 0;
+  return Math.min(300_000, 60_000 + 30_000 * perHundredK + reasoningMs);
+}
+
+const FATAL_PROVIDER_ERROR_PATTERN =
+  /\b40[123]\b|unauthori[sz]ed|forbidden|payment required|invalid.{0,10}api.?key|insufficient_quota|quota exceeded|billing/i;
+
+/** 鉴权 / 配额类错误：主请求同样会失败，有损的 deterministic checkpoint 换不来任何东西。 */
+export function isFatalProviderError(message: string | undefined): boolean {
+  return FATAL_PROVIDER_ERROR_PATTERN.test(message ?? "");
 }

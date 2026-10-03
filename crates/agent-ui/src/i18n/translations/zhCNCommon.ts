@@ -461,6 +461,9 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.changedFiles.expand": "再显示 {count} 个文件",
   "chat.compactingContext": "正在压缩上下文",
   "chat.compactingContextWait": "正在压缩上下文，请稍候...",
+  "chat.compactionFailed": "上下文压缩失败：{message}",
+  "chat.compactionDegraded":
+    "自动摘要不可用，已改用简化摘要完成压缩，部分细节可能丢失；如回复质量下降，建议新开对话。",
   "chat.contextCheckpoint.title": "上下文检查点",
   "chat.contextCheckpoint.messageCount": "{count} 条消息",
   "chat.contextCheckpoint.compressed": "已压缩",

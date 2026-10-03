@@ -1,5 +1,5 @@
 import type { ProviderRetryPolicy } from "../../settings";
-import type { StreamRetryConfig } from "./streamRetry";
+import { DEFAULT_STREAM_RETRY_MAX_ATTEMPTS, type StreamRetryConfig } from "./streamRetry";
 
 /**
  * 供应商级重试策略 → withStreamRetry 选项的解析（PR-2 策略归属权反转）。
@@ -21,4 +21,19 @@ export function resolveStreamRetryConfig(
   if (!retryPolicy) return {};
   if (retryPolicy.mode === "off") return { disabled: true };
   return { maxAttempts: retryPolicy.maxRetries + 1 };
+}
+
+/**
+ * 有总时限的辅助流（压缩摘要）：总尝试数取用户策略与 cap 的较小者，策略 off 照旧
+ * 禁用。它是这类请求全链路唯一的一层重试。
+ */
+export function resolveCappedStreamRetryConfig(
+  retryPolicy: ProviderRetryPolicy | undefined,
+  maxAttempts: number,
+): Pick<StreamRetryConfig, "maxAttempts" | "disabled"> {
+  const resolved = resolveStreamRetryConfig(retryPolicy);
+  return {
+    ...resolved,
+    maxAttempts: Math.min(resolved.maxAttempts ?? DEFAULT_STREAM_RETRY_MAX_ATTEMPTS, maxAttempts),
+  };
 }

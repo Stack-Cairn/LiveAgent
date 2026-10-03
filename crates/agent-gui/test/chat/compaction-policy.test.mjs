@@ -5,204 +5,110 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const policy = loader.loadModule("src/lib/chat/compaction/policy.ts");
 
-const NOW = 1_700_000_000_000;
-const modelConfig = { contextWindow: 200_000, maxOutputToken: 32_000 };
+test("limits: inputCap / reserve / hard / soft per the W·O table", () => {
+  const rows = [
+    [200_000, 64_000, { inputCap: 136_000, reserve: 10_000, hard: 126_000, soft: 116_000 }],
+    [400_000, 128_000, { inputCap: 272_000, reserve: 20_000, hard: 252_000, soft: 236_000 }],
+    [1_000_000, 128_000, { inputCap: 872_000, reserve: 20_000, hard: 852_000, soft: 836_000 }],
+    // 有意比旧阈值提前：旧口径给估算漂移只留 1.6k。
+    [128_000, 8_000, { inputCap: 120_000, reserve: 6_400, hard: 113_600, soft: 107_200 }],
+  ];
+  for (const [contextWindow, maxOutputToken, expected] of rows) {
+    assert.deepEqual(policy.resolveCompactionLimits({ contextWindow, maxOutputToken }), expected);
+  }
+  const limits = policy.resolveCompactionLimits({ contextWindow: 200_000, maxOutputToken: 64_000 });
+  assert.equal(policy.forkFits(134_000, limits), true);
+  assert.equal(policy.forkFits(134_001, limits), false);
+});
 
-function decide(overrides = {}) {
+const W200 = { contextWindow: 200_000, maxOutputToken: 64_000 }; // soft 116k / hard 126k
+
+function next(overrides = {}) {
   return policy.decideCompaction({
-    intent: "optimization",
+    trigger: "pre-send",
     totalTokens: 0,
-    modelConfig,
+    fixedTokens: 10_000,
+    modelConfig: W200,
     activeMessageCount: 10,
-    userMessageCount: 5,
-    lastCompactionAt: 0,
-    pressure: policy.createCompactionPressure(),
     inFlight: false,
-    now: NOW,
+    failureStreak: 0,
+    thrashing: false,
     ...overrides,
   });
 }
 
-test("threshold: every provider reserves the output buffer from the total window", () => {
-  assert.equal(
-    policy.resolveCompactionThreshold({
-      intent: "optimization",
-      contextWindow: 200_000,
-      maxOutputToken: 32_000,
-      pressureLevel: 0,
-    }),
-    200_000 - 32_000 * 1.5,
+test("decideCompaction checks guards in order", () => {
+  const huge = { totalTokens: 999_999 };
+  assert.equal(next({ ...huge, modelConfig: undefined }).reason, "disabled");
+  assert.equal(next({ ...huge, modelConfig: { contextWindow: 200_000, maxOutputToken: 0 } }).reason, "disabled");
+  assert.equal(next({ ...huge, activeMessageCount: 0 }).reason, "no-active-messages");
+  assert.equal(next({ ...huge, inFlight: true, trigger: "manual" }).reason, "in-flight");
+
+  // manual：只看 50% 门槛，不受 soft / 熔断影响。
+  assert.equal(next({ trigger: "manual", totalTokens: 99_999 }).reason, "below-manual-threshold");
+  const manual = next({ trigger: "manual", totalTokens: 100_000, failureStreak: 9 });
+  assert.equal(manual.shouldCompact, true);
+  assert.equal(manual.mustProgress, false);
+  assert.equal(manual.startAt, "fork");
+
+  // overflow：同样的输入必然再溢出，从 transcript 开始且必须推进。
+  const overflow = next({ trigger: "overflow", totalTokens: 50_000, thrashing: true });
+  assert.deepEqual([overflow.shouldCompact, overflow.mustProgress, overflow.startAt], [true, true, "transcript"]);
+
+  assert.equal(next({ totalTokens: 115_999 }).reason, "below-threshold");
+  const soft = next({ totalTokens: 116_000 });
+  assert.deepEqual([soft.shouldCompact, soft.mustProgress, soft.startAt], [true, false, "fork"]);
+  assert.equal(soft.limits.soft, 116_000);
+});
+
+test("prefix-too-large: compaction cannot free room under a huge fixed prefix", () => {
+  assert.equal(next({ totalTokens: 130_000, fixedTokens: 96_000 }).reason, "prefix-too-large");
+  assert.equal(next({ totalTokens: 130_000, fixedTokens: 95_999 }).shouldCompact, true);
+});
+
+test("breaker and thrash guard only gate [soft, hard); ≥ hard always progresses", () => {
+  for (const guard of [{ failureStreak: 2 }, { thrashing: true }]) {
+    assert.equal(next({ totalTokens: 125_999, ...guard }).reason, "circuit-open");
+    const atHard = next({ totalTokens: 126_000, ...guard });
+    assert.equal(atHard.shouldCompact, true);
+    assert.equal(atHard.mustProgress, true);
+  }
+  assert.equal(next({ totalTokens: 120_000, failureStreak: 1 }).shouldCompact, true);
+  // forkFits：total + 2k ≤ inputCap(136k)，否则从 transcript 开始。
+  assert.equal(next({ totalTokens: 134_000 }).startAt, "fork");
+  assert.equal(next({ totalTokens: 134_001 }).startAt, "transcript");
+});
+
+test("retained budget, first-event budget and fatal classifier", () => {
+  assert.equal(policy.retainedBudgetTokens(116_000, 10_000, 3_000, false), 20_000);
+  assert.equal(policy.retainedBudgetTokens(40_000, 10_000, 3_000, false), 7_000);
+  assert.equal(policy.retainedBudgetTokens(40_000, 30_000, 3_000, false), 0);
+  assert.equal(policy.retainedBudgetTokens(116_000, 10_000, 3_000, true), 0);
+
+  assert.equal(policy.firstEventBudgetMs(0, undefined), 60_000);
+  assert.equal(policy.firstEventBudgetMs(100_000, "medium"), 90_000);
+  assert.equal(policy.firstEventBudgetMs(100_001, "high"), 180_000);
+  assert.equal(policy.firstEventBudgetMs(250_000, "xhigh"), 210_000);
+  assert.equal(policy.firstEventBudgetMs(900_000, "high"), 300_000);
+
+  assert.deepEqual(
+    [policy.IDLE_TIMEOUT_MS, policy.DEADLINE_MANUAL_MS, policy.DEADLINE_AUTO_MS],
+    [180_000, 270_000, 600_000],
   );
+  assert.equal(policy.TRANSCRIPT_MIN_REMAINING_MS, 45_000);
 
-  assert.equal(
-    policy.resolveCompactionThreshold({
-      intent: "protection",
-      contextWindow: 200_000,
-      maxOutputToken: 32_000,
-      pressureLevel: 0,
-    }),
-    200_000 - 32_000 * 1.2,
-  );
-
-  // Codex 目录模型（总窗口 = 272K 输入预算 + 128K 输出，生成期已换算）：
-  // 保护阈值恒不超过真实输入上限（400K − 1.2×128K = 246.4K < 272K）。
-  assert.equal(
-    policy.resolveCompactionThreshold({
-      intent: "protection",
-      contextWindow: 400_000,
-      maxOutputToken: 128_000,
-      pressureLevel: 0,
-    }),
-    400_000 - 128_000 * 1.2,
-  );
-});
-
-test("threshold: sustained pressure pins the protection factor to 1.0", () => {
-  const pinned = policy.resolveCompactionThreshold({
-    intent: "protection",
-    contextWindow: 200_000,
-    maxOutputToken: 32_000,
-    pressureLevel: 2,
-  });
-  assert.equal(pinned, 200_000 - 32_000);
-
-  const optimizationUnchanged = policy.resolveCompactionThreshold({
-    intent: "optimization",
-    contextWindow: 200_000,
-    maxOutputToken: 32_000,
-    pressureLevel: 2,
-  });
-  assert.equal(optimizationUnchanged, 200_000 - 32_000 * 1.5);
-});
-
-test("decideCompaction covers every reason", () => {
-  assert.equal(decide({ modelConfig: undefined }).reason, "disabled");
-  assert.equal(decide({ activeMessageCount: 0, totalTokens: 999_999 }).reason, "no-active-messages");
-  assert.equal(decide({ inFlight: true, totalTokens: 999_999 }).reason, "in-flight");
-  assert.equal(decide({ totalTokens: 10_000 }).reason, "below-threshold");
-
-  const cooldown = decide({
-    totalTokens: 199_000,
-    lastCompactionAt: NOW - 30_000,
-    userMessageCount: 1,
-  });
-  assert.equal(cooldown.reason, "cooldown");
-  assert.equal(cooldown.shouldCompact, false);
-
-  // 冷却窗内但用户消息已足量 → 允许压缩（防超大单轮卡死）。
-  assert.equal(
-    decide({ totalTokens: 199_000, lastCompactionAt: NOW - 30_000, userMessageCount: 3 }).reason,
-    "threshold-exceeded",
-  );
-
-  const fire = decide({ totalTokens: 199_000 });
-  assert.equal(fire.shouldCompact, true);
-  assert.equal(fire.reason, "threshold-exceeded");
-  assert.equal(fire.threshold, 152_000);
-});
-
-test("pressure escalates on consecutive ineffective compactions and resets on an effective one", () => {
-  let pressure = policy.createCompactionPressure();
-  assert.equal(pressure.level, 0);
-
-  // 压缩后仍高于阈值 90% = 低效。
-  pressure = policy.notePressureAfterCompaction(pressure, {
-    totalTokensAfter: 150_000,
-    threshold: 160_000,
-    now: NOW,
-  });
-  assert.equal(pressure.level, 1);
-  assert.equal(pressure.consecutiveIneffective, 1);
-  assert.equal(pressure.compactionsApplied, 1);
-
-  pressure = policy.notePressureAfterCompaction(pressure, {
-    totalTokensAfter: 150_000,
-    threshold: 160_000,
-    now: NOW + 1000,
-  });
-  assert.equal(pressure.level, 2);
-
-  // 永不硬拒：第 3 次低效仍停在最高档而不是禁止压缩。
-  pressure = policy.notePressureAfterCompaction(pressure, {
-    totalTokensAfter: 150_000,
-    threshold: 160_000,
-    now: NOW + 2000,
-  });
-  assert.equal(pressure.level, 2);
-  assert.equal(pressure.consecutiveIneffective, 3);
-
-  pressure = policy.notePressureAfterCompaction(pressure, {
-    totalTokensAfter: 20_000,
-    threshold: 160_000,
-    now: NOW + 3000,
-  });
-  assert.equal(pressure.level, 0);
-  assert.equal(pressure.consecutiveIneffective, 0);
-  assert.equal(pressure.compactionsApplied, 4);
-});
-
-test("pressure decays outside the recent-compaction window", () => {
-  let pressure = policy.notePressureAfterCompaction(policy.createCompactionPressure(), {
-    totalTokensAfter: 150_000,
-    threshold: 160_000,
-    now: NOW,
-  });
-  pressure = policy.notePressureAfterCompaction(pressure, {
-    totalTokensAfter: 150_000,
-    threshold: 160_000,
-    now: NOW + 1000,
-  });
-  assert.equal(pressure.level, 2);
-
-  const withinWindow = policy.normalizeCompactionPressure(pressure, NOW + 2 * 60_000);
-  assert.equal(withinWindow.level, 2);
-
-  const decayed = policy.normalizeCompactionPressure(pressure, NOW + 6 * 60_000);
-  assert.equal(decayed.level, 0);
-  assert.equal(decayed.consecutiveIneffective, 0);
-  assert.equal(decayed.compactionsApplied, 2);
-});
-
-test("prune options escalate with pressure level", () => {
-  const level0 = policy.resolvePruneOptions(policy.createCompactionPressure());
-  assert.deepEqual(level0, {
-    minimumReleasedTokens: 20_000,
-    protectedToolTokens: 40_000,
-    protectedRecentUserTurns: 2,
-  });
-
-  const level1 = policy.resolvePruneOptions({
-    level: 1,
-    consecutiveIneffective: 1,
-    compactionsApplied: 1,
-    lastCompactionAt: NOW,
-  });
-  assert.equal(level1.protectedToolTokens, 20_000);
-  assert.equal(level1.protectedRecentUserTurns, 2);
-
-  const level2 = policy.resolvePruneOptions({
-    level: 2,
-    consecutiveIneffective: 2,
-    compactionsApplied: 2,
-    lastCompactionAt: NOW,
-  });
-  assert.equal(level2.protectedToolTokens, 10_000);
-  assert.equal(level2.protectedRecentUserTurns, 1);
-});
-
-test("prune-first fires on recent compaction or raised pressure; advisory at max level", () => {
-  const fresh = policy.createCompactionPressure();
-  assert.equal(policy.shouldPruneBeforeCompaction(fresh, NOW), false);
-
-  const recent = { ...fresh, compactionsApplied: 1, lastCompactionAt: NOW - 2 * 60_000 };
-  assert.equal(policy.shouldPruneBeforeCompaction(recent, NOW), true);
-
-  const stale = { ...fresh, compactionsApplied: 1, lastCompactionAt: NOW - 10 * 60_000 };
-  assert.equal(policy.shouldPruneBeforeCompaction(stale, NOW), false);
-
-  assert.equal(policy.isNearModelLimit(fresh), false);
-  assert.equal(
-    policy.isNearModelLimit({ ...fresh, level: 2, consecutiveIneffective: 2 }),
-    true,
-  );
+  for (const fatal of [
+    "401 Unauthorized",
+    "HTTP 403 forbidden",
+    "402 Payment Required",
+    "Invalid API key provided",
+    "insufficient_quota",
+    "You exceeded your current quota exceeded",
+    "billing hard limit reached",
+  ]) {
+    assert.equal(policy.isFatalProviderError(fatal), true, fatal);
+  }
+  for (const transient of ["502 bad gateway", "stream stalled: no events", "40100 tokens", undefined]) {
+    assert.equal(policy.isFatalProviderError(transient), false, String(transient));
+  }
 });

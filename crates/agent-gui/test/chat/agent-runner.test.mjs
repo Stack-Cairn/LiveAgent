@@ -274,9 +274,6 @@ const llmMock = {
       maxTokens: 4096,
     };
   },
-  finalizeProviderStreamOptions({ options }) {
-    return options;
-  },
   normalizeErrorMessage(value, fallback = "Request failed") {
     return typeof value === "string" && value.trim() ? value.trim() : fallback;
   },
@@ -401,6 +398,9 @@ const loader = createTsModuleLoader({
 
 const { runAssistantWithTools } = loader.loadModule("src/lib/chat/runner/agentRunner.ts");
 const { createSubagentScheduler } = loader.loadModule("src/lib/subagents/scheduler.ts");
+const { attachCheckpointBridge, isCheckpointBridgeMessage } = loader.loadModule(
+  "src/lib/chat/compaction/bridge.ts",
+);
 
 function resetFakeStreams(...assistants) {
   streamQueue.length = 0;
@@ -611,6 +611,7 @@ test("runAssistantWithTools calls onBeforeNextTurn only for toolUse turns with t
   assert.equal(beforeNextTurnSnapshots.length, 1);
   assert.equal(beforeNextTurnSnapshots[0].assistant.stopReason, "toolUse");
   assert.equal(beforeNextTurnSnapshots[0].toolResults.length, 1);
+  assert.equal(beforeNextTurnSnapshots[0].willContinue, true);
   assert.deepEqual(
     beforeNextTurnSnapshots[0].emittedMessages.map((message) => message.role),
     ["assistant", "toolResult"],
@@ -1070,6 +1071,60 @@ test("runAssistantWithTools keeps consecutive Bash calls sequential", async () =
   assert.equal(statuses.some((status) => /并行执行 3 个 Bash 命令/.test(status)), false);
 });
 
+test("runAssistantWithTools strips the merged checkpoint bridge from emitted messages at baseline 0", async () => {
+  const readCall = (id) => ({ type: "toolCall", id, name: "Read", arguments: { path: id } });
+  resetFakeStreams(
+    createToolUseAssistant(readCall("call-a")),
+    createToolUseAssistant(readCall("call-b")),
+    createTextAssistant("done"),
+  );
+  const checkpointSummary = {
+    role: "summary",
+    id: "summary-sub",
+    timestamp: 10,
+    content: "Subagent checkpoint",
+    summaryMeta: {
+      format: "plain-text-v1",
+      strategy: "cumulative-checkpoint",
+      coversThroughMessageId: "m-1",
+      coveredMessageCount: 2,
+      generatedBy: { providerId: "anthropic", model: "claude" },
+    },
+  };
+  const busOne = { role: "user", content: [{ type: "text", text: "bus one" }], timestamp: 20 };
+  const busTwo = { role: "user", content: [{ type: "text", text: "bus two" }], timestamp: 30 };
+  const seenEmitted = [];
+  const { params } = createBaseParams({
+    onBeforeNextTurn: async ({ round, emittedMessages, runtimeContext }) => {
+      seenEmitted.push(emittedMessages);
+      // 子代理形态：运行中压缩后 segment 为空，bus 刷新成为首条 user、bridge 合入它，
+      // 基线落在 0；下一轮从（不含 bridge 的）状态重建请求。
+      const messages =
+        round === 1
+          ? attachCheckpointBridge([busOne], checkpointSummary)
+          : [...attachCheckpointBridge(emittedMessages, checkpointSummary), busTwo];
+      return {
+        context: { systemPrompt: "Compacted", messages, tools: runtimeContext.tools },
+        emittedMessages: round === 1 ? [busOne] : [...emittedMessages, busTwo],
+      };
+    },
+  });
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(seenEmitted[1][0], busOne);
+  assert.equal(result.emittedMessages[0], busOne);
+  for (const message of [...seenEmitted.flat(), ...result.emittedMessages]) {
+    assert.doesNotMatch(JSON.stringify(message), /context_checkpoint/);
+  }
+  // 每次请求恰好一份 bridge，且没有连续两条 user。
+  for (const context of observedStreamContexts.slice(1)) {
+    assert.equal(JSON.stringify(context.messages).match(/<context_checkpoint>/g)?.length, 1);
+    assert.equal(context.messages[0].role, "user");
+    assert.notEqual(context.messages[1]?.role, "user");
+  }
+});
+
 test("runAssistantWithTools applies turn context overrides without duplicating compacted messages", async () => {
   const toolCall = {
     type: "toolCall",
@@ -1081,9 +1136,23 @@ test("runAssistantWithTools applies turn context overrides without duplicating c
     createToolUseAssistant(toolCall),
     createTextAssistant("after compaction"),
   );
+  // 运行中压缩后的续跑上下文：只有一条单独成条的 checkpoint bridge。
+  const checkpointSummary = {
+    role: "summary",
+    id: "summary-run",
+    timestamp: 10,
+    content: "Resume from checkpoint",
+    summaryMeta: {
+      format: "plain-text-v1",
+      strategy: "cumulative-checkpoint",
+      coversThroughMessageId: "m-1",
+      coveredMessageCount: 2,
+      generatedBy: { providerId: "anthropic", model: "claude" },
+    },
+  };
   const compactedContext = {
     systemPrompt: "Compacted system prompt",
-    messages: [{ role: "user", content: "Resume from checkpoint", timestamp: 10 }],
+    messages: attachCheckpointBridge([], checkpointSummary),
     tools: [
       {
         name: "Read",
@@ -1115,10 +1184,10 @@ test("runAssistantWithTools applies turn context overrides without duplicating c
     observedStreamContexts[1].systemPrompt.match(/# Tool-Execution Mode/g)?.length,
     1,
   );
-  assert.deepEqual(
-    observedStreamContexts[1].messages.map((message) => message.content),
-    ["Resume from checkpoint"],
-  );
+  assert.equal(observedStreamContexts[1].messages.length, 1);
+  assert.ok(isCheckpointBridgeMessage(observedStreamContexts[1].messages[0]));
+  assert.match(observedStreamContexts[1].messages[0].content[0].text, /Resume from checkpoint/);
+  // bridge 在基线之前：永不进入 emittedMessages（持久化顺序 assistant → checkpoint → assistant）。
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant"],
@@ -2699,6 +2768,64 @@ test("resolveToolTermination spreads across a mixed parallel batch (still ends t
   assert.equal(observedStreamContexts.length, 1);
   assert.equal(textDeltas.join(""), "");
   assert.equal(result.assistant.stopReason, "toolUse");
+});
+
+test("onBeforeNextTurn reports willContinue with pi-agent-core's all-or-nothing batch rule", async () => {
+  const planCall = createToolCall("call-plan", "ExitPlanMode", { plan: "# plan" });
+  // 未知工具在 pi-agent-core 里直接报错、不经 afterToolCall，不会 terminate：整批续跑。
+  const missingCall = createToolCall("call-missing", "MissingTool", {});
+  for (const [calls, expected] of [
+    [[planCall], false],
+    [[planCall, missingCall], true],
+  ]) {
+    resetFakeStreams(createAssistant(calls, "toolUse"), createTextAssistant("wrap-up"));
+    const continuations = [];
+    const { params } = createBaseParams({
+      tools: [
+        {
+          name: "ExitPlanMode",
+          description: "Present the plan",
+          parameters: { type: "object", properties: { plan: { type: "string" } } },
+        },
+      ],
+      resolveToolTermination: (toolCall) => toolCall.name === "ExitPlanMode",
+      onBeforeNextTurn: async ({ willContinue }) => {
+        continuations.push(willContinue);
+        return null;
+      },
+    });
+    params.context = { ...params.context, tools: params.tools };
+
+    await runAssistantWithTools(params);
+
+    assert.deepEqual(continuations, [expected], calls.map((call) => call.name).join("+"));
+  }
+});
+
+test("a tool round cut off at the output limit still reaches onBeforeNextTurn", async () => {
+  // pi-agent-core 把 "length" 轮的调用判失败后照样续跑：这一轮必须进入 emitted 基线，
+  // 否则溢出恢复只提交到上一轮，这一轮从历史与摘要里一起消失。
+  const writeCall = createToolCall("call-write", "Write", { file_path: "/tmp/a", content: "x" });
+  resetFakeStreams(createAssistant([writeCall], "length"), createTextAssistant("final"));
+  const snapshots = [];
+  const { params, executedToolCalls } = createBaseParams({
+    onBeforeNextTurn: async (snapshot) => {
+      snapshots.push(snapshot);
+      return null;
+    },
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.equal(executedToolCalls.length, 0);
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].assistant.stopReason, "length");
+  assert.equal(snapshots[0].toolResults[0].isError, true);
+  assert.equal(snapshots[0].willContinue, true);
+  assert.deepEqual(
+    snapshots[0].emittedMessages.map((message) => message.role),
+    ["assistant", "toolResult"],
+  );
 });
 
 test("ExitPlanMode in the tool list keeps toolChoice auto — plan rules live in the prompt, never in unbounded forcing", async () => {

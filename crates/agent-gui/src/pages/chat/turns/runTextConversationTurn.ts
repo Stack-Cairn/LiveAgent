@@ -5,11 +5,11 @@ import {
   serializeToolCatalog,
 } from "@liveagent/ui/lib/trajectory/sections";
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
-import type { CompactionController } from "../../../lib/chat/compaction/controller";
-import {
-  estimateTextTokens,
-  estimateTextTokenUnits,
-} from "../../../lib/chat/compaction/tokenLedger";
+import type {
+  CompactionController,
+  CompactionPresend,
+} from "../../../lib/chat/compaction/controller";
+import { estimateTextTokens } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import {
   appendMessagesToConversation,
@@ -45,6 +45,7 @@ import {
 } from "../../../lib/chat/search/providerNativeSearchStatus";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText, streamAssistantMessage } from "../../../lib/providers/llm";
+import { isOverflowError, readAssistantFromError } from "../../../lib/providers/runtime/overflow";
 import { buildTextOnlySystemSuffix } from "../../../lib/providers/runtime/textOnlyRuntime";
 import type { ProviderId } from "../../../lib/settings";
 import { trajectoryTerminalInfo } from "../../../lib/trajectory/assistantOutcome";
@@ -52,7 +53,6 @@ import {
   NOOP_TRAJECTORY_RECORDER,
   type TrajectoryRecorder,
 } from "../../../lib/trajectory/recorder";
-import { buildPartialAssistantMessage } from "../runtime/chatPageRuntime";
 
 export type RuntimeModel = {
   api: AssistantMessage["api"];
@@ -119,9 +119,12 @@ export type RunTextConversationTurnParams = {
       includeAbortedMessages?: boolean;
       includeUploadedFilesMetadata?: boolean;
       includeMemoryTurnUpdates?: boolean;
+      includeCheckpointBridge?: boolean;
     },
   ) => Context;
   compaction: CompactionController;
+  /** 本轮待发送的用户消息与输入框内容：只交给 pre-send 压缩（回滚时还原输入框）。 */
+  compactionPresend?: CompactionPresend;
   cancellation: TurnCancellation;
   resetLiveTranscript: (store: LiveTranscriptStore) => void;
   settleLiveTranscript: (store: LiveTranscriptStore) => void;
@@ -175,6 +178,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     applyConversationState,
     buildPreparedContext,
     compaction,
+    compactionPresend,
     cancellation,
     resetLiveTranscript,
     settleLiveTranscript,
@@ -209,11 +213,11 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
 
   let finalAssistant: AssistantMessage | null = null;
   let contextWithSkills = buildPreparedContext(getNextConversationState());
-  let pendingTextContext: Context | null = null;
   let textRound = 1;
   const startedTrajectorySteps = new Set<number>();
   let trajectoryFailoverAttempt = 0;
-  let protectionCompactionDisabled = false;
+  // 反应式溢出恢复至多一次：同样的输入重发必然再溢出。
+  let overflowRecoveryAttempted = false;
   // A failover status stays visible until the winning attempt streams content;
   // the status channel has no other owner between switch and first delta.
   let failoverStatusVisible = false;
@@ -332,30 +336,25 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   // toolsSuffix 估算（~4k），账本与检查点估值会系统性虚高。
   compaction.noteFixedOverheadTokens(estimateTextTokens(buildTextOnlySystemSuffix()));
 
-  await compaction.maybeCompactPreSend({
-    budgetContext: buildPreparedContext(getNextConversationState(), undefined, {
-      includeUploadedFilesMetadata: true,
-    }),
-    includeUploadedFilesMetadata: true,
+  // 主请求的上下文构建器：压缩的预算、contextTokensAfter 与 fork 后缀都按它算。
+  const buildTextContext = (state: ConversationViewState) =>
+    buildPreparedContext(state, undefined, { includeUploadedFilesMetadata: true });
+  await compaction.compact({
+    trigger: "pre-send",
+    state: getNextConversationState(),
+    buildContext: buildTextContext,
+    presend: compactionPresend,
   });
   hookLifecycle.startAgent();
 
   textResponseLoop: while (!finalAssistant) {
-    contextWithSkills =
-      pendingTextContext ??
-      buildPreparedContext(getNextConversationState(), undefined, {
-        includeUploadedFilesMetadata: true,
-      });
-    pendingTextContext = null;
+    contextWithSkills = buildTextContext(getNextConversationState());
     compaction.beginRequest(contextWithSkills, getNextConversationState());
     hookLifecycle.startTurn(textRound);
     textModeUsesLiveRounds = false;
     trajectoryFailoverAttempt = 0;
 
     let streamedAssistantText = "";
-    let streamedAssistantTokenUnits = 0;
-    let protectionCheckChars = 0;
-    let compactionRequested = false;
     let streamAttempt = 0;
     const nativeWebSearchEnabled = runtime.nativeWebSearchEnabled !== false;
     const nativeWebSearchStatus = resolveProviderNativeWebSearchStatus({
@@ -421,6 +420,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           onRequestStart: ({ context, systemSuffix }) => {
             recordTextRequestStart(context, systemSuffix);
           },
+          onRequestPrepared: (recipe) => compaction.noteRequest(recipe),
           onTextDelta: (delta) => {
             trajectory.firstToken(textRound);
             if (failoverStatusVisible) {
@@ -441,15 +441,6 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
               appendDraftAssistantText(delta, transcriptStore);
             }
             streamedAssistantText += delta;
-            streamedAssistantTokenUnits += estimateTextTokenUnits(delta);
-            protectionCheckChars += delta.length;
-            if (compactionRequested || protectionCompactionDisabled || protectionCheckChars < 160) {
-              return;
-            }
-            protectionCheckChars = 0;
-            if (!compaction.shouldProtectMidStream(streamedAssistantTokenUnits)) return;
-            compactionRequested = true;
-            scope.controller.abort();
           },
           onThinkingDelta: (delta) => {
             if (failoverStatusVisible) {
@@ -534,50 +525,33 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
         nativeWebSearchStatusController.finish();
       } catch (streamErr) {
         nativeWebSearchStatusController.finish();
-        if (compactionRequested) {
-          trajectory.stepEnd(textRound, {
-            status: "aborted",
-            error: "Provider request restarted after mid-stream compaction.",
-          });
-          hookLifecycle.ensureMessageEnded();
-          hookLifecycle.endTurn(textRound);
-          resetLiveTranscript(transcriptStore);
-          textModeUsesLiveRounds = false;
-
-          const partialAssistant = buildPartialAssistantMessage({
-            model: runtimeModel,
-            text: streamedAssistantText,
-            stopReason: "aborted",
-          });
-          if (partialAssistant) {
-            applyConversationState(
-              appendMessagesToConversation(getNextConversationState(), [partialAssistant]),
-            );
-          }
-
-          const compactionResult = await compaction.compactDuringRun({
-            trigger: "mid-stream",
-            state: getNextConversationState(),
-            includeAbortedMessages: true,
-            includeUploadedFilesMetadata: true,
-          });
-
-          if (!compactionResult.context) {
-            throw new Error("Mid-stream compaction did not provide a continuation context.");
-          }
-          pendingTextContext = compactionResult.context;
-          if (compactionResult.shouldDisableProtection) {
-            protectionCompactionDisabled = true;
-          }
-          textRound += 1;
-          continue textResponseLoop;
-        }
-
         if (cancellation.userStop.signal.aborted || isAbortLikeError(streamErr)) {
           if (commitVisibleAbortedConversation()) {
             return;
           }
           throw streamErr;
+        }
+
+        // 反应式溢出排在通用重试之前：重发同样的输入只会再溢出一次。压缩不成就原样抛出。
+        if (isOverflowError(readAssistantFromError(streamErr))) {
+          if (overflowRecoveryAttempted) throw streamErr;
+          overflowRecoveryAttempted = true;
+          trajectory.stepEnd(textRound, {
+            status: "error",
+            error: streamErr instanceof Error ? streamErr.message : String(streamErr),
+          });
+          hookLifecycle.ensureMessageEnded();
+          hookLifecycle.endTurn(textRound);
+          resetLiveTranscript(transcriptStore);
+          textModeUsesLiveRounds = false;
+          const compacted = await compaction.compact({
+            trigger: "overflow",
+            state: getNextConversationState(),
+            buildContext: buildTextContext,
+          });
+          if (compacted.outcome !== "compacted") throw streamErr;
+          textRound += 1;
+          continue textResponseLoop;
         }
 
         if (streamAttempt < 1) {
@@ -588,8 +562,6 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
             error: streamErr instanceof Error ? streamErr.message : String(streamErr),
           });
           streamedAssistantText = "";
-          streamedAssistantTokenUnits = 0;
-          protectionCheckChars = 0;
           resetLiveTranscript(transcriptStore);
           textModeUsesLiveRounds = false;
           continue;
@@ -651,9 +623,12 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
       conversationId,
       workdir: conversationCwd,
       // 抽取子模型看到的必须是用户真正说的话:memory 增量块只服务主模型的缓存,
-      // 混进来会把索引行当成用户发言,既撑破短消息门控又诱发重复写入。
-      messages: buildPreparedContext(finalState, undefined, { includeMemoryTurnUpdates: false })
-        .messages,
+      // 混进来会把索引行当成用户发言,既撑破短消息门控又诱发重复写入。checkpoint
+      // bridge(摘要+保留原话)同理,压缩后的首条 user 消息不能带着它被再抽一遍。
+      messages: buildPreparedContext(finalState, undefined, {
+        includeMemoryTurnUpdates: false,
+        includeCheckpointBridge: false,
+      }).messages,
       statusText: memoryExtractionStatusText,
       signal: cancellation.userStop.signal,
       debugLogger: conversationDebugLogger,

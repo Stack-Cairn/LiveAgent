@@ -13,11 +13,11 @@ import {
   serializeToolCatalog,
 } from "@liveagent/ui/lib/trajectory/sections";
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
-import type { CompactionController } from "../../../lib/chat/compaction/controller";
-import {
-  estimateTextTokens,
-  estimateTextTokenUnits,
-} from "../../../lib/chat/compaction/tokenLedger";
+import type {
+  CompactionController,
+  CompactionPresend,
+} from "../../../lib/chat/compaction/controller";
+import { estimateTextTokens } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import { resolveTailBlockAnchorId } from "../../../lib/chat/context/contextTailBlock";
 import {
@@ -62,6 +62,7 @@ import {
 import { buildToolsSuffix } from "../../../lib/chat/runner/toolExecutionPrompt";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText } from "../../../lib/providers/llm";
+import { isOverflowError, readAssistantFromError } from "../../../lib/providers/runtime/overflow";
 import { resolveRuntimePlatform } from "../../../lib/runtimePlatform";
 import {
   type AppSettings,
@@ -108,11 +109,7 @@ import {
   NOOP_TRAJECTORY_RECORDER,
   type TrajectoryRecorder,
 } from "../../../lib/trajectory/recorder";
-import {
-  appendSystemPrompt,
-  buildPartialAssistantMessage,
-  createEmptyAssistantUsage,
-} from "../runtime/chatPageRuntime";
+import { appendSystemPrompt, createEmptyAssistantUsage } from "../runtime/chatPageRuntime";
 import {
   buildGatewayToolCallPreviewArguments,
   summarizeToolCallForApproval,
@@ -342,9 +339,12 @@ export type RunAgentConversationTurnParams = {
       includeAbortedMessages?: boolean;
       includeUploadedFilesMetadata?: boolean;
       includeMemoryTurnUpdates?: boolean;
+      includeCheckpointBridge?: boolean;
     },
   ) => Context;
   compaction: CompactionController;
+  /** 本轮待发送的用户消息与输入框内容：只交给 pre-send 压缩（回滚时还原输入框）。 */
+  compactionPresend?: CompactionPresend;
   cancellation: TurnCancellation;
   resetLiveTranscript: (store: LiveTranscriptStore) => void;
   settleLiveTranscript: (store: LiveTranscriptStore) => void;
@@ -427,6 +427,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     applyConversationState,
     buildPreparedContext,
     compaction,
+    compactionPresend,
     cancellation,
     resetLiveTranscript,
     settleLiveTranscript,
@@ -703,15 +704,18 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     ),
   );
 
+  // 主请求的上下文构建器：压缩的预算、contextTokensAfter 与 fork 后缀都按它算。
+  const buildTurnContext = (state: ConversationViewState) =>
+    withAgentRuntimeContext(
+      buildPreparedContext(state, combinedTools, { includeUploadedFilesMetadata: true }),
+    );
+
   const preCompactionStartedAt = perfNowMs();
-  await compaction.maybeCompactPreSend({
-    budgetContext: withAgentRuntimeContext(
-      buildPreparedContext(getNextConversationState(), combinedTools, {
-        includeUploadedFilesMetadata: true,
-      }),
-    ),
-    tools: combinedTools,
-    includeUploadedFilesMetadata: true,
+  await compaction.compact({
+    trigger: "pre-send",
+    state: getNextConversationState(),
+    buildContext: buildTurnContext,
+    presend: compactionPresend,
   });
   finishAgentPerfSpan(
     conversationDebugLogger,
@@ -722,8 +726,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     },
   );
   // 压缩边界①：发送前压缩已重建前缀，此处重新冻结不额外损失命中率。
-  // bus 快照不在这里重冻：它几毫秒前刚在本函数起始冻结过，发送前压缩只重写历史与
-  // systemPrompt，不可能产生新的 bus 消息，重读一次纯属多余的 IPC。
+  // bus 快照不在这里重冻：它几毫秒前刚在本函数起始冻结过，发送前压缩只重写历史，
+  // 不可能产生新的 bus 消息，重读一次纯属多余的 IPC。
   refreezeTaskListContext();
 
   // MCP 懒加载:未激活的 MCP 工具不进模型请求(runner 每轮重估此谓词,
@@ -839,7 +843,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   let latestAgentEmittedMessages: Message[] = [];
   let suppressedToolTrace: SuppressedToolTraceSnapshot[] = [];
   let activeAgentRound = 0;
-  let pendingAgentContext: Context | null = null;
+  // Plan mode 补提交提醒：wire-only，一旦下发，本 turn 之后每次重入（含溢出恢复）
+  // 都追加在上下文末尾——溢出恢复重建上下文时丢了它，补提交就白白落空。
+  let planNudgeReminder: Message | null = null;
   const pendingTerminalAssistantMetaRef: {
     current: {
       assistant: AssistantMessage;
@@ -1042,23 +1048,15 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     return "";
   };
 
-  let midStreamProtectionDisabled = false;
+  // 反应式溢出恢复每次至多一次：成功的请求之后复位，防抖动兜住成本。
+  let overflowRecoveryAttempted = false;
   while (!result) {
-    let streamedAgentText = "";
-    let streamedAgentTokenUnits = 0;
-    let protectionCheckChars = 0;
-    let midStreamCompactionRequested = false;
-    let sawToolCallInRound = false;
     const nativeWebSearchEnabled = runtime.nativeWebSearchEnabled !== false;
-    const agentContext = withAgentRuntimeContext(
-      pendingAgentContext ??
-        buildPreparedContext(getNextConversationState(), combinedTools, {
-          includeUploadedFilesMetadata: true,
-        }),
-    );
-    pendingAgentContext = null;
-    // 主请求跑在派生 scope 上：mid-stream 压缩只 abort 该 scope，用户停止
-    // （userStop）随时链式传导，不存在换代窗口。
+    const turnContext = buildTurnContext(getNextConversationState());
+    const agentContext = planNudgeReminder
+      ? { ...turnContext, messages: [...turnContext.messages, planNudgeReminder] }
+      : turnContext;
+    // 主请求跑在派生 scope 上：用户停止（userStop）随时链式传导，不存在换代窗口。
     const scope = cancellation.deriveScope();
     compaction.beginRequest(agentContext, getNextConversationState());
     try {
@@ -1129,10 +1127,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         },
         onTurnStart: (round) => {
           activeAgentRound = round;
-          streamedAgentText = "";
-          streamedAgentTokenUnits = 0;
-          protectionCheckChars = 0;
-          sawToolCallInRound = false;
           hookLifecycle.startTurn(round);
           batchLiveRoundsUpdate(
             (prev) => [
@@ -1151,8 +1145,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onTextDelta: (delta, round) => {
           trajectory.firstToken(round);
           gatewayBridgeEvents.queueToken(delta, { round });
-          streamedAgentText += delta;
-          streamedAgentTokenUnits += estimateTextTokenUnits(delta);
           batchLiveRoundsUpdate(
             (prev) =>
               updateLiveRound(prev, round, (target) => {
@@ -1161,22 +1153,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
               }),
             transcriptStore,
           );
-
-          protectionCheckChars += delta.length;
-          if (
-            midStreamCompactionRequested ||
-            midStreamProtectionDisabled ||
-            sawToolCallInRound ||
-            protectionCheckChars < 160
-          ) {
-            return;
-          }
-
-          protectionCheckChars = 0;
-          // O(1) 账本判定，触发时才 abort 本地 scope 并在 catch 中构建压缩输入。
-          if (!compaction.shouldProtectMidStream(streamedAgentTokenUnits)) return;
-          midStreamCompactionRequested = true;
-          scope.controller.abort();
         },
         onThinkingDelta: (delta, round) => {
           // thinking 也算首 token：推理模型的 TTFT 就落在这里，只认 text 会把
@@ -1203,7 +1179,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         },
         onToolCall: (toolCall, round) => {
           trajectory.firstToken(round);
-          sawToolCallInRound = true;
           discardPendingToolCallDelta(toolCall, round);
           // isRunning 只表示工具已出现在当前轮次，不代表提问已经进入权威
           // pending 表。提问卡延迟到 onToolExecutionStart，避免用户在
@@ -1230,12 +1205,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         },
         onToolCallDelta: (toolCall, round) => {
           trajectory.firstToken(round);
-          sawToolCallInRound = true;
           queueToolCallDelta(toolCall, round);
         },
         onToolExecutionStart: (toolCall, round) => {
           trajectory.firstToken(round);
-          sawToolCallInRound = true;
           trajectory.toolStart(round, toolCall);
           discardPendingToolCallDelta(toolCall, round);
           if (!isSubagentCardToolCall(toolCall)) {
@@ -1303,6 +1276,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         },
         onAssistantMessage: (assistant, round) => {
           if (assistant.role !== "assistant") return;
+          if (assistant.stopReason !== "error" && assistant.stopReason !== "aborted") {
+            overflowRecoveryAttempted = false;
+          }
           // Some transports only surface a final message (no incremental text/tool callback).
           trajectory.firstToken(round);
           // stepEnd 记在这里而不是工具执行之后：这样 step 的耗时是纯模型时间，
@@ -1358,6 +1334,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             ...(event.errorMessage === "" ? {} : { error: event.errorMessage }),
           });
         },
+        onRequestPrepared: (recipe) => compaction.noteRequest(recipe),
         onTransportAttempt: (_round, snapshot) => {
           trajectory.noteTransport(activeAgentRound, {
             provider: snapshot.providerLabel,
@@ -1369,18 +1346,23 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             headerNames: snapshot.headerNames,
           });
         },
-        onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
+        onBeforeNextTurn: async ({
+          round,
+          assistant,
+          toolResults,
+          runtimeContext,
+          emittedMessages,
+          willContinue,
+        }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);
           latestAgentEmittedMessages = emittedMessages.slice();
+          // 这一批之后 run 就结束（如 ExitPlanMode）：没有下一次请求，不压缩也不投递。
+          if (!willContinue) return null;
           const tempState = appendMessagesToConversation(
             getNextConversationState(),
             emittedMessages,
           );
-          const tempContext = withAgentRuntimeContext(
-            buildPreparedContext(tempState, combinedTools, {
-              includeUploadedFilesMetadata: true,
-            }),
-          );
+          const tempContext = buildTurnContext(tempState);
           // 尾部投递：systemPrompt 里的 bus 快照与 roster 身份段都已冻结，run 内新到的
           // bus 消息与推进后的 roster 运行状态合并成**同一个**块作为 wireTailText 交给
           // runner——runner 累积后只挂到每次出站请求上，agent 运行时状态与
@@ -1392,14 +1374,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           // tempContext.messages 本身。真正的挂载与锚点钉死发生在 runner 侧。
           const tailBlockAttachable =
             Boolean(tailBlockText) && resolveTailBlockAnchorId(tempContext.messages) !== null;
-          const { context: compactedContext } = await compaction.compactDuringRun({
+          const compacted = await compaction.compact({
             trigger: "post-tool",
             state: tempState,
-            budgetContext: tempContext,
-            tools: combinedTools,
-            includeUploadedFilesMetadata: true,
+            buildContext: buildTurnContext,
+            forkMessages: runtimeContext.messages,
           });
-          if (!compactedContext) {
+          if (compacted.outcome !== "compacted") {
             // 没有增量时返回 null：不产生任何额外内容，运行时状态原样续跑。
             if (!tailBlockAttachable) {
               return null;
@@ -1425,10 +1406,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           await refreezeParentMessageBus();
           // 同理：roster 易变段的投递基线也随之作废，重置后下一轮重新投递。
           renderedRosterRunStatus = "";
-          return {
-            context: withAgentRuntimeContext(compactedContext),
-            emittedMessages: [],
-          };
+          return { context: buildTurnContext(compacted.state), emittedMessages: [] };
         },
         signal: scope.controller.signal,
         debugLogger: conversationDebugLogger,
@@ -1451,7 +1429,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           emittedMessages: result.emittedMessages,
         });
         if (decision.kind === "nudge") {
-          // 对齐 mid-stream 压缩的循环重入范式:先把本 run 的消息提交进会话
+          // 对齐反应式溢出压缩的循环重入范式:先把本 run 的消息提交进会话
           // 状态并重置 live 轮(避免重入后 round key 冲突、消息双渲染),再带
           // 一条 wire-only 提醒续跑。提醒只进出站请求——不追加进会话状态,
           // 不持久化、不进 UI 与记忆抽取。
@@ -1463,19 +1441,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           applyConversationState(interimState);
           clearPersistableAgentProgress();
           resetLiveTranscript(transcriptStore);
-          const preparedContext = buildPreparedContext(interimState, combinedTools, {
-            includeUploadedFilesMetadata: true,
-          });
-          pendingAgentContext = {
-            ...preparedContext,
-            messages: [
-              ...preparedContext.messages,
-              {
-                role: "user",
-                content: [{ type: "text", text: decision.reminderText }],
-                timestamp: Date.now(),
-              },
-            ],
+          planNudgeReminder = {
+            role: "user",
+            content: [{ type: "text", text: decision.reminderText }],
+            timestamp: Date.now(),
           };
           result = null;
         } else if (decision.kind === "fallback") {
@@ -1503,55 +1472,40 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         }
       }
     } catch (error) {
-      if (!midStreamCompactionRequested) {
+      // 反应式溢出：每次请求前都已检查过 ≤ soft，这里只兜估算漂移与单轮巨量工具输出。
+      // 同样的输入重发必然再溢出，压缩不成就原样抛出。
+      if (overflowRecoveryAttempted || !isOverflowError(readAssistantFromError(error))) {
         throw error;
       }
+      overflowRecoveryAttempted = true;
 
+      // 沿用原 catch 路径的清理顺序：先收尾 hook 与 live 轮，再提交已发出的消息、清空
+      // 可持久化进度（否则之后的 Stop 会把它们再追加一遍）；溢出的那条 assistant 不落地。
       hookLifecycle.ensureMessageEnded();
       if (activeAgentRound > 0) {
         hookLifecycle.endTurn(activeAgentRound);
       }
       resetLiveTranscript(transcriptStore);
-
-      const partialAssistant = buildPartialAssistantMessage({
-        model: runtimeModel,
-        text: streamedAgentText,
-        stopReason: "aborted",
-      });
-      const tempState = appendMessagesToConversation(getNextConversationState(), [
-        ...latestAgentEmittedMessages,
-        ...(partialAssistant ? [partialAssistant] : []),
-      ]);
+      const tempState = appendMessagesToConversation(
+        getNextConversationState(),
+        latestAgentEmittedMessages,
+      );
       latestAgentEmittedMessages = [];
       applyConversationState(tempState);
       clearPersistableAgentProgress();
 
-      const compactionResult = await compaction.compactDuringRun({
-        trigger: "mid-stream",
+      const compacted = await compaction.compact({
+        trigger: "overflow",
         state: tempState,
-        budgetContext: withAgentRuntimeContext(
-          buildPreparedContext(tempState, combinedTools, {
-            includeAbortedMessages: true,
-            includeUploadedFilesMetadata: true,
-          }),
-        ),
-        tools: combinedTools,
-        includeAbortedMessages: true,
-        includeUploadedFilesMetadata: true,
+        buildContext: buildTurnContext,
       });
-
-      if (!compactionResult.context) {
-        throw new Error("Mid-stream compaction did not provide a continuation context.");
+      if (compacted.outcome !== "compacted") {
+        throw error;
       }
-      // 压缩边界③：中途流式压缩后重新冻结，续跑上下文在下一轮循环由
-      // withAgentRuntimeContext 包装 pendingAgentContext 时才读取冻结值。
+      // 压缩边界③：反应式压缩后重新冻结；下一次循环从压缩后的状态重建上下文。
       refreezeTaskListContext();
       await refreezeParentMessageBus();
       renderedRosterRunStatus = "";
-      pendingAgentContext = compactionResult.context;
-      if (compactionResult.shouldDisableProtection) {
-        midStreamProtectionDisabled = true;
-      }
     } finally {
       scope.release();
     }
@@ -1603,9 +1557,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       conversationId,
       workdir: conversationCwd ?? effectiveWorkdir,
       // 抽取子模型看到的必须是用户真正说的话:memory 增量块只服务主模型的缓存,
-      // 混进来会把索引行当成用户发言,既撑破短消息门控又诱发重复写入。
-      messages: buildPreparedContext(finalState, undefined, { includeMemoryTurnUpdates: false })
-        .messages,
+      // 混进来会把索引行当成用户发言,既撑破短消息门控又诱发重复写入。checkpoint
+      // bridge(摘要+保留原话)同理,压缩后的首条 user 消息不能带着它被再抽一遍。
+      messages: buildPreparedContext(finalState, undefined, {
+        includeMemoryTurnUpdates: false,
+        includeCheckpointBridge: false,
+      }).messages,
       statusText: memoryExtractionStatusText,
       signal: cancellation.userStop.signal,
       debugLogger: conversationDebugLogger,

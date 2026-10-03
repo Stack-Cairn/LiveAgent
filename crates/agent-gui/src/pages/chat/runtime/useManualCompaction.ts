@@ -1,14 +1,8 @@
-import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
+import { deriveContextUsageTokens, estimateTextTokens } from "@liveagent/ui/lib/chat/contextUsage";
 import { invoke } from "@tauri-apps/api/core";
 import type { MutableRefObject } from "react";
 import { useCallback } from "react";
-import type {
-  CompactionController,
-  CompactionSinks,
-  ManualCompactionOutcome,
-  ManualContextUsageSnapshot,
-} from "../../../lib/chat/compaction/controller";
-import { estimateTextTokens } from "../../../lib/chat/compaction/tokenLedger";
+import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import type { CompactionDecisionReason } from "../../../lib/chat/compaction/types";
 import { getActiveSegment } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
@@ -19,10 +13,7 @@ import { buildToolsSuffix } from "../../../lib/chat/runner/toolExecutionPrompt";
 import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import { type AppSettings, applyConversationThinking } from "../../../lib/settings";
-import {
-  acquireTrajectoryRecorder,
-  updateTrajectoryRecorderSegment,
-} from "../../../lib/trajectory/recorderRegistry";
+import { acquireTrajectoryRecorder } from "../../../lib/trajectory/recorderRegistry";
 import { createLocalGatewayChatRunId } from "../gateway/gatewayRuntimeStatusModel";
 import type {
   FinishGatewayRunMirrorInput,
@@ -30,11 +21,10 @@ import type {
 } from "../gateway/useGatewayRunMirrorCoordinator";
 import type { PersistConversationAction } from "../history/useConversationHistoryActions";
 import type { ConversationRuntimeEntry } from "./chatPageRuntime";
-import {
-  buildPreparedContext as buildPreparedConversationContext,
-  buildResumeContext as buildResumeConversationContext,
-} from "./conversationContextBuilders";
+import { createCompactionSinks, observeCompactionTrajectory } from "./compactionBinding";
+import { buildPreparedContext as buildPreparedConversationContext } from "./conversationContextBuilders";
 import { resolveEffectiveChatModelSelection } from "./modelSelection";
+import { buildModelFailoverPlan } from "./providerRuntimeConfig";
 
 export type ManualCompactionResult = {
   status: "compacted" | "failed" | "busy" | "skipped";
@@ -48,20 +38,6 @@ export type ManualCompactionRequest = {
   // 从不触发它，中继层据返回值同步回包（accepted:false + message）。
   onAccepted?: () => void;
 };
-
-// 手动压缩的读数快照：优先用控制器账本，缺失（本会话尚未发过请求）才退到
-// 转录扫描；fixedTokens 缺省时探针的 rebase 会按当前上下文自行估算。
-function resolveManualContextUsage(
-  controller: CompactionController,
-  runtimeEntry: ConversationRuntimeEntry,
-): ManualContextUsageSnapshot {
-  const runtimeSnapshot = controller.contextUsageSnapshot;
-  return {
-    totalTokens:
-      runtimeSnapshot?.totalTokens ?? deriveContextUsageTokens(runtimeEntry.state.transcript.items),
-    fixedTokens: runtimeSnapshot?.fixedTokens,
-  };
-}
 
 type ConversationStopHandler = (options: { force: boolean; requestVersion: number }) => void;
 
@@ -189,7 +165,7 @@ export function useManualCompaction(params: {
       let runningStateClaimed = false;
       let stopHandlerRegistered = false;
       let stopRequestVersion: number | null = null;
-      let flushTrajectory: (() => Promise<void>) | null = null;
+      let flushTrajectory: (() => Promise<void>) | undefined;
       // 停止处理器与发送链路 handleConversationStop 同款：记录版本号供 finally
       // 消费 stop intent；abort 使 compactManually 中止（controller 返回 aborted）。
       const handleStop: ConversationStopHandler = (options) => {
@@ -209,24 +185,20 @@ export function useManualCompaction(params: {
       };
 
       const mapOutcome = (
-        outcome: ManualCompactionOutcome,
-        compactionFailureMessage: string,
+        result: Awaited<ReturnType<CompactionController["compactManually"]>>,
       ): ManualCompactionResult => {
-        switch (outcome.status) {
+        switch (result.outcome) {
           case "compacted":
             return { status: "compacted" };
           case "busy":
             return { status: "busy", message: t("chat.manualCompactRejected") };
           case "skipped":
-            return { status: "skipped", message: messageForSkipReason(outcome.reason) };
+            return { status: "skipped", message: messageForSkipReason(result.reason) };
+          // 中止（用户停止）落到 skipped + 取消文案；其余失败带失败详情。
+          case "aborted":
+            return { status: "skipped", message: t("chat.manualCompactCancelled") };
           default:
-            // 中止（用户停止）落到 skipped + 取消文案；其余失败带失败详情。
-            return outcome.aborted
-              ? { status: "skipped", message: t("chat.manualCompactCancelled") }
-              : {
-                  status: "failed",
-                  message: compactionFailureMessage || t("chat.manualCompactFailed"),
-                };
+            return { status: "failed", message: result.message || t("chat.manualCompactFailed") };
         }
       };
 
@@ -242,23 +214,15 @@ export function useManualCompaction(params: {
 
         // 运行时快照解析：当前会话用可见状态，但历史仍在水合时可见状态为空，
         // active segment 无消息即复核一次 runtime cache（否则误报"无可压缩内容"）。
-        let runtimeEntry: ConversationRuntimeEntry;
-        if (isCurrentConversation()) {
-          const visibleEntry = buildRuntimeEntryFromVisibleState();
-          const visibleMessages = getActiveSegment(visibleEntry.state)?.messages ?? [];
-          if (visibleMessages.length > 0) {
-            runtimeEntry = visibleEntry;
-          } else {
-            await ensureConversationReady(conversationId);
-            runtimeEntry = conversationRuntimeCacheRef.current.get(conversationId) ?? visibleEntry;
-          }
-        } else {
+        let runtimeEntry = isCurrentConversation()
+          ? buildRuntimeEntryFromVisibleState()
+          : undefined;
+        if (!runtimeEntry || !getActiveSegment(runtimeEntry.state)?.messages.length) {
           await ensureConversationReady(conversationId);
-          const cached = conversationRuntimeCacheRef.current.get(conversationId);
-          if (!cached) {
-            throw new Error("Conversation runtime is unavailable after history hydration");
-          }
-          runtimeEntry = cached;
+          runtimeEntry = conversationRuntimeCacheRef.current.get(conversationId) ?? runtimeEntry;
+        }
+        if (!runtimeEntry) {
+          throw new Error("Conversation runtime is unavailable after history hydration");
         }
 
         // 水合可能耗时，重核一次运行态后再占用 running 标志。
@@ -289,11 +253,13 @@ export function useManualCompaction(params: {
           };
         }
         const { provider, providerId, model, selectedModel } = effective;
-        const runtime = createProviderRuntimeConfig(
-          provider,
-          model,
-          applyConversationThinking(settings.chatRuntimeControls, selectedModel),
+        const runtimeControls = applyConversationThinking(
+          settings.chatRuntimeControls,
+          selectedModel,
         );
+        const runtime = createProviderRuntimeConfig(provider, model, runtimeControls);
+        // transcript 档与发送链路同一份 failover 计划；不回写切换，手动压缩不改会话模型选择。
+        const failoverPlan = buildModelFailoverPlan(settings, effective, runtimeControls);
 
         // 与发送链路同源的检查点上下文：注入 agent/skills/memory 提示词与 tools，
         // 使 checkpoint contextTokensAfter（两端环的权威锚点）计入系统提示词与
@@ -316,64 +282,27 @@ export function useManualCompaction(params: {
         // 消息的字节与发出去时对不上,压缩省下的前缀又被自己废掉。
         const skillMentionUpdates = skillMentionInjection.getMessageUpdates(conversationId);
 
-        let compactionFailureMessage = "";
-        const sinks: CompactionSinks = {
-          applyState: (state) =>
-            updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state })),
-          applyStateMidRun: (state) => {
-            updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state }));
-            resetLiveTranscript(transcriptStore);
-          },
-          publishStatus: (status) => {
-            if (status.phase === "failed") compactionFailureMessage = status.message;
-            updateConversationRuntimeEntry(conversationId, (prev) => ({
-              ...prev,
-              compactionStatus: status,
-            }));
-          },
-          setBridgeToolStatus: (status, isCompaction = false) => {
-            gatewayBridgeEvents.queueToolStatus(status, isCompaction);
-            updateToolStatus(status, transcriptStore);
-          },
-          queueCheckpoint: (state, contextUsageTokens) =>
-            gatewayBridgeEvents.queueCheckpoint(state, contextUsageTokens),
-          persist: (state) =>
-            persistConversation({
-              conversationId,
-              sessionId: runtimeEntry.sessionId,
-              providerId,
-              model,
-              selectedModel,
-              cwd: runtimeEntry.workdir,
-              state,
-              fallbackTitle: t("chat.pendingTitle"),
-              createdAt: runtimeEntry.createdAt,
-              titlePromise: null,
-            }),
-          // 压缩把携带 memory 增量块的 user 消息移出 active segment;丢弃注入
-          // 状态后,下一轮发送的 getSystemText 回退到现读快照并重新冻结。
-          onCompacted: () => memoryTurnInjection.invalidate(conversationId),
-        };
-
         const compactionController = getCompactionController(conversationId);
         // 重启后直接手动压缩：控制器还没有任何轮次注入过 provider 边界追加段
         //（agent 模式 toolsSuffix 实测 ~4k），检查点权威值会系统性偏低，下一次
         // 发送时环台阶式上跳。按持久化工具集补一份回退估算；本会话已有轮次
         // 注入的现值（出自真实请求参数）优先，绝不覆盖。
-        if (compactionController.contextFixedOverheadTokens === 0) {
-          const persistedTools = runtimeEntry.state.meta.tools;
-          if (Array.isArray(persistedTools) && persistedTools.length > 0) {
-            compactionController.noteFixedOverheadTokens(
-              estimateTextTokens(
-                buildToolsSuffix(
-                  runtimeEntry.workdir ?? "",
-                  persistedTools
-                    .map((tool) => (typeof tool?.name === "string" ? tool.name : ""))
-                    .filter(Boolean),
-                ),
+        const persistedTools = runtimeEntry.state.meta.tools;
+        if (
+          compactionController.contextFixedOverheadTokens === 0 &&
+          Array.isArray(persistedTools) &&
+          persistedTools.length > 0
+        ) {
+          compactionController.noteFixedOverheadTokens(
+            estimateTextTokens(
+              buildToolsSuffix(
+                runtimeEntry.workdir ?? "",
+                persistedTools
+                  .map((tool) => (typeof tool?.name === "string" ? tool.name : ""))
+                  .filter(Boolean),
               ),
-            );
-          }
+            ),
+          );
         }
         const trajectoryRecording = acquireTrajectoryRecorder(
           conversationId,
@@ -390,74 +319,71 @@ export function useManualCompaction(params: {
           },
         );
         flushTrajectory = trajectoryRecording.recorder.flush;
-        compactionController.setObserver({
-          onStart: ({ trigger }) => {
-            trajectoryRecording.recorder.compactionStart({ standalone: trigger === "manual" });
-          },
-          onEnd: ({ trigger, status, tokensBefore, tokensAfter, newSegmentIndex, error }) => {
-            trajectoryRecording.recorder.compactionEnd({
-              status,
-              standalone: trigger === "manual",
-              ...(tokensBefore === undefined ? {} : { tokensBefore }),
-              ...(tokensAfter === undefined ? {} : { tokensAfter }),
-              ...(error === undefined ? {} : { error }),
-            });
-            if (status === "complete" && newSegmentIndex !== undefined) {
-              updateTrajectoryRecorderSegment(conversationId, newSegmentIndex);
-            }
-          },
-        });
+        observeCompactionTrajectory(
+          compactionController,
+          trajectoryRecording.recorder,
+          conversationId,
+        );
         const outcome = await compactionController.compactManually(
           {
             providerId,
             model,
             runtime,
+            sessionId: runtimeEntry.sessionId,
+            failover: failoverPlan,
             cancellation,
-            sinks,
-            buildPreparedContext: (state, tools, options) =>
+            sinks: createCompactionSinks({
+              conversationId,
+              transcriptStore,
+              gatewayBridgeEvents,
+              updateConversationRuntimeEntry,
+              updateToolStatus,
+              resetLiveTranscript,
+              applyState: (state) =>
+                updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state })),
+              persist: (state) =>
+                persistConversation({
+                  conversationId,
+                  sessionId: runtimeEntry.sessionId,
+                  providerId,
+                  model,
+                  selectedModel,
+                  cwd: runtimeEntry.workdir,
+                  state,
+                  fallbackTitle: t("chat.pendingTitle"),
+                  createdAt: runtimeEntry.createdAt,
+                  titlePromise: null,
+                }),
+            }),
+          },
+          {
+            state: runtimeEntry.state,
+            // 与真实请求同参的工具集：checkpoint 估值缺了工具重量会系统性偏低。
+            buildContext: (state) =>
               buildPreparedConversationContext({
                 state,
-                tools,
+                tools: runtimeEntry.state.meta.tools,
                 activeAgentPrompt: resolvedAgentPrompt,
                 skillsPrompt,
                 memoryPrompt,
                 memoryTurnUpdates,
                 skillMentionUpdates,
-                includeAbortedMessages: options?.includeAbortedMessages,
-                includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
               }),
-            buildResumeContext: (state, resumeMessage, tools, options) =>
-              buildResumeConversationContext({
-                state,
-                resumeMessage,
-                tools,
-                activeAgentPrompt: resolvedAgentPrompt,
-                skillsPrompt,
-                memoryPrompt,
-                memoryTurnUpdates,
-                skillMentionUpdates,
-                includeAbortedMessages: options?.includeAbortedMessages,
-                includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
-              }),
-          },
-          runtimeEntry.state,
-          resolveManualContextUsage(compactionController, runtimeEntry),
-          {
-            tools: runtimeEntry.state.meta.tools,
+            // 读数快照优先用控制器账本，缺失（本会话尚未发过请求）才退到转录扫描；
+            // fixedTokens 缺省时探针的 rebase 会按当前上下文自行估算。
+            usage: compactionController.contextUsageSnapshot ?? {
+              totalTokens: deriveContextUsageTokens(runtimeEntry.state.transcript.items),
+            },
             onProceed: () => {
               proceeded = true;
               if (hasRemoteGatewayTarget) {
                 // 与 useSendChatTurn 同款注册镜像：userMessage 取最近一条用户消息
                 // （已在历史里的真实消息），transcriptStore 现成。缺 userMessage 会让
                 // 网关 checkpoint 请求撞 lastError、TTL 清扫器判死未注册 mirror。
-                const activeMessages = getActiveSegment(runtimeEntry.state)?.messages ?? [];
-                let lastUserMessage: (typeof activeMessages)[number] | undefined;
-                for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
-                  if (activeMessages[index]?.role === "user") {
-                    lastUserMessage = activeMessages[index];
-                    break;
-                  }
-                }
+                const lastUserMessage = (getActiveSegment(runtimeEntry.state)?.messages ?? [])
+                  .slice()
+                  .reverse()
+                  .find((message) => message?.role === "user");
                 if (lastUserMessage) {
                   registerGatewayRunMirror({
                     runId: bridgeRequestId,
@@ -468,7 +394,7 @@ export function useManualCompaction(params: {
                     state: "running",
                   });
                 }
-                // ledger 记账：2s 心跳的 active_runs 为 summarizer 静默期续命。
+                // ledger 记账：2s 心跳的 active_runs 为摘要静默期续命。
                 void invoke("gateway_chat_mark_local_started", {
                   request_id: bridgeRequestId,
                   conversation_id: conversationId,
@@ -481,7 +407,7 @@ export function useManualCompaction(params: {
           },
         );
 
-        return mapOutcome(outcome, compactionFailureMessage);
+        return mapOutcome(outcome);
       };
 
       try {
@@ -498,10 +424,7 @@ export function useManualCompaction(params: {
         result = { status: "failed", message };
         return result;
       } finally {
-        const flushRecordedTrajectory = flushTrajectory as (() => Promise<void>) | null;
-        if (flushRecordedTrajectory !== null) {
-          await flushRecordedTrajectory();
-        }
+        if (flushTrajectory) await flushTrajectory();
         if (stopHandlerRegistered) {
           clearConversationStopHandler(conversationId, handleStop);
           setConversationAbortController(conversationId, null);

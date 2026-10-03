@@ -196,12 +196,12 @@ recorder 每次 emit 同时：
 
 ## 压缩埋点
 
-pre-send、mid-stream、post-tool、manual 四条压缩路径统一通过 `CompactionController` observer：
+pre-send、overflow（反应式溢出）、post-tool、manual 四条压缩路径统一通过 `CompactionController` observer：
 
 - `publishRunning` 是唯一开始点；
-- `settleCompleted` / `settleFailed` / abort teardown 是终点；
-- 每个开始严格对应一个 `complete | error | aborted` 终态；
-- 用户取消、强制解绑和晚到的 summarizer completion 不会产生重复终态；
+- `settle` 是唯一终点：提交后的 `commit` 记 `complete`（deterministic 降级同样算 `complete`），`fail` 记 `error`，`handleTurnAbort` / 解绑 / 重绑经 `settleAbortedIfRunning` 记 `aborted`；
+- 每个开始严格对应一个 `complete | error | aborted` 终态，按 operationId 去重；
+- 用户取消、强制解绑和晚到的摘要结果不会产生重复终态；
 - `tokensBefore/tokensAfter` 在终态后清理，不能污染下一次压缩。
 
 observer 是诊断通道，回调抛错不会影响压缩主路径。

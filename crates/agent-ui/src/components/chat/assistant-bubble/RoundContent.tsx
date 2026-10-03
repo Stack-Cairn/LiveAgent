@@ -282,7 +282,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
           {layout.work.map((entry) => renderEntry(entry, true))}
           {showDetailedStatus ? (
             <div className="py-1.5">
-              <CompactingText />
+              <CompactingText progress={normalizedToolStatus} />
             </div>
           ) : null}
         </AssistantWorkTrace>

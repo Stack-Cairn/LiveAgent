@@ -7,6 +7,7 @@ import {
   UPLOADED_FILES_READ_PAGING_HINT,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { invoke } from "@tauri-apps/api/core";
+import { isCheckpointBridgeText } from "../chat/compaction/bridge";
 
 type PayloadHook = (payload: unknown, model: Model<Api>) => unknown | Promise<unknown>;
 
@@ -365,6 +366,27 @@ function rewriteNativeUploadInstructionText(params: {
   );
 }
 
+// 改写目标：优先含附件指令头的文本块，否则首个文本块。压缩后的 checkpoint bridge
+// 以前置文本块合入首条 user 消息，指令头因此不一定在首个文本块；bridge 块本身（可能
+// 引用了含指令头的原话）永不作为改写目标。
+function findUploadInstructionPartIndex(
+  parts: unknown[],
+  isTextPart: (part: Record<string, unknown>) => boolean,
+) {
+  let firstTextIndex = -1;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (!isRecord(part) || typeof part.text !== "string" || !isTextPart(part)) continue;
+    const text = part.text;
+    if (isCheckpointBridgeText(text)) continue;
+    if (UPLOADED_FILES_INSTRUCTION_HEADER_TEXTS.some((header) => text.includes(header))) {
+      return index;
+    }
+    if (firstTextIndex < 0) firstTextIndex = index;
+  }
+  return firstTextIndex;
+}
+
 function applyTypedNativeUploadInstruction(params: {
   content: unknown[];
   type: string;
@@ -372,22 +394,18 @@ function applyTypedNativeUploadInstruction(params: {
   inlinedFiles: PendingUploadedFile[];
 }) {
   const next = params.content.slice();
-  for (let index = 0; index < next.length; index += 1) {
-    const part = next[index];
-    if (!isRecord(part) || part.type !== params.type || typeof part.text !== "string") {
-      continue;
-    }
-    next[index] = {
-      ...part,
-      text: rewriteNativeUploadInstructionText({
-        text: part.text,
-        nativeInstruction: params.nativeInstruction,
-        inlinedFiles: params.inlinedFiles,
-      }),
-    };
-    return next;
-  }
-  return [{ type: params.type, text: params.nativeInstruction }, ...next];
+  const index = findUploadInstructionPartIndex(next, (part) => part.type === params.type);
+  if (index < 0) return [{ type: params.type, text: params.nativeInstruction }, ...next];
+  const part = next[index] as Record<string, unknown> & { text: string };
+  next[index] = {
+    ...part,
+    text: rewriteNativeUploadInstructionText({
+      text: part.text,
+      nativeInstruction: params.nativeInstruction,
+      inlinedFiles: params.inlinedFiles,
+    }),
+  };
+  return next;
 }
 
 function normalizeUserContent(content: unknown): unknown[] {
@@ -453,22 +471,18 @@ function normalizeGeminiUserParts(parts: unknown): unknown[] {
 
 function applyGeminiNativeUploadInstruction(parts: unknown[], inlinedFiles: PendingUploadedFile[]) {
   const next = parts.slice();
-  for (let index = 0; index < next.length; index += 1) {
-    const part = next[index];
-    if (!isRecord(part) || typeof part.text !== "string") {
-      continue;
-    }
-    next[index] = {
-      ...part,
-      text: rewriteNativeUploadInstructionText({
-        text: part.text,
-        nativeInstruction: GEMINI_NATIVE_UPLOAD_INSTRUCTION,
-        inlinedFiles,
-      }),
-    };
-    return next;
-  }
-  return [{ text: GEMINI_NATIVE_UPLOAD_INSTRUCTION }, ...next];
+  const index = findUploadInstructionPartIndex(next, () => true);
+  if (index < 0) return [{ text: GEMINI_NATIVE_UPLOAD_INSTRUCTION }, ...next];
+  const part = next[index] as Record<string, unknown> & { text: string };
+  next[index] = {
+    ...part,
+    text: rewriteNativeUploadInstructionText({
+      text: part.text,
+      nativeInstruction: GEMINI_NATIVE_UPLOAD_INSTRUCTION,
+      inlinedFiles,
+    }),
+  };
+  return next;
 }
 
 function hasContentPartType(content: unknown, type: string) {

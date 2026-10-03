@@ -297,19 +297,15 @@ export function createFakeWorktreeIpc(options = {}) {
 
 export function createDefaultCompactionMock(compactionCalls) {
   class FakeCompactionController {
-    #presend = undefined;
+    bindTurn() {}
 
-    bindTurn(binding) {
-      this.#presend = binding?.presend;
-    }
-
-    unbindTurn() {
-      this.#presend = undefined;
-    }
+    unbindTurn() {}
 
     get stats() {
       return { compactionsApplied: 0 };
     }
+
+    noteRequest() {}
 
     beginRequest() {}
 
@@ -317,18 +313,9 @@ export function createDefaultCompactionMock(compactionCalls) {
       return 0;
     }
 
-    shouldProtectMidStream() {
-      return false;
-    }
-
-    async maybeCompactPreSend() {
-      compactionCalls.push({ phase: "pre", incomingUserText: this.#presend?.pendingUserText });
-      return false;
-    }
-
-    async compactDuringRun() {
-      compactionCalls.push({ phase: "mid" });
-      return { context: null, shouldDisableProtection: false };
+    async compact({ trigger }) {
+      compactionCalls.push({ trigger });
+      return { outcome: "skipped", reason: "below-threshold" };
     }
 
     async handleTurnAbort() {

@@ -1,24 +1,81 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const loader = createTsModuleLoader();
-const controllerModule = loader.loadModule("src/lib/chat/compaction/controller.ts");
+// ============================================================================
+// CompactionController.compact 的编排与持久化语义。摘要降级梯（summarize.ts）
+// 由 compaction-summarize.test 覆盖，这里换成可编排的假实现。
+// ============================================================================
+
+const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+
+function createCompactionAbortError() {
+  const error = new Error("compaction aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+const summarizeCalls = [];
+let summarizeImpl = async () => okDraft();
+const loader = createTsModuleLoader({
+  mocks: {
+    [path.join(rootDir, "src/lib/chat/compaction/summarize.ts")]: {
+      createCompactionAbortError,
+      summarize: (input) => {
+        summarizeCalls.push(input);
+        return summarizeImpl(input);
+      },
+    },
+  },
+});
+const { CompactionController, createCompactionControllerRegistry } = loader.loadModule(
+  "src/lib/chat/compaction/controller.ts",
+);
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
 const cancellationModule = loader.loadModule("src/lib/chat/conversation/turnCancellation.ts");
+const bridgeModule = loader.loadModule("src/lib/chat/compaction/bridge.ts");
+const { deriveContextTokens } = loader.loadModule("src/lib/chat/compaction/tokenLedger.ts");
 
-const { CompactionController, createCompactionControllerRegistry } = controllerModule;
+// W 200k / O 32k：inputCap 168k，hard 158k，soft 148k。
+const MODEL_CONFIG = { contextWindow: 200_000, maxOutputToken: 32_000 };
+const SOFT_BAND = 150_000;
+const ABOVE_HARD = 190_000;
 
-const VALID_SUMMARY_XML = `<summary>
-<task>Fix src/app.ts</task>
-<state>Work on src/app.ts continues ${"detail ".repeat(60)}</state>
-<artifacts>
-- [file] src/app.ts | modified
-</artifacts>
-<next_steps>
-1. keep going
-</next_steps>
-</summary>`;
+const SUMMARY = "## Goal\nFix src/app.ts\n## Next Step\nkeep going";
+
+function okDraft(summaryText = SUMMARY, extra = {}) {
+  return {
+    ok: {
+      summaryText,
+      promptVersion: "summary-v4",
+      providerId: "anthropic",
+      model: "claude-x",
+      usage: { inputTokens: 5_000, outputTokens: 300, cacheReadTokens: 4_000 },
+    },
+    ...extra,
+  };
+}
+
+// 与真实 summarize 同口径：只有 scope 中止才抛 AbortError。
+function untilAborted(input) {
+  return new Promise((_, reject) => {
+    const fail = () => reject(createCompactionAbortError());
+    if (input.signal.aborted) fail();
+    else input.signal.addEventListener("abort", fail, { once: true });
+  });
+}
+
+function gate() {
+  let release;
+  const promise = new Promise((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
+const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 function usage(totalTokens) {
   return {
@@ -31,11 +88,11 @@ function usage(totalTokens) {
   };
 }
 
-function user(content, timestamp = 1) {
-  return { role: "user", content, timestamp };
+function user(content, timestamp, extra = {}) {
+  return { role: "user", content, timestamp, ...extra };
 }
 
-function assistantWithUsage(text, totalTokens, timestamp = 2) {
+function assistantWithUsage(text, totalTokens, timestamp) {
   return {
     role: "assistant",
     content: [{ type: "text", text }],
@@ -48,43 +105,22 @@ function assistantWithUsage(text, totalTokens, timestamp = 2) {
   };
 }
 
-function toolResultBig(chars, timestamp = 3) {
-  return {
-    role: "toolResult",
-    toolCallId: "tc-big",
-    toolName: "Read",
-    content: [{ type: "text", text: "x".repeat(chars) }],
-    isError: false,
-    timestamp,
-  };
-}
-
-function summaryResponse() {
-  return {
-    role: "assistant",
-    content: [{ type: "text", text: VALID_SUMMARY_XML }],
-    api: "anthropic-messages",
-    provider: "anthropic",
-    model: "claude-real",
-    stopReason: "stop",
-    usage: usage(5000),
-    timestamp: 1234,
-    responseId: "resp-1",
-  };
-}
-
-// 3 个用户消息绕开 MIN_COMPACTION_USER_MESSAGES 冷却窗，方便连续压缩场景。
-function bigState(extraMessages = []) {
+function bigState(totalTokens = ABOVE_HARD, extraMessages = []) {
   return conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
     messages: [
-      user("please fix src/app.ts", 1),
-      user("continue with src/app.ts", 2),
-      user("check src/app.ts again", 3),
-      assistantWithUsage("working on src/app.ts", 190_000, 4),
+      user("please fix src/app.ts", 1, { id: "u-1" }),
+      user("continue with src/app.ts", 2, { id: "u-2" }),
+      user("check src/app.ts again", 3, { id: "u-3" }),
+      assistantWithUsage("working on src/app.ts", totalTokens, 4),
       ...extraMessages,
     ],
   });
+}
+
+// 与真实请求构建器同口径：摘要只经 checkpoint bridge 进入请求。
+function requestContext(state) {
+  return conversationState.buildRequestContext(state, { includeCheckpointBridge: true });
 }
 
 function createSinksRecorder() {
@@ -105,7 +141,7 @@ function createSinksRecorder() {
         events.push(["persist", state]);
         return true;
       },
-      restoreComposer: (text, uploads) => events.push(["restoreComposer", text, uploads]),
+      restoreComposer: () => events.push(["restoreComposer"]),
       persistRollback: async (state) => {
         events.push(["persistRollback", state]);
         return true;
@@ -114,260 +150,397 @@ function createSinksRecorder() {
   };
 }
 
-function bindController(controller, overrides = {}) {
-  const cancellation = cancellationModule.createTurnCancellation();
+function createBinding(overrides = {}) {
   const recorder = createSinksRecorder();
-  controller.bindTurn({
+  const binding = {
     providerId: "anthropic",
     model: "claude-x",
-    runtime: {
-      baseUrl: "https://example",
-      apiKey: "k",
-      modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
-    },
-    cancellation,
+    runtime: { baseUrl: "https://example", apiKey: "k", modelConfig: MODEL_CONFIG },
+    cancellation: cancellationModule.createTurnCancellation(),
     sinks: recorder.sinks,
-    buildPreparedContext: (state, _tools, options) =>
-      conversationState.buildRequestContext(state, options),
-    buildResumeContext: (state, resumeMessage, _tools, options) => {
-      const context = conversationState.buildRequestContext(state, options);
-      return resumeMessage
-        ? { ...context, messages: [...context.messages, resumeMessage] }
-        : context;
-    },
     ...overrides,
-  });
-  return { cancellation, recorder };
+  };
+  return { binding, recorder, cancellation: binding.cancellation };
 }
 
-test("pre-send compaction: checkpoint, persist, re-appended user message, paired status", async () => {
-  const controller = new CompactionController();
-  const baseState = bigState();
-  const pendingUserMessage = user("next question", 9);
-  let completeCalls = 0;
-  const { recorder } = bindController(controller, {
-    complete: async () => {
-      completeCalls += 1;
-      return summaryResponse();
-    },
-    presend: {
-      baseState,
-      pendingUserText: "next question",
-      composerText: "next question",
-      uploadedFiles: [],
-      composeAppliedState: (state) =>
-        conversationState.appendMessagesToConversation(state, [pendingUserMessage]),
-    },
-  });
+function bindController(controller, overrides) {
+  const bound = createBinding(overrides);
+  controller.bindTurn(bound.binding);
+  return bound;
+}
 
-  const applied = await controller.maybeCompactPreSend({
-    budgetContext: conversationState.buildRequestContext(baseState),
-  });
+function compact(controller, trigger, state, extra = {}) {
+  return controller.compact({ trigger, state, buildContext: requestContext, ...extra });
+}
 
-  assert.equal(applied, true);
-  assert.equal(completeCalls, 1);
+function phases(recorder) {
+  return recorder.byKind("publishStatus").map(([, status]) => status.phase);
+}
 
-  const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
-  assert.deepEqual(statuses, ["running", "completed"]);
-
-  // persist 的是 checkpoint 状态（新 segment、无待发送消息）；apply 的是补回用户消息的状态。
-  const [, persistedState] = recorder.byKind("persist")[0];
-  assert.equal(persistedState.segments.length, 2);
-  assert.equal(persistedState.segments[1].messages.length, 0);
-  const [, appliedState] = recorder.byKind("applyState")[0];
-  assert.equal(appliedState.segments[1].messages.length, 1);
-  assert.equal(appliedState.segments[1].messages[0].content, "next question");
-
-  assert.equal(recorder.byKind("queueCheckpoint").length, 1);
-
-  // bridge 状态成对：running 时 isCompaction=true，结束后清 null。
-  const bridgeEvents = recorder.byKind("bridge");
-  assert.match(bridgeEvents[0][1], /正在压缩历史/);
-  assert.equal(bridgeEvents[0][2], true);
-  assert.equal(bridgeEvents.at(-1)[1], null);
-});
-
-test("below-threshold decisions are side-effect free", async () => {
-  const controller = new CompactionController();
-  const smallState = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [user("hi"), assistantWithUsage("hello", 1000)],
-  });
-  let completeCalls = 0;
-  const { recorder } = bindController(controller, {
-    complete: async () => {
-      completeCalls += 1;
-      return summaryResponse();
-    },
-    presend: {
-      baseState: smallState,
-      pendingUserText: "next",
-      composeAppliedState: (state) => state,
-    },
-  });
-
-  const applied = await controller.maybeCompactPreSend({
-    budgetContext: conversationState.buildRequestContext(smallState),
-  });
-  const midRun = await controller.compactDuringRun({
-    trigger: "post-tool",
-    state: smallState,
-  });
-
-  assert.equal(applied, false);
-  assert.equal(midRun.context, null);
-  assert.equal(completeCalls, 0);
-  assert.equal(recorder.events.length, 0);
-});
-
-test("single-flight: a concurrent trigger is rejected while a compaction is in flight", async () => {
-  const controller = new CompactionController();
-  let release;
-  const gate = new Promise((resolve) => {
-    release = resolve;
-  });
-  let completeCalls = 0;
-  bindController(controller, {
-    complete: async () => {
-      completeCalls += 1;
-      await gate;
-      return summaryResponse();
-    },
-  });
-
-  const state = bigState();
-  const first = controller.compactDuringRun({ trigger: "post-tool", state });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(controller.shouldProtectMidStream(1_000_000), false);
-  const second = await controller.compactDuringRun({ trigger: "post-tool", state });
-  assert.equal(second.context, null);
-
-  release();
-  const firstContext = await first;
-  assert.ok(firstContext.context);
-  assert.equal(completeCalls, 1);
-});
-
-test("user stop chains into the summarizer; handleTurnAbort rolls back and persists", async () => {
-  const controller = new CompactionController();
+function observe(controller) {
   const observed = [];
   controller.setObserver({
     onStart: (info) => observed.push(["start", info]),
     onEnd: (info) => observed.push(["end", info]),
   });
-  const state = bigState();
-  const { cancellation, recorder } = bindController(controller, {
-    complete: (params) =>
-      new Promise((_, reject) => {
-        params.signal?.addEventListener("abort", () => {
-          const error = new Error("aborted by user");
-          error.name = "AbortError";
-          reject(error);
-        });
-      }),
+  return observed;
+}
+
+function presendFor(state, text = "next question", restoreOnRollback = true) {
+  const pendingUserMessage = user(text, 9, { id: "u-pending" });
+  return {
+    state: conversationState.appendMessagesToConversation(state, [pendingUserMessage]),
+    presend: { pendingUserMessage, restoreOnRollback },
+  };
+}
+
+test.beforeEach(() => {
+  summarizeCalls.length = 0;
+  summarizeImpl = async () => okDraft();
+});
+
+test("pre-send seals N without the pending message and persists it into N+1 in one step", async () => {
+  const controller = new CompactionController();
+  const observed = observe(controller);
+  const { recorder } = bindController(controller);
+  const { state, presend } = presendFor(bigState());
+
+  const result = await compact(controller, "pre-send", state, { presend });
+
+  assert.equal(result.outcome, "compacted");
+  const [, persisted] = recorder.byKind("persist")[0];
+  assert.equal(recorder.byKind("persist").length, 1);
+  assert.equal(persisted.segments.length, 2);
+  assert.equal(persisted.segments[0].messages.length, 4);
+  assert.deepEqual(
+    persisted.segments[1].messages.map((message) => message.id),
+    ["u-pending"],
+  );
+  // contextTokensAfter = fixed + bridge，按组合待发送消息之前的 checkpoint 状态计算。
+  const summary = persisted.segments[1].summary;
+  const checkpointOnly = conversationState.replaceActiveSegmentMessages(persisted, []);
+  const [, , tokensAfter] = recorder.byKind("queueCheckpoint")[0];
+  assert.equal(summary.summaryMeta.stats.contextTokensAfter, tokensAfter);
+  assert.equal(tokensAfter, deriveContextTokens(requestContext(checkpointOnly)));
+  assert.equal(summary.summaryMeta.generatedBy.promptVersion, "summary-v4");
+  assert.deepEqual(summary.summaryMeta.stats.summarizer, {
+    inputTokens: 5_000,
+    outputTokens: 300,
+    cacheReadTokens: 4_000,
   });
 
-  const pending = controller.compactDuringRun({ trigger: "mid-stream", state });
-  await new Promise((resolve) => setImmediate(resolve));
+  // pre-send 落地走 applyState；状态与 bridge 成对。
+  assert.equal(recorder.byKind("applyState")[0][1], persisted);
+  assert.equal(recorder.byKind("applyStateMidRun").length, 0);
+  assert.deepEqual(phases(recorder), ["running", "completed"]);
+  const bridgeEvents = recorder.byKind("bridge");
+  assert.deepEqual(bridgeEvents[0].slice(1), ["0:00", true]);
+  assert.equal(bridgeEvents.at(-1)[1], null);
+  assert.deepEqual(
+    observed.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [
+      ["start", "pre-send"],
+      ["end", "complete"],
+    ],
+  );
+  assert.equal(observed[1][1].tokensAfter, tokensAfter);
+
+  // 待发送消息既不进摘要输入也不进保留池；≥ hard 必须推进。
+  const [input] = summarizeCalls;
+  assert.equal(input.automatic, true);
+  assert.equal(input.mustProgress, true);
+  assert.equal(input.segmentMessages.length, 4);
+  assert.doesNotMatch(JSON.stringify(input.messages), /next question/);
+  assert.ok(summary.retainedUserMessages.every((message) => message.text !== "next question"));
+});
+
+test("below-threshold decisions are side-effect free", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller);
+  const smallState = bigState(1_000);
+
+  assert.deepEqual(await compact(controller, "pre-send", smallState), {
+    outcome: "skipped",
+    reason: "below-threshold",
+  });
+  assert.deepEqual(await compact(controller, "post-tool", smallState), {
+    outcome: "skipped",
+    reason: "below-threshold",
+  });
+  assert.equal(summarizeCalls.length, 0);
+  assert.equal(recorder.events.length, 0);
+});
+
+test("single-flight: a concurrent trigger is skipped while a compaction is in flight", async () => {
+  const controller = new CompactionController();
+  bindController(controller);
+  const { promise, release } = gate();
+  summarizeImpl = async () => {
+    await promise;
+    return okDraft();
+  };
+
+  const first = compact(controller, "post-tool", bigState());
+  await tick();
+  assert.deepEqual(await compact(controller, "post-tool", bigState()), {
+    outcome: "skipped",
+    reason: "in-flight",
+  });
+  release();
+  assert.equal((await first).outcome, "compacted");
+  assert.equal(summarizeCalls.length, 1);
+});
+
+test("edit-resend: the pre-send base comes from the call-time state, never a pre-edit snapshot", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller);
+  // 编辑前最后一次请求的配方：结尾是被删掉的旧 prompt，fork 回放必须对不上而回退。
+  const preEdit = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("first request", 1, { id: "u-1" }),
+      assistantWithUsage("done", ABOVE_HARD, 2),
+      user("old prompt", 3, { id: "u-old" }),
+    ],
+  });
+  controller.noteRequest({
+    providerId: "anthropic",
+    modelId: "claude-x",
+    api: "anthropic-messages",
+    shape: "agent",
+    messages: requestContext(preEdit).messages,
+    options: {},
+    recordedAt: 1,
+  });
+  // replaceConversationAtMessage 之后的状态：旧 prompt 及其后缀已删，新 prompt 在末尾。
+  const replaced = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [user("first request", 1, { id: "u-1" }), assistantWithUsage("done", ABOVE_HARD, 2)],
+  });
+  const { state, presend } = presendFor(replaced, "new prompt");
+
+  assert.equal((await compact(controller, "pre-send", state, { presend })).outcome, "compacted");
+
+  const [, persisted] = recorder.byKind("persist")[0];
+  assert.doesNotMatch(JSON.stringify(persisted), /old prompt/);
+  assert.equal(persisted.segments[0].messages.length, 2);
+  assert.deepEqual(
+    persisted.segments[1].messages.map((message) => message.content),
+    ["new prompt"],
+  );
+  assert.deepEqual(
+    persisted.segments[1].summary.retainedUserMessages.map((message) => message.text),
+    ["first request"],
+  );
+  assert.doesNotMatch(JSON.stringify(summarizeCalls[0].messages), /old prompt|new prompt/);
+});
+
+test("post-tool summarizes req.state and never duplicates the pending message", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller);
+  const { state, presend } = presendFor(bigState());
+  const tempState = conversationState.appendMessagesToConversation(state, [
+    assistantWithUsage("tool round", ABOVE_HARD, 10),
+  ]);
+  const forkMessages = requestContext(tempState).messages;
+
+  // presend 只对 pre-send 生效：误传给 post-tool 也不得重复插入。
+  const result = await compact(controller, "post-tool", tempState, { presend, forkMessages });
+
+  assert.equal(result.outcome, "compacted");
+  const [, persisted] = recorder.byKind("persist")[0];
+  assert.equal(persisted.segments[0].messages.length, 6);
+  assert.equal(persisted.segments[1].messages.length, 0);
+  const pendingCopies = persisted.segments
+    .flatMap((segment) => segment.messages)
+    .filter((message) => message.id === "u-pending");
+  assert.equal(pendingCopies.length, 1);
+  assert.equal(recorder.byKind("applyStateMidRun")[0][1], persisted);
+  assert.equal(recorder.byKind("applyState").length, 0);
+  assert.equal(summarizeCalls[0].messages, forkMessages);
+});
+
+test("pre-send and manual fork messages replay the recorded request plus the newer suffix", async () => {
+  const controller = new CompactionController();
+  bindController(controller);
+  const state = bigState();
+  const recorded = requestContext(state).messages.slice(0, 3);
+  controller.noteRequest({
+    providerId: "anthropic",
+    modelId: "claude-x",
+    api: "anthropic-messages",
+    shape: "agent",
+    messages: recorded,
+    options: {},
+    recordedAt: 1,
+  });
+
+  await compact(controller, "pre-send", state);
+  const replayed = summarizeCalls[0].messages;
+  assert.equal(replayed.length, 4);
+  assert.ok(recorded.every((message, index) => replayed[index] === message));
+  assert.equal(replayed[3].role, "assistant");
+});
+
+test("Stop during pre-send rolls back to the base, restores the composer and persists the rollback", async () => {
+  const controller = new CompactionController();
+  const observed = observe(controller);
+  const { recorder, cancellation } = bindController(controller);
+  summarizeImpl = untilAborted;
+  const { state, presend } = presendFor(bigState());
+
+  const pending = compact(controller, "pre-send", state, { presend });
+  await tick();
   cancellation.userStop.abort();
   await assert.rejects(pending, /aborted/);
+  assert.equal(await controller.handleTurnAbort(), true);
 
-  const rolledBack = await controller.handleTurnAbort();
-  assert.equal(rolledBack, true);
-
-  const [, restoredState] = recorder.byKind("applyStateMidRun")[0];
-  assert.equal(restoredState, state);
-  // mid-run 回滚必须补持久化（旧 persistOnRollback 语义）。
-  assert.equal(recorder.byKind("persistRollback").length, 1);
-  const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
-  assert.deepEqual(statuses, ["running", "idle"]);
-  // 回滚后 bridge 状态已清，isCompaction 不悬挂。
+  // 首次持久化已把待发送消息写进库：回滚把不含它的 base 补持久化，撤销孤儿消息。
+  const [, restored] = recorder.byKind("applyStateMidRun")[0];
+  assert.equal(restored.segments.length, 1);
+  assert.equal(restored.segments[0].messages.length, 4);
+  assert.equal(recorder.byKind("persistRollback")[0][1], restored);
+  assert.equal(recorder.byKind("restoreComposer").length, 1);
+  assert.equal(recorder.byKind("persist").length, 0);
+  assert.deepEqual(phases(recorder), ["running", "idle"]);
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
-  assert.equal(observed.length, 2);
-  assert.equal(observed[0][0], "start");
-  assert.equal(observed[0][1].trigger, "mid-stream");
-  assert.equal(observed[1][0], "end");
-  assert.equal(observed[1][1].trigger, "mid-stream");
-  assert.equal(observed[1][1].status, "aborted");
-  assert.equal(observed[1][1].tokensBefore, observed[0][1].tokensBefore);
-  assert.equal(observed[1][1].tokensAfter, undefined);
-
+  assert.deepEqual(
+    observed.map(([kind, info]) => [kind, info.status ?? info.trigger]),
+    [
+      ["start", "pre-send"],
+      ["end", "aborted"],
+    ],
+  );
   // 快照与观察区间都已消费，再次调用不会重复发终态。
   assert.equal(await controller.handleTurnAbort(), false);
   assert.equal(observed.length, 2);
 });
 
-test("unbindTurn closes an active compaction observer exactly once", async () => {
+test("Stop during pre-send keeps the pending message when the send never cleared the composer", async () => {
   const controller = new CompactionController();
-  const observed = [];
-  controller.setObserver({
-    onStart: (info) => observed.push(["start", info]),
-    onEnd: (info) => observed.push(["end", info]),
-  });
-  let release;
-  const gate = new Promise((resolve) => {
-    release = resolve;
-  });
-  bindController(controller, {
-    complete: async () => {
-      await gate;
-      return summaryResponse();
-    },
-  });
-  const pending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
-  await new Promise((resolve) => setImmediate(resolve));
-  controller.unbindTurn();
-  assert.equal(observed.at(-1)[1].status, "aborted");
-  assert.equal(observed.filter(([kind]) => kind === "end").length, 1);
-  release();
-  await assert.rejects(pending, /abort/i);
-  assert.equal(observed.filter(([kind]) => kind === "end").length, 1);
+  const { recorder, cancellation } = bindController(controller);
+  summarizeImpl = untilAborted;
+  // 队列 / WebUI / 计划续跑：文本不在输入框里，撤销即永久丢失——交给普通中止提交保留。
+  const { state, presend } = presendFor(bigState(), "queued", false);
+
+  const pending = compact(controller, "pre-send", state, { presend });
+  await tick();
+  cancellation.userStop.abort();
+  await assert.rejects(pending, /aborted/);
+  assert.equal(await controller.handleTurnAbort(), false);
+  assert.equal(recorder.byKind("persistRollback").length, 0);
+  assert.equal(recorder.byKind("restoreComposer").length, 0);
+  assert.deepEqual(phases(recorder), ["running", "idle"]);
 });
 
-test("a late result cannot settle a newer compaction with the same trigger", async () => {
+test("Stop during pre-send keeps the pending message when the composer cannot take the draft back", async () => {
   const controller = new CompactionController();
-  const observed = [];
-  controller.setObserver({
-    onStart: (info) => observed.push(["start", info]),
-    onEnd: (info) => observed.push(["end", info]),
-  });
+  const { recorder, cancellation } = bindController(controller);
+  // 压缩期间输入框又有了新草稿：放不回去时撤销会让已发送的消息无处可寻。
+  recorder.sinks.restoreComposer = () => {
+    recorder.events.push(["restoreComposer"]);
+    return false;
+  };
+  summarizeImpl = untilAborted;
+  const { state, presend } = presendFor(bigState());
 
-  let releaseOld;
-  const oldGate = new Promise((resolve) => {
-    releaseOld = resolve;
-  });
-  const oldBinding = bindController(controller, {
-    complete: async () => {
-      await oldGate;
-      return summaryResponse();
-    },
-  });
-  const oldPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
-  await new Promise((resolve) => setImmediate(resolve));
+  const pending = compact(controller, "pre-send", state, { presend });
+  await tick();
+  cancellation.userStop.abort();
+  await assert.rejects(pending, /aborted/);
+  assert.equal(await controller.handleTurnAbort(), false);
+  assert.equal(recorder.byKind("restoreComposer").length, 1);
+  assert.equal(recorder.byKind("applyStateMidRun").length, 0);
+  assert.equal(recorder.byKind("persistRollback").length, 0);
+  assert.deepEqual(phases(recorder), ["running", "idle"]);
+});
+
+test("Stop during post-tool rolls back to the call-time state without touching the composer", async () => {
+  const controller = new CompactionController();
+  const { recorder, cancellation } = bindController(controller);
+  summarizeImpl = untilAborted;
+  const state = bigState();
+
+  const pending = compact(controller, "post-tool", state);
+  await tick();
+  cancellation.userStop.abort();
+  await assert.rejects(pending, /aborted/);
+  assert.equal(await controller.handleTurnAbort(), true);
+
+  assert.equal(recorder.byKind("applyStateMidRun")[0][1], state);
+  assert.equal(recorder.byKind("persistRollback")[0][1], state);
+  assert.equal(recorder.byKind("restoreComposer").length, 0);
+});
+
+test("Stop right before persist rolls back instead of committing", async () => {
+  const controller = new CompactionController();
+  const { recorder, cancellation } = bindController(controller);
+  summarizeImpl = async () => {
+    cancellation.userStop.abort();
+    return okDraft();
+  };
+
+  await assert.rejects(compact(controller, "post-tool", bigState()), /aborted/);
+  assert.equal(recorder.byKind("persist").length, 0);
+  assert.equal(await controller.handleTurnAbort(), true);
+  assert.equal(recorder.byKind("persistRollback").length, 1);
+});
+
+test("Stop after a successful persist never rolls back", async () => {
+  const controller = new CompactionController();
+  const observed = observe(controller);
+  const { recorder, cancellation } = bindController(controller);
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    cancellation.userStop.abort();
+    return true;
+  };
+
+  const result = await compact(controller, "post-tool", bigState());
+
+  // 提交点之后忽略 Stop：回滚会把内存退回旧 segment，之后每次持久化都报分段回退。
+  assert.equal(result.outcome, "compacted");
+  assert.equal(recorder.byKind("applyStateMidRun").length, 1);
+  assert.deepEqual(phases(recorder), ["running", "completed"]);
+  assert.equal(await controller.handleTurnAbort(), false);
+  assert.equal(recorder.byKind("persistRollback").length, 0);
+  assert.deepEqual(
+    observed.map(([kind, info]) => info.status ?? kind),
+    ["start", "complete"],
+  );
+});
+
+test("a stale late result neither persists nor settles a newer compaction", async () => {
+  const controller = new CompactionController();
+  const observed = observe(controller);
+  const oldGate = gate();
+  summarizeImpl = async () => {
+    await oldGate.promise;
+    return okDraft();
+  };
+  const old = bindController(controller);
+  const oldPending = compact(controller, "post-tool", bigState());
+  await tick();
   controller.unbindTurn();
 
-  let releaseNew;
-  const newGate = new Promise((resolve) => {
-    releaseNew = resolve;
-  });
-  const newBinding = bindController(controller, {
-    complete: async () => {
-      await newGate;
-      return summaryResponse("new summary");
-    },
-  });
-  const newPending = controller.compactDuringRun({ trigger: "post-tool", state: bigState() });
-  await new Promise((resolve) => setImmediate(resolve));
+  const newGate = gate();
+  summarizeImpl = async () => {
+    await newGate.promise;
+    return okDraft("new summary");
+  };
+  const fresh = bindController(controller);
+  const newPending = compact(controller, "post-tool", bigState());
+  await tick();
 
-  releaseOld();
+  oldGate.release();
   await assert.rejects(oldPending, /abort/i);
-  assert.equal(oldBinding.recorder.byKind("persist").length, 0);
-  assert.equal(observed.at(-1)[0], "start");
+  assert.equal(old.recorder.byKind("persist").length, 0);
+  // 旧操作的收尾不得清掉新操作的进度状态。
+  assert.equal(fresh.recorder.byKind("bridge").length, 1);
 
-  releaseNew();
-  const result = await newPending;
-  assert.equal(result.outcome, "compacted");
-  assert.equal(newBinding.recorder.byKind("persist").length, 1);
+  newGate.release();
+  assert.equal((await newPending).outcome, "compacted");
+  assert.equal(fresh.recorder.byKind("persist").length, 1);
   assert.deepEqual(
     observed.map(([kind, info]) => [kind, info.status ?? info.trigger]),
     [
@@ -379,171 +552,223 @@ test("a late result cannot settle a newer compaction with the same trigger", asy
   );
 });
 
-test("summarizer failure degrades to prune and still returns a usable context", async () => {
+test("a stale failure keeps the newer compaction's rollback snapshot and breaker intact", async () => {
   const controller = new CompactionController();
-  // 大工具输出（200k 字符 ≈ 50k tokens > 40k 保护额度）必须在"最近 2 个用户轮次"之前才可被裁剪。
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      toolResultBig(200_000, 2),
-      user("continue with src/app.ts", 3),
-      user("check src/app.ts again", 4),
-      assistantWithUsage("working on src/app.ts", 190_000, 5),
-    ],
-  });
-  const { recorder } = bindController(controller, {
-    complete: async () => {
-      throw new Error("invalid api key");
-    },
-  });
-
-  const context = await controller.compactDuringRun({ trigger: "post-tool", state });
-
-  assert.ok(context.context);
-  const [, prunedState] = recorder.byKind("applyStateMidRun")[0];
-  const prunedMessages = prunedState.segments[0].messages.filter(
-    (message) =>
-      message.role === "toolResult" &&
-      message.content?.[0]?.text === "[output pruned to preserve context budget]",
-  );
-  assert.equal(prunedMessages.length, 1);
-
-  const failedStatus = recorder
-    .byKind("publishStatus")
-    .map(([, status]) => status)
-    .find((status) => status.phase === "failed");
-  assert.match(failedStatus.message, /prune 降级/);
-  assert.equal(recorder.byKind("bridge").at(-1)[1], null);
-});
-
-test("mid-stream compaction failure returns a safe continuation and disables protection", async () => {
-  const controller = new CompactionController();
-  const abortedAssistant = {
-    ...assistantWithUsage("working on src/app.ts", 190_000, 4),
-    stopReason: "aborted",
+  const oldGate = gate();
+  summarizeImpl = async () => {
+    await oldGate.promise;
+    return { failure: { kind: "transient", message: "fork transient: 502" } };
   };
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      user("continue with src/app.ts", 2),
-      user("check src/app.ts again", 3),
-      abortedAssistant,
-    ],
-  });
-  bindController(controller, {
-    complete: async () => {
-      throw new Error("invalid api key");
-    },
-  });
+  bindController(controller);
+  const oldPending = compact(controller, "post-tool", bigState());
+  await tick();
+  controller.unbindTurn();
 
-  const result = await controller.compactDuringRun({
-    trigger: "mid-stream",
-    state,
-    includeAbortedMessages: true,
-  });
+  summarizeImpl = untilAborted;
+  const fresh = bindController(controller);
+  const { state, presend } = presendFor(bigState());
+  const newPending = compact(controller, "pre-send", state, { presend });
+  await tick();
 
-  assert.ok(result.context);
-  assert.equal(result.shouldDisableProtection, true);
-  assert.equal(
-    result.context.messages.some(
-      (message) => message.role === "assistant" && message.stopReason === "aborted",
-    ),
-    false,
-  );
-  assert.equal(result.context.messages.at(-1)?.role, "user");
-  assert.equal(
-    result.context.messages.at(-1)?.content,
-    conversationState.INTERNAL_RESUME_MESSAGE_TEXT,
-  );
+  oldGate.release();
+  await assert.rejects(oldPending);
+  assert.equal(controller.failureStreak, 0);
+
+  fresh.cancellation.userStop.abort();
+  await assert.rejects(newPending, /aborted/);
+  assert.equal(await controller.handleTurnAbort(), true);
+  assert.equal(fresh.recorder.byKind("persistRollback").length, 1);
 });
 
-test("mid-stream prune fallback also returns a safe continuation", async () => {
+test("late progress never re-lights the status, and a stale operation's progress is dropped", async () => {
   const controller = new CompactionController();
-  const abortedAssistant = {
-    ...assistantWithUsage("working on src/app.ts", 190_000, 5),
-    stopReason: "aborted",
+  const oldGate = gate();
+  summarizeImpl = async () => {
+    await oldGate.promise;
+    return okDraft();
   };
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      toolResultBig(200_000, 2),
-      user("continue with src/app.ts", 3),
-      user("check src/app.ts again", 4),
-      abortedAssistant,
-    ],
-  });
-  const { recorder } = bindController(controller, {
-    complete: async () => {
-      throw new Error("invalid api key");
-    },
-  });
+  bindController(controller);
+  const oldPending = compact(controller, "post-tool", bigState());
+  await tick();
+  controller.unbindTurn();
 
-  const result = await controller.compactDuringRun({
-    trigger: "mid-stream",
-    state,
-    includeAbortedMessages: true,
-  });
+  const fresh = bindController(controller);
+  summarizeImpl = async () => okDraft();
+  await compact(controller, "post-tool", bigState());
+  const bridgeCount = fresh.recorder.byKind("bridge").length;
+  summarizeCalls[0].onProgress("1.0k · 0:03");
+  summarizeCalls[1].onProgress("2.0k · 0:04");
+  assert.equal(fresh.recorder.byKind("bridge").length, bridgeCount);
+  assert.equal(fresh.recorder.byKind("bridge").at(-1)[1], null);
 
-  assert.ok(result.context);
-  assert.equal(result.shouldDisableProtection, false);
-  assert.equal(
-    result.context.messages.some(
-      (message) => message.role === "assistant" && message.stopReason === "aborted",
-    ),
-    false,
-  );
-  assert.equal(result.context.messages.at(-1)?.role, "user");
-  assert.equal(
-    result.context.messages.at(-1)?.content,
-    conversationState.INTERNAL_RESUME_MESSAGE_TEXT,
-  );
-  assert.equal(recorder.byKind("applyStateMidRun").length, 1);
+  oldGate.release();
+  await assert.rejects(oldPending);
 });
 
-test("escalation ladder: consecutive ineffective compactions advise but never hard-refuse", async () => {
+test("a throwing sink after the commit point still settles completed and runs the rest", async () => {
   const controller = new CompactionController();
-  let completeCalls = 0;
-  const { recorder } = bindController(controller, {
-    complete: async () => {
-      completeCalls += 1;
-      return summaryResponse();
-    },
-    // 压缩后的恢复上下文仍然巨大 → 判定为低效压缩，推动压力升级。
-    buildResumeContext: () => ({
-      systemPrompt: "sys",
-      messages: [assistantWithUsage("still huge", 190_000, 99)],
-    }),
-  });
+  const observed = observe(controller);
+  const { recorder } = bindController(controller);
+  recorder.sinks.applyStateMidRun = () => {
+    throw new Error("render failed");
+  };
 
-  for (let round = 1; round <= 3; round += 1) {
-    const context = await controller.compactDuringRun({
-      trigger: "post-tool",
-      state: bigState(),
-    });
-    assert.ok(context.context, `compaction round ${round} must not be refused`);
+  const result = await compact(controller, "post-tool", bigState());
+
+  assert.equal(result.outcome, "compacted");
+  assert.deepEqual(phases(recorder), ["running", "completed"]);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 1);
+  assert.equal(observed.at(-1)[1].status, "complete");
+  assert.equal(await controller.handleTurnAbort(), false);
+});
+
+test("persist barrier: false or null settles failed and applies nothing", async () => {
+  for (const rejected of [false, null]) {
+    const controller = new CompactionController();
+    const { recorder } = bindController(controller);
+    recorder.sinks.persist = async (state) => {
+      recorder.events.push(["persist", state]);
+      return rejected;
+    };
+
+    const result = await compact(controller, "post-tool", bigState());
+
+    assert.equal(result.outcome, "failed");
+    assert.match(result.message, /persistence failed/);
+    assert.equal(recorder.byKind("persist").length, 1);
+    assert.equal(recorder.byKind("applyStateMidRun").length, 0);
+    assert.equal(recorder.byKind("queueCheckpoint").length, 0);
+    assert.deepEqual(phases(recorder), ["running", "failed"]);
+    // 什么都没落地：之后的 Stop 不得回滚。
+    assert.equal(await controller.handleTurnAbort(), false);
   }
-
-  assert.equal(completeCalls, 3);
-  assert.equal(controller.stats.compactionsApplied, 3);
-
-  const runningTexts = recorder
-    .byKind("bridge")
-    .filter(([, , isCompaction]) => isCompaction === true)
-    .map(([, text]) => text);
-  assert.equal(runningTexts.length, 3);
-  assert.doesNotMatch(runningTexts[0], /建议适时开启新会话/);
-  // 连续两次低效后顶格，第三次给出建议性提示但仍执行压缩。
-  assert.match(runningTexts[2], /建议适时开启新会话/);
 });
 
-test("two consecutive compaction checkpoints preserve the exact authoritative task state", async () => {
+test("the revision-stamped state returned by persist is what gets applied", async () => {
+  const stamp = (recorder, revision) => {
+    recorder.sinks.persist = async (state) => {
+      recorder.events.push(["persist", state]);
+      return { ...state, transcript: { ...state.transcript, revision } };
+    };
+  };
+
+  const midRun = new CompactionController();
+  const { recorder } = bindController(midRun);
+  stamp(recorder, "conv:100:1:2:4");
+  const result = await compact(midRun, "post-tool", bigState());
+  assert.equal(recorder.byKind("persist")[0][1].transcript.revision, null);
+  assert.equal(recorder.byKind("applyStateMidRun")[0][1].transcript.revision, "conv:100:1:2:4");
+  assert.equal(recorder.byKind("queueCheckpoint")[0][1].transcript.revision, "conv:100:1:2:4");
+  assert.equal(result.state.transcript.revision, "conv:100:1:2:4");
+
+  // pre-send 持久化的就是含待发送消息的组合状态：盖章即可直接落地，无需补盖。
+  const preSend = new CompactionController();
+  const bound = bindController(preSend);
+  stamp(bound.recorder, "conv:200:1:2:5");
+  const { state, presend } = presendFor(bigState());
+  await compact(preSend, "pre-send", state, { presend });
+  const [, applied] = bound.recorder.byKind("applyState")[0];
+  assert.equal(applied.transcript.revision, "conv:200:1:2:5");
+  assert.equal(applied.segments.at(-1).messages.at(-1).id, "u-pending");
+});
+
+test("a degraded checkpoint settles as completed and the observer sees complete", async () => {
   const controller = new CompactionController();
-  const { recorder } = bindController(controller, {
-    complete: async () => summaryResponse(),
+  const observed = observe(controller);
+  const { recorder } = bindController(controller);
+  summarizeImpl = async () =>
+    okDraft("## Unsummarized activity", { degraded: "fork stall: stream stalled" });
+
+  const result = await compact(controller, "post-tool", bigState());
+
+  assert.equal(result.degraded, "fork stall: stream stalled");
+  const completed = recorder.byKind("publishStatus").at(-1)[1];
+  assert.equal(completed.phase, "completed");
+  assert.equal(completed.degraded, "fork stall: stream stalled");
+  assert.equal(observed.at(-1)[1].status, "complete");
+});
+
+test("non-abort failures, including abort-named ones, settle failed instead of aborting", async () => {
+  const controller = new CompactionController();
+  const observed = observe(controller);
+  const { recorder } = bindController(controller);
+  summarizeImpl = async () => {
+    const error = new Error("summary deadline reached");
+    error.name = "AbortError";
+    throw error;
+  };
+
+  const result = await compact(controller, "post-tool", bigState());
+
+  assert.deepEqual(result, { outcome: "failed", message: "summary deadline reached" });
+  assert.deepEqual(phases(recorder), ["running", "failed"]);
+  assert.deepEqual(
+    observed.map(([kind, info]) => info.status ?? kind),
+    ["start", "error"],
+  );
+  assert.equal(await controller.handleTurnAbort(), false);
+});
+
+test("automatic triggers may degrade to deterministic; manual never does", async () => {
+  const controller = new CompactionController();
+  bindController(controller);
+  await compact(controller, "overflow", bigState(SOFT_BAND));
+  assert.deepEqual(
+    [summarizeCalls[0].automatic, summarizeCalls[0].mustProgress, summarizeCalls[0].startAt],
+    [true, true, "transcript"],
+  );
+  controller.unbindTurn();
+
+  const { binding } = createBinding();
+  await controller.compactManually(binding, { state: bigState(), buildContext: requestContext });
+  assert.equal(summarizeCalls[1].automatic, false);
+  assert.equal(summarizeCalls[1].mustProgress, false);
+});
+
+test("the failure breaker only gates [soft, hard); at hard compaction always proceeds", async () => {
+  const controller = new CompactionController();
+  bindController(controller);
+  summarizeImpl = async () => ({ failure: { kind: "transient", message: "fork transient: 502" } });
+  assert.equal((await compact(controller, "post-tool", bigState(SOFT_BAND))).outcome, "failed");
+  assert.equal((await compact(controller, "post-tool", bigState(SOFT_BAND))).outcome, "failed");
+
+  summarizeImpl = async () => okDraft();
+  assert.deepEqual(await compact(controller, "post-tool", bigState(SOFT_BAND)), {
+    outcome: "skipped",
+    reason: "circuit-open",
   });
+  assert.equal(summarizeCalls.length, 2);
+  assert.equal((await compact(controller, "post-tool", bigState())).outcome, "compacted");
+  // 成功后熔断复位。
+  assert.equal((await compact(controller, "post-tool", bigState(SOFT_BAND))).outcome, "compacted");
+});
+
+test("the thrash guard only gates [soft, hard) and retains nothing once thrashing", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller);
+  // 初值 ∞：本轮第一次压缩不算抖动——紧挨着三次之后 [soft, hard) 仍可压缩，第四次才
+  // 累计到上限。
+  for (let index = 0; index < 3; index += 1) {
+    assert.equal((await compact(controller, "post-tool", bigState())).outcome, "compacted");
+  }
+  assert.ok(recorder.byKind("persist")[0][1].segments[1].summary.retainedUserMessages.length > 0);
+  assert.equal((await compact(controller, "post-tool", bigState(SOFT_BAND))).outcome, "compacted");
+
+  assert.deepEqual(await compact(controller, "post-tool", bigState(SOFT_BAND)), {
+    outcome: "skipped",
+    reason: "circuit-open",
+  });
+  assert.equal((await compact(controller, "post-tool", bigState())).outcome, "compacted");
+  assert.equal(recorder.byKind("persist").at(-1)[1].segments[1].summary.retainedUserMessages, undefined);
+
+  // 防抖动只管一轮之内：重新绑定后 [soft, hard) 恢复压缩。
+  bindController(controller);
+  assert.equal((await compact(controller, "post-tool", bigState(SOFT_BAND))).outcome, "compacted");
+});
+
+test("two consecutive checkpoints preserve the exact authoritative task state", async () => {
+  const controller = new CompactionController();
+  bindController(controller);
   const taskList = {
     runId: "run-through-two-compactions",
     revision: 5,
@@ -556,66 +781,25 @@ test("two consecutive compaction checkpoints preserve the exact authoritative ta
         activeForm: "Inspecting compaction",
         status: "completed",
       },
-      {
-        id: "2",
-        subject: "Finish implementation",
-        description: "Keep working on the same stable task",
-        activeForm: "Finishing implementation",
-        status: "in_progress",
-      },
     ],
   };
-  const initialState = conversationState.setTaskListState(bigState(), taskList);
-
-  const first = await controller.compactDuringRun({
-    trigger: "post-tool",
-    state: initialState,
-  });
-  assert.ok(first.context);
-  const firstCheckpointState = recorder.byKind("applyStateMidRun").at(-1)[1];
-  assert.deepEqual(firstCheckpointState.meta.taskList, taskList);
-
-  const secondInput = conversationState.appendMessagesToConversation(firstCheckpointState, [
-    user("continue task 2", 20),
-    user("keep the same task ids", 21),
-    user("verify state again", 22),
-    assistantWithUsage("continuing the same task", 190_000, 23),
-  ]);
-  const second = await controller.compactDuringRun({
-    trigger: "post-tool",
-    state: secondInput,
-  });
-  assert.ok(second.context);
-  const secondCheckpointState = recorder.byKind("applyStateMidRun").at(-1)[1];
-
-  assert.deepEqual(secondCheckpointState.meta.taskList, taskList);
-  assert.deepEqual(secondCheckpointState.meta.taskList, firstCheckpointState.meta.taskList);
-});
-
-test("a rejected checkpoint persist never switches runtime state to the unpersisted segment", async () => {
-  const controller = new CompactionController();
-  const { recorder } = bindController(controller, {
-    complete: async () => summaryResponse(),
-  });
-  recorder.sinks.persist = async (state) => {
-    recorder.events.push(["persist", state]);
-    return false;
-  };
-
-  const result = await controller.compactDuringRun({
-    trigger: "post-tool",
-    state: bigState(),
-  });
-
-  assert.equal(result.context, null);
-  assert.equal(result.shouldDisableProtection, false);
-  assert.equal(recorder.byKind("persist").length, 1);
-  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
-  assert.ok(
-    recorder
-      .byKind("applyStateMidRun")
-      .every(([, state]) => state.meta.activeSegmentIndex === 0),
+  const first = await compact(
+    controller,
+    "post-tool",
+    conversationState.setTaskListState(bigState(), taskList),
   );
+  assert.deepEqual(first.state.meta.taskList, taskList);
+
+  const second = await compact(
+    controller,
+    "post-tool",
+    conversationState.appendMessagesToConversation(first.state, [
+      user("continue task 2", 20),
+      assistantWithUsage("continuing the same task", ABOVE_HARD, 21),
+    ]),
+  );
+  assert.equal(second.outcome, "compacted");
+  assert.deepEqual(second.state.meta.taskList, taskList);
 });
 
 test("registry hands out one controller per conversation and disposes cleanly", () => {
@@ -636,125 +820,91 @@ test("beginRequest exposes the current total and dynamic fixed-token snapshot", 
 
   controller.beginRequest(conversationState.buildRequestContext(state), state);
 
-  assert.deepEqual(controller.contextUsageSnapshot, {
-    totalTokens: 100,
-    fixedTokens: 100,
-  });
+  assert.deepEqual(controller.contextUsageSnapshot, { totalTokens: 100, fixedTokens: 100 });
 });
 
-// —— 手动压缩（用量环入口）——
+// —— 手动压缩（用量环 / compact_now 入口）——
 
-function manualBinding(overrides = {}) {
-  const cancellation = cancellationModule.createTurnCancellation();
-  const recorder = createSinksRecorder();
-  return {
-    recorder,
-    binding: {
-      providerId: "anthropic",
-      model: "claude-x",
-      runtime: {
-        baseUrl: "https://example",
-        apiKey: "k",
-        modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
-      },
-      cancellation,
-      sinks: recorder.sinks,
-      complete: async () => summaryResponse(),
-      buildPreparedContext: (state, _tools, options) =>
-        conversationState.buildRequestContext(state, options),
-      buildResumeContext: (state, resumeMessage, _tools, options) => {
-        const context = conversationState.buildRequestContext(state, options);
-        return resumeMessage
-          ? { ...context, messages: [...context.messages, resumeMessage] }
-          : context;
-      },
-      ...overrides,
-    },
-  };
+function manual(controller, binding, state, extra = {}) {
+  return controller.compactManually(binding, { state, buildContext: requestContext, ...extra });
 }
 
-test("compactManually skips below the 50% manual threshold", async () => {
+test("compactManually: busy while bound, 50% gate without residue, onProceed exactly once", async () => {
   const controller = new CompactionController();
-  // 锚点 = usage 纯算术（prompt 侧 + 可见输出，本例 output 为 0），99_000
-  // 保证读数停在 100_000（50%）门槛之下。
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 99_000, 2),
-    ],
+  bindController(controller);
+  assert.deepEqual(await manual(controller, createBinding().binding, bigState()), {
+    outcome: "busy",
   });
-  const { binding, recorder } = manualBinding();
+  controller.unbindTurn();
 
-  const result = await controller.compactManually(binding, state);
+  const activeState = bigState();
+  controller.beginRequest(requestContext(activeState), activeState);
+  const before = controller.contextUsageTokens;
+  let proceedCalls = 0;
+  const onProceed = () => {
+    proceedCalls += 1;
+  };
 
-  assert.deepEqual(result, { status: "skipped", reason: "below-manual-threshold" });
-  assert.equal(recorder.byKind("publishStatus").length, 0);
-  assert.equal(recorder.byKind("persist").length, 0);
-});
-
-test("compactManually compacts at 50%, bypasses the automatic threshold, and unbinds", async () => {
-  const controller = new CompactionController();
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 100_000, 2),
-    ],
-  });
-  const { binding, recorder } = manualBinding();
-
-  const result = await controller.compactManually(binding, state);
-
-  assert.deepEqual(result, { status: "compacted" });
-  const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
-  assert.deepEqual(statuses, ["running", "completed"]);
-  assert.equal(recorder.byKind("persist").length, 1);
-  assert.equal(recorder.byKind("queueCheckpoint").length, 1);
-  const [, checkpointState, checkpointTokens] = recorder.byKind("queueCheckpoint")[0];
-  assert.equal(
-    checkpointState.segments[checkpointState.activeSegmentIndex].summary.summaryMeta.stats
-      .contextTokensAfter,
-    checkpointTokens,
+  // 锚点 = usage 纯算术，99_000 停在 100_000（50%）门槛之下。
+  const rejected = createBinding();
+  assert.deepEqual(
+    await manual(controller, rejected.binding, bigState(99_000), { onProceed }),
+    { outcome: "skipped", reason: "below-manual-threshold" },
   );
-  assert.ok(checkpointTokens > 0);
-  const [, appliedState] = recorder.byKind("applyStateMidRun")[0];
-  assert.equal(appliedState.segments.length, 2);
-  // running 时 bridge isCompaction=true，结束后清 null。
-  const bridgeEvents = recorder.byKind("bridge");
-  assert.equal(bridgeEvents[0][2], true);
-  assert.equal(bridgeEvents.at(-1)[1], null);
+  assert.equal(proceedCalls, 0);
+  assert.equal(rejected.recorder.events.length, 0);
+  // 共享账本是用量环的读数真源：被拒的探针不得在其上留下任何残留。
+  assert.equal(controller.contextUsageTokens, before);
+
+  const accepted = createBinding();
+  const result = await manual(controller, accepted.binding, bigState(100_000), {
+    onProceed: () => {
+      onProceed();
+      // onProceed 在决策通过之后、running 状态发布之前同步触发。
+      assert.equal(accepted.recorder.byKind("publishStatus").length, 0);
+    },
+  });
+  assert.equal(result.outcome, "compacted");
+  assert.equal(proceedCalls, 1);
+  assert.deepEqual(phases(accepted.recorder), ["running", "completed"]);
+  assert.equal(accepted.recorder.byKind("applyStateMidRun").length, 1);
   // 解绑后可再次手动压缩（不被残留 binding 卡成 busy）。
-  assert.notEqual(
-    (await controller.compactManually(manualBinding().binding, bigState())).status,
-    "busy",
-  );
+  assert.notEqual((await manual(controller, createBinding().binding, bigState())).outcome, "busy");
 });
 
-test("compactManually honors the persisted usage snapshot and fixed-token anchor", async () => {
+test("compactManually keeps the disabled hard guard and reports failures with their message", async () => {
   const controller = new CompactionController();
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 1_000, 2),
-    ],
+  const disabled = createBinding({
+    runtime: { baseUrl: "https://example", apiKey: "k", modelConfig: undefined },
   });
-  const { binding, recorder } = manualBinding();
-
-  const result = await controller.compactManually(binding, state, {
-    totalTokens: 100_000,
-    fixedTokens: 40_000,
+  assert.deepEqual(await manual(controller, disabled.binding, bigState()), {
+    outcome: "skipped",
+    reason: "disabled",
   });
+  assert.equal(disabled.recorder.events.length, 0);
 
-  assert.deepEqual(result, { status: "compacted" });
-  const [, checkpointState, checkpointTokens] = recorder.byKind("queueCheckpoint")[0];
-  assert.ok(checkpointTokens >= 40_000, "checkpoint keeps the persisted dynamic fixed overhead");
-  assert.equal(
-    checkpointState.segments[checkpointState.activeSegmentIndex].summary.summaryMeta.stats
-      .contextTokensAfter,
-    checkpointTokens,
-  );
+  summarizeImpl = async () => ({ failure: { kind: "fatal", message: "fork fatal: 401" } });
+  const failing = createBinding();
+  assert.deepEqual(await manual(controller, failing.binding, bigState()), {
+    outcome: "failed",
+    message: "fork fatal: 401",
+  });
+  assert.equal(failing.recorder.byKind("persist").length, 0);
+  assert.deepEqual(phases(failing.recorder), ["running", "failed"]);
+});
+
+test("compactManually reports aborted when the user stops mid-compaction", async () => {
+  const controller = new CompactionController();
+  const { binding, recorder, cancellation } = createBinding();
+  summarizeImpl = untilAborted;
+
+  const pending = manual(controller, binding, bigState());
+  await tick();
+  cancellation.userStop.abort();
+
+  assert.deepEqual(await pending, { outcome: "aborted" });
+  assert.deepEqual(phases(recorder), ["running", "idle"]);
+  assert.equal(recorder.byKind("bridge").at(-1)[1], null);
 });
 
 // 压缩后的无锚点窗口（新 segment 尚无真实 usage）：空闲环显示检查点权威值，
@@ -763,354 +913,33 @@ test("compactManually honors the persisted usage snapshot and fixed-token anchor
 // 下界，否则环先倒退、首个真实 usage 到达再跳涨。
 test("post-compaction beginRequest never dips below the checkpoint anchor", async () => {
   const controller = new CompactionController();
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 100_000, 2),
-    ],
-  });
-  const { binding, recorder } = manualBinding();
+  const { binding, recorder } = createBinding();
   // 大 fixedTokens 快照抬高检查点权威值，模拟“检查点值 > 下一次发送的现算估算”。
-  const result = await controller.compactManually(binding, state, {
-    totalTokens: 100_000,
-    fixedTokens: 40_000,
+  const result = await manual(controller, binding, bigState(1_000), {
+    usage: { totalTokens: 100_000, fixedTokens: 40_000 },
   });
-  assert.deepEqual(result, { status: "compacted" });
+  assert.equal(result.outcome, "compacted");
   const [, checkpointState, checkpointTokens] = recorder.byKind("queueCheckpoint")[0];
   assert.ok(checkpointTokens >= 40_000);
 
-  // 压缩后下一次发送：现算 fixed（sys + 摘要）远低于检查点值。
+  // 检查点值 = fixed + 单独成条的 bridge；账本下界扣回 bridge（bridge 另作消息计入）。
+  const summary = checkpointState.segments[checkpointState.activeSegmentIndex].summary;
+  const bridgeTokens = bridgeModule.estimateCheckpointBridgeTokens(summary);
+  assert.ok(bridgeTokens > 0);
+
   const nextState = conversationState.appendMessagesToConversation(checkpointState, [
     user("接着做下一件事", 30),
   ]);
-  const nextContext = conversationState.buildRequestContext(nextState);
+  const nextContext = requestContext(nextState);
+  assert.equal(nextContext.messages.length, 1);
   const total = controller.beginRequest(nextContext, nextState);
-  assert.ok(
-    total >= checkpointTokens,
-    `post-compaction beginRequest total ${total} must not dip below checkpoint ${checkpointTokens}`,
-  );
+  assert.equal(controller.contextFixedTokens, checkpointTokens - bridgeTokens);
+  assert.ok(total >= checkpointTokens);
 
-  // 跨重启：全新控制器（无 overhead、无账本快照）从持久化状态恢复同一下界。
-  const freshController = new CompactionController();
-  const freshTotal = freshController.beginRequest(nextContext, nextState);
-  assert.ok(
-    freshTotal >= checkpointTokens,
-    `fresh-controller beginRequest total ${freshTotal} must not dip below checkpoint ${checkpointTokens}`,
-  );
+  // 跨重启：全新控制器从持久化状态恢复同一下界。
+  assert.ok(new CompactionController().beginRequest(nextContext, nextState) >= checkpointTokens);
 
   // 真实 usage 锚点出现后，下界退场、读数回到锚点算术。
   controller.observeContextMessages([assistantWithUsage("done", 41_000, 31)]);
   assert.equal(controller.contextUsageTokens, 41_000);
-});
-
-test("compactManually refuses while a turn is bound or a compaction is in flight", async () => {
-  const controller = new CompactionController();
-  bindController(controller);
-  const { binding } = manualBinding();
-  assert.deepEqual(await controller.compactManually(binding, bigState()), { status: "busy" });
-});
-
-test("compactManually keeps the disabled hard guard (zero context window)", async () => {
-  const controller = new CompactionController();
-  let completeCalls = 0;
-  const { binding, recorder } = manualBinding({
-    runtime: { baseUrl: "https://example", apiKey: "k", modelConfig: undefined },
-    complete: async () => {
-      completeCalls += 1;
-      return summaryResponse();
-    },
-  });
-
-  const result = await controller.compactManually(binding, bigState());
-
-  assert.deepEqual(result, { status: "skipped", reason: "disabled" });
-  assert.equal(completeCalls, 0);
-  assert.equal(recorder.byKind("publishStatus").length, 0);
-});
-
-test("manual compaction failure never prunes or applies state to an idle conversation", async () => {
-  const controller = new CompactionController();
-  // 含可剪枝大工具输出的状态：run 时触发会走 prune 降级，manual（空闲会话）
-  // 绝不允许——prune 结果不持久化，一旦 apply 即内存与磁盘分叉。
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      toolResultBig(200_000, 2),
-      user("continue with src/app.ts", 3),
-      user("check src/app.ts again", 4),
-      assistantWithUsage("working on src/app.ts", 190_000, 5),
-    ],
-  });
-  const { binding, recorder } = manualBinding({
-    complete: async () => {
-      throw new Error("invalid api key");
-    },
-  });
-
-  const result = await controller.compactManually(binding, state);
-
-  assert.deepEqual(result, { status: "failed" });
-  assert.equal(recorder.byKind("applyStateMidRun").length, 0);
-  assert.equal(recorder.byKind("applyState").length, 0);
-  assert.equal(recorder.byKind("persist").length, 0);
-  const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
-  assert.deepEqual(statuses, ["running", "failed"]);
-  const failedStatus = recorder
-    .byKind("publishStatus")
-    .map(([, status]) => status)
-    .find((status) => status.phase === "failed");
-  assert.match(failedStatus.message, /invalid api key/);
-  assert.equal(recorder.byKind("bridge").at(-1)[1], null);
-});
-
-test("manual compaction skip after a prior completed compaction is not misreported", async () => {
-  const controller = new CompactionController();
-  // 第一次成功压缩把控制器的 statusPhase 留在 completed（生命周期字段，跨操作残留）。
-  const firstState = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 150_000, 2),
-    ],
-  });
-  assert.deepEqual(await controller.compactManually(manualBinding().binding, firstState), {
-    status: "compacted",
-  });
-
-  // 第二次低于 50% 门槛：探针拒绝。结果必须按本次调用的显式 outcome 报告，
-  // 不得被残留的 completed 误报成 compacted。
-  const secondState = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [user("hi", 1), assistantWithUsage("hello", 42_000, 2)],
-  });
-  const { binding, recorder } = manualBinding();
-  const second = await controller.compactManually(binding, secondState);
-
-  assert.deepEqual(second, { status: "skipped", reason: "below-manual-threshold" });
-  assert.equal(recorder.byKind("publishStatus").length, 0);
-  assert.equal(recorder.byKind("persist").length, 0);
-
-  // 更深一层：执行路径自身的二次裁决 skip 也必须走显式 outcome 通道——
-  // 决策拒绝不 publish 任何状态，残留的 completed 不得参与结果判定。
-  const { binding: directBinding } = manualBinding();
-  controller.bindTurn(directBinding);
-  const direct = await controller.compactDuringRun({
-    trigger: "manual",
-    state: secondState,
-    manualContextUsage: { totalTokens: 1_000 },
-  });
-  controller.unbindTurn();
-  assert.equal(direct.outcome, "skipped");
-  assert.equal(direct.reason, "below-manual-threshold");
-  assert.equal(direct.context, null);
-});
-
-test("a rejected manual probe leaves the shared usage ledger untouched", async () => {
-  const controller = new CompactionController();
-  const activeState = bigState();
-  controller.beginRequest(conversationState.buildRequestContext(activeState), activeState);
-  const before = controller.contextUsageTokens;
-  assert.ok(before > 0);
-
-  const probeState = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [user("hi", 1), assistantWithUsage("hello", 42_000, 2)],
-  });
-  const result = await controller.compactManually(manualBinding().binding, probeState);
-
-  assert.equal(result.status, "skipped");
-  // 共享账本是用量环的读数真源：被拒的探测不得在其上留下任何残留。
-  assert.equal(controller.contextUsageTokens, before);
-});
-
-test("compactManually threads tools into probe and checkpoint builds and fires onProceed once", async () => {
-  const controller = new CompactionController();
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 150_000, 2),
-    ],
-  });
-  const tools = [{ name: "Read", description: "read files", parameters: {} }];
-  const seenTools = [];
-  const { binding, recorder } = manualBinding({
-    buildPreparedContext: (viewState, builtTools, options) => {
-      seenTools.push(builtTools);
-      return conversationState.buildRequestContext(viewState, options);
-    },
-  });
-  let proceedCalls = 0;
-
-  const result = await controller.compactManually(binding, state, undefined, {
-    tools,
-    onProceed: () => {
-      proceedCalls += 1;
-      // onProceed 在探针通过之后、running 状态发布之前同步触发。
-      assert.equal(recorder.byKind("publishStatus").length, 0);
-    },
-  });
-
-  assert.deepEqual(result, { status: "compacted" });
-  assert.equal(proceedCalls, 1);
-  // 探针、预算、checkpoint 三次构建都拿到同一份工具集（checkpoint 估值
-  // 缺了工具重量会系统性偏低）。
-  assert.ok(seenTools.length >= 3);
-  assert.ok(seenTools.every((entry) => entry === tools));
-});
-
-test("compactManually does not fire onProceed when the probe rejects", async () => {
-  const controller = new CompactionController();
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [user("hi", 1), assistantWithUsage("hello", 42_000, 2)],
-  });
-  let proceedCalls = 0;
-
-  const result = await controller.compactManually(manualBinding().binding, state, undefined, {
-    onProceed: () => {
-      proceedCalls += 1;
-    },
-  });
-
-  assert.equal(result.status, "skipped");
-  assert.equal(proceedCalls, 0);
-});
-
-test("compactManually reports aborted=true when the user stops mid-compaction", async () => {
-  const controller = new CompactionController();
-  const state = conversationState.createConversationStateFromContext({
-    systemPrompt: "sys",
-    messages: [
-      user("please fix src/app.ts", 1),
-      assistantWithUsage("working on src/app.ts", 150_000, 2),
-    ],
-  });
-  const { binding, recorder } = manualBinding({
-    complete: (params) =>
-      new Promise((_, reject) => {
-        params.signal?.addEventListener("abort", () => {
-          const error = new Error("aborted by user");
-          error.name = "AbortError";
-          reject(error);
-        });
-      }),
-  });
-
-  const pending = controller.compactManually(binding, state);
-  await new Promise((resolve) => setImmediate(resolve));
-  binding.cancellation.userStop.abort();
-  const result = await pending;
-
-  assert.deepEqual(result, { status: "failed", aborted: true });
-  // 统一善后：回滚快照消费（补持久化）、running 复位 idle、bridge 清空。
-  const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
-  assert.deepEqual(statuses, ["running", "idle"]);
-  assert.equal(recorder.byKind("persistRollback").length, 1);
-  assert.equal(recorder.byKind("bridge").at(-1)[1], null);
-});
-
-// —— revision 盖章：persist sink 返回带 revision 的持久化状态时，落地（apply/
-// queueCheckpoint）的必须是那份盖章状态。压缩 checkpoint 状态出自
-// appendMessagesToConversation（revision 恒 null），若照原样 apply，运行时缓存
-// 失去 replace/分页的 CAS 令牌，压缩后 edit-resend 报"历史会话缺少 revision"。
-
-function stampingPersist(recorder, revision) {
-  recorder.sinks.persist = async (state) => {
-    recorder.events.push(["persist", state]);
-    return {
-      ...state,
-      transcript: { ...state.transcript, revision },
-    };
-  };
-}
-
-test("during-run compaction applies the revision-stamped state returned by persist", async () => {
-  const controller = new CompactionController();
-  const { recorder } = bindController(controller, {
-    complete: async () => summaryResponse(),
-  });
-  stampingPersist(recorder, "conv:100:1:2:4");
-
-  const result = await controller.compactDuringRun({
-    trigger: "post-tool",
-    state: bigState(),
-  });
-
-  assert.ok(result.context);
-  const [, persistedState] = recorder.byKind("persist")[0];
-  assert.equal(persistedState.transcript.revision, null);
-  const [, appliedState] = recorder.byKind("applyStateMidRun").at(-1);
-  assert.equal(appliedState.transcript.revision, "conv:100:1:2:4");
-  const [, checkpointState] = recorder.byKind("queueCheckpoint")[0];
-  assert.equal(checkpointState.transcript.revision, "conv:100:1:2:4");
-});
-
-test("pre-send compaction re-stamps the revision after composeAppliedState clears it", async () => {
-  const controller = new CompactionController();
-  const pendingUserMessage = user("next question", 9);
-  const baseState = bigState();
-  const { recorder } = bindController(controller, {
-    complete: async () => summaryResponse(),
-    presend: {
-      baseState,
-      pendingUserText: "next question",
-      composeAppliedState: (state) =>
-        conversationState.appendMessagesToConversation(state, [pendingUserMessage]),
-    },
-  });
-  stampingPersist(recorder, "conv:200:1:2:4");
-
-  const applied = await controller.maybeCompactPreSend({
-    budgetContext: conversationState.buildRequestContext(baseState),
-  });
-
-  assert.equal(applied, true);
-  const [, appliedState] = recorder.byKind("applyState")[0];
-  // compose 补回了用户消息（内存追加，DB 仍是 checkpoint 版本），revision 保留。
-  assert.equal(appliedState.segments.at(-1).messages.at(-1).content, "next question");
-  assert.equal(appliedState.transcript.revision, "conv:200:1:2:4");
-});
-
-test("boolean persist keeps the legacy pass-through contract", async () => {
-  const controller = new CompactionController();
-  const { recorder } = bindController(controller, {
-    complete: async () => summaryResponse(),
-  });
-
-  const result = await controller.compactDuringRun({
-    trigger: "post-tool",
-    state: bigState(),
-  });
-
-  assert.ok(result.context);
-  const [, persistedState] = recorder.byKind("persist")[0];
-  const [, appliedState] = recorder.byKind("applyStateMidRun").at(-1);
-  assert.equal(appliedState, persistedState);
-});
-
-test("a null persist result aborts the checkpoint like false", async () => {
-  const controller = new CompactionController();
-  const { recorder } = bindController(controller, {
-    complete: async () => summaryResponse(),
-  });
-  recorder.sinks.persist = async (state) => {
-    recorder.events.push(["persist", state]);
-    return null;
-  };
-
-  const result = await controller.compactDuringRun({
-    trigger: "post-tool",
-    state: bigState(),
-  });
-
-  assert.equal(result.context, null);
-  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
-  assert.ok(
-    recorder
-      .byKind("applyStateMidRun")
-      .every(([, state]) => state.meta.activeSegmentIndex === 0),
-  );
 });

@@ -1531,3 +1531,61 @@ test("text-mode Gemini stream forwards workdir for native attachments", async ()
     },
   });
 });
+
+test("native upload instruction rewrite targets the instruction block behind a leading checkpoint bridge", async () => {
+  const loader = createLoader(async () => ({
+    mimeType: "image/png",
+    data: "aW1hZ2U=",
+    sizeBytes: 5,
+  }));
+  const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
+  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+
+  const message = uploadedFiles.createUserMessageWithUploads("Inspect this", [
+    {
+      relativePath: "uploads/1/screenshot.png",
+      absolutePath: "/workspace/uploads/1/screenshot.png",
+      fileName: "screenshot.png",
+      kind: "image",
+      sizeBytes: 5,
+    },
+  ]);
+  // 压缩后的首条 user 消息：checkpoint bridge 作为前置文本块合入；它引用的旧原话里
+  // 恰好带着附件指令头，也不能被当成改写目标。
+  const quotedHeader = uploadedFiles.UPLOADED_FILES_INSTRUCTION_HEADER_TEXTS[0];
+  const { renderCheckpointBridgeText } = loader.loadModule("src/lib/chat/compaction/bridge.ts");
+  const bridgeText = renderCheckpointBridgeText({
+    role: "summary",
+    id: "summary-1",
+    timestamp: 0,
+    content: "earlier work",
+    retainedUserMessages: [{ timestamp: 0, text: quotedHeader }],
+    summaryMeta: {},
+  });
+  assert.ok(bridgeText.includes(quotedHeader));
+  const payload = {
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: bridgeText },
+          { type: "input_text", text: message.content },
+        ],
+      },
+    ],
+  };
+  const result = await nativeAttachments.__nativeResponsesAttachmentsTest
+    .applyNativeAttachmentsToResponsesPayload({
+      payload,
+      context: { messages: [message] },
+      model: { api: "openai-responses", input: ["text", "image"] },
+      workdir: "/workspace",
+      baseUrl: OFFICIAL_OPENAI_BASE_URL,
+    });
+
+  const content = result.input[0].content;
+  assert.equal(content[0].text, bridgeText, "the bridge block stays byte-identical");
+  assert.match(content[1].text, /included in this OpenAI Responses request/);
+  assert.match(content[1].text, /screenshot\.png \(image, 5 B\); inlined/);
+  assert.equal(content[2].type, "input_image");
+});

@@ -283,18 +283,14 @@ function createHarness(subagents) {
       }),
       compaction: {
         noteFixedOverheadTokens() {},
-        async maybeCompactPreSend({ budgetContext }) {
-          record("pre-send", budgetContext);
+        async compact({ trigger, state, buildContext }) {
+          record(trigger === "pre-send" ? "pre-send" : "during-run", buildContext(state));
+          return { outcome: "skipped", reason: "below-threshold" };
         },
         beginRequest(context) {
           record("request", context);
         },
         observeContextMessages: () => 0,
-        shouldProtectMidStream: () => false,
-        async compactDuringRun({ budgetContext }) {
-          record("during-run", budgetContext);
-          return { context: null, shouldDisableProtection: false };
-        },
       },
       cancellation: {
         userStop: new AbortController(),
@@ -338,6 +334,7 @@ function toolRounds(harness, { rounds = 2, beforeRound = {} } = {}) {
         toolResults: [result],
         emittedMessages: emitted,
         runtimeContext: params.context,
+        willContinue: true,
         signal: params.signal,
       });
       harness.overrides.push(override ?? null);

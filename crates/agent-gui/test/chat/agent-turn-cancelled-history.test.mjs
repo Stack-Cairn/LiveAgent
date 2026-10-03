@@ -92,6 +92,7 @@ async function replayCancelledHistoryScenario(params) {
     toolResults: [parentToolResult, cardToolResult],
     emittedMessages: [toolUseAssistant, parentToolResult, cardToolResult],
     runtimeContext: params.context,
+    willContinue: true,
     signal: params.signal,
   });
 
@@ -249,13 +250,11 @@ function createCompletedAgentDevTurnParams({
     }),
     compaction: {
       noteFixedOverheadTokens: noOp,
-      async maybeCompactPreSend() {},
+      async compact() {
+        return { outcome: "skipped", reason: "below-threshold" };
+      },
       beginRequest: noOp,
       observeContextMessages: () => 0,
-      shouldProtectMidStream: () => false,
-      async compactDuringRun() {
-        return { context: null, shouldDisableProtection: false };
-      },
     },
     cancellation: {
       userStop,
@@ -576,13 +575,11 @@ test("agent turn preserves suppressed parent Agent trace for cancellation persis
     buildPreparedContext: () => ({ systemPrompt: "", messages: [] }),
     compaction: {
       noteFixedOverheadTokens: noOp,
-      async maybeCompactPreSend() {},
+      async compact() {
+        return { outcome: "skipped", reason: "below-threshold" };
+      },
       beginRequest: noOp,
       observeContextMessages: () => 0,
-      shouldProtectMidStream: () => false,
-      async compactDuringRun() {
-        return { context: null, shouldDisableProtection: false };
-      },
     },
     cancellation: {
       deriveScope() {
@@ -656,7 +653,6 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
   };
   const gatewayEvents = [];
   let liveRounds = [];
-  let protectionChecks = 0;
   let askDeadlineAt = null;
   const state = conversationState.createConversationStateFromContext({
     systemPrompt: "",
@@ -682,9 +678,6 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
     assert.equal(visibleToolCalls().some((call) => call.id === askToolCall.id), false);
     assert.deepEqual(liveRounds[0].runningToolCallIds, []);
     assert.equal(askTools.getAskUserQuestionDeadlineAt(askToolCall.id), null);
-
-    // onToolCall 的内部回合语义仍须生效：后续长文本不能重新触发 mid-stream 保护。
-    params.onTextDelta?.("x".repeat(200), 1);
 
     params.onToolExecutionStart?.(askToolCall, 1);
     const askEventsAfterStart = toolCallEvents("AskUserQuestion");
@@ -749,16 +742,11 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
       buildPreparedContext: () => ({ systemPrompt: "", messages: [] }),
       compaction: {
         noteFixedOverheadTokens: noOp,
-        async maybeCompactPreSend() {},
+        async compact() {
+          return { outcome: "skipped", reason: "below-threshold" };
+        },
         beginRequest: noOp,
         observeContextMessages: () => 0,
-        shouldProtectMidStream() {
-          protectionChecks += 1;
-          return false;
-        },
-        async compactDuringRun() {
-          return { context: null, shouldDisableProtection: false };
-        },
       },
       cancellation: {
         deriveScope() {
@@ -784,7 +772,6 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
     runAssistantWithToolsScenario = replayCancelledHistoryScenario;
   }
 
-  assert.equal(protectionChecks, 0);
   assert.equal(toolCallEvents("AskUserQuestion").length, 1);
   assert.equal(askTools.getAskUserQuestionDeadlineAt(askToolCall.id), askDeadlineAt);
 });

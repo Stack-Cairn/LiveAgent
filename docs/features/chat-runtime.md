@@ -35,7 +35,7 @@
 
 | 上下文块 | 来源 |
 |---|---|
-| system prompt | 默认系统提示、用户 system settings、Skills prompt、Memory overview、压缩 summary。 |
+| system prompt | 默认系统提示、用户 system settings、Skills prompt、Memory overview（压缩 summary 不进 system prompt，经 checkpoint bridge 进入消息）。 |
 | messages | 当前 active segment 中的 user/assistant/toolResult 历史，经过 sanitizer。 |
 | tools | text 模式为空，agent 模式来自 builtin registry 和动态 MCP tools。 |
 | attachments | uploaded files 转成模型可见文本/图片引用，图片 bytes 按上下文策略清洗。 |
@@ -51,11 +51,12 @@
 
 | 触发点 | 作用 |
 |---|---|
-| pre-send | 发送前估算上下文，超预算时先压缩旧历史。 |
-| mid-stream | 流式或工具链路中发现预算不足时中断式压缩。 |
-| post-tool | 工具调用后上下文膨胀，进入下一轮前压缩。 |
+| pre-send | 发送前估算上下文，超过 soft 阈值时先压缩旧历史。 |
+| post-tool | 工具调用后上下文膨胀，且本批之后还会继续请求时，进入下一轮前压缩。 |
+| overflow | 供应商报上下文溢出时反应式压缩，并重试一次。 |
+| manual | 用量环或 WebUI 手动触发，仅在空闲且使用率 ≥ 50% 时执行。 |
 
-压缩产物以 summary checkpoint 写入新的 history segment。UI 中会显示上下文检查点，后续请求把 summary 合并进 system prompt，并只携带未覆盖的消息窗口。
+压缩产物以 summary checkpoint 写入新的 history segment。UI 中会显示上下文检查点；后续请求的 system prompt 与 tools 不变，summary、保留的用户原话与文件账本经 checkpoint bridge 合入新 segment 的首条 user 消息（或单独一条）。详见 [History 与 Context Compaction](./history-compaction.md)。
 
 ## Hooks 生命周期
 

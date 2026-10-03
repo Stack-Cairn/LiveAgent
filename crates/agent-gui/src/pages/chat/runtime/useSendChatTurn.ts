@@ -95,7 +95,6 @@ import {
   releaseTrajectoryRecorder,
   resolveTrajectoryTurnNumber,
   trajectorySlotCapture,
-  updateTrajectoryRecorderSegment,
 } from "../../../lib/trajectory/recorderRegistry";
 import { listWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";
 import { asErrorMessage } from "../chatPageUtils";
@@ -128,10 +127,8 @@ import {
   settleChatRunFinalization,
   trackTerminalHistoryPersist,
 } from "./chatRunFinalization";
-import {
-  buildPreparedContext as buildPreparedConversationContext,
-  buildResumeContext as buildResumeConversationContext,
-} from "./conversationContextBuilders";
+import { createCompactionSinks, observeCompactionTrajectory } from "./compactionBinding";
+import { buildPreparedContext as buildPreparedConversationContext } from "./conversationContextBuilders";
 import { startConversationTitleJob } from "./conversationTitleJob";
 import {
   type EffectiveChatModelSelection,
@@ -1095,23 +1092,32 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         hookWarning: null,
       }));
     }
+    // 返回清掉的内容是否全部放回：输入框 / 附件期间已有新内容时不覆盖，pre-send 压缩
+    // 回滚据此改为保留已发送的消息，而不是让它无处可寻。
     const restoreComposerOnStartFailure = () => {
       if (!composerClearedOnStart) {
-        return;
+        return false;
       }
+      let restored = true;
       if (isConversationVisible()) {
         if (clearedComposerDraft && composerRef.current && !composerRef.current.hasContent()) {
           composerRef.current.setDraft(clearedComposerDraft);
+        } else if (clearedComposerDraft) {
+          restored = false;
         }
       } else if (clearedComposerDraft && !composerDraftCacheRef.current.has(conversationId)) {
         composerDraftCacheRef.current.set(conversationId, clearedComposerDraft);
+      } else if (clearedComposerDraft) {
+        restored = false;
       }
-      if (
-        clearedPendingUploads.length > 0 &&
-        getPendingUploadsForConversation(conversationId).length === 0
-      ) {
-        setPendingUploadsForConversation(conversationId, clearedPendingUploads);
+      if (clearedPendingUploads.length > 0) {
+        if (getPendingUploadsForConversation(conversationId).length === 0) {
+          setPendingUploadsForConversation(conversationId, clearedPendingUploads);
+        } else {
+          restored = false;
+        }
       }
+      return restored;
     };
     if (mirrorsLocalRunToGateway) {
       try {
@@ -1301,25 +1307,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         }
       },
     );
-    // 压缩有四条触发路径，逐个调用点埋点必漏；订阅控制器生命周期一次覆盖全部。
-    // manual 发生在两轮之间，不属于任何 turn。
-    compaction.setObserver({
-      onStart: ({ trigger }) => {
-        trajectoryRecording.recorder.compactionStart({ standalone: trigger === "manual" });
-      },
-      onEnd: ({ trigger, status, tokensBefore, tokensAfter, newSegmentIndex, error }) => {
-        trajectoryRecording.recorder.compactionEnd({
-          status,
-          standalone: trigger === "manual",
-          ...(tokensBefore === undefined ? {} : { tokensBefore }),
-          ...(tokensAfter === undefined ? {} : { tokensAfter }),
-          ...(error === undefined ? {} : { error }),
-        });
-        if (status === "complete" && newSegmentIndex !== undefined) {
-          updateTrajectoryRecorderSegment(conversationId, newSegmentIndex);
-        }
-      },
-    });
+    observeCompactionTrajectory(compaction, trajectoryRecording.recorder, conversationId);
 
     function buildPreparedContext(
       state: ConversationViewState,
@@ -1328,6 +1316,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         includeAbortedMessages?: boolean;
         includeUploadedFilesMetadata?: boolean;
         includeMemoryTurnUpdates?: boolean;
+        includeCheckpointBridge?: boolean;
       },
     ): Context {
       return buildPreparedConversationContext({
@@ -1352,27 +1341,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             : skillMentionInjection.getMessageUpdates(conversationId),
         includeAbortedMessages: options?.includeAbortedMessages,
         includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
-        captureSlots: trajectorySlotCapture(conversationId),
-      });
-    }
-
-    function buildResumeContext(
-      state: ConversationViewState,
-      resumeMessage?: UserMessage,
-      tools?: Context["tools"],
-      options?: { includeAbortedMessages?: boolean; includeUploadedFilesMetadata?: boolean },
-    ): Context {
-      return buildResumeConversationContext({
-        state,
-        resumeMessage,
-        tools,
-        activeAgentPrompt: effectiveAgentPrompt,
-        skillsPrompt,
-        memoryPrompt,
-        memoryTurnUpdates: memoryTurnInjection.getMessageUpdates(conversationId),
-        skillMentionUpdates: skillMentionInjection.getMessageUpdates(conversationId),
-        includeAbortedMessages: options?.includeAbortedMessages,
-        includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
+        includeCheckpointBridge: options?.includeCheckpointBridge,
         captureSlots: trajectorySlotCapture(conversationId),
       });
     }
@@ -1381,28 +1350,19 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       providerId,
       model,
       runtime: providerConfig,
+      sessionId,
+      // 只有 transcript 档会 failover；切换不改本会话的模型选择。
+      failover: failoverPlan,
       cancellation,
       debugLogger: compactionDebugLogger,
-      buildPreparedContext,
-      buildResumeContext,
-      presend: {
-        baseState: baseConversationState,
-        pendingUserText: content,
-        composerText: content,
-        uploadedFiles,
-        composeAppliedState: (state) => appendMessagesToConversation(state, [pendingUserMessage]),
-      },
-      sinks: {
+      sinks: createCompactionSinks({
+        conversationId,
+        transcriptStore,
+        gatewayBridgeEvents,
+        updateConversationRuntimeEntry,
+        updateToolStatus,
+        resetLiveTranscript,
         applyState: applyConversationState,
-        applyStateMidRun: rebaseConversationStateDuringRun,
-        publishStatus: (status) =>
-          updateConversationRuntimeEntry(conversationId, (prev) => ({
-            ...prev,
-            compactionStatus: status,
-          })),
-        setBridgeToolStatus: updateGatewayBridgeToolStatus,
-        queueCheckpoint: (state, contextUsageTokens) =>
-          gatewayBridgeEvents.queueCheckpoint(state, contextUsageTokens),
         persist: (state) =>
           persistConversation({
             conversationId,
@@ -1416,13 +1376,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             createdAt,
             titlePromise,
           }),
-        restoreComposer: (composerText, restoredUploads) => {
-          if (isConversationVisible() && typeof composerText === "string") {
-            composerRef.current?.setText(composerText);
-            composerRef.current?.focus();
-          }
-          setPendingUploadsForConversation(conversationId, restoredUploads);
-        },
+        restoreComposer: restoreComposerOnStartFailure,
         persistRollback: async (state) => {
           abortedConversationCommitted = true;
           await persistConversationWithHistorySync({
@@ -1438,11 +1392,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             titlePromise,
           });
         },
-        // 压缩把携带 memory 增量块的 user 消息移出 active segment,增量对模型
-        // 永久不可见;丢弃注入状态,下一轮把 fresh 快照重冻结进 system 段 ——
-        // 压缩本来就要重建前缀,这次重冻结免费。
-        onCompacted: () => memoryTurnInjection.invalidate(conversationId),
-      },
+      }),
     });
     compactionBound = true;
 
@@ -1659,12 +1609,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }));
     }
 
-    function rebaseConversationStateDuringRun(nextState: ConversationViewState) {
-      // Once a compaction/prune result is committed into visible history, the
-      // corresponding live transcript becomes stale and must be cleared.
-      applyConversationState(nextState);
-      resetLiveTranscript(transcriptStore);
-    }
+    // 待发送消息只交给 pre-send 压缩：post-tool / overflow 用调用时的状态，绝不重复插入。
+    // 只有清空了本地输入框的发送才在 Stop 时撤销它：WebUI / edit-resend 的文本不在输入框里。
+    const compactionPresend = {
+      pendingUserMessage,
+      restoreOnRollback:
+        composerClearedOnStart && !gatewayBridgeRequest && !overrides?.editResendBaseMessageRef,
+    };
 
     // Run 级任务清单存储:先落盘、成功后才应用到运行时状态,失败时状态从未
     // 变更(无需回滚)。持久化走非终态通道——中途任务写盘失败只属于本次工具
@@ -1775,6 +1726,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             applyConversationState,
             buildPreparedContext,
             compaction,
+            compactionPresend,
             cancellation,
             resetLiveTranscript,
             settleLiveTranscript,
@@ -1823,6 +1775,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             applyConversationState,
             buildPreparedContext,
             compaction,
+            compactionPresend,
             cancellation,
             resetLiveTranscript,
             settleLiveTranscript,

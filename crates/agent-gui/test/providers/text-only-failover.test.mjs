@@ -77,6 +77,9 @@ const { streamAssistantMessage } = loader.loadModule(
 const { resetFailoverBreakers } = loader.loadModule(
   "src/lib/providers/runtime/providerFailover.ts",
 );
+const { AssistantResponseError, isOverflowError, readAssistantFromError } = loader.loadModule(
+  "src/lib/providers/runtime/overflow.ts",
+);
 
 const FAILOVER_CONFIG = { maxSwitches: 3, failureThreshold: 3, cooldownSeconds: 60 };
 
@@ -242,6 +245,33 @@ test("text mode never switches on client-request-class errors", async () => {
     streamAssistantMessage(baseParams({ failover: makeFailoverParams() })),
     /prompt is too long/,
   );
+  assert.equal(streamCalls.length, 1);
+});
+
+test("text mode throws the normalized message with the raw failed assistant attached", async () => {
+  // Anthropic's overflow wording: "195031" contains "503", which pi-ai's
+  // unanchored pattern would treat as a failover-eligible 5xx.
+  const errorMessage =
+    '400 {"type":"error","error":{"type":"invalid_request_error","message":"input length and `max_tokens` exceed context limit: 195031 + 32000 > 200000"}}';
+  streamImpl = (model) =>
+    model.baseUrl === "https://primary.example"
+      ? uncommittedErrorStream(errorMessage)
+      : successStream("unused");
+
+  const error = await streamAssistantMessage(
+    baseParams({ failover: makeFailoverParams() }),
+  ).catch((caught) => caught);
+  assert.ok(error instanceof AssistantResponseError);
+  // Message text unchanged: still the normalized nested message.
+  assert.equal(
+    error.message,
+    "input length and `max_tokens` exceed context limit: 195031 + 32000 > 200000",
+  );
+  const raw = readAssistantFromError(error);
+  assert.equal(raw.stopReason, "error");
+  assert.equal(raw.errorMessage, errorMessage);
+  assert.equal(isOverflowError(raw), true);
+  // Overflow is not failover-eligible: only the primary was attempted.
   assert.equal(streamCalls.length, 1);
 });
 

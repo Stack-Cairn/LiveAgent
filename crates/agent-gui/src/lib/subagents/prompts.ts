@@ -95,6 +95,9 @@ export function buildSubagentSystemPrompt(params: {
   return lines.join("\n\n");
 }
 
+// 委派消息首行标签：构建与旧数据识别共用。
+const DELEGATED_AGENT_NAME_LABEL = "Delegated agent name:";
+
 function buildSubagentUserPrompt(params: {
   spec: SubagentSpec;
   identity: SubagentIdentity;
@@ -102,7 +105,7 @@ function buildSubagentUserPrompt(params: {
   messageBusEnabled?: boolean;
 }) {
   return [
-    `Delegated agent name: ${params.identity.name}`,
+    `${DELEGATED_AGENT_NAME_LABEL} ${params.identity.name}`,
     `Delegated agent id: ${params.identity.agentId}`,
     `Delegated agent role: ${params.identity.role}`,
     "",
@@ -119,6 +122,16 @@ function buildSubagentUserPrompt(params: {
   ]
     .filter((line) => line !== "")
     .join("\n");
+}
+
+// 委派 / 续跑消息上的任务原文标签（随消息 JSON 持久化）：压缩保留原话时只取它，
+// 身份行与内嵌的 bus 快照都不是用户原话。
+const SUBAGENT_TASK_FIELD = "liveAgentSubagentTask";
+// 纯合成消息标签（bus 刷新）：不是用户原话，压缩保留时整条排除。
+const SUBAGENT_SYNTHETIC_FIELD = "liveAgentSynthetic";
+
+function withSubagentTask(message: Message, task: string): Message {
+  return Object.assign(message, { [SUBAGENT_TASK_FIELD]: task });
 }
 
 export function buildSubagentContext(params: {
@@ -143,19 +156,47 @@ export function buildSubagentContext(params: {
       messageBusEnabled: params.messageBusEnabled,
     }),
     messages: [
-      {
-        role: "user",
-        content: buildSubagentUserPrompt({
-          spec: params.spec,
-          identity: params.identity,
-          messageBusSnapshot: params.messageBusSnapshot,
-          messageBusEnabled: params.messageBusEnabled,
-        }),
-        timestamp: Date.now(),
-      },
+      withSubagentTask(
+        {
+          role: "user",
+          content: buildSubagentUserPrompt({
+            spec: params.spec,
+            identity: params.identity,
+            messageBusSnapshot: params.messageBusSnapshot,
+            messageBusEnabled: params.messageBusEnabled,
+          }),
+          timestamp: Date.now(),
+        },
+        params.spec.prompt,
+      ),
     ],
     tools: params.tools,
   };
+}
+
+// 合成 user 消息的固定首行：构建与旧数据识别共用。
+const SUBAGENT_CONTINUATION_HEADER = "Continue your existing delegated agent session.";
+const MESSAGE_BUS_REFRESH_HEADER = "LiveAgent Message Bus snapshot refreshed for this turn.";
+// 无标签旧数据的兜底识别：委派 / 续跑消息混着身份行与 bus 快照，bus 刷新整条合成。
+const LEGACY_SYNTHETIC_PREFIXES = [
+  DELEGATED_AGENT_NAME_LABEL,
+  SUBAGENT_CONTINUATION_HEADER,
+  MESSAGE_BUS_REFRESH_HEADER,
+];
+
+/**
+ * 子代理压缩时的保留原话改写：委派 / 续跑消息只保留任务原文（身份行与 bus 快照不是
+ * 用户原话），bus 刷新消息整条排除；没有标签的旧数据按首行整条排除。其余走默认提取。
+ */
+export function resolveSubagentRetainedUserText(message: Message): string | null | undefined {
+  if (message.role !== "user") return undefined;
+  const record = message as Message & Record<string, unknown>;
+  const task = record[SUBAGENT_TASK_FIELD];
+  if (typeof task === "string") return task;
+  if (record[SUBAGENT_SYNTHETIC_FIELD] === true) return null;
+  const first = typeof message.content === "string" ? message.content : message.content[0];
+  const text = typeof first === "string" ? first : first?.type === "text" ? first.text : "";
+  return LEGACY_SYNTHETIC_PREFIXES.some((prefix) => text.startsWith(prefix)) ? null : undefined;
 }
 
 export function buildSubagentContinuationMessage(params: {
@@ -165,48 +206,52 @@ export function buildSubagentContinuationMessage(params: {
   messageBusSnapshot?: string;
   messageBusEnabled?: boolean;
 }): Message {
-  return {
-    role: "user",
-    content: [
-      {
-        type: "text",
-        text: [
-          "Continue your existing delegated agent session.",
-          `Agent name: ${params.identity.name}`,
-          `Stable id: ${params.identity.agentId}`,
-          `Stable role: ${params.identity.role}`,
-          `Previous run id: ${params.resumedFrom.id}`,
-          `Previous mode: ${params.resumedFrom.mode}`,
-          `Current mode: ${params.spec.mode}`,
-          params.resumedFrom.mode !== params.spec.mode
-            ? `Execution mode changed: ${params.resumedFrom.mode} -> ${params.spec.mode}`
-            : "",
-          `Current continuation task: ${params.spec.prompt}`,
-          params.messageBusSnapshot ? `\n${params.messageBusSnapshot}` : "",
-          "",
-          params.messageBusEnabled
-            ? "Use your established role, prior findings, current tool access, and SendMessage when cross-agent communication is needed. Messages sent to parent are private to the parent; send to=* when peer agents need to read a report or summary. Return only your updated result, evidence, and risks."
-            : "Use your established role, prior findings, and current tool access. Return only your updated result, evidence, and risks.",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      },
-    ],
-    timestamp: Date.now(),
-  };
+  return withSubagentTask(
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: [
+            SUBAGENT_CONTINUATION_HEADER,
+            `Agent name: ${params.identity.name}`,
+            `Stable id: ${params.identity.agentId}`,
+            `Stable role: ${params.identity.role}`,
+            `Previous run id: ${params.resumedFrom.id}`,
+            `Previous mode: ${params.resumedFrom.mode}`,
+            `Current mode: ${params.spec.mode}`,
+            params.resumedFrom.mode !== params.spec.mode
+              ? `Execution mode changed: ${params.resumedFrom.mode} -> ${params.spec.mode}`
+              : "",
+            `Current continuation task: ${params.spec.prompt}`,
+            params.messageBusSnapshot ? `\n${params.messageBusSnapshot}` : "",
+            "",
+            params.messageBusEnabled
+              ? "Use your established role, prior findings, current tool access, and SendMessage when cross-agent communication is needed. Messages sent to parent are private to the parent; send to=* when peer agents need to read a report or summary. Return only your updated result, evidence, and risks."
+              : "Use your established role, prior findings, and current tool access. Return only your updated result, evidence, and risks.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+      ],
+      timestamp: Date.now(),
+    },
+    params.spec.prompt,
+  );
 }
 
 export function buildMessageBusUpdateMessage(snapshot: string): Message | null {
   const text = snapshot.trim();
   if (!text) return null;
-  return {
+  const message: Message = {
     role: "user",
     content: [
       {
         type: "text",
-        text: ["LiveAgent Message Bus snapshot refreshed for this turn.", "", text].join("\n"),
+        text: [MESSAGE_BUS_REFRESH_HEADER, "", text].join("\n"),
       },
     ],
     timestamp: Date.now(),
   };
+  return Object.assign(message, { [SUBAGENT_SYNTHETIC_FIELD]: true });
 }

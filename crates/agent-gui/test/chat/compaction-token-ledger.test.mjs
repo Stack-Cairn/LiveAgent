@@ -619,18 +619,6 @@ test("post-checkpoint rebase shrinks the total to the fresh segment size", () =>
   assert.ok(ledger.total() < 1000);
 });
 
-test("totalWithPendingTokens adds the streamed token-unit estimate in O(1)", () => {
-  const ledger = new TokenLedger();
-  ledger.rebase({ systemPrompt: "", messages: [assistant("w", usage(4000))] });
-  assert.equal(ledger.totalWithPendingTokens(0), 4000);
-  assert.equal(ledger.totalWithPendingTokens(estimateTextTokenUnits("a".repeat(401))), 4000 + 101);
-  // 中文流按 CJK 密度累计：400 字远高于 400/4=100。
-  assert.equal(
-    ledger.totalWithPendingTokens(estimateTextTokenUnits("好".repeat(400))),
-    4000 + Math.ceil(400 * 0.7),
-  );
-});
-
 test("estimateMessageTokens weighs CJK message content by CJK density", () => {
   const cjkMessage = user("这是一段用于估算的中文正文内容".repeat(20));
   const asciiEquivalent = user("a".repeat(15 * 20));
