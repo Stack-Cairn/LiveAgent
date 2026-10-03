@@ -8,6 +8,7 @@ import {
   getKBrainHistoryWindow,
   listKBrainHistory,
   renameKBrainHistory,
+  setKBrainHistoryCwd,
   setKBrainHistoryModel,
   setKBrainHistoryPinned,
   setKBrainHistoryShare,
@@ -580,8 +581,7 @@ export async function setChatHistoryModel(id: string, selectedModelJson: string)
 }
 
 export async function setChatHistoryCwd(id: string, cwd: string) {
-  if (isKBrainHistory())
-    throw new Error("K-brain session cwd is managed by the backend and cannot be changed");
+  if (isKBrainHistory()) return setKBrainHistoryCwd(id, cwd);
   return withConversationWriteLock(id, () =>
     invoke<ChatHistorySummary>("chat_history_set_cwd", { id, cwd }),
   );

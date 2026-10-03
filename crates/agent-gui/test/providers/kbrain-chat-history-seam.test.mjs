@@ -237,6 +237,10 @@ test("shipped history seam mutates, validates refs, paginates and shares without
     assert.deepEqual(branch.body, { message_ref: { segment_index: 0, message_index: 0, segment_id: ref.segmentId, message_id: "u1", role: "user", content_hash: ref.contentHash }, expected_revision: "rev-1" });
     assert.equal((await history.renameChatHistory(id, "Server title")).title, "Server title");
     assert.equal((await history.setChatHistoryPinned(id, true)).isPinned, true);
+    const moved = await history.setChatHistoryCwd(id, "/tmp/other-project");
+    assert.equal(moved.cwd, "/tmp/other-project");
+    assert.equal(moved.id, id);
+    assert.deepEqual(requests.findLast(r => r.method === "PATCH").body, { cwd: "/tmp/other-project" });
     assert.equal(globalThis.localStorage.getItem("kbrain-history-titles:v1"), null);
     const edited = await history.replaceChatHistoryFromMessage({ id, baseMessageRef: ref, replacementMessage: { role: "user", content: [{ type: "text", text: "new" }, { type: "image", data: "AA==", mimeType: "image/png" }], timestamp: 1 }, expectedRevision: "rev-1", maxMessages: 1 });
     assert.equal(edited.revision, "rev-2");
@@ -269,7 +273,7 @@ test("history mutation HTTP failures propagate and never call Tauri", async () =
     return sendJson(response, { error: "session has active child task" }, 409);
   }, async () => {
     const id = (await history.listChatHistory(1, 20)).items[0].id;
-    for (const operation of [() => history.deleteChatHistory(id), () => history.setChatHistoryPinned(id, true), () => history.renameChatHistory(id, "name"), () => history.getChatHistoryShare(id), () => history.setChatHistoryShare(id, true)]) {
+    for (const operation of [() => history.deleteChatHistory(id), () => history.setChatHistoryPinned(id, true), () => history.setChatHistoryCwd(id, "/tmp/other"), () => history.renameChatHistory(id, "name"), () => history.getChatHistoryShare(id), () => history.setChatHistoryShare(id, true)]) {
       await assert.rejects(operation, error => error.status === 409 && /active child/.test(error.message));
     }
     assert.deepEqual(invokes, []);

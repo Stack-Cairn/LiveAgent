@@ -557,6 +557,13 @@ export async function setKBrainHistoryPinned(
   return summaryForSession(await client().updateSession(backendId, { pinned }), localId);
 }
 
+export async function setKBrainHistoryCwd(id: string, cwd: string): Promise<ChatHistorySummary> {
+  const localId = id.trim();
+  const backendId = getKBrainSessionId(localId, baseUrl());
+  if (!backendId) throw new Error(`K-brain session mapping not found for conversation ${localId}`);
+  return summaryForSession(await client().updateSession(backendId, { cwd }), localId);
+}
+
 export async function deleteKBrainHistory(id: string): Promise<void> {
   const localId = id.trim();
   const backendId = getKBrainSessionId(localId, baseUrl());

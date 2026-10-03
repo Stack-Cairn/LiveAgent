@@ -257,6 +257,8 @@ export type KBrainUpdateSessionRequest = {
   title?: string;
   pinned?: boolean;
   model?: KBrainModelRef;
+  /** Moves the session to another workspace (absolute path to an existing directory). */
+  cwd?: string;
 };
 
 export type KBrainRunOptions = {

@@ -4027,7 +4027,7 @@ function ChatPageContent(props: ChatPageProps) {
           fontScale={settings.customSettings.fontScale.sidebar}
           conversationSearchRequestKey={conversationSearchRequestKey}
           activeView={activeView}
-          showProjects={isAgentMode && !kBrainBackendEnabled}
+          showProjects={isAgentMode}
           projects={workspaceProjects}
           workspaceProjectGroups={workspaceProjectGroups}
           activeProjectId={activeWorkspaceProject?.id ?? ""}
