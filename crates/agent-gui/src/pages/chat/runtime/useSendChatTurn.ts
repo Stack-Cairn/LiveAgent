@@ -1093,8 +1093,24 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         hookWarning: null,
       }));
     }
-    // 返回清掉的内容是否全部放回：输入框 / 附件期间已有新内容时不覆盖，pre-send 压缩
-    // 回滚据此改为保留已发送的消息，而不是让它无处可寻。
+    // 清掉的草稿与附件此刻能否全部放回（期间输入框 / 附件没有新内容）。
+    const canRestoreComposerFully = () => {
+      if (!composerClearedOnStart) {
+        return false;
+      }
+      if (clearedComposerDraft) {
+        const draftFree = isConversationVisible()
+          ? Boolean(composerRef.current) && !composerRef.current?.hasContent()
+          : !composerDraftCacheRef.current.has(conversationId);
+        if (!draftFree) return false;
+      }
+      return (
+        clearedPendingUploads.length === 0 ||
+        getPendingUploadsForConversation(conversationId).length === 0
+      );
+    };
+    // 返回清掉的内容是否全部放回：输入框 / 附件期间已有新内容时不覆盖（启动失败时尽力
+    // 放回能放的部分）。
     const restoreComposerOnStartFailure = () => {
       if (!composerClearedOnStart) {
         return false;
@@ -1377,7 +1393,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             createdAt,
             titlePromise,
           }),
-        restoreComposer: restoreComposerOnStartFailure,
+        // pre-send 回滚要么全部放回、要么一样都不动：只放回一半时调用方会保留已发送的
+        // 消息，输入框里却又有同一份草稿，再点发送就重复了。
+        restoreComposer: () => canRestoreComposerFully() && restoreComposerOnStartFailure(),
         persistRollback: async (state) => {
           abortedConversationCommitted = true;
           await persistConversationWithHistorySync({

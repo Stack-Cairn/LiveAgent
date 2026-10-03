@@ -181,6 +181,25 @@ export function isCheckpointBridgeMessage(message: Message | undefined): boolean
 }
 
 /**
+ * 往请求末尾追加一条 wire-only 的 user 消息（如 plan 模式的补提交提醒）。末尾恰是单独
+ * 成条的 bridge（运行中压缩后 segment 为空）时并进 bridge，不出现连续两条 user；并入后
+ * 的消息沿用 bridge 的 id，照样被 stripCheckpointBridges 整条丢弃，永不落地。
+ */
+export function appendWireUserMessage(messages: Message[], message: Message): Message[] {
+  const last = messages.at(-1);
+  if (message.role !== "user" || !last || !isCheckpointBridgeMessage(last)) {
+    return [...messages, message];
+  }
+  const toBlocks = (content: UserMessage["content"]) =>
+    typeof content === "string" ? [{ type: "text" as const, text: content }] : content;
+  const merged = {
+    ...last,
+    content: [...toBlocks((last as UserMessage).content), ...toBlocks(message.content)],
+  } as Message;
+  return [...messages.slice(0, -1), merged];
+}
+
+/**
  * 把从请求上下文切出的消息还原成不含 bridge 的形态：合入形态换回原消息，单独成条的
  * bridge 丢弃。runner 把 override.context.messages 整体写进运行时状态，emitted 基线
  * 落在 0 时（子代理压缩后 segment 首条就是 emitted 消息）切片会带上合入形态——不还原

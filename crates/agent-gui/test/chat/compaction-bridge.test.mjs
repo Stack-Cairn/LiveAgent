@@ -745,3 +745,25 @@ test("subagent request contexts carry the bridge and narrow synthetic messages i
   );
   assert.ok(isCheckpointBridgeMessage(buildContext(compacted).messages[0]));
 });
+
+test("a wire-only reminder after a run-time compaction folds into the standalone bridge", () => {
+  // 反应式溢出压缩后 segment 为空：请求只剩单独成条的 bridge，plan 补提交提醒并进它。
+  const messages = requestContext(compactedState([])).messages;
+  assert.equal(messages.length, 1);
+  assert.ok(isCheckpointBridgeMessage(messages[0]));
+  const reminder = user([{ type: "text", text: "Submit the plan with ExitPlanMode." }], 50);
+
+  const folded = bridge.appendWireUserMessage(messages, reminder);
+  assert.equal(folded.length, 1);
+  assertNoConsecutiveUsers(folded);
+  assert.ok(isCheckpointBridgeMessage(folded[0]), "keeps the bridge id so it is never persisted");
+  assert.equal(folded[0].content.at(-1).text, "Submit the plan with ExitPlanMode.");
+  assert.ok(isCheckpointBridgeText(folded[0].content[0].text));
+  assert.deepEqual(bridge.stripCheckpointBridges(folded), []);
+  // 入参不被改写。
+  assert.equal(messages[0].content.length, 1);
+
+  // 末尾不是 bridge 时照常追加。
+  const ordinary = [user("hi", 1), assistant("hello", 2)];
+  assert.deepEqual(bridge.appendWireUserMessage(ordinary, reminder), [...ordinary, reminder]);
+});

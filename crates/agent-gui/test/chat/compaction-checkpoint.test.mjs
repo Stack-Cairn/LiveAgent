@@ -145,6 +145,22 @@ test("the deterministic summary inherits the previous summary and appends clippe
   assert.ok(text.length < 1_000, "tool results are clipped to 300 characters");
 });
 
+test("repeated deterministic fallbacks keep the inherited summary bounded", () => {
+  const activity = (index) => [
+    user(`step ${index}: ${"please inspect the module and report every finding. ".repeat(40)}`, index),
+  ];
+  let summary = "## Goal\nShip it";
+  const sizes = [];
+  for (let index = 0; index < 60; index += 1) {
+    summary = deterministicSummary({ previousSummary: summary, messages: activity(index), reason: "fork invalid" });
+    sizes.push(summary.length);
+  }
+  // 上一份摘要封顶 8k token：后续兜底不再单调膨胀，截断从中段丢弃。
+  assert.ok(sizes[59] <= sizes[39] * 1.05, `summary keeps growing: ${sizes[39]} → ${sizes[59]}`);
+  assert.match(summary, /\[… truncated …\]/);
+  assert.ok(summary.startsWith("## Goal\nShip it"));
+});
+
 test("the legacy resume constant is untouched and still dropped at message 0 of a checkpoint segment", () => {
   assert.equal(
     conversationState.INTERNAL_RESUME_MESSAGE_TEXT,

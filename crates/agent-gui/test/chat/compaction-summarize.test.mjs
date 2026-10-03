@@ -429,6 +429,25 @@ test("a first-event stall on the fork goes straight to the transcript without a 
   assert.equal(stages(logged)[0][1], "stall");
 });
 
+test("the fork's first-event budget leaves the transcript its minimum time before the deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1_000_000 });
+  reset(silentStream(), textStream("## Goal\nafter capped stall"));
+  // 手动压缩 270s 时限 + 800k 输入：未封顶的首事件预算（300s）会吃满整个时限。
+  const { input, logged } = makeInput({ tokensBefore: 800_000, deadlineAt: Date.now() + 270_000 });
+  assert.equal(firstEventBudgetMs(800_000, "high"), 300_000);
+  const pending = summarize(input);
+  await waitFor(() => protocolCalls.length === 1);
+  // 270s − 45s（transcript 最低时间）− 5s 余量。
+  assert.equal(llmCalls[0].options.streamRetry.firstEventTimeoutMs, 220_000);
+
+  t.mock.timers.tick(220_000);
+  const result = await pending;
+
+  assert.equal(result.ok.promptVersion, "summary-v4-transcript");
+  assert.deepEqual(protocolCalls.map(kindOf), ["fork", "transcript"]);
+  assert.equal(stages(logged)[0][1], "stall");
+});
+
 test("the deadline is a failure, not an abort; a closed summary written before it is salvaged", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1_000_000 });
   // 总时限只剩 30s（不足 45s）：fork 被它结束后不再进入 transcript。

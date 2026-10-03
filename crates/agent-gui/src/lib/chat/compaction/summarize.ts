@@ -190,6 +190,24 @@ function withSummaryReasoning(runtime: ProviderRuntimeConfig): ProviderRuntimeCo
   return { ...runtime, reasoning: !level || level === "off" ? level : "low" };
 }
 
+// fork 的首事件预算不得吃掉 transcript 档的最低时间：否则手动压缩（总时限 270s）在大
+// 上下文冷预填时会被 fork 耗尽，transcript 永远轮不到。
+const MIN_FIRST_EVENT_TIMEOUT_MS = 1_000;
+// 看门狗触发到 transcript 的 available 检查之间还有收尾耗时，留出余量免得卡在边界上。
+const TRANSCRIPT_HANDOFF_MARGIN_MS = 5_000;
+
+function forkFirstEventTimeoutMs(
+  input: SummarizeInput,
+  reasoning: Parameters<typeof firstEventBudgetMs>[1],
+): number {
+  const leaveForTranscript =
+    input.deadlineAt - Date.now() - TRANSCRIPT_MIN_REMAINING_MS - TRANSCRIPT_HANDOFF_MARGIN_MS;
+  return Math.max(
+    MIN_FIRST_EVENT_TIMEOUT_MS,
+    Math.min(firstEventBudgetMs(input.tokensBefore, reasoning), leaveForTranscript),
+  );
+}
+
 const forkStrategy: SummaryStrategy = {
   id: "fork",
   promptVersion: PROMPT_VERSION.fork,
@@ -235,7 +253,7 @@ const forkStrategy: SummaryStrategy = {
         signal: io.signal,
         streamRetry: {
           ...resolveCappedStreamRetryConfig(input.runtime.retryPolicy, SUMMARY_MAX_STREAM_ATTEMPTS),
-          firstEventTimeoutMs: firstEventBudgetMs(input.tokensBefore, recipe.options.reasoning),
+          firstEventTimeoutMs: forkFirstEventTimeoutMs(input, recipe.options.reasoning),
           idleTimeoutMs: IDLE_TIMEOUT_MS,
           // 沉默是确定性的（冷预填、长推理），重发只会再付一遍费用：直接降到 transcript。
           retryOnStall: false,

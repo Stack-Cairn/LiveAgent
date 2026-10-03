@@ -21,8 +21,11 @@ export type CompactionLimits = {
 
 // fork 在主请求上下文之后追加一条指令：给它留出余量，同一窗口才不会拒收。
 const FORK_INSTRUCTION_RESERVE_TOKENS = 2_000;
-// fixed（system + tools + 边界追加段）距 soft 不足这么多时，压缩腾不出有效空间。
-const PREFIX_HEADROOM_TOKENS = 20_000;
+// fixed（system + tools + 边界追加段）距 soft 不足 min(20k, soft/4) 时，压缩腾不出有效空间。
+// 余量随 soft 缩放：固定 20k 会让 soft 只有 2 万多的小窗口模型（W=64k/O=32k、W=32k/O=4k）
+// 在任何真实前缀下都被拦死。
+const PREFIX_HEADROOM_MAX_TOKENS = 20_000;
+const PREFIX_HEADROOM_SOFT_RATIO = 0.25;
 // 连续失败达到它即熔断（仅 [soft, hard) 区间）。
 const CIRCUIT_FAILURE_STREAK = 2;
 // 保留原话的总预算上限（Codex 风格）；调用方给出的预算一律钳到 [0, 上限]。
@@ -78,8 +81,8 @@ export type CompactionVerdict =
 /**
  * 纯决策，按序判断：disabled → no-active-messages → in-flight → manual（50% 门槛）
  * → overflow（mustProgress，从 transcript 开始）→ below-threshold → prefix-too-large
- * → circuit-open → 压缩。熔断与防抖动只拦 [soft, hard)：≥ hard 不受它们拦截
- *（prefix-too-large 除外，压缩腾不出空间），never hard-reject。
+ * → circuit-open → 压缩。前缀过大、熔断与防抖动都只拦 [soft, hard)：≥ hard 不受它们
+ * 拦截（唯一例外是 fixed 本身已 ≥ hard，压缩什么都腾不出），never hard-reject。
  */
 export function decideCompaction(params: {
   trigger: CompactionTrigger;
@@ -123,8 +126,19 @@ export function decideCompaction(params: {
   // 同样的输入必然再次溢出，fork 没有意义。
   if (params.trigger === "overflow") return compact(true, "transcript");
   if (totalTokens < limits.soft) return skip("below-threshold");
-  // 压缩帮不上忙：让溢出错误自然暴露。
-  if (params.fixedTokens + PREFIX_HEADROOM_TOKENS >= limits.soft) return skip("prefix-too-large");
+  // 前缀过大：[soft, hard) 里压了也很快再满，不压；≥ hard 时压缩仍能把上下文拉回
+  // fixed + bridge，照样推进——除非 fixed 本身已 ≥ hard，那就让溢出错误自然暴露。
+  const prefixHeadroom = clamp(
+    Math.floor(PREFIX_HEADROOM_SOFT_RATIO * limits.soft),
+    0,
+    PREFIX_HEADROOM_MAX_TOKENS,
+  );
+  if (
+    params.fixedTokens + prefixHeadroom >= limits.soft &&
+    (totalTokens < limits.hard || params.fixedTokens >= limits.hard)
+  ) {
+    return skip("prefix-too-large");
+  }
   if (
     totalTokens < limits.hard &&
     (params.failureStreak >= CIRCUIT_FAILURE_STREAK || params.thrashing)

@@ -1,4 +1,5 @@
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
+import { estimateTextTokens } from "@liveagent/ui/lib/chat/contextUsage";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
@@ -19,7 +20,11 @@ import {
   sanitizeRetainedUserMessages,
 } from "./bridge";
 import { RETAINED_USER_MESSAGES_MAX_TOKENS } from "./policy";
-import { fillNewestFirst, serializeTranscript } from "./transcript";
+import { clipToTokens, fillNewestFirst, serializeTranscript } from "./transcript";
+
+// deterministic 摘要继承的上一份摘要上限（与 LLM 摘要的最小上限同值）：LLM 档持续失败时
+// 每次兜底都会再追加一段活动转录，不封顶会让 bridge 单调膨胀。
+const DETERMINISTIC_PREVIOUS_SUMMARY_MAX_TOKENS = 8_000;
 
 // 每条的 <user_message time="…"> 包裹开销（ISO 时间戳 + 标签）。
 const RETAINED_MESSAGE_OVERHEAD_TOKENS = 16;
@@ -184,17 +189,20 @@ export function buildCheckpointMessage(params: {
 }
 
 /**
- * 无 LLM 的兜底摘要（只在自动触发且 mustProgress 时用）：上一份摘要原样继承，
- * 其后附上未被摘要的本段活动（工具结果截到 300 字符，总量 4k token）。保留原话
- * 与文件账本照常经 bridge 带上。
+ * 无 LLM 的兜底摘要（只在自动触发且 mustProgress 时用）：继承上一份摘要（超过 8k token
+ * 时截掉中段），其后附上未被摘要的本段活动（工具结果截到 300 字符，总量 4k token）。
+ * 保留原话与文件账本照常经 bridge 带上。
  */
 export function deterministicSummary(params: {
   previousSummary?: string;
   messages: readonly Message[];
   reason: string;
 }): string {
+  const previous = params.previousSummary?.trim() ?? "";
   return [
-    params.previousSummary?.trim() ?? "",
+    estimateTextTokens(previous) > DETERMINISTIC_PREVIOUS_SUMMARY_MAX_TOKENS
+      ? clipToTokens(previous, DETERMINISTIC_PREVIOUS_SUMMARY_MAX_TOKENS)
+      : previous,
     "## Unsummarized activity",
     `(Automatic summary unavailable: ${params.reason}; re-read files as needed.)`,
     serializeTranscript(params.messages, { budgetTokens: 4_000, toolResultChars: 300 }),

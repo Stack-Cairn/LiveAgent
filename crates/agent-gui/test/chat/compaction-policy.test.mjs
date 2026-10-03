@@ -62,8 +62,30 @@ test("decideCompaction checks guards in order", () => {
 });
 
 test("prefix-too-large: compaction cannot free room under a huge fixed prefix", () => {
-  assert.equal(next({ totalTokens: 130_000, fixedTokens: 96_000 }).reason, "prefix-too-large");
-  assert.equal(next({ totalTokens: 130_000, fixedTokens: 95_999 }).shouldCompact, true);
+  // W200：soft 116k，余量 min(20k, 116k/4) = 20k，只拦 [soft, hard)。
+  assert.equal(next({ totalTokens: 120_000, fixedTokens: 96_000 }).reason, "prefix-too-large");
+  assert.equal(next({ totalTokens: 120_000, fixedTokens: 95_999 }).shouldCompact, true);
+  // ≥ hard：压缩仍能把上下文拉回 fixed + bridge，必须推进。
+  const atHard = next({ totalTokens: 130_000, fixedTokens: 96_000 });
+  assert.deepEqual([atHard.shouldCompact, atHard.mustProgress], [true, true]);
+  // fixed 本身已 ≥ hard：压缩腾不出空间，让溢出自然暴露。
+  assert.equal(next({ totalTokens: 130_000, fixedTokens: 126_000 }).reason, "prefix-too-large");
+});
+
+test("prefix-too-large headroom scales with soft on small windows", () => {
+  // W=64k/O=32k：soft 24768 / hard 28768，余量 6192。
+  const w64 = { modelConfig: { contextWindow: 65_536, maxOutputToken: 32_768 } };
+  const w64Soft = next({ ...w64, totalTokens: 25_000, fixedTokens: 8_000 });
+  assert.deepEqual([w64Soft.shouldCompact, w64Soft.mustProgress], [true, false]);
+  assert.equal(next({ ...w64, totalTokens: 25_000, fixedTokens: 18_576 }).reason, "prefix-too-large");
+  const w64Hard = next({ ...w64, totalTokens: 30_000, fixedTokens: 20_000 });
+  assert.deepEqual([w64Hard.shouldCompact, w64Hard.mustProgress], [true, true]);
+
+  // W=32k/O=4k：soft 20672 / hard 24672，余量 5168。
+  const w32 = { modelConfig: { contextWindow: 32_768, maxOutputToken: 4_096 } };
+  const w32Hard = next({ ...w32, totalTokens: 26_000, fixedTokens: 5_000 });
+  assert.deepEqual([w32Hard.shouldCompact, w32Hard.mustProgress], [true, true]);
+  assert.equal(next({ ...w32, totalTokens: 21_000, fixedTokens: 5_000 }).shouldCompact, true);
 });
 
 test("breaker and thrash guard only gate [soft, hard); ≥ hard always progresses", () => {

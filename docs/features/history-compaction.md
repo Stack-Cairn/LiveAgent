@@ -63,9 +63,9 @@ forkFits = total + 2k ≤ inputCap
 
 例：200k / 64k → soft 116k、hard 126k；1M / 128k → 836k / 852k。
 
-`decideCompaction` 按序判断：`disabled`（窗口或 O 缺失）→ `no-active-messages` → `in-flight` → manual 门槛 → `overflow`（mustProgress，从 transcript 起步）→ `below-threshold`（< soft）→ `prefix-too-large`（fixed + 20k ≥ soft，压缩腾不出空间，让错误自然暴露）→ `circuit-open` → 压缩（`mustProgress = total ≥ hard`，`startAt = forkFits ? fork : transcript`）。
+`decideCompaction` 按序判断：`disabled`（窗口或 O 缺失）→ `no-active-messages` → `in-flight` → manual 门槛 → `overflow`（mustProgress，从 transcript 起步）→ `below-threshold`（< soft）→ `prefix-too-large`（fixed + min(20k, ⌊soft/4⌋) ≥ soft 时只拦 `[soft, hard)`；≥ hard 照样压缩，除非 fixed 本身已 ≥ hard，此时让错误自然暴露）→ `circuit-open` → 压缩（`mustProgress = total ≥ hard`，`startAt = forkFits ? fork : transcript`）。
 
-熔断（自动压缩连续失败 ≥ 2）与防抖动（压缩后不足 2 次调用又满，连续 3 次）只拦 `[soft, hard)`；≥ hard 不受它们拦截（`prefix-too-large` 除外），never hard-reject。旧的压力阶梯、冷却与 prune 降级已删除，兜底职责由 deterministic 档承担。
+熔断（自动压缩连续失败 ≥ 2）与防抖动（压缩后不足 2 次调用又满，连续 3 次）只拦 `[soft, hard)`；≥ hard 不受它们拦截，never hard-reject。旧的压力阶梯、冷却与 prune 降级已删除，兜底职责由 deterministic 档承担。
 
 ### 摘要降级梯
 
@@ -73,7 +73,7 @@ forkFits = total + 2k ≤ inputCap
 |---|---|---|---|
 | fork | 会话最后一次主请求的 `RequestRecipe` 原样重放 + 末尾一条 `buildCompactionInstruction()` 指令：system、tools、`tool_choice`（强制工具放开为 auto）、reasoning、`max_tokens`、缓存键 / sessionId、metadata、wireTail 都与主请求一致；传输经 `prepareTransport` 每次现取（轮换的 key、新 baseUrl / 自定义头即时生效）。锁定缓存热的目标，不 failover。配方 provider / model / 协议 / 服务目标（`targetKey`，同轮 failover 到同 vendor 同模型的 fallback 后只有它不同）与当前主目标不符（重启、换模型、failover）、溢出触发或 `!forkFits` 时跳过。 | 首事件超时不在本层重试（`retryOnStall:false`），直接换档；模型在闭合 `</summary>` 之前发起工具调用即作废本档，工具永不执行。 | `summary-v4` |
 | transcript | `TRANSCRIPT_SYSTEM` + 单条 user：`<conversation>{serializeTranscript}</conversation>` + 同一指令；`cacheRetention:"none"`，推理开着降到 low，`maxTokens = min(O, 32k)`，可 failover。距总时限不足 45s 时不进入。 | 停滞可在本层重试（`retryOnStall:true`）。 | `summary-v4-transcript` |
-| deterministic | 无 LLM：上一份摘要 + `## Unsummarized activity` + 4k 预算的转录（工具结果截到 300 字符），注明自动摘要不可用的原因。仅自动触发、`mustProgress`、且最后一次失败不是 fatal（鉴权 / 配额）时运行。 | — | `summary-v4-deterministic` |
+| deterministic | 无 LLM：上一份摘要（超过 8k token 时截掉中段，防止连续兜底单调膨胀）+ `## Unsummarized activity` + 4k 预算的转录（工具结果截到 300 字符），注明自动摘要不可用的原因。仅自动触发、`mustProgress`、且最后一次失败不是 fatal（鉴权 / 配额）时运行。 | — | `summary-v4-deterministic` |
 
 deterministic 兜底的结果是 `completed{degraded}`：轨迹记 `complete`，GUI 弹出降级提示（`chat.compactionDegraded`）。
 
@@ -83,7 +83,7 @@ deterministic 兜底的结果是 `completed{degraded}`：轨迹记 `complete`，
 
 | 计时 | 值 |
 |---|---|
-| 首事件 | `60s + 30s × ⌈输入 token / 100k⌉`，high 及以上推理再加 60s，上限 300s；首个 committing 事件（text / thinking / toolcall_start）到达即解除。按冷缓存保守估算。 |
+| 首事件 | `60s + 30s × ⌈输入 token / 100k⌉`，high 及以上推理再加 60s，上限 300s；首个 committing 事件（text / thinking / toolcall_start）到达即解除。按冷缓存保守估算。fork 档另以 `总时限 − 45s − 5s` 封顶，保证 fork 首事件超时后 transcript 档仍有机会运行（手动压缩 270s 时限下即 220s）。 |
 | 空闲 | 有内容之后两个事件间最长 180s。 |
 | 总时限 | manual 270s（低于 WebUI 5 分钟的 pending 超时），自动 600s。超时算失败而不是用户中止。 |
 
@@ -113,7 +113,7 @@ deterministic 兜底的结果是 `completed{degraded}`：轨迹记 `complete`，
 
 | 项 | 契约 |
 |---|---|
-| bridge | 摘要只经 `<context_checkpoint>` bridge 进入请求（system prompt 不再含摘要，前缀缓存跨压缩稳定）。`buildRequestContext(state, { includeCheckpointBridge: true })` 每次请求现算：segment 首条是 user 时作为前置文本块合入（全局避免连续两条 user，严格交替的转换器 / 中转会拒收），否则（运行中压缩后）单独成一条 user 消息；按 summary 对象身份记忆化，整个 segment 期间字节与对象身份稳定。插值内容中的 `</summary`、`</user_message`、`</context_checkpoint`、`</files` 一律中和。摘要、保留原话、账本全空时不接；旧 checkpoint 用同一渲染器（没有 `<user_messages>`），升级后首次请求一次缓存未命中，无需迁移。 |
+| bridge | 摘要只经 `<context_checkpoint>` bridge 进入请求（system prompt 不再含摘要，前缀缓存跨压缩稳定）。`buildRequestContext(state, { includeCheckpointBridge: true })` 每次请求现算：segment 首条是 user 时作为前置文本块合入（全局避免连续两条 user，严格交替的转换器 / 中转会拒收），否则（运行中压缩后）单独成一条 user 消息，之后追加的 wire-only user 消息（plan 补提交提醒）经 `appendWireUserMessage` 并进这条 bridge，沿用其 id、照样不落地；按 summary 对象身份记忆化，整个 segment 期间字节与对象身份稳定。插值内容中的 `</summary`、`</user_message`、`</context_checkpoint`、`</files` 一律中和。摘要、保留原话、账本全空时不接；旧 checkpoint 用同一渲染器（没有 `<user_messages>`），升级后首次请求一次缓存未命中，无需迁移。 |
 | 只在请求里 | bridge 永不持久化、永不 emit：runner 的 emitted 切片与 `appendMessagesToConversation` 入口都过 `stripCheckpointBridges`，持久化顺序仍是 assistant → checkpoint → assistant。主请求、账本、用量环、压缩估值、子代理开 bridge；标题、记忆抽取、App 级 context 不开。 |
 | `retainedUserMessages` | summary **顶层**可选字段（不放 `summaryMeta`）。候选池 = 上一份保留集 + 被压缩 segment 的真实用户消息，按 id（或时间戳 + 文本）去重；排除 bridge、内部续跑消息与调用方判定不可保留的消息。按时间正序，上传元数据剥离（附件只留名字、粘贴引用只留标签，图片 → `[image]`）。预算 `clamp(⌊0.5·soft⌋ − fixed − summary, 0, 20k)`，thrashing 时为 0；从新到旧整条装入，第一条放不下的在剩余 ≥ 256 token 时截断并标记 `truncated`。读取时逐项校验，坏数据丢弃。对 Rust 不透明，旧 checkpoint 缺失即视为无。 |
 | 子代理标签 | 委派 / 续跑消息带 `liveAgentSubagentTask`（保留时只取任务原文），bus 刷新带 `liveAgentSynthetic`（整条排除）；无标签旧数据按首行兜底排除。随 `messages_json` 持久化，provider 转换忽略。 |

@@ -13,6 +13,7 @@ import {
   serializeToolCatalog,
 } from "@liveagent/ui/lib/trajectory/sections";
 import type { TrajectoryUsage } from "@liveagent/ui/lib/trajectory/types";
+import { appendWireUserMessage } from "../../../lib/chat/compaction/bridge";
 import type {
   CompactionController,
   CompactionPresend,
@@ -1053,8 +1054,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   while (!result) {
     const nativeWebSearchEnabled = runtime.nativeWebSearchEnabled !== false;
     const turnContext = buildTurnContext(getNextConversationState());
+    // 反应式溢出压缩后 segment 为空、末尾是单独成条的 bridge：提醒并进它，不出现连续两条 user。
     const agentContext = planNudgeReminder
-      ? { ...turnContext, messages: [...turnContext.messages, planNudgeReminder] }
+      ? { ...turnContext, messages: appendWireUserMessage(turnContext.messages, planNudgeReminder) }
       : turnContext;
     // 主请求跑在派生 scope 上：用户停止（userStop）随时链式传导，不存在换代窗口。
     const scope = cancellation.deriveScope();
