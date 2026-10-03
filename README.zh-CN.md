@@ -114,6 +114,7 @@ LiveAgent 是一个 **本地优先** 的 AI Agent 桌面客户端。它将大语
 
 - **持久化记忆** — Markdown + SQLite FTS 全文检索,跨会话知识管理
 - **定时任务** — bash / http / prompt 三种 Cron 任务类型,后台自动执行
+- **系统通知** — 日程提醒、定时任务结果与 Agent `Notify` 统一以桌面系统通知弹出,按类别开关;历史与免打扰交给系统通知中心和专注模式
 
 ### 🌐 远程 Gateway
 

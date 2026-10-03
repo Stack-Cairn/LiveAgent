@@ -1384,4 +1384,44 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "安装需要在桌面端完成：安装脚本在桌面主机上联网下载并执行，须由使用那台机器的人确认命令全文。",
   "settings.cuaDriver.desktopOnlyGrant":
     "授权需要在桌面端完成：系统授权对话框只会出现在桌面主机的屏幕上。",
+  "settings.navNotifications": "通知",
+  "settings.notifications.desc":
+    "日程提醒、定时任务结果和 Agent 消息以桌面系统通知弹出。历史记录在系统通知中心查看，免打扰请使用系统的专注模式或勿扰。",
+  "settings.notifications.types": "通知类型",
+  "settings.notifications.planning": "日程提醒",
+  "settings.notifications.planningDesc": "活动与任务到点时提醒",
+  "settings.notifications.cronFailure": "定时任务失败",
+  "settings.notifications.cronFailureDesc": "运行失败或超时时通知，同一任务 5 分钟内最多一条",
+  "settings.notifications.cronSuccess": "定时任务完成",
+  "settings.notifications.cronSuccessDesc": "每次运行成功后通知，同一任务 5 分钟内最多一条",
+  "settings.notifications.agent": "Agent 消息",
+  "settings.notifications.agentDesc": "Agent 通过 Notify 工具发送的提醒",
+  "settings.notifications.system": "系统通知",
+  "settings.notifications.check": "检查系统通知",
+  "settings.notifications.permissionGranted":
+    "系统已允许 LiveAgent 发送通知。横幅样式与声音可在系统设置中调整。",
+  "settings.notifications.permissionDenied":
+    "系统已关闭 LiveAgent 的通知，请在系统设置中允许后再试。",
+  "settings.notifications.permissionNotDetermined":
+    "尚未授权。点击「允许通知」或发送测试通知时，系统会询问是否允许。",
+  "settings.notifications.requestPermission": "允许通知",
+  "settings.notifications.systemDesc": "没有收到通知时，检查系统是否允许 LiveAgent 发送通知",
+  "settings.notifications.test": "发送测试通知",
+  "settings.notifications.testSent":
+    "已发送测试通知。没有看到的话，请在系统设置中允许 LiveAgent 发送通知。",
+  "settings.notifications.testDisabledByEnv":
+    "当前环境通过 LIVEAGENT_DISABLE_NOTIFICATIONS 关闭了系统通知。",
+  "settings.notifications.testFailed": "发送测试通知失败：{error}",
+  "settings.notifications.openSettings": "打开系统通知设置",
+  "settings.notifications.desktopOnly": "通知在运行 LiveAgent 桌面端的电脑上弹出。",
+  "notifications.cronFailureTitle": "定时任务失败：{name}",
+  "notifications.cronSuccessTitle": "定时任务完成：{name}",
+  "notifications.testTitle": "LiveAgent 测试通知",
+  "notifications.testBody": "看到这条消息，说明系统通知工作正常。",
+  "settings.notifications.openUnsupported":
+    "当前系统不支持直接打开，请在系统设置的「通知」中查看 LiveAgent。",
+  "settings.builtinTool.notify.name": "通知",
+  "settings.builtinTool.notify.desc": "向用户发送桌面系统通知",
+  "settings.builtinTool.notify.detail":
+    "在桌面端弹出一条系统通知；受「设置 → 通知 → Agent 消息」开关控制，30 秒内重复调用会被忽略。",
 } as const satisfies Record<string, string>;

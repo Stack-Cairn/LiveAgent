@@ -8,6 +8,7 @@ pub mod config_commands;
 pub mod history_commands;
 #[path = "integration/mod.rs"]
 pub mod integration_commands;
+pub mod notifications;
 pub mod planning;
 #[path = "runtime/mod.rs"]
 pub mod runtime_commands;

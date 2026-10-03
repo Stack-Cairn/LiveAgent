@@ -1454,4 +1454,48 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Install from the desktop app: the script is downloaded and run on the desktop host, and the person at that machine has to review the full command first.",
   "settings.cuaDriver.desktopOnlyGrant":
     "Grant from the desktop app: the system permission dialogs only appear on the desktop host's screen.",
+  "settings.navNotifications": "Notifications",
+  "settings.notifications.desc":
+    "Calendar reminders, scheduled task results and Agent messages appear as desktop system notifications. Find past notifications in the system notification center, and use the system's Focus / Do Not Disturb to silence them.",
+  "settings.notifications.types": "Notification types",
+  "settings.notifications.planning": "Calendar reminders",
+  "settings.notifications.planningDesc": "When events and tasks are due",
+  "settings.notifications.cronFailure": "Scheduled task failures",
+  "settings.notifications.cronFailureDesc":
+    "When a run fails or times out; at most one per task every 5 minutes",
+  "settings.notifications.cronSuccess": "Scheduled task completions",
+  "settings.notifications.cronSuccessDesc":
+    "After each successful run; at most one per task every 5 minutes",
+  "settings.notifications.agent": "Agent messages",
+  "settings.notifications.agentDesc": "Sent by the Agent with the Notify tool",
+  "settings.notifications.system": "System notifications",
+  "settings.notifications.check": "Check system notifications",
+  "settings.notifications.permissionGranted":
+    "LiveAgent is allowed to send notifications. Adjust the banner style and sound in system settings.",
+  "settings.notifications.permissionDenied":
+    "Notifications for LiveAgent are turned off in system settings. Allow them there and try again.",
+  "settings.notifications.permissionNotDetermined":
+    "Not authorized yet. The system will ask when you click Allow notifications or send a test notification.",
+  "settings.notifications.requestPermission": "Allow notifications",
+  "settings.notifications.systemDesc":
+    "If nothing shows up, check that the system allows LiveAgent to send notifications",
+  "settings.notifications.test": "Send test notification",
+  "settings.notifications.testSent":
+    "Test notification sent. If you don't see it, allow LiveAgent to send notifications in system settings.",
+  "settings.notifications.testDisabledByEnv":
+    "System notifications are turned off in this environment (LIVEAGENT_DISABLE_NOTIFICATIONS).",
+  "settings.notifications.testFailed": "Couldn't send the test notification: {error}",
+  "settings.notifications.openSettings": "Open system notification settings",
+  "settings.notifications.desktopOnly":
+    "Notifications appear on the computer running the LiveAgent desktop app.",
+  "notifications.cronFailureTitle": "Scheduled task failed: {name}",
+  "notifications.cronSuccessTitle": "Scheduled task finished: {name}",
+  "notifications.testTitle": "LiveAgent test notification",
+  "notifications.testBody": "If you can see this, system notifications are working.",
+  "settings.notifications.openUnsupported":
+    "This system can't open notification settings directly. Look for LiveAgent under Notifications in your system settings.",
+  "settings.builtinTool.notify.name": "Notify",
+  "settings.builtinTool.notify.desc": "Send the user a desktop system notification",
+  "settings.builtinTool.notify.detail":
+    "Shows a system notification on the desktop. Controlled by Settings → Notifications → Agent messages; calls within 30 seconds of the last one are dropped.",
 } as const satisfies Record<string, string>;

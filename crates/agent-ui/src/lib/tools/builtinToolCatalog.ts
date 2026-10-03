@@ -14,6 +14,7 @@ export type BuiltinToolCategoryId =
 
 export type ToolCatalogIconId =
   | "fileText"
+  | "bell"
   | "image"
   | "filePen"
   | "pencil"
@@ -303,6 +304,14 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     id: "cron_task_manager",
     toolName: "CronTaskManager",
     icon: "clock",
+    categoryId: "automation",
+    isReadOnly: false,
+    runtimeScopes: CHAT_AND_CRON,
+  },
+  {
+    id: "notify",
+    toolName: "Notify",
+    icon: "bell",
     categoryId: "automation",
     isReadOnly: false,
     runtimeScopes: CHAT_AND_CRON,

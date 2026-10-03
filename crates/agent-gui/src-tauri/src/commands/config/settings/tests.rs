@@ -1178,6 +1178,11 @@ mod tests {
         );
     }
 
+    /// 归一后的 notifications 默认值（save/load 全量断言共用）。
+    fn default_notifications_json() -> Value {
+        json!({ "planning": true, "cronFailure": true, "cronSuccess": false, "agent": true })
+    }
+
     /// 归一后的 systemProxy 默认值（save/load 全量断言共用）。
     fn default_system_proxy_json() -> Value {
         json!({
@@ -1223,7 +1228,7 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 15);
+        assert_eq!(row_count, 16);
         assert_eq!(
             keys,
             vec![
@@ -1236,6 +1241,7 @@ mod tests {
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
+                SYSTEM_NOTIFICATIONS_KEY.to_string(),
                 SYSTEM_SYSTEM_PROXY_KEY.to_string(),
                 SYSTEM_TOOL_POLICIES_KEY.to_string(),
                 SYSTEM_WORKDIR_KEY.to_string(),
@@ -1257,6 +1263,7 @@ mod tests {
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
+                "notifications": default_notifications_json(),
                 "systemProxy": default_system_proxy_json(),
                 "workdir": default_workdir.clone(),
                 "toolPolicies": { "Bash": "ask", "server:docs-mcp": "deny" },
@@ -1593,6 +1600,7 @@ mod tests {
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
+                "notifications": default_notifications_json(),
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
@@ -1650,6 +1658,7 @@ mod tests {
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
+                "notifications": default_notifications_json(),
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
@@ -1729,6 +1738,7 @@ mod tests {
                 "commandSafetyMode": "auto",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
+                "notifications": default_notifications_json(),
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
                 "workspaceProjects": [
@@ -1834,6 +1844,31 @@ mod tests {
         let resolved = loaded["resolvedTimeZone"].as_str().expect("resolved zone");
         assert!(!resolved.is_empty());
         assert_eq!(resolved, os_time_zone());
+    }
+
+    #[test]
+    fn save_system_round_trips_notification_preferences() {
+        let mut conn = open_memory_db();
+        save_system_with_default_workdir(
+            &mut conn,
+            json!({
+                "executionMode": "tools",
+                "notifications": { "planning": false, "cronSuccess": true, "agent": "bad" },
+            }),
+            "/tmp/liveagent-default-project",
+        )
+        .expect("save system");
+        let loaded = load_system_with_defaults(&conn, "/tmp/liveagent-default-project")
+            .expect("load system");
+        assert_eq!(
+            loaded["notifications"],
+            json!({ "planning": false, "cronFailure": true, "cronSuccess": true, "agent": true })
+        );
+        let preferences = crate::services::notifications::NotificationPreferences::from_value(
+            Some(&loaded["notifications"]),
+        );
+        assert!(!preferences.planning);
+        assert!(preferences.cron_success);
     }
 
     #[test]

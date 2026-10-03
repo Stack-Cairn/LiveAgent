@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::services::gateway::GatewayController;
 
 use super::db;
+use super::notifications::{output_excerpt, RunFinished};
 use super::scheduler::AutomationScheduler;
 use super::types::*;
 use super::validate;
@@ -43,6 +44,10 @@ impl AutomationNotifier {
         if let Err(error) = self.app_handle.emit(PROMPT_PENDING_EVENT, ()) {
             eprintln!("emit {PROMPT_PENDING_EVENT} failed: {error}");
         }
+    }
+
+    fn run_finished(&self, run: &RunFinished) {
+        super::notifications::notify_run_finished(&self.app_handle, run);
     }
 
     fn prompt_expired(&self, event: &PromptExpiredEvent) {
@@ -82,6 +87,8 @@ pub enum PromptQueueOutcome {
 pub struct AutomationStore {
     conn: Mutex<Connection>,
     notifier: Mutex<Option<AutomationNotifier>>,
+    #[cfg(test)]
+    finished_runs: Mutex<Vec<RunFinished>>,
 }
 
 impl AutomationStore {
@@ -91,6 +98,8 @@ impl AutomationStore {
         Ok(Self {
             conn: Mutex::new(conn),
             notifier: Mutex::new(None),
+            #[cfg(test)]
+            finished_runs: Mutex::new(Vec::new()),
         })
     }
 
@@ -101,6 +110,8 @@ impl AutomationStore {
         Ok(Self {
             conn: Mutex::new(conn),
             notifier: Mutex::new(None),
+            #[cfg(test)]
+            finished_runs: Mutex::new(Vec::new()),
         })
     }
 
@@ -138,6 +149,23 @@ impl AutomationStore {
         if let Ok(mut guard) = self.notifier.lock() {
             *guard = Some(notifier);
         }
+    }
+
+    /// Test-only: runs reported as finished so far.
+    #[cfg(test)]
+    pub fn debug_finished_runs(&self) -> Vec<RunFinished> {
+        self.finished_runs
+            .lock()
+            .map(|runs| runs.clone())
+            .unwrap_or_default()
+    }
+
+    fn run_finished(&self, run: RunFinished) {
+        #[cfg(test)]
+        if let Ok(mut runs) = self.finished_runs.lock() {
+            runs.push(run.clone());
+        }
+        self.with_notifier(|notifier| notifier.run_finished(&run));
     }
 
     fn with_notifier(&self, f: impl FnOnce(&AutomationNotifier)) {
@@ -339,12 +367,22 @@ impl AutomationStore {
 
     /// Persist a finished bash/http run (or synthesized failure/skip record).
     pub fn record_completed_run(&self, run: CompletedRun) -> Result<(), String> {
-        let cron_snapshot = {
+        let (cron_snapshot, finished) = {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
                 .map_err(|e| format!("开启 run 记录事务失败：{e}"))?;
             insert_finished_run(&tx, &run, RunState::Done)?;
+            let finished = (!run.skipped)
+                .then(|| -> Result<RunFinished, String> {
+                    Ok(RunFinished {
+                        task_name: task_name(&tx, &run.task_id, None)?,
+                        task_id: run.task_id.clone(),
+                        success: run.success,
+                        excerpt: output_excerpt(&run.output),
+                    })
+                })
+                .transpose()?;
             let effect = if run.counted {
                 decrement_remaining(&tx, &run.task_id)?
             } else {
@@ -360,11 +398,14 @@ impl AutomationStore {
             };
             tx.commit()
                 .map_err(|e| format!("提交 run 记录事务失败：{e}"))?;
-            snapshot
+            (snapshot, finished)
         };
 
         if let Some(snapshot) = cron_snapshot {
             self.with_notifier(|notifier| notifier.cron_changed(&snapshot));
+        }
+        if let Some(finished) = finished {
+            self.run_finished(finished);
         }
         Ok(())
     }
@@ -546,7 +587,7 @@ impl AutomationStore {
             return Err("executionId cannot be empty.".to_string());
         }
 
-        let cron_snapshot = {
+        let (cron_snapshot, finished) = {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -603,6 +644,12 @@ impl AutomationStore {
                 ],
             )
             .map_err(|e| format!("写入 prompt 完成结果失败：{e}"))?;
+            let finished = RunFinished {
+                task_name: task_name(&tx, &task_id, request_json.as_deref())?,
+                task_id: task_id.clone(),
+                success: input.success,
+                excerpt: output_excerpt(&output),
+            };
 
             let effect = if prompt_run_is_counted(request_json.as_deref()) {
                 decrement_remaining(&tx, &task_id)?
@@ -619,12 +666,13 @@ impl AutomationStore {
             };
             tx.commit()
                 .map_err(|e| format!("提交 prompt 完成事务失败：{e}"))?;
-            snapshot
+            (snapshot, finished)
         };
 
         if let Some(snapshot) = cron_snapshot {
             self.with_notifier(|notifier| notifier.cron_changed(&snapshot));
         }
+        self.run_finished(finished);
         Ok(PromptCompletionResponse {
             status: PromptCompletionStatus::Completed,
         })
@@ -639,11 +687,13 @@ impl AutomationStore {
             "state = 'pending' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?1",
             params![db::now_ms()],
             "Auto Prompt run expired before any runner claimed it.",
+            true,
         )?;
         events.extend(self.expire_prompt_runs_where(
             "state = 'leased' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?1",
             params![db::now_ms()],
             "Auto Prompt run timed out before the front-end completed it.",
+            true,
         )?);
         Ok(events)
     }
@@ -655,6 +705,8 @@ impl AutomationStore {
             "state IN ('pending', 'leased')",
             params![],
             "Auto Prompt run was interrupted by an app restart.",
+            // 启动时补记的上次进程遗留运行不弹通知，避免启动刷屏。
+            false,
         )?;
         Ok(expired.len())
     }
@@ -664,8 +716,9 @@ impl AutomationStore {
         predicate: &str,
         predicate_params: &[&dyn rusqlite::ToSql],
         message: &str,
+        report: bool,
     ) -> Result<Vec<PromptExpiredEvent>, String> {
-        let (events, cron_snapshot) = {
+        let (events, finished, cron_snapshot) = {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -700,7 +753,16 @@ impl AutomationStore {
             let now = db::now_ms();
             let mut changed = false;
             let mut events = Vec::with_capacity(rows.len());
+            let mut finished = Vec::new();
             for (execution_id, task_id, started_at, request_json) in rows {
+                if report {
+                    finished.push(RunFinished {
+                        task_name: task_name(&tx, &task_id, request_json.as_deref())?,
+                        task_id: task_id.clone(),
+                        success: false,
+                        excerpt: output_excerpt(message),
+                    });
+                }
                 tx.execute(
                     "UPDATE automation_cron_runs
                      SET state = 'expired', success = 0, finished_at = ?2, duration_ms = ?3,
@@ -731,7 +793,7 @@ impl AutomationStore {
             };
             tx.commit()
                 .map_err(|e| format!("提交 prompt 过期事务失败：{e}"))?;
-            (events, snapshot)
+            (events, finished, snapshot)
         };
 
         if let Some(snapshot) = cron_snapshot {
@@ -739,6 +801,9 @@ impl AutomationStore {
         }
         for event in &events {
             self.with_notifier(|notifier| notifier.prompt_expired(event));
+        }
+        for run in finished {
+            self.run_finished(run);
         }
         Ok(events)
     }
@@ -1007,6 +1072,32 @@ fn insert_finished_run(
     )
     .map_err(|e| format!("写入 automation_cron_runs 失败：{e}"))?;
     Ok(())
+}
+
+/// 通知里显示的任务名：当前任务名，任务已删除时取 prompt 运行请求里的快照，最后回退 id。
+fn task_name(
+    conn: &Connection,
+    task_id: &str,
+    request_json: Option<&str>,
+) -> Result<String, String> {
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT name FROM automation_cron_tasks WHERE task_id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("读取 cron 任务名失败：{e}"))?;
+    let snapshotted = || {
+        request_json
+            .and_then(|raw| serde_json::from_str::<PromptRunRequest>(raw).ok())
+            .map(|request| request.task_name)
+    };
+    Ok(stored
+        .or_else(snapshotted)
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| task_id.to_string()))
 }
 
 fn decrement_remaining(conn: &Connection, task_id: &str) -> Result<CronMutationEffect, String> {

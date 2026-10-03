@@ -1742,3 +1742,58 @@ fn planning_colors_are_validated_and_editable_for_every_layer() {
         .subscription("subscription.update", &json!({"id":id,"color":"blue"}))
         .is_err());
 }
+
+#[test]
+fn planning_writes_wait_for_a_concurrent_writer_instead_of_failing() {
+    // 共用 config.sqlite 的其它连接（通知服务等）在日程事务读与写之间提交时，
+    // DEFERRED 事务会立即得到 SQLITE_BUSY_SNAPSHOT；IMMEDIATE 事务应等待后成功。
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.sqlite");
+    let store = PlanningStore::with_connection(rusqlite::Connection::open(&path).unwrap()).unwrap();
+    let calendar = store.snapshot(Query::default()).unwrap().calendars[0]
+        .id
+        .clone();
+    let other = rusqlite::Connection::open(&path).unwrap();
+    other
+        .execute_batch("CREATE TABLE other_writer(v INTEGER); BEGIN IMMEDIATE; INSERT INTO other_writer VALUES (1);")
+        .unwrap();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        other.execute_batch("COMMIT;").unwrap();
+    });
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let result = store.mutate(input(
+        "event.create",
+        None,
+        None,
+        json!({"title":"Concurrent","calendarId":calendar,"time":{"kind":"timed","startAt":4_000_000_000_000i64,"endAt":4_000_003_600_000i64,"timeZone":"UTC"}}),
+    ));
+    writer.join().unwrap();
+    assert_eq!(result.unwrap().status, "ok");
+    assert!(store.claim_reminders(store::now()).is_ok());
+}
+
+#[test]
+fn planning_reminder_is_stale_a_day_after_trigger_or_snooze() {
+    let mut reminder = Reminder {
+        id: "event:t1".into(),
+        target_type: "event".into(),
+        target_id: "t1".into(),
+        title: "周会".into(),
+        origin: "event_start".into(),
+        trigger_at: 1_000_000,
+        snoozed_until: None,
+        status: "pending".into(),
+        notified_at: None,
+        lease_until: None,
+        attempts: 0,
+        next_attempt_at: 0,
+        revision: 1,
+    };
+    let due = 1_000_000 + super::STALE_REMINDER_MS;
+    assert!(!super::is_stale_reminder(&reminder, due));
+    assert!(super::is_stale_reminder(&reminder, due + 1));
+    // 稍后提醒按新的到点时间计算。
+    reminder.snoozed_until = Some(due);
+    assert!(!super::is_stale_reminder(&reminder, due + 1));
+}

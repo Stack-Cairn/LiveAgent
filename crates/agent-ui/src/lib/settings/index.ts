@@ -83,6 +83,7 @@ import type {
   ModelInputModalitiesOverride,
   ModelInputModality,
   ModelLimitsSource,
+  NotificationPreferences,
   ProjectPromptStrategy,
   PromptCacheHintMode,
   ProviderFailoverSettings,
@@ -1557,6 +1558,26 @@ export function resolveDefaultTimeZone(
   return system.defaultTimeZone || system.resolvedTimeZone || runtimeTimeZone();
 }
 
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  planning: true,
+  cronFailure: true,
+  cronSuccess: false,
+  agent: true,
+};
+
+/** 逐项回退默认值，与后端 `NotificationPreferences::from_value` 同语义。 */
+export function normalizeNotificationPreferences(input: unknown): NotificationPreferences {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const flag = (key: keyof NotificationPreferences) =>
+    typeof obj[key] === "boolean" ? (obj[key] as boolean) : DEFAULT_NOTIFICATION_PREFERENCES[key];
+  return {
+    planning: flag("planning"),
+    cronFailure: flag("cronFailure"),
+    cronSuccess: flag("cronSuccess"),
+    agent: flag("agent"),
+  };
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
@@ -1568,6 +1589,7 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
     browserAutomationMode: normalizeBrowserAutomationMode(obj.browserAutomationMode),
     defaultTimeZone: normalizeDefaultTimeZone(obj.defaultTimeZone),
+    notifications: normalizeNotificationPreferences(obj.notifications),
     ...(typeof obj.resolvedTimeZone === "string" && obj.resolvedTimeZone.trim()
       ? { resolvedTimeZone: obj.resolvedTimeZone.trim() }
       : {}),
@@ -1814,6 +1836,7 @@ export function getDefaultSettings(): AppSettings {
       commandSafetyMode: "auto",
       browserAutomationMode: "auto",
       defaultTimeZone: "",
+      notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
       workspaceProjects: [],
       workspaceProjectGroups: [],
       activeWorkspaceProjectId: undefined,

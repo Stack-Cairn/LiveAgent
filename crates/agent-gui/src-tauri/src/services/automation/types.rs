@@ -318,4 +318,6 @@ pub struct CompletedRun {
     pub output: String,
     /// Counted runs decrement `remaining_executions`; skip records do not.
     pub counted: bool,
+    /// The previous run was still in progress, so this one never ran.
+    pub skipped: bool,
 }

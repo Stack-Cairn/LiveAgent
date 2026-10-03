@@ -503,6 +503,13 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_DEFAULT_TIME_ZONE_KEY.to_string(),
         normalize_default_time_zone_value(system.get(SYSTEM_DEFAULT_TIME_ZONE_KEY)),
     );
+    system.insert(
+        SYSTEM_NOTIFICATIONS_KEY.to_string(),
+        crate::services::notifications::NotificationPreferences::from_value(
+            system.get(SYSTEM_NOTIFICATIONS_KEY),
+        )
+        .to_value(),
+    );
     // 派生只读键:无论调用方传入什么都不采信,由 load_system_with_defaults 重新注入。
     system.remove(SYSTEM_RESOLVED_TIME_ZONE_KEY);
 
@@ -588,6 +595,17 @@ pub(crate) fn invalidate_default_tz_cache() {
     if let Ok(mut cache) = DEFAULT_TZ_CACHE.lock() {
         *cache = None;
     }
+}
+
+/// 桌面系统通知的类别开关;配置库打不开或字段缺失时按默认值(失败 / 日程 / Agent 开,成功关)。
+pub(crate) fn load_runtime_notification_preferences(
+) -> crate::services::notifications::NotificationPreferences {
+    let stored = open_db()
+        .and_then(|conn| load_system(&conn))
+        .ok()
+        .flatten()
+        .and_then(|value| value.get(SYSTEM_NOTIFICATIONS_KEY).cloned());
+    crate::services::notifications::NotificationPreferences::from_value(stored.as_ref())
 }
 
 /// 浏览器接入模式的合法取值,与前端 BROWSER_AUTOMATION_MODES 一致。
@@ -743,6 +761,7 @@ fn save_system_with_default_workdir(
         SYSTEM_SYSTEM_PROXY_KEY,
         SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY,
         SYSTEM_DEFAULT_TIME_ZONE_KEY,
+        SYSTEM_NOTIFICATIONS_KEY,
     ]
     .into_iter()
     .chain(

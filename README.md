@@ -113,6 +113,7 @@ LiveAgent is a **local-first** AI agent desktop client. It deeply integrates lar
 
 - **Persistent memory** — Markdown + SQLite FTS full-text search for cross-session knowledge management
 - **Scheduled tasks** — bash / http / prompt cron job types, executed automatically in the background
+- **System notifications** — calendar reminders, scheduled-task results and the Agent `Notify` tool show up as desktop system notifications with per-type switches; history and Do Not Disturb are left to the OS notification center and Focus modes
 
 ### 🌐 Remote Gateway
 

@@ -216,6 +216,7 @@ fn record_completed_run_decrements_and_disables_at_zero() {
             exit_code: Some(0),
             output: "ok".to_string(),
             counted: true,
+            skipped: false,
         })
         .expect("record run");
 
@@ -458,6 +459,7 @@ fn run_retention_prunes_old_rows() {
                 exit_code: Some(0),
                 output: format!("run {index}"),
                 counted: false,
+                skipped: false,
             })
             .expect("record run");
     }
@@ -1308,4 +1310,102 @@ mod occurrences {
         assert!(!result.time_zone.is_empty());
         assert!(store.cron_occurrences(query(now, now)).is_err());
     }
+}
+
+#[test]
+fn automation_reports_finished_runs_but_not_skips_or_restart_recovery() {
+    let (store, task) = store_with_task(create_bash_task_op("b1", "Backup"));
+    let run = |success: bool, skipped: bool, output: &str| CompletedRun {
+        task_id: task.id.clone(),
+        success,
+        started_at: db::now_ms(),
+        duration_ms: 5,
+        exit_code: Some(if success { 0 } else { 3 }),
+        output: output.to_string(),
+        counted: !skipped,
+        skipped,
+    };
+    store
+        .record_completed_run(run(false, false, "Command: x\nstderr:\n\nboom\n"))
+        .expect("record failure");
+    store
+        .record_completed_run(run(
+            false,
+            true,
+            "Skipped: previous run is still in progress.",
+        ))
+        .expect("record skip");
+    store
+        .record_completed_run(run(true, false, "ok"))
+        .expect("record success");
+    let finished = store.debug_finished_runs();
+    assert_eq!(finished.len(), 2, "skips are not reported: {finished:?}");
+    assert_eq!(finished[0].task_name, "Backup");
+    assert!(!finished[0].success);
+    assert_eq!(finished[0].excerpt, "boom");
+    assert!(finished[1].success);
+
+    // Prompt runs: completion and timeout are reported, restart recovery is not.
+    let (store, task) = store_with_task(create_prompt_task_op("p1"));
+    store.queue_prompt_run(&task, "", false).expect("queue");
+    let claims = store.claim_prompt_runs().expect("claim");
+    store
+        .complete_prompt_run(CompletePromptRunInput {
+            execution_id: claims[0].execution_id.clone(),
+            success: false,
+            duration_ms: 10,
+            output: "model error".to_string(),
+        })
+        .expect("complete");
+    store.queue_prompt_run(&task, "", false).expect("requeue");
+    let claims = store.claim_prompt_runs().expect("claim again");
+    store
+        .debug_set_run_lease(&claims[0].execution_id, db::now_ms() - 1_000)
+        .expect("force expiry");
+    store.sweep_expired_prompt_runs().expect("sweep");
+    store
+        .queue_prompt_run(&task, "", false)
+        .expect("queue before restart");
+    store
+        .recover_interrupted_prompt_runs()
+        .expect("recover after restart");
+    let finished = store.debug_finished_runs();
+    assert_eq!(finished.len(), 2, "{finished:?}");
+    assert_eq!(finished[0].excerpt, "model error");
+    assert!(finished[1].excerpt.contains("timed out"));
+}
+
+#[test]
+fn automation_run_notice_maps_outcome_to_category_and_throttles_per_task() {
+    use super::notifications::{
+        build_notice, output_excerpt, RunFinished, RUN_NOTICE_MIN_INTERVAL_MS,
+    };
+    use crate::services::notifications::{NotificationKind, NotificationService};
+
+    let service = NotificationService::new();
+    let failed = RunFinished {
+        task_id: "t1".into(),
+        task_name: "Backup".into(),
+        success: false,
+        excerpt: "exit 3".into(),
+    };
+    let notice = build_notice(&failed, &service);
+    assert_eq!(notice.kind, NotificationKind::CronFailure);
+    assert_eq!(notice.title, "Scheduled task failed: Backup");
+    assert_eq!(notice.body, "exit 3");
+    assert_eq!(
+        notice.throttle,
+        Some(("cron:t1:false".to_string(), RUN_NOTICE_MIN_INTERVAL_MS))
+    );
+    let succeeded = RunFinished {
+        success: true,
+        ..failed
+    };
+    let notice = build_notice(&succeeded, &service);
+    assert_eq!(notice.kind, NotificationKind::CronSuccess);
+    assert_eq!(notice.title, "Scheduled task finished: Backup");
+
+    assert_eq!(output_excerpt("Command: x\nstdout:\nhello\n"), "hello");
+    assert_eq!(output_excerpt("\n  first line \nsecond"), "first line");
+    assert_eq!(output_excerpt(&"x".repeat(300)).chars().count(), 200);
 }

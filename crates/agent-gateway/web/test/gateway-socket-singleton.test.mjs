@@ -35,3 +35,30 @@ test("单例 reset→create 也触发 replaced", () => {
   detach();
   resetGatewayWebSocketClient();
 });
+
+// 登录前挂上的日程订阅在单例被替换后必须改挂新实例并重拉（通知见 notifications-gateway 测试）。
+test("日程 backend 在登录替换单例后改挂新实例", () => {
+  globalThis.window ??= globalThis;
+  resetGatewayWebSocketClient();
+  storage.delete("liveagent.gateway.token");
+  const planning = loader.loadModule("src/lib/planning/backend.ts").backend;
+  let refetches = 0;
+  const release = planning.subscribe(() => {
+    refetches += 1;
+  });
+  try {
+    const before = getGatewayWebSocketClient("");
+    assert.equal(before.planningListeners.size, 1);
+    const beforeReplace = refetches;
+    storage.set("liveagent.gateway.token", "token-c");
+    const after = getGatewayWebSocketClient("token-c");
+    assert.notEqual(before, after);
+    assert.equal(before.planningListeners.size, 0);
+    assert.equal(after.planningListeners.size, 1);
+    assert.ok(refetches > beforeReplace);
+  } finally {
+    release();
+  }
+  assert.equal(getGatewayWebSocketClient("token-c").planningListeners.size, 0);
+  resetGatewayWebSocketClient();
+});

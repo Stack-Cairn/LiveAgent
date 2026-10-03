@@ -62,6 +62,9 @@ const SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY: &str = "cuaAllowSelfTargeting";
 // 全局默认时区(IANA 名,"" = 自动跟随桌面端 OS 时区)。日程快照、Cron 调度与
 // 记忆后台日期计算统一经 `load_runtime_default_time_zone` 解析。
 const SYSTEM_DEFAULT_TIME_ZONE_KEY: &str = "defaultTimeZone";
+// 桌面系统通知的类别开关（日程提醒 / 定时任务失败 / 定时任务成功 / Agent 消息），
+// 经 `load_runtime_notification_preferences` 读取。免打扰交给系统专注模式。
+const SYSTEM_NOTIFICATIONS_KEY: &str = "notifications";
 // 只读派生值:load 时注入「自动」档解析到的桌面 OS 时区,供前端(含 WebUI)展示与
 // 回退;不进保存白名单。
 const SYSTEM_RESOLVED_TIME_ZONE_KEY: &str = "resolvedTimeZone";

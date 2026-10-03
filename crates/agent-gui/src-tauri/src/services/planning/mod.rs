@@ -8,29 +8,11 @@ mod tests;
 pub mod time;
 mod trash;
 pub mod types;
-use std::sync::{Arc, RwLock};
+use crate::services::notifications::{Notice, NotificationKind, NotificationService};
+use std::sync::Arc;
 pub use store::PlanningStore;
 use tauri::{Emitter, Manager};
 pub use types::*;
-
-/// Reminder notification title, pushed by the frontend in the UI language
-/// (the backend has no locale of its own, same as the tray menu).
-static NOTIFICATION_TITLE: RwLock<String> = RwLock::new(String::new());
-
-pub fn set_notification_title(title: String) {
-    if let Ok(mut current) = NOTIFICATION_TITLE.write() {
-        *current = title.chars().take(120).collect();
-    }
-}
-
-fn notification_title() -> String {
-    NOTIFICATION_TITLE
-        .read()
-        .ok()
-        .filter(|title| !title.trim().is_empty())
-        .map(|title| title.clone())
-        .unwrap_or_else(|| "LiveAgent".into())
-}
 
 pub async fn handle_request(
     app: &tauri::AppHandle,
@@ -95,7 +77,42 @@ pub fn changed(app: &tauri::AppHandle, seq: u64) {
     }
 }
 
-pub fn start(app: tauri::AppHandle, store: Arc<PlanningStore>) {
+/// 到点超过这个时长才被领取的提醒（应用长时间未运行 / 睡眠）只视为已处理，不再补弹。
+pub const STALE_REMINDER_MS: i64 = 24 * 60 * 60 * 1000;
+
+pub fn is_stale_reminder(reminder: &Reminder, now: i64) -> bool {
+    now - reminder.snoozed_until.unwrap_or(reminder.trigger_at) > STALE_REMINDER_MS
+}
+
+/// 提醒投递结果是否算已处理：只有系统通知真正失败才保留原有退避重试；
+/// 类别关闭、节流、环境关闭或过期都视为已通知。
+fn deliver_reminder(notifications: &NotificationService, reminder: &Reminder, now: i64) -> bool {
+    if is_stale_reminder(reminder, now) {
+        return true;
+    }
+    let notice = Notice::new(
+        NotificationKind::PlanningReminder,
+        notifications.label(
+            "planningReminderTitle",
+            "LiveAgent · Calendar reminder",
+            &[],
+        ),
+        &reminder.title,
+    );
+    match notifications.notify(notice) {
+        Ok(_) => true,
+        Err(error) => {
+            eprintln!("planning reminder notification: {error}");
+            false
+        }
+    }
+}
+
+pub fn start(
+    app: tauri::AppHandle,
+    store: Arc<PlanningStore>,
+    notifications: Arc<NotificationService>,
+) {
     tauri::async_runtime::spawn(async move {
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(30));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -108,21 +125,10 @@ pub fn start(app: tauri::AppHandle, store: Arc<PlanningStore>) {
             match claimed {
                 Ok(Ok(reminders)) => {
                     for reminder in reminders {
-                        use tauri_plugin_notification::NotificationExt;
-                        let success = if std::env::var("LIVEAGENT_DISABLE_NOTIFICATIONS").as_deref()
-                            == Ok("1")
-                        {
-                            true
-                        } else {
-                            app.notification()
-                                .builder()
-                                .title(notification_title())
-                                .body(&reminder.title)
-                                .show()
-                                .is_ok()
-                        };
                         let worker = Arc::clone(&store);
+                        let notifications = Arc::clone(&notifications);
                         let _ = tauri::async_runtime::spawn_blocking(move || {
+                            let success = deliver_reminder(&notifications, &reminder, store::now());
                             worker.finish_notification(&reminder, success, store::now())
                         })
                         .await;
