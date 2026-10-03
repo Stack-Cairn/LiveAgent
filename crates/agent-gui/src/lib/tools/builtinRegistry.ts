@@ -31,6 +31,7 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
+import { createNotifyTools } from "./notifyTool";
 import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
 import { createPlanningTools } from "./planningTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
@@ -250,6 +251,7 @@ async function buildBaseBuiltinToolBundles(
         ]
       : []),
     createPlanningTools(),
+    createNotifyTools(),
     createCronTools({
       currentChatModel: params.currentChatModel,
       workdir: params.workdir,
