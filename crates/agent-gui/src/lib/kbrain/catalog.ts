@@ -83,7 +83,21 @@ export function projectKBrainSettings(
   settings: AppSettings,
   providers: CustomProvider[],
 ): AppSettings {
-  return { ...settings, customProviders: providers, selectedModel: undefined };
+  // settings.selectedModel mirrors K-brain's default model (loaded from and saved to
+  // defaultProvider/defaultModel), so new conversations start on the last chosen model.
+  // Keep it only while the backend catalog still offers that model.
+  const selected = settings.selectedModel;
+  const available =
+    selected &&
+    providers.some(
+      (provider) =>
+        provider.id === selected.customProviderId && provider.activeModels.includes(selected.model),
+    );
+  return {
+    ...settings,
+    customProviders: providers,
+    selectedModel: available ? selected : undefined,
+  };
 }
 
 type CatalogOptions = {

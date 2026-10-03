@@ -77,7 +77,12 @@ test("catalog projection keeps opaque backend IDs, deduplicates pairs and never 
   }
   const projected = projectKBrainSettings(direct, providers);
   assert.equal(projected.customProviders, providers);
-  assert.equal(projected.selectedModel, undefined);
+  assert.equal(projected.selectedModel, undefined, "a selection missing from the catalog is dropped");
+  const kept = projectKBrainSettings(
+    { ...direct, selectedModel: { customProviderId: "backend-anthropic-account", model: "claude-other" } },
+    providers,
+  );
+  assert.deepEqual(kept.selectedModel, { customProviderId: "backend-anthropic-account", model: "claude-other" });
   assert.equal(projected.system, direct.system);
   assert.equal(JSON.stringify(direct), before);
 });
@@ -101,6 +106,7 @@ test("real catalog and selection hooks fetch /v1/models with the runtime connect
     const direct = directSettings();
     const before = JSON.stringify(direct);
     let snapshot, writes = 0;
+    const settingsWrites = [];
     const entryRef = { current: new Map([["conversation", { isSending: false }]]) };
     const idRef = { current: "conversation" };
     const rows = new Map();
@@ -111,7 +117,8 @@ test("real catalog and selection hooks fetch /v1/models with the runtime connect
       const catalog = useKBrainCatalogSettings(settings);
       const selection = useChatModelSelection({
         settings: catalog.settings,
-        setSettings() { writes++; },
+        // In the app the persisted settings hold the K-brain providers (same IDs as the catalog).
+        setSettings(updater) { writes++; settingsWrites.push(updater({ ...direct, customProviders: catalog.settings.customProviders })); },
         t: key => key,
         sidebarStore,
         sidebarConversationsById: rows,
@@ -152,7 +159,9 @@ test("real catalog and selection hooks fetch /v1/models with the runtime connect
     assert.equal(effective.provider.apiKey, "");
     assert.equal(effective.selectedModel.customProviderId, "backend-anthropic-account", "turn model.provider must use the backend ID");
     assert.deepEqual(JSON.parse(historyWrites.at(-1).selectedModelJson), selection);
-    assert.equal(writes, 0);
+    // The pick also becomes the default model (saved to K-brain) so a restart restores it.
+    assert.equal(writes, 1);
+    assert.deepEqual(settingsWrites[0].selectedModel, selection);
     assert.equal(JSON.stringify(direct), before);
     assert.equal(snapshot.catalog.settings.customProviders[0].apiKey, "");
     const modelOptions = snapshot.selection.modelOptions;
@@ -163,7 +172,7 @@ test("real catalog and selection hooks fetch /v1/models with the runtime connect
     rows.set("conversation", { selectedModelJson: JSON.stringify(restored) });
     await act(async () => root.render(React.createElement(Page, { theme: "light" })));
     assert.deepEqual(snapshot.selection.activeSelectedModel, restored, "history-sync must validate against the same backend catalog");
-    assert.equal(writes, 0);
+    assert.equal(writes, 1, "history-sync never rewrites the default model");
     assert.equal(JSON.stringify(direct), before);
   });
 });
