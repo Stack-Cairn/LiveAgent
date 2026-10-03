@@ -9,23 +9,50 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "../../i18n/index";
 import { useCheckpointRewindAction } from "../../lib/chat/checkpointRewind";
+import { cachedDateTimeFormat } from "../../lib/shared/intlFormatters";
 import { cn } from "../../lib/shared/utils";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
 import { type UsageDetailEntry, UsageInfoPopover } from "./UsagePanel";
 
-export function formatTranscriptMessageTimestamp(timestamp: number | undefined) {
+// 智能时间格式：今天只显示时钟（20:34），今年跨天加月日（9月30日 20:34），
+// 跨年补全年份（2025年12月31日 20:34）。中文用直排格式，其他语言走 Intl。
+// 与 ConversationSearchDialog.formatUpdatedAt 保持同一套 zh / Intl 分流模式。
+export function formatTranscriptMessageTimestamp(timestamp: number | undefined, locale?: string) {
   if (!timestamp || !Number.isFinite(timestamp)) return "";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "";
   const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  if (sameDay) return clock;
+  const sameYear = date.getFullYear() === now.getFullYear();
+  if ((locale ?? "zh-CN").toLowerCase().startsWith("zh")) {
+    const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+    return sameYear ? `${monthDay} ${clock}` : `${date.getFullYear()}年${monthDay} ${clock}`;
+  }
+  const dayFormat = cachedDateTimeFormat(locale ?? "en-US", "transcript-ts-day", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+  if (sameYear) return `${dayFormat} ${clock}`;
+  const fullFormat = cachedDateTimeFormat(locale ?? "en-US", "transcript-ts-full", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+  return `${fullFormat} ${clock}`;
 }
 
 // Keep the clock inside the action-button chrome so hover show/hide cannot
 // desync. Use a color token (not `text-muted-foreground/70`) so a /opacity
 // modifier cannot override the parent chrome's `opacity: 0`.
 function TranscriptTimestampLabel(props: { timestamp?: number; className?: string }) {
-  const label = formatTranscriptMessageTimestamp(props.timestamp);
+  const { locale } = useLocale();
+  const label = formatTranscriptMessageTimestamp(props.timestamp, locale);
   if (!label) return null;
   return (
     <span
