@@ -1447,6 +1447,10 @@ fn era_cache_key(cfg: &McpServerConfig) -> String {
 
 enum ProbeOutcome {
     Modern(String),
+    /// `server/discover` 成功但结果缺规范必填的 `supportedVersions`：可能是对
+    /// 未知方法也回成功的 legacy server，也可能是不合规的 modern server。先试
+    /// initialize，握手失败再按该版本走 modern。
+    Unconfirmed(String),
     /// 对端不是 modern server（或只支持 legacy 版本）：走 initialize。
     Legacy {
         timed_out: bool,
@@ -1468,7 +1472,8 @@ struct McpClient {
     initialized: bool,
     era: Option<ProtocolEra>,
     /// modern Streamable HTTP：工具名 → `x-mcp-header` 标注（来自 tools/list）。
-    tool_param_headers: HashMap<String, Vec<ParamHeader>>,
+    /// None 表示本 client 还没在 modern HTTP 下拉过工具列表，标注未知。
+    tool_param_headers: Option<HashMap<String, Vec<ParamHeader>>>,
 }
 
 /// 组成带稳定标记的「需授权」错误：前端/诊断按标记引导用户去 MCP Hub Connect。
@@ -1512,12 +1517,17 @@ impl McpClient {
             next_id: 1,
             initialized: false,
             era: None,
-            tool_param_headers: HashMap::new(),
+            tool_param_headers: None,
         })
     }
 
     fn is_modern(&self) -> bool {
         matches!(self.era, Some(ProtocolEra::Modern(_)))
+    }
+
+    /// 只有 modern Streamable HTTP 需要把 `x-mcp-header` 参数镜像到请求头。
+    fn mirrors_param_headers(&self) -> bool {
+        self.is_modern() && matches!(self.transport, McpTransport::Http(_))
     }
 
     fn protocol_version(&self) -> Option<String> {
@@ -1594,11 +1604,19 @@ impl McpClient {
                 Ok(())
             }
             ProbeOutcome::Fatal(e) => Err(e),
+            ProbeOutcome::Unconfirmed(v) => {
+                if self.legacy_initialize().is_err() {
+                    self.set_era(ProtocolEra::Modern(v));
+                }
+                Ok(())
+            }
             ProbeOutcome::Legacy { timed_out } => {
-                self.respawn_if_exited()?;
+                // 探测可能让进程退出，最多重启一次：退出可能在握手前就能观察到，
+                // 也可能晚于探测结果、到握手失败才暴露。新进程收不到探测，握手
+                // 再失败就是真故障，不再重启。
+                let respawned = self.respawn_if_exited()?;
                 let legacy = match self.legacy_initialize() {
-                    // 进程可能在处理探测请求时才退出：重启后（新进程不会再收到探测）再握手一次。
-                    Err(_) if self.respawn_if_exited()? => self.legacy_initialize(),
+                    Err(_) if !respawned && self.respawn_if_exited()? => self.legacy_initialize(),
                     other => other,
                 };
                 match legacy {
@@ -1616,7 +1634,8 @@ impl McpClient {
     /// legacy 握手失败后的最后一次 modern 探测；仍判 legacy 则报握手错误。
     fn finish_probe(&mut self, timeout: Duration, legacy_err: String) -> Result<(), String> {
         match self.probe_modern(timeout) {
-            ProbeOutcome::Modern(v) => {
+            // 握手已经失败过，discover 有响应就按 modern 走。
+            ProbeOutcome::Modern(v) | ProbeOutcome::Unconfirmed(v) => {
                 self.set_era(ProtocolEra::Modern(v));
                 Ok(())
             }
@@ -1657,7 +1676,7 @@ impl McpClient {
                 Ok(result) => {
                     let supported = mcp_protocol::discover_supported_versions(&result);
                     if supported.is_empty() {
-                        return ProbeOutcome::Modern(version);
+                        return ProbeOutcome::Unconfirmed(version);
                     }
                     return match mcp_protocol::choose_version(&supported) {
                         VersionChoice::Modern(v) => ProbeOutcome::Modern(v),
@@ -1874,9 +1893,8 @@ impl McpClient {
 
         // modern Streamable HTTP 要把 `x-mcp-header` 标注的参数镜像到请求头；
         // 标注违反约束的工具定义按规范必须拒收。
-        let mirror_param_headers =
-            self.is_modern() && matches!(self.transport, McpTransport::Http(_));
-        self.tool_param_headers.clear();
+        let mirror_param_headers = self.mirrors_param_headers();
+        let mut param_headers = HashMap::new();
 
         let mut out: Vec<McpToolInfo> = Vec::new();
         for t in tools {
@@ -1898,7 +1916,7 @@ impl McpClient {
                 match mcp_protocol::param_headers_from_schema(&input_schema) {
                     Ok(headers) if headers.is_empty() => {}
                     Ok(headers) => {
-                        self.tool_param_headers.insert(name.to_string(), headers);
+                        param_headers.insert(name.to_string(), headers);
                     }
                     Err(reason) => {
                         eprintln!(
@@ -1919,6 +1937,7 @@ impl McpClient {
             });
         }
 
+        self.tool_param_headers = mirror_param_headers.then_some(param_headers);
         Ok(out)
     }
 
@@ -1943,8 +1962,23 @@ impl McpClient {
         arguments: Value,
     ) -> Result<McpCallToolResponse, String> {
         self.ensure_initialized()?;
-        let param_header_values = |client: &Self| match client.tool_param_headers.get(tool_name) {
-            Some(headers) if client.is_modern() => {
+        // 规范要求调用时就带上 `Mcp-Param-*`：client 重建后（改配置、重启）还没
+        // 拉过工具列表时先拉一次拿到标注，而不是等 server 回 HeaderMismatch 再补。
+        // 拉取失败不拦调用，真正的错误由 tools/call 本身报出。
+        if self.mirrors_param_headers() && self.tool_param_headers.is_none() {
+            if let Err(e) = self.tools_list() {
+                eprintln!(
+                    "[mcp] tools/list before tools/call failed for server `{}`: {e}",
+                    self.config.id
+                );
+            }
+        }
+        let param_header_values = |client: &Self| match client
+            .tool_param_headers
+            .as_ref()
+            .and_then(|map| map.get(tool_name))
+        {
+            Some(headers) if client.mirrors_param_headers() => {
                 mcp_protocol::param_header_values(headers, &arguments)
             }
             _ => Vec::new(),
@@ -1959,8 +1993,8 @@ impl McpClient {
             Err(McpTransportError::Rpc { code, .. })
                 if code == mcp_protocol::ERR_HEADER_MISMATCH && self.is_modern() =>
             {
-                // 工具 inputSchema 的 x-mcp-header 标注可能变了（或尚未 tools/list）：
-                // 刷新后带上新的 Mcp-Param-* 头重试一次。
+                // 工具 inputSchema 的 x-mcp-header 标注可能变了：刷新后带上新的
+                // Mcp-Param-* 头重试一次。
                 self.tools_list()?;
                 let headers = param_header_values(self);
                 self.request_with_retry_raw("tools/call", params, &headers)
@@ -3089,7 +3123,7 @@ mod tests {
     }
 
     #[test]
-    fn modern_tools_call_refreshes_param_headers_on_header_mismatch() {
+    fn modern_tools_call_preloads_param_headers_on_fresh_client() {
         let (url, log) = spawn_mock_http(|req| match req.method() {
             "server/discover" => ok_result(
                 req,
@@ -3108,13 +3142,123 @@ mod tests {
             _ => error_response(req, 400, -32020, Value::Null),
         });
 
-        // 未先 tools/list：首个 tools/call 缺 Mcp-Param-Db → HeaderMismatch → 刷新后重试。
-        let mut client = McpClient::spawn(url_config("mismatch-http", "http", Some(&url))).unwrap();
+        // client 重建后直接调用：先拉工具列表拿到标注，首个 tools/call 就带上 Mcp-Param-Db。
+        let mut client = McpClient::spawn(url_config("preload-http", "http", Some(&url))).unwrap();
         client.tools_call("q", json!({ "db": "main" })).unwrap();
         assert_eq!(
             methods(&log),
-            vec!["server/discover", "tools/call", "tools/list", "tools/call"]
+            vec!["server/discover", "tools/list", "tools/call"]
         );
+    }
+
+    #[test]
+    fn modern_tools_call_refreshes_param_headers_on_header_mismatch() {
+        // 第一次 tools/list 还没有标注，之后 server 给 db 加上了 x-mcp-header。
+        let lists = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let lists_in_handler = lists.clone();
+        let (url, log) = spawn_mock_http(move |req| match req.method() {
+            "server/discover" => ok_result(
+                req,
+                json!({ "resultType": "complete", "supportedVersions": ["2026-07-28"], "capabilities": {} }),
+            ),
+            "tools/list" => {
+                let db = if lists_in_handler.fetch_add(1, Ordering::SeqCst) == 0 {
+                    json!({ "type": "string" })
+                } else {
+                    json!({ "type": "string", "x-mcp-header": "Db" })
+                };
+                ok_result(
+                    req,
+                    json!({ "resultType": "complete", "tools": [{
+                        "name": "q",
+                        "inputSchema": { "type": "object", "properties": { "db": db } }
+                    }] }),
+                )
+            }
+            "tools/call" if req.header("mcp-param-db") == Some("main") => {
+                ok_result(req, json!({ "resultType": "complete", "content": [] }))
+            }
+            _ => error_response(req, 400, -32020, Value::Null),
+        });
+
+        // 标注是旧的：首个 tools/call 缺 Mcp-Param-Db → HeaderMismatch → 刷新后重试。
+        let mut client = McpClient::spawn(url_config("mismatch-http", "http", Some(&url))).unwrap();
+        client.tools_list().unwrap();
+        client.tools_call("q", json!({ "db": "main" })).unwrap();
+        assert_eq!(
+            methods(&log),
+            vec![
+                "server/discover",
+                "tools/list",
+                "tools/call",
+                "tools/list",
+                "tools/call"
+            ]
+        );
+        assert_eq!(lists.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn discover_result_without_versions_tries_initialize_first() {
+        // 对未知方法也回成功的 legacy server：不能因为 discover「成功」就判 modern。
+        let (url, log) = spawn_mock_http(|req| match req.method() {
+            "initialize" => {
+                let mut resp = ok_result(
+                    req,
+                    json!({ "protocolVersion": "2025-06-18", "capabilities": {} }),
+                );
+                resp.headers.push(("Mcp-Session-Id", "sess-1".to_string()));
+                resp
+            }
+            "notifications/initialized" => accepted(),
+            "tools/list" if req.header("mcp-session-id") == Some("sess-1") => ok_result(
+                req,
+                json!({ "tools": [{ "name": "echo", "inputSchema": { "type": "object" } }] }),
+            ),
+            "tools/list" => error_response(req, 400, -32000, Value::Null),
+            _ => ok_result(req, json!({})),
+        });
+
+        let mut client =
+            McpClient::spawn(url_config("catch-all-http", "http", Some(&url))).unwrap();
+        assert_eq!(client.tools_list().unwrap().len(), 1);
+        assert_eq!(client.protocol_version().as_deref(), Some("2025-06-18"));
+        assert_eq!(
+            methods(&log),
+            vec![
+                "server/discover",
+                "initialize",
+                "notifications/initialized",
+                "tools/list"
+            ]
+        );
+    }
+
+    #[test]
+    fn discover_result_without_versions_falls_back_to_modern_when_initialize_fails() {
+        // 不合规的 modern server：discover 缺 supportedVersions，且拒绝 initialize。
+        let (url, log) = spawn_mock_http(|req| {
+            let has_meta = req.body["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"]
+                .as_str()
+                .is_some();
+            match req.method() {
+                "server/discover" => ok_result(req, json!({ "resultType": "complete" })),
+                "tools/list" if has_meta => ok_result(
+                    req,
+                    json!({ "resultType": "complete", "tools": [{ "name": "a" }] }),
+                ),
+                _ => error_response(req, 400, -32602, Value::Null),
+            }
+        });
+
+        let mut client =
+            McpClient::spawn(url_config("lax-modern-http", "http", Some(&url))).unwrap();
+        assert_eq!(client.tools_list().unwrap().len(), 1);
+        assert_eq!(client.protocol_version().as_deref(), Some("2026-07-28"));
+        let methods = methods(&log);
+        assert_eq!(methods.first().map(String::as_str), Some("server/discover"));
+        assert_eq!(methods.last().map(String::as_str), Some("tools/list"));
+        assert!(methods.iter().any(|m| m == "initialize"));
     }
 
     #[test]
@@ -3293,5 +3437,25 @@ done"#
         let mut client = McpClient::spawn(sh_server("exiting-legacy-stdio", &script)).unwrap();
         client.tools_list().unwrap();
         assert_eq!(client.protocol_version().as_deref(), Some("2025-03-26"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn crashing_stdio_server_is_respawned_at_most_once() {
+        // 启动即退出的 server：探测后最多重启一次，握手再失败直接报错。
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let counter = std::env::temp_dir().join(format!(
+            "liveagent-mcp-spawns-{}-{nanos}",
+            std::process::id()
+        ));
+        let script = format!("printf x >> '{}'; exit 1", counter.display());
+        let mut client = McpClient::spawn(sh_server("crashing-stdio", &script)).unwrap();
+        assert!(client.tools_list().is_err());
+        let spawns = std::fs::read_to_string(&counter).unwrap_or_default().len();
+        let _ = std::fs::remove_file(&counter);
+        assert_eq!(spawns, 2);
     }
 }

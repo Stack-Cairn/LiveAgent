@@ -631,6 +631,7 @@ function formatMcpManagerResult(result: McpManagerExecutionResult) {
       `test=${result.test.ok ? "ok" : "failed"} phase=${result.test.phase} durationMs=${result.test.durationMs}`,
     );
     lines.push(`tools=${result.test.toolsCount}`);
+    if (result.test.protocolVersion) lines.push(`protocolVersion=${result.test.protocolVersion}`);
     if (result.test.error) lines.push(`error=${result.test.error}`);
     if (result.test.stderrTail) lines.push(result.test.stderrTail);
   }

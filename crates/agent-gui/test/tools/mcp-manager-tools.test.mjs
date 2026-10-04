@@ -534,6 +534,7 @@ test("McpManager test calls runtime and hides stderr unless requested", async ()
           ],
           error: null,
           stderrTail: "diagnostic stderr",
+          protocolVersion: "2026-07-28",
         };
       }
       throw new Error(`unexpected invoke: ${command}`);
@@ -544,6 +545,7 @@ test("McpManager test calls runtime and hides stderr unless requested", async ()
   const diagnoseResult = await callMcpManager(bundle, { action: "diagnose", server_id: "demo" });
 
   assert.equal(testResult.isError, false);
+  assert.match(testResult.content[0].text, /^protocolVersion=2026-07-28$/m);
   assert.doesNotMatch(testResult.content[0].text, /diagnostic stderr/);
   assert.equal(diagnoseResult.isError, false);
   assert.match(diagnoseResult.content[0].text, /diagnostic stderr/);
