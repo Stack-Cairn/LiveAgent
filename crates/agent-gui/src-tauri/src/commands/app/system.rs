@@ -274,6 +274,36 @@ fn is_archive_upload(path: &Path) -> bool {
         || name.ends_with(".tar.xz")
 }
 
+/// 用户明确声明为文本的扩展名：内容嗅探判为二进制（夹杂 NUL、控制字符，
+/// 如串口/抓包导出的日志）时仍按文本接收，原样暂存，由 Read 宽松解码兜底。
+fn is_declared_text_upload(path: &Path) -> bool {
+    matches!(
+        upload_extension_lower(path).as_deref(),
+        Some("txt")
+            | Some("text")
+            | Some("log")
+            | Some("out")
+            | Some("csv")
+            | Some("tsv")
+            | Some("md")
+            | Some("markdown")
+            | Some("json")
+            | Some("jsonl")
+            | Some("ndjson")
+            | Some("xml")
+            | Some("yaml")
+            | Some("yml")
+            | Some("toml")
+            | Some("ini")
+            | Some("cfg")
+            | Some("conf")
+            | Some("properties")
+            | Some("srt")
+            | Some("vtt")
+            | Some("sql")
+    )
+}
+
 fn normalized_mime_matches(mime_type: Option<&str>, candidates: &[&str]) -> bool {
     let Some(normalized) = mime_type
         .map(str::trim)
@@ -356,6 +386,89 @@ enum UploadTextClass {
     Binary,
 }
 
+/// 正文中不应出现的 C0 控制字符：文本只用 \t \n \r（含少量 \x0C 换页、
+/// \x1B 转义），NUL 单独处理。
+fn is_suspicious_text_control(code: u32) -> bool {
+    matches!(code, 0x01..=0x08 | 0x0B | 0x0E..=0x1A | 0x1C..=0x1F | 0x7F)
+}
+
+/// 识别无 BOM 的 UTF-16（部分导出工具、PowerShell 重定向等会产出）：ASCII
+/// 字符的高字节恒为 0x00，集中落在奇数位（LE）或偶数位（BE）。要求 NUL
+/// 明显偏向一侧、解码几乎无错且无异常控制字符，避免把整数数组等二进制当文本。
+fn detect_bomless_utf16(bytes: &[u8]) -> Option<&'static encoding_rs::Encoding> {
+    let units = bytes.len() / 2;
+    if units < 2 {
+        return None;
+    }
+    let even = &bytes[..units * 2];
+    let (mut even_nul, mut odd_nul) = (0usize, 0usize);
+    for (index, byte) in even.iter().enumerate() {
+        if *byte == 0 {
+            if index % 2 == 0 {
+                even_nul += 1;
+            } else {
+                odd_nul += 1;
+            }
+        }
+    }
+    let (encoding, dominant, other) = if odd_nul >= even_nul {
+        (encoding_rs::UTF_16LE, odd_nul, even_nul)
+    } else {
+        (encoding_rs::UTF_16BE, even_nul, odd_nul)
+    };
+    // 至少 40% 的码元是 ASCII/Latin-1；另一侧的 0x00 只可能来自 U+xx00 字符，
+    // 正常文本里极少，超过 2% 视为二进制结构。
+    if dominant * 5 < units * 2 || other * 50 > units {
+        return None;
+    }
+    let (text, _) = encoding.decode_without_bom_handling(even);
+    let mut chars = 0usize;
+    let mut replacements = 0usize;
+    let mut suspicious = 0usize;
+    for ch in text.chars() {
+        chars += 1;
+        if ch == '\u{FFFD}' {
+            replacements += 1;
+        } else if ch == '\0' || is_suspicious_text_control(ch as u32) {
+            suspicious += 1;
+        }
+    }
+    // 探测前缀可能切断末尾代理对，容忍一个替换字符。
+    if replacements > 1 || suspicious * 32 > chars {
+        return None;
+    }
+    Some(encoding)
+}
+
+/// 基本是 UTF-8、只夹杂少量非法字节（日志里混入的坏字节等）：按 UTF-8
+/// 宽松解码，比交给 chardetng 猜成单字节编码更不容易把中文弄成乱码。
+fn is_mostly_utf8(bytes: &[u8]) -> bool {
+    let invalid: usize = bytes.utf8_chunks().map(|chunk| chunk.invalid().len()).sum();
+    invalid * 100 <= bytes.len()
+}
+
+/// 按扩展名放行的文本可能夹带 NUL/控制字符：内联为原生附件前替换成
+/// U+FFFD，部分供应商会拒绝含 NUL 的 text/plain 内容。输入须为 UTF-8。
+fn sanitize_inline_text_controls(bytes: Vec<u8>) -> Vec<u8> {
+    let needs_sanitize = bytes
+        .iter()
+        .any(|byte| *byte == 0 || is_suspicious_text_control(u32::from(*byte)));
+    if !needs_sanitize {
+        return bytes;
+    }
+    String::from_utf8_lossy(&bytes)
+        .chars()
+        .map(|ch| {
+            if ch == '\0' || is_suspicious_text_control(ch as u32) {
+                '\u{FFFD}'
+            } else {
+                ch
+            }
+        })
+        .collect::<String>()
+        .into_bytes()
+}
+
 /// 上传文本判定不能只做严格 UTF-8 校验：中文 Windows 上 .txt 常见 GBK/
 /// UTF-16（记事本"Unicode"），且探测只取前缀，UTF-8 多字节字符被截断
 /// 也会导致严格校验失败——这两类都不是二进制文件。
@@ -368,6 +481,9 @@ fn classify_upload_text_bytes(bytes: &[u8], prefix_truncated: bool) -> UploadTex
         return UploadTextClass::NeedsTranscode;
     }
     if bytes.contains(&0) {
+        if detect_bomless_utf16(bytes).is_some() {
+            return UploadTextClass::NeedsTranscode;
+        }
         return UploadTextClass::Binary;
     }
     let stripped = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
@@ -385,11 +501,10 @@ fn classify_upload_text_bytes(bytes: &[u8], prefix_truncated: bool) -> UploadTex
         }
     }
     // 无 NUL 且非 UTF-8：按控制字符占比区分传统编码文本与二进制。
-    // GBK/Big5/Shift-JIS 的多字节序列全部落在 0x80 以上，正文控制字符
-    // 只应出现 \t \n \r（含少量 \x0C 换页、\x1B 转义）。
+    // GBK/Big5/Shift-JIS 的多字节序列全部落在 0x80 以上。
     let suspicious = stripped
         .iter()
-        .filter(|byte| matches!(**byte, 0x01..=0x08 | 0x0B | 0x0E..=0x1A | 0x1C..=0x1F | 0x7F))
+        .filter(|byte| is_suspicious_text_control(u32::from(**byte)))
         .count();
     if suspicious * 32 > stripped.len() {
         UploadTextClass::Binary
@@ -407,9 +522,10 @@ fn classify_upload_text_file(path: &Path) -> Result<UploadTextClass, String> {
 /// 把非 UTF-8 编码的文本转码为 UTF-8。输入必须是完整文件内容（分类可能
 /// 基于截断前缀，这里先复查完整字节，合法 UTF-8 原样返回）。
 fn transcode_upload_text_to_utf8(bytes: &[u8]) -> Vec<u8> {
-    if bytes.is_empty() || std::str::from_utf8(bytes).is_ok() {
-        return bytes.to_vec();
+    if bytes.is_empty() {
+        return Vec::new();
     }
+    // BOM 字节在 UTF-8 中非法，先判 BOM 不会误伤合法 UTF-8。
     if bytes.starts_with(&[0xFF, 0xFE]) {
         let (text, _, _) = encoding_rs::UTF_16LE.decode(bytes);
         return text.into_owned().into_bytes();
@@ -417,6 +533,20 @@ fn transcode_upload_text_to_utf8(bytes: &[u8]) -> Vec<u8> {
     if bytes.starts_with(&[0xFE, 0xFF]) {
         let (text, _, _) = encoding_rs::UTF_16BE.decode(bytes);
         return text.into_owned().into_bytes();
+    }
+    // 无 BOM 的 UTF-16 ASCII 文本（"h\0i\0"）本身就是合法 UTF-8，必须
+    // 先于 UTF-8 校验识别。
+    if bytes.contains(&0) {
+        if let Some(encoding) = detect_bomless_utf16(bytes) {
+            let (text, _) = encoding.decode_without_bom_handling(bytes);
+            return text.into_owned().into_bytes();
+        }
+    }
+    if std::str::from_utf8(bytes).is_ok() {
+        return bytes.to_vec();
+    }
+    if is_mostly_utf8(bytes) {
+        return String::from_utf8_lossy(bytes).into_owned().into_bytes();
     }
     let mut detector = chardetng::EncodingDetector::new();
     detector.feed(bytes, true);
@@ -474,6 +604,9 @@ fn detect_upload_file_kind(path: &Path) -> Result<DetectedUploadKind, String> {
     if let Some(detected) = DetectedUploadKind::from_text_class(classify_upload_text_file(path)?) {
         return Ok(detected);
     }
+    if is_declared_text_upload(path) {
+        return Ok(DetectedUploadKind::plain("text"));
+    }
     Err(format!(
         "{} 不是当前 Read 支持解析的文本/图片/PDF/notebook/Word/Excel/压缩包文件",
         path.display()
@@ -520,6 +653,13 @@ fn detect_uploaded_bytes_kind(
         DetectedUploadKind::from_text_class(classify_upload_text_bytes(bytes, false))
     {
         return Ok(detected);
+    }
+    let declared_text_mime = normalized_mime
+        .as_deref()
+        .map(|value| value.starts_with("text/"))
+        .unwrap_or(false);
+    if is_declared_text_upload(path) || declared_text_mime {
+        return Ok(DetectedUploadKind::plain("text"));
     }
 
     Err(format!(
@@ -1523,7 +1663,7 @@ pub(crate) fn system_read_uploaded_native_attachment_sync(
     // 等编码（导入时不改写用户文件），JS 侧 decodeBase64Utf8 与各家 API 都按
     // UTF-8 解读 text/plain，这里在读取侧转码。
     let bytes = if kind.as_deref() == Some("text") {
-        transcode_upload_text_to_utf8(&bytes)
+        sanitize_inline_text_controls(transcode_upload_text_to_utf8(&bytes))
     } else {
         bytes
     };
@@ -4203,6 +4343,192 @@ mod tests {
 
         assert_eq!(response.mime_type, "text/plain");
         let expected = "中文测试文本".repeat(8);
+        assert_eq!(response.data, BASE64_STANDARD.encode(expected.as_bytes()));
+        assert_eq!(response.size_bytes, expected.len() as u64);
+    }
+
+    fn utf16_bytes(text: &str, big_endian: bool) -> Vec<u8> {
+        text.encode_utf16()
+            .flat_map(|unit| {
+                if big_endian {
+                    unit.to_be_bytes()
+                } else {
+                    unit.to_le_bytes()
+                }
+            })
+            .collect()
+    }
+
+    /// 夹杂 NUL 与控制字符的日志：嗅探判为二进制，但 .txt 声明为文本。
+    fn binary_laced_log() -> Vec<u8> {
+        let mut bytes = "设备日志 start\n".as_bytes().to_vec();
+        bytes.extend_from_slice(&[0x00, 0x01, 0x02, 0x00, 0xFF, 0x00]);
+        bytes.extend_from_slice("\nend 结束\n".as_bytes());
+        bytes
+    }
+
+    #[test]
+    fn classify_upload_text_bytes_detects_bomless_utf16() {
+        let sample = "hello world, 你好\r\n".repeat(4);
+        assert_eq!(
+            classify_upload_text_bytes(&utf16_bytes(&sample, false), false),
+            UploadTextClass::NeedsTranscode
+        );
+        assert_eq!(
+            classify_upload_text_bytes(&utf16_bytes(&sample, true), false),
+            UploadTextClass::NeedsTranscode
+        );
+        // 探测前缀截断在奇数字节处也不能误判为二进制。
+        let mut truncated = utf16_bytes(&sample, false);
+        truncated.pop();
+        assert_eq!(
+            classify_upload_text_bytes(&truncated, true),
+            UploadTextClass::NeedsTranscode
+        );
+        // 小整数的 u32 数组：NUL 分布在两侧，仍是二进制。
+        let ints: Vec<u8> = (1u32..64).flat_map(|value| value.to_le_bytes()).collect();
+        assert_eq!(
+            classify_upload_text_bytes(&ints, false),
+            UploadTextClass::Binary
+        );
+        // u16 小整数数组：NUL 偏向一侧但解码全是控制字符，仍是二进制。
+        let shorts: Vec<u8> = (1u16..32).flat_map(|value| value.to_le_bytes()).collect();
+        assert_eq!(
+            classify_upload_text_bytes(&shorts, false),
+            UploadTextClass::Binary
+        );
+    }
+
+    #[test]
+    fn transcode_upload_text_handles_bomless_utf16_and_mostly_utf8() {
+        let sample = "hello world, 你好\r\n".repeat(4);
+        assert_eq!(
+            String::from_utf8(transcode_upload_text_to_utf8(&utf16_bytes(&sample, false)))
+                .expect("utf16le to utf8"),
+            sample
+        );
+        assert_eq!(
+            String::from_utf8(transcode_upload_text_to_utf8(&utf16_bytes(&sample, true)))
+                .expect("utf16be to utf8"),
+            sample
+        );
+
+        // 大段 UTF-8 中文夹一个坏字节：按 UTF-8 宽松解码，中文不被猜成乱码。
+        let mut mostly = "中文日志内容".repeat(40).into_bytes();
+        mostly.push(0xFF);
+        mostly.extend_from_slice("尾部".as_bytes());
+        let decoded =
+            String::from_utf8(transcode_upload_text_to_utf8(&mostly)).expect("lossy utf8 output");
+        assert!(decoded.starts_with(&"中文日志内容".repeat(40)));
+        assert!(decoded.ends_with("\u{FFFD}尾部"));
+    }
+
+    #[test]
+    fn detect_upload_kind_accepts_declared_text_with_binary_bytes() {
+        let temp = tempdir().expect("create temp dir");
+        let txt = temp.path().join("device.txt");
+        fs::write(&txt, binary_laced_log()).expect("write laced txt");
+        let detected = detect_upload_file_kind(&txt).expect(".txt must be accepted");
+        assert_eq!(detected.kind, "text");
+        assert!(!detected.needs_utf8_transcode);
+
+        // 未声明为文本的扩展名仍按内容拒收。
+        let bin = temp.path().join("device.dat");
+        fs::write(&bin, binary_laced_log()).expect("write laced dat");
+        assert!(detect_upload_file_kind(&bin).is_err());
+
+        let from_bytes = detect_uploaded_bytes_kind("device.log", None, &binary_laced_log())
+            .expect(".log upload must be accepted");
+        assert_eq!(from_bytes.kind, "text");
+        let from_mime = detect_uploaded_bytes_kind("clip", Some("text/plain"), &binary_laced_log())
+            .expect("text/* upload must be accepted");
+        assert_eq!(from_mime.kind, "text");
+        assert!(detect_uploaded_bytes_kind("clip", None, &binary_laced_log()).is_err());
+    }
+
+    #[test]
+    fn import_external_binary_laced_txt_keeps_raw_copy() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        let external = temp.path().join("external");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        fs::create_dir_all(&external).expect("create external dir");
+        let source = external.join("device.txt");
+        fs::write(&source, binary_laced_log()).expect("write laced source");
+
+        let response = system_import_readable_file_paths_sync(
+            workdir.to_string_lossy().into_owned(),
+            vec![source.to_string_lossy().into_owned()],
+            None,
+        )
+        .expect("import laced txt");
+
+        assert!(
+            response.skipped.is_empty(),
+            "skipped = {:?}",
+            response.skipped
+        );
+        assert_eq!(response.files.len(), 1);
+        assert_eq!(response.files[0].kind, "text");
+        assert_eq!(
+            fs::read(&response.files[0].absolute_path).expect("read staged copy"),
+            binary_laced_log()
+        );
+
+        if let Some(parent) = Path::new(&response.files[0].absolute_path).parent() {
+            let _ = fs::remove_dir_all(parent);
+        }
+    }
+
+    #[test]
+    fn import_external_bomless_utf16_file_is_transcoded_to_utf8() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        let external = temp.path().join("external");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        fs::create_dir_all(&external).expect("create external dir");
+        let source = external.join("export.txt");
+        let sample = "name,value\r\nalpha,1\r\n中文,2\r\n".repeat(8);
+        fs::write(&source, utf16_bytes(&sample, false)).expect("write utf16 source");
+
+        let response = system_import_readable_file_paths_sync(
+            workdir.to_string_lossy().into_owned(),
+            vec![source.to_string_lossy().into_owned()],
+            None,
+        )
+        .expect("import utf16 txt");
+
+        assert!(
+            response.skipped.is_empty(),
+            "skipped = {:?}",
+            response.skipped
+        );
+        assert_eq!(response.files[0].kind, "text");
+        let staged =
+            fs::read_to_string(&response.files[0].absolute_path).expect("staged copy must be utf8");
+        assert_eq!(staged, sample);
+
+        if let Some(parent) = Path::new(&response.files[0].absolute_path).parent() {
+            let _ = fs::remove_dir_all(parent);
+        }
+    }
+
+    #[test]
+    fn read_uploaded_native_attachment_replaces_control_bytes() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let inside = workdir.join("device.txt");
+        fs::write(&inside, b"ok\x00\x01\tline\r\n\x1b[0m\n").expect("write laced workspace file");
+
+        let response = system_read_uploaded_native_attachment_sync(
+            workdir.to_string_lossy().into_owned(),
+            Some(inside.to_string_lossy().into_owned()),
+            Some("text".to_string()),
+        )
+        .expect("read laced native attachment");
+
+        let expected = "ok\u{FFFD}\u{FFFD}\tline\r\n\x1b[0m\n";
         assert_eq!(response.data, BASE64_STANDARD.encode(expected.as_bytes()));
         assert_eq!(response.size_bytes, expected.len() as u64);
     }
