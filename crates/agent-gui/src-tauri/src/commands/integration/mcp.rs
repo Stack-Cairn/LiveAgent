@@ -535,6 +535,9 @@ struct StdioTransport {
     child: Child,
     stdin: ChildStdin,
     stdout_rx: mpsc::Receiver<String>,
+    /// stdout 读到 EOF 后置位：进程关闭 stdout 早于其退出状态可被 `try_wait`
+    /// 观察到，只看退出状态会把已无法通信的进程当成存活（探测后重启判定失效）。
+    stdout_closed: Arc<AtomicBool>,
     stderr_tail: Arc<Mutex<Vec<String>>>,
 }
 
@@ -608,7 +611,11 @@ impl StdioTransport {
         }
 
         let (tx, rx) = mpsc::channel::<String>();
+        let stdout_closed = Arc::new(AtomicBool::new(false));
+        let closed_flag = stdout_closed.clone();
         std::thread::spawn(move || {
+            // 先置位再随线程结束释放 tx：读端看到通道断开时标记必然可见。
+            let _closed_guard = StdoutClosedGuard(closed_flag);
             let mut reader = BufReader::new(stdout);
             let mut line = String::new();
             loop {
@@ -633,6 +640,7 @@ impl StdioTransport {
             child,
             stdin,
             stdout_rx: rx,
+            stdout_closed,
             stderr_tail,
         })
     }
@@ -652,6 +660,12 @@ impl StdioTransport {
         if let Some(status) = self.child.try_wait().map_err(|e| e.to_string())? {
             return Err(format!(
                 "MCP server exited unexpectedly: status={status}{}",
+                self.stderr_summary()
+            ));
+        }
+        if self.stdout_closed.load(Ordering::Acquire) {
+            return Err(format!(
+                "MCP server closed stdout unexpectedly{}",
                 self.stderr_summary()
             ));
         }
@@ -740,6 +754,15 @@ impl StdioTransport {
                     .map_err(|e| e.with_suffix(&self.stderr_summary()));
             }
         }
+    }
+}
+
+/// stdout 读线程退出（EOF、读错误或接收端已丢弃）时置位 `stdout_closed`。
+struct StdoutClosedGuard(Arc<AtomicBool>);
+
+impl Drop for StdoutClosedGuard {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
     }
 }
 
@@ -3435,6 +3458,26 @@ esac
 done"#
         );
         let mut client = McpClient::spawn(sh_server("exiting-legacy-stdio", &script)).unwrap();
+        client.tools_list().unwrap();
+        assert_eq!(client.protocol_version().as_deref(), Some("2025-03-26"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stdio_server_that_closes_stdout_on_probe_is_respawned() {
+        // 探测后关闭 stdout 但进程仍存活：确定性复现「stdout 已 EOF、退出状态
+        // 尚不可见」的窗口，重启判定不能只看 try_wait。
+        let script = format!(
+            r#"while IFS= read -r line; do {SH_ID}
+case "$line" in
+  *'"method":"initialize"'*) printf '{{"jsonrpc":"2.0","id":%s,"result":{{"protocolVersion":"2025-03-26","capabilities":{{}}}}}}\n' "$id";;
+  *'"method":"notifications/initialized"'*) ;;
+  *'"method":"tools/list"'*) printf '{{"jsonrpc":"2.0","id":%s,"result":{{"tools":[]}}}}\n' "$id";;
+  *) exec >&-; while IFS= read -r _; do :; done;;
+esac
+done"#
+        );
+        let mut client = McpClient::spawn(sh_server("stdout-closing-stdio", &script)).unwrap();
         client.tools_list().unwrap();
         assert_eq!(client.protocol_version().as_deref(), Some("2025-03-26"));
     }
