@@ -4,15 +4,25 @@ import {
   GitBranch,
   Loader2,
   RefreshCw,
+  Share2,
   SquarePen,
   Undo2,
 } from "@liveagent/ui/components/IconSet";
+import { lazy, Suspense, useState } from "react";
 import { useLocale } from "../../i18n/index";
 import { useCheckpointRewindAction } from "../../lib/chat/checkpointRewind";
+import type { ReplyShareSource } from "../../lib/chat/replyShare";
 import { cachedDateTimeFormat } from "../../lib/shared/intlFormatters";
 import { cn } from "../../lib/shared/utils";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
 import { type UsageDetailEntry, UsageInfoPopover } from "./UsagePanel";
+
+// 分享弹窗依赖 Markdown 渲染和截图库，按需加载，不进转录区首屏。
+const AssistantReplyShareDialog = lazy(() =>
+  import("./AssistantReplyShareDialog").then((module) => ({
+    default: module.AssistantReplyShareDialog,
+  })),
+);
 
 // 智能时间格式：今天只显示时钟（20:34），今年跨天加月日（9月30日 20:34），
 // 跨年补全年份（2025年12月31日 20:34）。中文用直排格式，其他语言走 Intl。
@@ -177,6 +187,8 @@ export function TranscriptAssistantMessageActions(
     branchTitle: string;
     branchPending: boolean;
     onBranch: () => void;
+    // 提供后显示分享按钮；reply 为空时按钮禁用。
+    shareSource?: ReplyShareSource;
     withAvatarSpacer?: boolean;
   },
 ) {
@@ -195,9 +207,12 @@ export function TranscriptAssistantMessageActions(
     branchTitle,
     branchPending,
     onBranch,
+    shareSource,
     withAvatarSpacer = false,
   } = props;
   const { t } = useLocale();
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareDisabled = !shareSource?.reply.trim();
   const actions = (
     <div className="flex min-w-0 flex-1 items-center justify-start gap-0.5">
       <div
@@ -223,6 +238,21 @@ export function TranscriptAssistantMessageActions(
         >
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </button>
+        {shareSource ? (
+          <button
+            type="button"
+            className={cn(
+              "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+              "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+            )}
+            title={t("chat.share")}
+            aria-label={t("chat.share")}
+            disabled={shareDisabled}
+            onClick={() => setShareOpen(true)}
+          >
+            <Share2 className="size-3.5" />
+          </button>
+        ) : null}
         <ConfirmActionPopover
           title={t("chat.retryConfirmTitle")}
           description={t("chat.retryConfirmDescription")}
@@ -282,16 +312,25 @@ export function TranscriptAssistantMessageActions(
     </div>
   );
 
+  const shareDialog =
+    shareOpen && shareSource ? (
+      <Suspense fallback={null}>
+        <AssistantReplyShareDialog source={shareSource} onClose={() => setShareOpen(false)} />
+      </Suspense>
+    ) : null;
+
   if (!withAvatarSpacer) {
     return (
       <div className="chat-assistant-actions mt-1 flex items-center justify-start gap-1.5">
         {actions}
+        {shareDialog}
       </div>
     );
   }
   return (
     <div className="chat-assistant-actions assistant-bubble-shell flex w-full max-w-full items-start">
       {actions}
+      {shareDialog}
     </div>
   );
 }

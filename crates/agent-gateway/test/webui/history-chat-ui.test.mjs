@@ -881,9 +881,14 @@ test("GatewayTranscript renders folded and live rows in one virtualized list", (
     forwardRef(render) {
       return render;
     },
+    // Module-load shim: TranscriptMessageActions lazy-loads the reply share dialog.
+    lazy() {
+      return () => null;
+    },
     memo(component) {
       return component;
     },
+    Suspense: "Suspense",
     useCallback(callback) {
       return callback;
     },

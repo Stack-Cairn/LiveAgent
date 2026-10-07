@@ -16,6 +16,7 @@ import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
 import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import type { ReplyShareSource } from "@liveagent/ui/lib/chat/replyShare";
 import {
   type PendingUploadedFile,
   splitUserAttachmentsForDisplay,
@@ -415,6 +416,11 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
     [row.rounds, showUsage],
   );
   const retryMessageRef = retryTarget?.messageRef;
+  const retryPrompt = retryTarget?.text;
+  const shareSource = useMemo<ReplyShareSource>(
+    () => ({ reply: replyText, prompt: retryPrompt, timestamp: row.timestamp }),
+    [replyText, retryPrompt, row.timestamp],
+  );
   const retryDisabled = isStreaming || !onResendFromEdit || !retryMessageRef;
   const retryTitle = retryMessageRef
     ? t("chat.retry")
@@ -460,6 +466,7 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
       onBranch={() => {
         if (retryMessageRef) onBranchConversation?.(retryMessageRef);
       }}
+      shareSource={shareSource}
       withAvatarSpacer
       alwaysShowActions
     />
