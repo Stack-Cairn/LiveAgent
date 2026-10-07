@@ -27,7 +27,8 @@
     ],
     "windows": {
       "nsis": {
-        "installerIcon": "icons/icon-windows.ico"
+        "installerIcon": "icons/icon-windows.ico",
+        "installerHooks": "windows/installer-hooks.nsh"
       }
     }
   }
