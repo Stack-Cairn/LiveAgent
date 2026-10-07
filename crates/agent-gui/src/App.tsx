@@ -640,8 +640,6 @@ export default function App() {
         planningReminderTitle: translate("planner.notificationTitle", locale),
         cronFailureTitle: translate("notifications.cronFailureTitle", locale),
         cronSuccessTitle: translate("notifications.cronSuccessTitle", locale),
-        testTitle: translate("notifications.testTitle", locale),
-        testBody: translate("notifications.testBody", locale),
       },
     }).catch(() => {});
   }, [settings.locale]);

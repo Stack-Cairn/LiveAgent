@@ -35,7 +35,6 @@ test("Notify explains every outcome to the model", async () => {
   for (const [outcome, pattern] of [
     ["disabled", /turned off/],
     ["throttled", /30 seconds/],
-    ["disabledByEnv", /disabled in this environment/],
     ["permissionDenied", /turned off in the system settings/],
   ]) {
     const { module } = harness(() => outcome);

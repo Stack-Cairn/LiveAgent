@@ -208,7 +208,6 @@ macro_rules! app_invoke_handler {
             commands::planning::planning_mutate,
             commands::planning::planning_export,
             commands::notifications::notifications_set_labels,
-            commands::notifications::notifications_test,
             commands::notifications::notifications_notify,
             commands::notifications::notifications_permission,
             commands::notifications::notifications_request_permission,

@@ -33,8 +33,6 @@ pub enum NotificationKind {
     CronFailure,
     CronSuccess,
     AgentMessage,
-    /// 设置页「发送测试通知」：不受类别开关影响。
-    Test,
 }
 
 /// 系统设置 `notifications` 键：各类别是否弹系统通知。
@@ -85,7 +83,6 @@ impl NotificationPreferences {
             NotificationKind::CronFailure => self.cron_failure,
             NotificationKind::CronSuccess => self.cron_success,
             NotificationKind::AgentMessage => self.agent,
-            NotificationKind::Test => true,
         }
     }
 }
@@ -124,8 +121,6 @@ pub enum NotifyOutcome {
     Disabled,
     /// 节流窗口内已弹过同键通知。
     Throttled,
-    /// `LIVEAGENT_DISABLE_NOTIFICATIONS=1`：测试 / 自动化环境不弹。
-    DisabledByEnv,
     /// 用户在系统设置里拒绝了 LiveAgent 的通知（重试也不会成功，视为已处理）。
     PermissionDenied,
 }
@@ -149,7 +144,6 @@ pub struct NotificationService {
     sender: RwLock<Option<Arc<Sender>>>,
     labels: RwLock<HashMap<String, String>>,
     last_sent: Mutex<HashMap<String, i64>>,
-    disabled_by_env: bool,
     /// 是否走 macOS 原生通道（能读写真实权限）。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     native: AtomicBool,
@@ -167,7 +161,6 @@ impl NotificationService {
             sender: RwLock::new(None),
             labels: RwLock::new(HashMap::new()),
             last_sent: Mutex::new(HashMap::new()),
-            disabled_by_env: std::env::var("LIVEAGENT_DISABLE_NOTIFICATIONS").as_deref() == Ok("1"),
             native: AtomicBool::new(false),
         }
     }
@@ -277,29 +270,23 @@ impl NotificationService {
             return Err("E:title_required".into());
         }
         let body = clean(&notice.body, BODY_MAX_CHARS);
-        let outcome = if self.disabled_by_env {
-            NotifyOutcome::DisabledByEnv
-        } else {
-            let sender = self
-                .sender
-                .read()
-                .ok()
-                .and_then(|slot| slot.clone())
-                .ok_or("E:unavailable")?;
-            match sender(&title, &body) {
-                Ok(()) => NotifyOutcome::Sent,
-                Err(error) if error == PERMISSION_DENIED => {
-                    return Ok(NotifyOutcome::PermissionDenied)
-                }
-                Err(error) => return Err(error),
-            }
-        };
+        let sender = self
+            .sender
+            .read()
+            .ok()
+            .and_then(|slot| slot.clone())
+            .ok_or("E:unavailable")?;
+        match sender(&title, &body) {
+            Ok(()) => {}
+            Err(error) if error == PERMISSION_DENIED => return Ok(NotifyOutcome::PermissionDenied),
+            Err(error) => return Err(error),
+        }
         if let Some((key, _)) = notice.throttle {
             if let Ok(mut sent) = self.last_sent.lock() {
                 sent.insert(key, now);
             }
         }
-        Ok(outcome)
+        Ok(NotifyOutcome::Sent)
     }
 }
 

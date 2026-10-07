@@ -11,7 +11,6 @@ fn service() -> (NotificationService, Calls) {
         sender: RwLock::new(None),
         labels: RwLock::new(HashMap::new()),
         last_sent: Mutex::new(HashMap::new()),
-        disabled_by_env: false,
         native: AtomicBool::new(false),
     };
     let calls = Arc::new(Mutex::new(Vec::new()));
@@ -49,7 +48,7 @@ fn notifications_preferences_default_and_tolerate_bad_values() {
 }
 
 #[test]
-fn notifications_respect_category_switches_but_test_always_sends() {
+fn notifications_respect_category_switches() {
     let (service, calls) = service();
     let off = NotificationPreferences {
         planning: false,
@@ -67,9 +66,6 @@ fn notifications_respect_category_switches_but_test_always_sends() {
         assert_eq!(outcome, Ok(NotifyOutcome::Disabled));
     }
     assert!(calls.lock().unwrap().is_empty());
-    let outcome = service.notify_with(&off, 0, Notice::new(NotificationKind::Test, "t", "b"));
-    assert_eq!(outcome, Ok(NotifyOutcome::Sent));
-    assert_eq!(calls.lock().unwrap().len(), 1);
 }
 
 #[test]
@@ -146,19 +142,6 @@ fn notifications_clean_text_and_require_a_title() {
         service.notify_with(&prefs, 0, empty),
         Err("E:title_required".to_string())
     );
-}
-
-#[test]
-fn notifications_env_switch_skips_the_system_call() {
-    let (mut service, calls) = service();
-    service.disabled_by_env = true;
-    let outcome = service.notify_with(
-        &NotificationPreferences::default(),
-        0,
-        Notice::new(NotificationKind::Test, "t", "b"),
-    );
-    assert_eq!(outcome, Ok(NotifyOutcome::DisabledByEnv));
-    assert!(calls.lock().unwrap().is_empty());
 }
 
 #[test]

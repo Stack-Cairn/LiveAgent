@@ -2,7 +2,7 @@ import { type NotificationPreferences, updateSystem } from "@liveagent/app/lib/s
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { useCallback, useEffect, useState } from "react";
-import { Bell, ExternalLink } from "../../components/IconSet";
+import { ExternalLink } from "../../components/IconSet";
 import { SettingsSection } from "../../components/settings/SettingsLayout";
 import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
@@ -11,7 +11,6 @@ import type { UiSurface } from "../../contracts/registry";
 import { useLocale } from "../../i18n/index";
 import { SettingsGroup, SettingsRow } from "./shared";
 
-type NotifyOutcome = "sent" | "disabled" | "throttled" | "disabledByEnv" | "permissionDenied";
 /** macOS 原生通道能读到真实权限；其它平台与开发模式为 unknown。 */
 type PermissionState = "granted" | "denied" | "notDetermined" | "unknown";
 
@@ -31,7 +30,7 @@ const CATEGORIES: { key: keyof NotificationPreferences; label: string }[] = [
 
 /**
  * 设置 → 通知：各类别是否弹桌面系统通知。历史、免打扰与权限管理都交给操作系统，
- * 因此这里只有开关、系统权限状态、测试通知与打开系统通知设置（后三者只在桌面端可用）。
+ * 因此这里只有开关、系统权限状态与打开系统通知设置（后两者只在桌面端可用）。
  */
 export function NotificationsSection({
   settings,
@@ -39,7 +38,6 @@ export function NotificationsSection({
   surface = "desktop",
 }: SettingsSectionProps & { surface?: UiSurface }) {
   const { t } = useLocale();
-  const [testing, setTesting] = useState(false);
   const [permission, setPermission] = useState<PermissionState>("unknown");
   const preferences = settings.system.notifications;
   const desktop = surface === "desktop";
@@ -62,28 +60,6 @@ export function NotificationsSection({
     setSettings((prev) =>
       updateSystem(prev, { notifications: { ...prev.system.notifications, [key]: next } }),
     );
-
-  const sendTest = async () => {
-    setTesting(true);
-    try {
-      const outcome = await invoke<NotifyOutcome>("notifications_test");
-      if (outcome === "disabledByEnv") toast.warning(t("settings.notifications.testDisabledByEnv"));
-      else if (outcome === "permissionDenied")
-        toast.warning(t("settings.notifications.permissionDenied"));
-      else toast.success(t("settings.notifications.testSent"));
-    } catch (error) {
-      toast.error(
-        t("settings.notifications.testFailed").replace(
-          "{error}",
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
-    } finally {
-      setTesting(false);
-      // 首次发送会触发系统授权对话框，结束后刷新状态。
-      refreshPermission();
-    }
-  };
 
   const requestPermission = () => {
     void invoke<PermissionState>("notifications_request_permission")
@@ -124,7 +100,7 @@ export function NotificationsSection({
       </SettingsGroup>
       <SettingsGroup title={t("settings.notifications.system")}>
         <SettingsRow
-          title={t("settings.notifications.check")}
+          title={t("settings.notifications.permissionTitle")}
           description={
             desktop ? t(PERMISSION_DESC[permission]) : t("settings.notifications.desktopOnly")
           }
@@ -139,10 +115,6 @@ export function NotificationsSection({
                 <Button variant="outline" size="sm" onClick={openSystemSettings}>
                   <ExternalLink className="size-3.5" aria-hidden />
                   {t("settings.notifications.openSettings")}
-                </Button>
-                <Button size="sm" disabled={testing} onClick={() => void sendTest()}>
-                  <Bell className="size-3.5" aria-hidden />
-                  {t("settings.notifications.test")}
                 </Button>
               </div>
             ) : null

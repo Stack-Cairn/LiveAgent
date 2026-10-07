@@ -30,25 +30,6 @@ pub fn notifications_set_labels(
     service.set_labels(labels);
 }
 
-/// 设置页「发送测试通知」：不受类别开关影响。
-#[tauri::command]
-pub async fn notifications_test(
-    service: State<'_, Arc<NotificationService>>,
-) -> Result<NotifyOutcome, String> {
-    blocking(&service, |service| {
-        service.notify(Notice::new(
-            NotificationKind::Test,
-            service.label("testTitle", "LiveAgent test notification", &[]),
-            service.label(
-                "testBody",
-                "If you can see this, system notifications are working.",
-                &[],
-            ),
-        ))
-    })
-    .await?
-}
-
 /// Agent `Notify` 工具。
 #[tauri::command]
 pub async fn notifications_notify(

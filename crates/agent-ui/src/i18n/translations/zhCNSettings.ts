@@ -1397,27 +1397,19 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.notifications.agent": "Agent 消息",
   "settings.notifications.agentDesc": "Agent 通过 Notify 工具发送的提醒",
   "settings.notifications.system": "系统通知",
-  "settings.notifications.check": "检查系统通知",
+  "settings.notifications.permissionTitle": "系统通知权限",
   "settings.notifications.permissionGranted":
     "系统已允许 LiveAgent 发送通知。横幅样式与声音可在系统设置中调整。",
   "settings.notifications.permissionDenied":
     "系统已关闭 LiveAgent 的通知，请在系统设置中允许后再试。",
   "settings.notifications.permissionNotDetermined":
-    "尚未授权。点击「允许通知」或发送测试通知时，系统会询问是否允许。",
+    "尚未授权。点击「允许通知」后，系统会询问是否允许。",
   "settings.notifications.requestPermission": "允许通知",
   "settings.notifications.systemDesc": "没有收到通知时，检查系统是否允许 LiveAgent 发送通知",
-  "settings.notifications.test": "发送测试通知",
-  "settings.notifications.testSent":
-    "已发送测试通知。没有看到的话，请在系统设置中允许 LiveAgent 发送通知。",
-  "settings.notifications.testDisabledByEnv":
-    "当前环境通过 LIVEAGENT_DISABLE_NOTIFICATIONS 关闭了系统通知。",
-  "settings.notifications.testFailed": "发送测试通知失败：{error}",
   "settings.notifications.openSettings": "打开系统通知设置",
   "settings.notifications.desktopOnly": "通知在运行 LiveAgent 桌面端的电脑上弹出。",
   "notifications.cronFailureTitle": "定时任务失败：{name}",
   "notifications.cronSuccessTitle": "定时任务完成：{name}",
-  "notifications.testTitle": "LiveAgent 测试通知",
-  "notifications.testBody": "看到这条消息，说明系统通知工作正常。",
   "settings.notifications.openUnsupported":
     "当前系统不支持直接打开，请在系统设置的「通知」中查看 LiveAgent。",
   "settings.builtinTool.notify.name": "通知",

@@ -1469,29 +1469,21 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.notifications.agent": "Agent messages",
   "settings.notifications.agentDesc": "Sent by the Agent with the Notify tool",
   "settings.notifications.system": "System notifications",
-  "settings.notifications.check": "Check system notifications",
+  "settings.notifications.permissionTitle": "Notification permission",
   "settings.notifications.permissionGranted":
     "LiveAgent is allowed to send notifications. Adjust the banner style and sound in system settings.",
   "settings.notifications.permissionDenied":
     "Notifications for LiveAgent are turned off in system settings. Allow them there and try again.",
   "settings.notifications.permissionNotDetermined":
-    "Not authorized yet. The system will ask when you click Allow notifications or send a test notification.",
+    "Not authorized yet. The system will ask when you click Allow notifications.",
   "settings.notifications.requestPermission": "Allow notifications",
   "settings.notifications.systemDesc":
     "If nothing shows up, check that the system allows LiveAgent to send notifications",
-  "settings.notifications.test": "Send test notification",
-  "settings.notifications.testSent":
-    "Test notification sent. If you don't see it, allow LiveAgent to send notifications in system settings.",
-  "settings.notifications.testDisabledByEnv":
-    "System notifications are turned off in this environment (LIVEAGENT_DISABLE_NOTIFICATIONS).",
-  "settings.notifications.testFailed": "Couldn't send the test notification: {error}",
   "settings.notifications.openSettings": "Open system notification settings",
   "settings.notifications.desktopOnly":
     "Notifications appear on the computer running the LiveAgent desktop app.",
   "notifications.cronFailureTitle": "Scheduled task failed: {name}",
   "notifications.cronSuccessTitle": "Scheduled task finished: {name}",
-  "notifications.testTitle": "LiveAgent test notification",
-  "notifications.testBody": "If you can see this, system notifications are working.",
   "settings.notifications.openUnsupported":
     "This system can't open notification settings directly. Look for LiveAgent under Notifications in your system settings.",
   "settings.builtinTool.notify.name": "Notify",
