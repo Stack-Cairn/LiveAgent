@@ -633,9 +633,14 @@ export default function App() {
   const localeContextValue = useLocaleContextValue(settings.locale);
 
   useEffect(() => {
-    // Calendar reminder notifications are shown by the backend, which has no UI locale.
-    void invoke("planning_set_labels", {
-      notificationTitle: translate("planner.notificationTitle", settings.locale),
+    // 系统通知由后端发出，后端没有界面语言：按当前语言推送标题模板（`{name}` 由后端替换）。
+    const locale = settings.locale;
+    void invoke("notifications_set_labels", {
+      labels: {
+        planningReminderTitle: translate("planner.notificationTitle", locale),
+        cronFailureTitle: translate("notifications.cronFailureTitle", locale),
+        cronSuccessTitle: translate("notifications.cronSuccessTitle", locale),
+      },
     }).catch(() => {});
   }, [settings.locale]);
 

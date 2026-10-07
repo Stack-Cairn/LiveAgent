@@ -28,6 +28,7 @@
       "icons/icon.icns"
     ],
     "macOS": {
+      "signingIdentity": "-",
       "hardenedRuntime": true,
       "entitlements": "Entitlements.plist",
       "infoPlist": "Info.plist"

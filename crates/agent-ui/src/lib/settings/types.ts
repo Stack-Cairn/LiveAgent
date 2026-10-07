@@ -331,6 +331,18 @@ export const BROWSER_AUTOMATION_MODES: readonly BrowserAutomationMode[] = [
   "isolated",
 ];
 
+/** 桌面系统通知开关，与后端 `NotificationPreferences` 一致。 */
+export interface NotificationPreferences {
+  /** 日程提醒（默认开）。 */
+  planning: boolean;
+  /** 定时任务失败或超时（默认开）。 */
+  cronFailure: boolean;
+  /** 定时任务成功（默认关）。 */
+  cronSuccess: boolean;
+  /** Agent 通过 Notify 工具发送的消息（默认开）。 */
+  agent: boolean;
+}
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
@@ -357,6 +369,8 @@ export type SystemSettings = {
    * 计算统一使用。有效值用 `resolveDefaultTimeZone` 求得。
    */
   defaultTimeZone: string;
+  /** 桌面系统通知的类别开关；免打扰交给系统专注模式。 */
+  notifications: NotificationPreferences;
   /**
    * 只读派生值:桌面后端加载设置时注入的「自动」档时区(桌面 OS 时区)。保存时被
    * 后端忽略;WebUI 借此显示桌面时区而不是浏览器时区。

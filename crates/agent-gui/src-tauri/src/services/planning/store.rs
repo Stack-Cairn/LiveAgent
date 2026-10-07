@@ -1,6 +1,6 @@
 use super::{time, types::*};
 use chrono::Utc;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
 use std::sync::Mutex;
@@ -12,6 +12,19 @@ pub struct PlanningStore {
 }
 pub(super) fn sql_error(e: impl std::fmt::Display) -> String {
     format!("E:storage_failed:{e}")
+}
+/// 读-改-写事务一律以 IMMEDIATE 开始：一开始就拿写锁，冲突时按 busy_timeout 等待。
+/// DEFERRED 事务先读后写时，若期间别的连接（通知服务、定时任务等共用 config.sqlite）
+/// 已提交，WAL 下会立即返回 SQLITE_BUSY_SNAPSHOT（「database is locked」），不经过
+/// busy_timeout。错误里附带扩展码，便于区分快照过期（517）与写锁被长时间占用（5）。
+fn begin_write(conn: &mut Connection) -> Result<Transaction<'_>, String> {
+    conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| match &error {
+            rusqlite::Error::SqliteFailure(code, _) => {
+                format!("E:storage_failed:{error} (code {})", code.extended_code)
+            }
+            _ => sql_error(error),
+        })
 }
 fn id() -> String {
     Uuid::new_v4().to_string()
@@ -222,7 +235,7 @@ impl PlanningStore {
         if version.as_deref().is_some_and(|v| v != "1") {
             return Err("E:data_version_newer".into());
         }
-        let tx = conn.transaction().map_err(sql_error)?;
+        let tx = begin_write(&mut conn)?;
         for table in TABLES {
             tx.execute_batch(&format!("CREATE TABLE IF NOT EXISTS planning_{table}(id TEXT PRIMARY KEY,payload TEXT NOT NULL CHECK(json_valid(payload))); ")).map_err(sql_error)?;
         }
@@ -336,7 +349,7 @@ impl PlanningStore {
             return Err("E:request_too_large".into());
         }
         let mut conn = self.conn.lock().map_err(sql_error)?;
-        let tx = conn.transaction().map_err(sql_error)?;
+        let tx = begin_write(&mut conn)?;
         let existing: Option<(String, String)> = tx
             .query_row(
                 "SELECT request,result FROM planning_requests WHERE id=?1",
@@ -414,7 +427,7 @@ impl PlanningStore {
     /// 提醒并推进 seq,返回新 seq 供调用方广播 `planning:changed`;未变化返回 None。
     pub fn sync_default_zone(&self, now: i64) -> Result<Option<u64>, String> {
         let mut conn = self.conn.lock().map_err(sql_error)?;
-        let tx = conn.transaction().map_err(sql_error)?;
+        let tx = begin_write(&mut conn)?;
         let mirrored = meta(&tx, "timeZone")?;
         let mut s = snapshot(&tx)?;
         if mirrored == s.time_zone {
@@ -429,7 +442,7 @@ impl PlanningStore {
 
     pub fn claim_reminders(&self, at: i64) -> Result<Vec<Reminder>, String> {
         let mut conn = self.conn.lock().map_err(sql_error)?;
-        let tx = conn.transaction().map_err(sql_error)?;
+        let tx = begin_write(&mut conn)?;
         let mut s = snapshot(&tx)?;
         let before_reminders = json!(s.reminders);
         reconcile_reminders(&mut s, at, true)?;
@@ -465,7 +478,7 @@ impl PlanningStore {
         at: i64,
     ) -> Result<(), String> {
         let mut conn = self.conn.lock().map_err(sql_error)?;
-        let tx = conn.transaction().map_err(sql_error)?;
+        let tx = begin_write(&mut conn)?;
         let mut s = snapshot(&tx)?;
         if let Some(r) = s
             .reminders
@@ -490,7 +503,7 @@ impl PlanningStore {
     pub fn import(&self, mut incoming: Snapshot) -> Result<(), String> {
         validate(&incoming)?;
         let mut conn = self.conn.lock().map_err(sql_error)?;
-        let tx = conn.transaction().map_err(sql_error)?;
+        let tx = begin_write(&mut conn)?;
         let old = snapshot(&tx)?;
         incoming.seq = old.seq + 1;
         incoming.event_masters.clear();
