@@ -579,7 +579,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                     const parsed = parseModelValue(option.value);
                                     if (!parsed) return;
                                     onSelectModel(parsed);
-                                    setIsModelPickerOpen(false);
+                                    // Return to the root panel instead of closing, so the user can
+                                    // keep adjusting reasoning effort and other run controls.
+                                    showView("root");
                                   }}
                                   className={cn(
                                     "flex h-8 w-full items-center justify-between gap-2 rounded-lg px-2.5",

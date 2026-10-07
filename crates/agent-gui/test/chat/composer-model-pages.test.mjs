@@ -57,7 +57,9 @@ test("composer model pages preserve selection, reasoning, search and return navi
     assert.equal(secondGroup.getAttribute('aria-expanded'), 'true', 'search expands matching groups');
     await clickText("Beta");
     assert.deepEqual(values, [{ customProviderId: "two", model: "Beta" }]);
-    await open();
+    // Selecting a model returns to the root panel instead of closing the popover, so the
+    // reasoning entry is immediately available without reopening the picker.
+    assert.equal(document.querySelector('input[placeholder="chat.searchModel"]'), null, "back on the root panel");
     await clickText("chat.runtime.reasoningsettings.reasoning.low");
     await env.act(async () => document.querySelector('input[value="high"]').click());
     assert.deepEqual(patches.at(-1), { thinkingEnabled: true, reasoning: "high" });

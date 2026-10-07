@@ -67,13 +67,13 @@ test("execution mode switchers expose a native radio group", () => {
   }
 });
 
-test("model selection uses an in-place page and closes on selection", () => {
+test("model selection uses an in-place page and returns to the root panel", () => {
   for (const source of pickerSources) {
     assert.match(source, /showView\("model"\)/);
     assert.match(source, /showView\("root"\)/);
     assert.doesNotMatch(source, /expandedGroupId|toggleGroup/);
     assert.match(source, /aria-pressed=\{isSelected\}/);
-    assert.match(source, /onSelectModel\(parsed\);\s+setIsModelPickerOpen\(false\);/);
+    assert.match(source, /onSelectModel\(parsed\);[\s\S]{0,240}?showView\("root"\);/);
   }
 });
 
