@@ -26,7 +26,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-10-02";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-10-10";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -34,6 +34,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "claude-fable-5-1", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "claude-haiku-4-5", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-haiku-4-5-20251001", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
+    { id: "claude-haiku-5-5", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "claude-opus-4-5", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high"], off: true } },
     { id: "claude-opus-4-5-20251101", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high"], off: true } },
     { id: "claude-opus-4-6", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "max"], off: true } },
@@ -41,8 +42,8 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "claude-opus-4-8", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "claude-opus-5", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "claude-opus-5-5", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
-    { id: "claude-sonnet-4-5", contextWindow: 1000000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
-    { id: "claude-sonnet-4-5-20250929", contextWindow: 1000000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
+    { id: "claude-sonnet-4-5", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
+    { id: "claude-sonnet-4-5-20250929", contextWindow: 200000, maxOutputToken: 64000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-sonnet-4-6", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "max"], off: true } },
     { id: "claude-sonnet-5", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "claude-sonnet-5-5", contextWindow: 1000000, maxOutputToken: 128000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
