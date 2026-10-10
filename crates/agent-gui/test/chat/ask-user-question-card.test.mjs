@@ -471,3 +471,30 @@ test("settled and cancelled cards remain read-only", () => {
   );
   assert.equal(findSubmitButton(cancelled), undefined);
 });
+
+test("timeout or cancellation clears unsubmitted ordinary and custom selections", () => {
+  for (const draft of [
+    { draftSelections: { choice: "First" } },
+    { customSelected: { choice: true }, customTexts: { choice: "My answer" } },
+  ]) {
+    for (const terminal of [{ timedOut: true }, { cancelled: true }]) {
+      const card = createCardHarness(draft);
+      const active = card.render({});
+      assert.equal(findAll(active, n => n.props?.role === "radio" && n.props["aria-checked"]).length, 1);
+      const done = card.render({ ...terminal, answers: [], interactive: true });
+      assert.equal(findAll(done, n => n.props?.role === "radio" && n.props["aria-checked"]).length, 0);
+      assert.equal(findAll(done, n => n.type === InputStub).length, 0);
+      assert.equal(treeText(done).includes("chat.askUser.timeoutHint"), false);
+      assert.equal(treeText(done).includes("My answer"), false);
+      assert.match(treeText(done), terminal.timedOut ? /chat.askUser.timedOutNoSelection/ : /chat.askUser.cancelled/);
+    }
+  }
+});
+
+test("legacy timeout answers remain selected", () => {
+  const card = createCardHarness();
+  const tree = card.render({ timedOut: true, answers: [{ questionId: "choice", prompt: "Choose one option", selectedLabel: "First" }] });
+  assert.equal(findAll(tree, n => n.props?.role === "radio" && n.props["aria-checked"]).length, 1);
+  assert.match(treeText(tree), /chat.askUser.timedOut/);
+  assert.equal(treeText(tree).includes("chat.askUser.timedOutNoSelection"), false);
+});
