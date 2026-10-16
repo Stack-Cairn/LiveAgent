@@ -154,7 +154,10 @@ func validImagePath(path string) bool {
 		}
 	}
 	switch parts[0] {
-	case "health", "settings", "secrets":
+	case "health", "settings", "secrets", "platforms":
+		return len(parts) == 1
+	case "profiles":
+		// Read-only list of image services derived from chat providers.
 		return len(parts) == 1
 	case "targets":
 		return len(parts) == 1 || len(parts) == 3 && parts[2] == "verify" || len(parts) == 4 && parts[2] == "verifications"

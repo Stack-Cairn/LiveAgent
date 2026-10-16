@@ -2,8 +2,8 @@ import { useId, useState } from "react";
 import { Button } from "../../components/ui/button";
 import type { ExportDestination } from "../../lib/imaging/types";
 import { AssetImage } from "./AssetImage";
+import { selectClass } from "./ParamsBar";
 import type { ImageStudioController, StudioView } from "./studioController";
-import { selectClass } from "./TargetParameterForm";
 
 export function ImageDetailPane({
   controller,
@@ -44,7 +44,7 @@ export function ImageDetailPane({
   };
   return (
     <section aria-label="图片详情" className="space-y-4 p-4">
-      <h2 className="text-sm font-semibold">版本详情</h2>
+      <h2 className="text-sm font-semibold">图片详情</h2>
       <AssetImage
         client={controller.client}
         assetId={id}
@@ -58,14 +58,12 @@ export function ImageDetailPane({
           onEdit();
         }}
       >
-        继续修改
+        以此图生成
       </Button>
       <dl className="space-y-2 text-xs">
         <div>
-          <dt className="text-muted-foreground">实际目标</dt>
-          <dd>
-            {job.targetSnapshot.name} · 版本 {job.targetSnapshot.revision}
-          </dd>
+          <dt className="text-muted-foreground">模型</dt>
+          <dd>{job.targetSnapshot.name}</dd>
         </div>
         <div>
           <dt className="text-muted-foreground">实际提示词</dt>

@@ -2,7 +2,6 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import '@liveagent/app/index.css';
 import {ImageStudioPage} from '@liveagent/ui/features/image-studio/ImageStudioPage';
-import {ImageSettings} from '@liveagent/ui/pages/settings/ImageSettings';
 import {createImageStudioClient} from '@liveagent/ui/lib/imaging/client';
 import {transport,state} from './fixture';
 const client=createImageStudioClient({transport,reconnectDelaysMs:[20,40]});
@@ -16,5 +15,5 @@ createRoot(document.getElementById('root')!).render(<div style={{height:'100dvh'
   <label> Fixture <select aria-label="Fixture mode" onChange={e=>state.mode=e.target.value}><option value="success">Success</option><option value="unknown">Lost receipt</option><option value="error">Submit error</option><option value="hold">Pending / cancel</option><option value="reconnect">SSE reconnect</option></select></label>
   <label> <input type="checkbox" aria-label="Conflict on next settings save" onChange={e=>state.conflict=e.target.checked}/> Conflict on next settings save</label>
  </header>
- <div style={{flex:1,minHeight:0,overflow:isSettings?'auto':undefined}}>{isSettings?<ImageSettings client={client}/>:<ImageStudioPage client={client} ownerId="fake-owner" backendId="fake-backend" storage={storage}/>}</div>
+ <div style={{flex:1,minHeight:0,overflow:isSettings?'auto':undefined}}>{isSettings?<pre>{JSON.stringify(state.settings,null,2)}</pre>:<ImageStudioPage client={client} ownerId="fake-owner" backendId="fake-backend" storage={storage}/>}</div>
 </div>);

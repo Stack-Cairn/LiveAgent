@@ -2,15 +2,20 @@ import { isRecord, parseImageError, protocolError, safeInteger } from "./errors"
 import type {
   ConnectionBinding,
   CreateJobRequest,
+  GenerationParams,
   ImageAsset,
   ImageConnection,
   ImageEvent,
   ImageItem,
   ImageJob,
+  ImageProfile,
+  ImageProfileSet,
+  ImageProfileTarget,
   ImageProject,
   ImageSettings,
   ImageTarget,
   Page,
+  ParamCorrection,
   ParameterSpec,
   Scalar,
   TargetCapabilities,
@@ -218,6 +223,61 @@ export const parseSettings: Decoder<ImageSettings> = object({
   connections: array(connection),
   targets: array(parseTarget),
 });
+export const parseGenerationParams: Decoder<GenerationParams> = object({
+  size: text,
+  quality: optional(text),
+  outputFormat: optional(text),
+  outputCompression: optional(safeInteger),
+  moderation: optional(text),
+  n: optional(safeInteger),
+  transparentOutput: optional(bool),
+});
+const correction: Decoder<ParamCorrection> = object({
+  field: text,
+  from: text,
+  to: text,
+  reason: text,
+});
+const profileTarget: Decoder<ImageProfileTarget> = object({
+  id: text,
+  model: text,
+  adapter: text,
+  capabilities,
+  parameters: array(parameter),
+  ready: bool,
+});
+const profile: Decoder<ImageProfile> = object({
+  id: text,
+  name: text,
+  platform: text,
+  providerId: optional(text),
+  baseUrl: text,
+  enabled: bool,
+  models: strings,
+  selectedModel: optional(text),
+  apiKeyConfigured: bool,
+  targets: array(profileTarget),
+});
+export function parseProfileSet(value: unknown): ImageProfileSet {
+  return object({ revision: safeInteger, profiles: array(profile) })(record(value));
+}
+export function parseCreatedJob(value: unknown): {
+  job: ImageJob;
+  appliedParams?: GenerationParams;
+  corrections?: ParamCorrection[];
+} {
+  const source = envelope(value);
+  const job = parseJobEnvelope(value);
+  const result: {
+    job: ImageJob;
+    appliedParams?: GenerationParams;
+    corrections?: ParamCorrection[];
+  } = { job };
+  if (source.appliedParams !== undefined)
+    result.appliedParams = parseGenerationParams(source.appliedParams);
+  if (source.corrections !== undefined) result.corrections = array(correction)(source.corrections);
+  return result;
+}
 export const parseProject: Decoder<ImageProject> = object({
   id: text,
   title: text,

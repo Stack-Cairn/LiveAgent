@@ -6,7 +6,6 @@ import type { DraftStorage } from "./drafts";
 import { ImageCompareView } from "./ImageCompareView";
 import { ImageComposer } from "./ImageComposer";
 import { ImageDetailPane } from "./ImageDetailPane";
-import { ImageProjectRail } from "./ImageProjectRail";
 import { ResultGallery } from "./ResultGallery";
 import { useImageStudio } from "./useImageStudio";
 
@@ -33,6 +32,7 @@ function ImageStudioWorkbench({
   backendId,
   exportDestinations = [],
   storage,
+  onOpenSettings,
 }: ImageStudioPageProps) {
   const { controller, view } = useImageStudio(client, ownerId, backendId, storage);
   useEffect(
@@ -42,7 +42,7 @@ function ImageStudioWorkbench({
       }),
     [client, controller],
   );
-  const [panel, setPanel] = useState<"gallery" | "projects" | "details">("gallery");
+  const [panel, setPanel] = useState<"gallery" | "details">("gallery");
   const [compare, setCompare] = useState<{ left: string; right: string }>();
   const composer = useRef<HTMLDivElement>(null);
   if (view.supported === false) {
@@ -83,7 +83,6 @@ function ImageStudioWorkbench({
         <nav className="flex gap-1 lg:hidden" aria-label="工作台面板">
           {(
             [
-              { id: "projects", label: "项目" },
               { id: "gallery", label: "画廊" },
               { id: "details", label: "详情" },
             ] as const
@@ -114,11 +113,6 @@ function ImageStudioWorkbench({
         />
       ) : (
         <div className="flex min-h-0 flex-1">
-          <aside
-            className={`${panel === "projects" ? "block w-full" : "hidden"} shrink-0 overflow-y-auto border-r border-border lg:block lg:w-56`}
-          >
-            <ImageProjectRail controller={controller} view={view} />
-          </aside>
           <main
             className={`${panel === "gallery" ? "flex" : "hidden"} min-w-0 flex-1 flex-col overflow-y-auto lg:flex`}
             aria-busy={view.loading}
@@ -148,8 +142,8 @@ function ImageStudioWorkbench({
           </aside>
         </div>
       )}
-      <div ref={composer} className="max-h-[45%] shrink-0 overflow-y-auto">
-        <ImageComposer controller={controller} view={view} />
+      <div ref={composer} className="max-h-[55%] shrink-0 overflow-y-auto">
+        <ImageComposer controller={controller} view={view} onOpenSettings={onOpenSettings} />
       </div>
     </section>
   );

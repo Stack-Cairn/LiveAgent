@@ -1,5 +1,11 @@
 import type { CreateJobRequest, ImageTarget } from "../../lib/imaging/types";
-import { parameterError } from "./parameterModel";
+import {
+  allowedFields,
+  FORMAT_VALUES,
+  MODERATION_VALUES,
+  pruneParams,
+  QUALITY_VALUES,
+} from "./paramsBarModel";
 import { type FrozenSubmission, freezeSubmission } from "./studioModel";
 
 export interface DraftScope {
@@ -30,18 +36,43 @@ export function sanitizeDraft(value: unknown, targets: ImageTarget[]): StudioDra
   const data = record(value) ? value : {};
   const targetId = typeof data.targetId === "string" ? data.targetId : "";
   const target = targets.find((item) => item.id === targetId);
+  // Drafts keep only the unified field names, and only when the current target
+  // can still use them; a model switch leaves the rest to be re-picked.
+  const allowed = allowedFields(target);
   const parameters: Record<string, unknown> = {};
-  if (record(data.parameters))
-    for (const spec of target?.parameters ?? []) {
-      const v = data.parameters[spec.key];
-      if (v !== undefined && v !== null && !parameterError(spec, v))
-        Object.defineProperty(parameters, spec.key, {
-          value: v,
-          enumerable: true,
-          writable: true,
-          configurable: true,
-        });
+  if (record(data.parameters)) {
+    const source = data.parameters;
+    const keep = (key: string, value: unknown) => {
+      if (value === undefined || value === null) return;
+      Object.defineProperty(parameters, key, {
+        value,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    };
+    if (allowed.has("size")) {
+      const size = source.size;
+      const valid = typeof size === "string" && (size === "auto" || /^\d{2,5}x\d{2,5}$/.test(size));
+      keep("size", valid ? size : "auto");
     }
+    if (allowed.has("quality") && QUALITY_VALUES.includes(source.quality as never))
+      keep("quality", source.quality);
+    if (allowed.has("outputFormat") && FORMAT_VALUES.includes(source.outputFormat as never))
+      keep("outputFormat", source.outputFormat);
+    if (allowed.has("moderation") && MODERATION_VALUES.includes(source.moderation as never))
+      keep("moderation", source.moderation);
+    if (
+      allowed.has("outputCompression") &&
+      typeof source.outputCompression === "number" &&
+      Number.isInteger(source.outputCompression) &&
+      source.outputCompression >= 0 &&
+      source.outputCompression <= 100
+    )
+      keep("outputCompression", source.outputCompression);
+    if (allowed.has("transparentOutput") && source.transparentOutput === true)
+      keep("transparentOutput", true);
+  }
   const inputs: StudioDraft["inputs"] = [];
   if (Array.isArray(data.inputs))
     for (const input of data.inputs.slice(0, 16)) {
@@ -55,10 +86,13 @@ export function sanitizeDraft(value: unknown, targets: ImageTarget[]): StudioDra
           role: input.role as StudioDraft["inputs"][number]["role"],
         });
     }
+  // pruneParams is the single definition of what a target accepts, so the
+  // restored draft is exactly what a submit would send.
+  const pruned = Object.keys(parameters).length ? pruneParams(target, parameters) : {};
   return {
     prompt: typeof data.prompt === "string" ? data.prompt.slice(0, 100000) : "",
     targetId,
-    parameters,
+    parameters: pruned as unknown as Record<string, unknown>,
     inputs,
     ...(assetId(data.parentAssetId) && inputs.some((input) => input.assetId === data.parentAssetId)
       ? { parentAssetId: data.parentAssetId }

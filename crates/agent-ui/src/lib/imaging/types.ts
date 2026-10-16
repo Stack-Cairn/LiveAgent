@@ -38,6 +38,8 @@ export interface Usage {
 }
 export interface ImageErrorDetails {
   parameterKey?: string;
+  /** User-facing reason for a rejected profile field, shown next to that field. */
+  reason?: string;
   connectionId?: string;
   targetId?: string;
   expectedRevision?: number;
@@ -229,7 +231,62 @@ export interface TargetVerificationAttempt {
   input: TargetVerificationRequest;
   receipt?: TargetVerificationReceipt;
 }
+/** Unified generation parameters; the backend converts them per platform. */
+export interface GenerationParams {
+  size: string;
+  quality?: string;
+  outputFormat?: string;
+  outputCompression?: number;
+  moderation?: string;
+  n?: number;
+  transparentOutput?: boolean;
+}
+export interface ParamCorrection {
+  field: string;
+  from: string;
+  to: string;
+  reason: string;
+}
+export interface ImageProfileTarget {
+  id: string;
+  model: string;
+  adapter: string;
+  capabilities: TargetCapabilities;
+  parameters: ParameterSpec[];
+  /** False when the provider has no key or its platform is unknown. */
+  ready: boolean;
+}
+export interface ImageProfile {
+  id: string;
+  name: string;
+  platform: string;
+  providerId?: string;
+  baseUrl: string;
+  enabled: boolean;
+  models: string[];
+  selectedModel?: string;
+  apiKeyConfigured: boolean;
+  targets: ImageProfileTarget[];
+}
+export interface ImageProfileSet {
+  revision: number;
+  profiles: ImageProfile[];
+}
+export interface CreateJobWithParams extends Omit<CreateJobRequest, "parameters"> {
+  params: GenerationParams;
+}
+export interface CreatedJob {
+  job: ImageJob;
+  appliedParams?: GenerationParams;
+  corrections?: ParamCorrection[];
+}
+/** Image services are derived from the chat providers; this side is read-only. */
+export interface ImageProfilesClient {
+  listProfiles(): Promise<ImageProfileSet>;
+  createJobWithParams(input: CreateJobWithParams, key: string): Promise<CreatedJob>;
+}
 export interface ImageStudioClient {
+  profiles?: ImageProfilesClient;
   hasVerificationPersistence?(): boolean;
   loadVerificationAttempt?(targetId: string): TargetVerificationAttempt | null;
   clearVerificationAttempt?(targetId: string): void;

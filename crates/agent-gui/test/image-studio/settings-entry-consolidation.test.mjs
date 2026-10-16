@@ -1,50 +1,60 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
+import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const settings = { revision: 1, connections: [{ id: "ic_test", name: "Service", vendor: "openai", enabled: true, maxConcurrent: 1, credentialConfigured: false, binding: { kind: "independent", baseUrl: "https://api.openai.com/v1", authKind: "bearer", secretRefs: {} } }], targets: [] };
+// Image services are no longer configured separately: the workbench reads the
+// chat providers, so provider settings show no image tab and the client only
+// lists the derived services.
+const { createImageStudioClient } = createTsModuleLoader().loadModule("@liveagent/ui/lib/imaging/client");
 
-test("provider configuration includes image services without exposing target management", async () => {
-  const env = await createDomTestEnv();
-  const { ProviderImageServices } = env.loadModule("@liveagent/ui/pages/settings/ProviderImageServices");
-  const container = document.createElement("div"); document.body.append(container);
-  const root = env.createRoot(container);
-  const client = { getSettings: async () => settings };
-  const button = label => [...container.querySelectorAll("button")].find(b => b.textContent === label);
-  try {
-    await env.act(async () => root.render(env.React.createElement(ProviderImageServices, { client, registerLeaveGuard: () => () => {} }, env.React.createElement("div", null, "Existing provider controls"))));
-    assert.match(container.textContent, /Existing provider controls/);
-    await env.act(async () => button("图像服务").click());
-    assert.ok(button("新增连接")); assert.equal(button("新增目标"), undefined);
-    assert.match(container.textContent, /模型与工作流请在创作输入区/);
-    await env.act(async () => button("对话模型").click());
-    assert.match(container.textContent, /Existing provider controls/);
-  } finally { await env.act(async () => root.unmount()); env.cleanup(); }
+const profileSet = {
+  version: "kbrain.image.v1",
+  revision: 3,
+  profiles: [
+    {
+      id: "ip_0123456789abcdef",
+      name: "RollDek",
+      platform: "rolldek",
+      providerId: "rolldek",
+      baseUrl: "https://api-cn.rolldek.com/v1",
+      enabled: true,
+      models: ["gpt-image-2"],
+      apiKeyConfigured: true,
+      targets: [
+        {
+          id: "it_abc",
+          model: "gpt-image-2",
+          adapter: "rolldek-images",
+          capabilities: { operations: ["generate", "reference"], supportsCancel: false, supportsReconcile: false, supportsContinuation: false, supportsPreview: false, maxInputs: 16, maxCount: 4, outputFormats: ["png"] },
+          parameters: [{ key: "size", label: "size", type: "string", required: false }],
+          ready: true,
+        },
+      ],
+    },
+  ],
+};
+
+test("the workbench lists provider image models as 供应商 · 模型", async () => {
+  const seen = [];
+  const client = createImageStudioClient({
+    transport: async (path, init) => {
+      seen.push([init.method ?? "GET", path]);
+      return new Response(JSON.stringify(profileSet), { headers: { "Content-Type": "application/json" } });
+    },
+  });
+  const targets = await client.listTargets();
+  assert.deepEqual(seen, [["GET", "/v1/image/profiles"]]);
+  assert.equal(targets.length, 1);
+  assert.equal(targets[0].name, "RollDek · gpt-image-2");
+  assert.equal(targets[0].remoteId, "gpt-image-2");
+  assert.equal(targets[0].enabled, true);
+  assert.deepEqual(Object.keys(client.profiles).sort(), ["createJobWithParams", "listProfiles"]);
 });
 
-test("input target settings expose targets without separate credential configuration", async () => {
-  const env = await createDomTestEnv();
-  const { ImageSettings } = env.loadModule("@liveagent/ui/pages/settings/ImageSettings");
-  const container = document.createElement("div"); const root = env.createRoot(container);
-  try {
-    await env.act(async () => root.render(env.React.createElement(ImageSettings, { client: { getSettings: async () => settings }, panel: "targets" })));
-    const buttons = [...container.querySelectorAll("button")].map(b => b.textContent);
-    assert.ok(buttons.includes("新增目标")); assert.ok(!buttons.includes("新增连接"));
-    assert.equal(container.querySelector('input[type="password"]'), null);
-    assert.match(container.textContent, /供应商设置/);
-  } finally { await env.act(async () => root.unmount()); env.cleanup(); }
-});
-
-test("input target dialog protects an unsaved model draft before closing", async()=>{
- const env=await createDomTestEnv();const {ImageTargetSettings}=env.loadModule("@liveagent/ui/features/image-studio/ImageTargetSettings");
- const container=document.createElement("div");document.body.append(container);const root=env.createRoot(container);
- const button=label=>Array.from(document.querySelectorAll("button")).find(b=>b.textContent===label);
- try {
-  await env.act(async()=>root.render(env.React.createElement(ImageTargetSettings,{client:{getSettings:async()=>settings}})));
-  await env.act(async()=>button("目标设置").click());assert.ok(document.querySelector('[role="dialog"]'));
-  await env.act(async()=>button("新增目标").click());
-  window.confirm=()=>false;await env.act(async()=>button("关闭目标设置").click());assert.ok(document.querySelector('[role="dialog"]'));
-  window.confirm=()=>true;await env.act(async()=>button("关闭目标设置").click());
-  await new Promise(r=>setTimeout(r,200));assert.equal(document.querySelector('[role="dialog"]'),null);
- }finally{await env.act(async()=>root.unmount());env.cleanup();}
+test("provider settings no longer embed an image services tab", async () => {
+  const fs = await import("node:fs");
+  const page = fs.readFileSync(new URL("../../../agent-ui/src/pages/settings/SettingsPage.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /ProviderImageServices|ImageProfilesPanel/);
+  for (const gone of ["pages/settings/ProviderImageServices.tsx", "pages/settings/ImageProfilesPanel.tsx", "features/image-studio/ImageTargetSettings.tsx"])
+    assert.equal(fs.existsSync(new URL(`../../../agent-ui/src/${gone}`, import.meta.url)), false, gone);
 });

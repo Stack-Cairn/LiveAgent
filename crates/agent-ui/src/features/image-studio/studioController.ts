@@ -1,11 +1,12 @@
 import type {
   CreateJobRequest,
   ExportDestination,
+  GenerationParams,
   ImageStudioClient,
   ImageTarget,
   InputAsset,
   Operation,
-  Scalar,
+  ParamCorrection,
 } from "../../lib/imaging/types";
 import {
   type DraftScope,
@@ -22,7 +23,7 @@ import {
   verifyDraftAssets,
 } from "./drafts";
 import { ImageEventStreams } from "./imageEventStreams";
-import { defaultParameters, migrateParameters, validateParameters } from "./parameterModel";
+import { allowedFields, defaultParams, pruneParams } from "./paramsBarModel";
 import {
   applyJobSnapshot,
   errorAction,
@@ -53,6 +54,8 @@ export interface StudioView {
   dropped: string[];
   unverifiedAssetIds: string[];
   verifyingInputs: boolean;
+  /** What the backend actually used for each accepted job, keyed by job id. */
+  applied: Record<string, { params: GenerationParams; corrections: ParamCorrection[] }>;
 }
 const emptyDraft = (): StudioDraft => ({ prompt: "", targetId: "", parameters: {}, inputs: [] });
 export class ImageStudioController {
@@ -91,6 +94,7 @@ export class ImageStudioController {
       dropped: [],
       unverifiedAssetIds: [],
       verifyingInputs: false,
+      applied: {},
     };
     this.streams = this.newStreams();
   }
@@ -119,6 +123,13 @@ export class ImageStudioController {
   }
   private scope() {
     return { ownerId: this.ownerId, backendId: this.backendId, projectId: this.view.projectId };
+  }
+  /** Unified parameters for the current draft, limited to what the target takes. */
+  get params(): GenerationParams {
+    return pruneParams(this.target, this.view.draft.parameters);
+  }
+  setParams(params: GenerationParams) {
+    this.updateDraft({ parameters: { ...params } });
   }
   private persist() {
     if (!this.view.projectId || !this.view.draftReady) return;
@@ -189,7 +200,15 @@ export class ImageStudioController {
         state: { ...this.view.state, projects: projects.items },
         projectCursor: projects.nextCursor,
       });
-      if (projects.items[0]) await this.selectProject(projects.items[0].id);
+      // Projects are not shown: everything lives in one default project that is
+      // created on first use, so the workbench opens straight to the input box.
+      let project = projects.items[0];
+      if (!project) {
+        project = await this.client.createProject("默认");
+        if (!this.valid(epoch)) return;
+        this.patch({ state: { ...this.view.state, projects: [project] } });
+      }
+      await this.selectProject(project.id);
     } catch {
       if (this.valid(epoch)) this.patch({ notice: "图像工作台加载失败，请检查后端连接后重试。" });
     } finally {
@@ -220,9 +239,33 @@ export class ImageStudioController {
     this.patch({ operation });
     this.updateDraft({ inputs: [], parentAssetId: undefined });
   }
+  /** 文生图 without reference images, 图生图 with them. */
+  get mode(): "text" | "image" {
+    return this.view.draft.inputs.length ? "image" : "text";
+  }
+  /** Whether the current model can take reference images at all. */
+  get acceptsImages(): boolean {
+    const target = this.target;
+    return (
+      !!target?.capabilities.operations.includes("reference") && target.capabilities.maxInputs > 0
+    );
+  }
+  removeInput(assetId: string) {
+    this.updateDraft({
+      inputs: this.view.draft.inputs.filter((input) => input.assetId !== assetId),
+    });
+  }
+  /** The send button: replays an unconfirmed request, otherwise always starts
+   * a new task, like sending another chat message. */
+  async send() {
+    const previous = this.view.submission;
+    if (previous?.status === "submitting") return;
+    await this.submit(previous?.status === "accepted");
+  }
   setCount(count: number) {
     this.patch({ count });
   }
+
   get target() {
     return this.view.targets.find((target) => target.id === this.view.draft.targetId);
   }
@@ -256,9 +299,15 @@ export class ImageStudioController {
     }
   }
   private applyTarget(next: ImageTarget, previous: ImageTarget | undefined) {
-    const migration = previous
-      ? migrateParameters(previous, next, this.view.draft.parameters)
-      : { values: defaultParameters(next), dropped: [] };
+    // Unified parameters carry across models: unsupported ones are kept in the
+    // draft but greyed out and omitted on submit, so nothing needs confirming.
+    const migration = {
+      values: {
+        ...defaultParams(next),
+        ...(previous ? this.view.draft.parameters : {}),
+      } as Record<string, unknown>,
+      dropped: [] as string[],
+    };
     const operation = next.capabilities.operations.includes(this.view.operation)
       ? this.view.operation
       : (next.capabilities.operations[0] ?? "generate");
@@ -267,9 +316,7 @@ export class ImageStudioController {
       operation,
       count: Math.min(this.view.count, next.capabilities.maxCount),
       dropped: migration.dropped,
-      notice: hasInputs
-        ? "目标已切换，请重新确认输入图片的参考或编辑方式；新目标不保证继承原上下文。"
-        : "",
+      notice: hasInputs ? "已切换模型，参考图会保留。" : "",
     });
     const allowed =
       operation === "generate"
@@ -279,12 +326,12 @@ export class ImageStudioController {
           : operation === "edit"
             ? ["source", "reference"]
             : ["source", "mask"];
+    void allowed;
     this.updateDraft({
       targetId: next.id,
       parameters: migration.values,
-      inputs: this.view.draft.inputs
-        .filter((input) => allowed.includes(input.role))
-        .slice(0, next.capabilities.maxInputs),
+      // Reference images stay; the send button explains if the model cannot take them.
+      inputs: this.view.draft.inputs,
     });
   }
   acknowledgeMigration() {
@@ -311,7 +358,7 @@ export class ImageStudioController {
       draft: {
         ...emptyDraft(),
         targetId: target?.id ?? "",
-        parameters: target ? defaultParameters(target) : {},
+        parameters: target ? { ...defaultParams(target) } : {},
       },
       operation: target?.capabilities.operations[0] ?? "generate",
       count: 1,
@@ -372,7 +419,7 @@ export class ImageStudioController {
         }
       } catch {
         if (this.valid(epoch))
-          this.patch({ notice: "本地草稿或提交记录读取失败，已暂停保存与提交，请重选项目重试。" });
+          this.patch({ notice: "本地草稿或提交记录读取失败，请刷新页面重试。" });
       }
     };
     const loadHistory = async () => {
@@ -384,7 +431,7 @@ export class ImageStudioController {
         this.patch({ state, jobCursor: page.nextCursor });
         for (const job of page.items) this.streams.watch(job);
       } catch {
-        if (this.valid(epoch)) this.patch({ notice: "项目历史加载失败，草稿会独立恢复。" });
+        if (this.valid(epoch)) this.patch({ notice: "历史记录加载失败，草稿已保留。" });
       }
     };
     await Promise.all([loadDraft(), loadHistory()]);
@@ -497,30 +544,15 @@ export class ImageStudioController {
   selectAsset(id: string) {
     this.patch({ state: { ...this.view.state, selectedAssetId: id } });
   }
+  /** "以此图生成": put a result into the input box as a reference image. */
   editAsset(id: string) {
-    const target = this.target;
-    if (!target) return;
-    const operation = target.capabilities.operations.includes("edit")
-      ? "edit"
-      : target.capabilities.operations.includes("reference")
-        ? "reference"
-        : undefined;
-    if (!operation) {
-      this.patch({ notice: "当前目标不支持图片编辑或参考生成，请先切换目标。" });
+    if (!this.acceptsImages) {
+      this.patch({ notice: "当前模型不支持图生图，请换一个模型。" });
       return;
     }
-    const original = Object.values(this.view.state.jobs).find((job) => job.assetIds.includes(id));
-    this.patch({
-      operation,
-      notice:
-        original?.request.targetId !== target.id
-          ? "将以新目标的参考或编辑方式创建版本，不保证继承原上下文。"
-          : "已绑定父图片，将创建新版本。",
-    });
-    this.updateDraft({
-      inputs: [{ assetId: id, role: operation === "edit" ? "source" : "reference" }],
-      parentAssetId: id,
-    });
+    if (this.view.draft.inputs.some((input) => input.assetId === id)) return;
+    this.patch({ operation: "reference", notice: "" });
+    this.updateDraft({ inputs: [...this.view.draft.inputs, { assetId: id, role: "reference" }] });
   }
   cancelUpload() {
     this.uploadAbort?.abort();
@@ -589,14 +621,17 @@ export class ImageStudioController {
   validation(): string[] {
     const { draft, count, operation, projectId, uploading, dropped, draftReady } = this.view;
     const target = this.target;
-    if (!target?.enabled) return ["请选择已启用并验证的图像目标。"];
-    const errors = validateParameters(target, draft.parameters).map(
-      (error) =>
-        `${target.parameters.find((p) => p.key === error.key)?.label ?? error.key}：${error.message}`,
-    );
-    if (!projectId || !draftReady) errors.push("请先选择项目并等待草稿恢复。");
+    if (!target) return ["请先在“图像服务”里添加服务并选择模型。"];
+    if (!target.enabled) return [target.disabledReason || "当前模型不可用，请在图像服务中检查。"];
+    const errors: string[] = [];
+    const size = this.params.size;
+    if (allowedFields(target).has("size") && size !== "auto" && !/^\d{2,5}x\d{2,5}$/.test(size))
+      errors.push("尺寸格式应为 宽x高，例如 1600x900。");
+    if (!projectId || !draftReady) errors.push("正在加载，请稍候。");
     if (!draft.prompt.trim()) errors.push("请输入提示词。");
-    if (!target.capabilities.operations.includes(operation)) errors.push("目标不支持此操作。");
+    void operation;
+    if (draft.inputs.length && !this.acceptsImages)
+      errors.push("当前模型不支持图生图，请移除参考图或换一个模型。");
     if (!Number.isInteger(count) || count < 1 || count > Math.min(16, target.capabilities.maxCount))
       errors.push("请调整生成数量。");
     if (uploading) errors.push("请等待图片上传完成。");
@@ -605,22 +640,8 @@ export class ImageStudioController {
     if (draft.parentAssetId && !draft.inputs.some((input) => input.assetId === draft.parentAssetId))
       errors.push("父图片必须包含在输入图片中，请重新关联或解除版本关联。");
     if (dropped.length) errors.push("请先确认参数调整。");
-    const roles = draft.inputs.map((input) => input.role);
-    if (draft.inputs.length > target.capabilities.maxInputs) errors.push("输入图片超过目标上限。");
-    if (operation === "reference" && !roles.includes("reference")) errors.push("请添加参考图片。");
-    if (["edit", "mask"].includes(operation) && !roles.includes("source"))
-      errors.push("请添加原始图片。");
-    if (operation === "mask" && !roles.includes("mask")) errors.push("请添加遮罩图片。");
-    const allowed =
-      operation === "generate"
-        ? []
-        : operation === "reference"
-          ? ["reference"]
-          : operation === "edit"
-            ? ["source", "reference"]
-            : ["source", "mask"];
-    if (roles.some((role) => !allowed.includes(role)))
-      errors.push("输入图片用途与操作不兼容，请移除后重新添加。");
+    if (draft.inputs.length > target.capabilities.maxInputs)
+      errors.push(`当前模型最多接受 ${target.capabilities.maxInputs} 张参考图。`);
     return errors;
   }
   async regenerate(acceptedKey: string) {
@@ -643,16 +664,19 @@ export class ImageStudioController {
         return;
       }
     }
-    const { draft, projectId, count, operation } = this.view;
+    const { draft, projectId, count } = this.view;
+    const operation: Operation = draft.inputs.length ? "reference" : "generate";
+    // The frozen request keeps the unified parameters in `parameters` so a
+    // replay after an unknown response re-sends exactly the same intent.
+    const params = { ...this.params, n: count };
     const request: CreateJobRequest = {
       projectId,
       targetId: draft.targetId,
       prompt: draft.prompt,
-      parameters: draft.parameters as Record<string, Scalar>,
-      inputs: draft.inputs,
+      parameters: params as unknown as CreateJobRequest["parameters"],
+      inputs: draft.inputs.map((input) => ({ assetId: input.assetId, role: "reference" as const })),
       operation,
       count,
-      ...(draft.parentAssetId ? { parentAssetId: draft.parentAssetId } : {}),
     };
     const submission = freezeSubmission(
       previous,
@@ -669,14 +693,30 @@ export class ImageStudioController {
     const epoch = this.epoch;
     this.patch({ submission: { ...submission, status: "submitting" }, notice: "" });
     try {
-      const job = await this.client.createJob(submission.request, submission.key);
+      const created = await this.createFrozen(submission.request, submission.key);
+      const job = created.job;
       const accepted = this.settleSubmission(scope, submission.key, {
         ...submission,
         status: "accepted",
         jobId: job.id,
       });
       if (!this.valid(epoch)) return;
-      this.patch({ state: applyJobSnapshot(this.view.state, job), submission: accepted });
+      const corrections = created.corrections ?? [];
+      this.patch({
+        state: applyJobSnapshot(this.view.state, job),
+        submission: accepted,
+        ...(created.appliedParams
+          ? {
+              applied: {
+                ...this.view.applied,
+                [job.id]: { params: created.appliedParams, corrections },
+              },
+            }
+          : {}),
+        ...(corrections.length
+          ? { notice: `已按平台限制调整：${corrections.map((c) => c.reason).join("；")}。` }
+          : {}),
+      });
       this.streams.watch(job);
     } catch (error) {
       // Rejecting a replay (for example after auth expiry) does not settle the original attempt.
@@ -697,6 +737,23 @@ export class ImageStudioController {
     } finally {
       if (this.valid(epoch)) this.pendingSubmit = false;
     }
+  }
+  /** Submit a frozen request. Profile targets take the unified parameters and
+   * let the backend convert them; old backends get the legacy native call. */
+  private async createFrozen(request: CreateJobRequest, key: string) {
+    const profiles = this.client.profiles;
+    if (!profiles) return { job: await this.client.createJob(request, key) };
+    const { parameters, ...rest } = request;
+    const raw = parameters as unknown as Record<string, unknown>;
+    const params: GenerationParams = {
+      size: typeof raw.size === "string" ? raw.size : "auto",
+      n: request.count,
+    };
+    for (const field of ["quality", "outputFormat", "moderation"] as const)
+      if (typeof raw[field] === "string") params[field] = raw[field] as string;
+    if (typeof raw.outputCompression === "number") params.outputCompression = raw.outputCompression;
+    if (raw.transparentOutput === true) params.transparentOutput = true;
+    return profiles.createJobWithParams({ ...rest, params }, key);
   }
   async refreshJob(id: string) {
     const epoch = this.epoch;

@@ -1,5 +1,6 @@
 import { Button } from "../../components/ui/button";
 import { AssetImage } from "./AssetImage";
+import { describeParams } from "./paramsBarModel";
 import type { ImageStudioController, StudioView } from "./studioController";
 import { errorAction, jobResultCount, statusLabels, terminalJob } from "./studioModel";
 
@@ -21,7 +22,7 @@ export function ResultGallery({
         <div className="flex min-h-48 flex-col items-center justify-center gap-2 text-center">
           <h2 className="font-medium">从一个画面想法开始</h2>
           <p className="max-w-md text-sm text-muted-foreground">
-            选择项目和已验证的图像目标，输入描述生成图片。作品和编辑版本会保存在当前后端的项目中。
+            在下方选择模型、输入描述后点击生成。添加参考图即可图生图。
           </p>
         </div>
       )}
@@ -60,6 +61,7 @@ export function ResultGallery({
           <p className="line-clamp-2 whitespace-pre-wrap break-words text-sm">
             {job.request.prompt}
           </p>
+          <JobParams job={job} applied={view.applied[job.id]} />
           {job.status === "result_unknown" && (
             <p className="text-sm text-muted-foreground">
               结果未知。请先刷新核对；明确重新生成可能再次计费。
@@ -111,5 +113,38 @@ export function ResultGallery({
         </Button>
       )}
     </section>
+  );
+}
+
+/** Model, requested parameters and — when the backend adjusted something —
+ * what was actually sent, like gpt-image-studio's task card. */
+function JobParams({
+  job,
+  applied,
+}: {
+  job: StudioView["state"]["jobs"][string];
+  applied: StudioView["applied"][string] | undefined;
+}) {
+  const requested = describeParams(
+    job.request.parameters as unknown as Parameters<typeof describeParams>[0],
+  );
+  const model = job.targetSnapshot.remoteId || job.targetSnapshot.name;
+  const changed = applied?.corrections ?? [];
+  return (
+    <p className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <span>{model}</span>
+      {requested.map((part) => (
+        <span key={part}>· {part}</span>
+      ))}
+      {job.request.count > 1 && <span>· {job.request.count} 张</span>}
+      {changed.length > 0 && (
+        <span
+          className="text-amber-600 dark:text-amber-400"
+          title={changed.map((c) => c.reason).join("\n")}
+        >
+          · 已调整：{changed.map((c) => `${c.field} ${c.from}→${c.to}`).join("，")}
+        </span>
+      )}
+    </p>
   );
 }

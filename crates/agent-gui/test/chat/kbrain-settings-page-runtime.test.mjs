@@ -66,9 +66,7 @@ test("SettingsPage keeps the original provider interface and label for a K-brain
     await env.act(async () => Promise.resolve());
     assert.match(host.textContent, /original-provider-interface/);
     const tabs = [...host.querySelectorAll("button")].filter((button) => ["对话模型", "图像服务"].includes(button.textContent));
-    assert.deepEqual(tabs.map((button) => button.textContent), ["对话模型", "图像服务"]);
-    assert.equal(tabs[0].getAttribute("aria-pressed"), "true");
-    assert.equal(tabs[1].getAttribute("aria-pressed"), "false");
+    assert.deepEqual(tabs, [], "image services come from provider settings, so there is no separate tab");
     assert.equal(section.labelKey, "settings.navProviders");
     const zhCN = env.loadModule("@liveagent/ui/i18n/translations/zhCNSettings.ts");
     assert.equal(zhCN.ZH_CN_SETTINGS_TRANSLATIONS["settings.navProviders"], "供应商设置");

@@ -1,8 +1,10 @@
 import { abortError, ImageClientError, protocolError, responseError, safeInteger } from "./errors";
 import type {
+  CreateJobWithParams,
   ExportDestination,
   ExportResult,
   ImageEvent,
+  ImageProfilesClient,
   ImageStudioClient,
   TargetVerificationAttempt,
   TargetVerificationReceipt,
@@ -10,19 +12,20 @@ import type {
 } from "./types";
 import { IMAGE_WIRE_VERSION } from "./types";
 import {
-  array,
   bool,
   envelope,
   knownEvents,
   page,
   parseAsset,
+  parseCreatedJob,
   parseEvent,
+  parseGenerationParams,
   parseJob,
   parseJobEnvelope,
+  parseProfileSet,
   parseProject,
   parseRequest,
   parseSettings,
-  parseTarget,
   record,
   text,
 } from "./wire";
@@ -336,7 +339,25 @@ export function createImageStudioClient(options: ImageStudioClientOptions): Imag
       ),
     );
   }
+  const profiles: ImageProfilesClient = {
+    listProfiles: async () => parseProfileSet(await json("/profiles")),
+    createJobWithParams: async (input: CreateJobWithParams, key) => {
+      if (!key || [...key].some((char) => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127))
+        throw new ImageClientError("IMAGE_INVALID_INPUT");
+      const { params, ...rest } = input;
+      const request = parseRequest({ ...rest, parameters: {} });
+      const { parameters: _parameters, ...body } = request;
+      const value = await json("/jobs", {
+        method: "POST",
+        ...jsonBody({ ...body, params: parseGenerationParams(params) }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+      });
+      bool(value.replayed);
+      return parseCreatedJob(value);
+    },
+  };
   return {
+    profiles,
     capabilities: () =>
       scoped(undefined, async (signal) => {
         const response = await send(
@@ -431,7 +452,33 @@ export function createImageStudioClient(options: ImageStudioClientOptions): Imag
       if (receipt.id !== receiptId) throw protocolError();
       return rememberVerificationReceipt(targetId, receipt);
     },
-    listTargets: async () => array(parseTarget)((await json("/targets")).items),
+    // Targets derive from the chat providers: one target per image model,
+    // labelled "供应商 · 模型".
+    listTargets: async () => {
+      const set = parseProfileSet(await json("/profiles"));
+      return set.profiles.flatMap((profile) =>
+        profile.targets.map((target) => ({
+          id: target.id,
+          name: `${profile.name} · ${target.model}`,
+          connectionId: profile.id,
+          adapter: target.adapter,
+          adapterVersion: "1",
+          kind: "model" as const,
+          remoteId: target.model,
+          revision: set.revision,
+          capabilities: target.capabilities,
+          parameters: target.parameters,
+          enabled: target.ready,
+          ...(target.ready
+            ? {}
+            : {
+                disabledReason: profile.apiKeyConfigured
+                  ? "该供应商的平台暂不支持生图，请在供应商设置中检查。"
+                  : "该供应商尚未填写 API Key，请在供应商设置中填写。",
+              }),
+        })),
+      );
+    },
     getSettings: async () => {
       const value = await json("/settings");
       return parseSettings(value.settings ?? value);

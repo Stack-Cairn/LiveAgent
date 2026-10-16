@@ -12,6 +12,16 @@ const connection = { baseUrl: "https://gateway.example", backendId: "selected /?
 const identity = { ownerId: "verified-user", backendId: connection.backendId, gatewayOrigin: connection.baseUrl, accessToken: connection.token };
 const json = (body, status = 200) => Response.json({ version, ...body }, { status });
 const failure = (status, code) => json({ error: { code, message: "server detail", retryable: false, requestId: "req-image" } }, status);
+const profileSet = {
+  revision: 1,
+  profiles: [{
+    id: "ic_fixture", name: "Example provider", platform: "openai", baseUrl: "https://example.invalid", enabled: true,
+    models: fixture.settings.targets.map((target) => target.remoteId), apiKeyConfigured: true,
+    targets: fixture.settings.targets.map((target) => ({
+      id: target.id, model: target.remoteId, adapter: target.adapter, capabilities: target.capabilities, parameters: target.parameters, ready: target.enabled,
+    })),
+  }],
+};
 const asset = { id: "ia_fixture", hash: "hash", mime: "image/png", bytes: 3, width: 1, height: 1, source: "upload", parentAssetIds: [], createdAt: fixture.job.createdAt, available: true };
 
 test("all shared client HTTP routes use explicit backend and authenticated gateway health", async () => {
@@ -27,7 +37,7 @@ test("all shared client HTTP routes use explicit backend and authenticated gatew
     assert.equal(init.cache, "no-store");
     assert.ok(init.signal instanceof AbortSignal);
     if (parsed.pathname.endsWith("/health")) return Response.json({ status: "ok", capabilities: { image: { supported: true, version } } });
-    if (parsed.pathname.endsWith("/targets")) return json({ items: fixture.settings.targets });
+    if (parsed.pathname.endsWith("/profiles")) return json(profileSet);
     if (parsed.pathname.endsWith("/settings")) return json({ settings: fixture.settings });
     if (parsed.pathname.endsWith("/secrets")) return json({ ref: "opaque-ref", configured: true });
     if (parsed.pathname.endsWith("/projects")) return json({ items: [], nextCursor: "next" });

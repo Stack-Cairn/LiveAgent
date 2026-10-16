@@ -13,11 +13,17 @@ const err = (code:string,status=409) => json({error:{code,message:'TEST fixture 
 const asset = (id:string, jobId?:string) => ({id,hash:'fake-hash',mime:'image/png',bytes:100,width:320,height:240,source:jobId?'generated':'upload',parentAssetIds:[],...(jobId?{jobId}:{}),createdAt:now(),available:true});
 const canvas = document.createElement('canvas'); canvas.width=320; canvas.height=240; const ctx=canvas.getContext('2d')!;ctx.fillStyle='#2266bb';ctx.fillRect(0,0,320,240);ctx.fillStyle='white';ctx.font='22px sans-serif';ctx.fillText('TEST FIXTURE',70,120);
 const image = await new Promise<Blob>(resolve=>canvas.toBlob(blob=>resolve(blob!),'image/png'));
+const profileSet = () => ({revision:settings.revision,profiles:[{id:'ip_fixture0000000001',name:'TEST ONLY Service',kind:'builtin',platform:'openai',baseUrl:'https://api.openai.com/v1',enabled:true,models:settings.targets.map((x:any)=>x.remoteId+'-'+x.id),apiKeyConfigured:true,targets:settings.targets.map((x:any)=>({id:x.id,model:x.remoteId+'-'+x.id,adapter:x.adapter,capabilities:x.capabilities,parameters:[{key:'size',label:'size',type:'string',required:false},{key:'quality',label:'quality',type:'string',required:false},{key:'output_format',label:'output_format',type:'string',required:false}],ready:x.enabled}))}]});
 export const transport:ImageTransport = async (path, init) => {
  const url=new URL(path,'http://fixture.invalid'); const p=url.pathname.replace('/v1/image',''); const method=init.method||'GET'; const body=typeof init.body==='string'?JSON.parse(init.body):undefined;
  audit.push({path,method,key:new Headers(init.headers).get('Idempotency-Key'),after:new Headers(init.headers).get('Last-Event-ID'),body:p==='/secrets'?{connectionId:body.connectionId,purpose:body.purpose,value:'[REDACTED]'}:body});
  if(path==='/v1/health') return new Response(JSON.stringify({status:'ok',capabilities:{image:{supported:true,version}}}));
  if(p==='/targets') return json({items:settings.targets});
+ // Profile layer: one TEST profile whose two models mirror the two legacy targets.
+ if(p==='/platforms')return json({platforms:[{id:'openai',name:'OpenAI 兼容',kind:'builtin',defaultBaseUrl:'https://api.openai.com/v1',defaultModels:['gpt-image-2'],supportsModelListing:true,supportsApiMode:true,supportsStreaming:true,apiModes:['images','responses'],secretKind:'apiKey',maxOutputImages:10,supportsQuality:true,supportsModeration:true,supportsOutputFormat:true,supportsCompression:true,supportsTransparentBackground:true}]});
+ if(p==='/profiles' && method==='GET')return json(profileSet());
+ if(p==='/profiles/custom-providers')return json({revision:1,customProviders:[],templates:[]});
+ if(p.startsWith('/profiles'))return json(profileSet());
  if(p==='/settings' && method==='GET')return json({settings});
  if(p==='/settings' && method==='PUT'){if(state.conflict){state.conflict=false;settings.revision++;return err('IMAGE_REVISION_CONFLICT');} if(body.expectedRevision!==settings.revision)return err('IMAGE_REVISION_CONFLICT');Object.assign(settings,{...body,revision:settings.revision+1});return json({settings});}
  if(p==='/secrets')return json({ref:'fake-opaque-ref',configured:true});

@@ -4,6 +4,8 @@ import { createTsModuleLoader } from '../helpers/load-ts-module.mjs';
 const { draftKey, serializeDraft, restoreDraft }=createTsModuleLoader().loadModule('@liveagent/ui/features/image-studio/drafts');
 const scope={ownerId:'owner',backendId:'backend',projectId:'project'};
 const target={id:'t',parameters:[{key:'quality',type:'string',label:'质量',required:false}]};
+// The unified parameter bar always carries size/count; only declared keys survive.
+const unified={size:'auto',n:1,quality:'high'};
 const value={prompt:'画一只猫',targetId:'t',parameters:{quality:'high',secret:'never',url:'https://private'},inputs:[{assetId:'ia_ok',role:'source'},{assetId:'ia_gone',role:'reference'}],parentAssetId:'ia_ok',secret:'never',downloadUrl:'https://private'};
 test('scope keys are collision-free and scoped',()=>{assert.notEqual(draftKey('a:b','c','d'),draftKey('a','b:c','d')); assert.notEqual(draftKey('a','b','c'),draftKey('a','other','c'));});
 test('only versioned scoped public fields survive, restored assets must be available',async()=>{
@@ -15,5 +17,6 @@ test('only versioned scoped public fields survive, restored assets must be avail
 });
 test('malformed drafts cannot smuggle arbitrary parameter keys or unknown asset roles',async()=>{
  const raw=JSON.stringify({version:1,scope,...value,inputs:[{assetId:'ia_ok',role:'evil'}]});
- const result=await restoreDraft(raw,scope,[target],async()=>true); assert.equal(result.draft.inputs.length,0); assert.deepEqual(Object.keys(result.draft.parameters),['quality']);
+ const result=await restoreDraft(raw,scope,[target],async()=>true); assert.equal(result.draft.inputs.length,0); assert.deepEqual(result.draft.parameters,unified);
+ const unknown=await restoreDraft(JSON.stringify({version:1,scope,...value,parameters:{quality:'high',notAField:1}}),scope,[target],async()=>true); assert.equal('notAField' in unknown.draft.parameters,false);
 });
