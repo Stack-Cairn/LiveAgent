@@ -133,6 +133,32 @@ func (r *Relay) Queue(ctx context.Context, req *gatewayv2.ChatQueueRequest, call
 		r.queueEdits[key] = queueEdit{Item: item, ConversationID: conversationID, Index: index, Revision: newRevision}
 		return r.queueResponseLocked(conversationID, r.queues[conversationID], newRevision, "", &item)
 	}
+	// Restoring an edit can happen after the previous active run has finished.
+	// Reserve the oldest queued run while locked, but dispatch only after the
+	// updated queue state has been persisted successfully.
+	restoreEditedRun := func(edited queueEdit) QueueResponse {
+		queued := r.queues[conversationID]
+		index := edited.Index
+		if index > len(queued) {
+			index = len(queued)
+		}
+		queued = insertQueueItem(queued, index, edited.Item)
+		r.queues[conversationID] = queued
+		if r.activeRuns[conversationID] == "" {
+			next := queued[0]
+			r.queues[conversationID] = queued[1:]
+			state, runCtx := r.newRunLocked(context.Background(), next.RunID, conversationID, next.ClientRequestID, next.Callbacks)
+			r.activeRuns[conversationID] = next.RunID
+			rollbackRun = func() {
+				state.cancel()
+				delete(r.runs, next.RunID)
+				delete(r.activeRuns, conversationID)
+			}
+			afterCommit = func() { go r.execute(runCtx, state, next.CWD, next.Prompt) }
+		}
+		newRevision := r.bumpQueueRevisionLocked(conversationID)
+		return r.queueResponseLocked(conversationID, r.queues[conversationID], newRevision, "", nil)
+	}
 	if action == "edit_cancel" {
 		key := conversationID + "\x00" + strings.TrimSpace(req.GetItemId())
 		edited, ok := r.queueEdits[key]
@@ -140,14 +166,7 @@ func (r *Relay) Queue(ctx context.Context, req *gatewayv2.ChatQueueRequest, call
 			return queueError("not_found", "queued edit session not found")
 		}
 		delete(r.queueEdits, key)
-		items = r.queues[conversationID]
-		index := edited.Index
-		if index > len(items) {
-			index = len(items)
-		}
-		r.queues[conversationID] = insertQueueItem(items, index, edited.Item)
-		newRevision := r.bumpQueueRevisionLocked(conversationID)
-		return r.queueResponseLocked(conversationID, r.queues[conversationID], newRevision, "", nil)
+		return restoreEditedRun(edited)
 	}
 	if action == "edit_commit" {
 		key := conversationID + "\x00" + strings.TrimSpace(req.GetItemId())
@@ -166,14 +185,7 @@ func (r *Relay) Queue(ctx context.Context, req *gatewayv2.ChatQueueRequest, call
 		edited.Item.Prompt.ClientRequestID = edited.Item.ClientRequestID
 		edited.Item.DraftJSON, edited.Item.UploadedFilesJSON = draft, uploads
 		delete(r.queueEdits, key)
-		items = r.queues[conversationID]
-		index := edited.Index
-		if index > len(items) {
-			index = len(items)
-		}
-		r.queues[conversationID] = insertQueueItem(items, index, edited.Item)
-		newRevision := r.bumpQueueRevisionLocked(conversationID)
-		return r.queueResponseLocked(conversationID, r.queues[conversationID], newRevision, "", nil)
+		return restoreEditedRun(edited)
 	}
 	if strings.TrimSpace(req.GetItemId()) == r.activeRuns[conversationID] {
 		return queueError("active", "active run cannot be edited or deleted")
