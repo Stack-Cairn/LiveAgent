@@ -20,6 +20,7 @@ import {
 import { getConfiguredKBrainConnection } from "../kbrain/runtimeConnection";
 import type { KBrainSettingsDocument } from "../kbrain/types";
 import { SettingsStorageError, type SettingsStorageErrorCode } from "./errors";
+import { importLegacyMcpSettings } from "./legacyMcpImport";
 import {
   type AppSettings,
   type ChatRuntimeControls,
@@ -769,7 +770,11 @@ function projectPromptFields(settings: AppSettings, path: string) {
 async function loadKBrainMcpSettings(settings: AppSettings): Promise<AppSettings> {
   if (!isKBrainBackendEnabled()) return settings;
   try {
-    const document = await createKBrainClient().getMcpSettings();
+    const client = createKBrainClient();
+    let document = await client.getMcpSettings();
+    if (!isKBrainBrowserHost()) {
+      document = await importLegacyMcpSettings(settings.mcp, document, client.updateMcpSettings);
+    }
     return normalizeSettings({
       ...settings,
       mcp: fromKBrainMcpSettings(document, settings.mcp),

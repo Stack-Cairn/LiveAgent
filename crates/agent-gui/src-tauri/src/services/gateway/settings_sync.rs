@@ -32,6 +32,10 @@ impl GatewayController {
             crate::services::gateway_bridge::kbrain_gateway_settings(self.app_handle.clone())
                 .await?;
         apply_kbrain_model_settings(&mut snapshot, &backend)?;
+        let mcp =
+            crate::services::gateway_bridge::kbrain_gateway_mcp_settings(self.app_handle.clone())
+                .await?;
+        apply_kbrain_mcp_settings(&mut snapshot, &mcp)?;
         self.store_settings_snapshot(snapshot)
     }
 
@@ -45,6 +49,22 @@ impl GatewayController {
         *guard = Some(snapshot.clone());
         Ok(snapshot)
     }
+}
+
+pub(crate) fn apply_kbrain_mcp_settings(
+    snapshot: &mut Value,
+    backend: &Value,
+) -> Result<(), String> {
+    let settings = backend
+        .get("settings")
+        .filter(|settings| settings.get("servers").is_some_and(Value::is_array))
+        .ok_or_else(|| "K-brain MCP response is missing servers".to_string())?;
+    snapshot["mcp"] = settings.clone();
+    // Empty selections are omitted by the backend; never retain stale SQLite ids.
+    if !snapshot["mcp"].get("selected").is_some_and(Value::is_array) {
+        snapshot["mcp"]["selected"] = serde_json::json!([]);
+    }
+    Ok(())
 }
 
 pub(crate) fn apply_kbrain_model_settings(
