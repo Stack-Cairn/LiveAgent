@@ -8,9 +8,7 @@ import (
 	"strings"
 )
 
-// Settings projection is intentionally narrow: K-brain owns only provider
-// settings and the selected model. Omitting other fields lets the frontend
-// retain its local settings instead of replacing them with fabricated defaults.
+// Project backend-owned settings only; MCP is fetched from its resource route.
 type gatewaySettingsProjection struct {
 	AIApproval      json.RawMessage `json:"aiApproval,omitempty"`
 	Computer        json.RawMessage `json:"computer,omitempty"`
@@ -221,7 +219,7 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 	}
 	for key := range input {
 		switch key {
-		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval":
+		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills":
 		default:
 			return nil, fmt.Errorf("unsupported Gateway settings field %q: non-provider settings persistence is unavailable", key)
 		}
@@ -399,9 +397,36 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 		}
 	}
 	if len(update) == 0 {
-		return nil, errors.New("settings update contains no supported changes")
+		_, mcp := input["mcp"]
+		_, skills := input["skills"]
+		if !mcp && !skills {
+			return nil, errors.New("settings update contains no supported changes")
+		}
 	}
 	return json.Marshal(update)
+}
+
+func gatewayMCPSettings(raw json.RawMessage) (json.RawMessage, error) {
+	var settings map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &settings); err != nil || settings == nil {
+		return nil, errors.New("MCP settings must be an object")
+	}
+	var servers []map[string]json.RawMessage
+	if err := json.Unmarshal(settings["servers"], &servers); err != nil || servers == nil {
+		return nil, errors.New("MCP settings must contain a servers array")
+	}
+	for _, server := range servers {
+		if server == nil {
+			return nil, errors.New("MCP server must be an object")
+		}
+		var transport string
+		_ = json.Unmarshal(server["transport"], &transport)
+		if transport == "sse" {
+			server["transport"] = json.RawMessage(`"http"`)
+		}
+	}
+	settings["servers"], _ = json.Marshal(servers)
+	return json.Marshal(settings)
 }
 
 func providerModelPresent(provider map[string]any, modelID string) bool {

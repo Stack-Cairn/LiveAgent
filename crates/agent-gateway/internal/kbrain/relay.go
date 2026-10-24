@@ -159,6 +159,44 @@ func (r *Relay) SettingsGet(ctx context.Context, request *gatewayv2.SettingsGetR
 	if err != nil {
 		return nil, err
 	}
+	mcp, err := r.client.settingsRequest(ctx, "GET", "/v1/mcp", nil)
+	if err != nil {
+		return nil, err
+	}
+	var resource struct {
+		Settings json.RawMessage `json:"settings"`
+	}
+	if err := json.Unmarshal(mcp, &resource); err != nil {
+		return nil, err
+	}
+	validated, err := gatewayMCPSettings(resource.Settings)
+	if err != nil {
+		return nil, err
+	}
+	var snapshot map[string]json.RawMessage
+	if err := json.Unmarshal(projected, &snapshot); err != nil {
+		return nil, err
+	}
+	snapshot["mcp"] = validated
+	skills, err := r.SkillManage(ctx, &gatewayv2.SkillManageRequest{PayloadJson: `{"action":"list"}`})
+	if err != nil {
+		return nil, err
+	}
+	var skillResource struct {
+		Settings json.RawMessage `json:"settings"`
+	}
+	if err := json.Unmarshal([]byte(skills.GetResultJson()), &skillResource); err != nil {
+		return nil, err
+	}
+	validatedSkills, err := gatewaySkillSettings(skillResource.Settings)
+	if err != nil {
+		return nil, err
+	}
+	snapshot["skills"] = validatedSkills
+	projected, err = json.Marshal(snapshot)
+	if err != nil {
+		return nil, err
+	}
 	return &gatewayv2.SettingsGetResponse{SettingsJson: string(projected)}, nil
 }
 
@@ -181,8 +219,38 @@ func (r *Relay) SettingsUpdate(ctx context.Context, request *gatewayv2.SettingsU
 	if err != nil {
 		return nil, err
 	}
-	if _, err := r.client.UpdateSettings(ctx, translated); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(args, &fields); err != nil {
 		return nil, err
+	}
+	var mcp json.RawMessage
+	if value, ok := fields["mcp"]; ok {
+		mcp, err = gatewayMCPSettings(value)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var skills json.RawMessage
+	if value, ok := fields["skills"]; ok {
+		skills, err = gatewaySkillSettings(value)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if string(translated) != "{}" {
+		if _, err := r.client.UpdateSettings(ctx, translated); err != nil {
+			return nil, err
+		}
+	}
+	if mcp != nil {
+		if _, err := r.client.settingsRequest(ctx, "PUT", "/v1/mcp", mcp); err != nil {
+			return nil, err
+		}
+	}
+	if skills != nil {
+		if _, err := r.client.settingsRequest(ctx, "PUT", "/v1/skills/settings", skills); err != nil {
+			return nil, err
+		}
 	}
 	return &gatewayv2.SettingsUpdateResponse{Accepted: true}, nil
 }

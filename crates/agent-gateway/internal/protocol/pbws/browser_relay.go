@@ -180,6 +180,17 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		return
 	}
 	if c.srv.kbrainRelay != nil && agentID == c.srv.kbrainTargetID {
+		if request := env.GetSkillManage(); request != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+			defer cancel()
+			response, err := c.srv.kbrainRelay.SkillManage(ctx, request)
+			if err != nil {
+				_ = c.sendLocalError(requestID, errorMessage(err))
+				return
+			}
+			c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_SkillManageResp{SkillManageResp: response}})
+			return
+		}
 		if env.GetPlanning() != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
 			defer cancel()

@@ -22,6 +22,10 @@ import {
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
 import {
+  providerSupportsNativeWebSearch,
+  resolveProviderApi,
+} from "@liveagent/ui/lib/providers/providerCapabilities";
+import {
   normalizeApiKey,
   normalizeBaseUrl,
   normalizeModels,
@@ -526,7 +530,7 @@ export function getKnownModelThinkingLevels(
 
 /**
  * 纯读路径:按 (供应商类型, 模型) 解析出当前应展示/下发的档位,只推导
- * `reasoning` 展示值,**绝不回写任何桶**。旧实现在这里把钳制结果写回
+ * `reasoning` 展示值和可用的联网搜索状态,**绝不回写任何桶**。旧实现在这里把钳制结果写回
  * reasoningByProvider 再被 update 持久化——narrow 表模型一碰任何控件就把
  * wide 表模型选的表外档抹掉,是「切会话/另一栏档位被重置」的元凶之一。
  * 桶的迁移与写入只发生在 updateChatRuntimeControlsForProvider。
@@ -546,7 +550,17 @@ export function normalizeChatRuntimeControlsForProvider(
     resolveChatRuntimeReasoning(controls, key, params.modelId),
     levels,
   );
-  return { ...controls, reasoning };
+  return {
+    ...controls,
+    reasoning,
+    nativeWebSearchEnabled:
+      controls.nativeWebSearchEnabled &&
+      (!params.providerId ||
+        providerSupportsNativeWebSearch(
+          params.providerId,
+          resolveProviderApi(params.providerId, params.requestFormat),
+        )),
+  };
 }
 
 /**

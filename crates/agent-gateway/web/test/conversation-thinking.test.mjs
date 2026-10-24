@@ -34,3 +34,23 @@ test("web requests use each conversation's persisted or local thinking", () => {
   assert.equal(resolve(local).reasoning, "xhigh");
   assert.equal(resolve(resolveActiveModelSelection({ settings: app })).reasoning, "medium");
 });
+
+test("web requests disable unsupported native search without changing the saved preference", () => {
+  const app = s.normalizeSettings({ chatRuntimeControls: { nativeWebSearchEnabled: true } });
+  const selectedModel = { customProviderId: "p", model: "audit-model" };
+  for (const [type, requestFormat, supported] of [
+    ["codex", "openai-completions", false],
+    ["deepseek", undefined, false],
+    ["codex", "openai-responses", true],
+    ["claude_code", undefined, true],
+    ["gemini", undefined, true],
+  ]) {
+    const controls = resolveConversationRuntimeControls({
+      selectedModel,
+      activeProviders: [{ id: "p", type, requestFormat }],
+      runtimeControls: app.chatRuntimeControls,
+    });
+    assert.equal(controls.nativeWebSearchEnabled, supported, `${type}/${requestFormat}`);
+  }
+  assert.equal(app.chatRuntimeControls.nativeWebSearchEnabled, true);
+});

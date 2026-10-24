@@ -858,6 +858,7 @@ export function MemoryPanel(props: {
           onClose={() => setSettingsDrawerOpen(false)}
           onRequestWipe={wipeAll}
           backendManaged={backendManaged}
+          kbrain={resourceHost.isKbrain}
         />
       ) : null}
     </>

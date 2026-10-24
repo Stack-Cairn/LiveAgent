@@ -150,6 +150,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryModelNone": "无选择",
   "settings.memoryModelEmpty": "当前 Provider 未配置模型。",
   "settings.memoryBackendOwned": "记忆执行由 K-brain 负责。",
+  "settings.memoryOrganizerBackendDescription":
+    "由 K-brain 扫描并生成整理建议。请先检查下方操作，再应用整份建议；此界面不会执行模型或后台整理。",
+  "settings.memoryOrganizerApplyProposal": "应用此整理建议",
   "settings.memoryBackendManaged": "记忆由 K-brain 后端管理；本地记忆操作暂不可用。",
   "settings.skillsBackendManaged": "Skills 由 K-brain 后端管理；本地扫描和编辑暂不可用。",
   "settings.memoryOrganizerUnsupported":

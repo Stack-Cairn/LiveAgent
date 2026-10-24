@@ -164,6 +164,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryModelNone": "No selection",
   "settings.memoryModelEmpty": "No models are configured for the current provider.",
   "settings.memoryBackendOwned": "Memory execution is owned by K-brain.",
+  "settings.memoryOrganizerBackendDescription":
+    "K-brain scans memories and proposes changes. Review the operations below before applying the whole proposal. This UI runs no model or background organizer.",
+  "settings.memoryOrganizerApplyProposal": "Apply this proposal",
   "settings.memoryBackendManaged":
     "Memory is managed by the K-brain backend; local memory actions are unavailable.",
   "settings.skillsBackendManaged":
