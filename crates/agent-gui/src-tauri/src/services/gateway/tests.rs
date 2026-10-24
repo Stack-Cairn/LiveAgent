@@ -33,6 +33,20 @@ fn remote_chat_failure_preserves_actionable_error_for_webui() {
 }
 
 #[test]
+fn gateway_mcp_snapshot_uses_backend_instead_of_legacy_sqlite() {
+    let mut snapshot = json!({"mcp": {"servers": [{"id": "legacy"}], "selected": ["legacy"]}});
+    super::apply_kbrain_mcp_settings(&mut snapshot, &json!({
+        "settings": {"servers": [{"id": "backend", "enabled": true, "transport": "stdio", "command": "server"}], "selected": ["backend"]},
+        "statuses": []
+    })).unwrap();
+    assert_eq!(snapshot["mcp"]["servers"][0]["id"], "backend");
+    assert_eq!(snapshot["mcp"]["selected"], json!(["backend"]));
+    super::apply_kbrain_mcp_settings(&mut snapshot, &json!({"settings": {"servers": []}})).unwrap();
+    assert_eq!(snapshot["mcp"], json!({"servers": [], "selected": []}));
+    assert!(super::apply_kbrain_mcp_settings(&mut snapshot, &json!({"settings": {}})).is_err());
+}
+
+#[test]
 fn gateway_model_snapshot_uses_backend_instead_of_legacy_providers() {
     let mut snapshot = json!({
         "customProviders": [{"id": "legacy", "activeModels": ["old-model"]}],

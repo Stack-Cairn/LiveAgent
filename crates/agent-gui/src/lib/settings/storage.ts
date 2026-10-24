@@ -44,6 +44,7 @@ import {
   type Theme,
   workspaceProjectPathKey,
 } from "./index";
+import { importLegacyMcpSettings } from "./legacyMcpImport";
 import {
   clearRejectedLegacyProviders,
   isPermanentLegacyProviderRejection,
@@ -769,7 +770,11 @@ function projectPromptFields(settings: AppSettings, path: string) {
 async function loadKBrainMcpSettings(settings: AppSettings): Promise<AppSettings> {
   if (!isKBrainBackendEnabled()) return settings;
   try {
-    const document = await createKBrainClient().getMcpSettings();
+    const client = createKBrainClient();
+    let document = await client.getMcpSettings();
+    if (!isKBrainBrowserHost()) {
+      document = await importLegacyMcpSettings(settings.mcp, document, client.updateMcpSettings);
+    }
     return normalizeSettings({
       ...settings,
       mcp: fromKBrainMcpSettings(document, settings.mcp),

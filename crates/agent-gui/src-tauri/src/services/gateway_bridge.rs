@@ -502,6 +502,14 @@ pub async fn handle_history_delete(
 }
 
 pub(crate) async fn kbrain_gateway_settings(app: AppHandle) -> Result<Value, String> {
+    kbrain_gateway_resource(app, "/v1/settings").await
+}
+
+pub(crate) async fn kbrain_gateway_mcp_settings(app: AppHandle) -> Result<Value, String> {
+    kbrain_gateway_resource(app, "/v1/mcp").await
+}
+
+async fn kbrain_gateway_resource(app: AppHandle, path: &str) -> Result<Value, String> {
     let backend = app
         .try_state::<Arc<KBrainBackendState>>()
         .ok_or_else(|| "K-brain backend state is unavailable".to_string())?;
@@ -512,7 +520,7 @@ pub(crate) async fn kbrain_gateway_settings(app: AppHandle) -> Result<Value, Str
     })
     .await
     .map_err(|error| format!("K-brain backend startup task failed: {error}"))??;
-    kbrain_prompt_request(&connection, reqwest::Method::GET, "/v1/settings", None).await
+    kbrain_prompt_request(&connection, reqwest::Method::GET, path, None).await
 }
 
 pub async fn handle_provider_list(app: AppHandle) -> Result<proto::ProviderListResponse, String> {
@@ -2570,6 +2578,49 @@ mod tests {
         )
         .expect_err("missing API key must fail");
         assert!(no_key.contains("API Key"));
+    }
+
+    #[tokio::test]
+    async fn kbrain_mcp_snapshot_reads_authenticated_backend() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            loop {
+                let count = socket.read(&mut buffer).await.unwrap();
+                assert!(count > 0);
+                request.extend_from_slice(&buffer[..count]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let headers = String::from_utf8_lossy(&request).to_lowercase();
+            assert!(headers.starts_with("get /v1/mcp "));
+            assert!(headers.contains("authorization: bearer fixture-token"));
+            let payload = r#"{"settings":{"servers":[{"id":"backend-docs","enabled":true,"transport":"stdio","command":"server"}]},"statuses":[]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(), payload
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        let connection = KBrainBackendConnection {
+            base_url: format!("http://{address}"),
+            token: "fixture-token".into(),
+            protocol_version: "kbrain.agent.v1".into(),
+            storage_id: "test-storage".into(),
+        };
+        let result =
+            super::kbrain_prompt_request(&connection, reqwest::Method::GET, "/v1/mcp", None)
+                .await
+                .unwrap();
+        let mut snapshot = json!({"mcp": {"servers": [], "selected": ["stale"]}});
+        crate::services::gateway::apply_kbrain_mcp_settings(&mut snapshot, &result).unwrap();
+        assert_eq!(snapshot["mcp"]["servers"][0]["id"], "backend-docs");
+        assert_eq!(snapshot["mcp"]["selected"], json!([]));
+        server.await.unwrap();
     }
 
     #[tokio::test]

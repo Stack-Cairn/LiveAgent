@@ -145,7 +145,7 @@ async function startSettingsFixture({ document = SETTINGS_DOCUMENT, promptDocume
   };
 }
 
-async function withSettingsFixture({ browser = true, kbrainBackend = false, localStorage = createMemoryLocalStorage(), invoke, fixtureOptions, navigator = { languages: ["en-US"], language: "en-US" } }, task) {
+async function withSettingsFixture({ browser = true, kbrainBackend = false, managedLocal = false, storageId = "fixture-storage", localStorage = createMemoryLocalStorage(), invoke, fixtureOptions, navigator = { languages: ["en-US"], language: "en-US" } }, task) {
   const fixture = await startSettingsFixture(fixtureOptions);
   const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
@@ -165,7 +165,7 @@ async function withSettingsFixture({ browser = true, kbrainBackend = false, loca
     },
   });
   const runtime = loader.loadModule("src/lib/kbrain/runtimeConnection.ts");
-  runtime.setKBrainRuntimeConnection({ baseUrl: fixture.baseUrl, token: "fixture-token", protocolVersion: "kbrain.agent.v1" });
+  runtime.setKBrainRuntimeConnection({ baseUrl: fixture.baseUrl, token: "fixture-token", protocolVersion: "kbrain.agent.v1", managedLocal, storageId });
   try {
     return await task({ fixture, loader, storage: loader.loadModule("src/lib/settings/storage.ts") });
   } finally {
@@ -383,6 +383,49 @@ for (const browser of [true, false]) {
     });
   });
 }
+
+test("managed desktop migrates missing legacy MCP servers without replacing backend records or resurrecting deletions", async () => {
+  const legacy = { servers: [
+    { id: "legacy", enabled: true, transport: "stdio", command: "legacy-server", args: ["--stdio"], env: { TOKEN: "legacy-secret" } },
+    { id: "shared", enabled: true, transport: "stdio", command: "old-command" },
+  ], selected: ["legacy", "shared"] };
+  const backend = { servers: [{ id: "shared", enabled: false, transport: "stdio", command: "backend-command" }], selected: [] };
+  await withSettingsFixture({
+    browser: false, kbrainBackend: true, managedLocal: true,
+    invoke: async (command) => command === "settings_load_all" ? { mcp: legacy } : {},
+    fixtureOptions: { mcpSettings: backend },
+  }, async ({ storage, fixture, loader }) => {
+    const loaded = await storage.loadPersistedSettings();
+    assert.deepEqual(loaded.mcp.servers.map(s => s.id), ["shared", "legacy"]);
+    assert.equal(loaded.mcp.servers[0].command, "backend-command");
+    assert.equal(loaded.mcp.servers[0].enabled, false);
+    assert.deepEqual(loaded.mcp.selected, ["legacy"]);
+    const put = fixture.requests.find(r => r.method === "PUT" && r.path === "/v1/mcp");
+    assert.equal(put.body.servers[1].env.TOKEN, "legacy-secret");
+    assert.equal(put.headers.authorization, "Bearer fixture-token");
+    await storage.persistSettings(loaded, { ...loaded, mcp: backend });
+    const runtime = loader.loadModule("src/lib/kbrain/runtimeConnection.ts");
+    runtime.setKBrainRuntimeConnection({ baseUrl: fixture.baseUrl, token: "restarted-token", protocolVersion: "kbrain.agent.v1", managedLocal: true, storageId: "fixture-storage" });
+    assert.deepEqual((await storage.loadPersistedSettings()).mcp.servers.map(s => s.id), ["shared"]);
+    assert.equal(fixture.requests.filter(r => r.method === "PUT" && r.path === "/v1/mcp").length, 2);
+  });
+});
+
+test("legacy MCP import retries failed writes and never imports desktop servers into an external backend", async () => {
+  const legacy = { servers: [{ id: "legacy", enabled: true, command: "server", transport: "stdio" }], selected: [] };
+  const localStorage = createMemoryLocalStorage();
+  const options = { browser: false, kbrainBackend: true, managedLocal: true, localStorage, invoke: async command => command === "settings_load_all" ? { mcp: legacy } : {} };
+  await withSettingsFixture({ ...options, fixtureOptions: { mcpPutStatus: 503 } }, async ({ storage }) => {
+    await assert.rejects(() => storage.loadPersistedSettings(), /MCP save diagnostic/);
+  });
+  await withSettingsFixture(options, async ({ storage }) => {
+    assert.deepEqual((await storage.loadPersistedSettings()).mcp.servers.map(s => s.id), ["legacy"]);
+  });
+  await withSettingsFixture({ ...options, managedLocal: false, localStorage: createMemoryLocalStorage() }, async ({ storage, fixture }) => {
+    assert.equal((await storage.loadPersistedSettings()).mcp.servers.length, 0);
+    assert.equal(fixture.requests.filter(r => r.method === "PUT" && r.path === "/v1/mcp").length, 0);
+  });
+});
 
 test("K-brain prompt settings save through the authenticated adapter and reload with append/replace semantics", async () => {
   const workdir = "/repo/project";
