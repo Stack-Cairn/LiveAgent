@@ -47,7 +47,7 @@ import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommand
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
-import { nativeResourceHostCapabilities } from "@liveagent/ui/lib/resourceHost";
+import { kbrainResourceHostCapabilities } from "@liveagent/ui/lib/resourceHost";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import {
@@ -1615,7 +1615,7 @@ export function GatewayAppView({
                       }
                       settings={settings}
                       setSettings={setSettings}
-                      resourceHost={nativeResourceHostCapabilities}
+                      resourceHost={kbrainResourceHostCapabilities}
                       isAgentMode={isAgentMode}
                       initialSkills={availableSkills}
                       initialSkillsRootDir={skillsRootDir}
@@ -2245,7 +2245,10 @@ export function GatewayAppView({
               <SettingsPage
                 imageClient={imageStudio.host?.client}
                 registerLeaveGuard={viewModel.registerSettingsLeaveGuard}
-                settings={settings}
+                settings={{
+                  ...settings,
+                  system: { ...settings.system, workspaceProjects },
+                }}
                 settingsHost={settingsHostAdapter}
                 setSettings={setSettings}
                 saveState={settingsSaveState}

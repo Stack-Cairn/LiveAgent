@@ -1,6 +1,7 @@
 import { createKBrainClient } from "./client";
 
 const memoryCommands = new Set([
+  "memory_organizer",
   "memory_list",
   "memory_read",
   "memory_search",

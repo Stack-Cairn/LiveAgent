@@ -11,7 +11,7 @@ import type {
   SlashCommandListResponse,
 } from "../lib/gatewaySocketShared";
 
-/** WebUI 指令宿主依赖的 Gateway RPC 子集；全部经桌面端转到 K-brain。 */
+/** WebUI 指令宿主依赖的 Gateway RPC 子集，由 Gateway 转到目标运行端。 */
 export type WebComposerCommandClient = {
   listCommands: (workdir?: string) => Promise<SlashCommandListResponse>;
   clearGoal: (conversationId: string) => Promise<GoalManageResponse>;

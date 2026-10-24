@@ -801,7 +801,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     ),
     {
       thinkingEnabled: true,
-      nativeWebSearchEnabled: true,
+      nativeWebSearchEnabled: false,
       planModeEnabled: false,
       // 目录未命中（聚合命名）走标准四档兜底：存量 xhigh 只在展示值上钳回
       // 默认 high,reasoningByProvider 原样透传。

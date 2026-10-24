@@ -180,6 +180,57 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		return
 	}
 	if c.srv.kbrainRelay != nil && agentID == c.srv.kbrainTargetID {
+		ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+		defer cancel()
+		if response, handled, err := c.srv.kbrainRelay.Filesystem(ctx, env); handled {
+			if err != nil {
+				_ = c.sendLocalError(requestID, errorMessage(err))
+				return
+			}
+			c.sendKBrainResponse(requestID, agentID, response)
+			return
+		}
+		if request := env.GetSlashCommandList(); request != nil {
+			if err := vetSlashCommandList(request); err != nil {
+				_ = c.sendLocalError(requestID, err.Error())
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+			defer cancel()
+			response, err := c.srv.kbrainRelay.SlashCommands(ctx, request)
+			if err != nil {
+				_ = c.sendLocalError(requestID, errorMessage(err))
+				return
+			}
+			c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_SlashCommandListResp{SlashCommandListResp: response}})
+			return
+		}
+		if request := env.GetLoopManage(); request != nil {
+			if err := vetLoopManage(request); err != nil {
+				_ = c.sendLocalError(requestID, err.Error())
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+			defer cancel()
+			response, err := c.srv.kbrainRelay.Loops(ctx, request)
+			if err != nil {
+				_ = c.sendLocalError(requestID, errorMessage(err))
+				return
+			}
+			c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_LoopManageResp{LoopManageResp: response}})
+			return
+		}
+		if request := env.GetSkillManage(); request != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+			defer cancel()
+			response, err := c.srv.kbrainRelay.SkillManage(ctx, request)
+			if err != nil {
+				_ = c.sendLocalError(requestID, errorMessage(err))
+				return
+			}
+			c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_SkillManageResp{SkillManageResp: response}})
+			return
+		}
 		if env.GetPlanning() != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
 			defer cancel()

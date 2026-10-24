@@ -23,6 +23,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useMemo, useState } from "react";
 import { type MemoryQuotaSummaryResponse, memoryQuotaSummary } from "../../../lib/memory/api";
 import { deriveQuotaLadder } from "../../../lib/memory/organizer/quota";
+import { BackendMemoryOrganizer } from "./BackendMemoryOrganizer";
 import { memoryScopeLabel } from "./panelModel";
 
 export function MemorySettingsDrawer(props: {
@@ -33,6 +34,7 @@ export function MemorySettingsDrawer(props: {
   onClose: () => void;
   onRequestWipe: () => void | Promise<void>;
   backendManaged?: boolean;
+  kbrain?: boolean;
 }) {
   const { workdir, saving, t, onClose, onRequestWipe, backendManaged = false } = props;
   const [drawerWipeConfirmOpen, setDrawerWipeConfirmOpen] = useState(false);
@@ -90,11 +92,15 @@ export function MemorySettingsDrawer(props: {
               </div>
             ) : null}
 
-            <section className="py-5">
-              <p className="text-sm text-muted-foreground" role="status">
-                {t("settings.memoryOrganizerUnsupported")}
-              </p>
-            </section>
+            {props.kbrain && !backendManaged ? (
+              <BackendMemoryOrganizer workdir={workdir} t={t} />
+            ) : (
+              <section className="py-5">
+                <p className="text-sm text-muted-foreground" role="status">
+                  {t("settings.memoryOrganizerUnsupported")}
+                </p>
+              </section>
+            )}
 
             <div className="py-4 break-all font-mono text-xs text-muted-foreground">
               {props.storagePath}

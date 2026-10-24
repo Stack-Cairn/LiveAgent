@@ -156,6 +156,43 @@ test("a changed catalog still replaces the projected providers", async () => {
   });
 });
 
+test("a backend connection change refreshes an already mounted catalog without a parent render", async () => {
+  await mount(async (root) => {
+    const harness = await mountCatalog(root, backendSettings());
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, authorization: new Headers(init.headers).get("Authorization") });
+      return Response.json({ models: [refs[2]] });
+    };
+    await act(async () => runtimeConnection.setKBrainRuntimeConnection({
+      baseUrl: "http://restarted.test", token: "rotated-token", protocolVersion: "kbrain.agent.v1",
+      managedLocal: true, storageId: "same-data-root",
+    }));
+    assert.deepEqual(calls, [{ url: "http://restarted.test/v1/models", authorization: "Bearer rotated-token" }]);
+    assert.deepEqual(harness.snapshot.settings.customProviders.map(provider => provider.id), ["backend-openai-account"]);
+  });
+});
+
+test("explicit catalog endpoints remain isolated when the default connection rotates", async () => {
+  await mount(async (root) => {
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, authorization: new Headers(init.headers).get("Authorization") });
+      return Response.json({ models: refs });
+    };
+    const settings = backendSettings();
+    function Page() {
+      useKBrainCatalogSettings(settings, { baseUrl: "https://external.test", token: "external-token" });
+      return null;
+    }
+    await act(async () => root.render(React.createElement(Page)));
+    await act(async () => runtimeConnection.setKBrainRuntimeConnection({
+      baseUrl: "http://restarted.test", token: "local-token", protocolVersion: "kbrain.agent.v1",
+    }));
+    assert.deepEqual(calls, [{ url: "https://external.test/v1/models", authorization: "Bearer external-token" }]);
+  });
+});
+
 test("mergeBackendOwnedSettings skips write-backs whose content did not change", () => {
   const current = backendSettings();
   const sameContent = JSON.parse(JSON.stringify(current.customProviders));

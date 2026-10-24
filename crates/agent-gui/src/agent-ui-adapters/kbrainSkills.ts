@@ -1,22 +1,12 @@
 import type { SkillsResourceAdapter } from "@liveagent/ui/lib/resourceHost";
 import { normalizeClawHubSkillCard } from "@liveagent/ui/lib/skills/clawHub";
 import type { SystemManageSkillResponse } from "@liveagent/ui/lib/skills/index";
-import { getKBrainRuntimeConnection } from "../lib/kbrain/runtimeConnection";
+import { fetchKBrain } from "../lib/kbrain/transport";
 
 /** Resource-page seam for K-brain-managed Skills. */
-export function createKbrainSkillsAdapter(fetchImpl: typeof fetch = fetch): SkillsResourceAdapter {
+export function createKbrainSkillsAdapter(fetchImpl?: typeof fetch): SkillsResourceAdapter {
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const connection = getKBrainRuntimeConnection();
-    if (!connection) throw new Error("K-brain backend connection is not ready");
-    const response = await fetchImpl(`${connection.baseUrl}${path}`, {
-      ...init,
-      headers: {
-        Accept: "application/json",
-        ...(connection.token ? { Authorization: `Bearer ${connection.token}` } : {}),
-        ...(init?.body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...(init?.headers ?? {}),
-      },
-    });
+    const response = await fetchKBrain(path, init, fetchImpl ? { fetch: fetchImpl } : {});
     if (!response.ok) {
       throw new Error(
         (await response.text()) || `K-brain skills request failed (${response.status})`,

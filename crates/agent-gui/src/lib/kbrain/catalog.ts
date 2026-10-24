@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   type AppSettings,
   type CustomProvider,
@@ -6,7 +6,7 @@ import {
   getDefaultUsageQueryConfig,
 } from "../settings";
 import { createKBrainClient } from "./client";
-import { getKBrainRuntimeConnection } from "./runtimeConnection";
+import { getKBrainRuntimeConnection, subscribeKBrainRuntimeConnection } from "./runtimeConnection";
 import type { KBrainModelRef } from "./types";
 
 export function projectKBrainProviders(
@@ -109,11 +109,16 @@ type CatalogOptions = {
 export const KBRAIN_SETTINGS_CHANGED_EVENT = "kbrain:settings-changed";
 
 export function useKBrainCatalogSettings(settings: AppSettings, options: CatalogOptions = {}) {
-  const connection = getKBrainRuntimeConnection();
+  const connection = useSyncExternalStore(
+    subscribeKBrainRuntimeConnection,
+    getKBrainRuntimeConnection,
+    getKBrainRuntimeConnection,
+  );
   const enabled = options.enabled ?? connection !== null;
   const [settingsVersion, setSettingsVersion] = useState(0);
   const baseUrl = options.baseUrl ?? connection?.baseUrl;
   const token = options.token ?? connection?.token;
+  const explicitConnection = options.baseUrl !== undefined || options.token !== undefined;
   const [catalog, setCatalog] = useState<{
     baseUrl: string | undefined;
     token: string | undefined;
@@ -134,7 +139,8 @@ export function useKBrainCatalogSettings(settings: AppSettings, options: Catalog
     // level change) triggers a refresh here. Clearing the catalog first would project an
     // empty provider list for a frame and blank the model picker/labels. A catalog for a
     // different connection is already hidden by the baseUrl/token check below.
-    void createKBrainClient({ baseUrl, token })
+    // Default clients resolve the managed connection per request, including recovery.
+    void createKBrainClient(explicitConnection ? { baseUrl, token } : {})
       .listModels()
       .then((models) => {
         if (!cancelled) {
@@ -163,7 +169,7 @@ export function useKBrainCatalogSettings(settings: AppSettings, options: Catalog
     return () => {
       cancelled = true;
     };
-  }, [enabled, baseUrl, token, settingsVersion, settings.customProviders]); // refresh after backend settings writes
+  }, [enabled, baseUrl, token, explicitConnection, settingsVersion, settings.customProviders]); // refresh after backend settings writes
   const currentCatalog = catalog?.baseUrl === baseUrl && catalog?.token === token ? catalog : null;
   const runtimeSettings = useMemo(
     () => (enabled ? projectKBrainSettings(settings, currentCatalog?.providers ?? []) : settings),
