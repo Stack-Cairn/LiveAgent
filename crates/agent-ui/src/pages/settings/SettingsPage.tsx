@@ -159,6 +159,7 @@ export function SettingsPage(props: SettingsPageProps) {
             workdir={settings.system.workdir}
             settings={settings}
             setSettings={setSettings}
+            kbrain={props.settingsHost?.kbrain}
           />
         ),
       },

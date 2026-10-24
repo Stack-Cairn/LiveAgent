@@ -48,8 +48,10 @@ import {
   getResourceHostCapabilities,
   type ResourceHostCapabilities,
 } from "../../../lib/resourceHost";
+import type { KBrainSettingsAdapter } from "../kbrainSettingsAdapter";
 import { ConfirmDeletePopover } from "../shared";
 import { MemorySettingsDrawer } from "./MemorySettingsDrawer";
+import { MemorySwitch } from "./MemorySwitch";
 import {
   entryKey,
   entryTitle,
@@ -82,6 +84,7 @@ export function MemoryPanel(props: {
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   resourceHost?: ResourceHostCapabilities;
+  kbrain?: KBrainSettingsAdapter;
 }) {
   const { t } = useLocale();
   const workdir = props.workdir?.trim() || undefined;
@@ -303,6 +306,7 @@ export function MemoryPanel(props: {
         )}
       >
         <div className="shrink-0 space-y-3">
+          {props.kbrain ? <MemorySwitch kbrain={props.kbrain} /> : null}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 space-y-1">
               <div className="text-sm text-muted-foreground">

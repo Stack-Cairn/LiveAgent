@@ -123,6 +123,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
+import { kbrainSettingsAdapter } from "../agent-ui-adapters/kbrainSettings";
 import { createTauriTrajectoryHost } from "../agent-ui-adapters/trajectory";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
@@ -4497,6 +4498,7 @@ function ChatPageContent(props: ChatPageProps) {
                 settings={settings}
                 setSettings={setSettings}
                 resourceHost={resourceHost}
+                kbrainSettings={kbrainSettingsAdapter}
                 imageStudioHost={
                   imageStudioHost
                     ? {

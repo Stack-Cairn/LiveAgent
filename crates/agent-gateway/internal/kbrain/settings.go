@@ -10,8 +10,11 @@ import (
 
 // Project backend-owned settings only; MCP is fetched from its resource route.
 type gatewaySettingsProjection struct {
-	AIApproval      json.RawMessage `json:"aiApproval,omitempty"`
-	Computer        json.RawMessage `json:"computer,omitempty"`
+	AIApproval json.RawMessage `json:"aiApproval,omitempty"`
+	Computer   json.RawMessage `json:"computer,omitempty"`
+	// KBrainMemory is K-brain's memory master switch; WebUI's `memory` key is
+	// LiveAgent's organizer settings, so the switch travels under its own name.
+	KBrainMemory    json.RawMessage `json:"kbrainMemory,omitempty"`
 	CustomProviders []any           `json:"customProviders"`
 	SelectedModel   map[string]any  `json:"selectedModel"`
 }
@@ -19,6 +22,7 @@ type gatewaySettingsProjection struct {
 type kbrainSettingsDocument struct {
 	AIApproval      json.RawMessage  `json:"aiApproval,omitempty"`
 	Computer        json.RawMessage  `json:"computer,omitempty"`
+	Memory          json.RawMessage  `json:"memory,omitempty"`
 	DefaultModel    string           `json:"defaultModel"`
 	DefaultProvider string           `json:"defaultProvider"`
 	Providers       []kbrainProvider `json:"providers"`
@@ -193,7 +197,7 @@ func settingsProjectionForGateway(raw json.RawMessage) (json.RawMessage, error) 
 			"providerType":     providerTypeByID[document.DefaultProvider],
 		}
 	}
-	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval})
+	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval, KBrainMemory: document.Memory})
 }
 
 func decodeSettingsDocument(raw json.RawMessage) (kbrainSettingsDocument, error) {
@@ -219,7 +223,7 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 	}
 	for key := range input {
 		switch key {
-		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents", "projectPrompts":
+		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents", "projectPrompts", "kbrainMemory":
 		default:
 			return nil, fmt.Errorf("unsupported Gateway settings field %q: non-provider settings persistence is unavailable", key)
 		}
@@ -251,6 +255,15 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 			return nil, errors.New("computer must be an object")
 		}
 		update["computer"] = computer
+	}
+	if memory, ok := input["kbrainMemory"]; ok {
+		var object struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err := json.Unmarshal(memory, &object); err != nil || object.Enabled == nil {
+			return nil, errors.New("kbrainMemory must be an object with boolean enabled")
+		}
+		update["memory"] = map[string]bool{"enabled": *object.Enabled}
 	}
 	if selectedRaw, ok := input["selectedModel"]; ok {
 		var selected map[string]json.RawMessage
