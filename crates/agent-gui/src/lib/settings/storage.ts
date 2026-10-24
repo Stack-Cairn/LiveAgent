@@ -20,7 +20,6 @@ import {
 import { getConfiguredKBrainConnection } from "../kbrain/runtimeConnection";
 import type { KBrainSettingsDocument } from "../kbrain/types";
 import { SettingsStorageError, type SettingsStorageErrorCode } from "./errors";
-import { importLegacyMcpSettings } from "./legacyMcpImport";
 import {
   type AppSettings,
   type ChatRuntimeControls,
@@ -45,6 +44,7 @@ import {
   type Theme,
   workspaceProjectPathKey,
 } from "./index";
+import { importLegacyMcpSettings } from "./legacyMcpImport";
 import {
   clearRejectedLegacyProviders,
   isPermanentLegacyProviderRejection,
