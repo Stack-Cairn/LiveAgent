@@ -4,6 +4,7 @@ import { useLocale } from "@liveagent/ui/i18n";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ResourceHostCapabilities } from "../../lib/resourceHost";
 import { CronSection } from "../settings/CronSection";
+import type { KBrainSettingsAdapter } from "../settings/kbrainSettingsAdapter";
 import { MemoryPanel } from "../settings/memory/MemoryPanel";
 
 export function ResourceManagementPage({
@@ -11,9 +12,11 @@ export function ResourceManagementPage({
   settings,
   setSettings,
   resourceHost,
+  kbrainSettings,
 }: SettingsSectionProps & {
   resource: "memory" | "cron";
   resourceHost?: ResourceHostCapabilities;
+  kbrainSettings?: KBrainSettingsAdapter;
 }) {
   const { t } = useLocale();
   const memory = resource === "memory";
@@ -40,6 +43,7 @@ export function ResourceManagementPage({
               settings={settings}
               setSettings={setSettings}
               resourceHost={resourceHost}
+              kbrain={kbrainSettings}
             />
           ) : (
             <CronSection settings={settings} setSettings={setSettings} />

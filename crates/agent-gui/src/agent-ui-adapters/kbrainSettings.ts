@@ -28,6 +28,10 @@ export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
   getConnection: getKBrainRuntimeConnection,
   getSettings: () => request<KBrainSettingsDocument>("/v1/settings"),
   getComputerStatus: () => request<KBrainComputerStatus>("/v1/computer"),
+  getCapabilities: () =>
+    request<{ capabilities?: Record<string, unknown> }>("/v1/health").then(
+      (health) => health.capabilities ?? {},
+    ),
   updateSettings: (update) =>
     request<KBrainSettingsDocument>("/v1/settings", {
       method: "PUT",

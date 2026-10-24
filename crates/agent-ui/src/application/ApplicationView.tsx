@@ -9,6 +9,7 @@ import type { SkillSummary } from "../lib/skills/index";
 import { McpHubPage } from "../pages/mcp-hub/McpHubPage";
 import { PlanningPage } from "../pages/planning/PlanningPage";
 import { ResourceManagementPage } from "../pages/resources/ResourceManagementPage";
+import type { KBrainSettingsAdapter } from "../pages/settings/kbrainSettingsAdapter";
 import { SkillsHubPage } from "../pages/skills-hub/SkillsHubPage";
 import type { ImageStudioHost } from "./imageStudioHost";
 
@@ -26,6 +27,8 @@ type ApplicationViewProps = {
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   isAgentMode: boolean;
   resourceHost?: ResourceHostCapabilities;
+  /** K-brain settings for the memory hub's master switch; omitted hosts hide it. */
+  kbrainSettings?: KBrainSettingsAdapter;
   imageStudioHost?: ImageStudioHost;
   initialSkills?: SkillSummary[];
   initialSkillsRootDir?: string;
@@ -45,6 +48,7 @@ export function ApplicationView(props: ApplicationViewProps) {
     setSettings,
     isAgentMode,
     resourceHost,
+    kbrainSettings,
     imageStudioHost,
     initialSkills,
     initialSkillsRootDir,
@@ -94,6 +98,7 @@ export function ApplicationView(props: ApplicationViewProps) {
         settings={settings}
         setSettings={setSettings}
         resourceHost={resourceHost}
+        kbrainSettings={kbrainSettings}
       />
     );
   }

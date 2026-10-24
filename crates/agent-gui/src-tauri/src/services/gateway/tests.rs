@@ -1004,3 +1004,97 @@ fn chat_queue_event_envelope_carries_snapshot() {
         other => panic!("unexpected payload: {other:?}"),
     }
 }
+
+// Fourth review (2aa05c4e): the desktop agent's K-brain memory switch bridge, driven
+// through the real write_switch against a one-shot local HTTP stand-in. settings.get takes the
+// switch from the snapshot's own K-brain settings read, so there is no second read to test.
+mod review4_kbrain_memory {
+    use super::super::kbrain_memory::write_switch;
+    use crate::services::kbrain_backend::KBrainBackendConnection;
+    use std::io::{Read, Write};
+    use std::time::Duration;
+
+    const TOKEN: &str = "review4-secret-token";
+
+    /// One request: waits `delay`, answers `status` with `body`, returns the raw request.
+    fn kbrain_stub(
+        status: &'static str,
+        body: &'static str,
+        delay: Duration,
+    ) -> (KBrainBackendConnection, std::thread::JoinHandle<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind stub");
+        let base_url = format!("http://{}", listener.local_addr().expect("stub addr"));
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            stream
+                .set_read_timeout(Some(Duration::from_millis(500)))
+                .expect("read timeout");
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            loop {
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => request.extend_from_slice(&chunk[..read]),
+                }
+                let text = String::from_utf8_lossy(&request);
+                if let Some((head, rest)) = text.split_once("\r\n\r\n") {
+                    let length = head
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().ok())?
+                        })
+                        .unwrap_or(0);
+                    if rest.len() >= length {
+                        break;
+                    }
+                }
+            }
+            std::thread::sleep(delay);
+            let response = format!(
+                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            String::from_utf8_lossy(&request).into_owned()
+        });
+        let connection = KBrainBackendConnection {
+            base_url,
+            token: TOKEN.into(),
+            protocol_version: "review4".into(),
+            storage_id: "review4".into(),
+        };
+        (connection, handle)
+    }
+
+    #[test]
+    fn review4_switch_errors_name_the_status_without_token_or_url() {
+        for status in ["401 Unauthorized", "500 Internal Server Error"] {
+            let (connection, handle) = kbrain_stub(status, r#"{"error":"x"}"#, Duration::ZERO);
+            let base_url = connection.base_url.clone();
+            let error = write_switch(&connection, true).expect_err("non-2xx write must fail");
+            handle.join().expect("stub thread");
+            assert!(error.contains(&status[..3]), "{error}");
+            assert!(
+                !error.contains(TOKEN) && !error.contains(&base_url),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn review4_switch_write_puts_only_the_memory_switch() {
+        let (connection, handle) = kbrain_stub("200 OK", "{}", Duration::ZERO);
+        write_switch(&connection, false).expect("write accepted");
+        let request = handle.join().expect("stub thread");
+        assert!(
+            request.starts_with("PUT /v1/settings HTTP/1.1\r\n"),
+            "{request}"
+        );
+        assert!(
+            request.ends_with(r#"{"memory":{"enabled":false}}"#),
+            "{request}"
+        );
+    }
+}

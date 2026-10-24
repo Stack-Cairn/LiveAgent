@@ -27,6 +27,26 @@ func TestComputerSettingsPassThroughBackend(t *testing.T) {
 	}
 }
 
+func TestMemorySwitchTravelsAsKBrainMemory(t *testing.T) {
+	projected, err := settingsProjectionForGateway(json.RawMessage(`{"providers":[],"models":[],"memory":{"enabled":false}}`))
+	if err != nil || !strings.Contains(string(projected), `"kbrainMemory":{"enabled":false}`) || strings.Contains(string(projected), `"memory"`) {
+		t.Fatalf("projection must expose the switch only as kbrainMemory: %s %v", projected, err)
+	}
+	legacy, err := settingsProjectionForGateway(json.RawMessage(`{"providers":[],"models":[]}`))
+	if err != nil || strings.Contains(string(legacy), "kbrainMemory") {
+		t.Fatalf("a backend without the switch must not project one: %s %v", legacy, err)
+	}
+	update, err := settingsUpdateForKBrain(json.RawMessage(`{"kbrainMemory":{"enabled":false}}`))
+	if err != nil || string(update) != `{"memory":{"enabled":false}}` {
+		t.Fatalf("update: %s %v", update, err)
+	}
+	for _, bad := range []string{`{"kbrainMemory":null}`, `{"kbrainMemory":{}}`, `{"kbrainMemory":{"enabled":"no"}}`, `{"memory":{"enabled":false}}`} {
+		if _, err := settingsUpdateForKBrain(json.RawMessage(bad)); err == nil {
+			t.Fatalf("accepted %s", bad)
+		}
+	}
+}
+
 func TestSettingsProjectionOnlyProjectsKBrainOwnedFields(t *testing.T) {
 	raw := json.RawMessage(`{"defaultProvider":"p","defaultModel":"m","providers":[{"id":"p","name":"Provider","api":"openai-completions","baseUrl":"https://example.test/v1","apiKeyConfigured":true,"models":[{"id":"m","contextWindow":4096,"maxOutputTokens":512,"inputModalities":["text","image"]}]}]}`)
 	projected, err := settingsProjectionForGateway(raw)

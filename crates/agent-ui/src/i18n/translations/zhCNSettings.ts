@@ -109,6 +109,11 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.searchNoResults": "未找到匹配的设置",
   "settings.memoryTitle": "记忆",
   "settings.memoryBrowseDescription": "管理跨对话保留的信息、项目知识与日记。",
+  "settings.memorySwitchTitle": "启用记忆",
+  "settings.memorySwitchOnDescription": "对话会读取已存记忆，并在后台提取新记忆。",
+  "settings.memorySwitchOffDescription":
+    "已关闭：对话不读取、不提取记忆，代理也不能写入。已存记忆保留，仍可在这里查看和编辑。",
+  "settings.memorySwitchSaveFailed": "记忆开关保存失败，已恢复为后端当前状态。",
   "settings.memoryHealthy": "健康",
   "settings.memoryQuotaGlobal": "全局",
   "settings.memoryQuotaProject": "项目",
