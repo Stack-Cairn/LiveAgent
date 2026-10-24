@@ -333,7 +333,7 @@ func vetGoalManage(req *gatewayv2.GoalManageRequest) error {
 	return nil
 }
 
-// vetLoopManage 校验会话内定时任务并原地规范化：间隔由浏览器解析成 cron，这里只按长度把关，
+// vetLoopManage 校验会话内定时任务并原地规范化：支持间隔或旧版 cron，这里只按长度把关，
 // 真正的表达式与提示词校验在 K-brain 侧完成。与当前动作无关的字段清空后再转发。
 func vetLoopManage(req *gatewayv2.LoopManageRequest) error {
 	if req == nil {
@@ -353,7 +353,7 @@ func vetLoopManage(req *gatewayv2.LoopManageRequest) error {
 		req.Prompt = strings.TrimSpace(req.GetPrompt())
 		req.Reasoning = strings.TrimSpace(req.GetReasoning())
 		req.LoopId = ""
-		if req.Cron == "" || len(req.Cron) > maxLoopCronLen {
+		if (req.Cron == "" && req.Interval == "") || len(req.Cron) > maxLoopCronLen {
 			return errors.New("loop schedule is required")
 		}
 		if req.Prompt == "" || len(req.Prompt) > maxLoopPromptLen {

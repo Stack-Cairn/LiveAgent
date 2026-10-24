@@ -31,6 +31,10 @@ func TestRelayMCPSettingsReadSaveClearAndFailure(t *testing.T) {
 			_, _ = io.WriteString(w, `{"settings":{"enabled":true,"selected":[]}}`)
 			return
 		}
+		if r.URL.Path == "/v1/prompts" {
+			_, _ = io.WriteString(w, `{"globalTemplates":[]}`)
+			return
+		}
 		if r.URL.Path != "/v1/mcp" {
 			t.Errorf("path=%s", r.URL)
 			return

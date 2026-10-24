@@ -193,6 +193,16 @@ func (r *Relay) SettingsGet(ctx context.Context, request *gatewayv2.SettingsGetR
 		return nil, err
 	}
 	snapshot["skills"] = validatedSkills
+	var prompts struct {
+		Templates json.RawMessage `json:"globalTemplates"`
+	}
+	if err := r.commandResource(ctx, "GET", "/v1/prompts", nil, &prompts); err != nil {
+		return nil, err
+	}
+	if _, err := gatewayPromptTemplates(prompts.Templates); err != nil {
+		return nil, err
+	}
+	snapshot["agents"] = prompts.Templates
 	projected, err = json.Marshal(snapshot)
 	if err != nil {
 		return nil, err
@@ -237,6 +247,13 @@ func (r *Relay) SettingsUpdate(ctx context.Context, request *gatewayv2.SettingsU
 			return nil, err
 		}
 	}
+	var templates json.RawMessage
+	if value, ok := fields["agents"]; ok {
+		templates, err = gatewayPromptTemplates(value)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if string(translated) != "{}" {
 		if _, err := r.client.UpdateSettings(ctx, translated); err != nil {
 			return nil, err
@@ -249,6 +266,12 @@ func (r *Relay) SettingsUpdate(ctx context.Context, request *gatewayv2.SettingsU
 	}
 	if skills != nil {
 		if _, err := r.client.settingsRequest(ctx, "PUT", "/v1/skills/settings", skills); err != nil {
+			return nil, err
+		}
+	}
+	if templates != nil {
+		var result json.RawMessage
+		if err := r.commandResource(ctx, "PUT", "/v1/prompts/templates", map[string]json.RawMessage{"templates": templates}, &result); err != nil {
 			return nil, err
 		}
 	}
