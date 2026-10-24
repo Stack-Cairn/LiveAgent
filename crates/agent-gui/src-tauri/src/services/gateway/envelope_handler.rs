@@ -689,31 +689,8 @@ impl GatewayController {
                 Ok(())
             }
             Some(proto::gateway_envelope::Payload::SettingsGet(_request)) => {
-                match self.current_settings_snapshot().await {
-                    Ok(mut snapshot) => {
-                        // K-brain owns the memory switch; a backend that cannot be read
-                        // or lacks the switch leaves it out and the WebUI hides it.
-                        if let Some(connection) = kbrain_memory::running_kbrain(&self.app_handle) {
-                            let read = tauri::async_runtime::spawn_blocking(move || {
-                                kbrain_memory::read_switch(&connection)
-                            })
-                            .await;
-                            match read {
-                                Ok(Ok(Some(switch))) => {
-                                    if let Some(map) = snapshot.as_object_mut() {
-                                        map.insert(
-                                            kbrain_memory::KBRAIN_MEMORY_FIELD.to_string(),
-                                            switch,
-                                        );
-                                    }
-                                }
-                                Ok(Ok(None)) => {}
-                                Ok(Err(error)) => eprintln!("{error}"),
-                                Err(error) => {
-                                    eprintln!("read K-brain memory switch join failed: {error}")
-                                }
-                            }
-                        }
+                match self.settings_get_snapshot().await {
+                    Ok(snapshot) => {
                         let settings_json = match serialize_settings_sync_payload(&snapshot) {
                             Ok(settings_json) => settings_json,
                             Err(error) => {

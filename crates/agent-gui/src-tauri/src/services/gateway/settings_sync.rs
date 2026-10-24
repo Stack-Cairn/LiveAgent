@@ -14,6 +14,27 @@ use super::*;
 
 impl GatewayController {
     pub(crate) async fn current_settings_snapshot(&self) -> Result<Value, String> {
+        Ok(self.settings_snapshot_and_backend().await?.0)
+    }
+
+    /// The settings.get answer: the snapshot plus K-brain's memory switch taken from the
+    /// same K-brain settings read, so a successful answer always carries the switch of a
+    /// backend that has one. The switch is never cached or synced as LiveAgent settings.
+    pub(crate) async fn settings_get_snapshot(&self) -> Result<Value, String> {
+        let (mut snapshot, backend) = self.settings_snapshot_and_backend().await?;
+        if let (Some(switch), Some(map)) = (
+            super::kbrain_memory::switch_from_settings(&backend),
+            snapshot.as_object_mut(),
+        ) {
+            map.insert(
+                super::kbrain_memory::KBRAIN_MEMORY_FIELD.to_string(),
+                switch,
+            );
+        }
+        Ok(snapshot)
+    }
+
+    async fn settings_snapshot_and_backend(&self) -> Result<(Value, Value), String> {
         let cached_snapshot = self
             .settings_snapshot
             .lock()
@@ -36,7 +57,7 @@ impl GatewayController {
             crate::services::gateway_bridge::kbrain_gateway_mcp_settings(self.app_handle.clone())
                 .await?;
         apply_kbrain_mcp_settings(&mut snapshot, &mcp)?;
-        self.store_settings_snapshot(snapshot)
+        Ok((self.store_settings_snapshot(snapshot)?, backend))
     }
 
     pub(crate) fn store_settings_snapshot(&self, payload: Value) -> Result<Value, String> {

@@ -49,17 +49,6 @@ fn client() -> Result<Client, String> {
         .map_err(|error| format!("failed to create K-brain client: {error}"))
 }
 
-pub(crate) fn read_switch(connection: &KBrainBackendConnection) -> Result<Option<Value>, String> {
-    let settings: Value = client()?
-        .get(format!("{}/v1/settings", connection.base_url))
-        .header(AUTHORIZATION, format!("Bearer {}", connection.token))
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.json())
-        .map_err(|error| format!("read K-brain memory switch failed: {}", error.without_url()))?;
-    Ok(switch_from_settings(&settings))
-}
-
 pub(crate) fn write_switch(
     connection: &KBrainBackendConnection,
     enabled: bool,
