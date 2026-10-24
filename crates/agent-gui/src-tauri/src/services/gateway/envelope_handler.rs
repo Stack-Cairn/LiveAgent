@@ -690,7 +690,30 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::SettingsGet(_request)) => {
                 match self.current_settings_snapshot().await {
-                    Ok(snapshot) => {
+                    Ok(mut snapshot) => {
+                        // K-brain owns the memory switch; a backend that cannot be read
+                        // or lacks the switch leaves it out and the WebUI hides it.
+                        if let Some(connection) = kbrain_memory::running_kbrain(&self.app_handle) {
+                            let read = tauri::async_runtime::spawn_blocking(move || {
+                                kbrain_memory::read_switch(&connection)
+                            })
+                            .await;
+                            match read {
+                                Ok(Ok(Some(switch))) => {
+                                    if let Some(map) = snapshot.as_object_mut() {
+                                        map.insert(
+                                            kbrain_memory::KBRAIN_MEMORY_FIELD.to_string(),
+                                            switch,
+                                        );
+                                    }
+                                }
+                                Ok(Ok(None)) => {}
+                                Ok(Err(error)) => eprintln!("{error}"),
+                                Err(error) => {
+                                    eprintln!("read K-brain memory switch join failed: {error}")
+                                }
+                            }
+                        }
                         let settings_json = match serialize_settings_sync_payload(&snapshot) {
                             Ok(settings_json) => settings_json,
                             Err(error) => {
@@ -711,7 +734,54 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::SettingsUpdate(request)) => {
                 match parse_settings_sync_payload(&request.settings_json) {
-                    Ok(snapshot) => {
+                    Ok(mut snapshot) => {
+                        // The memory switch goes to K-brain and never into LiveAgent's
+                        // own settings; an update carrying only the switch ends here.
+                        let memory_switch = match kbrain_memory::take_switch_update(&mut snapshot) {
+                            Ok(switch) => switch,
+                            Err(error) => {
+                                return self.send_error_response(request_id, 400, error).await;
+                            }
+                        };
+                        if let Some(enabled) = memory_switch {
+                            let Some(connection) = kbrain_memory::running_kbrain(&self.app_handle)
+                            else {
+                                return self
+                                    .send_error_response(
+                                        request_id,
+                                        503,
+                                        "K-brain backend is not running".to_string(),
+                                    )
+                                    .await;
+                            };
+                            let written = tauri::async_runtime::spawn_blocking(move || {
+                                kbrain_memory::write_switch(&connection, enabled)
+                            })
+                            .await
+                            .map_err(|error| {
+                                format!("save K-brain memory switch join failed: {error}")
+                            })
+                            .and_then(|result| result);
+                            if let Err(error) = written {
+                                return self.send_error_response(request_id, 502, error).await;
+                            }
+                            if snapshot.as_object().is_some_and(|map| map.is_empty()) {
+                                return self
+                                    .send_agent_envelope(proto::AgentEnvelope {
+                                        request_id,
+                                        timestamp: now_unix_seconds(),
+                                        payload: Some(
+                                            proto::agent_envelope::Payload::SettingsUpdateResp(
+                                                proto::SettingsUpdateResponse {
+                                                    accepted: true,
+                                                    message: "ok".to_string(),
+                                                },
+                                            ),
+                                        ),
+                                    })
+                                    .await;
+                            }
+                        }
                         if snapshot.get(SSH_PATCH_FIELD).is_some() {
                             let patch_payload = snapshot.clone();
                             let apply_response =

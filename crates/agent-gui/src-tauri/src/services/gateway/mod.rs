@@ -53,6 +53,7 @@ mod controller;
 mod envelope_handler;
 mod history_sync;
 mod kbrain_history;
+mod kbrain_memory;
 mod managed_process;
 mod settings_sync;
 mod sftp;
