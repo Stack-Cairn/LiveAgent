@@ -3,7 +3,41 @@ package kbrain
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 )
+
+type gatewayProjectPrompt struct {
+	Prompt   string `json:"prompt"`
+	Strategy string `json:"strategy"`
+}
+
+func gatewayProjectPrompts(raw json.RawMessage) (map[string]gatewayProjectPrompt, error) {
+	var input map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &input); err != nil || input == nil || len(input) > 256 {
+		return nil, errors.New("projectPrompts must be an object with at most 256 projects")
+	}
+	out := map[string]gatewayProjectPrompt{}
+	for path, item := range input {
+		var fields map[string]json.RawMessage
+		if strings.TrimSpace(path) == "" || len(path) > 32768 || json.Unmarshal(item, &fields) != nil || fields == nil {
+			return nil, errors.New("invalid project prompt")
+		}
+		for key := range fields {
+			if key != "prompt" && key != "strategy" {
+				return nil, errors.New("unsupported project prompt field: " + key)
+			}
+		}
+		var value gatewayProjectPrompt
+		if json.Unmarshal(item, &value) != nil || (value.Strategy != "append" && value.Strategy != "replace") || len(value.Prompt) > 1<<20 {
+			return nil, errors.New("invalid project prompt strategy or content")
+		}
+		if _, ok := fields["prompt"]; !ok || string(fields["prompt"]) == "null" {
+			return nil, errors.New("project prompt must be a string")
+		}
+		out[path] = value
+	}
+	return out, nil
+}
 
 // Validate the UI projection before any settings domain is persisted.
 func gatewayPromptTemplates(raw json.RawMessage) (json.RawMessage, error) {

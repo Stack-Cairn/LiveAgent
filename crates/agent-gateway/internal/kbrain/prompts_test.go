@@ -2,6 +2,7 @@ package kbrain
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,44 @@ import (
 
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
+
+func TestRelayProjectPromptSaveAndValidation(t *testing.T) {
+	puts := 0
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/settings" {
+			_, _ = io.WriteString(w, `{"providers":[],"models":[]}`)
+			return
+		}
+		if r.URL.Path != "/v1/prompts/project" || r.Method != "PUT" {
+			t.Errorf("unexpected resource: %s %s", r.Method, r.URL)
+			return
+		}
+		var input map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input["workdir"] != "/project" {
+			t.Errorf("input=%v err=%v", input, err)
+		}
+		puts++
+		_, _ = io.WriteString(w, `{"revision":2}`)
+	}))
+	defer backend.Close()
+	client, _ := New(backend.URL, "", backend.Client())
+	relay, _ := NewRelay(client, "kb", ModelRef{}, "")
+	defer relay.Close()
+	for _, content := range []string{`{"prompt":"instruction","strategy":"replace"}`, `{"prompt":"","strategy":"append"}`} {
+		out, err := relay.SettingsUpdate(context.Background(), &gatewayv2.SettingsUpdateRequest{SettingsJson: `{"projectPrompts":{"/project":` + content + `}}`})
+		if err != nil || !out.GetAccepted() {
+			t.Fatalf("save=%v err=%v", out, err)
+		}
+	}
+	for _, raw := range []string{`null`, `[]`, `{"/project":null}`, `{"/project":{"prompt":null,"strategy":"append"}}`, `{"/project":{"prompt":"p","strategy":"invalid"}}`, `{"/project":{"prompt":"p","strategy":"append","extra":true}}`} {
+		if _, err := relay.SettingsUpdate(context.Background(), &gatewayv2.SettingsUpdateRequest{SettingsJson: `{"projectPrompts":` + raw + `}`}); err == nil {
+			t.Fatalf("accepted %s", raw)
+		}
+	}
+	if puts != 2 {
+		t.Fatalf("malformed update reached backend: %d", puts)
+	}
+}
 
 func TestRelayPromptTemplateSaveClearAndFailure(t *testing.T) {
 	puts := 0

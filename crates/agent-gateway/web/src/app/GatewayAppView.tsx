@@ -2245,7 +2245,10 @@ export function GatewayAppView({
               <SettingsPage
                 imageClient={imageStudio.host?.client}
                 registerLeaveGuard={viewModel.registerSettingsLeaveGuard}
-                settings={settings}
+                settings={{
+                  ...settings,
+                  system: { ...settings.system, workspaceProjects },
+                }}
                 settingsHost={settingsHostAdapter}
                 setSettings={setSettings}
                 saveState={settingsSaveState}

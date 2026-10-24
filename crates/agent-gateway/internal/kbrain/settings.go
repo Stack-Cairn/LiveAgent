@@ -219,7 +219,7 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 	}
 	for key := range input {
 		switch key {
-		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents":
+		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents", "projectPrompts":
 		default:
 			return nil, fmt.Errorf("unsupported Gateway settings field %q: non-provider settings persistence is unavailable", key)
 		}
@@ -400,7 +400,8 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 		_, mcp := input["mcp"]
 		_, skills := input["skills"]
 		_, agents := input["agents"]
-		if !mcp && !skills && !agents {
+		_, projects := input["projectPrompts"]
+		if !mcp && !skills && !agents && !projects {
 			return nil, errors.New("settings update contains no supported changes")
 		}
 	}

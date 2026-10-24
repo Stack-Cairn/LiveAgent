@@ -195,6 +195,11 @@ func (r *Relay) SettingsGet(ctx context.Context, request *gatewayv2.SettingsGetR
 	snapshot["skills"] = validatedSkills
 	var prompts struct {
 		Templates json.RawMessage `json:"globalTemplates"`
+		Projects  map[string]struct {
+			Workdir       string `json:"workdir"`
+			SourceWorkdir string `json:"sourceWorkdir"`
+			gatewayProjectPrompt
+		} `json:"projectPrompts"`
 	}
 	if err := r.commandResource(ctx, "GET", "/v1/prompts", nil, &prompts); err != nil {
 		return nil, err
@@ -203,6 +208,20 @@ func (r *Relay) SettingsGet(ctx context.Context, request *gatewayv2.SettingsGetR
 		return nil, err
 	}
 	snapshot["agents"] = prompts.Templates
+	projects := map[string]gatewayProjectPrompt{}
+	for _, project := range prompts.Projects {
+		if project.Workdir != "" {
+			projects[project.Workdir] = project.gatewayProjectPrompt
+		}
+		if project.SourceWorkdir != "" {
+			projects[project.SourceWorkdir] = project.gatewayProjectPrompt
+		}
+	}
+	projectJSON, err := json.Marshal(projects)
+	if err != nil {
+		return nil, err
+	}
+	snapshot["projectPrompts"] = projectJSON
 	projected, err = json.Marshal(snapshot)
 	if err != nil {
 		return nil, err
@@ -254,6 +273,13 @@ func (r *Relay) SettingsUpdate(ctx context.Context, request *gatewayv2.SettingsU
 			return nil, err
 		}
 	}
+	var projects map[string]gatewayProjectPrompt
+	if value, ok := fields["projectPrompts"]; ok {
+		projects, err = gatewayProjectPrompts(value)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if string(translated) != "{}" {
 		if _, err := r.client.UpdateSettings(ctx, translated); err != nil {
 			return nil, err
@@ -272,6 +298,12 @@ func (r *Relay) SettingsUpdate(ctx context.Context, request *gatewayv2.SettingsU
 	if templates != nil {
 		var result json.RawMessage
 		if err := r.commandResource(ctx, "PUT", "/v1/prompts/templates", map[string]json.RawMessage{"templates": templates}, &result); err != nil {
+			return nil, err
+		}
+	}
+	for workdir, project := range projects {
+		var result json.RawMessage
+		if err := r.commandResource(ctx, "PUT", "/v1/prompts/project", map[string]string{"workdir": workdir, "prompt": project.Prompt, "strategy": project.Strategy}, &result); err != nil {
 			return nil, err
 		}
 	}

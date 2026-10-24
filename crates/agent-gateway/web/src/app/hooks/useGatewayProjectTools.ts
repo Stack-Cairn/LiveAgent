@@ -20,6 +20,7 @@ import {
 import { createGatewayWorkspaceActivityClient } from "@/lib/workspace-activity/gatewayWorkspaceActivityClient";
 
 import { asErrorMessage } from "../chatEventUtils";
+import { isMobileSidebarLayout } from "../historyUtils";
 import type { useGatewayChatConfiguration } from "./useGatewayChatConfiguration";
 import type { useGatewayClients } from "./useGatewayClients";
 import { useProjectToolsRuntime } from "./useProjectToolsRuntime";
@@ -109,6 +110,13 @@ export function useGatewayProjectTools({
     rightDockSshTunnelOpen,
   });
   resetProjectToolsRuntimeRef.current = runtime.resetTerminalSessions;
+  const handleOpenWorkspaceFile = useCallback(
+    (...args: Parameters<typeof runtime.handleOpenWorkspaceFile>) => {
+      runtime.handleOpenWorkspaceFile(...args);
+      if (isMobileSidebarLayout()) setRightDockOpen(false);
+    },
+    [runtime.handleOpenWorkspaceFile, setRightDockOpen],
+  );
 
   const gitDisabledMessage = !settings.remote.enableWebGit
     ? translate("projectTools.webGitDisabled", settings.locale)
@@ -132,7 +140,7 @@ export function useGatewayProjectTools({
     terminalProjectPathKey,
     setRightDockOpen,
     setSettings,
-    onOpenFile: runtime.handleOpenWorkspaceFile,
+    onOpenFile: handleOpenWorkspaceFile,
   });
   const notifyChatFileLinkError = useCallback(
     (message: string) => addNotify("error", message),
@@ -164,6 +172,7 @@ export function useGatewayProjectTools({
 
   return {
     ...runtime,
+    handleOpenWorkspaceFile,
     ...composerActions,
     associatedSshHostIds,
     changedFilesActions,

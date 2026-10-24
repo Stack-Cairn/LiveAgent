@@ -28,6 +28,10 @@ func TestFilesystemTypedProjection(t *testing.T) {
 				t.Error(input)
 			}
 			_, _ = w.Write([]byte(`{"path":"file.txt","content":"hello","mtime_ms":123,"content_hash":"hash","size_bytes":5,"total_lines":1}`))
+		case "delete":
+			_, _ = w.Write([]byte(`{"path":"file.txt","kind":"file"}`))
+		case "read_preview":
+			_, _ = w.Write([]byte(`{"path":"file.txt","data":"aGVsbG8=","mime_type":"text/plain","mtime_ms":123,"content_hash":"hash","size_bytes":5}`))
 		default:
 			t.Error(input)
 		}
@@ -44,7 +48,11 @@ func TestFilesystemTypedProjection(t *testing.T) {
 	if err != nil || !handled || out.GetFsReadEditableTextResp().GetMtimeMs() != 123 || out.GetFsReadEditableTextResp().GetContentHash() != "hash" {
 		t.Fatalf("read=%v handled=%v err=%v", out, handled, err)
 	}
-	if _, handled, err := relay.Filesystem(context.Background(), &gatewayv2.GatewayEnvelope{Payload: &gatewayv2.GatewayEnvelope_FsDelete{FsDelete: &gatewayv2.FsDeleteRequest{Workdir: "/project", Path: "file.txt"}}}); err != nil || handled {
-		t.Fatal("unsupported write was silently handled")
+	out, handled, err = relay.Filesystem(context.Background(), &gatewayv2.GatewayEnvelope{Payload: &gatewayv2.GatewayEnvelope_FsReadWorkspaceImage{FsReadWorkspaceImage: &gatewayv2.FsReadWorkspaceImageRequest{Workdir: "/project", Path: "file.txt"}}})
+	if err != nil || !handled || out.GetFsReadWorkspaceImageResp().GetData() != "aGVsbG8=" || out.GetFsReadWorkspaceImageResp().GetMimeType() != "text/plain" {
+		t.Fatalf("preview=%v err=%v", out, err)
+	}
+	if out, handled, err := relay.Filesystem(context.Background(), &gatewayv2.GatewayEnvelope{Payload: &gatewayv2.GatewayEnvelope_FsDelete{FsDelete: &gatewayv2.FsDeleteRequest{Workdir: "/project", Path: "file.txt"}}}); err != nil || !handled || out.GetFsDeleteResp().GetPath() != "file.txt" {
+		t.Fatal("delete was not projected")
 	}
 }

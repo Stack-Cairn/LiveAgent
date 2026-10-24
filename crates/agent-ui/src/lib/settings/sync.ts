@@ -56,6 +56,7 @@ export type GatewaySettingsSyncPayload = {
   customProviders: GatewaySettingsSyncProvider[];
   mcp: AppSettings["mcp"];
   agents: AppSettings["agents"];
+  projectPrompts?: Record<string, { prompt: string; strategy: "append" | "replace" }>;
   ssh: AppSettings["ssh"];
   remote?: Pick<
     AppSettings["remote"],
@@ -1303,11 +1304,29 @@ export function applyGatewaySettingsSyncPayload(
     : current.customSettings;
   const incomingCustomSettings = customSettings as GatewaySettingsSyncCustomSettings;
 
+  const mergedSystem = Object.hasOwn(source, "system")
+    ? mergeSyncedSystemSettings(current.system, source.system, systemProxyPasswordUpdate)
+    : current.system;
+  const projectResources = { ...mergedSystem.workspaceResourceSettings };
+  if (source.projectPrompts && typeof source.projectPrompts === "object") {
+    for (const [path, entry] of Object.entries(projectResources)) {
+      projectResources[path] = { ...entry, projectPrompt: "", projectPromptStrategy: "append" };
+    }
+    for (const [path, value] of Object.entries(asObject(source.projectPrompts))) {
+      const project = asObject(value);
+      if (typeof project.prompt !== "string") continue;
+      const key = workspaceProjectPathKey(path);
+      projectResources[key] = {
+        ...projectResources[key],
+        projectPrompt: project.prompt,
+        projectPromptStrategy: project.strategy === "replace" ? "replace" : "append",
+      } as AppSettings["system"]["workspaceResourceSettings"][string];
+    }
+  }
+
   return normalizeSettings({
     ...current,
-    system: Object.hasOwn(source, "system")
-      ? mergeSyncedSystemSettings(current.system, source.system, systemProxyPasswordUpdate)
-      : current.system,
+    system: { ...mergedSystem, workspaceResourceSettings: projectResources },
     customProviders: mergeSyncedCustomProviders(
       current.customProviders,
       source.customProviders,

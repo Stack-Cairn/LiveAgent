@@ -17,10 +17,7 @@ import (
 
 const connectionTestHTTPTimeout = 22 * time.Second
 
-// sttHelloTimeout is the maximum time a client may wait after the WebSocket
-// upgrade before sending a hello frame. It is a package var so tests can
-// shorten it without exposing an unauthenticated Slowloris window in production.
-var sttHelloTimeout = 10 * time.Second
+const sttHelloTimeout = 10 * time.Second
 
 func (m *Manager) SettingsHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +74,10 @@ func (m *Manager) TestHandler() http.Handler {
 }
 
 func (m *Manager) WebSocketHandler(token string) http.Handler {
+	return m.webSocketHandler(token, sttHelloTimeout)
+}
+
+func (m *Manager) webSocketHandler(token string, helloTimeout time.Duration) http.Handler {
 	upgrader := websocket.Upgrader{Subprotocols: []string{pbws.Subprotocol}, CheckOrigin: shared.OriginAllowed}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -85,7 +86,7 @@ func (m *Manager) WebSocketHandler(token string) http.Handler {
 		}
 		defer func() { _ = conn.Close() }()
 		conn.SetReadLimit(64 << 10)
-		_ = conn.SetReadDeadline(time.Now().Add(sttHelloTimeout))
+		_ = conn.SetReadDeadline(time.Now().Add(helloTimeout))
 		messageType, data, err := conn.ReadMessage()
 		if err != nil || messageType != websocket.BinaryMessage {
 			return

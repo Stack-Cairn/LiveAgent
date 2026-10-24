@@ -1,5 +1,7 @@
 # 提示词、Loop、文件资源与外部服务续测
 
+后续文件写入、项目提示词、真实 SSH/隧道及验收边界见 [完整验收记录](2026-10-24-full-acceptance.md)；下文保留本轮当时的只读阶段结果。
+
 ## 分支与边界
 
 前一轮修复已推送：LA `audit/full-capability-alignment`（`d4aefae6`），KB `audit/memory-organizer-client`（`d239940`）。本轮继续在这两个分支提交，没有合并主分支或创建 release。

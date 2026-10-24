@@ -32,7 +32,7 @@ func TestRelayMCPSettingsReadSaveClearAndFailure(t *testing.T) {
 			return
 		}
 		if r.URL.Path == "/v1/prompts" {
-			_, _ = io.WriteString(w, `{"globalTemplates":[]}`)
+			_, _ = io.WriteString(w, `{"globalTemplates":[],"projectPrompts":{"opaque-id":{"workdir":"/canonical/project","sourceWorkdir":"/project","prompt":"persisted prompt","strategy":"replace"}}}`)
 			return
 		}
 		if r.URL.Path != "/v1/mcp" {
@@ -57,6 +57,12 @@ func TestRelayMCPSettingsReadSaveClearAndFailure(t *testing.T) {
 	get, err := relay.SettingsGet(context.Background(), &gatewayv2.SettingsGetRequest{})
 	if err != nil || !strings.Contains(get.GetSettingsJson(), `"existing"`) {
 		t.Fatalf("get=%v err=%v", get, err)
+	}
+	var snapshot struct {
+		Projects map[string]gatewayProjectPrompt `json:"projectPrompts"`
+	}
+	if err := json.Unmarshal([]byte(get.GetSettingsJson()), &snapshot); err != nil || snapshot.Projects["/project"].Prompt != "persisted prompt" || snapshot.Projects["/canonical/project"].Strategy != "replace" {
+		t.Fatalf("project prompt projection=%v err=%v", snapshot, err)
 	}
 	for _, body := range []string{`{"mcp":{"servers":[{"id":"sse","transport":"sse","enabled":true,"url":"https://example.test/mcp"}],"selected":["sse"]}}`, `{"mcp":{"servers":[],"selected":[]}}`} {
 		response, err := relay.SettingsUpdate(context.Background(), &gatewayv2.SettingsUpdateRequest{SettingsJson: body})
