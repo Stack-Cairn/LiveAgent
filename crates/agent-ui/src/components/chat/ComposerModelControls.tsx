@@ -581,7 +581,10 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                         </div>
                         <div
                           id={`${executionModeRadioName}-models-${group.id}`}
-                          className="space-y-0.5"
+                          data-model-group-list=""
+                          // 左边线落在标题展开箭头的中线（px-2.5 + 半个 size-3），子行整体右移，
+                          // 让模型与所属供应商形成上下级。
+                          className="ml-4 space-y-0.5 border-l border-border/60 pl-1.5"
                         >
                           {!collapsedProviders.has(group.id) &&
                             group.opts.map((option) => {

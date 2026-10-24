@@ -69,6 +69,15 @@ test("model picker shows the provider brand icon on group headers and model rows
       modelOptions.map(option => option.model),
     );
     assert.ok(rows.every((row, index) => row.textContent.includes(modelOptions[index].label)));
+
+    // 模型行收在供应商下方的缩进容器里，带一条左侧引导线，形成上下级。
+    const lists = [...document.querySelectorAll("[data-model-group-list]")];
+    assert.equal(lists.length, headers.length);
+    for (const list of lists) {
+      assert.match(list.className, /(^|\s)ml-4(\s|$)/);
+      assert.match(list.className, /(^|\s)border-l(\s|$)/);
+    }
+    assert.ok(rows.every(row => row.parentElement.hasAttribute("data-model-group-list")));
   } finally {
     await env.act(async () => root.unmount());
   }
