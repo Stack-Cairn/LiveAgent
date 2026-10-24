@@ -10,18 +10,17 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useRef, useState } from "react";
 import type { KBrainSettingsAdapter } from "../kbrainSettingsAdapter";
 
-/** Authoritative switch state, or null when the backend does not support it or is unreachable. */
+/**
+ * Authoritative switch state, or null when the backend does not support the switch.
+ * Rejects when the backend cannot be read, which callers must not treat as unsupported.
+ */
 export async function loadMemorySwitch(kbrain: KBrainSettingsAdapter): Promise<boolean | null> {
-  try {
-    if (kbrain.getCapabilities) {
-      const capabilities = await kbrain.getCapabilities();
-      if (capabilities.memory_switch !== 1) return null;
-    }
-    const enabled = (await kbrain.getSettings()).memory?.enabled;
-    return typeof enabled === "boolean" ? enabled : null;
-  } catch {
-    return null;
+  if (kbrain.getCapabilities) {
+    const capabilities = await kbrain.getCapabilities();
+    if (capabilities.memory_switch !== 1) return null;
   }
+  const enabled = (await kbrain.getSettings()).memory?.enabled;
+  return typeof enabled === "boolean" ? enabled : null;
 }
 
 export function MemorySwitch({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
@@ -32,11 +31,16 @@ export function MemorySwitch({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
   const savingRef = useRef(false);
 
   useEffect(() => {
+    // A failed read keeps what is shown: hidden before the first answer, the last
+    // backend-confirmed state after it.
     const load = () => {
       const ticket = ++epoch.current;
-      void loadMemorySwitch(kbrain).then((value) => {
-        if (ticket === epoch.current) setEnabled(value);
-      });
+      loadMemorySwitch(kbrain).then(
+        (value) => {
+          if (ticket === epoch.current) setEnabled(value);
+        },
+        () => {},
+      );
     };
     // Another mounted switch (the memory hub under the settings overlay) may save;
     // the saving instance already holds the backend's answer.
@@ -64,10 +68,13 @@ export function MemorySwitch({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
       window.dispatchEvent(new Event("kbrain:settings-changed"));
     } catch {
       if (ticket !== epoch.current) return;
-      toast.error(t("settings.memorySwitchSaveFailed"));
-      // Roll back to what the backend holds, not to the guess before the click.
-      const current = await loadMemorySwitch(kbrain);
-      if (ticket === epoch.current) setEnabled(current);
+      // Roll back to what the backend holds, not to the guess before the click; a write
+      // can land even when its response is lost.
+      const current = await loadMemorySwitch(kbrain).catch(() => enabled);
+      if (ticket !== epoch.current) return;
+      setEnabled(current);
+      if (current !== next) toast.error(t("settings.memorySwitchSaveFailed"));
+      if (current !== enabled) window.dispatchEvent(new Event("kbrain:settings-changed"));
     } finally {
       savingRef.current = false;
       if (ticket === epoch.current) setSaving(false);
