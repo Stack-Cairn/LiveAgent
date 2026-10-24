@@ -40,7 +40,7 @@ func TestRelayMCPSettingsReadSaveClearAndFailure(t *testing.T) {
 			return
 		}
 		if failed {
-			http.Error(w, "unavailable", 503)
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if r.Method == "PUT" {
