@@ -29,20 +29,32 @@ export function MemorySwitch({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const epoch = useRef(0);
+  const savingRef = useRef(false);
 
   useEffect(() => {
-    const ticket = ++epoch.current;
-    void loadMemorySwitch(kbrain).then((value) => {
-      if (ticket === epoch.current) setEnabled(value);
-    });
+    const load = () => {
+      const ticket = ++epoch.current;
+      void loadMemorySwitch(kbrain).then((value) => {
+        if (ticket === epoch.current) setEnabled(value);
+      });
+    };
+    // Another mounted switch (the memory hub under the settings overlay) may save;
+    // the saving instance already holds the backend's answer.
+    const onChanged = () => {
+      if (!savingRef.current) load();
+    };
+    load();
+    window.addEventListener("kbrain:settings-changed", onChanged);
     return () => {
       ++epoch.current;
+      window.removeEventListener("kbrain:settings-changed", onChanged);
     };
   }, [kbrain]);
 
   async function change(next: boolean) {
     if (saving || enabled === null || next === enabled) return;
     const ticket = ++epoch.current;
+    savingRef.current = true;
     setSaving(true);
     setEnabled(next);
     try {
@@ -57,6 +69,7 @@ export function MemorySwitch({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
       const current = await loadMemorySwitch(kbrain);
       if (ticket === epoch.current) setEnabled(current);
     } finally {
+      savingRef.current = false;
       if (ticket === epoch.current) setSaving(false);
     }
   }
