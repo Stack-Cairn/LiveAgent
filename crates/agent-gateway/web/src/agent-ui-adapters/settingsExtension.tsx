@@ -5,7 +5,10 @@ import {
   kbrainResourceHostCapabilities,
 } from "@liveagent/ui/lib/resourceHost";
 import type { GatewaySettingsSyncUpdatePayload } from "@liveagent/ui/lib/settings/sync";
-import type { KBrainSettingsAdapter } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
+import type {
+  KBrainMemoryConfig,
+  KBrainSettingsAdapter,
+} from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
 import { getGatewayWebSocketClient } from "../lib/gatewaySocket";
 import { loadToken } from "../lib/storage";
 import { DevicesSection } from "../pages/settings/DevicesSection";
@@ -60,11 +63,17 @@ const computerSettingsAdapter: KBrainSettingsAdapter = {
       ),
       aiApproval: document.aiApproval,
       computer: document.computer,
+      memory: document.kbrainMemory,
     };
   },
   async updateSettings(update) {
+    // Gateway carries the K-brain memory switch as `kbrainMemory`: its `memory` key is
+    // LiveAgent's own organizer settings.
+    const { memory, ...rest } = update as GatewaySettingsSyncUpdatePayload & {
+      memory?: KBrainMemoryConfig;
+    };
     await getGatewayWebSocketClient(loadToken().trim()).updateSettings(
-      update as GatewaySettingsSyncUpdatePayload,
+      memory ? { ...rest, kbrainMemory: memory } : rest,
     );
     return this.getSettings();
   },

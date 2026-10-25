@@ -52,6 +52,8 @@ export type GatewaySttSecretUpdate = AppSettings["stt"];
 export type GatewaySettingsSyncPayload = {
   aiApproval?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").AIApprovalConfig;
   computer?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainComputerConfig;
+  /** K-brain memory master switch, distinct from LiveAgent's `memory` organizer settings. */
+  kbrainMemory?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainMemoryConfig;
   system: AppSettings["system"];
   customProviders: GatewaySettingsSyncProvider[];
   mcp: AppSettings["mcp"];

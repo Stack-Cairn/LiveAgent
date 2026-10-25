@@ -23,9 +23,13 @@ export type AIApprovalConfig = {
   model?: string;
 };
 
+/** K-brain memory master switch; absent on backends without `capabilities.memory_switch`. */
+export type KBrainMemoryConfig = { enabled: boolean };
+
 export type KBrainSettingsDocument = {
   aiApproval?: AIApprovalConfig;
   computer?: KBrainComputerConfig;
+  memory?: KBrainMemoryConfig;
   mode: "kbrain";
   defaultModel: string;
   defaultProvider: string;
@@ -66,6 +70,8 @@ export type KBrainSettingsAdapter = {
   getSettings: () => Promise<KBrainSettingsDocument>;
   updateSettings: (update: unknown) => Promise<KBrainSettingsDocument>;
   getComputerStatus?: () => Promise<KBrainComputerStatus>;
+  /** `/v1/health` capabilities; hosts that cannot reach it rely on the settings document. */
+  getCapabilities?: () => Promise<Record<string, unknown>>;
 };
 
 export type SettingsHostAdapter = {
