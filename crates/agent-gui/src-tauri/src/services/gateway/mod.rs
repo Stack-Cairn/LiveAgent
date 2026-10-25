@@ -26,7 +26,6 @@ use crate::runtime::sftp::SftpSessionRegistry;
 use crate::runtime::terminal::TerminalSessionRegistry;
 use crate::services::automation::AutomationStore;
 use crate::services::chat_run_ledger::ChatRunLedger;
-use crate::services::memory::MemoryStore;
 use crate::services::provider_usage::ProviderUsageService;
 use crate::services::tunnel::{TunnelProxy, TunnelStore};
 use crate::services::workspace_watch::WorkspaceWatchService;
@@ -126,7 +125,6 @@ pub(crate) const GATEWAY_CHAT_CHECKPOINT_REQUESTED_EVENT: &str =
 pub struct GatewayController {
     app_handle: tauri::AppHandle,
     automation_store: Arc<AutomationStore>,
-    memory_store: Arc<MemoryStore>,
     provider_usage_service: Arc<ProviderUsageService>,
     terminal_registry: Arc<TerminalSessionRegistry>,
     sftp_registry: Arc<SftpSessionRegistry>,

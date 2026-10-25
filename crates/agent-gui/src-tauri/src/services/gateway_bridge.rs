@@ -35,12 +35,6 @@ use crate::services::automation::{
 };
 use crate::services::gateway::proto;
 use crate::services::kbrain_backend::{KBrainBackendConnection, KBrainBackendState};
-use crate::services::memory::{
-    MemoryAcceptArgs, MemoryBatchArgs, MemoryDeleteArgs, MemoryDeleteProjectArgs, MemoryListArgs,
-    MemoryOrganizeDueClaimArgs, MemoryOrganizeRunCreateArgs, MemoryOrganizeRunListArgs,
-    MemoryOrganizeRunReadArgs, MemoryOrganizeRunUpdateArgs, MemoryQuotaSummaryArgs, MemoryReadArgs,
-    MemoryRecentRejectionsArgs, MemorySearchArgs, MemoryStore, MemoryUpdateArgs, MemoryWriteArgs,
-};
 use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
 use crate::services::skills::system_manage_skill_sync;
 
@@ -962,6 +956,10 @@ fn prompt_workdir_query(workdir: &str) -> String {
 /// 指令目录请求的上限：WebUI 打开“/”弹层时同步等待，K-brain 卡住时要尽快失败。
 const KBRAIN_COMMANDS_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// 记忆命令的上限，与 Gateway 直连 K-brain 时的请求超时（2 分钟）一致：
+/// 手动整理在 K-brain 里同步执行，提前断开会把整理一起取消。
+const KBRAIN_MEMORY_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 /// 调 K-brain 的指令接口并解析 JSON；非 2xx 时取 error/message 字段作为错误。
 async fn kbrain_prompt_request(
     connection: &KBrainBackendConnection,
@@ -969,9 +967,26 @@ async fn kbrain_prompt_request(
     path_and_query: &str,
     body: Option<Value>,
 ) -> Result<Value, String> {
+    kbrain_json_request(
+        connection,
+        method,
+        path_and_query,
+        body,
+        KBRAIN_COMMANDS_REQUEST_TIMEOUT,
+    )
+    .await
+}
+
+async fn kbrain_json_request(
+    connection: &KBrainBackendConnection,
+    method: reqwest::Method,
+    path_and_query: &str,
+    body: Option<Value>,
+    timeout: std::time::Duration,
+) -> Result<Value, String> {
     let client = reqwest::Client::builder()
         .no_proxy()
-        .timeout(KBRAIN_COMMANDS_REQUEST_TIMEOUT)
+        .timeout(timeout)
         .build()
         .map_err(|error| format!("create K-brain HTTP client failed: {error}"))?;
     let mut request = client
@@ -1640,41 +1655,84 @@ pub async fn handle_uploaded_image_preview(
     })
 }
 
+/// 桌面端在 K-brain 模式下把这些记忆命令交给 K-brain（`agent-gui/src/lib/kbrain/memory.ts`）。
+/// WebUI 经网关转来的同名命令必须走同一条路，否则读写的是不再更新的本地记忆索引。
+const KBRAIN_MEMORY_COMMANDS: &[&str] = &[
+    "memory_organizer",
+    "memory_list",
+    "memory_read",
+    "memory_search",
+    "memory_write",
+    "memory_update",
+    "memory_delete",
+    "memory_delete_project",
+    "memory_accept",
+    "memory_apply_batch",
+    "memory_overview",
+    "memory_quota_summary",
+    "memory_recent_rejections",
+    "memory_organize_run_create",
+    "memory_organize_run_update",
+    "memory_organize_run_list",
+    "memory_organize_run_read",
+    "memory_organize_run_clear_history",
+    "memory_organize_due_claim",
+    "memory_organize_due_complete",
+    "memory_index_overview",
+    "memory_paths_info",
+    "memory_today_local_date",
+    "memory_today_daily",
+    "memory_wipe_all",
+];
+
+fn is_kbrain_memory_command(command: &str) -> bool {
+    KBRAIN_MEMORY_COMMANDS.contains(&command.trim())
+}
+
 pub async fn handle_memory_manage(
-    memory_store: Arc<MemoryStore>,
+    app: AppHandle,
     request: proto::MemoryManageRequest,
 ) -> Result<proto::MemoryManageResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || handle_memory_manage_sync(memory_store, request))
+    let command = request.command.trim().to_string();
+    if is_kbrain_memory_command(&command) {
+        let connection = ensure_kbrain_connection(&app).await?;
+        return kbrain_memory_manage(&connection, &command, &request.args_json).await;
+    }
+    tauri::async_runtime::spawn_blocking(move || handle_history_manage_sync(request))
         .await
         .map_err(|e| format!("gateway memory manage join failed: {e}"))?
 }
 
-fn handle_memory_manage_sync(
-    memory_store: Arc<MemoryStore>,
+/// 把一条记忆命令原样交给 K-brain 的 `/v1/memory/manage`，结果 JSON 原样返回。
+async fn kbrain_memory_manage(
+    connection: &KBrainBackendConnection,
+    command: &str,
+    args_json: &str,
+) -> Result<proto::MemoryManageResponse, String> {
+    let args = parse_memory_value(args_json, command)?;
+    let result = kbrain_json_request(
+        connection,
+        reqwest::Method::POST,
+        "/v1/memory/manage",
+        Some(json!({ "command": command, "args": args })),
+        KBRAIN_MEMORY_REQUEST_TIMEOUT,
+    )
+    .await?;
+    let result_json = serde_json::to_string(&result)
+        .map_err(|e| format!("serialize {command} result JSON failed: {e}"))?;
+    Ok(proto::MemoryManageResponse { result_json })
+}
+
+/// `memory.manage` 里与记忆库无关的会话历史命令，仍由桌面端本地处理。
+fn handle_history_manage_sync(
     request: proto::MemoryManageRequest,
 ) -> Result<proto::MemoryManageResponse, String> {
     let command = request.command.trim();
     let result = match command {
-        "memory_list" => {
-            let args = parse_memory_args::<MemoryListArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.list(args)?)
-        }
         "history_shared_list" => {
             let args = parse_memory_args::<HistorySharedListArgs>(&request.args_json, command)?;
             let page = chat_history::list_shared_chat_history_page_sync(args.page, args.page_size)?;
             serde_json::to_value(history_list_json(page))
-        }
-        "memory_read" => {
-            let args = parse_memory_args::<MemoryReadArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.read(args)?)
-        }
-        "memory_search" => {
-            let args = parse_memory_args::<MemorySearchArgs>(&request.args_json, command)?;
-            let history_args = args.clone();
-            let mut response = memory_store.search(args)?;
-            response.history_matches =
-                chat_history::search_chat_history_for_memory_sync(&history_args)?;
-            serde_json::to_value(response)
         }
         "chat_history_search" => {
             let args = parse_memory_args::<chat_history::ChatHistorySearchArgs>(
@@ -1683,109 +1741,6 @@ fn handle_memory_manage_sync(
             )?;
             serde_json::to_value(chat_history::search_chat_history_sync(args)?)
         }
-        "memory_write" => {
-            let args = parse_memory_args::<MemoryWriteArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.write(args)?)
-        }
-        "memory_update" => {
-            let args = parse_memory_args::<MemoryUpdateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.update(args)?)
-        }
-        "memory_delete" => {
-            let args = parse_memory_args::<MemoryDeleteArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.delete(args)?)
-        }
-        "memory_delete_project" => {
-            let args = parse_memory_args::<MemoryDeleteProjectArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.delete_project(args)?)
-        }
-        "memory_accept" => {
-            let args = parse_memory_args::<MemoryAcceptArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.accept(args)?)
-        }
-        "memory_apply_batch" => {
-            let args = parse_memory_args::<MemoryBatchArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.apply_batch(args)?)
-        }
-        "memory_organize_run_create" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeRunCreateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_run_create(args)?)
-        }
-        "memory_organize_run_update" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeRunUpdateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_run_update(args)?)
-        }
-        "memory_organize_run_list" => {
-            let args = if request.args_json.trim().is_empty() {
-                MemoryOrganizeRunListArgs::default()
-            } else {
-                parse_memory_args::<MemoryOrganizeRunListArgs>(&request.args_json, command)?
-            };
-            serde_json::to_value(memory_store.organize_run_list(args)?)
-        }
-        "memory_organize_run_read" => {
-            let args = parse_memory_args::<MemoryOrganizeRunReadArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_run_read(args)?)
-        }
-        "memory_organize_run_clear_history" => {
-            serde_json::to_value(memory_store.organize_run_clear_history()?)
-        }
-        "memory_organize_due_claim" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeDueClaimArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_due_claim(args)?)
-        }
-        "memory_organize_due_complete" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeRunUpdateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_due_complete(args)?)
-        }
-        "memory_index_overview" => {
-            let args = parse_memory_value(&request.args_json, command)?;
-            let workdir = args
-                .get("workdir")
-                .and_then(Value::as_str)
-                .map(str::to_string);
-            serde_json::to_value(memory_store.overview(workdir)?)
-        }
-        "memory_paths_info" => serde_json::to_value(memory_store.paths_info()?),
-        "memory_recent_rejections" => {
-            let args = if request.args_json.trim().is_empty() {
-                MemoryRecentRejectionsArgs::default()
-            } else {
-                parse_memory_args::<MemoryRecentRejectionsArgs>(&request.args_json, command)?
-            };
-            serde_json::to_value(memory_store.recent_rejections(args)?)
-        }
-        "memory_today_local_date" => {
-            let args = parse_memory_value(&request.args_json, command)?;
-            let rollover_hour = args
-                .get("rolloverHour")
-                .or_else(|| args.get("rollover_hour"))
-                .and_then(Value::as_u64)
-                .and_then(|value| u32::try_from(value).ok());
-            serde_json::to_value(memory_store.today_local_date(rollover_hour))
-        }
-        "memory_today_daily" => {
-            let args = parse_memory_value(&request.args_json, command)?;
-            let rollover_hour = args
-                .get("rolloverHour")
-                .or_else(|| args.get("rollover_hour"))
-                .and_then(Value::as_u64)
-                .and_then(|value| u32::try_from(value).ok());
-            serde_json::to_value(memory_store.today_daily(rollover_hour)?)
-        }
-        "memory_quota_summary" => {
-            let args = if request.args_json.trim().is_empty() {
-                MemoryQuotaSummaryArgs::default()
-            } else {
-                parse_memory_args::<MemoryQuotaSummaryArgs>(&request.args_json, command)?
-            };
-            serde_json::to_value(memory_store.quota_summary(args)?)
-        }
-        "memory_wipe_all" => serde_json::to_value(memory_store.wipe_all()?),
         _ => return Err(format!("unsupported memory command: {command}")),
     }
     .map_err(|e| format!("serialize {command} result failed: {e}"))?;
@@ -2310,11 +2265,11 @@ mod tests {
 
     use super::{
         decode_kbrain_terminal_response, flatten_history_messages_json,
-        flatten_history_messages_json_window, is_builtin_share_tool_name, kbrain_provider_models,
-        kbrain_slash_commands, kbrain_terminal_request, parse_occurrence_query, parse_runs_limit,
-        prompt_workdir_query, proto, redact_builtin_tool_content_json,
-        resolve_stored_provider_models_config, sanitize_provider_summaries,
-        KBrainBackendConnection,
+        flatten_history_messages_json_window, is_builtin_share_tool_name, is_kbrain_memory_command,
+        kbrain_memory_manage, kbrain_provider_models, kbrain_slash_commands,
+        kbrain_terminal_request, parse_occurrence_query, parse_runs_limit, prompt_workdir_query,
+        proto, redact_builtin_tool_content_json, resolve_stored_provider_models_config,
+        sanitize_provider_summaries, KBrainBackendConnection, KBRAIN_MEMORY_COMMANDS,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -2341,6 +2296,116 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn gateway_memory_routing_matches_desktop_kbrain_commands() {
+        // 桌面端 K-brain 模式下交给 K-brain 的记忆命令清单；网关转来的同名命令必须走同一条路。
+        let source = include_str!("../../../src/lib/kbrain/memory.ts");
+        let start = source.find("new Set([").expect("memoryCommands set");
+        let end = start + source[start..].find("]);").expect("memoryCommands end");
+        let mut desktop: Vec<&str> = source[start..end].split('"').skip(1).step_by(2).collect();
+        desktop.sort_unstable();
+        let mut gateway = KBRAIN_MEMORY_COMMANDS.to_vec();
+        gateway.sort_unstable();
+        assert_eq!(gateway, desktop);
+        for command in &desktop {
+            assert!(is_kbrain_memory_command(command), "{command}");
+        }
+        assert!(is_kbrain_memory_command("  memory_list  "));
+        for command in [
+            "history_shared_list",
+            "chat_history_search",
+            "",
+            "memory_unknown",
+        ] {
+            assert!(!is_kbrain_memory_command(command), "{command}");
+        }
+    }
+
+    #[tokio::test]
+    async fn kbrain_memory_manage_forwards_command_and_surfaces_errors() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(
+            listener,
+            "200 OK",
+            r#"{"entries":[{"slug":"fresh","scope":"global","unreviewed":true}],"truncated":false}"#,
+        ));
+        let response = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_list",
+            r#"{"includeAllProjects":true,"includeDaily":true,"limit":1000}"#,
+        )
+        .await
+        .expect("memory list");
+        let (headers, body) = server.await.expect("fixture task");
+        assert!(headers.starts_with("POST /v1/memory/manage "));
+        assert!(
+            headers.contains("authorization: Bearer fixture-token")
+                || headers.contains("Authorization: Bearer fixture-token")
+        );
+        assert_eq!(
+            body,
+            Some(json!({
+                "command": "memory_list",
+                "args": {"includeAllProjects": true, "includeDaily": true, "limit": 1000}
+            }))
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&response.result_json).expect("result JSON"),
+            json!({"entries":[{"slug":"fresh","scope":"global","unreviewed":true}],"truncated":false})
+        );
+
+        // 空参数按空对象发送；K-brain 的 null 结果（今天没有日记）原样回给 WebUI。
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(listener, "200 OK", "null"));
+        let response = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_today_daily",
+            "  ",
+        )
+        .await
+        .expect("today daily");
+        let (_, body) = server.await.expect("fixture task");
+        assert_eq!(
+            body,
+            Some(json!({"command": "memory_today_daily", "args": {}}))
+        );
+        assert_eq!(response.result_json, "null");
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(
+            listener,
+            "404 Not Found",
+            r#"{"version":"v1","error":"memory entry not found"}"#,
+        ));
+        let error = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_read",
+            r#"{"slug":"missing","scope":"global"}"#,
+        )
+        .await
+        .expect_err("missing entry");
+        server.await.expect("fixture task");
+        assert!(error.contains("memory entry not found"), "{error}");
+
+        let error = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_read",
+            "{not json",
+        )
+        .await
+        .expect_err("invalid args");
+        assert!(error.contains("invalid memory_read args JSON"), "{error}");
     }
 
     fn prompt_fixture_connection(address: std::net::SocketAddr) -> KBrainBackendConnection {
@@ -3137,5 +3202,29 @@ mod tests {
         .await
         .unwrap_err();
         assert!(undetected.contains("检测到"), "{undetected}");
+    }
+    /// 分发循环是单任务串行的（connection.rs 的 dispatcher_task）。MemoryManage 要等
+    /// K-brain（手动整理可达 2 分钟），在循环里直接 await 会让同一连接的 Ping、chat、
+    /// 审批全部排队。桌面 Wry AppHandle 无法在单测里构造，这里核对分发臂已 spawn。
+    #[test]
+    fn memory_manage_envelope_is_spawned_off_the_dispatch_loop() {
+        let source = include_str!("gateway/envelope_handler.rs");
+        let start = source
+            .find("Payload::MemoryManage(request)) =>")
+            .expect("MemoryManage arm");
+        let rest = &source[start + 1..];
+        let end = rest
+            .find("Some(proto::gateway_envelope::Payload::")
+            .expect("next arm");
+        let arm = &rest[..end];
+        assert!(
+            arm.contains("async_runtime::spawn("),
+            "MemoryManage arm awaits K-brain inline on the dispatch loop:\n{arm}"
+        );
+        // 对照：同样等 K-brain 的 SlashCommandList 已经 spawn。
+        let slash = source
+            .find("Payload::SlashCommandList(request)) =>")
+            .expect("SlashCommandList arm");
+        assert!(source[slash..slash + 200].contains("async_runtime::spawn("));
     }
 }

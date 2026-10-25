@@ -201,7 +201,7 @@ Git 面板与文件树不再轮询：桌面端 `workspace_watch` 服务（notify
 | 能力 | 直通请求臂 | Desktop 落点 |
 |---|---|---|
 | Skills 列表和管理 | `SkillFilesListRequest`、`SkillManageRequest`、`SkillMetadataReadRequest`、`SkillTextReadRequest` | `system_ensure_builtin_skills`、`system_manage_skill`、`system_read_skill_*`、`commands/app/system.rs`、`services/skills/*` |
-| Memory 管理 | `MemoryManageRequest` | `commands/integration/memory.rs`、`services/memory/*` |
+| Memory 管理 | `MemoryManageRequest` | `services/gateway_bridge.rs` 的 `handle_memory_manage`：记忆命令交给 K-brain `/v1/memory/manage`，`history_shared_list`、`chat_history_search` 在桌面端本地处理 |
 | Cron 管理 | `CronManageRequest` | `commands/automation/cron.rs`、`services/automation/*`、settings cron 表 |
 
 ## 恢复与去重机制
