@@ -1215,22 +1215,34 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::UploadedImagePreview(request)) => {
                 self.spawn_uploaded_image_preview_response(request_id, request)
             }
+            // 记忆命令要等 K-brain 回应（手动整理可达 2 分钟），spawn 出去，避免卡住分发循环。
             Some(proto::gateway_envelope::Payload::MemoryManage(request)) => {
-                match gateway_bridge::handle_memory_manage(Arc::clone(&self.memory_store), request)
+                let controller = Arc::clone(self);
+                tauri::async_runtime::spawn(async move {
+                    let result = match gateway_bridge::handle_memory_manage(
+                        controller.app_handle.clone(),
+                        request,
+                    )
                     .await
-                {
-                    Ok(response) => {
-                        self.send_agent_envelope(proto::AgentEnvelope {
-                            request_id,
-                            timestamp: now_unix_seconds(),
-                            payload: Some(proto::agent_envelope::Payload::MemoryManageResp(
-                                response,
-                            )),
-                        })
-                        .await
+                    {
+                        Ok(response) => {
+                            controller
+                                .send_agent_envelope(proto::AgentEnvelope {
+                                    request_id: request_id.clone(),
+                                    timestamp: now_unix_seconds(),
+                                    payload: Some(
+                                        proto::agent_envelope::Payload::MemoryManageResp(response),
+                                    ),
+                                })
+                                .await
+                        }
+                        Err(error) => controller.send_error_response(request_id, 500, error).await,
+                    };
+                    if let Err(error) = result {
+                        eprintln!("handle memory manage failed: {error}");
                     }
-                    Err(error) => self.send_error_response(request_id, 500, error).await,
-                }
+                });
+                Ok(())
             }
             Some(proto::gateway_envelope::Payload::SkillMetadataRead(request)) => {
                 match gateway_bridge::handle_skill_metadata_read(request).await {
