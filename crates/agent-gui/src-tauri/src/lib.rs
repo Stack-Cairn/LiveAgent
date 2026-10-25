@@ -985,7 +985,6 @@ pub fn run() {
                 let gateway_controller = Arc::new(services::gateway::GatewayController::new(
                     app.handle().clone(),
                     Arc::clone(&automation_store),
-                    Arc::clone(&memory_store),
                     Arc::clone(&provider_usage_service),
                     Arc::clone(&terminal_registry),
                     Arc::clone(&sftp_registry),
