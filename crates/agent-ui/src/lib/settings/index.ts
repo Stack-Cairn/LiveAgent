@@ -125,6 +125,7 @@ import {
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
+  MODEL_IMAGE_ADAPTERS,
   MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
@@ -989,6 +990,7 @@ export function normalizeProviderModelConfig(
   const promptCacheHintMode =
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   const inputModalities = normalizeInputModalities(obj.inputModalities);
+  const imageAdapter = MODEL_IMAGE_ADAPTERS.find((value) => value === obj.imageAdapter);
   return {
     id,
     ...(typeof obj.displayName === "string"
@@ -1007,6 +1009,8 @@ export function normalizeProviderModelConfig(
     // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
     // 重排顺序），合法覆盖永不被自动删除。
     ...(inputModalities ? { inputModalities } : {}),
+    ...(imageAdapter ? { imageAdapter } : {}),
+    ...(typeof obj.imageModel === "boolean" ? { imageModel: obj.imageModel } : {}),
   };
 }
 

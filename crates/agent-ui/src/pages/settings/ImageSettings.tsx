@@ -17,7 +17,6 @@ import type {
   Operation,
   ImageSettings as Settings,
 } from "../../lib/imaging/types";
-import { ImageTargetVerification } from "./ImageTargetVerification";
 import {
   connectionDependents,
   type ImageSecretPurpose,
@@ -37,6 +36,7 @@ import {
   patchImageTarget,
   removeImageConnection,
   settingsUpdate,
+  unfinishedImageAdapters,
   validateImageSettingsDraft,
   writeAndBindImageSecret,
 } from "./imageSettingsAdapter";
@@ -128,6 +128,13 @@ function ImageSettingsScope({
   dirtyRef.current = dirty;
   const connection = draft?.connections.find((c) => c.id === connectionId);
   const target = draft?.targets.find((t) => t.id === targetId);
+  const targetEnableBlock = !target
+    ? ""
+    : unfinishedImageAdapters.includes(target.adapter)
+      ? "后端暂未支持这种图像协议，目标保存后不能启用。"
+      : draft?.connections.some((c) => c.id === target.connectionId && !c.enabled)
+        ? "所用连接已停用，启用连接后才能启用目标。"
+        : "";
   const secretPurposes = draft ? imageSecretPurposes(draft, connectionId) : ["apiKey" as const];
   const selectedPurpose = secretPurposes.includes(purpose) ? purpose : secretPurposes[0];
 
@@ -426,7 +433,7 @@ function ImageSettingsScope({
             ? "配置图像供应商的地址、认证和凭据。模型与工作流请在创作输入区的目标设置中管理。"
             : panel === "targets"
               ? "选择已有图像连接，配置生成模型或工作流。连接和凭据由后端配置管理。"
-              : "配置图像连接和模型或工作流目标。公开配置保存后，再写入连接凭据。"}
+              : "供应商里标为生图的模型会直接出现在图像工作台。这里只用来配置需要单独连接的图像服务，例如 RunningHub 模型 API、火山方舟；公开配置保存后，再写入连接凭据。"}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -602,7 +609,10 @@ function ImageSettingsScope({
                         }}
                       >
                         <option value="independent">独立图像连接</option>
-                        <option value="provider_ref">复用已有供应商</option>
+                        {/* 供应商里的生图模型已直接出现在工作台；只为旧连接保留这一项。 */}
+                        {connection.binding.kind === "provider_ref" && (
+                          <option value="provider_ref">复用已有供应商</option>
+                        )}
                       </select>
                     </Field>
                     <Field label="最大并发任务">
@@ -1070,25 +1080,15 @@ function ImageSettingsScope({
                       </>
                     )}
                   </details>
-                  <p className="text-xs text-muted-foreground">
-                    {target.enabled ? "后端返回：已启用。" : "当前已禁用，尚不能用于生成。"}{" "}
-                    新增或修改执行配置后须完成实际验证；本页不会自动启用目标或执行收费测试。
-                  </p>
-                  <ImageTargetVerification
-                    key={target.id}
-                    client={client}
-                    target={target}
-                    revision={saved?.revision ?? 0}
-                    disabled={dirty || busy !== null}
-                    onEnable={() => updateTarget({ enabled: true })}
-                    onVerified={() => {
-                      void refresh();
-                    }}
+                  <Toggle
+                    label="启用目标"
+                    checked={target.enabled}
+                    // 已启用的仍可关闭；未完成的适配器或停用的连接下不能再打开。
+                    disabled={!target.enabled && targetEnableBlock !== ""}
+                    onChange={(enabled) => updateTarget({ enabled })}
                   />
-                  {target.enabled && (
-                    <Button variant="outline" onClick={() => updateTarget({ enabled: false })}>
-                      禁用目标
-                    </Button>
+                  {targetEnableBlock && (
+                    <p className="text-xs text-muted-foreground">{targetEnableBlock}</p>
                   )}
                   <Button
                     variant="destructive"

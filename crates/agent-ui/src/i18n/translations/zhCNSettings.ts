@@ -817,6 +817,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.estimatedLimitsBadge": "估计值",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
+  "settings.modelImage": "生图模型",
+  "settings.modelImageAuto": "自动识别（推荐）",
+  "settings.modelImageOn": "是",
+  "settings.modelImageOff": "否",
+  "settings.modelImageHint":
+    "启用且选「是」的模型会出现在图像工作台。自动识别按模型名判断：名字带 image 或在已知生图模型名单里就算。",
+  "settings.modelImageBadge": "生图",
   "settings.modelInputModalities": "输入能力",
   "settings.modelInputModalitiesAuto": "自动推断（推荐）",
   "settings.modelInputModalitiesText": "仅文本",

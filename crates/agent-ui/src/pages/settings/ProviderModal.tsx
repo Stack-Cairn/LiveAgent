@@ -39,6 +39,7 @@ import {
 } from "@liveagent/ui/lib/providers/modelVendor";
 import { isGatewayWebuiRuntime } from "@liveagent/ui/lib/runtimeEnv";
 import {
+  applyModelImageMode,
   applyModelInputModalitiesMode,
   applyModelsActiveState,
   applyProviderModelDraft,
@@ -48,8 +49,10 @@ import {
   createDraftModelConfig,
   createUsageQueryDraft,
   detectCodingPlanProvider,
+  getModelImageMode,
   getModelInputModalitiesMode,
   getPersistedUsageQueryProviderId,
+  type ModelImageMode,
   type ModelInputModalitiesMode,
   matchBalanceProviders,
   mergeFetchedModels,
@@ -648,8 +651,17 @@ function useProviderModalController({
   const editingModelInputModalitiesMode = editingModel
     ? getModelInputModalitiesMode(editingModel.model)
     : "auto";
+  // 旧版 K-brain 不回传 imageModel，也不认识这个开关，此时不显示。
+  const canToggleEditingModelImage = editingModel?.model.imageModel !== undefined;
+  const editingModelImageMode = editingModel ? getModelImageMode(editingModel.model) : "auto";
   const canSaveEditingModel =
     editingModelContextWindow !== null && editingModelMaxOutputToken !== null;
+
+  function setEditingModelImageMode(mode: ModelImageMode) {
+    setEditingModel((prev) =>
+      prev ? { ...prev, model: applyModelImageMode(prev.model, mode) } : prev,
+    );
+  }
 
   function setEditingModelInputModalitiesMode(mode: ModelInputModalitiesMode) {
     setEditingModel((prev) =>
@@ -980,12 +992,14 @@ function useProviderModalController({
     baseUrl,
     canSaveEditingModel,
     canOverrideModelInputModalities,
+    canToggleEditingModelImage,
     cancelCustomHeaderImport,
     clearVisibleModels,
     commitUsageTimeoutInput,
     customHeaders,
     editingModel,
     editingModelContextWindow,
+    editingModelImageMode,
     editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
     fetchError,
@@ -1038,6 +1052,7 @@ function useProviderModalController({
     setApiKey,
     setBaseUrl,
     setEditingModel,
+    setEditingModelImageMode,
     setEditingModelInputModalitiesMode,
     setHeaderImportError,
     setHeaderImportOpen,

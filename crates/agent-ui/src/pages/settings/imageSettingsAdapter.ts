@@ -140,15 +140,15 @@ export function imageSettingsDirty(
 ): boolean {
   return !same(saved, draft);
 }
-/** Changing execution inputs invalidates backend verification. Renames retain it. */
+/** K-brain 尚未完成这些适配器，拒绝保存启用状态的目标（config_validate.go）。 */
+export const unfinishedImageAdapters: readonly string[] = [
+  "google-interactions-image",
+  "runninghub-workflow",
+  "jimeng-image",
+];
 export function patchImageTarget(target: ImageTarget, patch: Partial<ImageTarget>): ImageTarget {
   const next = { ...target, ...patch };
-  const executionChanged = Object.keys(patch).some(
-    (key) =>
-      !["name", "enabled", "disabledReason"].includes(key) &&
-      !same(target[key as keyof ImageTarget], next[key as keyof ImageTarget]),
-  );
-  return executionChanged ? { ...next, enabled: false } : next;
+  return unfinishedImageAdapters.includes(next.adapter) ? { ...next, enabled: false } : next;
 }
 export function patchImageConnection(
   settings: ImageSettings,
@@ -158,8 +158,8 @@ export function patchImageConnection(
   const previous = settings.connections.find((c) => c.id === id);
   if (!previous) return settings;
   const next = { ...previous, ...patch };
-  const invalidate =
-    !same(previous.binding, next.binding) || previous.vendor !== next.vendor || !next.enabled;
+  // The backend rejects an enabled target on a disabled connection.
+  const invalidate = !next.enabled;
   return {
     ...settings,
     connections: settings.connections.map((c) => (c.id === id ? next : c)),
@@ -352,6 +352,9 @@ export function validateImageSettingsDraft(settings: ImageSettings): string[] {
       errors.push("目标标识无效或重复。");
     targets.add(t.id);
     if (!connections.has(t.connectionId)) errors.push("目标缺少连接。");
+    // Mirrors K-brain config_validate.go: enabled targets need an enabled connection.
+    if (t.enabled && settings.connections.some((c) => c.id === t.connectionId && !c.enabled))
+      errors.push("已启用的目标不能使用已停用的连接，请先启用连接或停用目标。");
     if (!t.name.trim() || !t.remoteId.trim() || !t.adapter.trim() || !t.adapterVersion.trim())
       errors.push("请填写目标名称、协议版本及模型或工作流标识。");
     const c = t.capabilities;

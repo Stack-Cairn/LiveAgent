@@ -64,6 +64,30 @@ export function applyModelInputModalitiesMode(
   };
 }
 
+export type ModelImageMode = "auto" | "on" | "off";
+
+export function getModelImageMode(model: ProviderModelConfig): ModelImageMode {
+  if (!model.imageAdapter) return "auto";
+  return model.imageAdapter === "disabled" ? "off" : "on";
+}
+
+/** "auto" 在草稿里就是没有 imageAdapter；保存时由 withImageAdapter / Gateway 补成空串。 */
+export function applyModelImageMode(
+  model: ProviderModelConfig,
+  mode: ModelImageMode,
+): ProviderModelConfig {
+  const next = { ...model };
+  delete next.imageAdapter;
+  if (mode === "auto") return next;
+  return { ...next, imageAdapter: mode === "on" ? "enabled" : "disabled" };
+}
+
+/** 列表行的生图标签：用户选择优先，自动时用 K-brain 回传的识别结果。 */
+export function modelIsImage(model: ProviderModelConfig): boolean {
+  const mode = getModelImageMode(model);
+  return mode === "auto" ? model.imageModel === true : mode === "on";
+}
+
 // KEEP IN SYNC:general/newapi 预设与桌面端 Rust services/provider_usage.rs 的
 // GENERAL_SCRIPT / NEWAPI_SCRIPT 逐字符一致(脚本为空的存量配置由 Rust 兜底执行);
 // custom 骨架仅前端填充(Rust 对空的 custom 脚本直接报错,无兜底)。三者内容

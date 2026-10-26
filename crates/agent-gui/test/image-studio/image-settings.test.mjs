@@ -32,15 +32,17 @@ test('connection deletion reports concrete dependencies and never silently delet
   assert.equal(model.removeImageConnection({ ...settings, targets: [] }, 'ic_test').connections.length, 0);
 });
 
-test('execution edits disable targets; renames do not claim or change verification', () => {
+test('edits keep targets enabled; only disabling the connection disables its targets', () => {
   const settings = fixture();
   settings.targets[0].enabled = true;
-  assert.equal(model.patchImageTarget(settings.targets[0], { name: 'Renamed' }).enabled, true);
-  for (const patch of [{ remoteId: 'other-model' }, { adapter: 'jimeng-image' }, { parameters: [{ key: 'size' }] }, { connectionId: 'ic_other' }]) {
-    assert.equal(model.patchImageTarget(settings.targets[0], patch).enabled, false);
+  // No verification step any more: editing a target or its connection keeps it usable.
+  for (const patch of [{ name: 'Renamed' }, { remoteId: 'other-model' }, { adapter: 'volcengine-ark-image' }, { parameters: [{ key: 'size' }] }, { connectionId: 'ic_other' }]) {
+    assert.equal(model.patchImageTarget(settings.targets[0], patch).enabled, true);
   }
+  // The backend cannot run unfinished adapters, so switching to one disables the target.
+  assert.equal(model.patchImageTarget(settings.targets[0], { adapter: 'jimeng-image' }).enabled, false);
   assert.equal(model.patchImageConnection(settings, 'ic_test', { name: 'Renamed' }).targets[0].enabled, true);
-  assert.equal(model.patchImageConnection(settings, 'ic_test', { binding: { kind: 'provider_ref', providerId: 'chat' } }).targets[0].enabled, false);
+  assert.equal(model.patchImageConnection(settings, 'ic_test', { binding: { kind: 'provider_ref', providerId: 'chat' } }).targets[0].enabled, true);
   assert.equal(model.patchImageConnection(settings, 'ic_test', { enabled: false }).targets[0].enabled, false);
   assert.equal(model.newImageTarget('it_new', 'ic_test').enabled, false);
 });

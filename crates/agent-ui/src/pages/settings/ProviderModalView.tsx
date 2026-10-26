@@ -81,6 +81,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   applyUsageQueryModePreset,
   formatTokenCount,
+  modelIsImage,
   setUsageQueryScript,
   USAGE_QUERY_CODING_PLAN_PROVIDERS,
 } from "@liveagent/ui/pages/settings/providerUtils";
@@ -122,12 +123,14 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     applyCliIdentityHeaders,
     baseUrl,
     canOverrideModelInputModalities,
+    canToggleEditingModelImage,
     canSaveEditingModel,
     cancelCustomHeaderImport,
     commitUsageTimeoutInput,
     customHeaders,
     editingModel,
     editingModelContextWindow,
+    editingModelImageMode,
     editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
     fetchError,
@@ -181,6 +184,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setApiKey,
     setBaseUrl,
     setEditingModel,
+    setEditingModelImageMode,
     setEditingModelInputModalitiesMode,
     setHeaderImportError,
     setHeaderImportOpen,
@@ -675,6 +679,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   "max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0",
                                 )}
                               >
+                                {modelIsImage(model) ? (
+                                  <span className="mr-1.5 rounded-full border border-border/70 bg-muted/60 px-1.5 py-0.5 text-tiny leading-none">
+                                    {t("settings.modelImageBadge")}
+                                  </span>
+                                ) : null}
                                 {modalityIcons.length > 0 ? (
                                   <span className="mr-1.5 flex items-center gap-1">
                                     {modalityIcons.map(({ modality, Icon, labelKey }) => (
@@ -839,6 +848,53 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             </DropdownMenu>
                             <FormFieldDescription>
                               {t("settings.modelInputModalitiesHint")}
+                            </FormFieldDescription>
+                          </FormField>
+                        ) : null}
+                        {canToggleEditingModelImage ? (
+                          <FormField>
+                            <FormFieldLabel>{t("settings.modelImage")}</FormFieldLabel>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    className="h-9 w-full justify-between bg-settings-tile-hover px-3"
+                                  />
+                                }
+                                aria-label={t("settings.modelImage")}
+                              >
+                                {t(
+                                  editingModelImageMode === "auto"
+                                    ? "settings.modelImageAuto"
+                                    : editingModelImageMode === "on"
+                                      ? "settings.modelImageOn"
+                                      : "settings.modelImageOff",
+                                )}
+                                <ChevronDown className="size-4 text-muted-foreground" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent variant="soft">
+                                <DropdownMenuRadioGroup
+                                  value={editingModelImageMode}
+                                  onValueChange={(value) => {
+                                    if (value === "auto" || value === "on" || value === "off")
+                                      setEditingModelImageMode(value);
+                                  }}
+                                >
+                                  <DropdownMenuRadioItem value="auto">
+                                    {t("settings.modelImageAuto")}
+                                  </DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="on">
+                                    {t("settings.modelImageOn")}
+                                  </DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="off">
+                                    {t("settings.modelImageOff")}
+                                  </DropdownMenuRadioItem>
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <FormFieldDescription>
+                              {t("settings.modelImageHint")}
                             </FormFieldDescription>
                           </FormField>
                         ) : null}

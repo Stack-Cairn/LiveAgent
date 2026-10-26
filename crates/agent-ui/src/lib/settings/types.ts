@@ -473,7 +473,23 @@ export type ProviderModelConfig = {
    * 读取前须经 normalizeInputModalities 归一化。
    */
   inputModalities?: ModelInputModalitiesOverride;
+  /**
+   * 生图开关的用户选择，原样写给 K-brain：缺失 = 自动识别，"enabled" = 是，
+   * "disabled" = 否；也保留 K-brain 认识的具体协议名。空串只出现在发给 K-brain
+   * 的请求里，表示清除选择。
+   */
+  imageAdapter?: ModelImageAdapter | "";
+  /** K-brain 回传的生效结果（只读）。旧版 K-brain 不回传，界面据此隐藏生图开关。 */
+  imageModel?: boolean;
 };
+
+export const MODEL_IMAGE_ADAPTERS = [
+  "enabled",
+  "disabled",
+  "openai-images",
+  "google-generate-content-image",
+] as const;
+export type ModelImageAdapter = (typeof MODEL_IMAGE_ADAPTERS)[number];
 
 export type ChatRuntimeControls = {
   thinkingEnabled: boolean;
