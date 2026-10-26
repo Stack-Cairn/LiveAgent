@@ -577,7 +577,7 @@ func kbrainProviderUpdate(provider map[string]json.RawMessage) (map[string]any, 
 			}
 			// "Auto" omits imageAdapter, but K-brain keeps an omitted field, so clear
 			// it explicitly. imageModel marks a K-brain that understands the toggle.
-			if _, known := model["imageModel"]; known {
+			if _, known := model["imageModel"].(bool); known {
 				if _, set := clean["imageAdapter"]; !set {
 					clean["imageAdapter"] = ""
 				}

@@ -82,3 +82,31 @@ test("saving sends auto as an explicit clear, only to a K-brain that knows the t
   assert.equal(byId.off.imageAdapter, "disabled");
   assert.equal("imageAdapter" in byId.old, false);
 });
+
+test("loading rejects near-miss toggle values instead of guessing", () => {
+  for (const imageAdapter of [" enabled", "Enabled", "ENABLED", "true", "", null, 1]) {
+    const model = normalizeProviderModelConfig({ id: "m", ...base, imageAdapter }, "codex");
+    assert.equal("imageAdapter" in model, false, `kept ${JSON.stringify(imageAdapter)}`);
+    assert.equal(getModelImageMode(model), "auto");
+  }
+  // A null result (not a boolean) must not count as "this K-brain knows the toggle".
+  const model = normalizeProviderModelConfig({ id: "m", ...base, imageModel: null }, "codex");
+  assert.equal("imageModel" in model, false);
+});
+
+test("the same model ID under two providers keeps separate choices", () => {
+  const provider = (id, imageAdapter) => ({
+    id,
+    name: id,
+    type: "codex",
+    baseUrl: `https://${id}.invalid/v1`,
+    apiKey: "",
+    apiKeyConfigured: true,
+    models: [{ id: "agnes-image-2.5-flash", ...base, imageModel: true, ...(imageAdapter ? { imageAdapter } : {}) }],
+    activeModels: ["agnes-image-2.5-flash"],
+  });
+  const providers = [provider("agnes-cn", "disabled"), provider("agnes-global")];
+  const pushed = kBrainSettingsUpdateFromLegacyProviders(providers, providers).providers;
+  assert.equal(pushed.find((p) => p.id === "agnes-cn").models[0].imageAdapter, "disabled");
+  assert.equal(pushed.find((p) => p.id === "agnes-global").models[0].imageAdapter, "");
+});

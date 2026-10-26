@@ -448,3 +448,21 @@ func TestImageToggleTravelsBetweenWebUIAndKBrain(t *testing.T) {
 		}
 	}
 }
+
+func TestImageToggleIgnoresNullImageModel(t *testing.T) {
+	// Only a K-brain that returns imageModel may receive the explicit clear; a
+	// null from a malformed client must not turn into imageAdapter:"".
+	input := json.RawMessage(`{"customProviders":[{"id":"p","name":"P","type":"codex","baseUrl":"https://example.test","apiKey":"","apiKeyConfigured":true,"models":[{"id":"m","imageModel":null}]}]}`)
+	translated, err := settingsUpdateForKBrain(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(translated, &got); err != nil {
+		t.Fatal(err)
+	}
+	model := got["providers"].([]any)[0].(map[string]any)["models"].([]any)[0].(map[string]any)
+	if _, ok := model["imageAdapter"]; ok {
+		t.Fatalf("null imageModel produced an image toggle write: %v", model)
+	}
+}
