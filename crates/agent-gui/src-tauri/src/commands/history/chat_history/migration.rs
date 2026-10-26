@@ -79,7 +79,7 @@ fn migration_read_artifact(
     Ok(bytes)
 }
 
-fn checkpoint_export(conversation_id: &str, home: &std::path::Path) -> LegacyMigrationCheckpoint {
+fn checkpoint_safe_id(conversation_id: &str) -> String {
     let safe: String = conversation_id
         .chars()
         .map(|c| {
@@ -90,7 +90,12 @@ fn checkpoint_export(conversation_id: &str, home: &std::path::Path) -> LegacyMig
             }
         })
         .collect();
-    let safe = safe.trim_matches('.');
+    safe.trim_matches('.').to_string()
+}
+
+fn checkpoint_export(conversation_id: &str, home: &std::path::Path) -> LegacyMigrationCheckpoint {
+    let safe = checkpoint_safe_id(conversation_id);
+    let safe = safe.as_str();
     let native_path = format!("~/.liveagent/checkpoints/{safe}");
     let mut out = LegacyMigrationCheckpoint {
         status: "partial".to_string(),
@@ -405,6 +410,114 @@ fn open_migration_path(path: &std::path::Path) -> Result<Connection, String> {
     conn.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|e| format!("set migration timeout failed: {e}"))?;
     Ok(conn)
+}
+
+/// Hashes every row a query returns, column by column, and also returns its first column.
+fn hash_query_rows(
+    conn: &Connection,
+    sql: &str,
+    columns: usize,
+) -> Result<(Vec<String>, String), String> {
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("prepare legacy history signature failed: {e}"))?;
+    let mut hash = <sha2::Sha256 as sha2::Digest>::new();
+    let keys = stmt
+        .query_map([], |row| {
+            let mut fields = Vec::with_capacity(columns);
+            for index in 0..columns {
+                let value: rusqlite::types::Value = row.get(index)?;
+                fields.push(format!("{value:?}"));
+            }
+            Ok((row.get::<_, String>(0)?, fields))
+        })
+        .map_err(|e| format!("query legacy history signature failed: {e}"))?
+        .map(|row| {
+            let (key, fields) = row?;
+            for field in fields {
+                sha2::Digest::update(&mut hash, field.len().to_le_bytes());
+                sha2::Digest::update(&mut hash, field.as_bytes());
+            }
+            Ok(key)
+        })
+        .collect::<Result<Vec<String>, rusqlite::Error>>()
+        .map_err(|e| format!("read legacy history signature failed: {e}"))?;
+    let digest = sha2::Digest::finalize(hash)
+        .iter()
+        .take(16)
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    Ok((keys, digest))
+}
+
+/// Cheap fingerprint of everything a legacy migration pass exports: the conversation and share
+/// rows themselves, the segment count and latest segment update, plus size and mtime of each
+/// conversation's checkpoint index. Startup skips the full export while it is unchanged since a
+/// complete pass. Segment bodies are trusted through updated_at to avoid reading them.
+fn migration_signature_sync(conn: &Connection, home: &std::path::Path) -> Result<String, String> {
+    let (segments, segments_at): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(*), COALESCE(MAX(updated_at), 0) FROM chatHistorySegment",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| format!("read legacy history signature failed: {e}"))?;
+    // Older builds rename, pin and move conversations without touching updated_at, so the
+    // exported conversation columns are hashed instead of trusted through the timestamp.
+    let (ids, rows_digest) = hash_query_rows(
+        conn,
+        "SELECT id, title, provider_id, model, session_id, cwd, context_meta_json,
+                active_segment_index, total_segment_count, total_message_count,
+                created_at, updated_at, is_pinned, selected_model_json
+           FROM chatHistory ORDER BY id ASC",
+        14,
+    )?;
+    let (_, shares_digest) = hash_query_rows(
+        conn,
+        "SELECT conversation_id, token, enabled, redact_tool_content
+           FROM chatHistoryShare ORDER BY conversation_id ASC",
+        4,
+    )?;
+    let rows = ids.len();
+    let checkpoints = home.join(".liveagent").join("checkpoints");
+    let (mut indexes, mut index_bytes, mut index_mtime) = (0u64, 0u64, 0u128);
+    for id in ids {
+        let safe = checkpoint_safe_id(&id);
+        if safe.is_empty() {
+            continue;
+        }
+        let Ok(metadata) = std::fs::metadata(checkpoints.join(safe).join("index.jsonl")) else {
+            continue;
+        };
+        indexes += 1;
+        index_bytes = index_bytes.wrapping_add(metadata.len());
+        if let Ok(modified) = metadata.modified() {
+            if let Ok(since) = modified.duration_since(std::time::UNIX_EPOCH) {
+                index_mtime = index_mtime.max(since.as_nanos());
+            }
+        }
+    }
+    Ok(format!(
+        "v1:{rows}:{rows_digest}:{shares_digest}:{segments}:{segments_at}:{indexes}:{index_bytes}:{index_mtime}"
+    ))
+}
+
+#[tauri::command]
+pub async fn legacy_history_migration_signature() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = crate::runtime::data_home::home_dir()
+            .ok_or_else(|| "cannot locate legacy history home".to_string())?;
+        let path = home
+            .join(format!(".{}", env!("CARGO_PKG_NAME")))
+            .join("chat-history.sqlite3");
+        if !path.exists() {
+            return Ok(None);
+        }
+        let conn = open_migration_path(&path)?;
+        migration_signature_sync(&conn, &home).map(Some)
+    })
+    .await
+    .map_err(|e| format!("legacy history signature join failed: {e}"))?
 }
 
 #[tauri::command]
