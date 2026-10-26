@@ -180,4 +180,67 @@ mod migration_tests {
             let _ = temp.keep();
         }
     }
+
+    #[test]
+    fn migration_signature_tracks_exported_rows_and_checkpoint_indexes() {
+        let temp = tempfile::tempdir().expect("fixture directory");
+        let path = temp.path().join("chat-history.sqlite3");
+        let conn = Connection::open(&path).expect("open fixture");
+        history_db::initialize_connection(&conn).expect("initialize fixture");
+        conn.execute(
+            "INSERT INTO chatHistory (id,title,provider_id,model,context_meta_json,active_segment_index,total_segment_count,total_message_count,created_at,updated_at,is_pinned) VALUES ('legacy-a','Draft','fixture','model','{}',0,1,1,10,20,0)",
+            [],
+        ).expect("insert history");
+        conn.execute(
+            "INSERT INTO chatHistorySegment (conversation_id,segment_index,segment_id,messages_json,message_count,created_at,updated_at) VALUES ('legacy-a',0,'seg-0','[]',0,10,20)",
+            [],
+        ).expect("insert segment");
+        let read = || {
+            let conn = open_migration_path(&path).expect("open read-only fixture");
+            migration_signature_sync(&conn, temp.path()).expect("signature")
+        };
+        let first = read();
+        assert_eq!(read(), first, "an untouched export keeps its signature");
+
+        conn.execute("UPDATE chatHistorySegment SET updated_at = 30", [])
+            .expect("touch segment");
+        let touched = read();
+        assert_ne!(touched, first, "an edited segment changes the signature");
+
+        conn.execute(
+            "INSERT INTO chatHistoryShare (conversation_id,token,enabled,redact_tool_content,created_at,updated_at) VALUES ('legacy-a','t',1,0,30,30)",
+            [],
+        ).expect("share");
+        let shared = read();
+        assert_ne!(shared, touched, "sharing changes the signature");
+
+        // Older builds rename, pin and move conversations without touching updated_at.
+        let mut previous = shared.clone();
+        for edit in [
+            "UPDATE chatHistory SET title = 'Renamed'",
+            "UPDATE chatHistory SET is_pinned = 1",
+            "UPDATE chatHistory SET cwd = '/elsewhere'",
+        ] {
+            conn.execute(edit, []).expect("metadata edit");
+            let edited = read();
+            assert_ne!(edited, previous, "{edit} changes the signature");
+            previous = edited;
+        }
+        let shared = previous;
+
+        let checkpoint_dir = temp.path().join(".liveagent/checkpoints/legacy-a");
+        std::fs::create_dir_all(&checkpoint_dir).unwrap();
+        std::fs::write(checkpoint_dir.join("index.jsonl"), "{}\n").unwrap();
+        let with_index = read();
+        assert_ne!(
+            with_index, shared,
+            "a new checkpoint index changes the signature"
+        );
+        std::fs::write(checkpoint_dir.join("index.jsonl"), "{}\n{}\n").unwrap();
+        assert_ne!(
+            read(),
+            with_index,
+            "a grown checkpoint index changes the signature"
+        );
+    }
 }

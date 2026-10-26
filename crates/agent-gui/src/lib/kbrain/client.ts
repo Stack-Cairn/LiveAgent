@@ -347,6 +347,28 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     });
   }
 
+  async function getCapabilities(signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const health = await request<{ capabilities?: Record<string, unknown> }>("/v1/health", {
+      signal,
+    });
+    return health.capabilities && typeof health.capabilities === "object"
+      ? health.capabilities
+      : {};
+  }
+
+  /** Ids among `ids` that K-brain can load, answered from file metadata (`session_exists`). */
+  async function sessionsExist(ids: readonly string[], signal?: AbortSignal): Promise<Set<string>> {
+    const result = await request<{ existing?: unknown }>("/v1/sessions/exists", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+      signal,
+    });
+    if (!Array.isArray(result?.existing) || result.existing.some((id) => typeof id !== "string")) {
+      throw new Error("Malformed K-brain session existence response");
+    }
+    return new Set(result.existing as string[]);
+  }
+
   async function getSession(conversationId: string, signal?: AbortSignal): Promise<KBrainSession> {
     return request<KBrainSession>(`/v1/sessions/${encodeURIComponent(conversationId)}`, { signal });
   }
@@ -837,6 +859,8 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     callMcpTool,
     generateText,
     compactSession,
+    getCapabilities,
+    sessionsExist,
     getSession,
     updateSession,
     startRun,

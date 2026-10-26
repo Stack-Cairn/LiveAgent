@@ -96,6 +96,8 @@ export type MigrationFailure = {
   bytes?: number;
   /** True when startup skipped it because the same content already failed deterministically. */
   skipped?: boolean;
+  /** True when the exported conversation itself could not be converted, before any request. */
+  invalidSource?: boolean;
 };
 
 export type HistoryMigrationSource = "legacy" | "pi";
@@ -137,16 +139,55 @@ export type HistoryMigrationOptions = {
   sessionExists?: (backendId: string) => Promise<boolean>;
 };
 
-type ExistenceClient = Pick<ReturnType<typeof createKBrainClient>, "listSessions" | "getSession">;
+type ExistenceClient = Pick<
+  ReturnType<typeof createKBrainClient>,
+  "listSessions" | "getSession" | "getCapabilities" | "sessionsExist"
+>;
+
+const MAX_EXISTS_IDS = 5000;
+
+/** Backend ids of every cached migration result in the current K-brain scope. */
+function cachedBackendIds(): string[] {
+  return Object.values(readMigrationCache(kBrainStorageScope()))
+    .map((entry) => entry?.result?.backend_id)
+    .filter((id): id is string => typeof id === "string" && id.trim() !== "");
+}
 
 /**
- * Existence check for cached migration results. Looking a session up by id makes K-brain read
- * and parse its whole transcript (one ~10 MB conversation took ~1.2 s), and startup checked
- * every cached conversation that way. One paged listing answers the common case instead; a
- * session missing from the listing (or a listing that fails) is still confirmed by id, so a
- * listing gap can never trigger a re-upload and only a real 404 does.
+ * Existence check for cached migration results. K-brain answers both the session listing and a
+ * lookup by id by reading whole transcripts (one ~10 MB conversation took ~1.2 s, and the listing
+ * reads every transcript on each page). A backend with `session_exists` confirms every cached id
+ * in one metadata-only request. Older backends fall back to one paged listing, and a session
+ * missing from the listing (or a listing that fails) is still confirmed by id, so a listing gap
+ * can never trigger a re-upload and only a real 404 does.
  */
-export function createSessionExistenceCheck(client: ExistenceClient, signal?: AbortSignal) {
+export function createSessionExistenceCheck(
+  client: ExistenceClient,
+  signal?: AbortSignal,
+  candidates: () => Iterable<string> = cachedBackendIds,
+) {
+  let batched: Promise<{ asked: Set<string>; existing: Set<string> } | null> | undefined;
+  const batch = () => {
+    batched ??= (async () => {
+      try {
+        if ((await client.getCapabilities(signal)).session_exists !== 1) return null;
+        const asked = new Set(candidates());
+        const ids = [...asked];
+        const existing = new Set<string>();
+        for (let start = 0; start < ids.length; start += MAX_EXISTS_IDS) {
+          const found = await client.sessionsExist(
+            ids.slice(start, start + MAX_EXISTS_IDS),
+            signal,
+          );
+          for (const id of found) existing.add(id);
+        }
+        return { asked, existing };
+      } catch {
+        return null;
+      }
+    })();
+    return batched;
+  };
   let listed: Promise<Set<string> | null> | undefined;
   const list = () => {
     listed ??= (async () => {
@@ -165,6 +206,15 @@ export function createSessionExistenceCheck(client: ExistenceClient, signal?: Ab
     return listed;
   };
   return async (backendId: string) => {
+    const known = await batch();
+    if (known?.asked.has(backendId)) return known.existing.has(backendId);
+    if (known) {
+      try {
+        return (await client.sessionsExist([backendId], signal)).has(backendId);
+      } catch {
+        // Fall through to the slower checks, which never mistake an error for absence.
+      }
+    }
     if ((await list())?.has(backendId)) return true;
     try {
       await client.getSession(backendId, signal);
@@ -387,11 +437,22 @@ function readMigrationCache(baseUrl: string): Record<string, CachedMigration> {
   }
 }
 
-function writeMigrationCache(baseUrl: string, cache: Record<string, CachedMigration>) {
+/**
+ * Applies this page's changes onto the cache as stored now, so the legacy and Pi passes that run
+ * side by side never overwrite each other's entries. `null` removes an entry.
+ */
+function writeMigrationCache(baseUrl: string, updates: Map<string, CachedMigration | null>) {
+  if (updates.size === 0) return;
+  const cache = readMigrationCache(baseUrl);
+  for (const [id, entry] of updates) {
+    if (entry) cache[id] = entry;
+    else delete cache[id];
+  }
   try {
     globalThis.localStorage?.setItem(migrationCacheKey(baseUrl), JSON.stringify(cache));
   } catch {
-    // Storage is optional; K-brain fingerprint idempotency remains authoritative.
+    // Storage is optional; K-brain fingerprint idempotency remains authoritative, and the
+    // startup marker is only written once every result is confirmed in the stored cache.
   }
 }
 
@@ -432,7 +493,7 @@ export async function migrateLegacyHistoryPage(
     options.sessionExists ?? createSessionExistenceCheck(client, options.signal);
   const scope = kBrainStorageScope();
   const cache = readMigrationCache(scope);
-  let cacheChanged = false;
+  const cacheUpdates = new Map<string, CachedMigration | null>();
   const knownFailures = readHistoryMigrationFailures(scope);
   const failedRecords: HistoryMigrationFailureRecord[] = [];
   const succeededIds: string[] = [];
@@ -444,10 +505,14 @@ export async function migrateLegacyHistoryPage(
     // Only the import POST speaks for the payload; earlier existence checks (GET) failing
     // with 401/403/500 say nothing about whether this conversation can ever be imported.
     let importAttempted = false;
+    // Converting the exported row is local and depends only on its content.
+    let converted = false;
     try {
       validateCheckpointExport(item.checkpoint);
       const messages = canonicalMessagesForMigration(item);
+      const activeContext = activeContextForMigration(item, messages);
       sourceFingerprint = await fingerprint({ item, messages });
+      converted = true;
       const known = options.retryKnownFailures
         ? undefined
         : knownDeterministicFailure(knownFailures, item.id, sourceFingerprint);
@@ -496,7 +561,7 @@ export async function migrateLegacyHistoryPage(
         share_token: item.shareToken,
         share_redact_tool: item.redactToolContent,
         messages,
-        active_context: activeContextForMigration(item, messages),
+        active_context: activeContext,
         checkpoint: item.checkpoint ?? {
           status: "unresolved",
           nativePath: `~/.liveagent/checkpoints/${item.id}`,
@@ -544,7 +609,7 @@ export async function migrateLegacyHistoryPage(
       setKBrainSessionId(item.id, result.backend_id);
       if (isStableMigrationResult(result)) {
         cache[item.id] = { fingerprint: sourceFingerprint, result };
-        cacheChanged = true;
+        cacheUpdates.set(item.id, cache[item.id]);
       }
       succeededIds.push(item.id);
       results.push(result);
@@ -559,6 +624,12 @@ export async function migrateLegacyHistoryPage(
       if (status === 410) {
         outcome = "skipped";
         succeededIds.push(item.id);
+        // A deleted conversation is not a cached import any more; keeping it would make every
+        // startup existence check report a missing session.
+        if (cache[item.id]) {
+          delete cache[item.id];
+          cacheUpdates.set(item.id, null);
+        }
         continue;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -575,6 +646,7 @@ export async function migrateLegacyHistoryPage(
         kind,
         title: item.title,
         bytes: bodyBytes,
+        ...(converted ? {} : { invalidSource: true }),
       });
       if (sourceFingerprint) {
         failedRecords.push({
@@ -591,7 +663,7 @@ export async function migrateLegacyHistoryPage(
       reportProgress(options, "settled", outcome);
     }
   }
-  if (cacheChanged) writeMigrationCache(scope, cache);
+  writeMigrationCache(scope, cacheUpdates);
   if (failedRecords.length > 0 || succeededIds.length > 0) {
     writeHistoryMigrationFailures(
       scope,
@@ -652,6 +724,82 @@ export async function recoverLegacyHistory(id: string): Promise<boolean> {
   }
 }
 
+/** Bump when the legacy export or its conversion changes, so every user runs one full pass. */
+const MIGRATION_MARKER_FORMAT = 1;
+
+function migrationMarker(signature: string) {
+  // Read at call time: an upgrade of the app may change what an unchanged database exports.
+  const appVersion = typeof __LIVEAGENT_APP_VERSION__ === "string" ? __LIVEAGENT_APP_VERSION__ : "";
+  return `${MIGRATION_MARKER_FORMAT}|${appVersion}|${signature}`;
+}
+
+function migrationCompletionKey(scope: string) {
+  return `liveagent.kbrain-history-migration-complete.v1:${scope}`;
+}
+
+/** A complete legacy pass: the source it covered and the K-brain sessions it confirmed. */
+type MigrationCompletion = { marker: string; backendIds: string[] };
+
+function readMigrationCompletion(scope: string): MigrationCompletion | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(migrationCompletionKey(scope));
+    const parsed = raw ? (JSON.parse(raw) as Partial<MigrationCompletion>) : null;
+    if (
+      typeof parsed?.marker !== "string" ||
+      !Array.isArray(parsed.backendIds) ||
+      parsed.backendIds.some((id) => typeof id !== "string")
+    ) {
+      return null;
+    }
+    return { marker: parsed.marker, backendIds: parsed.backendIds };
+  } catch {
+    return null;
+  }
+}
+
+function writeMigrationCompletion(scope: string, completion: MigrationCompletion) {
+  try {
+    globalThis.localStorage?.setItem(migrationCompletionKey(scope), JSON.stringify(completion));
+  } catch {
+    // Without the marker the next launch simply runs the full pass again.
+  }
+}
+
+/**
+ * Whether the sessions a complete legacy pass confirmed are all still in K-brain, answered only
+ * by a backend with the metadata-only `session_exists` check. Older backends always get the full
+ * pass, so a wiped K-brain store is still repaired by re-importing. Only that pass's own sessions
+ * count: entries no pass can clear (Pi sources that are gone, conversations skipped as known
+ * failures) must not keep the marker from ever applying.
+ */
+async function migratedSessionsStillExist(
+  backendIds: readonly string[],
+  options: HistoryMigrationOptions,
+): Promise<boolean> {
+  try {
+    const client = createKBrainClient({ fetch: options.fetch });
+    if ((await client.getCapabilities(options.signal)).session_exists !== 1) return false;
+    const ids = [...new Set(backendIds)];
+    for (let start = 0; start < ids.length; start += MAX_EXISTS_IDS) {
+      const chunk = ids.slice(start, start + MAX_EXISTS_IDS);
+      const found = await client.sessionsExist(chunk, options.signal);
+      if (chunk.some((id) => !found.has(id))) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readLegacySignature(): Promise<string | null> {
+  try {
+    const signature = await invoke<string | null>("legacy_history_migration_signature");
+    return typeof signature === "string" && signature ? signature : null;
+  } catch {
+    return null;
+  }
+}
+
 async function migrateHistorySourceOnce(
   command: "legacy_history_migration_page" | "pi_history_migration_page",
   options: HistoryMigrationOptions = {},
@@ -661,6 +809,20 @@ async function migrateHistorySourceOnce(
     progressSource: command === "legacy_history_migration_page" ? "legacy" : "pi",
   };
   if (!isTauriHost() || !getConfiguredKBrainConnection()) {
+    reportProgress(options, "done");
+    return { results: [], failures: [], complete: true };
+  }
+  // Read before the pass, so a change made while it runs is never covered by its marker.
+  const scope = kBrainStorageScope();
+  const signature =
+    command === "legacy_history_migration_page" ? await readLegacySignature() : null;
+  const completion =
+    signature && !options.retryKnownFailures ? readMigrationCompletion(scope) : null;
+  if (
+    signature &&
+    completion?.marker === migrationMarker(signature) &&
+    (await migratedSessionsStillExist(completion.backendIds, options))
+  ) {
     reportProgress(options, "done");
     return { results: [], failures: [], complete: true };
   }
@@ -680,6 +842,28 @@ async function migrateHistorySourceOnce(
       }
       cursor = migrated.nextCursor;
     } while (cursor !== undefined);
+    // Deterministic failures are listed for the user and skipped at startup anyway; a transient
+    // failure or an unresolved checkpoint export still needs the next launch to retry.
+    // The marker vouches for these results through the cache, so every one of them must have
+    // reached storage (a quota failure or a lost write leaves the next launch the full pass).
+    const stored = readMigrationCache(scope);
+    if (
+      signature &&
+      all.every(
+        (result) =>
+          isStableMigrationResult(result) &&
+          stored[result.source_id]?.result?.backend_id === result.backend_id,
+      ) &&
+      failures.every(
+        (failure) =>
+          failure.kind !== undefined && (failure.kind !== "transient" || failure.invalidSource),
+      )
+    ) {
+      writeMigrationCompletion(scope, {
+        marker: migrationMarker(signature),
+        backendIds: all.map((result) => result.backend_id),
+      });
+    }
     reportProgress(options, "done");
   } catch (error) {
     reportProgress(options, "error");

@@ -33,6 +33,8 @@ test("stable migration verifies existence, repairs only 404, and honors backend 
   let posts = 0;
   let gets = 0;
   const fetch = async (_url, init) => {
+    // A backend without session_exists keeps the listing/lookup path under test.
+    if (String(_url).endsWith("/v1/health")) return new Response(JSON.stringify({ status: "ok", capabilities: {} }));
     // The session listing is a separate existence source; an empty listing keeps every
     // assertion below about the per-session lookup meaningful.
     if (String(_url).includes("/v1/sessions?")) return new Response(JSON.stringify({ sessions: [], total_count: 0 }), { status: 200 });
@@ -276,6 +278,7 @@ test("one session listing answers existence checks without a lookup per conversa
   let listings = 0;
   let lookups = 0;
   const fetch = async (url, init) => {
+    if (String(url).endsWith("/v1/health")) return new Response(JSON.stringify({ status: "ok", capabilities: {} }));
     if (String(url).includes("/v1/sessions?")) {
       listings++;
       return new Response(JSON.stringify({ sessions: [{ id: "recoverable" }], total_count: 1 }), { status: 200 });
@@ -295,6 +298,83 @@ test("one session listing answers existence checks without a lookup per conversa
     assert.equal(posts, 1);
     assert.equal(lookups, 0);
     assert.ok(listings >= 1);
+  } finally {
+    runtime.clearKBrainRuntimeConnection();
+  }
+});
+
+function sessionExistsBackend({ existing = new Set(["recoverable"]), capability = 1 } = {}) {
+  const calls = { posts: 0, exists: [], listings: 0, lookups: 0, health: 0 };
+  const fetch = async (url, init) => {
+    const path = new URL(String(url)).pathname;
+    if (path === "/v1/health") {
+      calls.health++;
+      return new Response(JSON.stringify({ status: "ok", capabilities: capability === undefined ? {} : { session_exists: capability } }));
+    }
+    if (path === "/v1/sessions/exists") {
+      const { ids } = JSON.parse(init.body);
+      calls.exists.push(ids);
+      return new Response(JSON.stringify({ existing: ids.filter((id) => existing.has(id)) }));
+    }
+    if (path === "/v1/sessions") {
+      calls.listings++;
+      return new Response(JSON.stringify({ sessions: [], total_count: 0 }));
+    }
+    if (init?.method === "POST") {
+      calls.posts++;
+      existing.add("recoverable");
+      return new Response(JSON.stringify({ source_id: "recoverable", backend_id: "recoverable", status: "imported", checkpoint: "not_found", fingerprint: "fp" }));
+    }
+    calls.lookups++;
+    return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+  };
+  return { fetch, calls, existing };
+}
+
+test("a backend with session_exists confirms cached conversations in one request without listing", async () => {
+  const values = new Map();
+  globalThis.localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) };
+  runtime.setKBrainRuntimeConnection({ baseUrl: "http://migration-exists.test", token: "", protocolVersion: "kbrain.agent.v1" });
+  const backend = sessionExistsBackend();
+  try {
+    await migration.migrateLegacyHistoryPage(stablePage(), { fetch: backend.fetch });
+    assert.equal(backend.calls.posts, 1);
+    const again = await migration.migrateLegacyHistoryPage(stablePage(), { fetch: backend.fetch });
+    assert.equal(again.results[0].status, "already_imported");
+    assert.equal(backend.calls.posts, 1);
+    assert.deepEqual(backend.calls.exists.at(-1), ["recoverable"]);
+    assert.equal(backend.calls.listings, 0);
+    assert.equal(backend.calls.lookups, 0);
+
+    // A session K-brain no longer has is re-imported, exactly like a 404 on the old path.
+    backend.existing.clear();
+    await migration.migrateLegacyHistoryPage(stablePage(), { fetch: backend.fetch });
+    assert.equal(backend.calls.posts, 2);
+    assert.equal(backend.calls.listings, 0);
+  } finally {
+    runtime.clearKBrainRuntimeConnection();
+  }
+});
+
+test("a failing session_exists request falls back to the listing and never re-uploads", async () => {
+  const values = new Map();
+  globalThis.localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) };
+  runtime.setKBrainRuntimeConnection({ baseUrl: "http://migration-exists-fail.test", token: "", protocolVersion: "kbrain.agent.v1" });
+  const backend = sessionExistsBackend();
+  try {
+    await migration.migrateLegacyHistoryPage(stablePage(), { fetch: backend.fetch });
+    const fetch = async (url, init) => {
+      if (new URL(String(url)).pathname === "/v1/sessions/exists") return new Response("{}", { status: 500 });
+      if (new URL(String(url)).pathname === "/v1/sessions") {
+        backend.calls.listings++;
+        return new Response(JSON.stringify({ sessions: [{ id: "recoverable" }], total_count: 1 }));
+      }
+      return backend.fetch(url, init);
+    };
+    const again = await migration.migrateLegacyHistoryPage(stablePage(), { fetch });
+    assert.equal(again.results[0].status, "already_imported");
+    assert.equal(backend.calls.posts, 1);
+    assert.equal(backend.calls.listings, 1);
   } finally {
     runtime.clearKBrainRuntimeConnection();
   }
