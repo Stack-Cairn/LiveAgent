@@ -89,6 +89,15 @@ function resolvePushedInputModalities(providers: readonly CustomProvider[]) {
   };
 }
 
+/**
+ * 生图开关选「自动」时字段缺失，但 K-brain 对缺失字段保持原值，所以要显式发空串。
+ * 只对回传过 imageModel 的新版 K-brain 这样做；旧版不认识这个开关，原样发送。
+ */
+function withImageAdapter(model: ProviderModel): ProviderModel {
+  if (model.imageModel === undefined || model.imageAdapter) return model;
+  return { ...model, imageAdapter: "" };
+}
+
 function settingsUpdateFromProviders(
   previousProviders: readonly CustomProvider[],
   providersInput: readonly CustomProvider[],
@@ -104,7 +113,9 @@ function settingsUpdateFromProviders(
       previousById.get(provider.id)?.apiKeyConfigured === true;
     return {
       ...metadata,
-      ...(provider.models ? { models: provider.models.map(withInputModalities) } : {}),
+      ...(provider.models
+        ? { models: provider.models.map((model) => withImageAdapter(withInputModalities(model))) }
+        : {}),
       api: resolveProviderApi(provider.type, provider.requestFormat),
       ...(clearApiKey ? { clearApiKey: true } : apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
     };

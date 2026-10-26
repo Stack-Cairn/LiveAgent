@@ -66,6 +66,9 @@ type kbrainModel struct {
 	MaxOutputToken  int      `json:"maxOutputToken,omitempty"`
 	InputModalities []string `json:"inputModalities,omitempty"`
 	Vision          bool     `json:"vision,omitempty"`
+	ImageAdapter    string   `json:"imageAdapter,omitempty"`
+	// ImageModel is K-brain's read-only effective image toggle; absent on older K-brain.
+	ImageModel *bool `json:"imageModel,omitempty"`
 }
 
 func providerType(provider kbrainProvider) string {
@@ -111,6 +114,12 @@ func providerModel(provider kbrainProvider, model kbrainModel) map[string]any {
 		out["inputModalities"] = model.InputModalities
 	} else if model.Vision {
 		out["inputModalities"] = []string{"text", "image"}
+	}
+	if model.ImageAdapter != "" {
+		out["imageAdapter"] = model.ImageAdapter
+	}
+	if model.ImageModel != nil {
+		out["imageModel"] = *model.ImageModel
 	}
 	return out
 }
@@ -548,6 +557,7 @@ func kbrainProviderUpdate(provider map[string]json.RawMessage) (map[string]any, 
 			"id": true, "name": true, "displayName": true, "ownedBy": true,
 			"limitsSource": true, "contextWindow": true, "maxOutputTokens": true,
 			"maxOutputToken": true, "inputModalities": true, "vision": true,
+			"imageAdapter": true,
 		}
 		for _, item := range models {
 			model, ok := item.(map[string]any)
@@ -563,6 +573,13 @@ func kbrainProviderUpdate(provider map[string]json.RawMessage) (map[string]any, 
 			for key, value := range model {
 				if modelFields[key] {
 					clean[key] = value
+				}
+			}
+			// "Auto" omits imageAdapter, but K-brain keeps an omitted field, so clear
+			// it explicitly. imageModel marks a K-brain that understands the toggle.
+			if _, known := model["imageModel"]; known {
+				if _, set := clean["imageAdapter"]; !set {
+					clean["imageAdapter"] = ""
 				}
 			}
 			// WebUI edits the singular field; do not let an old alias override it.
