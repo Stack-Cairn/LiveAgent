@@ -13,18 +13,18 @@
 - K-brain 主检出的用户未提交开发保持原样；LiveAgent 原有两份未跟踪设计文档作为输入保留。
 - `start-tauri-dev.bat` 由 `.git/info/exclude:8` 忽略，`git ls-files` 无输出。不得将它、开发二进制、测试数据、token 或 profile 纳入提交。
 
-## 最新整体状态（2026-10-28 10:38，Asia/Shanghai）
+## 最新整体状态（2026-10-28 10:55，Asia/Shanghai）
 
 | 阶段 | 状态 | 已有结果与剩余工作 |
 |---|---|---|
 | 基线与计划 | 已完成 | 两仓基线、用户改动保护、设计与实施顺序已记录；最新 fetch 后基线未变化 |
 | K-brain 摘要与同步 | final4 冻结候选 | Server.Close 迟到快照、创建期 admission、嵌套 usage 深拷贝及空快照 `sessions:null` 均已复现并修复；build/vet、相关 count20/race30 通过，final4 SHA `16A864EB...40E174`，待最终真实组合和 CI |
-| GUI/Rust/Gateway/WebUI | 最终组合短测通过，长测中 | 桌面协调器、稳定映射、乐观覆盖、权威恢复、队列缺口锁存、token/ack、freshness 与旧版降级已有回归；直连最终 final4 真实14/14通过，legacy/cap1各3/3，Go全量通过 |
+| GUI/Rust/Gateway/WebUI | 实现及完整运行验证通过 | 桌面协调器、稳定映射、乐观覆盖、权威恢复、队列缺口锁存、token/ack、freshness 与旧版降级已有回归；正式106轮/30分钟通过，直连final4真实14/14、legacy/cap1各3/3，Go全量通过 |
 | 增量投影正确性 | 回归通过 | 新增 16 项独立回归全部通过；加 publication/offline-alias 共 21/21；GUI 聚焦组合与 WebUI 43 项均通过；typecheck、任务文件 Biome、Mirror 和 diff 检查通过 |
-| 自动化完整检查 | 最终build/check/lint已收敛，CI待开始 | GUI/WebUI最终build与typecheck通过、cargo check --tests通过、Gateway全包和最终lint通过、harness13/13；WebUI275/275，GUI全部3,534项3,528通过/5基线失败/1跳过。Rust23、K-brain8失败有基线复现，changed-file Biome/Mirror/diff通过。全目录Biome格式诊断单独记录，CI尚未开始 |
-| 真实客户端 | 新旧完整UI组合通过，短基线对照中 | 106/106正式循环、实际菜单/定时任务/外部kn/PTY取消恢复、M06分页/M07受控并发均通过；Windows最小化/Gateway断连恢复、新LA旧KB及旧LA新KB真实菜单改名通过。旧三端静态和TUI/HTTP短对照仍在处理中 |
-| 资源目标 | 正式长测与短对照完成，有明确取舍 | 106/106通过、桌面renderer平台、KB/GW/Rust稳定；WebUI+132.8MB及GC高水位保留。旧三端静态无法ready、没有可比结果；HTTP各10轮小库无订阅均过；独立TUI各40秒CPU接近但final4内存峰+34.5MB/end+11.9MB，不能宣称全面改善。正式大库持续创建内核CPU仍待1–3轮分项定位 |
-| 提交、PR 与 CI | 两仓PR跟进最终CI | K-brain b4f5508三平台全绿；文档head a0cbc8f重跑Windows/macOS过，Linux遇一次既有TUI流测试5秒超时，full/race日志与同基线诊断中。LA head fddd9372除Windows桌面Gateway外已全过（Draft governance跳过），Windows构建仍运行。CI-only与报告更新不改变47个已验收生产文件 |
+| 自动化完整检查 | LiveAgent全CI通过，K-brain最终CI诊断中 | GUI/WebUI最终build与typecheck、cargo check --tests、Gateway全包/lint、harness13/13、Mirror/diff通过；WebUI275/275。Windows GUI5/Rust23/KB8本地基线失败均有对照，Linux CI相关范围通过。LA最新head全部11个CI及后续governance成功；KB完整CI见下行 |
+| 真实客户端 | 最终实机场景与新旧UI组合完成 | 106/106正式循环、实际菜单/定时任务/外部kn/PTY取消恢复、M06分页/M07受控并发、Windows原生严格最小化/隐藏、新旧完整UI组合均有证据。macOS/系统真实休眠未验证；旧三端可比空闲基线未建立，明确限制 |
+| 资源目标 | 正式长测与短对照完成，有明确取舍 | 106/106通过、桌面renderer平台、KB/GW/Rust稳定；WebUI+132.8MB及GC高水位保留。HTTP各10轮小库无订阅均过；TUI冷峰+34.5MB/end+11.9MB取舍明示。248大库3轮分项将高CPU定位create约1.4–1.5秒，其余mutation8–21ms、每阶段1changesGET、后续idleCPU0，未作未经profile的函数归因 |
+| 提交、PR 与 CI | LiveAgent全绿，K-brain已明确测试fixture根因 | LiveAgent a7fc81f3全部11个CI与PR governance成功，PR当前API为ready/clean。KB aaf轮取消后日志证实阻塞订阅测试先启动后订阅、忽略journal且清理顺序死锁；已授权只修fixture gate/cleanup，保核心断言。a930 JSON诊断轮Windows/macOS过，Linux运行；未把取消/精确复跑替代fullsuite通过 |
 
 ## 阶段历史
 
@@ -137,6 +137,11 @@
 - LiveAgent修复已追加`fddd9372eba4e177f487d24eb021129cf13ac1c1`并推送，新run`40621043406`的Shared UI Boundaries、Diff和Docker已通过；K-brain新run`40620963007`的macOS通过，Windows LF/gofmt通过，Linux build/vet通过。首轮已过项不替代当前head终态，继续等所有required检查结束。
 - K-brain b4f5508新run三平台全绿，Linux完整47包（含浏览器）通过、session/backend race30通过。仅文档追加a0cbc8f后再跑，Windows/macOS通过，Linux唯一失败为未修改TUI `TestRunningTaskViewReplaysThenStreams`等待pre-open文本5秒超时；浏览器及两组race仍通过。保留首败，正在相同runner精确current/clean0dad重复诊断，不能用上一轮全绿覆盖此轮。
 - Windows M09最终严格补证：只操作任务窗口，minimize164采样点覆盖17.972秒、全程IsIconic=true，hide162点覆盖17.942秒、全程IsWindowVisible=false，最大采样间隔124/138ms。PATCH发送和确认位于状态采样窗口中，desktopCDP断开且无bringToFront，认证可见WebUI约653/650ms出现新标题；恢复后真实桌面DOM、applied revision和healthy正确。暂停的另一WebUI先不更新，bringToFront后重连补齐。最终清fixture回248/12、单owner、无待恢复；macOS和真实系统sleep仍未验证。证据 `strict-windows-m09/current-auth/result.json` 与原生states；初次旧tokenunauth样本明确保留为无效验证。
+- LiveAgent `fddd9372` run`40621043406`所有11个CI jobs成功，Windows最终亦通过；仅报告追加`a7fc81f3`的新run`40622113560`继续监测，不用上轮替代最新head终态。K-brain最新`aaf2c0a` run`40622088793`增加current与clean0dad同runner TUI精准count30诊断，保所有fullsuite测试、package并发设2；Windows/macOS全绿，current精准测试通过，Linux完整与race仍在跑。
+- LiveAgent最新报告head `a7fc81f3`的run`40622113560`已全部11项成功，包含三平台Desktop Gateway、Tauri Rust、GUI/WebUI、Go Gateway、Docker、Shared UI与Diff。Draft PR governance按已有规则跳过，没有伪称该项已运行；两仓API未返回单独required checks清单，因此仍跟进所有已触发CI，不只监测某个子集。
+- K-brain `aaf2c0a` Linux完整套件自02:39:38Z约10分钟未结束，job日志API为BlobNotFound404、check output为空，不能确认具体等待包。精确current-count30已过，Windows/macOS成功，但不替代fullsuite。计划满10分钟取消形成明确CANCELLED终态，追加全量`go test -json -p2 ./... -timeout10m`、保真实PIPESTATUS、always上传日志和失败时clean0dad全量对照；不跳测试或关闭sandbox，不将尚未定位的等待擅归环境。
+- 取消后的完整日志明确本轮失败为`internal/agent.TestBroadcastBlockingSubscriberCannotDeadlock`，并非前轮TUI：等OnText后清理阻塞约600秒，`httptest.Server.Close`仍有活动TCP。源码反例是StartBackground先启动流、SubscribeWithJournal后注册，首文本可已进入返回journal但测试忽略；超时路径的`t.Cleanup(close release)`又晚于`defer srv.Close`，释放通道无法先执行。授权仅修该测试的发送gate和defer顺序，保留阻塞subscriber时List/Cancel不死锁断言；不改Agent运行时业务。新JSON诊断head`a930b0c`仍跟进，首败/取消都不算通过。
+- LiveAgent PR当前API `isDraft=false`、`mergeStateStatus=CLEAN`，governance亦成功；运行时、CI与报告head保持同一生产manifest。正式锁尚未引用未发布K-brain依赖，PR正文继续明示，不自动合并。
 
 ## 下一步与完成门槛
 
