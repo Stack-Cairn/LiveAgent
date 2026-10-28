@@ -39,7 +39,7 @@
 | M06 多页工作区 | 桌面/WebUI实际展开两个cwd点击更多，10→18/19条、hasMore消失、alerts0；实际移动及250条缓存计数回归 | 通过；跨cwd最后一条删除与并发分页另由集成回归覆盖 |
 | M07 并发输入 | 实际桌面改名UI挂起PATCH，另端真实更新到达；pending保本地，拒绝后回最新远端并提示，成功分支确认后无alert | 通过；原fetch恢复，控制故障仅用于隔离fixture |
 | M08 重启重连 | 最终Gateway断开时继续改名、恢复后三端一致；实际终止KB后约1.86秒新epoch健康；关闭profile后新浏览器重连补齐 | 通过；原样保留错误token/旧ack/队列缺口集成回归 |
-| M09 隐藏恢复 | Windows实际执行minimize命令后仍消费变化，恢复后三端一致；BFCache页恢复与freshness回归 | 部分覆盖：恢复前IsIconic=false，可能被CDP自动前台化，不能证明变更全过程始终最小化。hide/unminimize IPC被现有权限拒绝、Win32仅恢复任务窗口；macOS/真实休眠未真机验证 |
+| M09 隐藏恢复 | 最终原生监测：minimize164点/17.972秒始终IsIconic=true，hide162点/17.942秒始终不可见；期间断开desktopCDP、独立HTTP修改、认证WebUI650/653ms更新，恢复后desktopDOM与水位正确 | Windows严格状态已通过；最初IPC权限拒绝/自动前台化样本保留但不作通过。暂停WebUI恢复后补齐，macOS/真实系统睡眠未真机验证 |
 | M10 取消重复 | 引用计数/focus/Abort/StrictMode回归、最终106轮重复focus仍单订阅；final4PTY双Ctrl+C取消后继续改名/退出0/resume恢复 | 通过上述范围；自然/GC/退出profile回收分别记录，不由进程存活推断 |
 | M11 超时鉴权 | 429/Retry-After、snapshot410、取消/卡住批次超时模块回归；直连真实上游401降级后新generation恢复1558ms，非法cwd拒绝 | 鉴权与恢复通过；任意真实反向代理超时部署不宣称全覆盖，受控HTTP集成覆盖超时契约 |
 | M12 版本组合 | 新LA+旧KB真实legacy列表/菜单改名；旧b204LA+final4真实菜单改名；新Gateway+旧KB及cap1各3/3，完整v2直连14/14 | 通过相应场景；初轮旧UI因fixture不存在cwd/model失败，错误日志与修正后结果均保留 |

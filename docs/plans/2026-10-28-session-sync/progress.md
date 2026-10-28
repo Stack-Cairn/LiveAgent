@@ -13,7 +13,7 @@
 - K-brain 主检出的用户未提交开发保持原样；LiveAgent 原有两份未跟踪设计文档作为输入保留。
 - `start-tauri-dev.bat` 由 `.git/info/exclude:8` 忽略，`git ls-files` 无输出。不得将它、开发二进制、测试数据、token 或 profile 纳入提交。
 
-## 最新整体状态（2026-10-28 10:27，Asia/Shanghai）
+## 最新整体状态（2026-10-28 10:38，Asia/Shanghai）
 
 | 阶段 | 状态 | 已有结果与剩余工作 |
 |---|---|---|
@@ -24,7 +24,7 @@
 | 自动化完整检查 | 最终build/check/lint已收敛，CI待开始 | GUI/WebUI最终build与typecheck通过、cargo check --tests通过、Gateway全包和最终lint通过、harness13/13；WebUI275/275，GUI全部3,534项3,528通过/5基线失败/1跳过。Rust23、K-brain8失败有基线复现，changed-file Biome/Mirror/diff通过。全目录Biome格式诊断单独记录，CI尚未开始 |
 | 真实客户端 | 新旧完整UI组合通过，短基线对照中 | 106/106正式循环、实际菜单/定时任务/外部kn/PTY取消恢复、M06分页/M07受控并发均通过；Windows最小化/Gateway断连恢复、新LA旧KB及旧LA新KB真实菜单改名通过。旧三端静态和TUI/HTTP短对照仍在处理中 |
 | 资源目标 | 正式长测与短对照完成，有明确取舍 | 106/106通过、桌面renderer平台、KB/GW/Rust稳定；WebUI+132.8MB及GC高水位保留。旧三端静态无法ready、没有可比结果；HTTP各10轮小库无订阅均过；独立TUI各40秒CPU接近但final4内存峰+34.5MB/end+11.9MB，不能宣称全面改善。正式大库持续创建内核CPU仍待1–3轮分项定位 |
-| 提交、PR 与 CI | 两仓PR已创建，CI修复中 | K-brain PR#60（main），LiveAgent Draft PR#1071（v2-kbrian）已附任务；KB macOS首轮过、Windows CRLF/Linux sandbox环境修复已追加b4f5508；LA Gateway/WebUI/Docker/Diff过，UI门禁mise缺失已修准备追加。仍监测全部required CI至终态，无合并/tag/release/正式lock变更 |
+| 提交、PR 与 CI | 两仓PR跟进最终CI | K-brain b4f5508三平台全绿；文档head a0cbc8f重跑Windows/macOS过，Linux遇一次既有TUI流测试5秒超时，full/race日志与同基线诊断中。LA head fddd9372除Windows桌面Gateway外已全过（Draft governance跳过），Windows构建仍运行。CI-only与报告更新不改变47个已验收生产文件 |
 
 ## 阶段历史
 
@@ -134,6 +134,9 @@
 - LiveAgent 101个任务文件提交`80f570e8c0f7b87e88d94ec3d896541909877d1e`，推fork并创建[Draft PR#1071](https://github.com/Stack-Cairn/LiveAgent/pull/1071)，base=`v2-kbrian`，关联issue#1070、跨仓依赖K-brain#60/482fd2d。PR说明全部测试、性能、运行截图和限制，保持Draft避免把未发布依赖或部分真机覆盖写成发行完成。两份原有设计输入仍未跟踪、未纳入提交，本地脚本仍忽略。
 - K-brain首轮CI macOS通过；Windows13个Go文件因checkout CRLF令gofmt失败，Linux全量仅internal/browser的9个案例报No usable sandbox，其余包通过。追加`b4f5508`只改workflow/报告：Windows checkout前禁autocrlf，Linux临时runner配置允许userns并验证、提供Xvfb，保持浏览器sandbox，race30独立执行不被fullsuite失败跳过。首败日志与新run继续监测。
 - LiveAgent首轮Gateway、WebUI、Docker、Diff通过；Shared UI Boundaries在严格changed-file门禁报`spawn mise ENOENT`（前面的shared typecheck/lint/44脚本测试/Mirror已过）。修脚本在CI使用已安装固定pnpm，本地仍走mise，显式LF与`.gitattributes`一致，保留`--error-on-warnings`。新增调用回归通过，ui/gui/webui三个真实changed-file门禁本地均通过；准备追加提交后监测。
+- LiveAgent修复已追加`fddd9372eba4e177f487d24eb021129cf13ac1c1`并推送，新run`40621043406`的Shared UI Boundaries、Diff和Docker已通过；K-brain新run`40620963007`的macOS通过，Windows LF/gofmt通过，Linux build/vet通过。首轮已过项不替代当前head终态，继续等所有required检查结束。
+- K-brain b4f5508新run三平台全绿，Linux完整47包（含浏览器）通过、session/backend race30通过。仅文档追加a0cbc8f后再跑，Windows/macOS通过，Linux唯一失败为未修改TUI `TestRunningTaskViewReplaysThenStreams`等待pre-open文本5秒超时；浏览器及两组race仍通过。保留首败，正在相同runner精确current/clean0dad重复诊断，不能用上一轮全绿覆盖此轮。
+- Windows M09最终严格补证：只操作任务窗口，minimize164采样点覆盖17.972秒、全程IsIconic=true，hide162点覆盖17.942秒、全程IsWindowVisible=false，最大采样间隔124/138ms。PATCH发送和确认位于状态采样窗口中，desktopCDP断开且无bringToFront，认证可见WebUI约653/650ms出现新标题；恢复后真实桌面DOM、applied revision和healthy正确。暂停的另一WebUI先不更新，bringToFront后重连补齐。最终清fixture回248/12、单owner、无待恢复；macOS和真实系统sleep仍未验证。证据 `strict-windows-m09/current-auth/result.json` 与原生states；初次旧tokenunauth样本明确保留为无效验证。
 
 ## 下一步与完成门槛
 

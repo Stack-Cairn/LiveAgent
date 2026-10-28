@@ -1,6 +1,6 @@
 # 会话列表同步验证矩阵
 
-> 状态：进行中。模块和存储/协议集成回归已有结果；最终增量构建的真实客户端、资源采样、跨仓 PR 与 CI 尚未完成。用户已明确免除人工验收，真实客户端场景由自动化执行。下表只把有可复核证据的检查列为通过。
+> 状态：最终真实客户端与5/30分钟采样已完成，跨仓PR已创建、CI跟进中。用户明确免除人工验收，实际场景由Agent自动执行。部分平台/旧三端基线限制保留，下表只把有可复核证据的检查列为通过。
 
 ## 变更对象
 
@@ -54,16 +54,16 @@ LiveAgent 基线为 `upstream/v2-kbrian` 的 `b2049905a89462e766b4aa7d6aa76b3a4c
 | 检查 | 结果与限制 |
 |---|---|
 | GUI build | 通过；Vite已有大chunk警告，不等于运行内存结论 |
-| GUI/共享UI typecheck | 通过；最终生产代码冻结后还需统一复核 |
-| GUI lint | 原命令失败，首轮222个格式诊断；固定b204的App.tsx原始LF字节输入Biome也失败。任务文件按LF独立检查通过，未全仓重排格式 |
+| GUI/共享UI typecheck | 最终通过；CI Shared UI Boundaries亦通过 |
+| GUI lint | Windows全目录最终219个行尾/格式诊断（首轮222），固定b204的App.tsx原始LF也复现格式问题；最终所有任务生产TS/TSX按LF/error-on-warnings严格检查通过，未全仓重排格式；Linux CI GUI lint通过 |
 | Node全量预检 | 565个文件、7批全部运行：4045项，4036通过、8失败、1跳过。失败已分为 task backend cargo smoke、native file-drop routing、permission modes、planning lazy migration、trajectory HTTP 两项及其余环境 fixture；没有把这些结果写成全量通过。GUI 单目录复跑的 656 项为 653通过、3失败（permission-modes 的 full-access/always 及父测试），失败来自默认锁定旧 K-brain 能力；使用最终开发构建且修正能力门槛后，新协议相关 focused 20/20 通过。 |
 | Node工作目录复跑 | native-file-drop-routing、planning-lazy-migration在GUI目录复跑13/13通过；说明原根目录runner不适用于其相对路径读取 |
 | Node Bash相关基线对照 | 未修改K-brain二进制执行permission/trajectory：17项，12通过、5失败；full-access、always及两条trajectory路径复现，与任务首轮一致 |
 | Rust check --tests | 通过，已有unused警告保留 |
 | Rust完整lib tests | 当前任务源码：1134 tests，1107通过、23失败、4忽略；失败均为环境相关的 hook/bash、Windows worktree 路径、sandbox/terminal 与 MSYS 隔离。固定 b204 只读 archive 已逐字节核对 2,674 个文件，并在独立临时 target 编译运行：1131 tests，1104通过、23失败、4忽略；失败名称集合与任务源码完全相同。基线日志 `%TEMP%/liveagent-session-sync-rust-baseline-closure/full-lib-test.log`，源码核对 `%TEMP%/liveagent-session-sync-rust-baseline-closure/baseline-source-verification.json`。因此 23 项不能归因于本次改动；本次新增 Rust 测试通过。 |
-| Gateway Go全量 | 通过；最后资源预算修复后focused回归通过，最终完整复跑待报告 |
-| WebUI全量 | 274/274通过；新增恢复/确认独立聚焦17/17通过，最终新增用例须再次统一运行 |
-| 自动化harness | 11/11通过；只证明harness基础行为，不替代真实客户端场景 |
+| Gateway Go全量 | 最终全包通过，固定Go1.25/golangci-lint2.12.2+干净cache为0issues，PBWS测试copylocks已修后复测；Linux CI Gateway通过 |
+| WebUI全量 | 最终119文件275/275通过；Linux CI build/lint/tests通过 |
+| 自动化harness | 最终13/13通过；只证明harness基础行为，不替代真实客户端场景 |
 | Mirror/shared boundaries | `node scripts/check-mirror.mjs`通过：复用全仓UI边界检查、检查两端共享alias及sidebar单一实现，无空脚本 |
 | Diff卫生 | `git diff --check`通过；未跟踪文件在暂存前另做实际内容检查 |
 
@@ -75,8 +75,8 @@ LiveAgent 基线为 `upstream/v2-kbrian` 的 `b2049905a89462e766b4aa7d6aa76b3a4c
 
 M01–M12按设计转为Agent自动执行。真实UI使用实际Tauri WebView/CDP和两个WebUI，TUI使用PTY，模型走确定性的本地fixture。直接通过HTTP写入并观察三端DOM是同步负载证据，不能代替在WebUI输入、点击改名/置顶等产品流程；两者分别记录。
 
-长循环的前两次尝试没有完成30分钟：一轮在25次操作后因浏览器把一个页面放入Back-Forward Cache而超时，另一轮只有4次完成记录。恢复页面后可重连补齐，但没有result.json的失败循环不能写成30分钟通过。修复legacy广播污染后，须先验证实际WebUI元数据操作，再重新运行完整循环和进程采样。
+前两次长循环未完成，后续93轮虽然功能正确但发现React DEV timeline资源回归，均保留失败记录。最终final4+当前生产源码+DEV预算修复，正式5分钟静态完成，30分钟106/106轮实际三端创建/置顶/改名/删除通过。桌面renderer预热后形成平台，WebUI真实+132.8MB、GC与profile退出回收证据及TUI冷峰取舍一并记录，不声称零增长。没有result.json的早期尝试不计通过。
 
-5分钟空闲与30分钟请求基准已提供初步对照，最终30分钟动态循环、退出回收、错误恢复、版本组合和跨平台未覆盖项由 automation.md补录。任何未覆盖或环境失败不写成通过。用户本次免人工验收，不把缺失自动化转交给用户手工执行。
+实际菜单、分页、受控改名延迟成功/失败、Gateway/K-brain重连、定时任务、外部kn、final4PTY取消与恢复、空库初始化及新旧桌面组合已执行，见`automation.md`和`requirements.md`逐项结果。旧三端静态未达到相同视图ready、macOS/真实系统休眠未验证，Windows严格最小化全过程的范围按最新自动化记录判断；不把这些缺口写成通过，也不要求用户代做人工验收。
 
-提交与PR/CI尚未完成。正式锁仍指向旧发布后端，依赖合入/发布状态须在PR中说明；开发联调成功不能伪装为正式发布产物可用。
+已创建K-brain PR#60（main）和LiveAgent Draft PR#1071（v2-kbrian）。K-brain运行时生产提交482fd2d、CI修复b4f5508首轮三平台全绿，文档head继续跟进；LiveAgent运行时提交80f570e8、CI门禁修复fddd9372，Gateway/WebUI/Docker/Shared UI/Diff通过，其他required检查仍监测。正式锁仍指向旧发布后端，PR明确跨仓尚未发布依赖；不自动合并、不伪造发布产物。最新状态由`progress.md`持续留痕。

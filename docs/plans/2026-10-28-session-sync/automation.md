@@ -224,3 +224,18 @@ Windows 窗口最小化期间后端改名继续被桌面消费；现有 capabili
 随后三秒空闲用户/内核 CPU 均为 0。高成本集中在实际配置下的会话创建阶段，changes 没有出现持续短请求或空闲忙循环；没有函数栈 profile，所以仍不将原因精确归为某个 skills/factory/锁函数，也不据此进行无关重构。原始分项保存在 `cpu-stage-248-final4.json`。
 
 测试结束时已从当前任务工作区 BAT 恢复 final4 原隔离 home，真实 coordinator healthy=true、248 会话/12 工作目录、单订阅、`needsGatewaySnapshot=false`，新 epoch/generation 正常。没有留下用于采样的旧基线客户端代替当前实现；旧版本/空库组合均单独记明。
+
+## Windows 严格最小化与隐藏补测
+
+2026-10-28 10:34–10:35，对仍在运行的当前任务客户端执行原生窗口状态补测。先核对进程路径及 HWND 所属 PID，再由独立 PowerShell/Win32 监测器调用 `ShowWindowAsync(SW_MINIMIZE)` 或 `SW_HIDE`；变更期间关闭全部桌面 CDP 连接，仅使用 Node HTTP 发送真实元数据 PATCH，并通过已认证的 WebUI 读取同步结果。监测器按 100 ms 目标间隔记录窗口所有者、存在性、`IsIconic` 和 `IsWindowVisible`，18 秒截止后原生恢复窗口，才重新读取实际桌面 DOM。
+
+| 场景 | 原生连续采样证据 | 变更与可见 WebUI | 恢复后桌面 |
+|---|---|---|---|
+| Windows 最小化 | 164 个样本，首尾跨度 17,972 ms；全部 `IsIconic=true`、窗口存在且 owner PID 一致；最大采样间隔 124 ms | PATCH 发送/确认均落在采样区间内；可见 WebUI 在确认后约 653 ms 显示新标题 | 新标题存在，协调器 healthy，revision 已应用，无 Gateway 待恢复快照 |
+| Windows 隐藏 | 162 个样本，首尾跨度 17,942 ms；全部 `IsWindowVisible=false`、窗口存在且 owner PID 一致；最大采样间隔 138 ms | PATCH 发送/确认均落在采样区间内；可见 WebUI 在确认后约 650 ms 显示新标题 | 新标题存在，协调器 healthy，revision 已应用，无 Gateway 待恢复快照 |
+
+另一 WebUI 当时处于浏览器 hidden 状态，未承诺暂停页实时更新；补测期间它没有显示新标题，恢复为前台后重连并正确显示已删除 fixture 的权威结果，无 alert。首轮还明确捕获到旧基线 profile 使用旧 token/agent 的 unauthorized 状态；修正为真实登录 UI 加当前桌面 agent 后才形成上表有效证据，没有把未认证页面计作同步成功。
+
+补测只使用任务专用合成会话，完成后删除，客户端回到 248 会话/12 工作目录、单订阅且健康。运行中生产文件与正式采样的 47 项冻结 manifest 全部逐字节哈希一致；后续 HEAD 差异仅是 CI/文档/测试收尾，因此没有用旧业务构建代替当前源码验证。证据保存在 `%TEMP%/liveagent-session-sync-validation-20261028/strict-windows-m09/current-auth/result.json`、两个场景的 `window-states.jsonl` 及 `production-manifest-match.json`。
+
+本项补齐 Windows 原生最小化/隐藏期间的同步证据，没有扩大 Tauri capability。窗口状态是实际约 100–138 ms 间隔采样，不作亚采样瞬间的无变化承诺。Windows 真实系统睡眠/唤醒和 macOS 真机场景仍未验证。
