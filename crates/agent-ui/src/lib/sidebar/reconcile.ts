@@ -5,6 +5,7 @@ import type { SidebarBackendEvent, SidebarConversation } from "./types";
 export type MergeSidebarConversationOptions = {
   preserveExistingTitle?: boolean;
   preserveExistingUpdatedAt?: boolean;
+  authoritative?: boolean;
 };
 
 export type ReconcileSidebarConversationsOptions = {
@@ -103,6 +104,15 @@ export function mergeSidebarConversation(
 ): SidebarConversation {
   if (!existing) {
     return next;
+  }
+
+  if (options?.authoritative) {
+    const replacement = {
+      ...next,
+      ...(options.preserveExistingTitle ? { title: existing.title } : {}),
+      ...(options.preserveExistingUpdatedAt ? { updatedAt: existing.updatedAt } : {}),
+    };
+    return sameSidebarConversation(existing, replacement) ? existing : replacement;
   }
 
   const merged: SidebarConversation = {
@@ -223,12 +233,15 @@ export function applySidebarBackendEvent(
   options?: ApplySidebarBackendEventOptions,
 ): readonly SidebarConversation[] {
   switch (event.kind) {
+    case "reset":
+      return reconcileSidebarConversations(conversations, event.conversations);
     case "delete": {
       const filtered = conversations.filter((item) => item.id !== event.conversationId);
       return filtered.length === conversations.length ? conversations : filtered;
     }
     case "running":
     case "idle":
+    case "workdirs":
       return conversations;
     case "upsert": {
       const conversationId = event.conversationId.trim();
@@ -237,6 +250,7 @@ export function applySidebarBackendEvent(
         options?.preserveUpdatedAtConversationIds,
       );
       return upsertSidebarConversation(conversations, event.conversation, {
+        authoritative: event.authoritative,
         preserveExistingTitle: preserveTitleConversationIds.has(conversationId),
         preserveExistingUpdatedAt: preserveUpdatedAtConversationIds.has(conversationId),
       });

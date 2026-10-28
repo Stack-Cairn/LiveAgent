@@ -671,3 +671,76 @@ test("upsertLocal and removeLocal manage pending drafts", async () => {
   assert.equal(store.peek("draft"), undefined);
   store.stop();
 });
+
+test("remote events preserve an in-flight optimistic rename and failure restores latest remote", async (t) => {
+  const fake = createFakeBackend();
+  fake.state.pages.set("cwd:/tmp/a", [conversation("one", { cwd: "/tmp/a", title: "before" })]);
+  let rejectRename;
+  fake.state.renameImpl = () => new Promise((_, reject) => { rejectRename = reject; });
+  const store = createSidebarStore(fake.backend);
+  t.after(() => store.stop());
+  store.setScope(SCOPE_A);
+  store.start();
+  await tick();
+  const mutation = store.rename("one", "my title");
+  fake.emit({ kind: "upsert", conversationId: "one", conversation: conversation("one", { cwd: "/tmp/a", title: "remote title", updatedAt: 42 }) });
+  assert.equal(store.getSnapshot().byId.get("one").title, "my title");
+  rejectRename(new Error("not accepted"));
+  assert.equal(await mutation, false);
+  assert.equal(store.getSnapshot().byId.get("one").title, "remote title");
+});
+
+test("authoritative sync reset drops absent cached aliases but retains pending drafts", async (t) => {
+  const fake = createFakeBackend();
+  fake.state.pages.set("cwd:/tmp/a", [conversation("stale", { cwd: "/tmp/a" })]);
+  const store = createSidebarStore(fake.backend);
+  t.after(() => store.stop());
+  store.setScope(SCOPE_A);
+  store.start();
+  await tick();
+  store.upsertLocal(conversation("draft", { cwd: "/tmp/a", isPending: true }));
+  fake.emit({ kind: "reset", conversations: [conversation("fresh", { cwd: "/tmp/a" })], workdirs: [{ path: "/tmp/a", conversationCount: 1, updatedAt: 2 }] });
+  assert.equal(store.getSnapshot().byId.has("stale"), false);
+  assert.equal(store.getSnapshot().byId.has("draft"), true);
+  assert.equal(store.getSnapshot().byId.has("fresh"), true);
+  assert.equal(store.getSnapshot().workdirs[0].conversationCount, 1);
+});
+
+test("healthy event sync can disable periodic list reads and restore them after failure", async (t) => {
+  const fake = createFakeBackend();
+  const healthListeners = new Set();
+  let healthy = true;
+  fake.backend.getReconcileIntervalMs = () => healthy ? null : 15;
+  fake.backend.subscribeSyncState = (listener) => { healthListeners.add(listener); return () => healthListeners.delete(listener); };
+  const store = createSidebarStore(fake.backend, { reconcileIntervalMs: 15 });
+  t.after(() => store.stop());
+  store.setScope(SCOPE_A);
+  store.start();
+  await tick();
+  const initial = fake.state.calls.list.length;
+  await sleep(45);
+  assert.equal(fake.state.calls.list.length, initial);
+  healthy = false;
+  for (const listener of healthListeners) listener();
+  await sleep(35);
+  assert.ok(fake.state.calls.list.length > initial);
+});
+
+test("a mutation response from a replaced source cannot restore its old alias", async (t) => {
+ const fake=createFakeBackend(); fake.state.pages.set("cwd:/tmp/a",[conversation("old",{cwd:"/tmp/a"})]);
+ let finish;fake.state.renameImpl=()=>new Promise(resolve=>finish=resolve);
+ const store=createSidebarStore(fake.backend); t.after(()=>store.stop());store.setScope(SCOPE_A);store.start();await tick();
+ fake.emit({kind:"reset",sourceIdentity:"source-one",conversations:[conversation("old",{cwd:"/tmp/a"})]});
+ const mutation=store.rename("old","optimistic");
+ fake.emit({kind:"reset",sourceIdentity:"source-two",conversations:[conversation("new",{cwd:"/tmp/a"})]});
+ finish(conversation("old",{cwd:"/tmp/a",title:"late"}));
+ assert.equal(await mutation,false);assert.equal(store.getSnapshot().byId.has("old"),false);assert.equal(store.getSnapshot().byId.has("new"),true);
+ assert.equal(store.getSnapshot().mutations.size,0);
+});
+
+test("a mutation resolving after stop cannot change a restarted store",async(t)=>{
+ const fake=createFakeBackend();fake.state.pages.set("cwd:/tmp/a",[conversation("one",{cwd:"/tmp/a",title:"old"})]);let finish;fake.state.renameImpl=()=>new Promise(resolve=>finish=resolve);
+ const store=createSidebarStore(fake.backend);t.after(()=>store.stop());store.setScope(SCOPE_A);store.start();await tick();
+ const mutation=store.rename("one","pending");store.stop();fake.state.pages.set("cwd:/tmp/a",[conversation("one",{cwd:"/tmp/a",title:"fresh"})]);store.start();await tick();
+ finish(conversation("one",{cwd:"/tmp/a",title:"late"}));assert.equal(await mutation,false);assert.equal(store.getSnapshot().byId.get("one").title,"fresh");
+});

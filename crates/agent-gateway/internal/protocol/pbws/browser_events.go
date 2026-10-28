@@ -1,15 +1,19 @@
 package pbws
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
 	"github.com/liveagent/agent-gateway/internal/transport/wscore"
+	"google.golang.org/protobuf/proto"
 )
 
 // 浏览器连接的订阅生命周期、九路广播转发与连接后快照回放：
@@ -21,6 +25,52 @@ type workspaceSubscription struct {
 	cancel func()
 	done   chan struct{}
 	once   sync.Once
+}
+
+type historyRecoveryLatch struct {
+	sourceID   string
+	generation string
+	token      string
+	cutSeq     uint64
+	snapshot   *gatewayv2.HistorySyncSnapshot
+	createdAt  time.Time
+}
+
+func newHistoryResyncToken() string {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "history-resync-unavailable"
+	}
+	return hex.EncodeToString(value[:])
+}
+
+func (c *browserConn) latchHistoryRecovery(agentID string, status *gatewayv2.HistorySyncStatus) *gatewayv2.HistorySyncStatus {
+	status = proto.Clone(status).(*gatewayv2.HistorySyncStatus)
+	if !status.GetNeedsResync() {
+		return status
+	}
+	c.historyRecoveryMu.Lock()
+	if current, ok := c.historyRecovery[agentID]; ok &&
+		current.sourceID == status.GetSourceId() && current.generation == status.GetGeneration() &&
+		status.GetLatestDeliverySeq() <= current.cutSeq && time.Since(current.createdAt) <= 60*time.Second {
+		status.ResyncToken = current.token
+		c.historyRecoveryMu.Unlock()
+		return status
+	}
+	latch := historyRecoveryLatch{
+		sourceID:   status.GetSourceId(),
+		generation: status.GetGeneration(),
+		token:      newHistoryResyncToken(),
+		cutSeq:     status.GetLatestDeliverySeq(),
+		createdAt:  time.Now(),
+	}
+	if c.historyRecovery == nil {
+		c.historyRecovery = make(map[string]historyRecoveryLatch)
+	}
+	c.historyRecovery[agentID] = latch
+	c.historyRecoveryMu.Unlock()
+	status.ResyncToken = latch.token
+	return status
 }
 
 func (s *workspaceSubscription) close() {
@@ -309,12 +359,9 @@ func (c *browserConn) startEventForwarders() {
 		return &gatewayv2.WebServerFrame{AgentId: event.AgentID, Payload: &gatewayv2.WebServerFrame_PlanningChanged{PlanningChanged: event.Event}}, true
 	}, "planning_changed")
 
-	forward(c, c.sm.SubscribeHistorySync, func(event session.Tagged[*gatewayv2.HistorySyncEvent]) (*gatewayv2.WebServerFrame, bool) {
-		return &gatewayv2.WebServerFrame{
-			AgentId: event.AgentID,
-			Payload: &gatewayv2.WebServerFrame_HistoryEvent{HistoryEvent: event.Event},
-		}, true
-	}, "history_event")
+	historySub := c.sm.SubscribeHistorySyncRecovery()
+	c.historySyncAck = historySub.Acknowledge
+	go c.forwardHistorySync(historySub)
 
 	forward(c, c.sm.SubscribeSettingsSync, func(event session.Tagged[*gatewayv2.SettingsSyncEvent]) (*gatewayv2.WebServerFrame, bool) {
 		return &gatewayv2.WebServerFrame{
@@ -377,6 +424,193 @@ func (c *browserConn) startEventForwarders() {
 			Payload: &gatewayv2.WebServerFrame_Status{Status: statusEvent(status.Event)},
 		}, true
 	}, "status")
+}
+
+func (c *browserConn) forwardHistorySync(sub *session.HistorySyncSubscription) {
+	defer sub.Cleanup()
+	for {
+		select {
+		case <-c.done:
+			return
+		case event := <-sub.Events:
+			if err := c.send(wscore.FrameData, "history_event", &gatewayv2.WebServerFrame{
+				AgentId: event.AgentID,
+				Payload: &gatewayv2.WebServerFrame_HistoryEvent{HistoryEvent: event.Event},
+			}); err != nil {
+				if errors.Is(err, wscore.ErrWriteQueueFull) {
+					status := c.latchHistoryRecovery(event.AgentID, &gatewayv2.HistorySyncStatus{
+						SourceId:          event.Event.GetSourceId(),
+						Generation:        event.Event.GetGeneration(),
+						LatestDeliverySeq: event.Event.GetDeliverySeq(),
+						Available:         true,
+						NeedsResync:       true,
+					})
+					if sendErr := c.send(wscore.FrameControl, "history_sync_status", &gatewayv2.WebServerFrame{
+						AgentId: event.AgentID,
+						Payload: &gatewayv2.WebServerFrame_HistorySyncStatus{HistorySyncStatus: status},
+					}); sendErr != nil {
+						c.core.Close()
+						return
+					}
+					continue
+				}
+				return
+			}
+		case status := <-sub.Status:
+			status.Event = c.latchHistoryRecovery(status.AgentID, status.Event)
+			if err := c.send(wscore.FrameControl, "history_sync_status", &gatewayv2.WebServerFrame{
+				AgentId: status.AgentID,
+				Payload: &gatewayv2.WebServerFrame_HistorySyncStatus{HistorySyncStatus: status.Event},
+			}); err != nil {
+				// Recovery control cannot be allowed to disappear behind the same
+				// congested queue as the data that triggered it.
+				c.core.Close()
+				return
+			}
+		}
+	}
+}
+
+func (c *browserConn) handleHistoryResync(requestID, agentID string, request *gatewayv2.HistoryResyncRequest) {
+	token := strings.TrimSpace(request.GetResyncToken())
+	c.historyRecoveryMu.Lock()
+	latch, latched := c.historyRecovery[agentID]
+	if latched && time.Since(latch.createdAt) > 60*time.Second {
+		delete(c.historyRecovery, agentID)
+		latched = false
+	}
+	c.historyRecoveryMu.Unlock()
+	if !latched && token == "" {
+		if current, ok := c.sm.HistorySyncSnapshot(agentID, ""); ok {
+			status := c.latchHistoryRecovery(agentID, &gatewayv2.HistorySyncStatus{
+				SourceId: current.GetSourceId(), Generation: current.GetGeneration(),
+				LatestDeliverySeq: current.GetCutDeliverySeq(), Available: true, NeedsResync: true,
+			})
+			token = status.GetResyncToken()
+			c.historyRecoveryMu.Lock()
+			latch, latched = c.historyRecovery[agentID]
+			c.historyRecoveryMu.Unlock()
+		}
+	}
+	if !latched || token == "" || token != latch.token {
+		_ = c.sendLocalError(requestID, "stale history resync token")
+		return
+	}
+	if latch.snapshot == nil {
+		current, ok := c.sm.HistorySyncSnapshot(agentID, token)
+		if !ok {
+			_ = c.sendLocalError(requestID, "history synchronization snapshot is unavailable")
+			return
+		}
+		c.historyRecoveryMu.Lock()
+		latest := c.historyRecovery[agentID]
+		if latest.token != token {
+			c.historyRecoveryMu.Unlock()
+			_ = c.sendLocalError(requestID, "stale history resync token")
+			return
+		}
+		latest.snapshot = proto.Clone(current).(*gatewayv2.HistorySyncSnapshot)
+		latest.cutSeq = current.GetCutDeliverySeq()
+		c.historyRecovery[agentID] = latest
+		latch = latest
+		c.historyRecoveryMu.Unlock()
+	}
+	snapshot, err := pageHistorySnapshot(latch.snapshot, request.GetOffset(), request.GetLimit())
+	if err != nil {
+		_ = c.sendLocalError(requestID, err.Error())
+		return
+	}
+	if err := c.send(wscore.FrameResponse, "history_sync_snapshot", &gatewayv2.WebServerFrame{
+		RequestId: requestID,
+		AgentId:   agentID,
+		Payload: &gatewayv2.WebServerFrame_HistorySyncSnapshot{
+			HistorySyncSnapshot: snapshot,
+		},
+	}); err != nil {
+		c.core.Close()
+	}
+}
+
+func pageHistorySnapshot(snapshot *gatewayv2.HistorySyncSnapshot, offset, requestedLimit uint32) (*gatewayv2.HistorySyncSnapshot, error) {
+	total := uint32(len(snapshot.GetConversations()))
+	limit := requestedLimit
+	if limit == 0 || limit > 500 {
+		limit = 500
+	}
+	if offset > total {
+		offset = total
+	}
+	newPage := func(end uint32) *gatewayv2.HistorySyncSnapshot {
+		out := &gatewayv2.HistorySyncSnapshot{
+			SourceId: snapshot.GetSourceId(), Generation: snapshot.GetGeneration(),
+			CutDeliverySeq: snapshot.GetCutDeliverySeq(), ResyncToken: snapshot.GetResyncToken(),
+			Offset: offset, TotalCount: total,
+		}
+		out.Conversations = make([]*gatewayv2.ConversationSummary, 0, end-offset)
+		for _, summary := range snapshot.Conversations[offset:end] {
+			out.Conversations = append(out.Conversations, proto.Clone(summary).(*gatewayv2.ConversationSummary))
+		}
+		if offset == 0 {
+			out.Workdirs = make([]*gatewayv2.HistoryWorkdirSummary, 0, len(snapshot.Workdirs))
+			for _, item := range snapshot.Workdirs {
+				out.Workdirs = append(out.Workdirs, proto.Clone(item).(*gatewayv2.HistoryWorkdirSummary))
+			}
+		}
+		return out
+	}
+	var end uint32
+	var out *gatewayv2.HistorySyncSnapshot
+	for {
+		end = offset + limit
+		if end > total {
+			end = total
+		}
+		out = newPage(end)
+		if proto.Size(out) <= 8<<20 {
+			break
+		}
+		if limit <= 1 {
+			return nil, errors.New("history synchronization snapshot entry exceeds frame budget")
+		}
+		limit /= 2
+	}
+	if end < total {
+		out.NextOffset = end
+	} else {
+		out.NextOffset = 0
+	}
+	return out, nil
+}
+
+func (c *browserConn) handleHistoryResyncAck(requestID, agentID string, ack *gatewayv2.HistoryResyncAck) {
+	if strings.TrimSpace(ack.GetSourceId()) == "" || strings.TrimSpace(ack.GetGeneration()) == "" {
+		_ = c.sendLocalError(requestID, "history resync acknowledgement identity is required")
+		return
+	}
+	// The authoritative snapshot is held by the manager, so acknowledging is
+	// connection-local. A stale acknowledgement never mutates manager state.
+	c.historyRecoveryMu.Lock()
+	latch, ok := c.historyRecovery[agentID]
+	if !ok || !historyResyncAckMatches(latch, ack, time.Now()) {
+		if ok && time.Since(latch.createdAt) > 60*time.Second {
+			delete(c.historyRecovery, agentID)
+		}
+		c.historyRecoveryMu.Unlock()
+		_ = c.sendLocalError(requestID, "stale history resync acknowledgement")
+		return
+	}
+	delete(c.historyRecovery, agentID)
+	c.historyRecoveryMu.Unlock()
+	if c.historySyncAck != nil {
+		c.historySyncAck(agentID, ack.GetGeneration(), ack.GetAppliedDeliverySeq())
+	}
+	_ = c.sendAck(requestID)
+}
+
+func historyResyncAckMatches(latch historyRecoveryLatch, ack *gatewayv2.HistoryResyncAck, now time.Time) bool {
+	return ack != nil && now.Sub(latch.createdAt) <= 60*time.Second &&
+		latch.token == ack.GetResyncToken() && latch.generation == ack.GetGeneration() &&
+		latch.sourceID == ack.GetSourceId() && ack.GetAppliedDeliverySeq() >= latch.cutSeq
 }
 
 // forward 是可掉帧广播转发的共用骨架：subscribe 建立订阅（cleanup 随 goroutine 退出执行），
@@ -453,6 +687,21 @@ func (c *browserConn) replaySnapshots() {
 			AgentId: agentID,
 			Payload: &gatewayv2.WebServerFrame_Status{Status: statusEvent(agentStatus)},
 		})
+		if snapshot, ok := c.sm.HistorySyncSnapshot(agentID, ""); ok {
+			status := c.latchHistoryRecovery(agentID, &gatewayv2.HistorySyncStatus{
+				SourceId:          snapshot.GetSourceId(),
+				Generation:        snapshot.GetGeneration(),
+				LatestDeliverySeq: snapshot.GetCutDeliverySeq(),
+				Available:         true,
+				NeedsResync:       true,
+			})
+			_ = c.send(wscore.FrameData, "history_sync_status", &gatewayv2.WebServerFrame{
+				AgentId: agentID,
+				Payload: &gatewayv2.WebServerFrame_HistorySyncStatus{
+					HistorySyncStatus: status,
+				},
+			})
+		}
 	}
 
 	// 每个已登记 Agent 回放自己的隧道快照并打标；离线 Agent 也保留其隧道目录。

@@ -1,4 +1,5 @@
 import { GATEWAY_WEBUI_MARKER } from "@liveagent/ui/lib/runtimeEnv";
+import { installReactDevTimelineLimit } from "@liveagent/ui/lib/system/reactDevTimeline";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -11,6 +12,11 @@ import "streamdown/styles.css";
 
 // 渲染前写入 WebUI 运行时标记（isGatewayWebuiRuntime 的唯一权威写入点）。
 document.documentElement.dataset.liveagentWebui = GATEWAY_WEBUI_MARKER;
+
+if (import.meta.env.DEV) {
+  const stopReactTimelineLimit = installReactDevTimelineLimit();
+  import.meta.hot?.dispose(stopReactTimelineLimit);
+}
 
 const dashboardPaths = new Set(["/dashboard", "/status-board", "/observatory"]);
 // 独立管理页：/admin/devices（Agent 凭证管理，REST + 网关 Token）。

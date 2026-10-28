@@ -178,12 +178,46 @@ export type KBrainSession = {
   oldest_offset?: number;
   has_more_before?: boolean;
   total_message_count?: number;
+  sync_epoch?: string;
+  sync_revision?: string;
 };
 
 export type KBrainSessionPage = {
   sessions: KBrainSession[];
   total_count: number;
   version?: string;
+  epoch?: string;
+  revision?: string;
+};
+
+export type KBrainSessionWorkdir = { cwd: string; count: number; updated_at: string };
+export type KBrainSyncSnapshot = {
+  epoch: string;
+  revision: string;
+  snapshot_id: string;
+  expires_in_seconds: number;
+  total_count: number;
+  workdirs: KBrainSessionWorkdir[];
+};
+export type KBrainSyncSnapshotPage = {
+  epoch: string;
+  revision: string;
+  snapshot_id: string;
+  total_count: number;
+  sessions: KBrainSession[];
+  next_offset: number | null;
+};
+export type KBrainSessionChange =
+  | { id: string; revision: string; kind: "delete" }
+  | { id: string; revision: string; kind: "upsert"; listed: boolean; session: KBrainSession };
+export type KBrainSessionChanges = {
+  epoch: string;
+  head_revision: string;
+  next_since: string | null;
+  reset: boolean;
+  reset_reason?: string;
+  more: boolean;
+  changes: KBrainSessionChange[];
 };
 
 export type KBrainHistoryResponse = {

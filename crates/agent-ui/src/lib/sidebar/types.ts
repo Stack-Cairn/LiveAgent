@@ -58,8 +58,21 @@ export type SidebarRunningItem = {
 };
 
 export type SidebarBackendEvent =
-  | { kind: "upsert"; conversationId: string; conversation: SidebarConversation }
-  | { kind: "delete"; conversationId: string }
+  | {
+      kind: "reset";
+      conversations: SidebarConversation[];
+      workdirs?: SidebarWorkdirSummary[];
+      sourceIdentity?: string;
+    }
+  | {
+      kind: "upsert";
+      conversationId: string;
+      conversation: SidebarConversation;
+      /** Complete projection from the ordered snapshot/change stream. */
+      authoritative?: boolean;
+    }
+  | { kind: "delete"; conversationId: string; authoritative?: boolean }
+  | { kind: "workdirs"; workdirs: SidebarWorkdirSummary[] }
   | {
       kind: "running";
       conversationId: string;

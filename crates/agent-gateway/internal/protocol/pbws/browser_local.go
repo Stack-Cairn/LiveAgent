@@ -353,6 +353,15 @@ func (s *Server) kbrainCallbacks(agentID string) kbrain.Callbacks {
 		OnQueue: func(conversationID, snapshot string, revision uint64) {
 			s.sm.BroadcastRemoteChatQueue(agentID, &gatewayv2.ChatQueueEvent{ConversationId: conversationID, SnapshotJson: snapshot, Revision: revision})
 		},
+		OnHistoryEvent: func(event *gatewayv2.HistorySyncEvent) {
+			s.sm.IngestRemoteHistoryEvent(agentID, event)
+		},
+		OnHistoryStatus: func(status *gatewayv2.HistorySyncStatus) {
+			s.sm.IngestRemoteHistoryStatus(agentID, status)
+		},
+		OnHistorySnapshot: func(snapshot *gatewayv2.HistorySyncSnapshot) {
+			s.sm.IngestRemoteHistorySnapshot(agentID, snapshot)
+		},
 	}
 }
 

@@ -9,7 +9,35 @@ type MappingRecord = Record<string, string>;
 type MappingState = {
   localToBackend: MappingRecord;
   backendToLocal: MappingRecord;
+  legacyManagedStorageScope?: string;
 };
+
+let cachedStorage: Storage | undefined;
+let cachedState: MappingState | undefined;
+let cachedRaw: string | null = null;
+let pendingWrite = false;
+let batchDepth = 0;
+const recentDeletedAliases = new Map<string, { id: string; expiresAt: number }>();
+const MAX_DELETED_ALIASES = 10_000;
+
+function pruneDeletedAliases() {
+  const now = Date.now();
+  for (const [key, value] of recentDeletedAliases) {
+    if (value.expiresAt > now && recentDeletedAliases.size <= MAX_DELETED_ALIASES) break;
+    recentDeletedAliases.delete(key);
+  }
+}
+
+export function withKBrainMappingBatch<T>(operation: () => T): T {
+  if (batchDepth === 0) readState();
+  batchDepth += 1;
+  try {
+    return operation();
+  } finally {
+    batchDepth -= 1;
+    if (batchDepth === 0 && pendingWrite && cachedState) writeState(cachedState);
+  }
+}
 
 export function kBrainStorageScope(baseUrl?: string) {
   const managed = getKBrainRuntimeConnection();
@@ -17,7 +45,11 @@ export function kBrainStorageScope(baseUrl?: string) {
     .trim()
     .replace(/\/+$/, "");
   // The managed backend retains its storage identity across ephemeral ports.
-  return managed && normalized === managed.baseUrl ? "liveagent-managed-kbrain" : normalized;
+  return managed && normalized === managed.baseUrl
+    ? managed.storageId
+      ? `liveagent-managed-kbrain:${managed.storageId}`
+      : "liveagent-managed-kbrain"
+    : normalized;
 }
 
 const normalizeBaseUrl = kBrainStorageScope;
@@ -28,10 +60,21 @@ function scopedKey(baseUrl: string, conversationId: string) {
 
 function readState(): MappingState {
   try {
-    const raw = globalThis.localStorage?.getItem(mappingKey);
-    if (!raw) return { localToBackend: {}, backendToLocal: {} };
-    const parsed = JSON.parse(raw) as Partial<MappingState>;
-    return {
+    const storage = globalThis.localStorage;
+    if (storage !== cachedStorage) {
+      cachedStorage = storage;
+      cachedState = undefined;
+      pendingWrite = false;
+      cachedRaw = null;
+      recentDeletedAliases.clear();
+    }
+    if (batchDepth > 0 && cachedState) return cachedState;
+    if (cachedState && pendingWrite) return cachedState;
+    const raw = storage?.getItem(mappingKey) ?? null;
+    if (cachedState && raw === cachedRaw) return cachedState;
+    const parsed = raw ? (JSON.parse(raw) as Partial<MappingState>) : {};
+    cachedRaw = raw;
+    cachedState = {
       localToBackend:
         parsed.localToBackend && typeof parsed.localToBackend === "object"
           ? parsed.localToBackend
@@ -40,15 +83,28 @@ function readState(): MappingState {
         parsed.backendToLocal && typeof parsed.backendToLocal === "object"
           ? parsed.backendToLocal
           : {},
+      ...(typeof parsed.legacyManagedStorageScope === "string"
+        ? { legacyManagedStorageScope: parsed.legacyManagedStorageScope }
+        : {}),
     };
+    return cachedState;
   } catch {
-    return { localToBackend: {}, backendToLocal: {} };
+    cachedState ??= { localToBackend: {}, backendToLocal: {} };
+    return cachedState;
   }
 }
 
 function writeState(state: MappingState) {
+  cachedState = state;
+  pendingWrite = true;
+  if (batchDepth > 0) return;
   try {
-    globalThis.localStorage?.setItem(mappingKey, JSON.stringify(state));
+    const raw = JSON.stringify(state);
+    if (globalThis.localStorage) {
+      globalThis.localStorage.setItem(mappingKey, raw);
+      cachedRaw = raw;
+      pendingWrite = false;
+    }
   } catch {
     // Mapping is recoverable from the remote list; storage is optional.
   }
@@ -79,8 +135,20 @@ export function getKBrainSessionId(conversationId: string, baseUrl?: string): st
   const localId = conversationId.trim();
   if (!localId) return undefined;
   const state = readState();
-  const mapped = state.localToBackend[scopedKey(normalizeBaseUrl(baseUrl), localId)];
+  const scope = normalizeBaseUrl(baseUrl);
+  const mapped = state.localToBackend[scopedKey(scope, localId)];
   if (mapped) return mapped;
+  if (
+    scope.startsWith("liveagent-managed-kbrain:") &&
+    (!state.legacyManagedStorageScope || state.legacyManagedStorageScope === scope)
+  ) {
+    const previous = state.localToBackend[scopedKey("liveagent-managed-kbrain", localId)];
+    if (previous) {
+      state.legacyManagedStorageScope = scope;
+      setKBrainSessionId(localId, previous, baseUrl);
+      return previous;
+    }
+  }
   const legacy = readLegacyMapping(localId, baseUrl);
   if (legacy) {
     setKBrainSessionId(localId, legacy, baseUrl);
@@ -102,6 +170,12 @@ export function setKBrainSessionId(
   const state = readState();
   const localKey = scopedKey(scope, localId);
   const previousRemoteId = state.localToBackend[localKey];
+  if (
+    previousRemoteId === remoteId &&
+    state.backendToLocal[scopedKey(scope, remoteId)] === localId
+  ) {
+    return remoteId;
+  }
   if (previousRemoteId && state.backendToLocal[scopedKey(scope, previousRemoteId)] === localId) {
     delete state.backendToLocal[scopedKey(scope, previousRemoteId)];
   }
@@ -118,11 +192,35 @@ export function setKBrainSessionId(
 export function getKBrainConversationId(backendId: string, baseUrl?: string): string | undefined {
   const remoteId = backendId.trim();
   if (!remoteId) return undefined;
-  return readState().backendToLocal[scopedKey(normalizeBaseUrl(baseUrl), remoteId)];
+  const state = readState();
+  const scope = normalizeBaseUrl(baseUrl);
+  const existing = state.backendToLocal[scopedKey(scope, remoteId)];
+  if (existing) return existing;
+  // The previous managed namespace had no data-root identity. Bind its
+  // aliases to the first identified managed root, never to every later root.
+  if (
+    scope.startsWith("liveagent-managed-kbrain:") &&
+    (!state.legacyManagedStorageScope || state.legacyManagedStorageScope === scope)
+  ) {
+    const legacy = state.backendToLocal[scopedKey("liveagent-managed-kbrain", remoteId)];
+    if (legacy) {
+      state.legacyManagedStorageScope = scope;
+      setKBrainSessionId(legacy, remoteId, baseUrl);
+      return legacy;
+    }
+  }
+  return undefined;
 }
 
 export function ensureKBrainConversationId(backendId: string, baseUrl?: string): string {
-  return getKBrainConversationId(backendId, baseUrl) ?? createUuid();
+  const existing = getKBrainConversationId(backendId, baseUrl);
+  if (existing) return existing;
+  pruneDeletedAliases();
+  const key = scopedKey(normalizeBaseUrl(baseUrl), backendId);
+  const id = recentDeletedAliases.get(key)?.id ?? createUuid();
+  recentDeletedAliases.delete(key);
+  setKBrainSessionId(id, backendId, baseUrl);
+  return id;
 }
 
 export function clearKBrainSessionId(conversationId: string, baseUrl?: string): void {
@@ -132,9 +230,23 @@ export function clearKBrainSessionId(conversationId: string, baseUrl?: string): 
   const state = readState();
   const localKey = scopedKey(scope, localId);
   const remoteId = state.localToBackend[localKey];
+  if (remoteId) {
+    const key = scopedKey(scope, remoteId);
+    recentDeletedAliases.delete(key);
+    recentDeletedAliases.set(key, { id: localId, expiresAt: Date.now() + 86_400_000 });
+    pruneDeletedAliases();
+  }
   delete state.localToBackend[localKey];
   if (remoteId && state.backendToLocal[scopedKey(scope, remoteId)] === localId) {
     delete state.backendToLocal[scopedKey(scope, remoteId)];
+  }
+  if (remoteId && state.legacyManagedStorageScope === scope) {
+    const legacyLocalKey = scopedKey("liveagent-managed-kbrain", localId);
+    const legacyRemoteKey = scopedKey("liveagent-managed-kbrain", remoteId);
+    if (state.localToBackend[legacyLocalKey] === remoteId)
+      delete state.localToBackend[legacyLocalKey];
+    if (state.backendToLocal[legacyRemoteKey] === localId)
+      delete state.backendToLocal[legacyRemoteKey];
   }
   writeState(state);
 }

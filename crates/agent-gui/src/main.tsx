@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import "katex/dist/katex.min.css";
 import "streamdown/styles.css";
+import { installReactDevTimelineLimit } from "@liveagent/ui/lib/system/reactDevTimeline";
 import {
   connectKBrainBackendWithRetry,
   createKBrainBootstrapRunner,
@@ -12,6 +13,11 @@ import { migrateAllHistoryOnce } from "./lib/kbrain/historyMigration";
 import { inferRuntimePlatform } from "./lib/runtimePlatform";
 import { createStartupRenderer } from "./lib/startup/render";
 import { installWebviewNavigationGuard } from "./lib/system/webviewNavigationGuard";
+
+if (import.meta.env.DEV) {
+  const stopReactTimelineLimit = installReactDevTimelineLimit();
+  import.meta.hot?.dispose(stopReactTimelineLimit);
+}
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 

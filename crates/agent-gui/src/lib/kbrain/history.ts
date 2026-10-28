@@ -34,6 +34,7 @@ import {
 } from "./mapping";
 import { questionResultDetails } from "./questions";
 import { getConfiguredKBrainConnection } from "./runtimeConnection";
+import { confirmKBrainMutation, hasKBrainMutationSync } from "./sessionSyncState";
 import { contextToKBrainMessages } from "./turn";
 import type {
   KBrainHistoryResponse,
@@ -306,7 +307,10 @@ function attachTaskMessages(messages: Message[], tasks: Message[]): Message[] {
   );
 }
 
-function summaryForSession(session: KBrainSession, conversationId: string): ChatHistorySummary {
+export function summaryForSession(
+  session: KBrainSession,
+  conversationId: string,
+): ChatHistorySummary {
   const createdAt = epoch(session.created_at);
   return {
     id: conversationId,
@@ -319,8 +323,8 @@ function summaryForSession(session: KBrainSession, conversationId: string): Chat
     messageCount: session.total_message_count ?? session.message_count,
     createdAt,
     updatedAt: epoch(session.updated_at, createdAt),
-    isPinned: session.pinned,
-    isShared: session.shared,
+    isPinned: session.pinned === true,
+    isShared: session.shared === true,
     ...(session.forked_from?.trim() ? { forkedFromSessionId: session.forked_from.trim() } : {}),
   };
 }
@@ -529,8 +533,8 @@ export async function getKBrainHistoryWindow(
     backendId = getKBrainSessionId(localId, baseUrl());
   }
   if (!backendId) throw new Error(`K-brain session mapping not found for conversation ${localId}`);
-  const read = () =>
-    client().getHistory(backendId!, {
+  const read = (sessionId: string) =>
+    client().getHistory(sessionId, {
       maxMessages: params.maxMessages ?? 360,
       beforeOffset: params.beforeOffset,
       expectedRevision: params.expectedRevision,
@@ -538,11 +542,11 @@ export async function getKBrainHistoryWindow(
     });
   let result: KBrainHistoryResponse;
   try {
-    result = await read();
+    result = await read(backendId);
   } catch (error) {
     if (historyErrorStatus(error) !== 404 || !(await recoverLegacyHistory(localId))) throw error;
     backendId = getKBrainSessionId(localId, baseUrl()) ?? backendId;
-    result = await read();
+    result = await read(backendId);
   }
   setKBrainSessionId(localId, result.session.id, baseUrl());
   if (params.expectedRevision !== undefined && result.revision !== params.expectedRevision) {
@@ -630,7 +634,10 @@ export async function renameKBrainHistory(id: string, title: string): Promise<Ch
   const backendId = getKBrainSessionId(localId, baseUrl());
   if (!backendId) throw new Error(`K-brain session mapping not found for conversation ${localId}`);
   const session = await client().updateSession(backendId, { title: title.trim() });
-  return summaryForSession(session, localId);
+  return summaryForSession(
+    (await confirmKBrainMutation(backendId, session, true)) ?? session,
+    localId,
+  );
 }
 
 export async function setKBrainHistoryPinned(
@@ -640,14 +647,22 @@ export async function setKBrainHistoryPinned(
   const localId = id.trim();
   const backendId = getKBrainSessionId(localId, baseUrl());
   if (!backendId) throw new Error(`K-brain session mapping not found for conversation ${localId}`);
-  return summaryForSession(await client().updateSession(backendId, { pinned }), localId);
+  const session = await client().updateSession(backendId, { pinned });
+  return summaryForSession(
+    (await confirmKBrainMutation(backendId, session, true)) ?? session,
+    localId,
+  );
 }
 
 export async function setKBrainHistoryCwd(id: string, cwd: string): Promise<ChatHistorySummary> {
   const localId = id.trim();
   const backendId = getKBrainSessionId(localId, baseUrl());
   if (!backendId) throw new Error(`K-brain session mapping not found for conversation ${localId}`);
-  return summaryForSession(await client().updateSession(backendId, { cwd }), localId);
+  const session = await client().updateSession(backendId, { cwd });
+  return summaryForSession(
+    (await confirmKBrainMutation(backendId, session, true)) ?? session,
+    localId,
+  );
 }
 
 export async function deleteKBrainHistory(id: string): Promise<void> {
@@ -656,7 +671,11 @@ export async function deleteKBrainHistory(id: string): Promise<void> {
   if (!backendId) throw new Error(`K-brain session mapping not found for conversation ${localId}`);
   const result = await client().deleteSession(backendId);
   if (result.ok !== true) throw new Error("K-brain session deletion was not confirmed");
-  clearKBrainSessionId(localId, baseUrl());
+  const syncing = hasKBrainMutationSync();
+  await confirmKBrainMutation(backendId, result);
+  // The coordinator retains the alias until Gateway accepted the delete or
+  // took over an authoritative resync. Legacy polling keeps its old cleanup.
+  if (!syncing) clearKBrainSessionId(localId, baseUrl());
   projections.delete(`${baseUrl() ?? ""}:${localId}`);
 }
 

@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # buf breaking 需要完整历史以对比 origin/main 的 proto 契约。
+          # buf breaking uses the actual PR base, including v2 integration PRs.
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -51,12 +51,14 @@ jobs:
           pnpm --filter @liveagent/gateway-webui build
 
       - name: Proto lint and breaking-change check
-        run: make proto-check BUF_BREAKING_AGAINST='../../.git#branch=origin/main,subdir=crates/agent-gateway'
+        env:
+          PROTO_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: make proto-check BUF_BREAKING_AGAINST="../../.git#ref=${PROTO_BASE_SHA},subdir=crates/agent-gateway"
 
       - name: Check generated protobuf
         run: |
           make proto
-          git diff --exit-code -- crates/agent-gateway/internal/proto
+          git diff --exit-code -- crates/agent-gateway/internal/proto crates/agent-gateway/web/src/lib/proto/gen
 
       - name: Lint gateway
         uses: golangci/golangci-lint-action@v8
@@ -265,6 +267,7 @@ jobs:
           cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib --
           chat_history ssh_local_forward shell_runner integration_commands::mcp
           services::system_proxy services::kbrain_backend
+          history_sync_v2_tests history_sync_command_tests
 
   managed-gateway:
     name: Desktop Gateway (${{ matrix.name }})
@@ -352,13 +355,15 @@ jobs:
         run: node scripts/release/prepare-kbrain.mjs --release
 
       - name: Run existing Gateway and settings tests
-        run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib -- settings::tests services::gateway::tests services::gateway::connection::transport_supervisor_tests
+        run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib -- settings::tests services::gateway::tests services::gateway::connection::transport_supervisor_tests history_sync_v2_tests history_sync_command_tests
 
   ui-boundaries:
     name: Shared UI Boundaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -380,10 +385,12 @@ jobs:
       - name: Run check script tests
         run: pnpm check:script-tests
 
-      - name: Check shared UI dependency boundaries
-        run: pnpm check:ui-boundaries
+      - name: Check shared UI dependency boundaries and mirrors
+        run: node scripts/check-mirror.mjs
 
       - name: Reject new Biome warnings
+        env:
+          LIVEAGENT_CHECK_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           node scripts/check-biome-changed.mjs ui
           node scripts/check-biome-changed.mjs gui

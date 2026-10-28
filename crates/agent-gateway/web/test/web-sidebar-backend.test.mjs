@@ -41,8 +41,12 @@ function createFakeApi() {
     listResponse: { conversations: [], total_count: 0, running_conversations: [] },
     workdirs: [],
     historyListeners: new Set(),
+    historySyncListeners: new Set(),
     connectionListeners: new Set(),
     statusListeners: new Set(),
+    resyncCalls: 0,
+    resyncHandler: null,
+    acknowledgeHandler: null,
     calls: { list: [], workdirs: 0, rename: [], pin: [], move: [], delete: [] },
   };
   const api = {
@@ -73,6 +77,27 @@ function createFakeApi() {
       state.historyListeners.add(listener);
       return () => state.historyListeners.delete(listener);
     },
+    subscribeHistorySync: (listener) => {
+      state.historySyncListeners.add(listener);
+      return () => state.historySyncListeners.delete(listener);
+    },
+    requestHistoryResync: async (resyncToken) => {
+      state.resyncCalls += 1;
+      if (state.resyncHandler) return state.resyncHandler(resyncToken);
+      return {
+        source_id: "source",
+        generation: "generation",
+        cut_delivery_seq: 2,
+        resync_token: resyncToken || "generated",
+        conversations: [summary("sync-1", { cwd: "/sync" })],
+        workdirs: [{ path: "/sync", conversationCount: 1, updatedAt: MILLIS }],
+      };
+    },
+    acknowledgeHistoryResync: async (snapshot, appliedDeliverySeq) => {
+      state.acknowledged = snapshot;
+      state.acknowledgedSeq = appliedDeliverySeq;
+      if (state.acknowledgeHandler) return state.acknowledgeHandler(snapshot, appliedDeliverySeq);
+    },
     subscribeConnection: (listener) => {
       state.connectionListeners.add(listener);
       return () => state.connectionListeners.delete(listener);
@@ -87,6 +112,9 @@ function createFakeApi() {
     state,
     emitHistory: (event) => {
       for (const listener of state.historyListeners) listener(event);
+    },
+    emitHistorySync: (update) => {
+      for (const listener of state.historySyncListeners) listener(update);
     },
     emitConnection: (connected) => {
       for (const listener of state.connectionListeners) listener(connected);
@@ -103,6 +131,267 @@ test("normalizeGatewayEpochMs converts seconds and passes milliseconds through",
   assert.equal(normalizeGatewayEpochMs(0), 0);
   assert.equal(normalizeGatewayEpochMs(-5), 0);
   assert.equal(normalizeGatewayEpochMs(undefined), 0);
+});
+
+test("history sync status replaces the remote projection and acknowledges the cut", async () => {
+  const { api, state, emitHistorySync } = createFakeApi();
+  const backend = createWebSidebarBackend({
+    api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+  });
+  const events = [];
+  const syncChanges = [];
+  const unsubscribeState = backend.subscribeSyncState(() => syncChanges.push(true));
+  const unsubscribe = backend.subscribeEvents((event) => events.push(event));
+
+  emitHistorySync({
+    kind: "status",
+    status: {
+      source_id: "source",
+      generation: "generation",
+      latest_delivery_seq: 2,
+      available: true,
+      needs_resync: true,
+      resync_token: "token-1",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(events[0].kind, "reset");
+  assert.equal(events[0].conversations[0].id, "sync-1");
+  assert.equal(events[0].workdirs[0].path, "/sync");
+  assert.equal(state.acknowledged.resync_token, "token-1");
+  assert.equal(backend.getReconcileIntervalMs(), 300_000);
+  assert.ok(syncChanges.length > 0);
+
+  unsubscribe();
+  unsubscribeState();
+});
+
+test("failed and overflowing history recovery is bounded and never commits a partial reset", async () => {
+  const { api, state, emitHistory, emitHistorySync } = createFakeApi();
+  let releaseSnapshot;
+  state.resyncHandler = () =>
+    new Promise((resolve) => {
+      releaseSnapshot = resolve;
+    });
+  const backend = createWebSidebarBackend({
+    api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+    historySyncMaxBufferedEvents: 3,
+    historySyncRetryBaseMs: 100,
+  });
+  const events = [];
+  const unsubscribe = backend.subscribeEvents((event) => events.push(event));
+  emitHistorySync({
+    kind: "status",
+    status: {
+      source_id: "source",
+      generation: "generation",
+      latest_delivery_seq: 0,
+      available: true,
+      needs_resync: true,
+      resync_token: "overflow-token",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let index = 1; index <= 4; index += 1) {
+    emitHistory({
+      kind: "delete",
+      conversation_id: `overflow-${index}`,
+      source_id: "source",
+      generation: "generation",
+      delivery_seq: index,
+    });
+  }
+  releaseSnapshot({
+    source_id: "source",
+    generation: "generation",
+    cut_delivery_seq: 0,
+    resync_token: "overflow-token",
+    conversations: [],
+    workdirs: [],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(events.some((event) => event.kind === "reset"), false);
+  assert.equal(state.resyncCalls, 1, "recovery errors must back off instead of busy-looping");
+  assert.equal(backend.getReconcileIntervalMs(), 60_000);
+  unsubscribe();
+});
+
+test("history recovery replays a buffered tail atomically and acknowledges the applied sequence", async () => {
+  const { api, state, emitHistory, emitHistorySync } = createFakeApi();
+  let releaseSnapshot;
+  state.resyncHandler = () =>
+    new Promise((resolve) => {
+      releaseSnapshot = resolve;
+    });
+  const backend = createWebSidebarBackend({
+    api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+  });
+  const events = [];
+  const unsubscribe = backend.subscribeEvents((event) => events.push(event));
+  emitHistorySync({
+    kind: "status",
+    status: {
+      source_id: "source",
+      generation: "generation",
+      latest_delivery_seq: 2,
+      available: true,
+      needs_resync: true,
+      resync_token: "tail-token",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  emitHistory({
+    kind: "upsert",
+    conversation_id: "tail",
+    conversation: summary("tail"),
+    source_id: "source",
+    generation: "generation",
+    delivery_seq: 3,
+  });
+  releaseSnapshot({
+    source_id: "source",
+    generation: "generation",
+    cut_delivery_seq: 2,
+    resync_token: "tail-token",
+    conversations: [summary("base")],
+    workdirs: [],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, "reset");
+  assert.deepEqual(
+    events[0].conversations.map((item) => item.id).sort(),
+    ["base", "tail"],
+  );
+  assert.equal(state.acknowledgedSeq, 3);
+  unsubscribe();
+});
+
+test("a buffered sequence gap never commits a partial snapshot and retries with backoff", async () => {
+  const { api, state, emitHistory, emitHistorySync } = createFakeApi();
+  let releaseSnapshot;
+  state.resyncHandler = () =>
+    new Promise((resolve) => {
+      releaseSnapshot = resolve;
+    });
+  const backend = createWebSidebarBackend({
+    api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+    historySyncRetryBaseMs: 100,
+  });
+  const events = [];
+  const unsubscribe = backend.subscribeEvents((event) => events.push(event));
+  emitHistorySync({
+    kind: "status",
+    status: {
+      source_id: "source",
+      generation: "generation",
+      latest_delivery_seq: 2,
+      available: true,
+      needs_resync: true,
+      resync_token: "gap-token",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  emitHistory({
+    kind: "delete",
+    conversation_id: "missing-three",
+    source_id: "source",
+    generation: "generation",
+    delivery_seq: 4,
+  });
+  releaseSnapshot({
+    source_id: "source",
+    generation: "generation",
+    cut_delivery_seq: 2,
+    resync_token: "gap-token",
+    conversations: [summary("base")],
+    workdirs: [],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(events.some((event) => event.kind === "reset"), false);
+  assert.equal(state.resyncCalls, 1);
+  unsubscribe();
+});
+
+test("history sync freshness expires and legacy clients retain the 60 second reconcile", async () => {
+  const fixture = createFakeApi();
+  const backend = createWebSidebarBackend({
+    api: fixture.api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+    historySyncFreshnessMs: 10,
+  });
+  const unsubscribe = backend.subscribeEvents(() => undefined);
+  fixture.emitHistorySync({
+    kind: "status",
+    status: {
+      source_id: "source",
+      generation: "generation",
+      latest_delivery_seq: 2,
+      available: true,
+      needs_resync: true,
+      resync_token: "fresh-token",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(backend.getReconcileIntervalMs(), 300_000);
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  assert.equal(backend.getReconcileIntervalMs(), 60_000);
+  unsubscribe();
+
+  const oldFixture = createFakeApi();
+  delete oldFixture.api.subscribeHistorySync;
+  delete oldFixture.api.requestHistoryResync;
+  delete oldFixture.api.acknowledgeHistoryResync;
+  const legacy = createWebSidebarBackend({
+    api: oldFixture.api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+  });
+  const legacyEvents = [];
+  const unsubscribeLegacy = legacy.subscribeEvents((event) => legacyEvents.push(event));
+  oldFixture.emitHistory({ kind: "delete", conversation_id: "legacy" });
+  assert.equal(legacy.getReconcileIntervalMs(), 60_000);
+  assert.deepEqual(legacyEvents[0], { kind: "delete", conversationId: "legacy" });
+  unsubscribeLegacy();
+});
+
+test("unsubscribing cancels pending history recovery retries", async () => {
+  const { api, state, emitHistorySync } = createFakeApi();
+  state.resyncHandler = async () => {
+    throw new Error("offline");
+  };
+  const backend = createWebSidebarBackend({
+    api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+    historySyncRetryBaseMs: 20,
+  });
+  const unsubscribe = backend.subscribeEvents(() => undefined);
+  emitHistorySync({
+    kind: "status",
+    status: {
+      source_id: "source",
+      generation: "generation",
+      latest_delivery_seq: 0,
+      available: false,
+      needs_resync: true,
+      resync_token: "offline-token",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  unsubscribe();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(state.resyncCalls, 1);
 });
 
 test("normalize maps snake_case summaries with second→ms timestamps and empty fallbacks", () => {
@@ -329,11 +618,36 @@ test("subscribeConnection waits for fresh status and detects online session repl
 
 test("mutations delegate to the gateway api and normalize returned summaries", async () => {
   const { api, state } = createFakeApi();
+  state.resyncHandler = (token) => {
+    let conversations = [];
+    if (!state.calls.delete.includes("c1")) {
+      const latestMove = state.calls.move.at(-1);
+      const latestPin = state.calls.pin.at(-1);
+      const latestRename = state.calls.rename.at(-1);
+      conversations = [
+        summary("c1", {
+          title: latestRename?.title,
+          cwd: latestMove?.cwd,
+          is_pinned: latestPin?.isPinned,
+          pinned_at: latestPin?.isPinned ? SECONDS : 0,
+        }),
+      ];
+    }
+    return {
+      source_id: "source",
+      generation: "generation",
+      cut_delivery_seq: state.resyncCalls,
+      resync_token: token || `mutation-${state.resyncCalls}`,
+      conversations,
+      workdirs: [],
+    };
+  };
   const activityStore = createActivityStore();
   const backend = createWebSidebarBackend({
     api,
     activityStore,
     getProtectedConversationIds: () => ["protected-1", " "],
+    historyMutationConfirmMs: 1,
   });
 
   const renamed = await backend.renameConversation("c1", "Next");
@@ -351,6 +665,44 @@ test("mutations delegate to the gateway api and normalize returned summaries", a
 
   await backend.deleteConversation("c1");
   assert.deepEqual(state.calls.delete, ["c1"]);
+  assert.equal(state.resyncCalls, 0, "legacy mode must not call unsupported resync methods");
 
   assert.deepEqual([...backend.getProtectedConversationIds()], ["protected-1", " "]);
+});
+
+test("mutation completion returns the synchronized authority instead of a stale unary response", async () => {
+  const { api, state, emitHistorySync } = createFakeApi();
+  api.renameHistory = async () => summary("c1", { title: "stale response" });
+  state.resyncHandler = (token) => ({
+    source_id: "source",
+    generation: "generation",
+    cut_delivery_seq: 9,
+    resync_token: token || "mutation-token",
+    conversations: [summary("c1", { title: "requested", updated_at: SECONDS + 20 })],
+    workdirs: [],
+  });
+  const backend = createWebSidebarBackend({
+    api,
+    activityStore: createActivityStore(),
+    getProtectedConversationIds: () => [],
+    historyMutationConfirmMs: 1,
+  });
+  const unsubscribe = backend.subscribeEvents(() => undefined);
+  emitHistorySync({
+    kind: "status",
+    status: {
+      source_id: "source",
+      generation: "generation",
+      latest_delivery_seq: 9,
+      available: true,
+      needs_resync: true,
+      resync_token: "initial-token",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const confirmed = await backend.renameConversation("c1", "requested");
+  assert.equal(confirmed.title, "requested");
+  assert.equal(confirmed.updatedAt, (SECONDS + 20) * 1000);
+  assert.equal(state.acknowledgedSeq, 9);
+  unsubscribe();
 });

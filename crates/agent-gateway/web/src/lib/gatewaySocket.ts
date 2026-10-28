@@ -59,6 +59,7 @@ import type {
   GatewayWorkspaceRootGrantDraft,
   HistoryGetOptions,
   HistoryListener,
+  HistorySyncListener,
   ManagedProcessLogPayload,
   ManagedProcessStatePayload,
   MentionListResponse,
@@ -128,6 +129,14 @@ export type GatewayWebSocketClientLike = {
   subscribeAgents(listener: (agents: AgentStatus[]) => void): () => void;
   subscribeStatus(listener: StatusListener): () => void;
   subscribeHistory(listener: HistoryListener): () => void;
+  subscribeHistorySync(listener: HistorySyncListener): () => void;
+  requestHistoryResync(
+    resyncToken: string,
+  ): Promise<import("./gatewayTypes").GatewayHistorySyncSnapshot>;
+  acknowledgeHistoryResync(
+    snapshot: import("./gatewayTypes").GatewayHistorySyncSnapshot,
+    appliedDeliverySeq?: number,
+  ): Promise<void>;
   subscribeSettings(listener: SettingsListener): () => void;
   subscribeTerminal(listener: TerminalListener): () => void;
   subscribeSftpTransfers(listener: SftpTransferListener): () => void;

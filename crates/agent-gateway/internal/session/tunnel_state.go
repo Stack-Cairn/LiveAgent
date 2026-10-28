@@ -627,6 +627,7 @@ func (m *Manager) setRelayHealth(agentID string, health *gatewayv2.TunnelHealth)
 // offline. Streams and tunnels of other agents are untouched.
 func (m *Manager) onAgentSessionCleared(agentID string) {
 	agentID = strings.TrimSpace(agentID)
+	m.ClearHistorySyncState(agentID)
 	m.tunnels.mu.Lock()
 	for streamID, stream := range m.tunnels.streams {
 		if stream.agentID != agentID {

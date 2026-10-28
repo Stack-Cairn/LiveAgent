@@ -126,6 +126,16 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 		return
 	}
 
+	if historyStatus := env.GetHistorySyncStatus(); historyStatus != nil {
+		m.updateHistorySyncStatus(agentID, historyStatus)
+		return
+	}
+
+	if historySnapshot := env.GetHistorySyncSnapshot(); historySnapshot != nil {
+		m.updateHistorySyncSnapshot(agentID, historySnapshot)
+		return
+	}
+
 	if settingsSync := env.GetSettingsSync(); settingsSync != nil {
 		m.broadcastSettingsSync(agentID, settingsSync)
 		return

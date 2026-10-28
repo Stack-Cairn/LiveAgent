@@ -16,6 +16,7 @@ import {
   setChatHistoryCwd,
   setChatHistoryPinned,
 } from "../chat/history/chatHistory";
+import { getKBrainSidebarSyncError, kBrainSidebarSync } from "../kbrain/sidebarSync";
 import { getProviderRuntimeBackend } from "../providers/runtime/providerRuntimeConfig";
 
 // The desktop history sync wire protocol. The Rust side emits one event per
@@ -66,10 +67,14 @@ export function createGuiSidebarBackend(): SidebarBackend {
   const isKBrain = getProviderRuntimeBackend() === "kbrain";
   return {
     listPinnedConversations: () =>
-      listPinnedSidebarConversations((page, pageSize) => listChatHistory(page, pageSize)),
+      isKBrain && kBrainSidebarSync.isHealthy()
+        ? Promise.resolve(kBrainSidebarSync.pinned())
+        : listPinnedSidebarConversations((page, pageSize) => listChatHistory(page, pageSize)),
     // scope.kind === "none" never reaches the adapter — the store resolves it
     // locally to an empty list without an IPC round-trip.
     listConversations: async (page, pageSize, scope) => {
+      if (isKBrain && kBrainSidebarSync.isHealthy())
+        return kBrainSidebarSync.list(page, pageSize, scope);
       const filter =
         scope.kind === "workdir" ? { cwd: scope.cwd } : isKBrain ? undefined : { cwdEmpty: true };
       const result = await listChatHistory(page, pageSize, filter);
@@ -79,6 +84,7 @@ export function createGuiSidebarBackend(): SidebarBackend {
     },
 
     listWorkdirs: async () => {
+      if (isKBrain && kBrainSidebarSync.isHealthy()) return kBrainSidebarSync.workdirs();
       const response = await listChatHistoryWorkdirs();
       return response.workdirs;
     },
@@ -89,7 +95,7 @@ export function createGuiSidebarBackend(): SidebarBackend {
     deleteConversation: (id) => deleteChatHistory(id),
 
     subscribeEvents: (listener) => {
-      if (isKBrain) return () => undefined;
+      if (isKBrain) return kBrainSidebarSync.subscribe(listener);
       let disposed = false;
       const unlistenPromise = listen<ChatHistorySyncEvent>(CHAT_HISTORY_SYNC_EVENT, (event) => {
         if (disposed) {
@@ -106,5 +112,13 @@ export function createGuiSidebarBackend(): SidebarBackend {
     // Local sqlite is always reachable: no subscribeConnection. Nothing needs
     // protection beyond pending drafts (which reconcile retains by itself).
     getProtectedConversationIds: () => [],
+    ...(isKBrain
+      ? {
+          subscribeConnection: kBrainSidebarSync.subscribeConnection,
+          getReconcileIntervalMs: () => (kBrainSidebarSync.isHealthy() ? null : 60_000),
+          subscribeSyncState: kBrainSidebarSync.subscribeHealth,
+          getSyncError: getKBrainSidebarSyncError,
+        }
+      : {}),
   };
 }
