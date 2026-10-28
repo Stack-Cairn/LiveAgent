@@ -88,3 +88,18 @@ test("remote history shares the desktop K-brain projection and preserves message
   assert.deepEqual(calls.at(-1), ["delete", "conversation"]);
   await assert.rejects(run(event("unknown")), /Unsupported gateway history action/);
 });
+
+test("healthy desktop projection serves Gateway list and workdirs without backend pagination",async()=>{
+ const historyPath=fileURLToPath(new URL("../../src/lib/chat/history/chatHistory.ts",import.meta.url));
+ const syncPath=fileURLToPath(new URL("../../src/lib/kbrain/sidebarSync.ts",import.meta.url));
+ const calls=[];const loader=createTsModuleLoader({mocks:{
+ [historyPath]:{listChatHistory:()=>assert.fail("no full history HTTP"),listChatHistoryWorkdirs:()=>assert.fail("no workdir full pagination")},
+ [syncPath]:{kBrainSidebarSync:{isHealthy:()=>true,list:(...args)=>{calls.push(args);return{items:[],totalCount:0};},workdirs:()=>[{path:"/project",conversationCount:2,updatedAt:1}]}}
+ }});
+ const {runGatewayHistoryAction:run}=loader.loadModule("src/pages/chat/gateway/gatewayHistoryActions.ts");
+ await run({kind:"history",conversationId:"",action:"list",data:{page:2,pageSize:20,cwd:"/project"}});
+ assert.deepEqual(calls[0],[2,20,{kind:"workdir",cwd:"/project"}]);
+ await run({kind:"history",conversationId:"",action:"list",data:{cwdEmpty:true}});
+ assert.deepEqual(calls[1],[1,80,{kind:"unscoped"}]);
+ assert.equal((await run({kind:"history",conversationId:"",action:"workdirs",data:{}})).workdirs[0].conversationCount,2);
+});

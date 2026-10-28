@@ -10,6 +10,7 @@ import {
 } from "../../../lib/chat/history/chatHistory";
 import { resolveKBrainLocalId } from "../../../lib/kbrain/history";
 import { getKBrainSessionId, setKBrainSessionId } from "../../../lib/kbrain/mapping";
+import { kBrainSidebarSync } from "../../../lib/kbrain/sidebarSync";
 import type { GatewayComposerActionEvent } from "./gatewayBridgeTypes";
 
 export async function runGatewayHistoryAction(event: GatewayComposerActionEvent): Promise<unknown> {
@@ -18,12 +19,25 @@ export async function runGatewayHistoryAction(event: GatewayComposerActionEvent)
   const id = target && !getKBrainSessionId(target) ? resolveKBrainLocalId(target) : target;
   if (target && id !== target) setKBrainSessionId(id, target);
   switch (event.action) {
-    case "list":
+    case "list": {
+      if (kBrainSidebarSync.isHealthy()) {
+        return kBrainSidebarSync.list(
+          Number(data.page) || 1,
+          Number(data.pageSize) || 80,
+          typeof data.cwd === "string" && data.cwd.trim()
+            ? { kind: "workdir", cwd: data.cwd }
+            : data.cwdEmpty === true
+              ? { kind: "unscoped" }
+              : { kind: "all" },
+        );
+      }
       return listChatHistory(Number(data.page) || 1, Number(data.pageSize) || 80, {
         cwd: typeof data.cwd === "string" && data.cwd.trim() ? data.cwd : undefined,
         cwdEmpty: data.cwdEmpty === true,
       });
+    }
     case "workdirs":
+      if (kBrainSidebarSync.isHealthy()) return { workdirs: kBrainSidebarSync.workdirs() };
       return listChatHistoryWorkdirs();
     case "get": {
       const window = await getChatHistoryWindow({

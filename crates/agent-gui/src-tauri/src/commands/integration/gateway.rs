@@ -8,7 +8,8 @@ use crate::services::gateway::{
     GatewayChatIngressAcceptResult, GatewayChatIngressBatchInput, GatewayChatQueueEventInput,
     GatewayChatQueueResponseInput, GatewayClarifyDeltaInput, GatewayClarifyRespondInput,
     GatewayComposerActionRespondInput,
-    GatewayController, GatewayStatusSnapshot,
+    GatewayController, GatewayHistorySyncPublishInput, GatewayHistorySyncPublishResult,
+    GatewayStatusSnapshot,
 };
 use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
 use crate::services::tunnel::{
@@ -283,6 +284,54 @@ pub async fn gateway_publish_settings_sync(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
     gateway_controller.publish_settings_sync(payload).await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn gateway_publish_history_sync_v2(
+    input: GatewayHistorySyncPublishInput,
+    window: tauri::WebviewWindow,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<GatewayHistorySyncPublishResult, String> {
+    let caller_url = window
+        .url()
+        .map_err(|error| format!("read history synchronization origin: {error}"))?;
+    authorize_history_sync_caller(window.label(), caller_url.as_str())?;
+    gateway_controller.publish_history_sync_v2(input).await
+}
+
+fn authorize_history_sync_caller(label: &str, raw_url: &str) -> Result<(), String> {
+    if label != "main" {
+        return Err("history synchronization is restricted to the main window".to_string());
+    }
+    let url = tauri::Url::parse(raw_url).map_err(|_| "invalid history synchronization origin")?;
+    let host = url.host_str().unwrap_or_default();
+    let allowed = match url.scheme() {
+        "tauri" => host == "localhost",
+        "asset" => host.is_empty() || host == "localhost",
+        "http" => matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "tauri.localhost"),
+        "https" => host == "tauri.localhost",
+        _ => false,
+    };
+    if !allowed {
+        return Err("history synchronization origin is not trusted".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod history_sync_command_tests {
+    use super::authorize_history_sync_caller;
+
+    #[test]
+    fn history_sync_publish_only_accepts_main_local_origins() {
+        assert!(authorize_history_sync_caller("main", "http://localhost:1420/").is_ok());
+        assert!(authorize_history_sync_caller("main", "http://tauri.localhost/").is_ok());
+        assert!(authorize_history_sync_caller("main", "tauri://localhost/").is_ok());
+        assert!(authorize_history_sync_caller("shared", "http://localhost:1420/").is_err());
+        assert!(authorize_history_sync_caller("main", "https://example.com/").is_err());
+        assert!(authorize_history_sync_caller("main", "asset://remote.example/file").is_err());
+        assert!(authorize_history_sync_caller("main", "javascript:alert(1)").is_err());
+    }
 }
 
 #[tauri::command]

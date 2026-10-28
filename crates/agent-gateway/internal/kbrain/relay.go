@@ -38,6 +38,8 @@ type Relay struct {
 	backendContext  context.Context
 	backendCancel   context.CancelFunc
 	backendWorkers  sync.WaitGroup
+	historyWatching bool
+	historyState    *relayHistoryState
 }
 
 type runState struct {
@@ -89,9 +91,12 @@ type QueueResponse struct {
 }
 
 type Callbacks struct {
-	OnEvent   func(gatewayRunID string, event *gatewayv2.ChatEvent)
-	OnControl func(gatewayRunID string, control *gatewayv2.ChatControlEvent)
-	OnQueue   func(conversationID string, snapshot string, revision uint64)
+	OnEvent           func(gatewayRunID string, event *gatewayv2.ChatEvent)
+	OnControl         func(gatewayRunID string, control *gatewayv2.ChatControlEvent)
+	OnQueue           func(conversationID string, snapshot string, revision uint64)
+	OnHistoryEvent    func(event *gatewayv2.HistorySyncEvent)
+	OnHistoryStatus   func(status *gatewayv2.HistorySyncStatus)
+	OnHistorySnapshot func(snapshot *gatewayv2.HistorySyncSnapshot)
 }
 
 func NewRelay(client *Client, target string, defaultModel ModelRef, cwd string) (*Relay, error) {

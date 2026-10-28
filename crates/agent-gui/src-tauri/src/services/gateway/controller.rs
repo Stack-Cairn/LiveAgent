@@ -413,6 +413,29 @@ impl GatewayController {
         }
     }
 
+    pub async fn publish_history_sync_v2(
+        &self,
+        input: GatewayHistorySyncPublishInput,
+    ) -> Result<GatewayHistorySyncPublishResult, String> {
+        let envelope = build_history_sync_v2_envelope(input)?;
+        if !self.status().online {
+            return Ok(GatewayHistorySyncPublishResult {
+                accepted: false,
+                needs_resync: true,
+            });
+        }
+        match tokio::time::timeout(Duration::from_secs(5), self.send_agent_envelope(envelope)).await {
+            Ok(Ok(())) => Ok(GatewayHistorySyncPublishResult {
+                accepted: true,
+                needs_resync: false,
+            }),
+            Ok(Err(_)) | Err(_) => Ok(GatewayHistorySyncPublishResult {
+                accepted: false,
+                needs_resync: true,
+            }),
+        }
+    }
+
     pub async fn publish_settings_sync(&self, payload: Value) -> Result<(), String> {
         let snapshot = self.store_settings_snapshot(payload)?;
 

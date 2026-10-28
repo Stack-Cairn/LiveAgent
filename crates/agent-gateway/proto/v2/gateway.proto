@@ -76,6 +76,7 @@ message GatewayEnvelope {
     GoalManageRequest goal_manage = 107;
     LoopManageRequest loop_manage = 108;
     ProxyDetectRequest proxy_detect = 109;
+    HistoryResyncRequest history_resync = 110;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -167,6 +168,8 @@ message AgentEnvelope {
     GoalManageResponse goal_manage_resp = 114;
     LoopManageResponse loop_manage_resp = 115;
     ProxyDetectResponse proxy_detect_resp = 116;
+    HistorySyncStatus history_sync_status = 117;
+    HistorySyncSnapshot history_sync_snapshot = 118;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1063,6 +1066,41 @@ message HistorySyncEvent {
   string kind = 1;
   ConversationSummary conversation = 2;
   string conversation_id = 3;
+  string source_id = 4;
+  string generation = 5;
+  uint64 delivery_seq = 6;
+}
+
+// HistorySyncStatus is a producer heartbeat and recovery barrier. A source
+// generation is only healthy after a complete snapshot for that generation
+// has been accepted by the Gateway.
+message HistorySyncStatus {
+  string source_id = 1;
+  string generation = 2;
+  uint64 latest_delivery_seq = 3;
+  bool available = 4;
+  bool needs_resync = 5;
+  string resync_token = 6;
+}
+
+// HistorySyncSnapshot is an immutable LA-id projection captured at
+// cut_delivery_seq. Incremental events after the cut can be replayed safely.
+message HistorySyncSnapshot {
+  string source_id = 1;
+  string generation = 2;
+  uint64 cut_delivery_seq = 3;
+  string resync_token = 4;
+  repeated ConversationSummary conversations = 5;
+  repeated HistoryWorkdirSummary workdirs = 6;
+  uint32 offset = 7;
+  uint32 next_offset = 8;
+  uint32 total_count = 9;
+}
+
+message HistoryResyncRequest {
+  string resync_token = 1;
+  uint32 offset = 2;
+  uint32 limit = 3;
 }
 
 message ProviderListRequest {}

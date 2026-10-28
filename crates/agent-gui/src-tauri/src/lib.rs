@@ -374,6 +374,7 @@ macro_rules! app_invoke_handler {
             commands::gateway::gateway_clarify_delta,
             commands::gateway::gateway_publish_chat_queue_event,
             commands::gateway::gateway_publish_settings_sync,
+            commands::gateway::gateway_publish_history_sync_v2,
             commands::gateway::gateway_tunnel_state,
             commands::gateway::gateway_tunnel_create,
             commands::gateway::gateway_tunnel_update,

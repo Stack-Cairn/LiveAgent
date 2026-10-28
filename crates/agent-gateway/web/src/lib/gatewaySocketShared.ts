@@ -40,12 +40,19 @@ import type {
   ChatQueueSnapshot,
   GatewayChatRuntimeControls,
   GatewayHistoryEvent,
+  GatewayHistorySyncSnapshot,
+  GatewayHistorySyncStatus,
   GatewaySelectedModel,
   MemoryManagePayload,
 } from "./gatewayTypes";
 
 export type StatusListener = (status: AgentStatus | null, error: string | null) => void;
 export type HistoryListener = (event: GatewayHistoryEvent) => void;
+export type HistorySyncListener = (
+  update:
+    | { kind: "status"; status: GatewayHistorySyncStatus }
+    | { kind: "snapshot"; snapshot: GatewayHistorySyncSnapshot },
+) => void;
 export type SettingsListener = (event: GatewaySettingsSyncPayload) => void;
 export type GatewaySettingsUpdateResponse = {
   accepted?: boolean;

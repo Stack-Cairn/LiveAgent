@@ -136,6 +136,21 @@ func (r *Relay) HistoryPin(ctx context.Context, req *gatewayv2.HistoryPinRequest
 	return &gatewayv2.HistoryPinResponse{Conversation: sessionSummary(id, session)}, nil
 }
 
+func (r *Relay) HistorySetCwd(ctx context.Context, req *gatewayv2.HistorySetCwdRequest) (*gatewayv2.HistorySetCwdResponse, error) {
+	if req == nil {
+		return nil, errors.New("history cwd request is required")
+	}
+	id := strings.TrimSpace(req.GetConversationId())
+	if id == "" {
+		return nil, errors.New("conversation_id is required")
+	}
+	session, err := r.client.UpdateSession(ctx, r.backendSessionID(id), map[string]any{"cwd": strings.TrimSpace(req.GetCwd())})
+	if err != nil {
+		return nil, err
+	}
+	return &gatewayv2.HistorySetCwdResponse{Conversation: sessionSummary(id, session)}, nil
+}
+
 func (r *Relay) HistoryDelete(ctx context.Context, req *gatewayv2.HistoryDeleteRequest) (*gatewayv2.HistoryDeleteResponse, error) {
 	if req == nil {
 		return nil, errors.New("history delete request is required")
@@ -148,8 +163,29 @@ func (r *Relay) HistoryDelete(ctx context.Context, req *gatewayv2.HistoryDeleteR
 		return nil, err
 	}
 	r.mu.Lock()
-	delete(r.sessions, id)
+	var invalidate func(*gatewayv2.HistorySyncStatus)
+	if state := r.historyState; state != nil && state.available {
+		// The ordered stream still needs the original alias to publish delete.
+		// A failed stream releases these aliases before rebuilding its snapshot.
+		if len(state.pendingDeletes) >= maxPendingHistoryDeletes {
+			state.available = false
+			state.resetRequired = true
+			for pending := range state.pendingDeletes {
+				delete(r.sessions, pending)
+			}
+			clear(state.pendingDeletes)
+			delete(r.sessions, id)
+			invalidate = state.callbacks.OnHistoryStatus
+		} else if _, known := r.sessions[id]; known {
+			state.pendingDeletes[id] = struct{}{}
+		}
+	} else {
+		delete(r.sessions, id)
+	}
 	r.mu.Unlock()
+	if invalidate != nil {
+		invalidate(&gatewayv2.HistorySyncStatus{SourceId: "kbrain:" + r.target, Available: false, NeedsResync: true})
+	}
 	return &gatewayv2.HistoryDeleteResponse{}, nil
 }
 

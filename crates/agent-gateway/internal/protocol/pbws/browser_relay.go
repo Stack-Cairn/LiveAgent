@@ -97,6 +97,17 @@ func (c *browserConn) handleKBrainHistoryDelete(requestID, agentID string, reque
 	c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_HistoryDeleteResp{HistoryDeleteResp: response}})
 }
 
+func (c *browserConn) handleKBrainHistorySetCwd(requestID, agentID string, request *gatewayv2.HistorySetCwdRequest) {
+	ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+	defer cancel()
+	response, err := c.srv.kbrainRelay.HistorySetCwd(ctx, request)
+	if err != nil {
+		_ = c.sendLocalError(requestID, errorMessage(err))
+		return
+	}
+	c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_HistorySetCwdResp{HistorySetCwdResp: response}})
+}
+
 func (c *browserConn) handleKBrainSettingsGet(requestID, agentID string, request *gatewayv2.SettingsGetRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
 	defer cancel()
@@ -280,6 +291,10 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		}
 		if historyPin := env.GetHistoryPin(); historyPin != nil {
 			c.handleKBrainHistoryPin(requestID, agentID, historyPin)
+			return
+		}
+		if historyCwd := env.GetHistorySetCwd(); historyCwd != nil {
+			c.handleKBrainHistorySetCwd(requestID, agentID, historyCwd)
 			return
 		}
 		if historyDelete := env.GetHistoryDelete(); historyDelete != nil {

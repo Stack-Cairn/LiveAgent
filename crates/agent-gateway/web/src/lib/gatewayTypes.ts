@@ -287,9 +287,36 @@ export type GatewayHistoryEvent =
       kind: "upsert";
       conversation_id: string;
       conversation: ConversationSummary;
+      source_id?: string;
+      generation?: string;
+      delivery_seq?: number;
     }
   | {
       kind: "delete";
       conversation_id: string;
       conversation?: undefined;
+      source_id?: string;
+      generation?: string;
+      delivery_seq?: number;
     };
+
+export type GatewayHistorySyncStatus = {
+  source_id: string;
+  generation: string;
+  latest_delivery_seq: number;
+  available: boolean;
+  needs_resync: boolean;
+  resync_token: string;
+};
+
+export type GatewayHistorySyncSnapshot = {
+  source_id: string;
+  generation: string;
+  cut_delivery_seq: number;
+  resync_token: string;
+  conversations: ConversationSummary[];
+  workdirs: HistoryWorkdirSummary[];
+  offset: number;
+  next_offset: number;
+  total_count: number;
+};

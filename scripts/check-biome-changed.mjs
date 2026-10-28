@@ -71,22 +71,11 @@ function changedFiles(workspaceRoot) {
 async function runBiome(workspace, files) {
   const cwd = resolve(repoRoot, workspace.root);
   const workspaceFiles = files.map((path) => relative(cwd, resolve(repoRoot, path)));
+  const invocation = biomeInvocation(workspace.filter, workspaceFiles);
   return await new Promise((resolveExitCode) => {
     const child = spawn(
-      "mise",
-      [
-        "exec",
-        "--",
-        "pnpm",
-        "--filter",
-        workspace.filter,
-        "exec",
-        "biome",
-        "check",
-        ...workspaceFiles,
-        "--max-diagnostics=none",
-        "--error-on-warnings",
-      ],
+      invocation.command,
+      invocation.args,
       { cwd: repoRoot, shell: false, stdio: "inherit" },
     );
     child.once("error", (error) => {
@@ -95,6 +84,25 @@ async function runBiome(workspace, files) {
     });
     child.once("close", (code) => resolveExitCode(code ?? 1));
   });
+}
+
+export function biomeInvocation(filter, files, ci = Boolean(process.env.CI)) {
+  const args = [
+    "--filter",
+    filter,
+    "exec",
+    "biome",
+    "check",
+    ...files,
+    "--line-ending=lf",
+    "--max-diagnostics=none",
+    "--error-on-warnings",
+  ];
+  // CI installs the exact Node/pnpm versions before this gate. It does not
+  // install mise; local runs keep using the repository's mise toolchain.
+  return ci
+    ? { command: "pnpm", args }
+    : { command: "mise", args: ["exec", "--", "pnpm", ...args] };
 }
 
 async function main() {

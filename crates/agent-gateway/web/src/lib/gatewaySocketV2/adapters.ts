@@ -66,6 +66,7 @@ import {
   HistoryPinRequestSchema,
   HistoryPrefixRequestSchema,
   HistoryRenameRequestSchema,
+  HistoryResyncRequestSchema,
   HistorySetCwdRequestSchema,
   HistoryShareGetRequestSchema,
   HistoryShareSetRequestSchema,
@@ -117,6 +118,7 @@ import {
   ChatUnsubscribeRequestSchema,
   ClientHelloSchema,
   ClientRole,
+  HistoryResyncAckSchema,
   PongFrameSchema,
   StatusGetRequestSchema,
   TerminalClientFrameSchema,
@@ -177,9 +179,22 @@ function toI64(value: unknown): bigint {
   return Number.isFinite(parsed) ? BigInt(Math.trunc(parsed)) : 0n;
 }
 
+function toU64(value: unknown): bigint {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? BigInt(parsed) : 0n;
+}
+
 // 64 位整数入站边界：bigint → number（详见文件头注释）。
 function num(value: number | bigint | undefined): number {
   return Number(value ?? 0);
+}
+
+function safeU64(value: number | bigint | undefined): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error("Gateway history synchronization sequence exceeds the JavaScript safe range");
+  }
+  return parsed;
 }
 
 function parseJson(text: string): unknown {
@@ -306,6 +321,27 @@ function buildRequestFrame(requestId: string, type: string, payload: unknown): W
         "workspaceUnsubscribe",
         create(WorkspaceUnsubscribeRequestSchema, { workdir: trimStr(body.workdir) }),
       );
+    case "history.resync":
+      return webFrame(
+        requestId,
+        "historyResync",
+        create(HistoryResyncRequestSchema, {
+          resyncToken: trimStr(body.resync_token),
+          offset: n32(body.offset),
+          limit: n32(body.limit),
+        }),
+      );
+    case "history.resync_ack":
+      return webFrame(
+        requestId,
+        "historyResyncAck",
+        create(HistoryResyncAckSchema, {
+          sourceId: trimStr(body.source_id),
+          generation: trimStr(body.generation),
+          resyncToken: trimStr(body.resync_token),
+          appliedDeliverySeq: toU64(body.applied_delivery_seq),
+        }),
+      );
     default:
       return create(WebClientFrameSchema, {
         requestId,
@@ -322,7 +358,9 @@ type WebFrameCase =
   | "chatUnsubscribe"
   | "chatActivities"
   | "workspaceSubscribe"
-  | "workspaceUnsubscribe";
+  | "workspaceUnsubscribe"
+  | "historyResync"
+  | "historyResyncAck";
 
 function webFrame(requestId: string, frameCase: WebFrameCase, value: unknown): WebClientFrame {
   return create(WebClientFrameSchema, {
@@ -1157,6 +1195,41 @@ export function decodeServerFrame(
         agentId,
         payload: historyEventPayload(payload.value),
       };
+    case "historySyncStatus":
+      return {
+        kind: "event",
+        type: "history.sync_status",
+        agentId,
+        payload: {
+          source_id: payload.value.sourceId.trim(),
+          generation: payload.value.generation.trim(),
+          latest_delivery_seq: safeU64(payload.value.latestDeliverySeq),
+          available: payload.value.available,
+          needs_resync: payload.value.needsResync,
+          resync_token: payload.value.resyncToken.trim(),
+        },
+      };
+    case "historySyncSnapshot":
+      return {
+        kind: requestId ? "response" : "event",
+        ...(requestId ? { requestId } : { type: "history.sync_snapshot" }),
+        agentId,
+        payload: {
+          source_id: payload.value.sourceId.trim(),
+          generation: payload.value.generation.trim(),
+          cut_delivery_seq: safeU64(payload.value.cutDeliverySeq),
+          resync_token: payload.value.resyncToken.trim(),
+          conversations: payload.value.conversations.map(conversationSummaryPayload),
+          workdirs: payload.value.workdirs.map((item) => ({
+            path: item.path,
+            conversationCount: item.conversationCount,
+            updatedAt: num(item.updatedAt),
+          })),
+          offset: payload.value.offset,
+          next_offset: payload.value.nextOffset,
+          total_count: payload.value.totalCount,
+        },
+      } as DecodedServerFrame;
     case "settingsEvent": {
       // settings_json 在客户端解析为现有设置事件对象。
       const parsed = settingsEventPayload(payload.value);
@@ -1603,6 +1676,9 @@ function historyEventPayload(event: HistorySyncEvent): J {
   const payload: J = {
     kind: event.kind.trim(),
     conversation_id: event.conversationId.trim(),
+    source_id: event.sourceId.trim(),
+    generation: event.generation.trim(),
+    delivery_seq: safeU64(event.deliverySeq),
   };
   if (event.conversation) {
     payload.conversation = conversationSummaryPayload(event.conversation);

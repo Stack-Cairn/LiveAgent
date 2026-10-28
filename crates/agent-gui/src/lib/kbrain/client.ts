@@ -17,13 +17,17 @@ import {
   type KBrainQuestionAnswer,
   type KBrainRunAccepted,
   type KBrainSession,
+  type KBrainSessionChanges,
   type KBrainSessionLoop,
   type KBrainSessionPage,
+  type KBrainSessionWorkdir,
   type KBrainSettingsDocument,
   type KBrainSettingsUpdate,
   type KBrainSharedProjection,
   type KBrainShareStatus,
   type KBrainSlashCommand,
+  type KBrainSyncSnapshot,
+  type KBrainSyncSnapshotPage,
   type KBrainTextGenerateRequest,
   type KBrainTextGenerateResponse,
   type KBrainUpdateSessionRequest,
@@ -171,7 +175,15 @@ async function readError(response: Response) {
     // Keep the original response body for non-JSON server errors.
   }
   const error = new Error(message || `K-brain request failed (${response.status})`);
-  Object.assign(error, { status: response.status });
+  const retryAfter = response.headers.get("Retry-After");
+  const seconds = retryAfter === null ? NaN : Number(retryAfter);
+  const retryAfterMs = Number.isFinite(seconds)
+    ? Math.max(0, seconds * 1000)
+    : Math.max(0, Date.parse(retryAfter ?? "") - Date.now());
+  Object.assign(error, {
+    status: response.status,
+    ...(Number.isFinite(retryAfterMs) ? { retryAfterMs } : {}),
+  });
   return error;
 }
 
@@ -240,6 +252,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
       cwd?: string;
       cwdEmpty?: boolean;
       shared?: boolean;
+      pinned?: boolean;
     } = {},
   ): Promise<KBrainSessionPage> {
     const query = new URLSearchParams();
@@ -248,6 +261,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     if (params.cwd !== undefined) query.set("cwd", params.cwd);
     if (params.cwdEmpty !== undefined) query.set("cwd_empty", String(params.cwdEmpty));
     if (params.shared !== undefined) query.set("shared", String(params.shared));
+    if (params.pinned !== undefined) query.set("pinned", String(params.pinned));
     const result = await request<KBrainSessionPage | KBrainSession[]>(`/v1/sessions?${query}`);
     return Array.isArray(result)
       ? { sessions: result, total_count: result.length }
@@ -255,7 +269,53 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
           sessions: result.sessions ?? [],
           total_count: result.total_count ?? result.sessions?.length ?? 0,
           version: result.version,
+          epoch: result.epoch,
+          revision: result.revision,
         };
+  }
+
+  function createSessionSnapshot(signal?: AbortSignal): Promise<KBrainSyncSnapshot> {
+    return request("/v1/sessions/snapshots", { method: "POST", body: "{}", signal });
+  }
+
+  function getSessionSnapshot(
+    id: string,
+    offset: number,
+    signal?: AbortSignal,
+  ): Promise<KBrainSyncSnapshotPage> {
+    return request(`/v1/sessions/snapshots/${encodeURIComponent(id)}?offset=${offset}&limit=500`, {
+      signal,
+    });
+  }
+
+  async function releaseSessionSnapshot(id: string): Promise<void> {
+    const response = await fetchKBrain(
+      `/v1/sessions/snapshots/${encodeURIComponent(id)}`,
+      {
+        method: "DELETE",
+        signal: AbortSignal.timeout(5_000),
+      },
+      inputOptions,
+    );
+    if (!response.ok) throw await readError(response);
+    await response.body?.cancel();
+  }
+
+  function getSessionChanges(
+    params: { epoch: string; since: string; wait: number; rescan?: boolean },
+    signal?: AbortSignal,
+  ): Promise<KBrainSessionChanges> {
+    const query = new URLSearchParams({
+      epoch: params.epoch,
+      since: params.since,
+      wait: String(params.wait),
+      rescan: params.rescan ? "1" : "0",
+    });
+    return request(`/v1/sessions/changes?${query}`, { signal });
+  }
+
+  function getSessionWorkdirs(signal?: AbortSignal): Promise<{ workdirs: KBrainSessionWorkdir[] }> {
+    return request("/v1/sessions/workdirs", { signal });
   }
 
   async function listModels(): Promise<KBrainModelRef[]> {
@@ -465,9 +525,12 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     return result;
   }
 
-  async function deleteSession(conversationId: string): Promise<{ ok: boolean }> {
-    return request<{ ok: boolean }>(`/v1/sessions/${encodeURIComponent(conversationId)}`, {
+  async function deleteSession(
+    conversationId: string,
+  ): Promise<{ ok: boolean; sync_epoch?: string; sync_revision?: string }> {
+    return request(`/v1/sessions/${encodeURIComponent(conversationId)}`, {
       method: "DELETE",
+      signal: AbortSignal.timeout(45_000),
     });
   }
 
@@ -496,6 +559,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     return request<KBrainSession>(`/v1/sessions/${encodeURIComponent(conversationId)}`, {
       method: "PATCH",
       body: JSON.stringify(input),
+      signal: AbortSignal.timeout(45_000),
     });
   }
 
@@ -847,6 +911,11 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     searchHistory,
     importLegacyHistory,
     listSessions,
+    createSessionSnapshot,
+    getSessionSnapshot,
+    releaseSessionSnapshot,
+    getSessionChanges,
+    getSessionWorkdirs,
     listModels,
     discoverProviderModels,
     revealProviderSecrets,
