@@ -6,7 +6,7 @@
 - K-brain：`origin/main`，`0dad9fdec4adbb2a6324974edc1d610c69b2a79b`，独立工作树 `D:/Documents/Projects/Go/K-brain-worktrees/session-sync-resources`，分支 `feat/session-sync-resources`。主检出已有用户改动保持原样。
 - 设计输入：`docs/design/2026-10-27-session-change-sync.md`；问题与证据：`docs/design/2026-10-28-session-change-sync-review.md`。
 - 用户本次明确免除人工验收；GUI/WebUI/TUI 场景由 Agent 自动执行并保存证据，不把“已启动”当作行为验证。
-- 对应问题：[Stack-Cairn/LiveAgent#1070](https://github.com/Stack-Cairn/LiveAgent/issues/1070)。实现PR：[LiveAgent#1071](https://github.com/Stack-Cairn/LiveAgent/pull/1071)。跨仓依赖：[K-brain#60](https://github.com/Stack-Cairn/K-brain/pull/60)，生产提交`482fd2d71fd9a85777e8f7e650379c39b6712684`、CI/文档head`a0cbc8f6f4276597efce4cabd95b8bdc02ddce63`；正式锁仍保持已有发布版本，未伪造未发布产物。
+- 对应问题：[Stack-Cairn/LiveAgent#1070](https://github.com/Stack-Cairn/LiveAgent/issues/1070)。实现PR：[LiveAgent#1071](https://github.com/Stack-Cairn/LiveAgent/pull/1071)。跨仓依赖：[K-brain#60](https://github.com/Stack-Cairn/K-brain/pull/60)，生产提交`482fd2d71fd9a85777e8f7e650379c39b6712684`、CI/文档head`a0cbc8f6f4276597efce4cabd95b8bdc02ddce63`；PR #60 已合入为 `51c827d3d56533550e67bc4f78ff7673fa7bd9a3`，用户授权发布的 `v0.107.6-beta.23` 构建已全部成功；当前 lock 更新到该 release 的真实下载地址与 SHA-256，下载和 LA CI 结果见 progress.md。
 
 ## 实施顺序
 

@@ -28,6 +28,17 @@
 
 ## 阶段历史
 
+### PR #60 合入后的发布与 LA lock 更新
+
+- 用户明确授权先触发 K-brain release，再更新 LA PR #1071。已确认 K-brain main/PR #60 merge 为 `51c827d3d56533550e67bc4f78ff7673fa7bd9a3`。
+- 创建未占用的预发布 tag `v0.107.6-beta.23`，固定到该 merge SHA，触发 Build K-brain run `40660044879`。待发布工作流终态及真实下载产物后更新 lock，不使用开发覆盖冒充发布产物。
+- merge 后 Session sync run `40658795442` 的 Linux 唯一全量失败为 `internal/browser.TestE2EDedicated` 的 `TempDir RemoveAll cleanup: directory not empty`；TUI 本轮通过，Windows/macOS成功。该失败保留，不能用发布成功替代完整测试结论。
+- 切回 PR 分支 `feat-session-sync-resources`。另一个 worktree 排查任务未提交的 `git.rs` 与其计划文档原样保留，只暂存本次 lock/发布记录文件，不纳入其他任务改动。原有两份用户设计文档继续未跟踪。
+- K-brain beta.23发布run `40660044879`终态全部成功：6个平台构建、3个平台computer协议/准备检查、Linux真实desktop integration、发布资产完成。真实release含SHA256SUMS。
+- LA lock已更新sourceRevision、releaseTag和4个受支持target的8个真实资产URL/SHA256。首次直连120秒超时保留，按全局规则仅该下载命令临时使用127.0.0.1:7890重试；4平台8文件全部由prepare release路径下载并通过hash，receipt origin均为locked-download。证据 `%TEMP%/liveagent-beta23-lock-FuY43o/verification.json`。
+- beta.23 Windows发布版backend SHA256 `88809043a0664da1224210013cb676c0c0ea72f009a0ad022a69f6b6a1560652`，computer `6a5744e0073b59751920cba46e9ed18685ff1114f6caebc29aa4122cc97a7a1b`。实际Relay/WebUI harness14/14通过：双真实WS、双实际WebUI、改名/置顶/移动/删除、错误cwd、鉴权拒绝恢复、重启epoch和单上游轮询。证据 `%TEMP%/liveagent-beta23-relay-20261028/results.json`。
+- 发布/打包回归13项=11pass/2Windows平台skip；摘要协调器/稳定映射13/13通过。历史final4性能长测保留原构建身份，不声称使用beta.23重新跑了30分钟。
+
 ### 阶段一：基线与原问题量化
 
 - 构造 248 个会话、251 MiB 的确定性隔离数据集；数据和模型请求不使用用户会话或密钥。
