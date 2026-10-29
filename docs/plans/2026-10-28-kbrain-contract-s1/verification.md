@@ -108,7 +108,7 @@ K-brain 权限分两层：每次运行的 `permission_mode`（normal / plan / au
 
 ## 未运行 / 未覆盖
 
-- 人工验收 3、5、6 未完成：3 需先配置审查模型；5、6 需从 WebUI 发起，且第二轮 Gateway 改动需要重启调试版才进入 sidecar。
+- 人工验收 1–7 已由用户在调试版与 WebUI 全部验证通过（2026-10-29），验收中发现的问题均已在第二至第六轮修复。
 - macOS / Linux；签名、存储门禁、迁移、更新器（S2–S6）。
 - 生图实例握手（S6），`/v1/terminal`、`/v1/fs` 未加闸门（S1 未要求）。
 - K0 尚未发布真实 tag，`kbrain.lock.json` 未改；`capabilities.json` 中 K0 新字段的首次发布 tag 待发布后补登记。
