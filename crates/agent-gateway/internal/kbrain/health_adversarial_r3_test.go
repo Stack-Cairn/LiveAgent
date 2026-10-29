@@ -54,8 +54,8 @@ func TestR3StoppingQueuedWorkIsRefusedOnContradictingBackend(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		backend.record(r)
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/v1/health":
+		switch r.URL.Path {
+		case "/v1/health":
 			_, _ = w.Write([]byte(r3ContradictingHealth))
 		default:
 			_, _ = w.Write([]byte(`{"version":"kbrain.agent.v1","accepted":true,"snapshot":{"conversationId":"session","revision":3,"items":[{"id":"item"}]},"receipt":{"id":"item","state":"queued"}}`))
