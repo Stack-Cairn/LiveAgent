@@ -46,7 +46,7 @@ function backend({ capability = 1, importStatus = 200, checkpoint = "not_found" 
   const fetch = async (url, init) => {
     const path = new URL(String(url)).pathname;
     if (path === "/v1/health") {
-      return new Response(JSON.stringify({ status: "ok", capabilities: capability ? { session_exists: capability } : {} }));
+      return new Response(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities: capability ? { session_exists: capability } : {} }));
     }
     if (path === "/v1/sessions/exists") {
       calls.exists++;

@@ -1,6 +1,7 @@
 import type { AssistantMessage, Context } from "@liveagent/app/lib/agentTypes";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import type { Locale } from "../../../i18n/config";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import type { SuppressedToolTraceSnapshot } from "../../../lib/chat/conversation/chatAbort";
 import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
@@ -45,6 +46,7 @@ export type PersistConversationParams = {
 };
 
 export type RunAgentConversationTurnParams = {
+  locale?: Locale;
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;

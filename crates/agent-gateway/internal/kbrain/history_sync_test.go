@@ -18,7 +18,7 @@ func TestRelayHistorySyncSnapshotChangesAndCancellation(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case req.URL.Path == "/v1/health":
-			fmt.Fprint(w, `{"status":"ok","capabilities":{"session_changes":2}}`)
+			fmt.Fprint(w, `{"status":"ok","version":"kbrain.agent.v1","capabilities":{"session_changes":2}}`)
 		case req.Method == http.MethodPost && req.URL.Path == "/v1/sessions/snapshots":
 			fmt.Fprint(w, `{"epoch":"epoch","revision":"0","snapshot_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_in_seconds":60,"total_count":1,"workdirs":[{"cwd":"/one","count":1,"updated_at":"2026-10-28T00:00:00Z"}]}`)
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/sessions/snapshots/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":
@@ -131,7 +131,7 @@ func TestRelayHistorySyncRetriesTransientCapabilityFailure(t *testing.T) {
 				fmt.Fprint(w, `{}`)
 				return
 			}
-			fmt.Fprint(w, `{"capabilities":{"session_changes":2}}`)
+			fmt.Fprint(w, `{"status":"ok","version":"kbrain.agent.v1","capabilities":{"session_changes":2}}`)
 		case req.Method == http.MethodPost && req.URL.Path == "/v1/sessions/snapshots":
 			fmt.Fprint(w, `{"epoch":"epoch","revision":"0","snapshot_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","expires_in_seconds":60,"total_count":0,"workdirs":[]}`)
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/sessions/snapshots/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":

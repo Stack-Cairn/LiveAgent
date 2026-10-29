@@ -1,0 +1,277 @@
+{
+  "schema": 1,
+  "source": "K-brain docs/compatibility.md section 2 and LiveAgent docs/design/2026-10-26-kbrain-decoupled-updates.md section 3.1. Shared by the TS, Rust and Go health parsers so all three hosts accept and reject the same bodies.",
+  "accept": [
+    {
+      "name": "legacy v1 minimal",
+      "body": { "status": "ok", "version": "kbrain.agent.v1" },
+      "legacy": true,
+      "minor": 0
+    },
+    {
+      "name": "legacy beta.23 with capabilities",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "capabilities": {
+          "session_changes": 2,
+          "session_queue": 1,
+          "computer_session_approval": 1,
+          "memory_switch": 1,
+          "image_model_toggle": 1,
+          "session_exists": 1,
+          "permission_modes": [
+            "normal",
+            "plan",
+            "auto_edit",
+            "full_access",
+            "always",
+            "auto_review"
+          ],
+          "image": { "supported": true, "version": "kbrain.image.v1" }
+        }
+      },
+      "legacy": true,
+      "minor": 0
+    },
+    {
+      "name": "K0 structured health",
+      "body": {
+        "version": "kbrain.agent.v1",
+        "status": "ok",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "build": {
+          "version": "v0.108.0-beta.1",
+          "revision": "1111111111111111111111111111111111111111",
+          "channel": "prerelease"
+        },
+        "startupContract": 1,
+        "instanceId": "c438bc67-0445-48c5-ad21-78403ad461ef",
+        "capabilityRevision": 1,
+        "capabilities": {
+          "session_changes": 2,
+          "session_queue": 1,
+          "computer_session_approval": 1,
+          "memory_switch": 1,
+          "image_model_toggle": 1,
+          "session_exists": 1,
+          "permission_modes": [
+            "normal",
+            "plan",
+            "auto_edit",
+            "full_access",
+            "always",
+            "auto_review"
+          ],
+          "image": { "supported": false, "version": "kbrain.image.v1" }
+        }
+      },
+      "legacy": false,
+      "minor": 1,
+      "buildVersion": "v0.108.0-beta.1",
+      "instanceId": "c438bc67-0445-48c5-ad21-78403ad461ef",
+      "capabilityRevision": 1
+    },
+    {
+      "name": "structured dev build without revision",
+      "body": {
+        "version": "kbrain.agent.v1",
+        "status": "ok",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "build": { "version": "dev", "channel": "dev" },
+        "startupContract": 1,
+        "instanceId": "x",
+        "capabilityRevision": 1
+      },
+      "legacy": false,
+      "minor": 1,
+      "buildVersion": "dev"
+    },
+    {
+      "name": "future additive fields are ignored",
+      "body": {
+        "version": "kbrain.agent.v1",
+        "status": "ok",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 9, "extra": true },
+        "storage": { "state": "ready" },
+        "somethingNew": [1]
+      },
+      "legacy": false,
+      "minor": 9
+    },
+    {
+      "name": "integers written as 1.0 and -0 are judged by value (exponent and raw-token spellings: agent-gui/test/chat/kbrain-health-adversarial-vectors.json)",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1.0, "minor": 1 },
+        "startupContract": 1.0,
+        "capabilityRevision": -0
+      },
+      "legacy": false,
+      "minor": 1
+    },
+    {
+      "name": "largest safe integer is accepted",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 9007199254740991 }
+      },
+      "legacy": false,
+      "minor": 9007199254740991
+    }
+  ],
+  "reject": [
+    { "name": "body is not an object", "body": ["ok"] },
+    { "name": "body is null", "body": null },
+    { "name": "status missing", "body": { "version": "kbrain.agent.v1" } },
+    { "name": "status not ok", "body": { "status": "starting", "version": "kbrain.agent.v1" } },
+    {
+      "name": "legacy version missing",
+      "body": { "status": "ok", "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 } }
+    },
+    { "name": "legacy version is v2", "body": { "status": "ok", "version": "kbrain.agent.v2" } },
+    { "name": "legacy version wrong type", "body": { "status": "ok", "version": 1 } },
+    {
+      "name": "protocol null is a type error, not missing",
+      "body": { "status": "ok", "version": "kbrain.agent.v1", "protocol": null }
+    },
+    {
+      "name": "protocol string",
+      "body": { "status": "ok", "version": "kbrain.agent.v1", "protocol": "kbrain.agent" }
+    },
+    {
+      "name": "protocol major contradicts v1",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 2, "minor": 0 }
+      }
+    },
+    {
+      "name": "protocol name contradicts",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "other.agent", "major": 1, "minor": 0 }
+      }
+    },
+    {
+      "name": "protocol major as string",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": "1", "minor": 0 }
+      }
+    },
+    {
+      "name": "protocol minor missing",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1 }
+      }
+    },
+    {
+      "name": "protocol minor fractional",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1.5 }
+      }
+    },
+    {
+      "name": "protocol minor negative",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": -1 }
+      }
+    },
+    {
+      "name": "capabilities not an object",
+      "body": { "status": "ok", "version": "kbrain.agent.v1", "capabilities": [] }
+    },
+    {
+      "name": "instanceId wrong type",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "instanceId": 7
+      }
+    },
+    {
+      "name": "capabilityRevision fractional",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "capabilityRevision": 1.5
+      }
+    },
+    {
+      "name": "startupContract wrong type",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "startupContract": "1"
+      }
+    },
+    {
+      "name": "build not an object",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "build": "v1"
+      }
+    },
+    {
+      "name": "build version missing",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "build": { "channel": "dev" }
+      }
+    },
+    {
+      "name": "build revision wrong type",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "build": { "version": "dev", "channel": "dev", "revision": 5 }
+      }
+    },
+    {
+      "name": "minor above 2^53-1",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 9007199254740993 }
+      }
+    },
+    {
+      "name": "capabilityRevision 2^63",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "capabilityRevision": 9223372036854775808
+      }
+    },
+    {
+      "name": "build version only whitespace",
+      "body": {
+        "status": "ok",
+        "version": "kbrain.agent.v1",
+        "protocol": { "name": "kbrain.agent", "major": 1, "minor": 1 },
+        "build": { "version": "   ", "channel": "dev" }
+      }
+    }
+  ]
+}

@@ -11,10 +11,11 @@ use std::time::{Duration, Instant};
 
 use reqwest::blocking::Client;
 use reqwest::header::AUTHORIZATION;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::runtime::process::terminate_child_process_tree;
+use crate::services::kbrain_health::parse_health;
 use crate::services::system_proxy;
 
 const BACKEND_DIR: &str = "kbrain";
@@ -41,12 +42,6 @@ pub struct KBrainBackendConnection {
     pub token: String,
     pub protocol_version: String,
     pub storage_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct HealthResponse {
-    status: String,
-    version: String,
 }
 
 struct BackendProcess {
@@ -579,19 +574,14 @@ fn wait_for_health(
             .header(AUTHORIZATION, format!("Bearer {}", connection.token))
             .send()
             .and_then(|response| response.error_for_status())
-            .and_then(|response| response.json::<HealthResponse>());
+            .and_then(|response| response.json::<serde_json::Value>());
         check_startup_process(child, events, cancelled)?;
         if Instant::now() >= deadline {
             return Err("K-brain backend health check timed out".into());
         }
-        if let Ok(health) = result {
-            if health.status == "ok" && health.version == PROTOCOL_VERSION {
-                return Ok(());
-            }
-            return Err(format!(
-                "K-brain backend protocol mismatch (reported version {})",
-                health.version
-            ));
+        // 传输或 JSON 错误继续等待；拿到 JSON 后按契约判定，矛盾或类型错误立即失败。
+        if let Ok(body) = result {
+            return parse_health(&body).map(|_| ());
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         thread::sleep(remaining.min(Duration::from_millis(100)));

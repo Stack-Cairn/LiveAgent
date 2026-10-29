@@ -454,8 +454,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.runtime.reasoningCompact.xhigh": "极高",
   "chat.runtime.reasoningCompact.max": "最高",
   "chat.safety.label": "命令执行方式",
-  "chat.safety.ask": "变更前确认",
-  "chat.safety.askDesc": "运行前逐条请求审批，只读操作无需确认",
+  "chat.safety.ask": "始终询问",
+  "chat.safety.askDesc": "每个需要授权的操作都先请求审批",
   "chat.safety.auto": "完全访问",
   "chat.safety.autoDesc": "自动执行工具，仍遵守后端显式禁止规则和 AI 审批配置",
   "chat.safety.autoEdit": "自动编辑",
@@ -464,6 +464,9 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.safety.alwaysDesc":
     "使用 K-brain always 模式，跳过交互审批和 AI 审查，仍遵守显式禁止及目录边界",
   "chat.safety.autoReview": "自动审查",
+  "chat.safety.autoReviewNeedsModel":
+    "还没有选择审查模型：每次操作都要你确认，工具输出也不会交给模型。",
+  "chat.safety.configureReviewer": "去设置审查模型",
   "chat.safety.autoReviewDesc": "由 K-brain AI 审查；低风险自动批准，未知或高风险交由用户确认",
   "chat.safety.sandbox": "沙箱",
   "chat.safety.sandboxDesc": "在沙箱内运行，写入受限、敏感目录不可读",

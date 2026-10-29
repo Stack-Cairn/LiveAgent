@@ -2,7 +2,6 @@ package kbrain
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -77,27 +76,13 @@ func parseHistoryRevision(value string) (uint64, error) {
 }
 
 func (c *Client) supportsSessionChanges(ctx context.Context) (bool, error) {
-	var raw json.RawMessage
-	resp, err := c.request(ctx, http.MethodGet, "/v1/health", nil, &raw)
+	// Contract violations are returned like transport errors so the relay
+	// reports history as unavailable instead of silently polling forever.
+	health, _, err := c.Health(ctx)
 	if err != nil {
 		return false, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("kbrain health: %s", resp.Status)
-	}
-	var health struct {
-		Capabilities map[string]json.RawMessage `json:"capabilities"`
-	}
-	if err := json.Unmarshal(raw, &health); err != nil {
-		// Older test and deployment endpoints can expose a non-object health
-		// body. They simply do not negotiate session_changes v2.
-		return false, nil
-	}
-	var version int
-	if raw := health.Capabilities["session_changes"]; len(raw) > 0 {
-		_ = json.Unmarshal(raw, &version)
-	}
-	return version >= 2, nil
+	return health.CapabilityAtLeast("session_changes", 2), nil
 }
 
 func (c *Client) createHistorySnapshot(ctx context.Context) (historySnapshotStart, error) {
@@ -311,6 +296,18 @@ func (r *Relay) syncHistoryGeneration(callbacks Callbacks) error {
 		}
 		for _, item := range validated {
 			change := item.change
+			// K-brain keeps a new session unlisted until its first message is
+			// persisted. Only sessions that were listed have a browser row to
+			// delete; a never-listed one may be a WebUI pending conversation.
+			_, wasListed := sessions[change.ID]
+			if change.Kind == "upsert" && change.Listed && change.Session != nil {
+				sessions[change.ID] = *change.Session
+			} else {
+				delete(sessions, change.ID)
+				if change.Kind != "delete" && !wasListed {
+					continue
+				}
+			}
 			if deliverySeq >= 1<<53-1 {
 				return errors.New("gateway history delivery sequence exhausted")
 			}

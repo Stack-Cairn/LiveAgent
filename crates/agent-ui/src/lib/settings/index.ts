@@ -1489,19 +1489,20 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
 /**
  * 命令安全模式归一。
  *
- * - 缺失 / null / 空串:沿用默认 `auto`(全新配置与旧快照的正常形态)。
+ * - 缺失 / null / 空串:默认 `always`(全新配置与旧快照的正常形态)。
+ * - 旧值 `auto`(已下线的"完全访问")迁移为 `always`(始终允许)。
  * - **存在但无法识别:收敛到最严格的 `ask`**(P2#6)。该设置全部意义在于约束,
  *   未来新增的模式值、回退到旧版本、手改配置的笔误若静默降级成最宽松的非 ask 值,
  *   等于悄悄放宽用户的约束选择;Rust 侧 normalize_command_safety_mode_value 同语义。
  */
 export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
-  if (input === undefined || input === null) return "auto";
+  if (input === undefined || input === null) return "always";
   if (typeof input !== "string") {
     console.warn(`[settings] non-string commandSafetyMode; failing closed to "ask"`, input);
     return "ask";
   }
   const mode = input.trim();
-  if (mode === "") return "auto";
+  if (mode === "" || mode === "auto") return "always";
   if ((COMMAND_SAFETY_MODES as readonly string[]).includes(mode)) {
     return mode as CommandSafetyMode;
   }
@@ -1841,7 +1842,7 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
-      commandSafetyMode: "auto",
+      commandSafetyMode: "always",
       browserAutomationMode: "auto",
       defaultTimeZone: "",
       workspaceProjects: [],

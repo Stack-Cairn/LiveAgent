@@ -207,6 +207,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       hookLifecycle.startTurn(round);
       latestGoalState = undefined;
       const assistant = await runKBrainTurn({
+        locale: params.locale,
         conversationId: params.conversationId,
         sessionId: params.sessionId,
         clientRequestId:

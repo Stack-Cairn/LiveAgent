@@ -34,7 +34,7 @@ test("stable migration verifies existence, repairs only 404, and honors backend 
   let gets = 0;
   const fetch = async (_url, init) => {
     // A backend without session_exists keeps the listing/lookup path under test.
-    if (String(_url).endsWith("/v1/health")) return new Response(JSON.stringify({ status: "ok", capabilities: {} }));
+    if (String(_url).endsWith("/v1/health")) return new Response(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities: {} }));
     // The session listing is a separate existence source; an empty listing keeps every
     // assertion below about the per-session lookup meaningful.
     if (String(_url).includes("/v1/sessions?")) return new Response(JSON.stringify({ sessions: [], total_count: 0 }), { status: 200 });
@@ -278,7 +278,7 @@ test("one session listing answers existence checks without a lookup per conversa
   let listings = 0;
   let lookups = 0;
   const fetch = async (url, init) => {
-    if (String(url).endsWith("/v1/health")) return new Response(JSON.stringify({ status: "ok", capabilities: {} }));
+    if (String(url).endsWith("/v1/health")) return new Response(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities: {} }));
     if (String(url).includes("/v1/sessions?")) {
       listings++;
       return new Response(JSON.stringify({ sessions: [{ id: "recoverable" }], total_count: 1 }), { status: 200 });
@@ -309,7 +309,7 @@ function sessionExistsBackend({ existing = new Set(["recoverable"]), capability 
     const path = new URL(String(url)).pathname;
     if (path === "/v1/health") {
       calls.health++;
-      return new Response(JSON.stringify({ status: "ok", capabilities: capability === undefined ? {} : { session_exists: capability } }));
+      return new Response(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities: capability === undefined ? {} : { session_exists: capability } }));
     }
     if (path === "/v1/sessions/exists") {
       const { ids } = JSON.parse(init.body);

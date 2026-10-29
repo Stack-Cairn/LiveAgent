@@ -222,6 +222,24 @@ test("browser bootstrap rejects protocol mismatch, timeout, and cancellation", a
     }),
     /protocol mismatch/,
   );
+  // A03: structured fields that contradict the legacy v1 marker are a broken contract.
+  await assert.rejects(
+    browserBootstrap.connectKBrainBackend(async () => ({}), {
+      fetch: async () =>
+        new Response(
+          JSON.stringify({ status: "ok", version: "kbrain.agent.v1", protocol: { name: "kbrain.agent", major: 2, minor: 0 } }),
+          { status: 200 },
+        ),
+    }),
+    /health contract violation: protocol/,
+  );
+  await assert.rejects(
+    browserBootstrap.connectKBrainBackend(async () => ({}), {
+      fetch: async () =>
+        new Response(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", protocol: null }), { status: 200 }),
+    }),
+    /protocol must be an object/,
+  );
   await assert.rejects(
     browserBootstrap.connectKBrainBackend(async () => ({}), {
       timeoutMs: 1,

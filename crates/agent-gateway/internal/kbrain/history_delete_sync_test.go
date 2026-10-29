@@ -21,7 +21,7 @@ func TestRelayDeleteRetainsAliasUntilOrderedDeleteIsDelivered(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case req.URL.Path == "/v1/health":
-			fmt.Fprint(w, `{"capabilities":{"session_changes":2}}`)
+			fmt.Fprint(w, `{"status":"ok","version":"kbrain.agent.v1","capabilities":{"session_changes":2}}`)
 		case req.Method == http.MethodPost && req.URL.Path == "/v1/sessions/snapshots":
 			fmt.Fprint(w, `{"epoch":"e","revision":"0","snapshot_id":"s","total_count":1}`)
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/sessions/snapshots/s":

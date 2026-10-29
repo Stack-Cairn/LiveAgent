@@ -293,14 +293,25 @@ function useProviderModalController({
   const apiKeyIsStoredValue =
     apiKeyIsRedactedDisplay || (revealedApiKey !== null && apiKey === revealedApiKey);
   const apiKeyForRequest = apiKeyIsStoredValue ? "" : apiKey.trim();
+  // K-brain uses the stored key by provider ID, also for an edited address (as
+  // saving does). A K-brain from before that change drops it for a new address;
+  // that refusal is answered with a prompt to type the key again.
   const canReuseStoredApiKey =
     providerCredentialsRedacted &&
     apiKeyIsStoredValue &&
     Boolean(initialData?.id) &&
-    initialData?.apiKeyConfigured === true &&
-    baseUrl.trim() === (initialData.baseUrl ?? "").trim() &&
-    modelsUrl.trim() === (providerType === "gemini" ? "" : (initialData.modelsUrl ?? "").trim()) &&
-    useSystemProxy === (initialData.useSystemProxy ?? false);
+    initialData?.apiKeyConfigured === true;
+  const storedAddressChangedRef = useRef(false);
+  storedAddressChangedRef.current =
+    canReuseStoredApiKey &&
+    !(
+      baseUrl.trim() === (initialData?.baseUrl ?? "").trim() &&
+      modelsUrl.trim() ===
+        (providerType === "gemini" ? "" : (initialData?.modelsUrl ?? "").trim()) &&
+      useSystemProxy === (initialData?.useSystemProxy ?? false)
+    );
+  const modelsNeedApiKeyMessageRef = useRef("");
+  modelsNeedApiKeyMessageRef.current = t("settings.providerModelsNeedApiKey");
   const toggleShowApiKey = useCallback(async () => {
     if (showApiKey) {
       setShowApiKey(false);
@@ -401,7 +412,12 @@ function useProviderModalController({
         commitModelsWithNewRowsRef.current(mergedModels);
       } catch (err) {
         if (generation === modelFetchGeneration.current) {
-          setFetchError(err instanceof Error ? err.message : String(err));
+          const message = err instanceof Error ? err.message : String(err);
+          const storedKeyRefused =
+            !key &&
+            storedAddressChangedRef.current &&
+            /credentials or endpoint are not configured/i.test(message);
+          setFetchError(storedKeyRefused ? modelsNeedApiKeyMessageRef.current : message);
         }
       } finally {
         if (generation === modelFetchGeneration.current) setFetchingModels(false);
@@ -425,18 +441,19 @@ function useProviderModalController({
     const trimUrl = baseUrl.trim();
     const trimModelsUrl = providerType === "gemini" ? "" : modelsUrl.trim();
     const trimKey = apiKeyForRequest;
+    // Without a typed key, K-brain reuses the stored one by provider ID.
+    if ((!trimUrl && !trimModelsUrl) || (!trimKey && !canReuseStoredApiKey)) return;
     const key =
       providerType +
       ":" +
       buildProviderModelsFetchKey(
         trimUrl,
-        trimKey,
+        trimKey || `stored:${initialData?.id ?? ""}`,
         useSystemProxy,
         isFullUrl,
         trimModelsUrl,
         effectiveCustomHeaders,
       );
-    if ((!trimUrl && !trimModelsUrl) || !trimKey) return;
     if (key === prevFetchKey.current) return;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -453,9 +470,11 @@ function useProviderModalController({
   }, [
     apiKeyForRequest,
     baseUrl,
+    canReuseStoredApiKey,
     providerType,
     doFetch,
     effectiveCustomHeaders,
+    initialData?.id,
     isFullUrl,
     modelsUrl,
     useSystemProxy,

@@ -1256,7 +1256,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
-                "commandSafetyMode": "auto",
+                "commandSafetyMode": "always",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),
@@ -1592,7 +1592,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
-                "commandSafetyMode": "auto",
+                "commandSafetyMode": "always",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),
@@ -1649,7 +1649,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
-                "commandSafetyMode": "auto",
+                "commandSafetyMode": "always",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),
@@ -1676,19 +1676,24 @@ mod tests {
     // save_system 会把归一结果破坏性地写回磁盘。
     #[test]
     fn command_safety_mode_unrecognized_value_fails_closed_to_ask() {
-        // 缺失 / null / 空串:正常缺省形态,沿用 auto。
-        assert_eq!(normalize_command_safety_mode_value(None), json!("auto"));
+        // 缺失 / null / 空串:正常缺省形态,默认 always。
+        assert_eq!(normalize_command_safety_mode_value(None), json!("always"));
         assert_eq!(
             normalize_command_safety_mode_value(Some(&Value::Null)),
-            json!("auto")
+            json!("always")
         );
         assert_eq!(
             normalize_command_safety_mode_value(Some(&json!("   "))),
-            json!("auto")
+            json!("always")
+        );
+        // 已下线的"完全访问"(auto)迁移为"始终允许"。
+        assert_eq!(
+            normalize_command_safety_mode_value(Some(&json!(" auto "))),
+            json!("always")
         );
         // 合法值原样保留(含空白裁剪)。
         for mode in [
-            "ask", "auto", "autoEdit", "always", "autoReview", "sandbox", "sandboxOffline",
+            "ask", "autoEdit", "always", "autoReview", "sandbox", "sandboxOffline",
         ] {
             assert_eq!(
                 normalize_command_safety_mode_value(Some(&json!(format!(" {mode} ")))),
@@ -1730,7 +1735,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "workspaceResourceSettings": {},
-                "commandSafetyMode": "auto",
+                "commandSafetyMode": "always",
                 "browserAutomationMode": "auto",
                 "defaultTimeZone": "",
                 "systemProxy": default_system_proxy_json(),

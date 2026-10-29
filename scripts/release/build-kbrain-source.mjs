@@ -25,7 +25,7 @@ export async function buildSource(options = {}) {
     const sha256 = {};
     for (const [kind, command] of [["backend", "./cmd/kn"], ["computer", "./cmd/k-brain-computer"]]) {
       const destination = join(output, platform.assets[kind]);
-      run("go", ["build", "-trimpath", "-ldflags", `-s -w -X main.version=${lock.sourceRevision}`, "-o", destination, command], { cwd: source, env, stdio: "inherit" });
+      run("go", ["build", "-trimpath", "-ldflags", `-s -w -X main.version=dev -X main.revision=${lock.sourceRevision}`, "-o", destination, command], { cwd: source, env, stdio: "inherit" });
       sha256[kind] = createHash("sha256").update(await readFile(destination)).digest("hex");
     }
     const record = { schemaVersion: 1, repository: lock.repository, sourceRevision: lock.sourceRevision, protocol: lock.protocol, platforms: { [target]: { assets: platform.assets, sha256 } } };

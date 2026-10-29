@@ -307,12 +307,10 @@ func kbrainOptions(body handler.ChatRequestBody) *kbrain.RunOptions {
 		options.Mode = "agent"
 	}
 	switch body.CommandSafetyMode {
-	case "auto":
-		options.ApprovalPolicy = "auto"
-		options.PermissionMode = "full_access"
 	case "autoEdit":
 		options.PermissionMode = "auto_edit"
-	case "always":
+	case "always", "auto":
+		// "auto" is the retired "full access" mode; clients migrate it to "always".
 		options.PermissionMode = "always"
 	case "autoReview":
 		options.PermissionMode = "auto_review"

@@ -613,13 +613,16 @@ const COMMAND_SAFETY_MODES: [&str; 7] = [
     "ask", "auto", "autoEdit", "always", "autoReview", "sandbox", "sandboxOffline",
 ];
 /// 键缺失(全新配置/旧快照)时的默认值。
-const COMMAND_SAFETY_MODE_DEFAULT: &str = "auto";
+const COMMAND_SAFETY_MODE_DEFAULT: &str = "always";
+/// 已下线的"完全访问"旧值,读取时迁移为"始终允许"。
+const COMMAND_SAFETY_MODE_RETIRED_AUTO: &str = "auto";
 /// 存在但无法识别时收敛到的最严格值(逐次人工放行)。
 const COMMAND_SAFETY_MODE_FAIL_CLOSED: &str = "ask";
 
 /// 保留受支持的权限模式，未知值收敛到 "ask"。
 ///
-/// - 键缺失 / null / 空串:沿用默认 "auto"(全新配置与旧快照的正常形态)。
+/// - 键缺失 / null / 空串:默认 "always"(全新配置与旧快照的正常形态)。
+/// - 旧值 "auto"(已下线的"完全访问")迁移为 "always"(始终允许),随下次保存持久化。
 /// - **存在但无法识别:收敛到最严格的 "ask"**(P2#6)。该设置全部意义在于约束,而
 ///   `save_system` 会先删除全部 system key 再按白名单重插,故此处的默认值不只是读取
 ///   期兜底,而是会被破坏性地持久化。未来新增的模式值、回退到旧版本、手改配置的
@@ -639,7 +642,7 @@ fn normalize_command_safety_mode_value(raw: Option<&Value>) -> Value {
         );
         return Value::String(COMMAND_SAFETY_MODE_FAIL_CLOSED.to_string());
     };
-    if text.is_empty() {
+    if text.is_empty() || text == COMMAND_SAFETY_MODE_RETIRED_AUTO {
         return Value::String(COMMAND_SAFETY_MODE_DEFAULT.to_string());
     }
     if COMMAND_SAFETY_MODES.contains(&text) {

@@ -1472,6 +1472,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         await chatRuntimeHost.runTurn({
           mode: "agent",
           params: {
+            locale: settings.locale,
             providerId,
             model,
             runtime: providerConfig,
@@ -1572,6 +1573,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         await chatRuntimeHost.runTurn({
           mode: "text",
           params: {
+            locale: settings.locale,
             providerId,
             model,
             runtime: providerConfig,

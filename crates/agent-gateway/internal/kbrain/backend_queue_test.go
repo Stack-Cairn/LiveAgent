@@ -277,6 +277,9 @@ func TestBackendQueueCanonicalReloadCanOperateBeforeHistoryMapping(t *testing.T)
 			}
 		case "/v1/sessions/canonical/queue":
 			reads++
+		case "/v1/health":
+			fmt.Fprint(w, `{"status":"ok","version":"kbrain.agent.v1","capabilities":{"session_queue":1}}`)
+			return
 		default:
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -296,7 +299,9 @@ func TestBackendQueueCanonicalReloadCanOperateBeforeHistoryMapping(t *testing.T)
 }
 
 func TestBackendQueueCapabilityKeepsLegacyWorkOwnedByRelay(t *testing.T) {
-	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"capabilities":{"session_queue":1}}`) }))
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"status":"ok","version":"kbrain.agent.v1","capabilities":{"session_queue":1}}`)
+	}))
 	defer h.Close()
 	client, _ := New(h.URL, "", h.Client())
 	relay, _ := NewRelay(client, "target", ModelRef{}, "")

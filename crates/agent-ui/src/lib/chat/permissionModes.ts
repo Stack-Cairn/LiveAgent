@@ -16,8 +16,9 @@ export function resolveKBrainPermissionMode(
   switch (mode) {
     case "autoEdit":
       return "auto_edit";
+    // Legacy "auto" (retired "full access") runs as "always", matching the
+    // settings migration, should an older client still send it.
     case "auto":
-      return "full_access";
     case "always":
       return "always";
     case "autoReview":

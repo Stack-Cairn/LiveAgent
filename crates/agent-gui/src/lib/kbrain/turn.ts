@@ -13,11 +13,13 @@ import {
   type RunProgress,
 } from "@liveagent/ui/lib/chat/runProgress";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
+import type { Locale } from "../../i18n/config";
 import type { ConversationViewState } from "../chat/conversation/conversationState";
 import { appendMessagesToConversation } from "../chat/conversation/conversationState";
 import { createKBrainClient } from "./client";
 import { getKBrainSessionId, setKBrainSessionId } from "./mapping";
 import { questionResultDetails } from "./questions";
+import { aiReviewTitle, localizeAIReviewReason } from "./reviewNotice";
 import type {
   KBrainClientToolRequest,
   KBrainClientToolResult,
@@ -149,6 +151,7 @@ export type KBrainPermissionRequest = {
 };
 
 export type KBrainTurnParams = {
+  locale?: Locale;
   conversationId: string;
   sessionId: string;
   cwd?: string;
@@ -754,8 +757,8 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           review &&
           Object.entries(review.report).some(([key, value]) => key !== "reason" && value !== "low")
         ) {
-          toast.warning(`AI review · ${review.tool}`, {
-            description: review.report.reason,
+          toast.warning(aiReviewTitle(review.tool, params.locale), {
+            description: localizeAIReviewReason(review.report.reason, params.locale),
             id: `ai-review-${params.conversationId}`,
             duration: 15000,
           });

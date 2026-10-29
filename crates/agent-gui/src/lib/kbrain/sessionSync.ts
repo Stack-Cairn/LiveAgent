@@ -1,3 +1,4 @@
+import { capabilityAtLeast } from "@liveagent/ui/lib/kbrain/health";
 import type { KBrainClient } from "./client";
 import type { KBrainSession, KBrainSessionChanges, KBrainSessionWorkdir } from "./types";
 
@@ -234,7 +235,7 @@ export function createKBrainSessionSync(options: SessionSyncOptions) {
         ]);
         const capabilities = await options.client.getCapabilities(initializationSignal);
         if (signal.aborted) return;
-        if (typeof capabilities.session_changes !== "number" || capabilities.session_changes < 2) {
+        if (!capabilityAtLeast({ capabilities }, "session_changes", 2)) {
           health(false);
           await delay(options.legacyProbeMs ?? 300_000, signal);
           continue;

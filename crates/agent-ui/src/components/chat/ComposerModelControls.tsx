@@ -237,6 +237,38 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     const selector = view === "root" ? "button" : "[data-model-back]";
     popoverContentRef.current?.querySelector<HTMLButtonElement>(selector)?.focus();
   }, [view, isModelPickerOpen]);
+  // Entering the model list brings the active model into view, expanding its
+  // provider when collapsed, so a long catalog does not hide the current choice.
+  // A provider filter for another provider is left alone.
+  const selectedProviderId = selectedOption?.providerId;
+  // Read on entry only: changing the filter later must not jump the list.
+  const providerFilterRef = useRef(providerFilter);
+  providerFilterRef.current = providerFilter;
+  useEffect(() => {
+    if (!isModelPickerOpen || view !== "model" || !selectedProviderId) return;
+    const filter = providerFilterRef.current;
+    if (filter && filter !== selectedProviderId) return;
+    setCollapsedProviders((previous) => {
+      if (!previous.has(selectedProviderId)) return previous;
+      const next = new Set(previous);
+      next.delete(selectedProviderId);
+      return next;
+    });
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const selected = popoverContentRef.current?.querySelector<HTMLElement>(
+          'button[data-model-option][aria-pressed="true"]',
+        );
+        const viewport = selected?.closest<HTMLElement>("[data-scroll-viewport]");
+        if (!selected || !viewport) return;
+        const area = viewport.getBoundingClientRect();
+        const row = selected.getBoundingClientRect();
+        // Center the row; this also keeps it clear of the sticky provider header.
+        viewport.scrollTop += row.top - area.top - (area.height - row.height) / 2;
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isModelPickerOpen, view, selectedProviderId]);
   const resolveModelPickerInitialFocus = (openType: string) => {
     const openedByTouch = openType === "touch";
     if (openedByTouch || isCoarsePointer()) {

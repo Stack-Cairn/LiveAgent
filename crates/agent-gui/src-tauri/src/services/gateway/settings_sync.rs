@@ -17,19 +17,25 @@ impl GatewayController {
         Ok(self.settings_snapshot_and_backend().await?.0)
     }
 
-    /// The settings.get answer: the snapshot plus K-brain's memory switch taken from the
-    /// same K-brain settings read, so a successful answer always carries the switch of a
-    /// backend that has one. The switch is never cached or synced as LiveAgent settings.
+    /// The settings.get answer: the snapshot plus K-brain's memory switch and AI approval
+    /// reviewer taken from the same K-brain settings read, so a successful answer always
+    /// carries them for a backend that has them. Neither is cached or synced as LiveAgent
+    /// settings.
     pub(crate) async fn settings_get_snapshot(&self) -> Result<Value, String> {
         let (mut snapshot, backend) = self.settings_snapshot_and_backend().await?;
-        if let (Some(switch), Some(map)) = (
-            super::kbrain_memory::switch_from_settings(&backend),
-            snapshot.as_object_mut(),
-        ) {
-            map.insert(
-                super::kbrain_memory::KBRAIN_MEMORY_FIELD.to_string(),
-                switch,
-            );
+        if let Some(map) = snapshot.as_object_mut() {
+            if let Some(switch) = super::kbrain_memory::switch_from_settings(&backend) {
+                map.insert(
+                    super::kbrain_memory::KBRAIN_MEMORY_FIELD.to_string(),
+                    switch,
+                );
+            }
+            if let Some(approval) = super::kbrain_ai_approval::approval_from_settings(&backend) {
+                map.insert(
+                    super::kbrain_ai_approval::AI_APPROVAL_FIELD.to_string(),
+                    approval,
+                );
+            }
         }
         Ok(snapshot)
     }
