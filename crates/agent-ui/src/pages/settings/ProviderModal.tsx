@@ -387,7 +387,7 @@ function useProviderModalController({
       try {
         const list = await discoverProviderModels({
           type: providerType,
-          requestFormat,
+          requestFormat: providerType === "codex" ? requestFormat : undefined,
           baseUrl: url,
           apiKey: key,
           useSystemProxy,
@@ -428,6 +428,8 @@ function useProviderModalController({
     const key =
       providerType +
       ":" +
+      (canReuseStoredApiKey ? initialData?.id : "") +
+      ":" +
       buildProviderModelsFetchKey(
         trimUrl,
         trimKey,
@@ -436,7 +438,7 @@ function useProviderModalController({
         trimModelsUrl,
         effectiveCustomHeaders,
       );
-    if ((!trimUrl && !trimModelsUrl) || !trimKey) return;
+    if ((!trimUrl && !trimModelsUrl) || (!trimKey && !canReuseStoredApiKey)) return;
     if (key === prevFetchKey.current) return;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -453,6 +455,8 @@ function useProviderModalController({
   }, [
     apiKeyForRequest,
     baseUrl,
+    canReuseStoredApiKey,
+    initialData?.id,
     providerType,
     doFetch,
     effectiveCustomHeaders,
