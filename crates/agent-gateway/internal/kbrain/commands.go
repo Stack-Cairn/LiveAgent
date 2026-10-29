@@ -58,6 +58,9 @@ func (r *Relay) Loops(ctx context.Context, req *gatewayv2.LoopManageRequest) (*g
 			return nil, err
 		}
 	case "create":
+		if err := r.client.requireHandshake(ctx, ""); err != nil {
+			return nil, err
+		}
 		var loop gatewayv2.LoopSummary
 		input := map[string]string{"cron": req.GetCron(), "interval": req.GetInterval(), "prompt": req.GetPrompt(), "reasoning": req.GetReasoning()}
 		if err := r.commandResource(ctx, http.MethodPost, path, input, &loop); err != nil {

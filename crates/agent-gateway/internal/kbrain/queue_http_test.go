@@ -183,6 +183,8 @@ func newQueueHTTPBackendWithQueueState(t *testing.T, path string) (*Relay, *queu
 			}
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = fmt.Fprintf(w, `{"version":"kbrain.agent.v1","conversation_id":"queue-regression","run_id":"backend-%d","accepted_seq":%d}`, run, 2*run-1)
+		case req.Method == http.MethodGet && req.URL.Path == "/v1/health":
+			_, _ = w.Write([]byte(`{"status":"ok","version":"kbrain.agent.v1"}`))
 		case req.Method == http.MethodPost && req.URL.Path == "/v1/sessions/queue-regression/runs/backend-1/cancel":
 			backend.cancelSeen <- struct{}{}
 			w.WriteHeader(http.StatusOK)

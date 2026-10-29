@@ -2,7 +2,6 @@ package kbrain
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -81,37 +80,18 @@ func (c *Client) sessionQueue(ctx context.Context, method, sessionID, suffix str
 // EnableBackendQueue selects backend ownership only when explicitly advertised.
 // Existing relay-owned work drains through its original executor before migration.
 func (r *Relay) EnableBackendQueue(ctx context.Context, callbacks Callbacks) error {
-	var health struct {
-		Capabilities struct {
-			SessionQueue int `json:"session_queue"`
-		} `json:"capabilities"`
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.client.BaseURL+"/v1/health", nil)
-	if err != nil {
-		return err
-	}
-	if r.client.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+r.client.Token)
-	}
-	resp, err := r.client.HTTP.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == 404 {
+	health, resp, err := readHealth(ctx, r.client.HTTP, r.client.BaseURL, r.client.Token)
+	if resp != nil && resp.StatusCode == http.StatusNotFound {
 		if r.usesBackendQueue() {
 			return fmt.Errorf("backend-owned queue requires a compatible K-brain")
 		}
 		return nil
 	}
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("kbrain health: %s", resp.Status)
-	}
-	if err = json.NewDecoder(resp.Body).Decode(&health); err != nil {
+	if err != nil {
 		return err
 	}
 	r.mu.Lock()
-	if health.Capabilities.SessionQueue != 1 {
+	if !health.FrozenCapability("session_queue") {
 		if r.backendQueue {
 			r.mu.Unlock()
 			return fmt.Errorf("backend-owned queue requires a compatible K-brain")

@@ -59,7 +59,7 @@ function backend() {
   const fetch = async (url, init) => {
     const path = new URL(String(url)).pathname;
     if (path === "/v1/health") {
-      return new Response(JSON.stringify({ status: "ok", capabilities: { session_exists: 1 } }));
+      return new Response(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities: { session_exists: 1 } }));
     }
     if (path === "/v1/sessions/exists") {
       const { ids } = JSON.parse(init.body);

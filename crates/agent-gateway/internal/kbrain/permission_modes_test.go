@@ -26,7 +26,7 @@ func TestPermissionModeCapabilityBeforeSubmission(t *testing.T) {
 					if supported {
 						modes = append(modes, mode)
 					}
-					_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": map[string]any{"permission_modes": modes}})
+					_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": protocolVersion, "capabilities": map[string]any{"permission_modes": modes}})
 				case "/v1/sessions/session/runs":
 					posts++
 					var got PromptRequest

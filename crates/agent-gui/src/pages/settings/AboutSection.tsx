@@ -22,11 +22,13 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { useEffect, useId } from "react";
+import { getKBrainHealth } from "../../agent-ui-adapters/kbrainSettings";
 import type { AppUpdateController } from "../../lib/appUpdates";
 import type { ReleaseAnnouncementController } from "../../lib/releaseAnnouncement";
 import { releaseNotesBody, releaseTitle } from "../../lib/releaseNotes";
 import { updateUpdateSettings } from "../../lib/settings";
 import { formatReleaseDate } from "./aboutDate";
+import { KBrainBackendRow } from "./KBrainBackendRow";
 import type { SettingsSectionProps } from "./types";
 
 type AboutSectionProps = SettingsSectionProps & {
@@ -218,6 +220,8 @@ export function AboutSection(props: AboutSectionProps) {
               </div>
             }
           />
+
+          <KBrainBackendRow loadHealth={getKBrainHealth} />
 
           <SettingsRow
             title={t("settings.aboutSoftwareUpdate")}

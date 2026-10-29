@@ -16,6 +16,8 @@ func TestComposerCommandNeverUsesBackendQueue(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch req.URL.Path {
+		case "/v1/health":
+			w.Write([]byte(`{"status":"ok","version":"kbrain.agent.v1"}`))
 		case "/v1/sessions":
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"id":"session"}`))

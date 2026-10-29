@@ -1,3 +1,8 @@
+import {
+  type KBrainHealth,
+  readKBrainHealthResponse,
+  supportsPermissionMode,
+} from "@liveagent/ui/lib/kbrain/health";
 import { createKBrainQueueClient } from "./queueClient";
 import { fetchKBrain, KBrainTransportError } from "./transport";
 import {
@@ -407,13 +412,14 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     });
   }
 
+  async function getHealth(signal?: AbortSignal): Promise<KBrainHealth> {
+    const response = await fetchKBrain("/v1/health", { signal }, inputOptions);
+    if (!response.ok) throw await readError(response);
+    return readKBrainHealthResponse(response);
+  }
+
   async function getCapabilities(signal?: AbortSignal): Promise<Record<string, unknown>> {
-    const health = await request<{ capabilities?: Record<string, unknown> }>("/v1/health", {
-      signal,
-    });
-    return health.capabilities && typeof health.capabilities === "object"
-      ? health.capabilities
-      : {};
+    return (await getHealth(signal)).capabilities;
   }
 
   /** Ids among `ids` that K-brain can load, answered from file metadata (`session_exists`). */
@@ -621,11 +627,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     signal?.throwIfAborted();
     const mode = input.options?.permission_mode;
     if (mode === "always" || mode === "auto_edit" || mode === "auto_review") {
-      const health = await request<{ capabilities?: { permission_modes?: string[] } }>(
-        "/v1/health",
-        { signal },
-      );
-      if (!health.capabilities?.permission_modes?.includes(mode)) {
+      if (!supportsPermissionMode(await getHealth(signal), mode)) {
         throw new Error(
           `K-brain does not support permission mode ${mode}; update the backend before using this mode.`,
         );
@@ -929,6 +931,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     generateText,
     compactSession,
     getCapabilities,
+    getHealth,
     sessionsExist,
     getSession,
     updateSession,

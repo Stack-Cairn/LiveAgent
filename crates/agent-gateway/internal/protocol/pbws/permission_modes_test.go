@@ -57,7 +57,7 @@ func TestPermissionModesOverWebSocketAndHTTP(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/v1/health":
-					_, _ = w.Write([]byte(`{"capabilities":{"permission_modes":["always","auto_review","auto_edit"]}}`))
+					_, _ = w.Write([]byte(`{"status":"ok","version":"kbrain.agent.v1","capabilities":{"permission_modes":["always","auto_review","auto_edit"]}}`))
 				case "/v1/sessions":
 					w.WriteHeader(http.StatusCreated)
 					_, _ = w.Write([]byte(`{"id":"backend-session"}`))

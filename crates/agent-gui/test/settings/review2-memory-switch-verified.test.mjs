@@ -17,7 +17,7 @@ function startKBrain() {
       state.requests.push(`${req.method} ${req.url}`);
       res.setHeader("Content-Type", "application/json");
       if (req.url === "/v1/health") {
-        res.end(JSON.stringify({ status: "ok", capabilities: { memory_switch: 1 } }));
+        res.end(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities: { memory_switch: 1 } }));
         return;
       }
       if (req.method === "PUT") {

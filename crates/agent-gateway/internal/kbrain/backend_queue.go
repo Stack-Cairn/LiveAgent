@@ -79,6 +79,15 @@ func (r *Relay) startBackendQueuedRun(ctx context.Context, gatewayRunID, convers
 		model := r.defaultModel
 		prompt.Model = &model
 	}
+	// Verify the handshake before any backend write or persisted binding, so a
+	// refused backend leaves no session or recovery record behind.
+	mode := ""
+	if prompt.Options != nil {
+		mode = prompt.Options.PermissionMode
+	}
+	if err := r.client.requireHandshake(ctx, mode); err != nil {
+		return false, err
+	}
 	// Serialize session mapping before the backend acceptance; no local FIFO is created.
 	r.backendSubmitMu.Lock()
 	defer r.backendSubmitMu.Unlock()
@@ -222,6 +231,11 @@ func (r *Relay) backendQueueAction(ctx context.Context, req *gatewayv2.ChatQueue
 			}
 			input["request"], input["draft_json"], input["uploaded_files_json"] = request, draft, uploads
 		}
+		if queueActionAdvancesWork(action) {
+			if err := r.client.requireHandshake(ctx, ""); err != nil {
+				return queueError("backend_error", err.Error())
+			}
+		}
 		out, err = r.client.sessionQueue(ctx, http.MethodPost, sessionID, "/actions", input)
 	}
 	if err != nil {
@@ -245,6 +259,18 @@ func (r *Relay) backendQueueAction(ctx context.Context, req *gatewayv2.ChatQueue
 		}
 	}
 	return result
+}
+
+// queueActionAdvancesWork reports queue actions that hand new or changed work
+// to the backend. Actions that stop or inspect work (remove, pause, edit
+// begin/cancel, get_item) stay available when the handshake is broken so users
+// can still halt what the backend would otherwise run.
+func queueActionAdvancesWork(action string) bool {
+	switch action {
+	case "remove", "pause", "edit_begin", "edit_cancel", "get_item":
+		return false
+	}
+	return true
 }
 
 func (r *Relay) cancelBackendQueuedRun(ctx context.Context, conversationID, gatewayRunID string) (bool, error) {

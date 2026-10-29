@@ -1,3 +1,4 @@
+import type { KBrainHealth } from "@liveagent/ui/lib/kbrain/health";
 export type KBrainSettingsProvider = {
   id: string;
   name: string;
@@ -72,6 +73,8 @@ export type KBrainSettingsAdapter = {
   getComputerStatus?: () => Promise<KBrainComputerStatus>;
   /** `/v1/health` capabilities; hosts that cannot reach it rely on the settings document. */
   getCapabilities?: () => Promise<Record<string, unknown>>;
+  /** Parsed `/v1/health` handshake for diagnostics; only hosts talking to K-brain directly provide it. */
+  getHealth?: () => Promise<KBrainHealth>;
 };
 
 export type SettingsHostAdapter = {

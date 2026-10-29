@@ -1,3 +1,4 @@
+import { type KBrainHealth, readKBrainHealthResponse } from "@liveagent/ui/lib/kbrain/health";
 import type {
   KBrainComputerStatus,
   KBrainSettingsAdapter,
@@ -5,7 +6,7 @@ import type {
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
 import { getKBrainRuntimeConnection } from "../lib/kbrain/runtimeConnection";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function send(path: string, init?: RequestInit): Promise<Response> {
   const connection = getKBrainRuntimeConnection();
   if (!connection) throw new Error("K-brain backend connection is not ready");
   const response = await fetch(`${connection.baseUrl}${path}`, {
@@ -19,7 +20,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok)
     throw new Error((await response.text()) || `K-brain request failed (${response.status})`);
-  return (await response.json()) as T;
+  return response;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await (await send(path, init)).json()) as T;
+}
+
+export function getKBrainHealth(): Promise<KBrainHealth> {
+  return send("/v1/health").then(readKBrainHealthResponse);
 }
 
 export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
@@ -28,10 +37,8 @@ export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
   getConnection: getKBrainRuntimeConnection,
   getSettings: () => request<KBrainSettingsDocument>("/v1/settings"),
   getComputerStatus: () => request<KBrainComputerStatus>("/v1/computer"),
-  getCapabilities: () =>
-    request<{ capabilities?: Record<string, unknown> }>("/v1/health").then(
-      (health) => health.capabilities ?? {},
-    ),
+  getHealth: getKBrainHealth,
+  getCapabilities: () => getKBrainHealth().then((health) => health.capabilities),
   updateSettings: (update) =>
     request<KBrainSettingsDocument>("/v1/settings", {
       method: "PUT",
