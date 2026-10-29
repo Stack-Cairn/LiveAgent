@@ -296,6 +296,18 @@ func (r *Relay) syncHistoryGeneration(callbacks Callbacks) error {
 		}
 		for _, item := range validated {
 			change := item.change
+			// K-brain keeps a new session unlisted until its first message is
+			// persisted. Only sessions that were listed have a browser row to
+			// delete; a never-listed one may be a WebUI pending conversation.
+			_, wasListed := sessions[change.ID]
+			if change.Kind == "upsert" && change.Listed && change.Session != nil {
+				sessions[change.ID] = *change.Session
+			} else {
+				delete(sessions, change.ID)
+				if change.Kind != "delete" && !wasListed {
+					continue
+				}
+			}
 			if deliverySeq >= 1<<53-1 {
 				return errors.New("gateway history delivery sequence exhausted")
 			}

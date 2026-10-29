@@ -1,4 +1,5 @@
 import type { AssistantMessage, Context } from "@liveagent/app/lib/agentTypes";
+import type { Locale } from "../../../i18n/config";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
 import type {
@@ -35,6 +36,7 @@ export type PersistConversationParams = {
 };
 
 export type RunTextConversationTurnParams = {
+  locale?: Locale;
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;

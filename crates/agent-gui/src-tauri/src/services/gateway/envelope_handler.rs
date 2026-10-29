@@ -712,15 +712,23 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::SettingsUpdate(request)) => {
                 match parse_settings_sync_payload(&request.settings_json) {
                     Ok(mut snapshot) => {
-                        // The memory switch goes to K-brain and never into LiveAgent's
-                        // own settings; an update carrying only the switch ends here.
+                        // The memory switch and the AI approval reviewer go to K-brain and
+                        // never into LiveAgent's own settings; an update carrying only
+                        // them ends here.
                         let memory_switch = match kbrain_memory::take_switch_update(&mut snapshot) {
                             Ok(switch) => switch,
                             Err(error) => {
                                 return self.send_error_response(request_id, 400, error).await;
                             }
                         };
-                        if let Some(enabled) = memory_switch {
+                        let ai_approval =
+                            match kbrain_ai_approval::take_approval_update(&mut snapshot) {
+                                Ok(approval) => approval,
+                                Err(error) => {
+                                    return self.send_error_response(request_id, 400, error).await;
+                                }
+                            };
+                        if memory_switch.is_some() || ai_approval.is_some() {
                             let Some(connection) = kbrain_memory::running_kbrain(&self.app_handle)
                             else {
                                 return self
@@ -732,12 +740,16 @@ impl GatewayController {
                                     .await;
                             };
                             let written = tauri::async_runtime::spawn_blocking(move || {
-                                kbrain_memory::write_switch(&connection, enabled)
+                                if let Some(enabled) = memory_switch {
+                                    kbrain_memory::write_switch(&connection, enabled)?;
+                                }
+                                if let Some(approval) = &ai_approval {
+                                    kbrain_ai_approval::write_approval(&connection, approval)?;
+                                }
+                                Ok(())
                             })
                             .await
-                            .map_err(|error| {
-                                format!("save K-brain memory switch join failed: {error}")
-                            })
+                            .map_err(|error| format!("save K-brain settings join failed: {error}"))
                             .and_then(|result| result);
                             if let Err(error) = written {
                                 return self.send_error_response(request_id, 502, error).await;

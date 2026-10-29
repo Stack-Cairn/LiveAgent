@@ -1622,4 +1622,32 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Grant from the desktop app: the system permission dialogs only appear on the desktop host's screen.",
   "settings.cuaDriver.desktopOnlyRuntime":
     "This runtime cannot read Computer Use status: the browser host has no desktop app behind it. Open the desktop app, or the Gateway WebUI connected to a desktop host, to manage the driver.",
+  "settings.localGatewayError.portInUse":
+    "Local Gateway port {port} is already in use. Close the program using it (for example another running LiveAgent), then retry the Gateway connection.",
+  "settings.localGatewayError.executableMissing": "Local Gateway executable was not found.",
+  "settings.localGatewayError.notExecutable": "Local Gateway must be a Windows executable (.exe).",
+  "settings.localGatewayError.startupTimeout":
+    "Local Gateway startup timed out waiting for its health check.",
+  "settings.localGatewayError.startFailed": "Unable to start the local Gateway executable.",
+  "settings.localGatewayError.stopFailed": "Unable to stop the local Gateway process.",
+  "settings.localGatewayError.inspectFailed": "Unable to inspect the local Gateway process.",
+  "settings.localGatewayError.collectFailed": "Unable to collect the local Gateway process.",
+  "settings.localGatewayError.dataDir": "Unable to prepare the local Gateway data directory.",
+  "settings.localGatewayError.healthCheck": "Unable to prepare the local Gateway health check.",
+  "settings.localGatewayError.imageBackend": "Unable to update the local Gateway image backend.",
+  "settings.localGatewayError.exitedBeforeReady":
+    "Local Gateway exited before becoming ready ({status}).",
+  "settings.localGatewayError.exitedDuringHealthCheck":
+    "Local Gateway exited during its health check.",
+  "settings.localGatewayError.permissionDenied":
+    "Permission denied starting the local Gateway executable.",
+  "settings.localGatewayError.invalidToken": "Local Gateway requires a valid authentication token.",
+  "settings.localGatewayError.invalidPort": "Local Gateway requires a nonzero loopback port.",
+  "settings.localGatewayError.startupCancelled": "Local Gateway startup was cancelled.",
+  "settings.localGatewayError.controlPipe": "Local Gateway control pipe is unavailable.",
+  "settings.localGatewayError.supervisorFailed": "Local gateway supervisor task failed.",
+  "settings.localGatewayError.desktopExecutable": "Unable to locate desktop executable.",
+  "settings.localGatewayError.desktopDirectory": "Unable to locate desktop directory.",
+  "settings.providerModelsNeedApiKey":
+    "The address changed. Enter the API key again to fetch the model list automatically.",
 } as const satisfies Record<string, string>;

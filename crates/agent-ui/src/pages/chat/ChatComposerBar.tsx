@@ -339,7 +339,7 @@ export type ChatComposerBarProps = {
   onComposerBusyChange: (isBusy: boolean) => void;
   onSelectModel: (selection: SelectedModel) => void;
   onSelectExecutionMode: (mode: "text" | "tools") => void;
-  onOpenSettings: (section?: "providers" | "stt", providerId?: string) => void;
+  onOpenSettings: (section?: "providers" | "stt" | "systemTools", providerId?: string) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
   /** Select a folder to mount as a read-only project root. */
@@ -1855,12 +1855,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               {commandSafetyMode && onCommandSafetyModeChange ? (
                 <CommandSafetyModeSelector
                   value={commandSafetyMode}
-                  planModeEnabled={chatRuntimeControls.planModeEnabled}
-                  onPlanModeChange={(planModeEnabled) =>
-                    onChatRuntimeControlsChange({ planModeEnabled })
-                  }
                   disabled={controlsDisabled || !isAgentMode}
                   onChange={onCommandSafetyModeChange}
+                  onConfigureAutoReview={() => onOpenSettings("systemTools")}
                 />
               ) : null}
 

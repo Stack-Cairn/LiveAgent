@@ -41,7 +41,7 @@ pub(crate) fn take_switch_update(update: &mut Value) -> Result<Option<bool>, Str
         .ok_or_else(|| "kbrainMemory must be an object with boolean enabled".to_string())
 }
 
-fn client() -> Result<Client, String> {
+pub(super) fn client() -> Result<Client, String> {
     Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(5))

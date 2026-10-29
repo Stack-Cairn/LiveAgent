@@ -490,9 +490,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.runtime.reasoningCompact.xhigh": "XHigh",
   "chat.runtime.reasoningCompact.max": "Max",
   "chat.safety.label": "Command execution mode",
-  "chat.safety.ask": "Confirm changes",
-  "chat.safety.askDesc":
-    "Requests approval before each run; read-only operations need no confirmation",
+  "chat.safety.ask": "Always ask",
+  "chat.safety.askDesc": "Requests approval before every action that needs authorization",
   "chat.safety.auto": "Full access",
   "chat.safety.autoEdit": "Auto edit",
   "chat.safety.autoEditDesc":
@@ -501,6 +500,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.safety.alwaysDesc":
     "Use K-brain always mode without interactive or AI review; explicit denials and workspace boundaries still apply",
   "chat.safety.autoReview": "Auto review",
+  "chat.safety.autoReviewNeedsModel":
+    "No reviewer model selected: every action needs your approval and tool output is withheld from the model.",
+  "chat.safety.configureReviewer": "Choose a reviewer model",
   "chat.safety.autoReviewDesc":
     "K-brain reviews actions; low-risk actions proceed, unknown or elevated risk requires confirmation",
   "chat.safety.autoDesc":

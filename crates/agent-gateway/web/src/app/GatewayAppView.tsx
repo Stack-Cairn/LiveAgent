@@ -2237,9 +2237,10 @@ export function GatewayAppView({
             <div
               className={cn(
                 GATEWAY_SETTINGS_OVERLAY_CLASS,
-                // Keep the settled transform at none: a transformed settings scroller
-                // can leave blank rasterized regions on Android Chrome.
-                overlay === "open" ? "opacity-100! transform-none!" : "",
+                // Keep the settled translate at none: a transformed settings scroller
+                // can leave blank rasterized regions on Android Chrome. Tailwind v4
+                // puts translate-y-* on `translate`, which transform-none! does not reset.
+                overlay === "open" ? "opacity-100! translate-none!" : "",
               )}
               onTransitionEnd={handleSettingsTransitionEnd}
             >

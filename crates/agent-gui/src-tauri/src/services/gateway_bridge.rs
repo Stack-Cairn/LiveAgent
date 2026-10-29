@@ -19,7 +19,6 @@ use crate::commands::{
         workspace_root_grants_apply, workspace_root_grants_list, workspace_root_grants_revoke,
         WorkspaceRootAccess, WorkspaceRootGrant, WorkspaceRootGrantDraft,
     },
-    settings::{load_providers, open_db},
     system::{
         system_create_project_folder_sync, system_import_directory_abort_sync,
         system_import_directory_chunk_sync, system_import_directory_commit_sync,
@@ -542,41 +541,7 @@ pub async fn handle_provider_models(
     .await
     .map_err(|error| format!("K-brain backend startup task failed: {error}"))??;
     let provider_id = request.provider_id.trim().to_string();
-    let provider_type = request.provider_type.trim().to_string();
-    let request_headers = request.custom_headers.as_ref().map(|headers| {
-        headers
-            .headers
-            .iter()
-            .map(|header| (header.name.clone(), header.value.clone()))
-            .collect::<Vec<_>>()
-    });
-    let config = if request.api_key.trim().is_empty() {
-        let provider_id_for_lookup = provider_id.clone();
-        let provider_type_for_lookup = provider_type.clone();
-        let request_headers_for_lookup = request_headers.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            let conn = open_db()?;
-            resolve_stored_provider_models_config(
-                &provider_id_for_lookup,
-                &provider_type_for_lookup,
-                request.is_full_url,
-                request_headers_for_lookup,
-                load_providers(&conn)?,
-            )
-        })
-        .await
-        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
-    } else {
-        ProviderModelsRequestConfig {
-            provider_type: provider_type.clone(),
-            base_url: request.base_url.trim().to_string(),
-            api_key: request.api_key.trim().to_string(),
-            use_system_proxy: request.use_system_proxy,
-            models_url: request.models_url.trim().to_string(),
-            is_full_url: request.is_full_url.unwrap_or(false),
-            custom_headers: request_headers.unwrap_or_default(),
-        }
-    };
+    let config = provider_models_request_config(&request)?;
     let api = match config.provider_type.as_str() {
         "gemini" => "google-generative-ai",
         "claude_code" => "anthropic-messages",
@@ -593,7 +558,6 @@ pub async fn handle_provider_models(
         "api": api,
         "baseUrl": config.base_url,
         "apiKey": config.api_key,
-        "isFullUrl": config.is_full_url,
         "modelsUrl": config.models_url,
         "useSystemProxy": config.use_system_proxy,
         "requestFormat": request.request_format.trim(),
@@ -601,14 +565,18 @@ pub async fn handle_provider_models(
     if !provider_id.is_empty() {
         body["providerId"] = Value::String(provider_id);
     }
-    body["customHeaders"] = serde_json::to_value(
-        config
-            .custom_headers
-            .iter()
-            .map(|(key, value)| json!({ "key": key, "value": value }))
-            .collect::<Vec<_>>(),
-    )
-    .map_err(|error| format!("serialize provider headers failed: {error}"))?;
+    if let Some(is_full_url) = config.is_full_url {
+        body["isFullUrl"] = Value::Bool(is_full_url);
+    }
+    if let Some(headers) = &config.custom_headers {
+        body["customHeaders"] = serde_json::to_value(
+            headers
+                .iter()
+                .map(|(key, value)| json!({ "key": key, "value": value }))
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|error| format!("serialize provider headers failed: {error}"))?;
+    }
     let models = kbrain_provider_models(&connection, body).await?;
     Ok(proto::ProviderModelsResponse {
         models_json: serde_json::to_string(&models)
@@ -623,85 +591,35 @@ struct ProviderModelsRequestConfig {
     api_key: String,
     use_system_proxy: bool,
     models_url: String,
-    is_full_url: bool,
-    custom_headers: Vec<(String, String)>,
-}
-
-fn resolve_stored_provider_models_config(
-    provider_id: &str,
-    expected_provider_type: &str,
+    /// None keeps the stored value (proto: "未提供时沿用已保存配置").
     is_full_url: Option<bool>,
     custom_headers: Option<Vec<(String, String)>>,
-    providers: Option<Value>,
+}
+
+/// The discovery draft exactly as the WebUI edited it. An empty key asks K-brain to
+/// use the stored one by provider ID, the same as the desktop and Gateway direct
+/// paths: K-brain owns provider credentials, the legacy provider table is stale.
+fn provider_models_request_config(
+    request: &proto::ProviderModelsRequest,
 ) -> Result<ProviderModelsRequestConfig, String> {
-    let provider_id = provider_id.trim();
-    if provider_id.is_empty() {
+    let api_key = request.api_key.trim().to_string();
+    if api_key.is_empty() && request.provider_id.trim().is_empty() {
         return Err("请先填写 API Key".to_string());
     }
-    let providers = providers
-        .and_then(|value| value.as_array().cloned())
-        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
-    let provider = providers
-        .into_iter()
-        .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
-        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
-    let stored_provider_type = provider
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
-    if stored_provider_type != expected_provider_type.trim() {
-        return Err("供应商类型与已保存配置不匹配".to_string());
-    }
-    let api_key = provider
-        .get("apiKey")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())?;
-    let base_url = provider
-        .get("baseUrl")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let models_url = provider
-        .get("modelsUrl")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let stored_headers = provider
-        .get("customHeaders")
-        .and_then(Value::as_array)
-        .map(|headers| {
-            headers
-                .iter()
-                .filter_map(|header| {
-                    let key = header.get("key").and_then(Value::as_str)?.trim();
-                    let value = header.get("value").and_then(Value::as_str)?;
-                    (!key.is_empty()).then(|| (key.to_string(), value.to_string()))
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
     Ok(ProviderModelsRequestConfig {
-        provider_type: stored_provider_type.to_string(),
-        base_url,
+        provider_type: request.provider_type.trim().to_string(),
+        base_url: request.base_url.trim().to_string(),
         api_key,
-        use_system_proxy: provider
-            .get("useSystemProxy")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        models_url,
-        is_full_url: is_full_url.unwrap_or_else(|| {
-            provider
-                .get("isFullUrl")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
+        use_system_proxy: request.use_system_proxy,
+        models_url: request.models_url.trim().to_string(),
+        is_full_url: request.is_full_url,
+        custom_headers: request.custom_headers.as_ref().map(|headers| {
+            headers
+                .headers
+                .iter()
+                .map(|header| (header.name.clone(), header.value.clone()))
+                .collect()
         }),
-        custom_headers: custom_headers.unwrap_or(stored_headers),
     })
 }
 
@@ -2268,7 +2186,7 @@ mod tests {
         flatten_history_messages_json_window, is_builtin_share_tool_name, is_kbrain_memory_command,
         kbrain_memory_manage, kbrain_provider_models, kbrain_slash_commands,
         kbrain_terminal_request, parse_occurrence_query, parse_runs_limit, prompt_workdir_query,
-        proto, redact_builtin_tool_content_json, resolve_stored_provider_models_config,
+        provider_models_request_config, proto, redact_builtin_tool_content_json,
         sanitize_provider_summaries, KBrainBackendConnection, KBRAIN_MEMORY_COMMANDS,
     };
     use crate::commands::chat_history::{
@@ -2583,66 +2501,46 @@ mod tests {
     }
 
     #[test]
-    fn stored_provider_model_config_preserves_redacted_settings_and_draft_overrides() {
-        let stored = json!([
-            {
-                "id": "saved/provider",
-                "type": "codex",
-                "apiKey": "saved-secret",
-                "baseUrl": "https://relay.example.test/v1",
-                "modelsUrl": "https://catalog.example.test/models",
-                "useSystemProxy": true,
-                "isFullUrl": true,
-                "customHeaders": [{ "key": "X-Saved", "value": "yes" }]
-            }
-        ]);
-        let config = resolve_stored_provider_models_config(
-            "saved/provider",
-            "codex",
-            Some(false),
-            Some(vec![("X-Draft".to_string(), "yes".to_string())]),
-            Some(stored),
-        )
-        .expect("resolve saved provider config");
-
-        assert_eq!(config.provider_type, "codex");
-        assert_eq!(config.api_key, "saved-secret");
-        assert_eq!(config.base_url, "https://relay.example.test/v1");
+    fn stored_key_discovery_forwards_the_draft_for_kbrain_to_resolve_by_id() {
+        let request = proto::ProviderModelsRequest {
+            provider_type: "codex".into(),
+            base_url: " https://relay.example.test/v2 ".into(),
+            provider_id: "saved/provider".into(),
+            models_url: "https://catalog.example.test/models".into(),
+            use_system_proxy: true,
+            ..Default::default()
+        };
+        let config = provider_models_request_config(&request).expect("draft config");
+        // The key stays in K-brain; the edited address is passed through unchanged.
+        assert_eq!(config.api_key, "");
+        assert_eq!(config.base_url, "https://relay.example.test/v2");
         assert_eq!(config.models_url, "https://catalog.example.test/models");
         assert!(config.use_system_proxy);
-        assert!(!config.is_full_url);
-        assert_eq!(
-            config.custom_headers,
-            vec![("X-Draft".to_string(), "yes".to_string())]
-        );
+        // Not provided: K-brain keeps the stored full-URL flag and headers.
+        assert_eq!(config.is_full_url, None);
+        assert_eq!(config.custom_headers, None);
     }
 
     #[test]
-    fn stored_provider_model_config_rejects_missing_or_mismatched_credentials() {
-        let missing =
-            resolve_stored_provider_models_config("missing", "codex", None, None, Some(json!([])))
-                .expect_err("missing provider must fail");
-        assert!(missing.contains("未找到已保存的供应商"));
+    fn discovery_without_a_key_needs_a_provider_to_resolve_it() {
+        let error = provider_models_request_config(&proto::ProviderModelsRequest {
+            provider_type: "codex".into(),
+            base_url: "https://relay.example.test/v1".into(),
+            ..Default::default()
+        })
+        .expect_err("a new provider without a key cannot be discovered");
+        assert!(error.contains("API Key"));
 
-        let mismatch = resolve_stored_provider_models_config(
-            "saved",
-            "gemini",
-            None,
-            None,
-            Some(json!([{ "id": "saved", "type": "codex", "apiKey": "secret" }])),
-        )
-        .expect_err("provider type mismatch must fail");
-        assert!(mismatch.contains("类型"));
-
-        let no_key = resolve_stored_provider_models_config(
-            "saved",
-            "codex",
-            None,
-            None,
-            Some(json!([{ "id": "saved", "type": "codex", "apiKey": "" }])),
-        )
-        .expect_err("missing API key must fail");
-        assert!(no_key.contains("API Key"));
+        let typed = provider_models_request_config(&proto::ProviderModelsRequest {
+            provider_type: "codex".into(),
+            base_url: "https://relay.example.test/v1".into(),
+            api_key: " sk-typed ".into(),
+            is_full_url: Some(true),
+            ..Default::default()
+        })
+        .expect("a typed key needs no stored provider");
+        assert_eq!(typed.api_key, "sk-typed");
+        assert_eq!(typed.is_full_url, Some(true));
     }
 
     #[tokio::test]

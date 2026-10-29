@@ -889,7 +889,7 @@ export default function App() {
           >
             {/* The overlay owns its title bar so the chat subtree below keeps a
                 constant height across open/close. */}
-            <WindowsSettingsHeader onBack={closeSettings} />
+            <WindowsSettingsHeader />
             <div className="relative min-h-0 flex-1 overflow-hidden">
               <AppErrorBoundary>
                 <Suspense

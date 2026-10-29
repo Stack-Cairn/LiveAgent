@@ -291,6 +291,10 @@ function onChanges(input: {
       const conversationId = getKBrainConversationId(backendId);
       if (change.kind === "delete" || !change.listed) {
         if (!conversationId) continue;
+        // K-brain keeps a new session unlisted until its first message is
+        // persisted. Only rows that were listed have anything to delete; a
+        // never-listed session must leave the local pending row in place.
+        if (change.kind !== "delete" && !nextDesired.has(conversationId)) continue;
         nextDesired.delete(conversationId);
         nextItems.delete(conversationId);
         pendingEvents.push({ kind: "delete", conversationId, authoritative: true });

@@ -428,6 +428,13 @@ func (c *Client) settingsRequest(ctx context.Context, method, path string, input
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		// K-brain explains a rejected request in {"error": ...}; keep that text.
+		var failure struct {
+			Error string `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&failure) == nil && strings.TrimSpace(failure.Error) != "" {
+			return nil, fmt.Errorf("kbrain settings request: %s: %s", resp.Status, strings.TrimSpace(failure.Error))
+		}
 		return nil, fmt.Errorf("kbrain settings request: %s", resp.Status)
 	}
 	var out json.RawMessage

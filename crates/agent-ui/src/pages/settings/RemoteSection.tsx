@@ -32,6 +32,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { localizeLocalGatewayError } from "@liveagent/ui/lib/settings/localGatewayError";
 import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -307,12 +308,15 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
   };
 
   const connectedProtocol = status.protocol?.trim();
+  const lastError = status.lastError?.trim()
+    ? localizeLocalGatewayError(status.lastError.trim(), t)
+    : null;
   const statusText = isConnected
     ? connectedProtocol
       ? t("settings.remoteConnectedProtocol").replace("{protocol}", connectedProtocol)
       : t("settings.remoteConnected")
     : settings.remote.enabled
-      ? status.lastError?.trim() || t("settings.remoteDisconnected")
+      ? lastError || t("settings.remoteDisconnected")
       : t("settings.remoteDisconnected");
 
   return (
@@ -330,7 +334,7 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : "bg-muted/50 text-muted-foreground",
               )}
-              title={status.lastError ?? undefined}
+              title={lastError ?? undefined}
             >
               {isConnected ? (
                 <Wifi className="size-3.5 shrink-0" />
@@ -679,8 +683,8 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
         <summary className="cursor-pointer text-sm font-medium">
           {t("settings.remoteConnectionStatus")}
         </summary>
-        {status.lastError ? (
-          <p className="mt-3 break-words text-xs text-destructive">{status.lastError}</p>
+        {lastError ? (
+          <p className="mt-3 break-words text-xs text-destructive">{lastError}</p>
         ) : null}
         {managedLocal && settings.remote.enabled && !isConnected ? (
           <Button

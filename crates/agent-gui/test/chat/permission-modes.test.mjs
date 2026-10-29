@@ -9,12 +9,20 @@ const { normalizeCommandSafetyMode, strictestCommandSafetyMode } = loader.loadMo
 const { normalizeGatewayCommandSafetyMode } = loader.loadModule("src/pages/chat/gateway/gatewayBridgeTypes");
 
 test("permission choices map to K-brain and plan always takes precedence", () => {
-  for (const [mode, expected] of [["ask", "normal"], ["autoEdit", "auto_edit"], ["autoReview", "auto_review"], ["auto", "full_access"], ["always", "always"]]) {
+  for (const [mode, expected] of [["ask", "normal"], ["autoEdit", "auto_edit"], ["autoReview", "auto_review"], ["always", "always"]]) {
     assert.equal(normalizeCommandSafetyMode(mode), mode);
     assert.equal(normalizeGatewayCommandSafetyMode(mode), mode);
     assert.equal(resolveKBrainPermissionMode(mode), expected);
     assert.equal(resolveKBrainPermissionMode(mode, true), "plan");
   }
+});
+
+test("the retired full-access mode migrates to always allow", () => {
+  assert.equal(normalizeCommandSafetyMode("auto"), "always");
+  assert.equal(normalizeCommandSafetyMode(" auto "), "always");
+  // An older client may still send "auto"; it runs as "always", never as full_access.
+  assert.equal(resolveKBrainPermissionMode("auto"), "always");
+  assert.equal(resolveKBrainPermissionMode("auto", true), "plan");
 });
 
 test("remote choices cannot bypass a stricter local selection", () => {

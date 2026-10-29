@@ -393,6 +393,58 @@ test("AI review warnings stay outside assistant content", async () => {
  assert.deepEqual(text,[]);
 });
 
+test("AI review warnings use the interface language for K-brain's fixed reasons", async () => {
+  storage.clear();
+  const warnings = [];
+  const reviewLoader = createTsModuleLoader({
+    mocks: {
+      "@liveagent/ui/components/ui/toast-manager": {
+        toast: { warning: (...args) => warnings.push(args) },
+      },
+    },
+  });
+  const { runKBrainTurn: run } = reviewLoader.loadModule("src/lib/kbrain/turn.ts");
+  const review = (seq, reason) =>
+    event(seq, "approval.reviewed", {
+      tool: "Bash",
+      phase: "action",
+      automatic: false,
+      report: {
+        risk: "unknown",
+        sandbox: "unknown",
+        sensitive_data: "unknown",
+        model_behavior: "unknown",
+        injection: "unknown",
+        reason,
+      },
+    });
+  const runWith = async (locale, reason) => {
+    const fetch = makeFetch({
+      calls: [],
+      streams: [() => stream(review(2, reason) + event(3, "run.completed"))],
+    });
+    await run({ ...baseParams, locale, fetch });
+    return warnings.at(-1);
+  };
+
+  let [title, options] = await runWith(
+    "zh-CN",
+    "Earlier tool output requires human review. Reviewer unavailable; manual approval required",
+  );
+  assert.equal(title, "AI 审查 · Bash");
+  assert.equal(options.description, "之前的工具输出需要人工复核。未配置可用的审查模型，需要人工确认。");
+
+  [title, options] = await runWith(
+    "zh-CN",
+    "Sensitive data was redacted; manual approval required. Uploads a file to an unknown host",
+  );
+  assert.equal(options.description, "已隐去敏感信息，需要人工确认。Uploads a file to an unknown host");
+
+  [title, options] = await runWith("en-US", "Reviewer busy; manual approval required");
+  assert.equal(title, "AI review · Bash");
+  assert.equal(options.description, "Reviewer busy; manual approval required.");
+});
+
 test("Stop recovers and cancels a run accepted before its HTTP acknowledgement", async () => {
   storage.clear();
   const controller = new AbortController();

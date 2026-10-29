@@ -19,7 +19,7 @@ import (
 )
 
 func TestKBrainPermissionModeTransport(t *testing.T) {
-	for input, expected := range map[string]string{"ask": "normal", "autoEdit": "auto_edit", "autoReview": "auto_review", "auto": "full_access", "always": "always"} {
+	for input, expected := range map[string]string{"ask": "normal", "autoEdit": "auto_edit", "autoReview": "auto_review", "auto": "always", "always": "always"} {
 		body := handler.ChatRequestBody{CommandSafetyMode: input, ExecutionMode: "tools"}
 		if got := kbrainOptions(body).PermissionMode; got != expected {
 			t.Fatalf("%s: %s", input, got)
@@ -49,7 +49,7 @@ func TestExplicitPlanCommandOverridesRuntimeControls(t *testing.T) {
 
 func TestPermissionModesOverWebSocketAndHTTP(t *testing.T) {
 	for _, tc := range []struct{ selected, expected string }{
-		{"ask", "normal"}, {"autoEdit", "auto_edit"}, {"autoReview", "auto_review"}, {"auto", "full_access"}, {"always", "always"}, {"plan", "plan"},
+		{"ask", "normal"}, {"autoEdit", "auto_edit"}, {"autoReview", "auto_review"}, {"auto", "always"}, {"always", "always"}, {"plan", "plan"},
 	} {
 		t.Run(tc.selected, func(t *testing.T) {
 			received := make(chan kbrain.PromptRequest, 1)

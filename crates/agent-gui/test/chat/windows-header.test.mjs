@@ -66,7 +66,6 @@ test("Windows workbench has one header with live native controls and a marked dr
 test("Windows settings reuses the workbench frame and native controls across navigation", async () => {
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
-  let backs = 0;
   const chat = React.createElement(AppWorkbenchChrome, {
     settings: { theme: "light" }, sidebarOpen: false,
     onOpenSidebar() {}, onOpenSettings() {}, onToggleTheme() {},
@@ -77,7 +76,7 @@ test("Windows settings reuses the workbench frame and native controls across nav
     const frame = host.firstElementChild;
     const frameClass = frame.className;
     const frameHeight = frame.style.height;
-    await act(async () => root.render(React.createElement(WindowsSettingsHeader, { onBack: () => backs++ })));
+    await act(async () => root.render(React.createElement(WindowsSettingsHeader)));
     assert.equal(host.firstElementChild.className, frameClass);
     assert.equal(host.firstElementChild.style.height, frameHeight);
     assert.equal(host.querySelectorAll("header").length, 1);
@@ -94,15 +93,16 @@ test("Windows settings reuses the workbench frame and native controls across nav
     assert.equal(controls[1].getAttribute("aria-label"), label);
     await act(async () => controls[2].click());
     assert.deepEqual(calls.slice(before), ["minimize", "maximize", "maximize", "close"]);
-    await act(async () => host.querySelector("header > button").click());
-    assert.equal(backs, 1);
+    // Back to chat lives in the settings sidebar; the header has no second back button.
+    assert.equal(host.querySelector("header > button"), null);
+    assert.equal(host.querySelectorAll("header button").length, controls.length);
     await act(async () => root.render(chat));
     assert.equal(host.querySelectorAll("[data-windows-window-controls]").length, 1);
     assert.equal(host.querySelector("[data-windows-settings-header]"), null);
     for (const platform of ["MacIntel", "Linux x86_64"]) {
       Object.defineProperty(navigator, "platform", { value: platform, configurable: true });
       Object.defineProperty(navigator, "userAgent", { value: platform, configurable: true });
-      await act(async () => root.render(React.createElement(WindowsSettingsHeader, { onBack() {} })));
+      await act(async () => root.render(React.createElement(WindowsSettingsHeader)));
       assert.equal(host.childElementCount, 0);
     }
   } finally {
