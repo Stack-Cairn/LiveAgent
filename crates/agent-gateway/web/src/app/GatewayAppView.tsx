@@ -159,6 +159,7 @@ export function GatewayAppView({
     viewModel.imageStudioToken,
     verifiedImageIdentity,
     viewModel.activeWorkspaceProjectPath,
+    (key) => translate(key, viewModel.settings.locale),
   );
   const chatFrameRef = useRef<HTMLDivElement | null>(null);
   useWindowFileDropGuard();

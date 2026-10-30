@@ -30,6 +30,7 @@ function composer(c) {
     [path('features/image-studio/InputImageStack.tsx')]: { InputImageStack: 'input-stack' },
     [path('features/image-studio/ImageTargetSettings.tsx')]: { ImageTargetSettings: 'target-settings' },
     [path('features/image-studio/TargetParameterForm.tsx')]: { selectClass: '', TargetParameterForm: 'parameters' },
+    [path('i18n/index.ts')]: { useLocale: () => ({ t: key => key }) },
   } });
   const { ImageComposer } = ui.loadModule('@liveagent/ui/features/image-studio/ImageComposer');
   const render = () => { cursor = 0; return ImageComposer({ controller: c, view: c.view }); };

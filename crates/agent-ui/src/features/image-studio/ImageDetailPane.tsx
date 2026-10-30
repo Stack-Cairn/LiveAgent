@@ -1,8 +1,10 @@
 import { useId, useState } from "react";
 import { Button } from "../../components/ui/button";
+import { useLocale } from "../../i18n";
 import type { ExportDestination } from "../../lib/imaging/types";
 import { AssetImage } from "./AssetImage";
 import type { ImageStudioController, StudioView } from "./studioController";
+import { parameterLabel, parameterValueLabel } from "./studioText";
 import { selectClass } from "./TargetParameterForm";
 
 export function ImageDetailPane({
@@ -22,6 +24,7 @@ export function ImageDetailPane({
   const [destination, setDestination] = useState<ExportDestination | "">("");
   const [other, setOther] = useState("");
   const prefix = useId();
+  const { t } = useLocale();
   const job = Object.values(view.state.jobs).find((job) => job.assetIds.includes(id ?? ""));
   if (!id || !job)
     return (
@@ -75,12 +78,17 @@ export function ImageDetailPane({
           <dt className="text-muted-foreground">参数快照</dt>
           <dd>
             <ul>
-              {Object.entries(job.request.parameters).map(([key, value]) => (
-                <li key={key}>
-                  {job.targetSnapshot.parameters.find((spec) => spec.key === key)?.label ?? key}：
-                  {String(value)}
-                </li>
-              ))}
+              {Object.entries(job.request.parameters).map(([key, value]) => {
+                const spec = job.targetSnapshot.parameters.find(
+                  (candidate) => candidate.key === key,
+                );
+                return (
+                  <li key={key}>
+                    {spec ? parameterLabel(spec, t) : key}：
+                    {spec ? parameterValueLabel(spec, value, t) : String(value)}
+                  </li>
+                );
+              })}
             </ul>
             {!Object.keys(job.request.parameters).length && "默认参数"}
           </dd>

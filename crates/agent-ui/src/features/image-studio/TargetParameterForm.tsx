@@ -1,7 +1,9 @@
 import { useId } from "react";
 import { Input } from "../../components/ui/input";
+import { useLocale } from "../../i18n";
 import type { ImageTarget } from "../../lib/imaging/types";
 import { validateParameters } from "./parameterModel";
+import { parameterLabel, parameterValueLabel } from "./studioText";
 
 export const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
@@ -17,6 +19,7 @@ export function TargetParameterForm({
   disabled?: boolean;
 }) {
   const prefix = useId();
+  const { t } = useLocale();
   const errors = validateParameters(target, values);
   const set = (key: string, value: unknown) => {
     const next = { ...values };
@@ -39,7 +42,7 @@ export function TargetParameterForm({
         return (
           <div key={spec.key} className="min-w-0 space-y-1">
             <label htmlFor={id} className="text-xs font-medium">
-              {spec.label}
+              {parameterLabel(spec, t)}
               {spec.required ? " *" : ""}
               {spec.unit ? <span className="ml-1 text-muted-foreground">({spec.unit})</span> : null}
             </label>
@@ -53,7 +56,11 @@ export function TargetParameterForm({
                 <option value={-1}>请选择</option>
                 {spec.enum.map((value, index) => (
                   <option key={`${typeof value}:${value}`} value={index}>
-                    {typeof value === "boolean" ? (value ? "是" : "否") : String(value)}
+                    {typeof value === "boolean"
+                      ? value
+                        ? "是"
+                        : "否"
+                      : parameterValueLabel(spec, value, t)}
                   </option>
                 ))}
               </select>

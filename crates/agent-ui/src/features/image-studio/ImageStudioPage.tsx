@@ -13,6 +13,7 @@ import {
   X,
 } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
+import { useLocale } from "../../i18n";
 import type { ExportDestination, ImageStudioClient } from "../../lib/imaging/types";
 import { AssetImage } from "./AssetImage";
 import { AssetLightbox } from "./AssetLightbox";
@@ -121,6 +122,7 @@ function ImageStudioWorkbench({
   headerActions,
 }: ImageStudioPageProps) {
   const { controller, view } = useImageStudio(client, ownerId, backendId, storage);
+  const { t } = useLocale();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   useEffect(
@@ -310,7 +312,7 @@ function ImageStudioWorkbench({
                 <div className="flex max-w-md flex-col items-center gap-3 px-6 py-12 text-center">
                   <ImageOff className="size-8 text-muted-foreground opacity-60" strokeWidth={1.5} />
                   <p className="text-sm font-medium">这次没有生成图片</p>
-                  {jobErrorLines(selectedJob).map((line) => (
+                  {jobErrorLines(selectedJob, t).map((line) => (
                     <p key={line} className="break-words text-xs text-destructive">
                       {line}
                     </p>
