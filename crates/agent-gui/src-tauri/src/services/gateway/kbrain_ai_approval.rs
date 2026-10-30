@@ -29,6 +29,11 @@ pub(crate) fn approval_from_settings(settings: &Value) -> Option<Value> {
             }
         }
     }
+    // Read-only marker from backends with capability ai_review_per_run: the WebUI hides the
+    // global setting like the desktop. take_approval_update never forwards it back.
+    if source.get("perRun").and_then(Value::as_bool) == Some(true) {
+        out.insert("perRun".into(), Value::Bool(true));
+    }
     Some(Value::Object(out))
 }
 
@@ -108,6 +113,16 @@ mod tests {
             approval_from_settings(&json!({ "aiApproval": { "mode": "off", "provider": "" } })),
             Some(json!({ "mode": "off" }))
         );
+        // A per-run backend (capability ai_review_per_run) marks the setting so the WebUI
+        // hides it, exactly as the desktop does from the same settings document.
+        assert_eq!(
+            approval_from_settings(&json!({ "aiApproval": { "mode": "off", "perRun": true } })),
+            Some(json!({ "mode": "off", "perRun": true }))
+        );
+        assert_eq!(
+            approval_from_settings(&json!({ "aiApproval": { "mode": "off", "perRun": "yes" } })),
+            Some(json!({ "mode": "off" }))
+        );
         assert_eq!(approval_from_settings(&json!({ "providers": [] })), None);
         assert_eq!(
             approval_from_settings(&json!({ "aiApproval": { "mode": "always" } })),
@@ -127,6 +142,9 @@ mod tests {
             Ok(Some(json!({ "mode": "risk_only", "provider": "deepseek", "model": "flash" })))
         );
         assert_eq!(update, json!({ "theme": "dark" }));
+        // perRun is read-only: K-brain rejects unknown fields on write.
+        let mut echoed = json!({ "aiApproval": { "mode": "off", "perRun": true } });
+        assert_eq!(take_approval_update(&mut echoed), Ok(Some(json!({ "mode": "off" }))));
 
         let mut untouched = json!({ "theme": "dark" });
         assert_eq!(take_approval_update(&mut untouched), Ok(None));

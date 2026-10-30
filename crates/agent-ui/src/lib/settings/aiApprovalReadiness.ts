@@ -21,6 +21,8 @@ const SETTINGS_CHANGED_EVENT = "kbrain:settings-changed";
  * for every action and withholds tool output.
  */
 export function isAIApprovalReviewerConfigured(state: AIApprovalReadinessState) {
+  // A per-run backend reviews with the session's own model when no usable reviewer is set.
+  if (state.aiApproval.perRun) return true;
   const provider = state.aiApproval.provider?.trim();
   const model = state.aiApproval.model?.trim();
   return Boolean(

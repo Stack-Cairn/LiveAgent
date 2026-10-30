@@ -140,6 +140,11 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
     setError("");
   }
 
+  // A per-run backend (aiApproval.perRun) needs no global setting: the composer's permission
+  // mode decides and auto review uses the session's model. Stay hidden until that is known so
+  // the section does not flash on those backends; an older backend shows it once loaded.
+  if (document?.aiApproval?.perRun || (!document && !error)) return null;
+
   return (
     <SettingsSection
       title={t("settings.aiApproval.title")}
