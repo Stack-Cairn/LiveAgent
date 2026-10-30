@@ -196,7 +196,7 @@ test("English workbench shows no Chinese across history, preview, pickers, notic
     assert.match(host.textContent, /Generating|Stop local processing/);
     assert.match(host.textContent, /Image request limit reached — Wait for the rate limit/);
     assert.match(host.textContent, /Local processing stopped/);
-    assert.match(host.textContent, /Ratio 16:9 · Resolution|Size chosen by the model/);
+    assert.match(host.textContent, /16:9 · 2K|Size chosen by the model/);
     assert.deepEqual(screen(), [], "initial workbench");
 
     const failed = host.querySelector('[aria-label="View job: Prompt failed"]');
