@@ -1,4 +1,5 @@
 import {
+  hasFrozenCapability,
   type KBrainHealth,
   readKBrainHealthResponse,
   supportsPermissionMode,
@@ -21,6 +22,7 @@ import {
   type KBrainProviderSecrets,
   type KBrainQuestionAnswer,
   type KBrainRunAccepted,
+  type KBrainRunOptions,
   type KBrainSession,
   type KBrainSessionChanges,
   type KBrainSessionLoop,
@@ -620,6 +622,44 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     return result;
   }
 
+  // Capability ai_review_per_run: runs send review_scope "per_run" so the permission mode alone
+  // decides AI review (the global setting is hidden). Older backends reject unknown run options,
+  // so the answer comes from /v1/health; a failed read resolves false and is not cached. The
+  // shared read takes no caller's signal; each caller still stops waiting as soon as it aborts.
+  let perRunReview: Promise<boolean> | null = null;
+  function supportsPerRunReview(signal?: AbortSignal): Promise<boolean> {
+    if (!perRunReview) {
+      const read: Promise<boolean> = getHealth().then(
+        (health) => hasFrozenCapability(health, "ai_review_per_run"),
+        () => {
+          if (perRunReview === read) perRunReview = null;
+          return false;
+        },
+      );
+      perRunReview = read;
+    }
+    const pending = perRunReview;
+    if (!signal) return pending;
+    signal.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+      void pending.then((value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      });
+    });
+  }
+
+  /** Run options with review_scope "per_run" when the backend reviews per permission mode. */
+  async function scopedRunOptions<T extends KBrainRunOptions | undefined>(
+    options: T,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    if (!options || !(await supportsPerRunReview(signal))) return options;
+    return { ...options, review_scope: "per_run" as const };
+  }
+
   async function startRun(
     input: KBrainPromptRequest,
     signal?: AbortSignal,
@@ -627,18 +667,21 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     signal?.throwIfAborted();
     const mode = input.options?.permission_mode;
     if (mode === "always" || mode === "auto_edit" || mode === "auto_review") {
-      if (!supportsPermissionMode(await getHealth(signal), mode)) {
+      const health = await getHealth(signal);
+      perRunReview ??= Promise.resolve(hasFrozenCapability(health, "ai_review_per_run"));
+      if (!supportsPermissionMode(health, mode)) {
         throw new Error(
           `K-brain does not support permission mode ${mode}; update the backend before using this mode.`,
         );
       }
     }
+    const body = { ...input, options: await scopedRunOptions(input.options, signal) };
     const path = `/v1/sessions/${encodeURIComponent(input.conversation_id)}/runs`;
     let accepted: KBrainRunAccepted;
     try {
       accepted = await request<KBrainRunAccepted>(path, {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify(body),
         signal,
       });
     } catch (error) {
@@ -702,9 +745,17 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     input: KBrainGoalRequest,
     signal?: AbortSignal,
   ): Promise<KBrainGoalState> {
+    // Goal turns are runs too: K-brain reuses these options for every continuation.
     const body =
       input.action === "set" || input.action === "resume"
-        ? { ...input, run: { ...input.run, conversation_id: conversationId } }
+        ? {
+            ...input,
+            run: {
+              ...input.run,
+              conversation_id: conversationId,
+              options: await scopedRunOptions(input.run.options, signal),
+            },
+          }
         : input;
     const state = await request<KBrainGoalState>(
       `/v1/sessions/${encodeURIComponent(conversationId)}/goal`,

@@ -42,6 +42,9 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
   const epoch = useRef(0);
   const pending = useRef(false);
   const loadedScope = useRef<string | undefined>(undefined);
+  // Set once an older backend (no aiApproval.perRun) is confirmed, so a reload keeps the
+  // section, its focus and its loading status instead of unmounting it.
+  const shown = useRef(false);
   const dirty = !!document?.aiApproval && !sameConfig(draft, document.aiApproval);
   const refresh = useCallback(async () => {
     const ticket = ++epoch.current;
@@ -59,6 +62,7 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
       if (!next.aiApproval || !MODES.includes(next.aiApproval.mode))
         throw new Error(t("settings.aiApproval.upgrade"));
       loadedScope.current = scope;
+      shown.current = !next.aiApproval.perRun;
       setDocument(next);
       setDraft(next.aiApproval);
     } catch (reason) {
@@ -139,6 +143,11 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
     setSaved(false);
     setError("");
   }
+
+  // A per-run backend (aiApproval.perRun) needs no global setting: the composer's permission
+  // mode decides and auto review uses the session's model. Stay hidden until that is known so
+  // the section does not flash on those backends; an older backend shows it once loaded.
+  if (document?.aiApproval?.perRun || (!document && !error && !shown.current)) return null;
 
   return (
     <SettingsSection

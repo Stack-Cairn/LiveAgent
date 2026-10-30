@@ -150,11 +150,13 @@ type Usage struct {
 }
 
 type RunOptions struct {
-	Reasoning       string          `json:"reasoning,omitempty"`
-	Mode            string          `json:"mode,omitempty"`
-	Search          string          `json:"search,omitempty"`
-	ApprovalPolicy  string          `json:"approval_policy,omitempty"`
-	PermissionMode  string          `json:"permission_mode,omitempty"`
+	Reasoning      string `json:"reasoning,omitempty"`
+	Mode           string `json:"mode,omitempty"`
+	Search         string `json:"search,omitempty"`
+	ApprovalPolicy string `json:"approval_policy,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty"`
+	// ReviewScope is set by StartRun from capability ai_review_per_run; callers leave it empty.
+	ReviewScope     string          `json:"review_scope,omitempty"`
 	WorkspaceRoots  []WorkspaceRoot `json:"workspace_roots,omitempty"`
 	Tools           *ToolSelection  `json:"tools,omitempty"`
 	PlanModeEnabled bool            `json:"plan_mode_enabled,omitempty"`
@@ -370,6 +372,24 @@ func (c *Client) CreateSession(ctx context.Context, cwd string, model ModelRef) 
 	return out.ID, nil
 }
 
+// withReviewScope copies the run options with review_scope "per_run" on backends with
+// capability ai_review_per_run, so the permission mode alone decides AI review. Older
+// backends reject unknown run options, so the (capability-fresh) handshake must prove it.
+// Every path that submits a run (StartRun, the backend queue) goes through it.
+func (c *Client) withReviewScope(ctx context.Context, in PromptRequest) PromptRequest {
+	if in.Options == nil {
+		return in
+	}
+	health, err := c.verifiedHealth(ctx, handshakeCapabilityMaxAge)
+	if err != nil || !health.FrozenCapability("ai_review_per_run") {
+		return in
+	}
+	options := *in.Options
+	options.ReviewScope = "per_run"
+	in.Options = &options
+	return in
+}
+
 func (c *Client) StartRun(ctx context.Context, sessionID string, in PromptRequest) (RunAccepted, int, error) {
 	var out RunAccepted
 	// Every run needs a valid handshake: a backend that contradicts
@@ -381,6 +401,7 @@ func (c *Client) StartRun(ctx context.Context, sessionID string, in PromptReques
 	if err := c.requireHandshake(ctx, mode); err != nil {
 		return out, 0, err
 	}
+	in = c.withReviewScope(ctx, in)
 	resp, err := c.request(ctx, http.MethodPost, "/v1/sessions/"+sessionID+"/runs", in, &out)
 	if err != nil {
 		return out, 0, err

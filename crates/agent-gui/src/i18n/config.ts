@@ -107,6 +107,11 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "chat.aiReview.reason.turnBudgetExhausted": "本轮审查次数已用完，需要人工确认。",
     "chat.aiReview.reason.busy": "审查模型繁忙，需要人工确认。",
     "chat.aiReview.reason.failed": "审查失败或超时，需要人工确认。",
+    "chat.aiReview.reason.timedOut": "审查超时，需要人工确认。",
+    "chat.aiReview.reason.httpFailed":
+      "审查请求失败（HTTP {status}），请检查 AI 审查的模型和服务商设置，需要人工确认。",
+    "chat.aiReview.reason.modelUnresolved": "找不到 AI 审查设置里的审查模型，需要人工确认。",
+    "chat.aiReview.reason.truncated": "审查结果被输出上限截断，需要人工确认。",
     "chat.aiReview.reason.invalidResponse": "审查模型返回的结果无法识别，需要人工确认。",
     "chat.aiReview.reason.sensitiveRedacted": "已隐去敏感信息，需要人工确认。",
     "chat.aiReview.reason.earlierOutput": "之前的工具输出需要人工复核。",
@@ -458,6 +463,12 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
       "Turn review budget exhausted; manual approval required.",
     "chat.aiReview.reason.busy": "Reviewer busy; manual approval required.",
     "chat.aiReview.reason.failed": "Reviewer failed or timed out; manual approval required.",
+    "chat.aiReview.reason.timedOut": "Reviewer timed out; manual approval required.",
+    "chat.aiReview.reason.httpFailed":
+      "Reviewer request failed (HTTP {status}); check the AI review model and provider. Manual approval required.",
+    "chat.aiReview.reason.modelUnresolved":
+      "The AI review model could not be resolved; manual approval required.",
+    "chat.aiReview.reason.truncated": "Reviewer reply was truncated; manual approval required.",
     "chat.aiReview.reason.invalidResponse": "Invalid reviewer response; manual approval required.",
     "chat.aiReview.reason.sensitiveRedacted":
       "Sensitive data was redacted; manual approval required.",

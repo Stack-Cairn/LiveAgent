@@ -22,6 +22,12 @@ export type AIApprovalConfig = {
   mode: "off" | "risk_only" | "auto";
   provider?: string;
   model?: string;
+  /**
+   * Read-only, from backends with `capabilities.ai_review_per_run`: the composer's permission
+   * mode decides when to review and auto review falls back to the session's model, so hosts
+   * hide the global setting. provider/model then only override the reviewer. Never sent back.
+   */
+  perRun?: boolean;
 };
 
 /** K-brain memory master switch; absent on backends without `capabilities.memory_switch`. */

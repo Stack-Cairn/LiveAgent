@@ -155,3 +155,15 @@ test("AI approval ignores old pending load responses after adapter changes", asy
     assert.equal(host.querySelector('[role="alert"]'), null);
   });
 });
+
+// K-brain with capability ai_review_per_run reports aiApproval.perRun: the composer's
+// permission mode decides when to review and auto review falls back to the session's model,
+// so the global setting is hidden. An older backend (no perRun) keeps the section.
+test("AI approval setting is hidden on backends that review per permission mode", async () => {
+  await fixture(async ({ host }) => {
+    assert.equal(host.querySelector('[data-testid="ai-approval-settings"]'), null);
+  }, settings({ mode: "off", perRun: true }));
+  await fixture(async ({ host }) => {
+    assert.ok(host.querySelector('[data-testid="ai-approval-settings"]'), "older backend keeps the section");
+  }, settings({ mode: "off" }));
+});
