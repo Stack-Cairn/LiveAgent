@@ -1,5 +1,6 @@
 import type { ImageStudioHost } from "@liveagent/ui/application/imageStudioHost";
 import type { DraftStorage } from "@liveagent/ui/features/image-studio/drafts";
+import { imageErrorText, type Translate } from "@liveagent/ui/features/image-studio/studioText";
 // Pure browser helper shared with desktop; it has no Tauri/native dependencies.
 import { createBrowserImageDownload } from "@liveagent/ui/lib/imaging/browserDownload";
 import { ImageClientError } from "@liveagent/ui/lib/imaging/errors";
@@ -66,13 +67,13 @@ export function createWebImageStudioHost(
   };
 }
 
-export function gatewayImageErrorNotice(error: unknown): string {
+export function gatewayImageErrorNotice(error: unknown, t?: Translate): string {
   if (!(error instanceof ImageClientError)) return "图像连接失败（IMAGE_NETWORK_ERROR）。";
   const status = error.status ? `HTTP ${error.status} · ` : "";
   const message =
     error.code === "IMAGE_IDENTITY_UNAVAILABLE"
       ? GATEWAY_IMAGE_IDENTITY_UNAVAILABLE
-      : `${error.message}（${error.code}）`;
+      : `${t ? imageErrorText(error, t) : error.message}（${error.code}）`;
   return `${status}${message}`;
 }
 
@@ -80,6 +81,8 @@ export function useWebImageStudioHost(
   token: string,
   identity: TrustedGatewayImageIdentity | undefined,
   workspace: string,
+  /** The caller renders the locale provider, so it passes the interface language in. */
+  t?: Translate,
 ): { host?: ImageStudioHost; unavailable: string; retry: () => void } {
   const [attempt, setAttempt] = useState(0);
   const [active, setActive] = useState<{
@@ -88,7 +91,8 @@ export function useWebImageStudioHost(
     identity: TrustedGatewayImageIdentity;
     workspace: string;
     host?: ImageStudioHost;
-    error?: string;
+    // Kept raw so the notice follows the current interface language.
+    error?: { cause: unknown };
   }>();
   useEffect(() => {
     // In particular, do not even access browser draft storage without trusted identity.
@@ -99,8 +103,7 @@ export function useWebImageStudioHost(
     let disposed = false;
     let session: ReturnType<typeof createWebImageStudioHost> | undefined;
     const failed = (error: unknown) => {
-      if (!disposed)
-        setActive({ attempt, token, identity, workspace, error: gatewayImageErrorNotice(error) });
+      if (!disposed) setActive({ attempt, token, identity, workspace, error: { cause: error } });
     };
     try {
       let storage: DraftStorage | undefined;
@@ -140,6 +143,7 @@ export function useWebImageStudioHost(
     retry: () => setAttempt((value) => value + 1),
     host: current?.host,
     unavailable:
-      current?.error ?? (identity ? "正在连接图像工作台…" : GATEWAY_IMAGE_IDENTITY_UNAVAILABLE),
+      (current?.error && gatewayImageErrorNotice(current.error.cause, t)) ??
+      (identity ? "正在连接图像工作台…" : GATEWAY_IMAGE_IDENTITY_UNAVAILABLE),
   };
 }

@@ -88,6 +88,21 @@ test("real 503 health response stays visible with manual retry and no available 
   });
 });
 
+test("unavailable notice follows the interface language passed by the view", async () => {
+  await withBrowser(async () => {
+    globalThis.fetch = async () => Response.json({ version: "kbrain.image.v1", error: { code: "IMAGE_UNAVAILABLE", message: "Not ready", requestId: "req-503", retryable: true } }, { status: 503 });
+    const { t } = createWebModuleLoader().loadModule("@liveagent/ui/i18n/index");
+    const hook = hookHarness();
+    hook.render("login-token", identity, "/workspace", (key) => t(key, "zh-CN"));
+    hook.flush();
+    await tick();
+    assert.equal(hook.render("login-token", identity, "/workspace", (key) => t(key, "zh-CN")).unavailable, "HTTP 503 · 图像模块不可用（IMAGE_UNAVAILABLE）");
+    // The raw error is kept, so switching language re-renders the same failure in English.
+    assert.equal(hook.render("login-token", identity, "/workspace", (key) => t(key, "en-US")).unavailable, "HTTP 503 · Image module unavailable（IMAGE_UNAVAILABLE）");
+    hook.dispose();
+  });
+});
+
 test("identity/token/workspace switches synchronously hide stale host and abort its transport", async () => {
   await withBrowser(async () => {
     globalThis.fetch = async () => Response.json({ status: "ok", capabilities: { image: { supported: true, version: "kbrain.image.v1" } } });

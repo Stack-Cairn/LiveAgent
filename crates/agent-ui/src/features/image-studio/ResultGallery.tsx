@@ -12,6 +12,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { ConfirmActionPopover } from "../../components/ui/confirm-action-popover";
 import { Input } from "../../components/ui/input";
+import { useLocale } from "../../i18n";
 import type { ImageJob } from "../../lib/imaging/types";
 import { cn } from "../../lib/shared/utils";
 import { AssetImage } from "./AssetImage";
@@ -83,7 +84,8 @@ function HistoryCard({
 }) {
   const assets = [...new Set(job.assetIds)];
   const active = !terminalJob(job);
-  const errors = jobErrorLines(job);
+  const { t } = useLocale();
+  const errors = jobErrorLines(job, t);
   const { prompt, framing } = splitFramedPrompt(job.request.prompt);
   return (
     <article

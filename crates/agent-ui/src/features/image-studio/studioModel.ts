@@ -6,6 +6,7 @@ import type {
   ImageProject,
   ImageTarget,
 } from "../../lib/imaging/types";
+import { imageErrorText, type Translate } from "./studioText";
 
 export interface FrozenSubmission {
   key: string;
@@ -176,11 +177,11 @@ export const noticeDuration: Record<NoticeTone, number | null> = {
   error: null,
 };
 /** Job-level and per-item errors usually repeat the same upstream message; show each once. */
-export function jobErrorLines(job: ImageJob): string[] {
+export function jobErrorLines(job: ImageJob, t: Translate): string[] {
   const errors = [job.error, ...job.items.map((item) => item.error)].filter(
     (error): error is NonNullable<typeof error> => Boolean(error),
   );
-  return [...new Set(errors.map((error) => `${error.message} ${errorAction(error)}`))];
+  return [...new Set(errors.map((error) => `${imageErrorText(error, t)} ${errorAction(error)}`))];
 }
 export const formatJobTime = (iso: string) =>
   new Date(iso).toLocaleString(undefined, {

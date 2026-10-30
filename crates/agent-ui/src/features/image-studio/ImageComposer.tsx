@@ -3,6 +3,7 @@ import { Loader2, Sparkles } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
+import { useLocale } from "../../i18n";
 import type { Operation } from "../../lib/imaging/types";
 import { ImageModelPicker } from "./ImageModelPicker";
 import { describeImageSize, ImageSizePicker } from "./ImageSizePicker";
@@ -35,7 +36,8 @@ export function ImageComposer({
       : undefined;
   const imageMode = view.operation !== "generate";
   const locked = !view.projectId || !view.draftReady;
-  const errors = controller.validation();
+  const { t } = useLocale();
+  const errors = controller.validation(t);
   const importImage = (image: File) => {
     if (locked || !imageOperation || view.uploading) return;
     const operation = imageMode ? view.operation : imageOperation;
@@ -54,7 +56,7 @@ export function ImageComposer({
       className="shrink-0 space-y-3 rounded-2xl border border-border bg-card p-3 sm:p-4"
       onSubmit={(event) => {
         event.preventDefault();
-        void controller.submit();
+        void controller.submit(t);
       }}
       onDragOver={(event) => {
         if (imageOperation) event.preventDefault();
@@ -211,7 +213,7 @@ export function ImageComposer({
         )}
         {view.dropped.length > 0 && (
           <div role="alert" className="text-xs">
-            切换模型后需要调整：{view.dropped.join("、")}。
+            切换模型后需要调整：{controller.droppedLabels(t).join("、")}。
             <Button
               type="button"
               size="sm"

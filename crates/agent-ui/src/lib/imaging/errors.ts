@@ -23,6 +23,9 @@ const messages: Record<string, string> = {
   IMAGE_STREAM_ENDED: "Image event stream ended before completion",
   IMAGE_EXPORT_FAILED: "Image export failed",
 };
+/** Codes with a fixed client message; the UI localizes each by code. */
+export const IMAGE_ERROR_CODES = Object.keys(messages);
+export const IMAGE_ERROR_FALLBACK_MESSAGE = "Image operation failed";
 
 /** Never attaches response bodies, request inputs, native URLs or an upstream cause. */
 export class ImageClientError extends Error implements ImageError {
@@ -39,7 +42,7 @@ export class ImageClientError extends Error implements ImageError {
     details?: ImageErrorDetails,
   ) {
     const safeCode = /^IMAGE_[A-Z0-9_]{1,80}$/.test(code) ? code : "IMAGE_UNAVAILABLE";
-    super(messages[safeCode] ?? "Image operation failed");
+    super(messages[safeCode] ?? IMAGE_ERROR_FALLBACK_MESSAGE);
     this.name = "ImageClientError";
     this.code = safeCode;
     this.status = status;

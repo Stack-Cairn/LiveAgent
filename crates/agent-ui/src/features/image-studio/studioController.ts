@@ -6,6 +6,7 @@ import type {
   ImageTarget,
   InputAsset,
   Operation,
+  ParameterSpec,
   Scalar,
 } from "../../lib/imaging/types";
 import {
@@ -36,6 +37,7 @@ import {
   type StudioState,
   submissionWasRejected,
 } from "./studioModel";
+import { parameterLabel, type Translate } from "./studioText";
 
 export interface PendingSubmission {
   projectId: string;
@@ -92,6 +94,7 @@ export class ImageStudioController {
   private inputRevision = 0;
   private draftRestore = 0;
   private targetRefresh = 0;
+  private droppedSpecs = new Map<string, ParameterSpec>();
   private archiveCreation?: Promise<ImageProject>;
   private historyQueue: { projectId: string; cursor?: string }[] = [];
   private historyPage?: { epoch: number };
@@ -404,12 +407,21 @@ export class ImageStudioController {
         this.patch({ notice: "图像模型刷新失败，请检查连接后重试。" });
     }
   }
+  /** Dropped keys belong to the previous target; the banner names them by its spec. */
+  droppedLabels(t: Translate = (key) => key): string[] {
+    return this.view.dropped.map((key) => {
+      const spec = this.droppedSpecs.get(key);
+      return spec ? parameterLabel(spec, t) : key;
+    });
+  }
   private applyTarget(next: ImageTarget, previous: ImageTarget | undefined) {
     if (this.view.uploading && (next.id !== previous?.id || next.revision !== previous?.revision))
       this.cancelUpload();
     const migration = previous
       ? migrateParameters(previous, next, this.view.draft.parameters)
       : { values: defaultParameters(next), dropped: [] };
+    for (const spec of previous?.parameters ?? [])
+      if (migration.dropped.includes(spec.key)) this.droppedSpecs.set(spec.key, spec);
     const operation = next.capabilities.operations.includes(this.view.operation)
       ? this.view.operation
       : (next.capabilities.operations[0] ?? "generate");
@@ -954,14 +966,14 @@ export class ImageStudioController {
       if (this.valid(epoch)) this.patch({ verifyingInputs: false });
     }
   }
-  validation(): string[] {
+  validation(t: Translate = (key) => key): string[] {
     const { draft, count, operation, projectId, uploading, dropped, draftReady } = this.view;
     const target = this.target;
     if (!target?.enabled) return ["请选择已启用并验证的图像模型。"];
-    const errors = validateParameters(target, draft.parameters).map(
-      (error) =>
-        `${target.parameters.find((p) => p.key === error.key)?.label ?? error.key}：${error.message}`,
-    );
+    const errors = validateParameters(target, draft.parameters).map((error) => {
+      const spec = target.parameters.find((p) => p.key === error.key);
+      return `${spec ? parameterLabel(spec, t) : error.key}：${error.message}`;
+    });
     if (!projectId || !draftReady) errors.push("请等待历史与草稿恢复，加载失败时请重试。");
     if (!draft.prompt.trim()) errors.push("请输入提示词。");
     if (!target.capabilities.operations.includes(operation)) errors.push("模型不支持此操作。");
@@ -992,9 +1004,9 @@ export class ImageStudioController {
     return errors;
   }
   /** Every click is a new job built from the current draft; only an in-flight request blocks it. */
-  async submit() {
+  async submit(t?: Translate) {
     if (this.pendingSubmit || this.disposed || !this.view.draftReady) return;
-    const errors = this.validation();
+    const errors = this.validation(t);
     if (errors.length) {
       this.patch({ notice: errors.join(" ") });
       return;
