@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { ImagePreviewSlide } from "../../components/chat/imagePreviewModel";
 import { Loader2, X } from "../../components/IconSet";
+import { useLocale } from "../../i18n";
 import type { ImageAsset, ImageStudioClient } from "../../lib/imaging/types";
+import { formatMessage, message } from "./studioText";
 
 // Reuses the chat lightbox (zoom, pan, slide switching, save/copy). Loaded on first
 // open so the workbench does not pull the viewer into its initial bundle.
@@ -13,6 +15,7 @@ const extension = (mime: string) =>
   mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
 
 function Loading({ label, onClose }: { label: string; onClose: () => void }) {
+  const { t } = useLocale();
   // A stalled read must never trap the user behind the overlay.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -30,7 +33,7 @@ function Loading({ label, onClose }: { label: string; onClose: () => void }) {
       {label}
       <button
         type="button"
-        aria-label="关闭大图"
+        aria-label={t("imageStudio.lightbox.close")}
         onClick={onClose}
         className="absolute right-4 top-4 rounded-full bg-white/10 p-2 hover:bg-white/20 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
       >
@@ -62,6 +65,7 @@ export function AssetLightbox({
 }) {
   // Slides keep their asset id so a failed sibling never shifts the start position.
   const [slides, setSlides] = useState<(ImagePreviewSlide & { assetId: string })[] | null>(null);
+  const { t } = useLocale();
   const key = assetIds.join("|");
   // biome-ignore lint/correctness/useExhaustiveDependencies: the joined key stands in for the id list
   useEffect(() => {
@@ -80,7 +84,10 @@ export function AssetLightbox({
           return {
             assetId: id,
             src,
-            alt: `${title}（第 ${position + 1} 张）`,
+            alt: formatMessage(
+              message("imageStudio.lightbox.slideAlt", { title, index: position + 1 }),
+              t,
+            ),
             title,
             mimeType: blob.type || meta?.mime,
             sizeBytes: blob.size,
@@ -105,16 +112,22 @@ export function AssetLightbox({
       controller.abort();
       for (const url of urls) URL.revokeObjectURL(url);
     };
-  }, [open, client, key, title]);
+  }, [open, client, key, title, t]);
   if (!open) return null;
-  if (!slides) return <Loading label="正在加载原图…" onClose={onClose} />;
+  if (!slides) return <Loading label={t("imageStudio.lightbox.loading")} onClose={onClose} />;
   const start = Math.max(
     0,
     slides.findIndex((slide) => slide.assetId === assetIds[index]),
   );
   return (
-    <Suspense fallback={<Loading label="正在打开图片查看器…" onClose={onClose} />}>
-      <ImagePreview open slides={slides} index={start} closeLabel="关闭大图" onClose={onClose} />
+    <Suspense fallback={<Loading label={t("imageStudio.lightbox.opening")} onClose={onClose} />}>
+      <ImagePreview
+        open
+        slides={slides}
+        index={start}
+        closeLabel={t("imageStudio.lightbox.close")}
+        onClose={onClose}
+      />
     </Suspense>
   );
 }

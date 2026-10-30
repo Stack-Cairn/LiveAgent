@@ -6,7 +6,14 @@ import type {
   ImageProject,
   ImageTarget,
 } from "../../lib/imaging/types";
-import { imageErrorText, type Translate } from "./studioText";
+import {
+  defaultTranslate,
+  formatMessage,
+  imageErrorText,
+  type Message,
+  message,
+  type Translate,
+} from "./studioText";
 
 export interface FrozenSubmission {
   key: string;
@@ -49,7 +56,8 @@ function normalizeJob(job: ImageJob): ImageJob {
       status: "failed",
       error: {
         code: "IMAGE_EMPTY_RESULT",
-        message: "任务没有返回可用图片，请修改输入后重新生成。",
+        // Display text comes from imageStudio.error.IMAGE_EMPTY_RESULT; this one stays for logs.
+        message: "The job returned no usable image.",
         retryable: false,
         requestId: "",
       },
@@ -151,23 +159,27 @@ export function submissionWasRejected(error: unknown): error is { code: string; 
     codes.includes(error.code)
   );
 }
-export function errorAction(error: { code?: string } | undefined): string {
+export function errorActionMessage(error: { code?: string } | undefined): Message {
   const code = error?.code ?? "";
-  if (/401|403|AUTH|CREDENTIAL|FORBIDDEN/.test(code)) return "请前往供应商设置检查地址与认证。";
-  if (/429|RATE|QUOTA/.test(code)) return "请等待限额恢复后再操作。";
-  if (/422|PARAMETER|INVALID/.test(code)) return "请修改提示词、参数或输入图片。";
-  if (/UNKNOWN|UNCERTAIN/.test(code))
-    return "请先核对任务状态；明确重新生成会创建新任务，可能再次计费。";
-  if (/EVENT_GAP/.test(code)) return "事件历史已过期，请重新获取任务快照。";
-  return "请刷新核对任务；确认后可修改输入重新生成。";
+  if (/401|403|AUTH|CREDENTIAL|FORBIDDEN/.test(code))
+    return message("imageStudio.errorAction.auth");
+  if (/429|RATE|QUOTA/.test(code)) return message("imageStudio.errorAction.rateLimit");
+  if (/422|PARAMETER|INVALID/.test(code)) return message("imageStudio.errorAction.input");
+  if (/UNKNOWN|UNCERTAIN/.test(code)) return message("imageStudio.errorAction.unknown");
+  if (/EVENT_GAP/.test(code)) return message("imageStudio.errorAction.eventGap");
+  return message("imageStudio.errorAction.default");
 }
+export const errorAction = (error: { code?: string } | undefined, t = defaultTranslate) =>
+  formatMessage(errorActionMessage(error), t);
 export type NoticeTone = "info" | "success" | "warning" | "error";
-/** Notices are plain strings from many controller paths; classify them in one place. */
-export function noticeTone(text: string): NoticeTone {
-  if (/失败|已失效/.test(text)) return "error";
-  if (/^(已删除历史记录|图片已保存)/.test(text)) return "success";
-  if (/请|不支持|不可用|上限|不兼容|未确认|可能|计费/.test(text)) return "warning";
-  return "info";
+const noticeTones = new Set<string>(["info", "success", "warning", "error"]);
+/**
+ * Notice keys carry their tone (`imageStudio.notice.<tone>.<name>`), so the colour
+ * never depends on the wording of one language. Validation lists are warnings.
+ */
+export function noticeTone(text: Message | undefined): NoticeTone {
+  const tone = /^imageStudio\.notice\.(\w+)\./.exec(text?.key ?? "")?.[1] ?? "";
+  return noticeTones.has(tone) ? (tone as NoticeTone) : "warning";
 }
 /** Errors wait for the user; everything else fades on its own. */
 export const noticeDuration: Record<NoticeTone, number | null> = {
@@ -181,41 +193,60 @@ export function jobErrorLines(job: ImageJob, t: Translate): string[] {
   const errors = [job.error, ...job.items.map((item) => item.error)].filter(
     (error): error is NonNullable<typeof error> => Boolean(error),
   );
-  return [...new Set(errors.map((error) => `${imageErrorText(error, t)} ${errorAction(error)}`))];
+  return [
+    ...new Set(
+      errors.map((error) =>
+        formatMessage(
+          message("imageStudio.errorLine", {
+            error: imageErrorText(error, t),
+            action: errorActionMessage(error),
+          }),
+          t,
+        ),
+      ),
+    ),
+  ];
 }
-export const formatJobTime = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
+export const formatJobTime = (iso: string, locale?: string) =>
+  new Date(iso).toLocaleString(locale, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
   });
-export const statusLabels: Record<ImageJob["status"], string> = {
-  queued: "排队中",
-  running: "生成中",
-  saving: "保存中",
-  succeeded: "已完成",
-  partial_succeeded: "部分完成",
-  failed: "失败",
-  cancel_requested: "正在取消",
-  cancelled: "已取消",
-  result_unknown: "结果未知",
+const statusKeys: Record<ImageJob["status"], string> = {
+  queued: "imageStudio.status.queued",
+  running: "imageStudio.status.running",
+  saving: "imageStudio.status.saving",
+  succeeded: "imageStudio.status.succeeded",
+  partial_succeeded: "imageStudio.status.partial_succeeded",
+  failed: "imageStudio.status.failed",
+  cancel_requested: "imageStudio.status.cancel_requested",
+  cancelled: "imageStudio.status.cancelled",
+  result_unknown: "imageStudio.status.result_unknown",
 };
+/** A status from a newer backend has no key yet and shows as sent. */
+export const statusLabel = (status: ImageJob["status"], t: Translate = defaultTranslate) =>
+  Object.hasOwn(statusKeys, status) ? t(statusKeys[status]) : status;
 
 // K-brain reports machine codes; unknown codes fall through verbatim so a new
 // backend reason is still visible rather than silently swallowed.
-const targetDisabledReasons: Record<string, string> = {
-  awaiting_verification: "旧配置，等待验证",
-  auth_required: "供应商未配置 API Key",
-  unsupported_image_model: "该模型不支持生成图片",
-  unsupported_image_protocol: "供应商接口类型不支持生图",
-  unsupported_provider_headers: "供应商自定义请求头不受支持",
-  unsupported_provider_endpoint: "供应商接口地址不受支持",
-};
-export function targetDisabledText(target: Pick<ImageTarget, "disabledReason">): string {
+const targetDisabledKeys = new Map([
+  ["awaiting_verification", "imageStudio.targetDisabled.awaiting_verification"],
+  ["auth_required", "imageStudio.targetDisabled.auth_required"],
+  ["unsupported_image_model", "imageStudio.targetDisabled.unsupported_image_model"],
+  ["unsupported_image_protocol", "imageStudio.targetDisabled.unsupported_image_protocol"],
+  ["unsupported_provider_headers", "imageStudio.targetDisabled.unsupported_provider_headers"],
+  ["unsupported_provider_endpoint", "imageStudio.targetDisabled.unsupported_provider_endpoint"],
+]);
+export function targetDisabledText(
+  target: Pick<ImageTarget, "disabledReason">,
+  t: Translate = defaultTranslate,
+): string {
   const reason = target.disabledReason?.trim();
-  if (!reason) return "该模型暂不可用，请检查供应商配置。";
-  return targetDisabledReasons[reason] ?? reason;
+  if (!reason) return t("imageStudio.targetUnavailable");
+  const key = targetDisabledKeys.get(reason);
+  return key ? t(key) : reason;
 }
 // Provider-derived targets are named "<provider> · <model>" by K-brain.
 export function splitTargetName(name: string): { model: string; provider?: string } {

@@ -355,7 +355,7 @@ test("upload rejects invalid files, reports transport failure and cancels in-fli
     assert.equal(submit().disabled, true);
     await importFile("drop", new env.dom.window.File(["duplicate"], "duplicate.png", { type: "image/png" }));
     assert.equal(calls.uploads.length, 2, "ignores imports during upload");
-    await click(button("取消上传"));
+    await click(byLabel("取消上传"));
     assert.equal(calls.uploads[1].signal.aborted, true);
     await env.act(async () => pending.resolve({ id: "ia_late", available: true }));
     assert.equal(host.querySelector('[aria-label="输入图片"]'), null);

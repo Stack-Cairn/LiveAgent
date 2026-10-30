@@ -98,7 +98,7 @@ test("unavailable notice follows the interface language passed by the view", asy
     await tick();
     assert.equal(hook.render("login-token", identity, "/workspace", (key) => t(key, "zh-CN")).unavailable, "HTTP 503 · 图像模块不可用（IMAGE_UNAVAILABLE）");
     // The raw error is kept, so switching language re-renders the same failure in English.
-    assert.equal(hook.render("login-token", identity, "/workspace", (key) => t(key, "en-US")).unavailable, "HTTP 503 · Image module unavailable（IMAGE_UNAVAILABLE）");
+    assert.equal(hook.render("login-token", identity, "/workspace", (key) => t(key, "en-US")).unavailable, "HTTP 503 · Image module unavailable (IMAGE_UNAVAILABLE)");
     hook.dispose();
   });
 });

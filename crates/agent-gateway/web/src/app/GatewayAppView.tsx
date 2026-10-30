@@ -1595,13 +1595,15 @@ export function GatewayAppView({
 
                     {activeView === "image-studio-hub" && !imageStudio.host && (
                       <section className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-                        <h1 className="text-lg font-semibold">图像工作台</h1>
+                        <h1 className="text-lg font-semibold">
+                          {translate("imageStudio.name", viewModel.settings.locale)}
+                        </h1>
                         <p role="status" className="max-w-lg text-sm text-muted-foreground">
                           {imageStudio.unavailable}
                         </p>
                         {imageStudioIdentity && (
                           <Button variant="outline" onClick={imageStudio.retry}>
-                            重试连接
+                            {translate("imageStudio.retryConnect", viewModel.settings.locale)}
                           </Button>
                         )}
                       </section>

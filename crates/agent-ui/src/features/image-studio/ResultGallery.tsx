@@ -18,13 +18,14 @@ import { cn } from "../../lib/shared/utils";
 import { AssetImage } from "./AssetImage";
 import { splitFramedPrompt } from "./framing";
 import type { ImageStudioController, StudioView } from "./studioController";
-import { formatJobTime, jobErrorLines, statusLabels, terminalJob } from "./studioModel";
+import { formatJobTime, jobErrorLines, statusLabel, terminalJob } from "./studioModel";
+import { formatMessage, message } from "./studioText";
 
 const filters = [
-  ["all", "全部"],
-  ["completed", "有结果"],
-  ["active", "进行中"],
-  ["failed", "需关注"],
+  ["all", "imageStudio.gallery.filter.all"],
+  ["completed", "imageStudio.gallery.filter.completed"],
+  ["active", "imageStudio.gallery.filter.active"],
+  ["failed", "imageStudio.gallery.filter.failed"],
 ] as const;
 type Filter = (typeof filters)[number][0];
 
@@ -84,12 +85,12 @@ function HistoryCard({
 }) {
   const assets = [...new Set(job.assetIds)];
   const active = !terminalJob(job);
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const errors = jobErrorLines(job, t);
   const { prompt, framing } = splitFramedPrompt(job.request.prompt);
   return (
     <article
-      aria-label={`任务 ${job.id}`}
+      aria-label={formatMessage(message("imageStudio.gallery.job", { id: job.id }), t)}
       className={cn(
         "group relative flex gap-3 overflow-hidden rounded-xl p-2 transition-colors",
         selected ? "bg-muted" : "hover:bg-muted/50",
@@ -98,7 +99,7 @@ function HistoryCard({
       {/* Stretched hit area: the whole card opens the job in the preview. */}
       <button
         type="button"
-        aria-label={`查看任务：${prompt}`}
+        aria-label={formatMessage(message("imageStudio.gallery.view", { prompt }), t)}
         aria-pressed={selected}
         // Text layers ignore the pointer so the whole card clicks; carry their
         // full content here so truncated prompts and errors stay readable.
@@ -111,7 +112,7 @@ function HistoryCard({
           <AssetImage
             client={controller.client}
             assetId={assets[0]}
-            alt={`生成结果 1`}
+            alt={formatMessage(message("imageStudio.result", { index: 1 }), t)}
             className="size-full object-cover"
           />
         ) : active ? (
@@ -132,11 +133,11 @@ function HistoryCard({
         </p>
         <p
           className="truncate text-xs leading-4 text-muted-foreground"
-          title={`${job.targetSnapshot.name} · ${formatJobTime(job.createdAt)}`}
+          title={`${job.targetSnapshot.name} · ${formatJobTime(job.createdAt, locale)}`}
         >
           {job.targetSnapshot.name} ·{" "}
           <time dateTime={job.createdAt} className="tabular-nums">
-            {formatJobTime(job.createdAt)}
+            {formatJobTime(job.createdAt, locale)}
           </time>
         </p>
         <div className="mt-1 flex h-7 min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -148,12 +149,12 @@ function HistoryCard({
                   aria-hidden="true"
                 />
               )}
-              {statusLabels[job.status]}
+              {statusLabel(job.status, t)}
             </Badge>
             {framing && (
               <span
                 className="min-w-0 truncate rounded bg-muted/70 px-1 tabular-nums"
-                title="写入提示词的画面参数"
+                title={t("imageStudio.gallery.framing")}
               >
                 {[framing.ratio, framing.tier].filter(Boolean).join(" · ")}
               </span>
@@ -167,15 +168,24 @@ function HistoryCard({
               selected && "lg:opacity-100",
             )}
           >
-            <IconAction label="恢复输入" onClick={() => void controller.restoreJob(job.id)}>
+            <IconAction
+              label={t("imageStudio.gallery.restore")}
+              onClick={() => void controller.restoreJob(job.id)}
+            >
               <Undo2 className="size-3.5" />
             </IconAction>
             {assets[0] && !active && (
-              <IconAction label="继续修改" onClick={() => controller.editAsset(assets[0])}>
+              <IconAction
+                label={t("imageStudio.continueEditing")}
+                onClick={() => controller.editAsset(assets[0])}
+              >
                 <SquarePen className="size-3.5" />
               </IconAction>
             )}
-            <IconAction label="刷新状态" onClick={() => void controller.refreshJob(job.id)}>
+            <IconAction
+              label={t("imageStudio.gallery.refresh")}
+              onClick={() => void controller.refreshJob(job.id)}
+            >
               <RefreshCw className="size-3.5" />
             </IconAction>
             {active ? (
@@ -187,17 +197,19 @@ function HistoryCard({
                 disabled={job.status === "cancel_requested"}
                 onClick={() => void controller.cancelJob(job.id)}
               >
-                {job.status === "cancel_requested"
-                  ? "正在取消…"
-                  : job.targetSnapshot.capabilities.supportsCancel
-                    ? "取消任务"
-                    : "停止本地处理"}
+                {t(
+                  job.status === "cancel_requested"
+                    ? "imageStudio.gallery.cancelling"
+                    : job.targetSnapshot.capabilities.supportsCancel
+                      ? "imageStudio.gallery.cancel"
+                      : "imageStudio.gallery.stopLocal",
+                )}
               </Button>
             ) : (
               <ConfirmActionPopover
-                title="删除这条历史记录？"
-                description="删除后不再显示在历史中，生成的图片也会在稍后清理。"
-                confirmLabel="删除"
+                title={t("imageStudio.gallery.deleteTitle")}
+                description={t("imageStudio.gallery.deleteDescription")}
+                confirmLabel={t("imageStudio.gallery.delete")}
                 onConfirm={() => void controller.deleteJob(job.id)}
               >
                 {() => (
@@ -205,11 +217,11 @@ function HistoryCard({
                     type="button"
                     size="icon"
                     variant="ghost"
-                    title="删除"
+                    title={t("imageStudio.gallery.delete")}
                     className="size-7 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   >
                     <Trash2 className="size-3.5" />
-                    <span className="sr-only">删除</span>
+                    <span className="sr-only">{t("imageStudio.gallery.delete")}</span>
                   </Button>
                 )}
               </ConfirmActionPopover>
@@ -219,10 +231,10 @@ function HistoryCard({
         {[
           ...errors.map((line) => ({ line, alert: true })),
           ...(job.status === "result_unknown"
-            ? [{ line: "结果未知，请先刷新核对。重新生成可能再次计费。", alert: false }]
+            ? [{ line: t("imageStudio.gallery.resultUnknown"), alert: false }]
             : []),
           ...(job.cancelEffect === "local_only"
-            ? [{ line: "已停止本地处理，上游可能仍在执行或计费。晚到图片会保留。", alert: false }]
+            ? [{ line: t("imageStudio.gallery.localOnly"), alert: false }]
             : []),
         ].map(({ line, alert }) => (
           <p
@@ -254,6 +266,7 @@ export function ResultGallery({
   onSelectJob: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const { t } = useLocale();
   const [filter, setFilter] = useState<Filter>("all");
   const jobs = Object.values(view.state.jobs).sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
@@ -273,14 +286,17 @@ export function ResultGallery({
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            aria-label="搜索历史记录"
-            placeholder="搜索提示词或模型"
+            aria-label={t("imageStudio.gallery.search")}
+            placeholder={t("imageStudio.gallery.searchPlaceholder")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="h-9 rounded-lg pl-8"
           />
         </div>
-        <fieldset aria-label="筛选历史记录" className="flex gap-0.5 rounded-lg bg-muted/60 p-0.5">
+        <fieldset
+          aria-label={t("imageStudio.gallery.filterLabel")}
+          className="flex gap-0.5 rounded-lg bg-muted/60 p-0.5"
+        >
           {filters.map(([value, label]) => (
             <button
               key={value}
@@ -295,20 +311,20 @@ export function ResultGallery({
               )}
               onClick={() => setFilter(value)}
             >
-              {label}
+              {t(label)}
             </button>
           ))}
         </fieldset>
       </div>
       <section
-        aria-label="图像结果画廊"
+        aria-label={t("imageStudio.gallery.label")}
         className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-3"
       >
         {!visible.length && (
           <div className="flex min-h-48 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
-            <p>{jobs.length ? "没有匹配的历史记录" : "暂无历史记录"}</p>
+            <p>{t(jobs.length ? "imageStudio.gallery.noMatch" : "imageStudio.gallery.empty")}</p>
             <p className="text-xs">
-              {jobs.length ? "试试其他提示词或筛选条件" : "生成后可以在这里查看和恢复作品"}
+              {t(jobs.length ? "imageStudio.gallery.noMatchHint" : "imageStudio.gallery.emptyHint")}
             </p>
           </div>
         )}
@@ -328,7 +344,7 @@ export function ResultGallery({
             className="mt-2 w-full"
             onClick={() => void controller.moreJobs()}
           >
-            加载更多历史
+            {t("imageStudio.gallery.loadMore")}
           </Button>
         )}
       </section>

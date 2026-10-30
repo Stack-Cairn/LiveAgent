@@ -3,7 +3,7 @@ import { Input } from "../../components/ui/input";
 import { useLocale } from "../../i18n";
 import type { ImageTarget } from "../../lib/imaging/types";
 import { validateParameters } from "./parameterModel";
-import { parameterLabel, parameterValueLabel } from "./studioText";
+import { formatMessage, parameterLabel, parameterValueLabel } from "./studioText";
 
 export const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
@@ -31,7 +31,8 @@ export function TargetParameterForm({
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {target.parameters.map((spec) => {
         const id = `${prefix}-${spec.key}`;
-        const message = errors.find((error) => error.key === spec.key)?.message;
+        const error = errors.find((item) => item.key === spec.key)?.message;
+        const message = error && formatMessage(error, t);
         const common = {
           id,
           disabled,
@@ -53,13 +54,11 @@ export function TargetParameterForm({
                 value={spec.enum.findIndex((value) => value === values[spec.key])}
                 onChange={(event) => set(spec.key, spec.enum?.[Number(event.target.value)])}
               >
-                <option value={-1}>请选择</option>
+                <option value={-1}>{t("imageStudio.option.unset")}</option>
                 {spec.enum.map((value, index) => (
                   <option key={`${typeof value}:${value}`} value={index}>
                     {typeof value === "boolean"
-                      ? value
-                        ? "是"
-                        : "否"
+                      ? t(value ? "imageStudio.option.yes" : "imageStudio.option.no")
                       : parameterValueLabel(spec, value, t)}
                   </option>
                 ))}
@@ -76,9 +75,9 @@ export function TargetParameterForm({
                   )
                 }
               >
-                <option value="">请选择</option>
-                <option value="true">是</option>
-                <option value="false">否</option>
+                <option value="">{t("imageStudio.option.unset")}</option>
+                <option value="true">{t("imageStudio.option.yes")}</option>
+                <option value="false">{t("imageStudio.option.no")}</option>
               </select>
             ) : (
               <Input

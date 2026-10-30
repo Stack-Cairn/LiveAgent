@@ -516,13 +516,13 @@ test('review fixes: history refresh keeps an in-flight request; acceptance selec
     assert.equal(c.view.submission.status, 'accepted');
     assert.ok(c.view.state.jobs.new);
     assert.equal(c.view.state.selectedJobId, 'new', 'the preview follows the job just submitted');
-    c.showNotice('keep me');
+    c.showNotice({ key: 'keep me' });
     const draft = c.view.draft;
     await c.refreshTargets();
     assert.equal(c.view.draft, draft, 'an unchanged model must not replace the draft');
     assert.equal(c.view.notice, 'keep me');
     const seq = c.view.noticeSeq;
-    c.showNotice('keep me');
+    c.showNotice({ key: 'keep me' });
     assert.equal(c.view.noticeSeq, seq + 1, 'an identical notice restarts its timer');
   } finally { c.dispose(); }
 });

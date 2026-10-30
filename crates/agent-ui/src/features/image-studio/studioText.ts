@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE } from "../../i18n/hostTranslations";
 import { SHARED_TRANSLATIONS } from "../../i18n/sharedTranslations";
 import { IMAGE_ERROR_FALLBACK_MESSAGE } from "../../lib/imaging/errors";
 import type { ImageError, ParameterSpec } from "../../lib/imaging/types";
@@ -5,6 +6,32 @@ import type { ImageError, ParameterSpec } from "../../lib/imaging/types";
 export type Translate = (key: string) => string;
 
 const english: Record<string, string> = SHARED_TRANSLATIONS["en-US"];
+const fallback: Record<string, string> = SHARED_TRANSLATIONS[DEFAULT_LOCALE];
+/** For code outside a LocaleContext (controller before mount, tests): the default locale. */
+export const defaultTranslate: Translate = (key) => fallback[key] ?? key;
+
+/** A parameter is a fixed value, a nested message, or text that depends on the language. */
+export type MessageParam = string | number | Message | ((t: Translate) => string);
+/**
+ * Text kept as a key until it is shown, so a stored notice follows a later language
+ * switch. `{name}` placeholders are filled in a single pass: a value that itself
+ * contains `{other}` or `$&` (a prompt, a provider message) is inserted verbatim.
+ */
+export interface Message {
+  key: string;
+  params?: Record<string, MessageParam>;
+}
+export const message = (key: string, params?: Record<string, MessageParam>): Message =>
+  params ? { key, params } : { key };
+export function formatMessage(text: Message, t: Translate): string {
+  const params = text.params ?? {};
+  return t(text.key).replace(/\{(\w+)\}/g, (token, name: string) => {
+    if (!Object.hasOwn(params, name)) return token;
+    const value = params[name];
+    if (typeof value === "function") return value(t);
+    return typeof value === "object" ? formatMessage(value, t) : String(value);
+  });
+}
 const lookup = (t: Translate, key: string) => {
   const text = t(key);
   return text === key ? undefined : text;

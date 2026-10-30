@@ -3,25 +3,28 @@ import { AlertTriangle, Check, ChevronDown, ImageIcon, Package } from "../../com
 import { Button } from "../../components/ui/button";
 import { menuSurfaceClassName } from "../../components/ui/menu-surface";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { useLocale } from "../../i18n";
 import type { ImageTarget } from "../../lib/imaging/types";
 import { cn } from "../../lib/shared/utils";
 import { splitTargetName, targetDisabledText } from "./studioModel";
+import type { Translate } from "./studioText";
 
 // The popup mirrors the chat composer's model picker (ComposerModelControls):
 // provider-grouped rows with capability badges and a check mark.
 
-function modeBadges(target: ImageTarget) {
+function modeBadges(target: ImageTarget, t: Translate) {
   const operations = target.capabilities.operations;
   return [
-    operations.includes("generate") && "文生图",
-    (operations.includes("edit") || operations.includes("reference")) && "图生图",
+    operations.includes("generate") && t("imageStudio.textToImage"),
+    (operations.includes("edit") || operations.includes("reference")) &&
+      t("imageStudio.imageToImage"),
   ].filter((badge): badge is string => Boolean(badge));
 }
 
-function groupByProvider(targets: ImageTarget[]) {
+function groupByProvider(targets: ImageTarget[], other: string) {
   const groups = new Map<string, ImageTarget[]>();
   for (const target of targets) {
-    const provider = splitTargetName(target.name).provider ?? "其他";
+    const provider = splitTargetName(target.name).provider ?? other;
     groups.set(provider, [...(groups.get(provider) ?? []), target]);
   }
   return [...groups.entries()];
@@ -46,13 +49,14 @@ function ModelRow({
   onSelect: () => void;
 }) {
   const { model } = splitTargetName(target.name);
+  const { t } = useLocale();
   return (
     <button
       type="button"
       data-model-option=""
       aria-pressed={selected}
       disabled={!target.enabled}
-      title={target.enabled ? target.name : targetDisabledText(target)}
+      title={target.enabled ? target.name : targetDisabledText(target, t)}
       onClick={onSelect}
       className={cn(
         "flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left",
@@ -70,13 +74,13 @@ function ModelRow({
       <span className="min-w-0 flex-1 truncate">{model}</span>
       <span className="flex min-w-0 shrink-0 items-center gap-1 text-tiny font-normal text-muted-foreground">
         {target.enabled ? (
-          modeBadges(target).map((badge) => (
+          modeBadges(target, t).map((badge) => (
             <span key={badge} className="rounded bg-muted/60 px-1 py-px">
               {badge}
             </span>
           ))
         ) : (
-          <span className="max-w-36 truncate">{targetDisabledText(target)}</span>
+          <span className="max-w-36 truncate">{targetDisabledText(target, t)}</span>
         )}
       </span>
       <span className="size-3.5 shrink-0">{selected && <Check className="size-3.5" />}</span>
@@ -100,6 +104,7 @@ export function ImageModelPicker({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useLocale();
   const contentRef = useRef<HTMLDivElement>(null);
   const available = targets.filter((target) => target.enabled);
   const unavailable = targets.filter((target) => !target.enabled);
@@ -108,10 +113,10 @@ export function ImageModelPicker({
   const label = current
     ? splitTargetName(current.name).model
     : missing
-      ? "原模型不可用"
+      ? t("imageStudio.modelPicker.missing")
       : targets.length
-        ? "选择图像模型"
-        : "暂无可用图像模型";
+        ? t("imageStudio.modelPicker.choose")
+        : t("imageStudio.modelPicker.none");
   const warn = missing || (current && !current.enabled);
   const select = (targetId: string) => {
     onChange(targetId);
@@ -167,7 +172,7 @@ export function ImageModelPicker({
         align="start"
         sideOffset={8}
         collisionPadding={8}
-        aria-label="选择图像模型"
+        aria-label={t("imageStudio.modelPicker.choose")}
         onKeyDown={(event) => {
           if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
           const rows = Array.from(
@@ -195,10 +200,10 @@ export function ImageModelPicker({
       >
         {available.length === 0 && (
           <p className="px-3 py-6 text-center text-muted-foreground">
-            暂无可用图像模型，请在供应商设置中添加
+            {t("imageStudio.modelPicker.noneHint")}
           </p>
         )}
-        {groupByProvider(available).map(([provider, items]) => (
+        {groupByProvider(available, t("imageStudio.modelPicker.other")).map(([provider, items]) => (
           <div key={provider} className="space-y-0.5 pb-1.5 last:pb-0">
             <GroupHeader label={provider} count={items.length} />
             {items.map((target) => (
@@ -213,7 +218,10 @@ export function ImageModelPicker({
         ))}
         {unavailable.length > 0 && (
           <div className="space-y-0.5 border-t border-border/40 pt-1.5">
-            <GroupHeader label="不可用" count={unavailable.length} />
+            <GroupHeader
+              label={t("imageStudio.modelPicker.unavailable")}
+              count={unavailable.length}
+            />
             {unavailable.map((target) => (
               <ModelRow
                 key={target.id}

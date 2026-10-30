@@ -29,15 +29,25 @@ import { MAX_UPLOAD_BYTES, sniffImage, UPLOAD_MIMES } from "./imageSniff";
 import { defaultParameters, migrateParameters, validateParameters } from "./parameterModel";
 import {
   applyJobSnapshot,
-  errorAction,
+  errorActionMessage,
   type FrozenSubmission,
   freezeSubmission,
   initialStudioState,
   markSubmissionUnknown,
+  type NoticeTone,
+  noticeTone,
   type StudioState,
   submissionWasRejected,
+  targetDisabledText,
 } from "./studioModel";
-import { parameterLabel, type Translate } from "./studioText";
+import {
+  defaultTranslate,
+  formatMessage,
+  type Message,
+  message,
+  parameterLabel,
+  type Translate,
+} from "./studioText";
 
 export interface PendingSubmission {
   projectId: string;
@@ -55,6 +65,7 @@ export interface StudioView {
   operation: Operation;
   count: number;
   notice: string;
+  noticeTone: NoticeTone;
   /** Bumps on every non-empty notice, so an identical repeat restarts its timer. */
   noticeSeq: number;
   uploading: boolean;
@@ -67,20 +78,23 @@ export interface StudioView {
   verifyingInputs: boolean;
 }
 const emptyDraft = (): StudioDraft => ({ prompt: "", targetId: "", parameters: {}, inputs: [] });
-function uploadFailureNotice(error: unknown): string {
+// The backend matches the first archive by this title on every start, so it is
+// stored data and stays the same in every interface language.
+const ARCHIVE_TITLE = "图像工作台";
+function uploadFailureNotice(error: unknown): Message {
   const { status, code } = (error ?? {}) as { status?: number; code?: string };
   if (status === 413 || code === "IMAGE_TOO_LARGE")
-    return "上传失败：图片超过 20 MiB 上限，请压缩后再上传。";
+    return message("imageStudio.notice.error.uploadTooLarge");
   if (status === 422 || code === "IMAGE_INVALID_INPUT")
-    return "上传失败：图片内容已损坏、无法解码或像素超过 4000 万，请换一张 PNG、JPEG 或 WebP 图片。";
+    return message("imageStudio.notice.error.uploadUndecodable");
   if (
     code === "IMAGE_NETWORK_ERROR" ||
     status === 0 ||
     code === "KBRAIN_TRANSPORT_UNAVAILABLE" ||
     error instanceof TypeError
   )
-    return "上传失败：无法连接图像服务，请检查后端后重试；草稿已保留。";
-  return "图片上传失败，请重新上传；草稿已保留。";
+    return message("imageStudio.notice.error.uploadOffline");
+  return message("imageStudio.notice.error.uploadFailed");
 }
 
 export class ImageStudioController {
@@ -101,6 +115,9 @@ export class ImageStudioController {
   private uploadAbort?: AbortController;
   private scopeAbort = new AbortController();
   private streams: ImageEventStreams;
+  private translate: Translate = defaultTranslate;
+  /** What the current notice says, kept so a language switch can re-render it. */
+  private noticeSource: Message[] = [];
   constructor(
     public client: ImageStudioClient,
     private ownerId: string,
@@ -117,6 +134,7 @@ export class ImageStudioController {
       operation: "generate",
       count: 1,
       notice: "",
+      noticeTone: "info",
       noticeSeq: 0,
       uploading: false,
       draftReady: false,
@@ -134,8 +152,26 @@ export class ImageStudioController {
       this.client,
       () => this.view.state,
       (state) => this.patch({ state }),
-      (notice) => this.patch({ notice }),
+      (notice) => this.say(notice),
     );
+  }
+  /** Follows the interface language; the notice on screen is re-rendered in place. */
+  setTranslator(t: Translate) {
+    if (t === this.translate) return;
+    this.translate = t;
+    if (!this.view.notice || this.disposed) return;
+    this.view = { ...this.view, notice: this.renderNotice() };
+    for (const listener of this.listeners) listener();
+  }
+  private renderNotice() {
+    return this.noticeSource.map((text) => formatMessage(text, this.translate)).join(" ");
+  }
+  private noticeOf(...messages: Message[]): Pick<StudioView, "notice" | "noticeTone"> {
+    this.noticeSource = messages;
+    return { notice: this.renderNotice(), noticeTone: noticeTone(messages[0]) };
+  }
+  private say(...messages: Message[]) {
+    this.patch(this.noticeOf(...messages));
   }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -147,6 +183,7 @@ export class ImageStudioController {
   private patch(patch: Partial<StudioView>) {
     if (this.disposed) return;
     const announces = typeof patch.notice === "string" && patch.notice !== "";
+    if (patch.notice === "") this.noticeSource = [];
     this.view = {
       ...this.view,
       ...patch,
@@ -177,7 +214,7 @@ export class ImageStudioController {
         serializeDraft(scope, this.view.draft, this.view.targets),
       );
     } catch {
-      this.patch({ notice: "本地草稿保存失败，请保留当前页面。" });
+      this.say(message("imageStudio.notice.error.draftSaveFailed"));
     }
   }
   private saveSubmission(scope: DraftScope, submission: FrozenSubmission | null): boolean {
@@ -191,7 +228,7 @@ export class ImageStudioController {
       return true;
     } catch {
       if (this.view.projectId === scope.projectId)
-        this.patch({ notice: "提交记录保存失败；若页面中断，请在历史中确认任务是否已创建。" });
+        this.say(message("imageStudio.notice.error.submissionSaveFailed"));
       return false;
     } finally {
       this.patch({});
@@ -298,14 +335,14 @@ export class ImageStudioController {
       }
       if (!projects.size) {
         // Share an in-flight creation across start retries; never create once per epoch.
-        this.archiveCreation ??= this.client.createProject("图像工作台");
+        this.archiveCreation ??= this.client.createProject(ARCHIVE_TITLE);
         const creation = this.archiveCreation;
         try {
           const project = await creation;
           if (!this.valid(epoch)) return;
           projects.set(project.id, project);
         } catch {
-          if (this.valid(epoch)) this.patch({ notice: "图像工作台初始化失败，请重试。" });
+          if (this.valid(epoch)) this.say(message("imageStudio.notice.error.archiveInitFailed"));
           return;
         } finally {
           if (this.archiveCreation === creation) this.archiveCreation = undefined;
@@ -319,7 +356,7 @@ export class ImageStudioController {
       }
       const archive =
         projects.get(remembered) ??
-        [...projects.values()].find((project) => project.title === "图像工作台") ??
+        [...projects.values()].find((project) => project.title === ARCHIVE_TITLE) ??
         projects.values().next().value;
       if (!archive) throw new Error("Image archive unavailable");
       this.loadKnownSubmissions([...projects.values()]);
@@ -333,7 +370,7 @@ export class ImageStudioController {
       });
       await this.selectProject(archive.id);
     } catch {
-      if (this.valid(epoch)) this.patch({ notice: "图像工作台加载失败，请检查后端连接后重试。" });
+      if (this.valid(epoch)) this.say(message("imageStudio.notice.error.archiveLoadFailed"));
     } finally {
       if (this.valid(epoch)) this.patch({ loading: false });
     }
@@ -394,9 +431,15 @@ export class ImageStudioController {
           this.patch({ dropped: [...new Set([...pendingDrops, ...this.view.dropped])] });
         }
         if (!next.enabled)
-          this.patch({ notice: next.disabledReason || "当前模型已停用，请选择已启用的模型。" });
+          this.say(
+            next.disabledReason
+              ? message("imageStudio.notice.warning.targetDisabled", {
+                  reason: (t) => targetDisabledText(next, t),
+                })
+              : message("imageStudio.notice.warning.targetStopped"),
+          );
       } else if (this.view.draft.targetId) {
-        this.patch({ notice: "当前模型已删除，请重新选择模型；草稿与原提交记录已保留。" });
+        this.say(message("imageStudio.notice.warning.targetDeleted"));
       } else {
         const available = targets.find((target) => target.enabled);
         if (available) this.applyTarget(available, undefined);
@@ -404,11 +447,11 @@ export class ImageStudioController {
       }
     } catch {
       if (this.valid(epoch) && refresh === this.targetRefresh)
-        this.patch({ notice: "图像模型刷新失败，请检查连接后重试。" });
+        this.say(message("imageStudio.notice.error.targetRefreshFailed"));
     }
   }
   /** Dropped keys belong to the previous target; the banner names them by its spec. */
-  droppedLabels(t: Translate = (key) => key): string[] {
+  droppedLabels(t: Translate = this.translate): string[] {
     return this.view.dropped.map((key) => {
       const spec = this.droppedSpecs.get(key);
       return spec ? parameterLabel(spec, t) : key;
@@ -432,9 +475,9 @@ export class ImageStudioController {
       operation,
       count: Math.min(this.view.count, next.capabilities.maxCount),
       dropped: migration.dropped,
-      notice: hasInputs
-        ? "模型已切换，请重新确认输入图片的参考或编辑方式；新模型不保证继承原上下文。"
-        : "",
+      ...(hasInputs
+        ? this.noticeOf(message("imageStudio.notice.warning.modelSwitched"))
+        : { notice: "" }),
     });
     const allowed =
       operation === "generate"
@@ -541,16 +584,18 @@ export class ImageStudioController {
         try {
           this.storage?.setItem(this.archiveKey(), projectId);
         } catch {
-          this.patch({ notice: "历史归档选择保存失败，请保留当前页面。" });
+          this.say(message("imageStudio.notice.error.archiveSelectionSaveFailed"));
         }
         if (restored?.unverifiedAssetIds.length)
-          this.patch({ notice: "部分输入图片暂时无法核验，引用已保留，请重验后提交。" });
+          this.say(message("imageStudio.notice.warning.inputsUnverified"));
         else if (restored?.invalidAssetIds.length)
-          this.patch({ notice: `${restored.invalidAssetIds.length} 张输入图已失效，请重新上传。` });
+          this.say(
+            message("imageStudio.notice.error.inputsInvalid", {
+              count: restored.invalidAssetIds.length,
+            }),
+          );
         if (submission?.status === "unknown")
-          this.patch({
-            notice: "上次提交结果未确认，请先在历史中确认任务是否已创建，再决定是否重新生成。",
-          });
+          this.say(message("imageStudio.notice.warning.submissionUnconfirmed"));
         if (restored?.draft.inputs.length) {
           const roles = restored.draft.inputs.map((input) => input.role);
           const desired = roles.includes("mask")
@@ -560,11 +605,10 @@ export class ImageStudioController {
               : "reference";
           if (this.target?.capabilities.operations.includes(desired))
             this.patch({ operation: desired });
-          else this.patch({ notice: "草稿输入与当前模型能力不兼容，请调整操作或重新上传。" });
+          else this.say(message("imageStudio.notice.warning.draftIncompatible"));
         }
       } catch {
-        if (this.valid(epoch))
-          this.patch({ notice: "本地草稿或提交记录读取失败，已暂停保存与提交，请重试加载。" });
+        if (this.valid(epoch)) this.say(message("imageStudio.notice.error.draftReadFailed"));
       }
     };
     const loadHistory = async () => {
@@ -588,7 +632,7 @@ export class ImageStudioController {
       this.patch({ state: nextState, jobCursor: this.nextHistoryCursor() });
       for (const job of Object.values(nextState.jobs)) this.streams.watch(job);
       if (pages.some(({ page }) => !page))
-        this.patch({ notice: "部分历史加载失败，可通过加载更多重试；草稿会独立恢复。" });
+        this.say(message("imageStudio.notice.error.historyPartial"));
     };
     await Promise.all([loadDraft(), loadHistory()]);
     if (this.valid(epoch)) this.patch({ loading: false });
@@ -612,7 +656,7 @@ export class ImageStudioController {
           projectCursor: page.nextCursor,
         });
     } catch {
-      if (this.valid(epoch)) this.patch({ notice: "更多历史加载失败，请重试。" });
+      if (this.valid(epoch)) this.say(message("imageStudio.notice.error.moreProjectsFailed"));
     }
   }
   private nextHistoryCursor() {
@@ -641,7 +685,7 @@ export class ImageStudioController {
         this.historyQueue.push(next);
         this.patch({
           jobCursor: this.nextHistoryCursor(),
-          notice: "更多历史加载失败，已保留重试并继续加载其他历史。",
+          ...this.noticeOf(message("imageStudio.notice.error.moreJobsFailed")),
         });
       }
     } finally {
@@ -673,13 +717,14 @@ export class ImageStudioController {
         for (const job of page?.items ?? []) state = applyJobSnapshot(state, job);
       this.patch({ state });
       for (const job of Object.values(state.jobs)) this.streams.watch(job);
-      if (pages.some((page) => !page)) this.patch({ notice: "部分历史刷新失败，请稍后重试。" });
+      if (pages.some((page) => !page))
+        this.say(message("imageStudio.notice.error.historyRefreshPartial"));
     } finally {
       if (this.valid(epoch)) this.patch({ loading: false });
     }
   }
-  showNotice(text: string) {
-    this.patch({ notice: text });
+  showNotice(text: Message) {
+    this.say(text);
   }
   async createProject(title: string) {
     if (!title.trim()) return;
@@ -692,7 +737,7 @@ export class ImageStudioController {
       });
       await this.selectProject(project.id);
     } catch {
-      if (this.valid(epoch)) this.patch({ notice: "历史创建失败，请重试。" });
+      if (this.valid(epoch)) this.say(message("imageStudio.notice.error.projectCreateFailed"));
     }
   }
   async renameProject(title: string) {
@@ -709,8 +754,7 @@ export class ImageStudioController {
           },
         });
     } catch {
-      if (this.valid(epoch))
-        this.patch({ notice: "历史重命名失败，可能已被其他页面修改；请刷新历史列表后重试。" });
+      if (this.valid(epoch)) this.say(message("imageStudio.notice.error.projectRenameFailed"));
     }
   }
   async deleteProject() {
@@ -725,7 +769,7 @@ export class ImageStudioController {
         this.storage?.removeItem(draftKey(this.ownerId, this.backendId, projectId));
         this.storage?.removeItem(submissionKey(this.scope()));
       } catch {
-        this.patch({ notice: "历史已删除，但本地草稿清理失败。" });
+        this.say(message("imageStudio.notice.error.draftCleanupFailed"));
       }
       const projects = this.view.state.projects.filter((project) => project.id !== projectId);
       this.patch({ state: { ...this.view.state, projects } });
@@ -745,7 +789,7 @@ export class ImageStudioController {
         });
       }
     } catch {
-      if (this.valid(epoch)) this.patch({ notice: "历史删除失败，请重试。" });
+      if (this.valid(epoch)) this.say(message("imageStudio.notice.error.projectDeleteFailed"));
     }
   }
   dismissNotice(notice = this.view.notice) {
@@ -783,7 +827,7 @@ export class ImageStudioController {
           snapshotNeeded,
           ...(selectedHere ? { selectedJobId: undefined, selectedAssetId: undefined } : {}),
         },
-        notice: "已删除历史记录。",
+        ...this.noticeOf(message("imageStudio.notice.success.jobDeleted")),
       });
     };
     try {
@@ -794,8 +838,8 @@ export class ImageStudioController {
       const status = (error as { status?: number }).status;
       // Already gone on the backend (another window, or a retried click).
       if (status === 404) forget();
-      else if (status === 409) this.patch({ notice: "任务仍在进行，请先取消或等待结束后再删除。" });
-      else this.patch({ notice: "删除失败，请检查连接后重试。" });
+      else if (status === 409) this.say(message("imageStudio.notice.warning.jobStillRunning"));
+      else this.say(message("imageStudio.notice.error.jobDeleteFailed"));
     }
   }
   async restoreJob(id: string) {
@@ -841,16 +885,21 @@ export class ImageStudioController {
         count: request.count,
         dropped: [],
         unverifiedAssetIds: verified.unverifiedAssetIds,
-        notice: verified.unverifiedAssetIds.length
-          ? "历史输入图片暂时无法核验，引用已保留，请重验后提交。"
-          : verified.invalidAssetIds.length
-            ? "历史输入图片已失效，请重新上传后提交。"
-            : "已恢复历史请求，可调整后生成。",
+        ...this.noticeOf(
+          message(
+            verified.unverifiedAssetIds.length
+              ? "imageStudio.notice.warning.restoredUnverified"
+              : verified.invalidAssetIds.length
+                ? "imageStudio.notice.error.restoredInvalid"
+                : "imageStudio.notice.warning.restored",
+          ),
+        ),
       });
       this.updateDraft(verified.draft);
-      if (!this.target?.enabled) this.patch({ notice: "历史模型当前不可用，请选择已启用的模型。" });
+      if (!this.target?.enabled)
+        this.say(message("imageStudio.notice.warning.restoredTargetUnavailable"));
       if (this.view.submission?.status === "unknown")
-        this.patch({ notice: "历史草稿已恢复；另有一次提交结果未确认，请先在历史中确认。" });
+        this.say(message("imageStudio.notice.warning.restoredWithPending"));
     } finally {
       if (this.valid(epoch) && restoration === this.draftRestore)
         this.patch({ verifyingInputs: false });
@@ -872,15 +921,18 @@ export class ImageStudioController {
         ? "reference"
         : undefined;
     if (!operation) {
-      this.patch({ notice: "当前模型不支持图片编辑或参考生成，请先切换模型。" });
+      this.say(message("imageStudio.notice.warning.editUnsupported"));
       return;
     }
     this.patch({
       operation,
-      notice:
-        original?.request.targetId !== target.id
-          ? "将以新模型的参考或编辑方式创建版本，不保证继承原上下文。"
-          : "已绑定父图片，将创建新版本。",
+      ...this.noticeOf(
+        message(
+          original?.request.targetId !== target.id
+            ? "imageStudio.notice.info.editAcrossModels"
+            : "imageStudio.notice.info.editBound",
+        ),
+      ),
     });
     this.updateDraft({
       inputs: [{ assetId: id, role: operation === "edit" ? "source" : "reference" }],
@@ -889,16 +941,19 @@ export class ImageStudioController {
   }
   cancelUpload() {
     this.uploadAbort?.abort();
-    this.patch({ uploading: false, notice: "上传已取消，草稿已保留。" });
+    this.patch({
+      uploading: false,
+      ...this.noticeOf(message("imageStudio.notice.info.uploadCancelled")),
+    });
   }
   async upload(file: Blob, name: string, role: InputAsset["role"]) {
     if (this.view.uploading || !this.view.projectId) return;
     if (file.size > MAX_UPLOAD_BYTES) {
-      this.patch({ notice: "上传失败：图片超过 20 MiB 上限，请压缩后再上传。" });
+      this.say(message("imageStudio.notice.error.uploadTooLarge"));
       return;
     }
     if (this.view.draft.inputs.length >= (this.target?.capabilities.maxInputs ?? 0)) {
-      this.patch({ notice: "已达到当前模型输入图片上限。" });
+      this.say(message("imageStudio.notice.warning.inputLimit"));
       return;
     }
     // Claim the upload slot synchronously so a model/operation switch during the
@@ -907,20 +962,24 @@ export class ImageStudioController {
     const controller = new AbortController();
     this.uploadAbort = controller;
     this.patch({ uploading: true });
-    const reject = (notice: string) => {
-      if (this.uploadAbort === controller) this.patch({ uploading: false, notice });
+    const reject = (notice: Message) => {
+      if (this.uploadAbort === controller)
+        this.patch({ uploading: false, ...this.noticeOf(notice) });
     };
     try {
       // Trust the bytes over the extension-derived File.type (see imageSniff.ts).
       const sniffed = await sniffImage(file);
       if (!this.valid(epoch) || controller.signal.aborted) return;
       if (sniffed.kind === "unsupported")
-        return reject(`上传失败：这是 ${sniffed.label} 图片，目前只支持 PNG、JPEG 和 WebP。`);
+        return reject(
+          message("imageStudio.notice.error.uploadUnsupportedFormat", { format: sniffed.label }),
+        );
       if (sniffed.kind === "unknown" && !UPLOAD_MIMES.includes(file.type))
-        return reject("上传失败：无法识别图片格式，目前只支持 PNG、JPEG 和 WebP。");
-      let relabeled = "";
+        return reject(message("imageStudio.notice.error.uploadUnknownFormat"));
+      let relabeled: Message | undefined;
       if (sniffed.kind === "supported" && sniffed.mime !== file.type) {
-        if (file.type) relabeled = `文件扩展名与内容不符，已按实际格式 ${sniffed.label} 上传。`;
+        if (file.type)
+          relabeled = message("imageStudio.notice.info.uploadRelabeled", { format: sniffed.label });
         file = new File([file], name, { type: sniffed.mime });
       }
       const asset = await this.client.upload(file, name, controller.signal);
@@ -930,10 +989,9 @@ export class ImageStudioController {
         state: { ...this.view.state, assets: { ...this.view.state.assets, [asset.id]: asset } },
       });
       this.updateDraft({ inputs: [...this.view.draft.inputs, { assetId: asset.id, role }] });
-      if (relabeled) this.patch({ notice: relabeled });
+      if (relabeled) this.say(relabeled);
     } catch (error) {
-      if (this.valid(epoch) && !controller.signal.aborted)
-        this.patch({ notice: uploadFailureNotice(error) });
+      if (this.valid(epoch) && !controller.signal.aborted) this.say(uploadFailureNotice(error));
     } finally {
       if (this.valid(epoch) && this.uploadAbort === controller) this.patch({ uploading: false });
     }
@@ -955,42 +1013,54 @@ export class ImageStudioController {
         inputs: verified.draft.inputs,
         parentAssetId: verified.draft.parentAssetId,
       });
-      this.patch({
-        notice: verified.unverifiedAssetIds.length
-          ? "部分输入图片仍无法核验，引用已保留，请检查连接或认证后重验。"
-          : verified.invalidAssetIds.length
-            ? "已移除确定失效的输入图片，请重新上传。"
-            : "输入图片核验通过。",
-      });
+      this.say(
+        message(
+          verified.unverifiedAssetIds.length
+            ? "imageStudio.notice.warning.revalidateUnverified"
+            : verified.invalidAssetIds.length
+              ? "imageStudio.notice.warning.revalidateRemoved"
+              : "imageStudio.notice.info.revalidateOk",
+        ),
+      );
     } finally {
       if (this.valid(epoch)) this.patch({ verifyingInputs: false });
     }
   }
-  validation(t: Translate = (key) => key): string[] {
+  validation(t: Translate = this.translate): string[] {
+    return this.validationMessages().map((text) => formatMessage(text, t));
+  }
+  private validationMessages(): Message[] {
     const { draft, count, operation, projectId, uploading, dropped, draftReady } = this.view;
     const target = this.target;
-    if (!target?.enabled) return ["请选择已启用并验证的图像模型。"];
+    if (!target?.enabled) return [message("imageStudio.validation.targetRequired")];
     const errors = validateParameters(target, draft.parameters).map((error) => {
       const spec = target.parameters.find((p) => p.key === error.key);
-      return `${spec ? parameterLabel(spec, t) : error.key}：${error.message}`;
+      return message("imageStudio.validation.parameter", {
+        label: spec ? (t) => parameterLabel(spec, t) : error.key,
+        message: error.message,
+      });
     });
-    if (!projectId || !draftReady) errors.push("请等待历史与草稿恢复，加载失败时请重试。");
-    if (!draft.prompt.trim()) errors.push("请输入提示词。");
-    if (!target.capabilities.operations.includes(operation)) errors.push("模型不支持此操作。");
+    if (!projectId || !draftReady) errors.push(message("imageStudio.validation.draftLoading"));
+    if (!draft.prompt.trim()) errors.push(message("imageStudio.validation.promptRequired"));
+    if (!target.capabilities.operations.includes(operation))
+      errors.push(message("imageStudio.validation.operationUnsupported"));
     if (!Number.isInteger(count) || count < 1 || count > Math.min(16, target.capabilities.maxCount))
-      errors.push("请调整生成数量。");
-    if (uploading) errors.push("请等待图片上传完成。");
+      errors.push(message("imageStudio.validation.count"));
+    if (uploading) errors.push(message("imageStudio.validation.uploading"));
     if (this.view.verifyingInputs || this.view.unverifiedAssetIds.length)
-      errors.push("输入图片尚未核验通过，请重验后提交。");
+      errors.push(message("imageStudio.validation.inputsUnverified"));
     if (draft.parentAssetId && !draft.inputs.some((input) => input.assetId === draft.parentAssetId))
-      errors.push("父图片必须包含在输入图片中，请重新关联或解除版本关联。");
-    if (dropped.length) errors.push("请先确认参数调整。");
+      errors.push(message("imageStudio.validation.parentMissing"));
+    if (dropped.length) errors.push(message("imageStudio.validation.droppedPending"));
     const roles = draft.inputs.map((input) => input.role);
-    if (draft.inputs.length > target.capabilities.maxInputs) errors.push("输入图片超过模型上限。");
-    if (operation === "reference" && !roles.includes("reference")) errors.push("请添加参考图片。");
+    if (draft.inputs.length > target.capabilities.maxInputs)
+      errors.push(message("imageStudio.validation.tooManyInputs"));
+    if (operation === "reference" && !roles.includes("reference"))
+      errors.push(message("imageStudio.validation.referenceRequired"));
     if (["edit", "mask"].includes(operation) && !roles.includes("source"))
-      errors.push("请添加原始图片。");
-    if (operation === "mask" && !roles.includes("mask")) errors.push("请添加遮罩图片。");
+      errors.push(message("imageStudio.validation.sourceRequired"));
+    if (operation === "mask" && !roles.includes("mask"))
+      errors.push(message("imageStudio.validation.maskRequired"));
     const allowed =
       operation === "generate"
         ? []
@@ -1000,15 +1070,15 @@ export class ImageStudioController {
             ? ["source", "reference"]
             : ["source", "mask"];
     if (roles.some((role) => !allowed.includes(role)))
-      errors.push("输入图片用途与操作不兼容，请移除后重新添加。");
+      errors.push(message("imageStudio.validation.roleMismatch"));
     return errors;
   }
   /** Every click is a new job built from the current draft; only an in-flight request blocks it. */
-  async submit(t?: Translate) {
+  async submit() {
     if (this.pendingSubmit || this.disposed || !this.view.draftReady) return;
-    const errors = this.validation(t);
+    const errors = this.validationMessages();
     if (errors.length) {
-      this.patch({ notice: errors.join(" ") });
+      this.say(...errors);
       return;
     }
     const { draft, projectId, count, operation } = this.view;
@@ -1065,9 +1135,13 @@ export class ImageStudioController {
       if (this.valid(epoch)) {
         this.patch({
           submission: unresolved,
-          notice: rejected
-            ? `请求已被拒绝。${errorAction(error)}草稿已保留。`
-            : "提交结果未确认，任务可能已经创建。请刷新历史确认后再决定是否重新生成；草稿已保留。",
+          ...this.noticeOf(
+            rejected
+              ? message("imageStudio.notice.warning.submitRejected", {
+                  action: errorActionMessage(error),
+                })
+              : message("imageStudio.notice.warning.submitUnconfirmed"),
+          ),
         });
       }
     } finally {
@@ -1082,7 +1156,7 @@ export class ImageStudioController {
       this.patch({ state: applyJobSnapshot(this.view.state, job) });
       this.streams.watch(job);
     } catch {
-      if (this.valid(epoch)) this.patch({ notice: "任务核对失败，请稍后重试。" });
+      if (this.valid(epoch)) this.say(message("imageStudio.notice.error.jobCheckFailed"));
     }
   }
   async cancelJob(id: string) {
@@ -1092,13 +1166,16 @@ export class ImageStudioController {
       if (!this.valid(epoch)) return;
       this.patch({
         state: applyJobSnapshot(this.view.state, job),
-        notice:
-          job.cancelEffect === "local_only"
-            ? "已停止本地处理，上游可能继续执行或计费。"
-            : "已发送取消请求，以任务最终状态为准。",
+        ...this.noticeOf(
+          message(
+            job.cancelEffect === "local_only"
+              ? "imageStudio.notice.warning.cancelLocal"
+              : "imageStudio.notice.warning.cancelSent",
+          ),
+        ),
       });
     } catch {
-      if (this.valid(epoch)) this.patch({ notice: "取消响应未确认，请刷新核对任务。" });
+      if (this.valid(epoch)) this.say(message("imageStudio.notice.warning.cancelUnconfirmed"));
     }
   }
   async exportAsset(id: string, destination: ExportDestination) {
@@ -1106,10 +1183,20 @@ export class ImageStudioController {
     try {
       const result = await this.client.exportAsset(id, destination);
       if (this.valid(epoch))
-        this.patch({ notice: result.saved ? "图片已保存。" : "已取消导出，未保存图片。" });
+        this.say(
+          message(
+            result.saved
+              ? "imageStudio.notice.success.exportSaved"
+              : "imageStudio.notice.info.exportCancelled",
+          ),
+        );
     } catch (error) {
       if (this.valid(epoch))
-        this.patch({ notice: `导出失败。${errorAction(error as { code?: string })}` });
+        this.say(
+          message("imageStudio.notice.error.exportFailed", {
+            action: errorActionMessage(error as { code?: string }),
+          }),
+        );
     }
   }
 }

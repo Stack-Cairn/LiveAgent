@@ -1,6 +1,12 @@
 import type { ImageStudioHost } from "@liveagent/ui/application/imageStudioHost";
 import type { DraftStorage } from "@liveagent/ui/features/image-studio/drafts";
-import { imageErrorText, type Translate } from "@liveagent/ui/features/image-studio/studioText";
+import {
+  defaultTranslate,
+  formatMessage,
+  imageErrorText,
+  message,
+  type Translate,
+} from "@liveagent/ui/features/image-studio/studioText";
 // Pure browser helper shared with desktop; it has no Tauri/native dependencies.
 import { createBrowserImageDownload } from "@liveagent/ui/lib/imaging/browserDownload";
 import { ImageClientError } from "@liveagent/ui/lib/imaging/errors";
@@ -16,9 +22,6 @@ export interface TrustedGatewayImageIdentity {
   gatewayOrigin: string;
   accessToken: string;
 }
-
-export const GATEWAY_IMAGE_IDENTITY_UNAVAILABLE =
-  "Gateway 尚未提供可信图像身份（IMAGE_IDENTITY_UNAVAILABLE）。当前共享令牌登录无法确定图像所属用户，图像工作台暂不可用。";
 
 export function createWebImageStudioHost(
   connection: GatewayImageConnection,
@@ -67,14 +70,20 @@ export function createWebImageStudioHost(
   };
 }
 
-export function gatewayImageErrorNotice(error: unknown, t?: Translate): string {
-  if (!(error instanceof ImageClientError)) return "图像连接失败（IMAGE_NETWORK_ERROR）。";
+export function gatewayImageErrorNotice(error: unknown, t: Translate = defaultTranslate): string {
+  if (!(error instanceof ImageClientError)) return t("imageStudio.gateway.networkError");
   const status = error.status ? `HTTP ${error.status} · ` : "";
-  const message =
+  const text =
     error.code === "IMAGE_IDENTITY_UNAVAILABLE"
-      ? GATEWAY_IMAGE_IDENTITY_UNAVAILABLE
-      : `${t ? imageErrorText(error, t) : error.message}（${error.code}）`;
-  return `${status}${message}`;
+      ? t("imageStudio.gateway.identityUnavailable")
+      : formatMessage(
+          message("imageStudio.gateway.errorWithCode", {
+            message: imageErrorText(error, t),
+            code: error.code,
+          }),
+          t,
+        );
+  return `${status}${text}`;
 }
 
 export function useWebImageStudioHost(
@@ -82,7 +91,7 @@ export function useWebImageStudioHost(
   identity: TrustedGatewayImageIdentity | undefined,
   workspace: string,
   /** The caller renders the locale provider, so it passes the interface language in. */
-  t?: Translate,
+  t: Translate = defaultTranslate,
 ): { host?: ImageStudioHost; unavailable: string; retry: () => void } {
   const [attempt, setAttempt] = useState(0);
   const [active, setActive] = useState<{
@@ -144,6 +153,6 @@ export function useWebImageStudioHost(
     host: current?.host,
     unavailable:
       (current?.error && gatewayImageErrorNotice(current.error.cause, t)) ??
-      (identity ? "正在连接图像工作台…" : GATEWAY_IMAGE_IDENTITY_UNAVAILABLE),
+      t(identity ? "imageStudio.connecting" : "imageStudio.gateway.identityUnavailable"),
   };
 }

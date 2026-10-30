@@ -118,12 +118,12 @@ test("job error lines localize the image error by code", async () => {
     const [zhLine] = jobErrorLines(unknownJob, zh);
     assert.match(zhLine, /^图像任务的执行结果未知 请先核对任务状态/);
     assert.doesNotMatch(zhLine, /[A-Za-z]{3}/);
-    assert.match(jobErrorLines(unknownJob, en)[0], /^Image execution result is unknown /);
+    assert.match(jobErrorLines(unknownJob, en)[0], /^Image execution result is unknown — Check the job status/);
     // A code the client does not know arrives with the generic English message.
     const future = new ImageClientError("IMAGE_FUTURE_REASON");
     const job = { ...unknownJob, status: "failed", error: { ...unknownJob.error, code: future.code, message: future.message } };
     assert.match(jobErrorLines(job, zh)[0], /^图像操作失败 /);
-    assert.match(jobErrorLines(job, en)[0], /^Image operation failed /);
+    assert.match(jobErrorLines(job, en)[0], /^Image operation failed — /);
     // Every client-side code has a translation in both locales.
     const { IMAGE_ERROR_CODES } = env.loadModule("@liveagent/ui/lib/imaging/errors");
     for (const code of IMAGE_ERROR_CODES)

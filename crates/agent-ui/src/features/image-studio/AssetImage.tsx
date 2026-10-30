@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocale } from "../../i18n";
 import type { ImageStudioClient } from "../../lib/imaging/types";
 
 export function AssetImage({
@@ -16,6 +17,7 @@ export function AssetImage({
 }) {
   const [preview, setPreview] = useState<{ id: string; url: string }>();
   const [failed, setFailed] = useState(false);
+  const { t } = useLocale();
   useEffect(() => {
     const controller = new AbortController();
     let objectUrl: string | undefined;
@@ -39,7 +41,7 @@ export function AssetImage({
   if (failed)
     return (
       <span className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-        图片不可用，请刷新或重新导入
+        {t("imageStudio.asset.unavailable")}
       </span>
     );
   if (!preview || preview.id !== assetId)
@@ -48,7 +50,7 @@ export function AssetImage({
         className="flex min-h-24 items-center justify-center text-sm text-muted-foreground"
         aria-busy="true"
       >
-        加载图片…
+        {t("imageStudio.asset.loading")}
       </span>
     );
   return <img src={preview.url} alt={alt} className={className} onError={() => setFailed(true)} />;
