@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { ImagePreviewSlide } from "../../components/chat/imagePreviewModel";
 import { Loader2, X } from "../../components/IconSet";
 import { useLocale } from "../../i18n";
@@ -64,7 +64,9 @@ export function AssetLightbox({
   onFailed?: () => void;
 }) {
   // Slides keep their asset id so a failed sibling never shifts the start position.
-  const [slides, setSlides] = useState<(ImagePreviewSlide & { assetId: string })[] | null>(null);
+  const [loaded, setSlides] = useState<
+    (Omit<ImagePreviewSlide, "alt"> & { assetId: string; position: number })[] | null
+  >(null);
   const { t } = useLocale();
   const key = assetIds.join("|");
   // biome-ignore lint/correctness/useExhaustiveDependencies: the joined key stands in for the id list
@@ -83,11 +85,8 @@ export function AssetLightbox({
           const meta = assets[id];
           return {
             assetId: id,
+            position,
             src,
-            alt: formatMessage(
-              message("imageStudio.lightbox.slideAlt", { title, index: position + 1 }),
-              t,
-            ),
             title,
             mimeType: blob.type || meta?.mime,
             sizeBytes: blob.size,
@@ -112,7 +111,19 @@ export function AssetLightbox({
       controller.abort();
       for (const url of urls) URL.revokeObjectURL(url);
     };
-  }, [open, client, key, title, t]);
+  }, [open, client, key, title]);
+  // Labelled at render time: a language switch must not re-download the originals.
+  const slides = useMemo(
+    () =>
+      loaded?.map(({ position, ...slide }) => ({
+        ...slide,
+        alt: formatMessage(
+          message("imageStudio.lightbox.slideAlt", { title, index: position + 1 }),
+          t,
+        ),
+      })) ?? null,
+    [loaded, title, t],
+  );
   if (!open) return null;
   if (!slides) return <Loading label={t("imageStudio.lightbox.loading")} onClose={onClose} />;
   const start = Math.max(

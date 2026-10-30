@@ -2021,7 +2021,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
     "Couldn't read the job snapshot. Refresh to check its status.",
   "imageStudio.notice.error.originalLoadFailed":
     "Couldn't load the original image. Refresh the history and try again.",
-  "imageStudio.notice.warning.targetDisabled": "{reason}",
+  "imageStudio.notice.info.targetDisabled": "{reason}",
   "imageStudio.notice.warning.targetStopped":
     "The current model is disabled. Choose an enabled model.",
   "imageStudio.notice.warning.targetDeleted":

@@ -1915,7 +1915,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "imageStudio.notice.error.exportFailed": "导出失败。{action}",
   "imageStudio.notice.error.snapshotFailed": "任务快照读取失败，请刷新核对状态。",
   "imageStudio.notice.error.originalLoadFailed": "原图加载失败，请刷新历史后重试。",
-  "imageStudio.notice.warning.targetDisabled": "{reason}",
+  "imageStudio.notice.info.targetDisabled": "{reason}",
   "imageStudio.notice.warning.targetStopped": "当前模型已停用，请选择已启用的模型。",
   "imageStudio.notice.warning.targetDeleted":
     "当前模型已删除，请重新选择模型；草稿与原提交记录已保留。",

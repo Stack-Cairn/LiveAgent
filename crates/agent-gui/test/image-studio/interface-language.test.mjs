@@ -75,7 +75,8 @@ test("notice tones keep the colour the Chinese wording used to give them", () =>
     count: 2,
     format: "GIF",
     action: message("imageStudio.errorAction.default"),
-    reason: message("imageStudio.targetUnavailable"),
+    // The old disabled-model notice showed the raw reason code.
+    reason: "auth_required",
   };
   const notices = studioKeys("zh-CN").filter(([key]) => key.startsWith("imageStudio.notice."));
   assert.ok(notices.length >= 60);

@@ -433,7 +433,7 @@ export class ImageStudioController {
         if (!next.enabled)
           this.say(
             next.disabledReason
-              ? message("imageStudio.notice.warning.targetDisabled", {
+              ? message("imageStudio.notice.info.targetDisabled", {
                   reason: (t) => targetDisabledText(next, t),
                 })
               : message("imageStudio.notice.warning.targetStopped"),
