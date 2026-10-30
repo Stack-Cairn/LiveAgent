@@ -22,8 +22,15 @@ const FIXED_REASONS: Readonly<Record<string, string>> = {
     "chat.aiReview.reason.turnBudgetExhausted",
   "Reviewer busy; manual approval required": "chat.aiReview.reason.busy",
   "Reviewer failed or timed out; manual approval required": "chat.aiReview.reason.failed",
+  "Reviewer timed out; manual approval required": "chat.aiReview.reason.timedOut",
+  "Reviewer model could not be resolved; manual approval required":
+    "chat.aiReview.reason.modelUnresolved",
+  "Reviewer reply was truncated; manual approval required": "chat.aiReview.reason.truncated",
   "Invalid reviewer response; manual approval required": "chat.aiReview.reason.invalidResponse",
 };
+
+// The review provider's HTTP status is the one variable part K-brain reports.
+const HTTP_FAILURE = /^Reviewer request failed \(HTTP (\d{3})\); manual approval required$/;
 
 export function aiReviewTitle(tool: string, locale?: Locale): string {
   return t("chat.aiReview.title", locale).replace("{tool}", tool);
@@ -42,8 +49,11 @@ export function localizeAIReviewReason(reason: string, locale?: Locale): string 
       }
     }
   }
-  const fixed = FIXED_REASONS[rest.replace(/\.$/, "")];
+  const bare = rest.replace(/\.$/, "");
+  const fixed = FIXED_REASONS[bare];
+  const httpStatus = HTTP_FAILURE.exec(bare)?.[1];
   if (fixed) parts.push(t(fixed, locale));
+  else if (httpStatus) parts.push(t("chat.aiReview.reason.httpFailed", locale).replace("{status}", httpStatus));
   else if (rest) parts.push(rest);
   return parts.join((locale ?? DEFAULT_LOCALE).startsWith("zh") ? "" : " ");
 }
