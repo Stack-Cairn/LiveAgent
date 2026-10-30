@@ -53,7 +53,8 @@ export function localizeAIReviewReason(reason: string, locale?: Locale): string 
   const fixed = FIXED_REASONS[bare];
   const httpStatus = HTTP_FAILURE.exec(bare)?.[1];
   if (fixed) parts.push(t(fixed, locale));
-  else if (httpStatus) parts.push(t("chat.aiReview.reason.httpFailed", locale).replace("{status}", httpStatus));
+  else if (httpStatus)
+    parts.push(t("chat.aiReview.reason.httpFailed", locale).replace("{status}", httpStatus));
   else if (rest) parts.push(rest);
   return parts.join((locale ?? DEFAULT_LOCALE).startsWith("zh") ? "" : " ");
 }
