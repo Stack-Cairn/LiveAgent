@@ -305,6 +305,8 @@ export type KBrainRunOptions = {
   search?: "disabled" | "enabled";
   approval_policy?: "ask" | "auto" | "deny";
   permission_mode?: import("@liveagent/ui/lib/chat/permissionModes").KBrainPermissionMode;
+  /** Sent by the client only when K-brain advertises capability ai_review_per_run. */
+  review_scope?: "per_run";
   workspace_roots?: Array<{ path: string; access: "read" | "write" }>;
   tools?: { policies?: Record<string, "ask" | "allow" | "deny"> };
   plan_mode_enabled?: boolean;

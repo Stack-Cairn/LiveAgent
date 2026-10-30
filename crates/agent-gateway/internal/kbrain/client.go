@@ -150,11 +150,13 @@ type Usage struct {
 }
 
 type RunOptions struct {
-	Reasoning       string          `json:"reasoning,omitempty"`
-	Mode            string          `json:"mode,omitempty"`
-	Search          string          `json:"search,omitempty"`
-	ApprovalPolicy  string          `json:"approval_policy,omitempty"`
-	PermissionMode  string          `json:"permission_mode,omitempty"`
+	Reasoning      string `json:"reasoning,omitempty"`
+	Mode           string `json:"mode,omitempty"`
+	Search         string `json:"search,omitempty"`
+	ApprovalPolicy string `json:"approval_policy,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty"`
+	// ReviewScope is set by StartRun from capability ai_review_per_run; callers leave it empty.
+	ReviewScope     string          `json:"review_scope,omitempty"`
 	WorkspaceRoots  []WorkspaceRoot `json:"workspace_roots,omitempty"`
 	Tools           *ToolSelection  `json:"tools,omitempty"`
 	PlanModeEnabled bool            `json:"plan_mode_enabled,omitempty"`
@@ -380,6 +382,15 @@ func (c *Client) StartRun(ctx context.Context, sessionID string, in PromptReques
 	}
 	if err := c.requireHandshake(ctx, mode); err != nil {
 		return out, 0, err
+	}
+	// The permission mode alone decides AI review on backends that accept review_scope;
+	// older backends reject unknown run options, so the cached handshake must prove it.
+	if in.Options != nil {
+		if health, err := c.verifiedHealth(ctx, handshakeMaxAge); err == nil && health.FrozenCapability("ai_review_per_run") {
+			options := *in.Options
+			options.ReviewScope = "per_run"
+			in.Options = &options
+		}
 	}
 	resp, err := c.request(ctx, http.MethodPost, "/v1/sessions/"+sessionID+"/runs", in, &out)
 	if err != nil {

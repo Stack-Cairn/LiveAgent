@@ -1,4 +1,5 @@
 import {
+  hasFrozenCapability,
   type KBrainHealth,
   readKBrainHealthResponse,
   supportsPermissionMode,
@@ -620,6 +621,22 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     return result;
   }
 
+  // Capability ai_review_per_run: runs send review_scope "per_run" so the permission mode alone
+  // decides AI review (the global setting is hidden). Older backends reject unknown run options,
+  // so the answer comes from /v1/health; a failed read is not cached and sends no scope. The
+  // shared read takes no caller's signal, so one stopped run cannot drop the scope of another.
+  let perRunReview: Promise<boolean> | null = null;
+  async function supportsPerRunReview(signal?: AbortSignal): Promise<boolean> {
+    perRunReview ??= getHealth().then((health) => hasFrozenCapability(health, "ai_review_per_run"));
+    try {
+      return await perRunReview;
+    } catch {
+      perRunReview = null;
+      signal?.throwIfAborted();
+      return false;
+    }
+  }
+
   async function startRun(
     input: KBrainPromptRequest,
     signal?: AbortSignal,
@@ -627,18 +644,24 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     signal?.throwIfAborted();
     const mode = input.options?.permission_mode;
     if (mode === "always" || mode === "auto_edit" || mode === "auto_review") {
-      if (!supportsPermissionMode(await getHealth(signal), mode)) {
+      const health = await getHealth(signal);
+      perRunReview ??= Promise.resolve(hasFrozenCapability(health, "ai_review_per_run"));
+      if (!supportsPermissionMode(health, mode)) {
         throw new Error(
           `K-brain does not support permission mode ${mode}; update the backend before using this mode.`,
         );
       }
     }
+    const body =
+      input.options && (await supportsPerRunReview(signal))
+        ? { ...input, options: { ...input.options, review_scope: "per_run" as const } }
+        : input;
     const path = `/v1/sessions/${encodeURIComponent(input.conversation_id)}/runs`;
     let accepted: KBrainRunAccepted;
     try {
       accepted = await request<KBrainRunAccepted>(path, {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify(body),
         signal,
       });
     } catch (error) {

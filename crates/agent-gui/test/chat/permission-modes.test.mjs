@@ -77,3 +77,43 @@ test("a contradicting health handshake blocks elevated modes before any run is p
   await assert.rejects(client.startRun(input), /health contract violation/);
   assert.deepEqual(requests, ["/v1/health"]);
 });
+
+// K-brain with capability ai_review_per_run accepts review_scope "per_run": the composer's
+// permission mode alone decides AI review (the global setting is hidden). Older backends
+// reject unknown run options, so the field is sent only when the capability is proven, and a
+// relay without /v1/health still runs normal-mode turns.
+test("runs opt into per-run AI review only when the backend advertises it", async (t) => {
+  const posts = [];
+  let health = { status: "ok", version: "kbrain.agent.v1", capabilities: { permission_modes: ["auto_review"], ai_review_per_run: 1 } };
+  const server = http.createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    res.setHeader("content-type", "application/json");
+    if (req.url === "/v1/health") {
+      if (!health) { res.statusCode = 404; res.end("{}"); return; }
+      res.end(JSON.stringify(health));
+      return;
+    }
+    posts.push(JSON.parse(raw));
+    res.end(JSON.stringify({ version: "kbrain.agent.v1", conversation_id: "session", run_id: "run", accepted_seq: 1 }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const { createKBrainClient } = loader.loadModule("src/lib/kbrain/client");
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const run = (client, permission_mode) =>
+    client.startRun({ conversation_id: "session", client_request_id: `r-${posts.length}`, prompt: "hi", options: { mode: "agent", permission_mode } });
+
+  const perRun = createKBrainClient({ baseUrl: url });
+  await run(perRun, "normal");
+  await run(perRun, "auto_review");
+  assert.deepEqual(posts.map((body) => body.options.review_scope), ["per_run", "per_run"]);
+
+  health = { status: "ok", version: "kbrain.agent.v1", capabilities: { permission_modes: ["auto_review"] } };
+  await run(createKBrainClient({ baseUrl: url }), "normal");
+  assert.equal("review_scope" in posts.at(-1).options, false, "older backend gets no review_scope");
+
+  health = null;
+  await run(createKBrainClient({ baseUrl: url }), "normal");
+  assert.equal("review_scope" in posts.at(-1).options, false, "a relay without health still runs");
+});
