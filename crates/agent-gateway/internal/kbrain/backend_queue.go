@@ -88,6 +88,7 @@ func (r *Relay) startBackendQueuedRun(ctx context.Context, gatewayRunID, convers
 	if err := r.client.requireHandshake(ctx, mode); err != nil {
 		return false, err
 	}
+	prompt = r.client.withReviewScope(ctx, prompt)
 	// Serialize session mapping before the backend acceptance; no local FIFO is created.
 	r.backendSubmitMu.Lock()
 	defer r.backendSubmitMu.Unlock()
