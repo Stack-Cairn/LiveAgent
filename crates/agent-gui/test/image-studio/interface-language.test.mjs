@@ -193,10 +193,22 @@ test("English workbench shows no Chinese across history, preview, pickers, notic
     const screen = () => chineseOnScreen(document);
     assert.match(host.textContent, /Image Studio/);
     assert.match(host.textContent, /Image 1 of 2/);
-    assert.match(host.textContent, /Generating|Stop local processing/);
+    const buttons = [...host.querySelectorAll("button")].map((button) => button.textContent.trim());
+    assert.ok(buttons.includes("Stop locally"), "short label keeps the status badge visible");
+    assert.deepEqual(
+      [...host.querySelectorAll('fieldset[aria-label="Filter history"] button')].map((b) => b.textContent),
+      ["All", "Results", "Active", "Issues"],
+    );
     assert.match(host.textContent, /Image request limit reached — Wait for the rate limit/);
     assert.match(host.textContent, /Local processing stopped/);
-    assert.match(host.textContent, /16:9 · 2K|Size chosen by the model/);
+    assert.match(host.textContent, /Size chosen by the model/);
+    const { describeImageSize } = env.loadModule("@liveagent/ui/features/image-studio/ImageSizePicker");
+    assert.equal(
+      describeImageSize(framed, {}, { ratio: "16:9", tier: "2K" }, en),
+      "16:9 · 2K · ≈2048x1152 · In prompt",
+      "fits the composer footer at 390 px",
+    );
+    assert.equal(describeImageSize(framed, {}, { ratio: "16:9", tier: "2K" }), "比例 16:9 · 分辨率 2K · 约 2048x1152 · 写入提示词");
     assert.deepEqual(screen(), [], "initial workbench");
 
     const failed = host.querySelector('[aria-label="View job: Prompt failed"]');
