@@ -299,3 +299,38 @@ func TestOriginAllowedUsesForwardedProtoForSameOrigin(t *testing.T) {
 		t.Fatal("expected forwarded https origin to be allowed")
 	}
 }
+
+func TestPublicModelCatalogServesWithoutAuthorization(t *testing.T) {
+	const body = `{"schemaVersion":1,"snapshotDate":"2026-10-30","sections":{"openai":[]},"sha256":"abc"}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer upstream.Close()
+	handler := NewHTTPServer(&config.Config{
+		Token:           "dev-token",
+		ModelCatalogURL: upstream.URL,
+		RequestTimeout:  5 * time.Second,
+	}, session.NewManager(), nil)
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/public/model-catalog", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != body {
+		t.Fatalf("public model catalog = %d %q, want 200 with upstream body", rec.Code, rec.Body.String())
+	}
+
+	// Authenticated API routes stay behind the token.
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/status", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("/api/status without token = %d, want 401", rec.Code)
+	}
+}
+
+func TestPublicModelCatalogDisabledWithoutUpstream(t *testing.T) {
+	handler := NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager(), nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/public/model-catalog", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled model catalog = %d, want 404", rec.Code)
+	}
+}

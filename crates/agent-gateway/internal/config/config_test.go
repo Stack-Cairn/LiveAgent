@@ -198,3 +198,23 @@ func resetFlagsForTest(t *testing.T) {
 	flag.CommandLine.SetOutput(io.Discard)
 	os.Args = []string{"gateway"}
 }
+
+func TestLoadModelCatalogURL(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	if cfg := Load(); cfg.ModelCatalogURL != DefaultModelCatalogURL {
+		t.Fatalf("default ModelCatalogURL = %q, want %q", cfg.ModelCatalogURL, DefaultModelCatalogURL)
+	}
+
+	t.Setenv("LIVEAGENT_GATEWAY_MODEL_CATALOG_URL", "https://mirror.example/catalog.json")
+	resetFlagsForTest(t)
+	if cfg := Load(); cfg.ModelCatalogURL != "https://mirror.example/catalog.json" {
+		t.Fatalf("mirror ModelCatalogURL = %q", cfg.ModelCatalogURL)
+	}
+
+	t.Setenv("LIVEAGENT_GATEWAY_MODEL_CATALOG_URL", " OFF ")
+	resetFlagsForTest(t)
+	if cfg := Load(); cfg.ModelCatalogURL != "" {
+		t.Fatalf("off ModelCatalogURL = %q, want empty", cfg.ModelCatalogURL)
+	}
+}
