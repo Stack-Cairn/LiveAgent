@@ -1802,6 +1802,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "imageStudio.parameter.quality.medium": "Medium",
   "imageStudio.parameter.quality.high": "High",
   "imageStudio.parameter.quality.auto": "Auto",
+  "imageStudio.parameter.quality.xhigh": "Extra high",
+  "imageStudio.parameter.quality.max": "Max",
   "imageStudio.parameter.output_format": "Output format",
   "imageStudio.parameter.background": "Background",
   "imageStudio.parameter.background.opaque": "Opaque",

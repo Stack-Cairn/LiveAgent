@@ -96,6 +96,10 @@ test("unknown keys and hinted labels fall back to the backend label", async () =
     assert.equal(parameterLabel({ key: "output_compression", label: "Output compression" }, zh), "输出压缩率");
     const quality = { key: "quality", label: "quality" };
     assert.equal(parameterValueLabel(quality, "high", zh), "高");
+    // GPT Image 2.5 adds two tiers above high (K-brain#68).
+    assert.equal(parameterValueLabel(quality, "xhigh", zh), "超高");
+    assert.equal(parameterValueLabel(quality, "max", zh), "最高");
+    assert.equal(parameterValueLabel(quality, "xhigh", (key) => t(key, "en-US")), "Extra high");
     assert.equal(parameterValueLabel(quality, "ultra", zh), "ultra");
     assert.equal(parameterValueLabel({ key: "seed", label: "seed" }, 7, zh), "7");
     // A label written in settings names a different parameter under the same key.

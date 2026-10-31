@@ -1719,6 +1719,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "imageStudio.parameter.quality.medium": "中",
   "imageStudio.parameter.quality.high": "高",
   "imageStudio.parameter.quality.auto": "自动",
+  "imageStudio.parameter.quality.xhigh": "超高",
+  "imageStudio.parameter.quality.max": "最高",
   "imageStudio.parameter.output_format": "输出格式",
   "imageStudio.parameter.background": "背景",
   "imageStudio.parameter.background.opaque": "不透明",
