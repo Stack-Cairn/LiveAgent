@@ -187,7 +187,8 @@ test("history searches prompt/model, filters status and changes original preview
   const older = job("older", { assetIds: ["ia_old"], targetSnapshot: { ...target(), name: "Watercolor" } });
   const newer = job("newer", { createdAt: "2026-02-01T00:00:00Z", assetIds: ["ia_new", "ia_new"] });
   const active = job("active", { status: "running" });
-  const failed = job("failed", { status: "failed", error: { code: "IMAGE_INVALID_INPUT", message: "Bad history input" } });
+  // parseImageError rebuilds message from the code, so the UI shows the localized code text.
+  const failed = job("failed", { status: "failed", error: { code: "IMAGE_INVALID_INPUT", message: "Invalid image input" } });
   await mounted(async ({ host, calls, byLabel, button, click, change, submit }) => {
     const gallery = byLabel("图像结果画廊");
     assert.deepEqual([...gallery.querySelectorAll("article")].map(e => e.getAttribute("aria-label")), ["任务 newer", "任务 older", "任务 active", "任务 failed"]);
@@ -223,7 +224,7 @@ test("history searches prompt/model, filters status and changes original preview
     await click(byLabel("查看任务：Prompt failed"));
     assert.equal(byLabel("图片预览").querySelector("img"), null, "a failed job never falls back to another job's image");
     assert.match(byLabel("图片预览").textContent, /这次没有生成图片/);
-    assert.equal(byLabel("图片预览").textContent.split("Bad history input").length - 1, 1);
+    assert.equal(byLabel("图片预览").textContent.split("图像输入无效").length - 1, 1);
   }, { jobs: [older, newer, active, failed] });
 });
 
@@ -354,7 +355,7 @@ test("upload rejects invalid files, reports transport failure and cancels in-fli
     assert.equal(submit().disabled, true);
     await importFile("drop", new env.dom.window.File(["duplicate"], "duplicate.png", { type: "image/png" }));
     assert.equal(calls.uploads.length, 2, "ignores imports during upload");
-    await click(button("取消上传"));
+    await click(byLabel("取消上传"));
     assert.equal(calls.uploads[1].signal.aborted, true);
     await env.act(async () => pending.resolve({ id: "ia_late", available: true }));
     assert.equal(host.querySelector('[aria-label="输入图片"]'), null);
@@ -467,9 +468,9 @@ test("history shows errors and cancellation semantics, disables pending cancella
   const running = job("running", { status: "running" });
   const local = job("local", { status: "running", targetSnapshot: { ...target(), capabilities: { ...target().capabilities, supportsCancel: false } } });
   const cancelling = job("cancelling", { status: "cancel_requested" });
-  const unknown = job("unknown", { status: "result_unknown", error: { code: "IMAGE_RESULT_UNKNOWN", message: "Receipt unavailable" } });
+  const unknown = job("unknown", { status: "result_unknown", error: { code: "IMAGE_RESULT_UNKNOWN", message: "Image execution result is unknown" } });
   await mounted(async ({ host, calls, byLabel, button, click, submit }) => {
-    assert.match(byLabel("任务 unknown").textContent, /Receipt unavailable/);
+    assert.match(byLabel("任务 unknown").textContent, /图像任务的执行结果未知/);
     assert.match(byLabel("任务 unknown").textContent, /重新生成可能再次计费/);
     assert.equal(button("正在取消…", byLabel("任务 cancelling")).disabled, true);
     await click(button("取消任务", byLabel("任务 running")));

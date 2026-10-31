@@ -1,7 +1,9 @@
 import { useId, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { useLocale } from "../../i18n";
 import type { ImageStudioController, StudioView } from "./studioController";
+import { formatMessage, message } from "./studioText";
 
 export function ImageProjectRail({
   controller,
@@ -14,9 +16,10 @@ export function ImageProjectRail({
   const [rename, setRename] = useState("");
   const [deleting, setDeleting] = useState(false);
   const id = useId();
+  const { t } = useLocale();
   return (
-    <nav aria-label="图像项目" className="space-y-4 p-3">
-      <h2 className="text-sm font-semibold">项目与素材</h2>
+    <nav aria-label={t("imageStudio.projects.label")} className="space-y-4 p-3">
+      <h2 className="text-sm font-semibold">{t("imageStudio.projects.title")}</h2>
       <form
         className="space-y-2"
         onSubmit={(event) => {
@@ -28,16 +31,16 @@ export function ImageProjectRail({
         }}
       >
         <label htmlFor={`${id}-title`} className="sr-only">
-          新项目名称
+          {t("imageStudio.projects.newName")}
         </label>
         <Input
           id={`${id}-title`}
           value={title}
-          placeholder="新项目名称"
+          placeholder={t("imageStudio.projects.newName")}
           onChange={(event) => setTitle(event.target.value)}
         />
         <Button type="submit" size="sm" variant="outline" disabled={!title.trim()}>
-          新建项目
+          {t("imageStudio.projects.create")}
         </Button>
       </form>
       <ul className="space-y-1">
@@ -59,22 +62,22 @@ export function ImageProjectRail({
       </ul>
       {view.projectCursor && (
         <Button size="sm" variant="ghost" onClick={() => void controller.moreProjects()}>
-          加载更多项目
+          {t("imageStudio.projects.loadMore")}
         </Button>
       )}
       {view.projectId && (
         <details>
           <summary className="cursor-pointer text-xs focus-visible:ring-2 focus-visible:ring-ring">
-            管理当前项目
+            {t("imageStudio.projects.manage")}
           </summary>
           <div className="space-y-2 pt-2">
             <label htmlFor={`${id}-rename`} className="sr-only">
-              项目新名称
+              {t("imageStudio.projects.renameLabel")}
             </label>
             <Input
               id={`${id}-rename`}
               value={rename}
-              placeholder="项目新名称"
+              placeholder={t("imageStudio.projects.renameLabel")}
               onChange={(event) => setRename(event.target.value)}
             />
             <Button
@@ -83,11 +86,11 @@ export function ImageProjectRail({
               disabled={!rename.trim()}
               onClick={() => void controller.renameProject(rename)}
             >
-              重命名
+              {t("imageStudio.projects.rename")}
             </Button>
             {deleting ? (
               <div role="alert" className="space-y-2 text-xs">
-                <p>删除项目及其历史引用？本地草稿也会清理。</p>
+                <p>{t("imageStudio.projects.deleteBody")}</p>
                 <Button
                   size="sm"
                   variant="destructive"
@@ -96,15 +99,15 @@ export function ImageProjectRail({
                     void controller.deleteProject();
                   }}
                 >
-                  确认删除项目
+                  {t("imageStudio.projects.deleteConfirm")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setDeleting(false)}>
-                  保留项目
+                  {t("imageStudio.projects.keep")}
                 </Button>
               </div>
             ) : (
               <Button size="sm" variant="ghost" onClick={() => setDeleting(true)}>
-                删除项目
+                {t("imageStudio.projects.delete")}
               </Button>
             )}
           </div>
@@ -112,9 +115,12 @@ export function ImageProjectRail({
       )}
       {view.draft.inputs.length > 0 && (
         <div>
-          <h3 className="text-xs font-medium">当前素材</h3>
+          <h3 className="text-xs font-medium">{t("imageStudio.projects.assets")}</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            {view.draft.inputs.length} 张已保存的输入图片，可在创作区管理。
+            {formatMessage(
+              message("imageStudio.projects.assetsCount", { count: view.draft.inputs.length }),
+              t,
+            )}
           </p>
         </div>
       )}

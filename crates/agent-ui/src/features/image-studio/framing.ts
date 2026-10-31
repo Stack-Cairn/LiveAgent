@@ -11,6 +11,8 @@ export interface Framing {
   tier?: string;
 }
 
+// The marked line is prompt text for the model and is parsed back on restore, so it
+// is wire format, not interface text: it stays the same in every interface language.
 const MARK = "【画面参数】";
 const PIXELS = /^\d+x\d+$/;
 

@@ -32,11 +32,12 @@ test("prompt framing applies only when the target declares no ratio/size enum", 
 });
 
 test("notice tones: failures persist, successes and info fade, cautions linger", () => {
-  assert.equal(noticeTone("删除失败，请检查连接后重试。"), "error");
-  assert.equal(noticeTone("已删除历史记录。"), "success");
-  assert.equal(noticeTone("图片已保存。"), "success");
-  assert.equal(noticeTone("模型已切换，请重新确认输入图片的参考或编辑方式；新模型不保证继承原上下文。"), "warning");
-  assert.equal(noticeTone("上传已取消，草稿已保留。"), "info");
+  assert.equal(noticeTone({ key: "imageStudio.notice.error.jobDeleteFailed" }), "error");
+  assert.equal(noticeTone({ key: "imageStudio.notice.success.jobDeleted" }), "success");
+  assert.equal(noticeTone({ key: "imageStudio.notice.success.exportSaved" }), "success");
+  assert.equal(noticeTone({ key: "imageStudio.notice.warning.modelSwitched" }), "warning");
+  assert.equal(noticeTone({ key: "imageStudio.notice.info.uploadCancelled" }), "info");
+  assert.equal(noticeTone({ key: "imageStudio.validation.promptRequired" }), "warning", "validation lists are cautions");
   assert.equal(noticeDuration.error, null);
   assert.ok(noticeDuration.success < noticeDuration.warning);
 });

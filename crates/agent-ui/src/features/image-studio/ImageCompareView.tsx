@@ -1,7 +1,9 @@
 import { useId, useState } from "react";
 import { Button } from "../../components/ui/button";
+import { useLocale } from "../../i18n";
 import type { ImageStudioClient } from "../../lib/imaging/types";
 import { AssetImage } from "./AssetImage";
+import { formatMessage, message } from "./studioText";
 
 export function ImageCompareView({
   client,
@@ -16,12 +18,16 @@ export function ImageCompareView({
 }) {
   const [zoom, setZoom] = useState(100);
   const id = useId();
+  const { t } = useLocale();
   return (
-    <section aria-label="图片版本比较" className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+    <section
+      aria-label={t("imageStudio.compare.label")}
+      className="flex min-h-0 flex-1 flex-col gap-3 p-4"
+    >
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="font-medium">版本比较</h2>
+        <h2 className="font-medium">{t("imageStudio.compare.title")}</h2>
         <label htmlFor={id} className="text-sm">
-          缩放 {zoom}%
+          {formatMessage(message("imageStudio.compare.zoom", { zoom }), t)}
         </label>
         <input
           id={id}
@@ -33,13 +39,13 @@ export function ImageCompareView({
           onChange={(event) => setZoom(Number(event.target.value))}
         />
         <Button variant="outline" className="ml-auto" onClick={onClose}>
-          返回画廊
+          {t("imageStudio.compare.back")}
         </Button>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto sm:grid-cols-2">
         {[
-          { id: left, title: "对照版本" },
-          { id: right, title: "当前版本" },
+          { id: left, title: t("imageStudio.compare.left") },
+          { id: right, title: t("imageStudio.compare.right") },
         ].map((item) => (
           <figure
             key={item.title}

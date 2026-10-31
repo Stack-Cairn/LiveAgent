@@ -1,22 +1,31 @@
 import type { ImageTarget, ParameterSpec } from "../../lib/imaging/types";
+import { type Message, message } from "./studioText";
 
 export interface FieldError {
   key: string;
-  message: string;
+  message: Message;
 }
-export function parameterError(spec: ParameterSpec, value: unknown): string | undefined {
+export function parameterError(spec: ParameterSpec, value: unknown): Message | undefined {
   if (value === undefined || value === null || value === "")
-    return spec.required ? "此项必填" : undefined;
-  if (spec.type === "string" && typeof value !== "string") return "请输入文本";
-  if (spec.type === "boolean" && typeof value !== "boolean") return "请选择是或否";
+    return spec.required ? message("imageStudio.parameterError.required") : undefined;
+  if (spec.type === "string" && typeof value !== "string")
+    return message("imageStudio.parameterError.text");
+  if (spec.type === "boolean" && typeof value !== "boolean")
+    return message("imageStudio.parameterError.boolean");
   if (spec.type === "number" || spec.type === "integer") {
-    if (typeof value !== "number" || !Number.isFinite(value)) return "请输入有效数字";
-    if (spec.type === "integer" && !Number.isInteger(value)) return "请输入整数";
-    if (spec.minimum !== undefined && value < spec.minimum) return `不能小于 ${spec.minimum}`;
-    if (spec.maximum !== undefined && value > spec.maximum) return `不能大于 ${spec.maximum}`;
+    if (typeof value !== "number" || !Number.isFinite(value))
+      return message("imageStudio.parameterError.number");
+    if (spec.type === "integer" && !Number.isInteger(value))
+      return message("imageStudio.parameterError.integer");
+    if (spec.minimum !== undefined && value < spec.minimum)
+      return message("imageStudio.parameterError.minimum", { value: spec.minimum });
+    if (spec.maximum !== undefined && value > spec.maximum)
+      return message("imageStudio.parameterError.maximum", { value: spec.maximum });
   }
-  if (!["string", "boolean", "number", "integer"].includes(spec.type)) return "暂不支持此参数类型";
-  if (spec.enum && !spec.enum.some((candidate) => candidate === value)) return "请选择支持的值";
+  if (!["string", "boolean", "number", "integer"].includes(spec.type))
+    return message("imageStudio.parameterError.unsupportedType");
+  if (spec.enum && !spec.enum.some((candidate) => candidate === value))
+    return message("imageStudio.parameterError.unsupportedValue");
 }
 export function validateParameters(
   target: ImageTarget,
@@ -24,12 +33,12 @@ export function validateParameters(
 ): FieldError[] {
   const errors: FieldError[] = [];
   for (const spec of target.parameters) {
-    const message = parameterError(spec, params[spec.key]);
-    if (message) errors.push({ key: spec.key, message });
+    const error = parameterError(spec, params[spec.key]);
+    if (error) errors.push({ key: spec.key, message: error });
   }
   for (const key of Object.keys(params))
     if (!target.parameters.some((spec) => spec.key === key))
-      errors.push({ key, message: "目标不支持此参数" });
+      errors.push({ key, message: message("imageStudio.parameterError.unknown") });
   return errors;
 }
 export function defaultParameters(target: ImageTarget): Record<string, unknown> {
@@ -38,6 +47,20 @@ export function defaultParameters(target: ImageTarget): Record<string, unknown> 
       .filter((spec) => spec.default !== undefined && !parameterError(spec, spec.default))
       .map((spec) => [spec.key, spec.default]),
   );
+}
+/** A restored job may predate the target's current schema (e.g. `size` before ratio tiers). */
+export function keepDeclaredParameters(
+  target: ImageTarget,
+  params: Record<string, unknown>,
+): { values: Record<string, unknown>; dropped: string[] } {
+  const values: Record<string, unknown> = {};
+  const dropped: string[] = [];
+  for (const [key, value] of Object.entries(params)) {
+    const spec = target.parameters.find((item) => item.key === key);
+    if (spec && !parameterError(spec, value)) values[key] = value;
+    else dropped.push(key);
+  }
+  return { values, dropped };
 }
 export function migrateParameters(
   from: ImageTarget,

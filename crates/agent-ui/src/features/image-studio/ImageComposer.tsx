@@ -3,12 +3,14 @@ import { Loader2, Sparkles } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
+import { useLocale } from "../../i18n";
 import type { Operation } from "../../lib/imaging/types";
 import { ImageModelPicker } from "./ImageModelPicker";
 import { describeImageSize, ImageSizePicker } from "./ImageSizePicker";
 import { InputImageStack } from "./InputImageStack";
 import type { ImageStudioController, StudioView } from "./studioController";
 import { targetDisabledText } from "./studioModel";
+import { formatMessage, message } from "./studioText";
 
 const modeClass = (active: boolean) =>
   `rounded-lg px-3 py-1.5 text-sm transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -35,7 +37,8 @@ export function ImageComposer({
       : undefined;
   const imageMode = view.operation !== "generate";
   const locked = !view.projectId || !view.draftReady;
-  const errors = controller.validation();
+  const { t } = useLocale();
+  const errors = controller.validation(t);
   const importImage = (image: File) => {
     if (locked || !imageOperation || view.uploading) return;
     const operation = imageMode ? view.operation : imageOperation;
@@ -50,7 +53,7 @@ export function ImageComposer({
   };
   return (
     <form
-      aria-label="图像创作"
+      aria-label={t("imageStudio.composer.label")}
       className="shrink-0 space-y-3 rounded-2xl border border-border bg-card p-3 sm:p-4"
       onSubmit={(event) => {
         event.preventDefault();
@@ -76,7 +79,7 @@ export function ImageComposer({
       }}
     >
       <fieldset disabled={locked} className="min-w-0 space-y-3">
-        <legend className="sr-only">图像创作</legend>
+        <legend className="sr-only">{t("imageStudio.composer.label")}</legend>
         <div className="flex min-w-0 gap-3">
           <input
             ref={file}
@@ -85,7 +88,7 @@ export function ImageComposer({
             className="sr-only"
             tabIndex={-1}
             accept="image/png,image/jpeg,image/webp"
-            aria-label="选择输入图片"
+            aria-label={t("imageStudio.composer.chooseFile")}
             onChange={(event) => {
               const image = event.target.files?.[0];
               if (image) importImage(image);
@@ -100,7 +103,11 @@ export function ImageComposer({
               !view.uploading &&
               view.draft.inputs.length < (target?.capabilities.maxInputs ?? 0)
             }
-            disabledReason={imageOperation ? "已达到当前模型输入图片上限" : "当前模型不支持图生图"}
+            disabledReason={t(
+              imageOperation
+                ? "imageStudio.composer.inputLimit"
+                : "imageStudio.composer.noImageInput",
+            )}
             uploading={view.uploading}
             onCancelUpload={() => controller.cancelUpload()}
             onAdd={() => file.current?.click()}
@@ -111,14 +118,14 @@ export function ImageComposer({
             }
           />
           <label htmlFor={`${prefix}-prompt`} className="sr-only">
-            提示词
+            {t("imageStudio.composer.prompt")}
           </label>
           <Textarea
             id={`${prefix}-prompt`}
             name="image-prompt"
             rows={3}
             className="h-24 min-h-24 max-h-24 min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2 shadow-none focus-visible:ring-0"
-            placeholder="描述、拖入或粘贴你想生成或编辑的图片，例如：暖色霓虹灯下的电影感人像海报，浅景深"
+            placeholder={t("imageStudio.composer.placeholder")}
             value={view.draft.prompt}
             onChange={(event) => controller.updateDraft({ prompt: event.target.value })}
           />
@@ -126,7 +133,7 @@ export function ImageComposer({
         <div className="flex flex-wrap items-center gap-2">
           <fieldset
             className="inline-flex shrink-0 rounded-xl border border-border p-1"
-            aria-label="生成方式"
+            aria-label={t("imageStudio.composer.mode")}
           >
             <button
               type="button"
@@ -135,23 +142,23 @@ export function ImageComposer({
               aria-pressed={!imageMode}
               onClick={() => controller.setOperation("generate")}
             >
-              文生图
+              {t("imageStudio.textToImage")}
             </button>
             <button
               type="button"
               className={modeClass(imageMode)}
               disabled={!imageOperation}
-              title={imageOperation ? undefined : "当前模型不支持图生图"}
+              title={imageOperation ? undefined : t("imageStudio.composer.noImageInput")}
               aria-pressed={imageMode}
               onClick={() => {
                 if (imageOperation && !imageMode) controller.setOperation(imageOperation);
               }}
             >
-              图生图
+              {t("imageStudio.imageToImage")}
             </button>
           </fieldset>
           <label className="sr-only" htmlFor={`${prefix}-model`}>
-            图像模型
+            {t("imageStudio.composer.model")}
           </label>
           <ImageModelPicker
             id={`${prefix}-model`}
@@ -170,7 +177,7 @@ export function ImageComposer({
           {(target?.capabilities.maxCount ?? 1) > 1 && (
             <>
               <label htmlFor={`${prefix}-count`} className="sr-only">
-                生成数量
+                {t("imageStudio.composer.count")}
               </label>
               <Input
                 id={`${prefix}-count`}
@@ -178,7 +185,7 @@ export function ImageComposer({
                 min={1}
                 max={Math.min(16, target?.capabilities.maxCount ?? 1)}
                 step={1}
-                title="生成数量"
+                title={t("imageStudio.composer.count")}
                 className="h-10 w-16 rounded-xl"
                 value={Number.isNaN(view.count) ? "" : view.count}
                 onChange={(event) => controller.setCount(event.target.valueAsNumber)}
@@ -201,30 +208,41 @@ export function ImageComposer({
             ) : (
               <Sparkles className="mr-1.5 size-4" />
             )}
-            {submitting ? "正在提交…" : imageMode ? "编辑" : "生成"}
+            {t(
+              submitting
+                ? "imageStudio.composer.submitting"
+                : imageMode
+                  ? "imageStudio.composer.edit"
+                  : "imageStudio.composer.generate",
+            )}
           </Button>
         </div>
         {target && !target.enabled && (
           <p role="status" className="text-xs text-destructive">
-            {targetDisabledText(target)}
+            {targetDisabledText(target, t)}
           </p>
         )}
         {view.dropped.length > 0 && (
           <div role="alert" className="text-xs">
-            切换模型后需要调整：{view.dropped.join("、")}。
+            {formatMessage(
+              message("imageStudio.composer.dropped", {
+                labels: controller.droppedLabels(t).join(t("imageStudio.listSeparator")),
+              }),
+              t,
+            )}
             <Button
               type="button"
               size="sm"
               variant="outline"
               onClick={() => controller.acknowledgeMigration()}
             >
-              确认参数调整
+              {t("imageStudio.composer.confirmDropped")}
             </Button>
           </div>
         )}
         {view.unverifiedAssetIds.length > 0 && (
           <div role="status" className="text-xs">
-            输入图片暂时无法核验，引用已保留。
+            {t("imageStudio.composer.unverified")}
             <Button
               type="button"
               size="sm"
@@ -232,13 +250,13 @@ export function ImageComposer({
               disabled={view.verifyingInputs}
               onClick={() => void controller.revalidateInputs()}
             >
-              重新核验输入图片
+              {t("imageStudio.composer.revalidate")}
             </Button>
           </div>
         )}
         <p className="flex h-4 min-w-0 gap-1.5 text-xs text-muted-foreground">
           <span className="shrink-0">
-            {describeImageSize(target, view.draft.parameters, view.draft.framing)}
+            {describeImageSize(target, view.draft.parameters, view.draft.framing, t)}
           </span>
           {/* Only validation is announced; size changes are visible but not spoken. */}
           <span className="min-w-0 truncate" aria-live="polite" title={errors[0]}>
@@ -248,10 +266,10 @@ export function ImageComposer({
       </fieldset>
       {!view.targets.length && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>在供应商设置中添加支持图像生成的模型。</span>
+          <span>{t("imageStudio.composer.noModels")}</span>
           {onOpenSettings && (
             <Button type="button" size="sm" variant="link" onClick={onOpenSettings}>
-              供应商设置
+              {t("imageStudio.composer.providerSettings")}
             </Button>
           )}
           <Button
@@ -260,7 +278,7 @@ export function ImageComposer({
             variant="ghost"
             onClick={() => void controller.refreshTargets()}
           >
-            刷新模型
+            {t("imageStudio.composer.refreshModels")}
           </Button>
         </div>
       )}

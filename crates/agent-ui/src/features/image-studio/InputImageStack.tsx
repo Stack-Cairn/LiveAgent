@@ -1,12 +1,18 @@
 import { ImageIcon as ImagePlus, Loader2, Plus, X } from "../../components/IconSet";
+import { useLocale } from "../../i18n";
 import type { ImageStudioClient } from "../../lib/imaging/types";
 import { cn } from "../../lib/shared/utils";
 import { AssetImage } from "./AssetImage";
+import { formatMessage, message } from "./studioText";
 
 type Input = { assetId: string; role: "source" | "reference" | "mask" };
 
-const roleLabel = (role: Input["role"]) =>
-  role === "mask" ? "遮罩" : role === "reference" ? "参考图" : "原图";
+const roleKey = (role: Input["role"]) =>
+  role === "mask"
+    ? "imageStudio.input.role.mask"
+    : role === "reference"
+      ? "imageStudio.input.role.reference"
+      : "imageStudio.input.role.source";
 
 // Fanned cards: the first input sits on top, up to two more peek out behind it.
 const layers = [
@@ -34,6 +40,7 @@ export function InputImageStack({
   uploading: boolean;
   onCancelUpload: () => void;
 }) {
+  const { t } = useLocale();
   // Upload progress overlays the tile instead of adding a row, so the composer
   // never changes height while a file is in flight.
   const progress = uploading && (
@@ -42,13 +49,14 @@ export function InputImageStack({
       className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-1 rounded-xl bg-background/80 text-xs backdrop-blur-[2px]"
     >
       <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
-      <span className="sr-only">上传中…</span>
+      <span className="sr-only">{t("imageStudio.input.uploading")}</span>
       <button
         type="button"
+        aria-label={t("imageStudio.input.cancelUpload")}
         onClick={onCancelUpload}
         className="rounded-md px-1.5 py-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
-        取消<span className="sr-only">上传</span>
+        {t("imageStudio.input.cancel")}
       </button>
     </div>
   );
@@ -57,8 +65,8 @@ export function InputImageStack({
       <div className="relative shrink-0">
         <button
           type="button"
-          aria-label="上传参考图片"
-          title={canAdd ? "上传、拖入或粘贴图片" : disabledReason}
+          aria-label={t("imageStudio.input.upload")}
+          title={canAdd ? t("imageStudio.input.uploadHint") : disabledReason}
           disabled={!canAdd}
           onClick={onAdd}
           className={cn(
@@ -74,7 +82,7 @@ export function InputImageStack({
     );
   return (
     <div className="group relative h-24 w-20 shrink-0 sm:w-24">
-      <ul aria-label="输入图片" className="relative size-full">
+      <ul aria-label={t("imageStudio.input.list")} className="relative size-full">
         {inputs.map((input, index) => (
           <li
             key={`${input.assetId}-${input.role}`}
@@ -91,18 +99,21 @@ export function InputImageStack({
               <AssetImage
                 client={client}
                 assetId={input.assetId}
-                alt={`参考图片 ${index + 1}`}
+                alt={formatMessage(message("imageStudio.input.alt", { index: index + 1 }), t)}
                 className="size-full object-cover"
               />
             )}
-            <span className="sr-only">{roleLabel(input.role)}</span>
+            <span className="sr-only">{t(roleKey(input.role))}</span>
           </li>
         ))}
       </ul>
       <button
         type="button"
-        aria-label="移除图片 1"
-        title={`移除${roleLabel(inputs[0].role)}`}
+        aria-label={t("imageStudio.input.removeFirst")}
+        title={formatMessage(
+          message("imageStudio.input.remove", { role: t(roleKey(inputs[0].role)) }),
+          t,
+        )}
         onClick={() => onRemove(0)}
         className={cn(
           "absolute -left-1.5 -top-1.5 z-40 flex size-6 items-center justify-center rounded-full bg-destructive text-white shadow-md transition-opacity",
@@ -121,8 +132,8 @@ export function InputImageStack({
       {canAdd && (
         <button
           type="button"
-          aria-label="继续添加图片"
-          title="继续添加图片"
+          aria-label={t("imageStudio.input.addMore")}
+          title={t("imageStudio.input.addMore")}
           onClick={onAdd}
           className={cn(
             "absolute -bottom-2 -right-2 z-40 flex size-8 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md transition-colors",

@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { Link2, Maximize2 } from "../../components/IconSet";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { useLocale } from "../../i18n";
 import type { ImageTarget, ParameterSpec } from "../../lib/imaging/types";
 import { cn } from "../../lib/shared/utils";
 import {
@@ -13,6 +14,7 @@ import {
   isPixelSizeSpec,
   usesPromptFraming,
 } from "./framing";
+import { defaultTranslate, formatMessage, message, type Translate } from "./studioText";
 import { TargetParameterForm } from "./TargetParameterForm";
 
 // Two ways to frame an image:
@@ -50,23 +52,28 @@ const ratioShape = (ratio: string): [number, number] | undefined => {
 };
 const wideFirst = (a: Choice, b: Choice) =>
   (b.shape ? b.shape[0] / b.shape[1] : 0) - (a.shape ? a.shape[0] / a.shape[1] : 0);
-const AUTO: Choice = { label: "自动" };
-/** "自动" sends the provider's own "auto" when declared, else leaves the key unset. */
-const withAuto = (spec: ParameterSpec, list: Choice[]): Choice[] =>
+/** "Auto" sends the provider's own "auto" when declared, else leaves the key unset. */
+const withAuto = (spec: ParameterSpec, list: Choice[], auto: Choice): Choice[] =>
   spec.enum?.some(isAutoValue)
-    ? [{ value: "auto", label: "自动" }, ...list]
+    ? [{ value: "auto", label: auto.label }, ...list]
     : spec.required
       ? list
-      : [AUTO, ...list];
+      : [auto, ...list];
 
-function planFor(target: ImageTarget | undefined, values: Values, framing?: Framing): Plan {
+function planFor(
+  target: ImageTarget | undefined,
+  values: Values,
+  framing: Framing | undefined,
+  t: Translate,
+): Plan {
   const params = target?.parameters ?? [];
+  const auto: Choice = { label: t("imageStudio.size.auto") };
   if (!target || usesPromptFraming(target)) {
     return {
       mode: "prompt",
-      ratios: [AUTO, ...FRAMING_RATIOS.map((r) => ({ value: r, label: r, shape: ratioShape(r) }))],
+      ratios: [auto, ...FRAMING_RATIOS.map((r) => ({ value: r, label: r, shape: ratioShape(r) }))],
       ratio: framing?.ratio,
-      tiers: [AUTO, ...FRAMING_TIERS.map((t) => ({ value: t, label: t }))],
+      tiers: [auto, ...FRAMING_TIERS.map((tier) => ({ value: tier, label: tier }))],
       tier: framing?.tier,
       pixels: framingPixels(framing),
       rest: params,
@@ -100,9 +107,9 @@ function planFor(target: ImageTarget | undefined, values: Values, framing?: Fram
   const handled = new Set([ratioSpec.key, resolution?.key]);
   return {
     mode: "params",
-    ratios: withAuto(ratioSpec, ratios),
+    ratios: withAuto(ratioSpec, ratios, auto),
     ratio,
-    tiers: resolution ? withAuto(resolution, tiers) : tiers,
+    tiers: resolution ? withAuto(resolution, tiers, auto) : tiers,
     tier: resolution
       ? (values[resolution.key] as string | undefined)
       : pixels
@@ -118,18 +125,28 @@ export function describeImageSize(
   target: ImageTarget | undefined,
   values: Values,
   framing?: Framing,
+  t: Translate = defaultTranslate,
 ) {
-  const plan = planFor(target, values, framing);
-  if (plan.mode === "params" && plan.pixels) return `当前尺寸 ${plan.pixels.w}x${plan.pixels.h}`;
+  const plan = planFor(target, values, framing, t);
+  const text = (key: string, value: string) => formatMessage(message(key, { value }), t);
+  if (plan.mode === "params" && plan.pixels)
+    return text("imageStudio.size.current", `${plan.pixels.w}x${plan.pixels.h}`);
   const parts = [
     plan.ratio && !isAutoValue(plan.ratio)
-      ? `比例 ${plan.ratios.find((c) => c.value === plan.ratio)?.label ?? plan.ratio}`
+      ? text(
+          "imageStudio.size.ratio",
+          plan.ratios.find((c) => c.value === plan.ratio)?.label ?? plan.ratio,
+        )
       : "",
-    plan.tier && !isAutoValue(plan.tier) ? `分辨率 ${plan.tier}` : "",
-    plan.mode === "prompt" && plan.pixels ? `约 ${plan.pixels.w}x${plan.pixels.h}` : "",
+    plan.tier && !isAutoValue(plan.tier) ? text("imageStudio.size.tier", plan.tier) : "",
+    plan.mode === "prompt" && plan.pixels
+      ? text("imageStudio.size.approx", `${plan.pixels.w}x${plan.pixels.h}`)
+      : "",
   ].filter(Boolean);
-  if (!parts.length) return "尺寸由模型自动决定";
-  return plan.mode === "prompt" ? `${parts.join(" · ")} · 写入提示词` : parts.join(" · ");
+  if (!parts.length) return t("imageStudio.size.modelDecides");
+  return plan.mode === "prompt"
+    ? [...parts, t("imageStudio.size.inPrompt")].join(" · ")
+    : parts.join(" · ");
 }
 
 function Shape({ shape }: { shape?: [number, number] }) {
@@ -217,7 +234,8 @@ export function ImageSizePicker({
   onFramingChange: (framing: Framing) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const plan = planFor(target, values, framing);
+  const { t } = useLocale();
+  const plan = planFor(target, values, framing, t);
   const setParam = (key: string, value?: string) => {
     const next = { ...values };
     if (value === undefined) delete next[key];
@@ -246,7 +264,7 @@ export function ImageSizePicker({
         render={
           <button
             type="button"
-            title="画面比例与尺寸"
+            title={t("imageStudio.size.title")}
             className={cn(
               "inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-border px-3 text-sm transition-colors",
               "hover:bg-muted/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
@@ -256,10 +274,10 @@ export function ImageSizePicker({
         }
       >
         <Maximize2 className="size-4 shrink-0 text-muted-foreground" />
-        <span>{ratioLabel ?? "自动比例"}</span>
+        <span>{ratioLabel ?? t("imageStudio.size.autoRatio")}</span>
         <span className="h-4 w-px bg-border" aria-hidden="true" />
         <span className="tabular-nums">
-          {plan.tier && !isAutoValue(plan.tier) ? plan.tier : "自动"}
+          {plan.tier && !isAutoValue(plan.tier) ? plan.tier : t("imageStudio.size.auto")}
         </span>
       </PopoverTrigger>
       <PopoverContent
@@ -267,11 +285,11 @@ export function ImageSizePicker({
         align="start"
         sideOffset={8}
         collisionPadding={8}
-        aria-label="画面比例与尺寸"
+        aria-label={t("imageStudio.size.title")}
         className="max-h-[min(600px,80dvh)] w-80 max-w-[calc(100vw-16px)] space-y-4 overflow-y-auto rounded-2xl p-4"
       >
         <ChoiceGrid
-          label="画面比例"
+          label={t("imageStudio.size.ratioLabel")}
           choices={plan.ratios}
           selected={plan.ratio}
           columns={3}
@@ -280,7 +298,7 @@ export function ImageSizePicker({
         />
         {showTiers && plan.tiers.length > 0 && (
           <ChoiceGrid
-            label="分辨率"
+            label={t("imageStudio.size.tierLabel")}
             choices={plan.tiers}
             selected={plan.tier}
             columns={Math.min(4, plan.tiers.length)}
@@ -290,7 +308,11 @@ export function ImageSizePicker({
         {(plan.mode === "prompt" || plan.pixels) && (
           <section className="space-y-2">
             <h3 className="text-xs text-muted-foreground">
-              尺寸{plan.mode === "prompt" ? "（估算）" : ""}
+              {t(
+                plan.mode === "prompt"
+                  ? "imageStudio.size.dimensionsEstimated"
+                  : "imageStudio.size.dimensions",
+              )}
             </h3>
             <div className="flex items-center gap-2 text-sm">
               {(["W", "H"] as const).map((axis, index) => (
@@ -299,23 +321,27 @@ export function ImageSizePicker({
                   <div className="flex h-10 flex-1 items-center justify-between rounded-xl bg-muted/50 px-3">
                     <span className="text-muted-foreground">{axis}</span>
                     <span className="tabular-nums">
-                      {plan.pixels ? (axis === "W" ? plan.pixels.w : plan.pixels.h) : "自动"}
+                      {plan.pixels
+                        ? axis === "W"
+                          ? plan.pixels.w
+                          : plan.pixels.h
+                        : t("imageStudio.size.auto")}
                     </span>
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-right text-xs text-muted-foreground">单位：像素</p>
+            <p className="text-right text-xs text-muted-foreground">{t("imageStudio.size.unit")}</p>
           </section>
         )}
         {plan.mode === "prompt" && (
           <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            当前模型不接受尺寸参数，所选比例和分辨率会附加在提示词末尾发送，实际尺寸以模型输出为准。
+            {t("imageStudio.size.promptNote")}
           </p>
         )}
         {target && plan.rest.length > 0 && (
           <section className="space-y-2">
-            <h3 className="text-xs text-muted-foreground">更多参数</h3>
+            <h3 className="text-xs text-muted-foreground">{t("imageStudio.size.moreParams")}</h3>
             <TargetParameterForm
               target={{ ...target, parameters: plan.rest }}
               values={values}
