@@ -11,12 +11,11 @@ import (
 const testCatalogBody = `{"schemaVersion":1,"snapshotDate":"2026-10-30","sections":{"openai":[]},"sha256":"abc"}`
 
 type catalogUpstream struct {
-	server   *httptest.Server
-	hits     atomic.Int32
-	status   atomic.Int32
-	body     atomic.Value
-	lastINM  atomic.Value
-	upstream string
+	server  *httptest.Server
+	hits    atomic.Int32
+	status  atomic.Int32
+	body    atomic.Value
+	lastINM atomic.Value
 }
 
 func newCatalogUpstream(t *testing.T) *catalogUpstream {
@@ -224,7 +223,7 @@ func TestModelCatalogProxyKeepsGoodCopyWhenUpstreamTurnsInvalid(t *testing.T) {
 }
 
 func TestModelCatalogProxyDisabledReturnsNotFound(t *testing.T) {
-	var proxy *ModelCatalogProxy = NewModelCatalogProxy("", time.Second)
+	proxy := NewModelCatalogProxy("", time.Second)
 	if proxy != nil {
 		t.Fatalf("empty upstream URL must disable the proxy")
 	}
