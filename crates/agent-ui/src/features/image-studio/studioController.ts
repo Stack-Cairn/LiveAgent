@@ -26,7 +26,12 @@ import {
 import { composeFramedPrompt, splitFramedPrompt, usesPromptFraming } from "./framing";
 import { ImageEventStreams } from "./imageEventStreams";
 import { MAX_UPLOAD_BYTES, sniffImage, UPLOAD_MIMES } from "./imageSniff";
-import { defaultParameters, migrateParameters, validateParameters } from "./parameterModel";
+import {
+  defaultParameters,
+  keepDeclaredParameters,
+  migrateParameters,
+  validateParameters,
+} from "./parameterModel";
 import {
   applyJobSnapshot,
   errorActionMessage,
@@ -880,10 +885,23 @@ export class ImageStudioController {
         this.view.draft !== previousDraft
       )
         return;
+      // Keys the target no longer declares can't be cleared from the UI and block submit.
+      const restoredTarget = this.view.targets.find((target) => target.id === request.targetId);
+      const kept = restoredTarget
+        ? keepDeclaredParameters(restoredTarget, verified.draft.parameters)
+        : { values: verified.draft.parameters, dropped: [] };
+      for (const key of kept.dropped)
+        this.droppedSpecs.set(key, {
+          key,
+          label: key,
+          type: "string",
+          required: false,
+        });
+      verified.draft.parameters = kept.values;
       this.patch({
         operation: request.operation,
         count: request.count,
-        dropped: [],
+        dropped: kept.dropped,
         unverifiedAssetIds: verified.unverifiedAssetIds,
         ...this.noticeOf(
           message(

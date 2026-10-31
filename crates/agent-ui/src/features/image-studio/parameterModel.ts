@@ -48,6 +48,20 @@ export function defaultParameters(target: ImageTarget): Record<string, unknown> 
       .map((spec) => [spec.key, spec.default]),
   );
 }
+/** A restored job may predate the target's current schema (e.g. `size` before ratio tiers). */
+export function keepDeclaredParameters(
+  target: ImageTarget,
+  params: Record<string, unknown>,
+): { values: Record<string, unknown>; dropped: string[] } {
+  const values: Record<string, unknown> = {};
+  const dropped: string[] = [];
+  for (const [key, value] of Object.entries(params)) {
+    const spec = target.parameters.find((item) => item.key === key);
+    if (spec && !parameterError(spec, value)) values[key] = value;
+    else dropped.push(key);
+  }
+  return { values, dropped };
+}
 export function migrateParameters(
   from: ImageTarget,
   to: ImageTarget,

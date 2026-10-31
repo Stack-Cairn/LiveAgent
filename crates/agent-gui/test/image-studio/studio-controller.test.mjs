@@ -219,7 +219,9 @@ test('restoreJob restores the complete request in its own project without submit
     projectId: 'old', prompt: 'historical prompt', targetId: 't', parameters: { quality: 'high' },
     inputs: [{ assetId: 'ia_parent', role: 'source' }], parentAssetId: 'ia_parent', operation: 'edit', count: 3,
   } };
+  // The target declares the restored key; undeclared keys are dropped on restore.
   const c = controller({
+    listTargets: async () => [{ ...target, parameters: [{ key: 'quality', label: 'quality', type: 'string', required: false }] }],
     listJobs: async (id, cursor) => ({
       items: id === 'old' ? [cursor ? historical : job('old', 'recent')] : [job('archive', 'archive-history')],
       ...(id === 'old' && !cursor ? { nextCursor: 'old-older' } : {}),
