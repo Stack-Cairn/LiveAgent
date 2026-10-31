@@ -6,7 +6,15 @@ import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
+import {
+  CATALOG_LIVE_DEFAULT_URL,
+  configureCatalogLiveSources,
+  getCatalogLiveVersion,
+  loadCatalogLiveSupplement,
+  startCatalogLiveRefresh,
+} from "@liveagent/ui/lib/models/catalogLive";
 import { loadThinkingLiveSupplement } from "@liveagent/ui/lib/models/thinkingLive";
+import { useCatalogLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import {
   configureResourceHostCapabilities,
   kbrainResourceHostCapabilities,
@@ -51,6 +59,7 @@ import {
   getDefaultSettings,
   getNextTheme,
   normalizeSettings,
+  refreshCatalogDerivedModelLimits,
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
   type SttProviderId,
@@ -70,6 +79,7 @@ import {
   loadPersistedSettingsWithDefaults,
   persistSettings,
   publishGatewaySettingsSync,
+  reconcileKBrainCatalogMetadata,
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import { desktopSttSettingsService } from "./lib/stt/desktopSttSettingsService";
@@ -286,6 +296,36 @@ export default function App() {
     setSttProviderOverride(null);
   }, [settings.stt.provider]);
 
+  // 运行期模型目录（model-catalog.v1.json）：磁盘缓存在本 effect 内同步生效，早于
+  // 下方的设置加载，让加载时的限额重解析直接用上；网络结果随后到达时由下一个
+  // effect 跟进。失败静默，维持「快照 + 兜底」的现状。
+  // VITE_LIVEAGENT_MODEL_CATALOG_URL（构建期注入，默认不设）用于镜像与调试，排在默认地址之前。
+  useEffect(() => {
+    configureCatalogLiveSources([
+      import.meta.env.VITE_LIVEAGENT_MODEL_CATALOG_URL ?? "",
+      CATALOG_LIVE_DEFAULT_URL,
+    ]);
+    void loadCatalogLiveSupplement();
+    return startCatalogLiveRefresh();
+  }, []);
+  // 设置加载所依据的目录版本。之后到达的新目录：内存设置重解析 catalog/fallback
+  // 限额，并把差异补推给 K-brain（加载时已对账过的版本不重复推）。补推排进设置保存
+  // 队列：它是一次 GET→PUT，与用户保存交错会用旧快照覆盖刚保存的供应商配置。
+  const catalogVersionAtSettingsLoadRef = useRef(0);
+  const catalogLiveVersion = useCatalogLiveVersion();
+  useEffect(() => {
+    if (!settingsReady || catalogLiveVersion === catalogVersionAtSettingsLoadRef.current) return;
+    catalogVersionAtSettingsLoadRef.current = catalogLiveVersion;
+    const refreshed = refreshCatalogDerivedModelLimits(settingsRef.current);
+    if (refreshed !== settingsRef.current) {
+      settingsRef.current = refreshed;
+      setSettingsState(refreshed);
+    }
+    saveChainRef.current = saveChainRef.current
+      .catch(() => undefined)
+      .then(() => reconcileKBrainCatalogMetadata());
+  }, [catalogLiveVersion, settingsReady]);
+
   // 思考档位运行期补充（models.dev）：启动后台拉一次，TTL 内幂等；失败静默，
   // 档位解析维持在「快照 + 兜底」的现状。
   useEffect(() => {
@@ -391,6 +431,8 @@ export default function App() {
     let cancelled = false;
 
     async function hydrateSettings() {
+      // 在发起加载前取版本：加载途中到达的新目录不会被误记为已处理。
+      catalogVersionAtSettingsLoadRef.current = getCatalogLiveVersion();
       try {
         const persistedSettingsPromise = loadPersistedSettingsWithDefaults();
         void loadChatPage();

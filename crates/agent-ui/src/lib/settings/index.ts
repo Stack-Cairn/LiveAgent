@@ -1051,6 +1051,41 @@ export function normalizeProviderModelConfigs(
   return out;
 }
 
+/**
+ * 运行期模型目录生效后，按生效目录重解析 catalog/fallback 来源的模型限额，结果与
+ * 重新加载设置时 normalizeProviderModelConfig 的重解析一致；user/provider 来源
+ * 原样保留。没有任何变化时返回同一个对象，调用方据此跳过 setState 与写入。
+ */
+export function refreshCatalogDerivedModelLimits(settings: AppSettings): AppSettings {
+  let changed = false;
+  const customProviders = settings.customProviders.map((provider) => {
+    let providerChanged = false;
+    const models = provider.models.map((model) => {
+      if (model.limitsSource !== "catalog" && model.limitsSource !== "fallback") return model;
+      const next = normalizeProviderModelConfig(model, provider.type);
+      if (
+        !next ||
+        (next.contextWindow === model.contextWindow &&
+          next.maxOutputToken === model.maxOutputToken &&
+          next.limitsSource === model.limitsSource)
+      ) {
+        return model;
+      }
+      providerChanged = true;
+      return {
+        ...model,
+        contextWindow: next.contextWindow,
+        maxOutputToken: next.maxOutputToken,
+        limitsSource: next.limitsSource,
+      };
+    });
+    if (!providerChanged) return provider;
+    changed = true;
+    return { ...provider, models };
+  });
+  return changed ? { ...settings, customProviders } : settings;
+}
+
 export function findProviderModelConfig(
   provider: Pick<CustomProvider, "models" | "type"> & { baseUrl?: string },
   modelId: string,

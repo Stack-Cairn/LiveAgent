@@ -101,13 +101,63 @@ function withoutDateSuffix(modelId: string): string[] {
   return withoutMonthDay !== modelId ? [withoutMonthDay] : [];
 }
 
+// ---------------------------------------------------------------------------
+// 生效目录：内置快照 + 运行期目录（catalogLive.ts）
+// ---------------------------------------------------------------------------
+// 运行期目录与快照出自同一个生成器（scripts/generate-model-catalog.mjs --json），
+// 分区裁决、归一化都已在生成期完成，这里只做两件事：远程分区整份替换同名快照
+// 分区；远程任何分区都没有的 id 从快照补回（上游下架/改名的模型可能仍在用户
+// 配置里，删掉会让它们退回兜底限额）。补回只看 id 是否全局出现，不涉及分区
+// 优先级，所以不会在客户端引入第二套裁决规则。
+export type RuntimeModelCatalog = {
+  snapshotDate: string;
+  sections: Partial<Record<CatalogProviderId, readonly CatalogModelEntry[]>>;
+};
+
+let effectiveCatalog: Record<CatalogProviderId, readonly CatalogModelEntry[]> = MODEL_CATALOG;
+
+export function getEffectiveModelCatalog(): Record<
+  CatalogProviderId,
+  readonly CatalogModelEntry[]
+> {
+  return effectiveCatalog;
+}
+
+/** 生效已校验的运行期目录；null 回到内置快照。调用方负责通知订阅者。 */
+export function applyRuntimeModelCatalog(runtime: RuntimeModelCatalog | null): void {
+  if (!runtime) {
+    effectiveCatalog = MODEL_CATALOG;
+  } else {
+    const remoteIds = new Set<string>();
+    for (const entries of Object.values(runtime.sections)) {
+      for (const entry of entries ?? []) remoteIds.add(entry.id.toLowerCase());
+    }
+    const next = {} as Record<CatalogProviderId, readonly CatalogModelEntry[]>;
+    for (const provider of CATALOG_PROVIDER_IDS) {
+      const remote = runtime.sections[provider];
+      if (!remote) {
+        next[provider] = MODEL_CATALOG[provider];
+        continue;
+      }
+      const backfill = MODEL_CATALOG[provider].filter(
+        (entry) => !remoteIds.has(entry.id.toLowerCase()),
+      );
+      next[provider] = [...remote, ...backfill].sort((a, b) =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      );
+    }
+    effectiveCatalog = next;
+  }
+  catalogIndexByProvider.clear();
+}
+
 const catalogIndexByProvider = new Map<CatalogProviderId, Map<string, CatalogModelEntry>>();
 
 function getCatalogIndex(catalogProvider: CatalogProviderId): Map<string, CatalogModelEntry> {
   let index = catalogIndexByProvider.get(catalogProvider);
   if (!index) {
     index = new Map();
-    for (const entry of MODEL_CATALOG[catalogProvider]) {
+    for (const entry of effectiveCatalog[catalogProvider]) {
       index.set(entry.id, entry);
       // 目录含混合大小写 id（MiniMax-M2/LongCat-2.0 等）：补小写别名，让候选链
       // 的 lower 候选可命中；生成期按小写去重保证别名不会跨条目歧义。

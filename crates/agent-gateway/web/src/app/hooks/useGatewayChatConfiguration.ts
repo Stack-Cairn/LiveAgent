@@ -1,6 +1,9 @@
 import { t as translate } from "@liveagent/ui/i18n/index";
 import { useComposerSkillSelection } from "@liveagent/ui/lib/chat/useComposerActions";
-import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
+import {
+  useCatalogLiveVersion,
+  useThinkingLiveVersion,
+} from "@liveagent/ui/lib/models/useThinkingLive";
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useMemo } from "react";
@@ -144,9 +147,12 @@ export function useGatewayChatConfiguration({
       setSettings,
     ],
   );
+  // 运行期模型目录只改模态/档位时设置对象不变，版本号让选择器的视觉/推理标记跟进。
+  const catalogLiveVersion = useCatalogLiveVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: catalogLiveVersion 是刻意的失效信号，运行期目录到达后重建选项。
   const modelOptions = useMemo(
     () => buildModelOptions(settings, { floatSelectedFirst: false }),
-    [settings],
+    [settings, catalogLiveVersion],
   );
   const selectedValue = activeSelectedModel
     ? toModelValue(activeSelectedModel.customProviderId, activeSelectedModel.model)

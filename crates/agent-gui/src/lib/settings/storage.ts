@@ -11,7 +11,7 @@ import { fromKBrainMcpSettings, toKBrainMcpSettings } from "../kbrain/mcp";
 import { createKBrainPromptClient, type KBrainPromptSnapshot } from "../kbrain/prompts";
 import {
   appProvidersFromKBrain,
-  kBrainSettingsUpdateForMissingInputModalities,
+  kBrainSettingsUpdateForCatalogRefresh,
   kBrainSettingsUpdateFromAppSettings,
   kBrainSettingsUpdateFromLegacyProviders,
   loadKBrainProviderSettings,
@@ -503,24 +503,38 @@ function kBrainRejectionReason(error: unknown): string {
   return message.trim().slice(0, 300) || "rejected by K-brain";
 }
 
-// 旧配置的中转模型没有输入模态，K-brain 会把它们当成纯文本、丢弃 Read 到的图片。
-// 每次加载时对账补齐；失败只记日志，绝不影响设置加载。
-async function backfillKBrainInputModalities(
+// 旧配置的中转模型没有输入模态，K-brain 会把它们当成纯文本、丢弃 Read 到的图片；
+// 目录（内置快照或运行期目录）更新后，catalog/fallback 来源的限额也会与后端存值
+// 不一致。每次加载时对账补齐；失败只记日志，绝不影响设置加载。
+async function backfillKBrainCatalogMetadata(
   document: KBrainSettingsDocument,
   providers: CustomProvider[],
 ) {
-  const selectedModel =
-    document.defaultProvider && document.defaultModel
-      ? { customProviderId: document.defaultProvider, model: document.defaultModel }
-      : undefined;
-  const update = kBrainSettingsUpdateForMissingInputModalities(providers, selectedModel);
+  const update = kBrainSettingsUpdateForCatalogRefresh(document);
   if (!update) return { document, providers };
   try {
     const saved = await saveKBrainProviderSettings(update);
     return { document: saved, providers: appProvidersFromKBrain(saved) };
   } catch (error) {
-    console.warn("K-brain input modality backfill failed", error);
+    console.warn("K-brain catalog metadata backfill failed", error);
     return { document, providers };
+  }
+}
+
+/**
+ * 运行期模型目录在设置加载之后才到达时调用：按新目录把限额/模态补推给 K-brain
+ * （设计 C7）。返回是否写入；后端未就绪或失败只记日志，不抛出。
+ */
+export async function reconcileKBrainCatalogMetadata(): Promise<boolean> {
+  if (!isKBrainBackendEnabled()) return false;
+  try {
+    const update = kBrainSettingsUpdateForCatalogRefresh(await loadKBrainProviderSettings());
+    if (!update) return false;
+    await saveKBrainProviderSettings(update);
+    return true;
+  } catch (error) {
+    console.warn("K-brain catalog metadata reconcile failed", error);
+    return false;
   }
 }
 
@@ -532,7 +546,7 @@ async function loadAndMaybeImportKBrainProviders(
     legacyProviders,
     legacySelectedModel,
   );
-  const settings = await backfillKBrainInputModalities(loaded.document, loaded.providers);
+  const settings = await backfillKBrainCatalogMetadata(loaded.document, loaded.providers);
   refreshRejectedLegacyProviders();
   return settings;
 }

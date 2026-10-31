@@ -66,6 +66,7 @@ import { VerticalReorderList } from "@liveagent/ui/components/ui/VerticalReorder
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { useCatalogLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
@@ -433,7 +434,10 @@ function ProviderSettingsDialog(
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const [selectedProtocol, setSelectedProtocol] = useState(providerType);
-  const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
+  // 运行期模型目录只改模态/档位时设置对象不变，版本号让选择器的视觉/推理标记跟进。
+  const catalogLiveVersion = useCatalogLiveVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: catalogLiveVersion 是刻意的失效信号，运行期目录到达后重建选项。
+  const modelOptions = useMemo(() => buildModelOptions(settings), [settings, catalogLiveVersion]);
   // 上下文占用展示三档的动态描述：只解释当前选中档，取代原先罗列三档的长段落。
   const contextDisplayModeDesc = {
     statsBar: t("settings.composerContextDisplayStatsBarDesc"),

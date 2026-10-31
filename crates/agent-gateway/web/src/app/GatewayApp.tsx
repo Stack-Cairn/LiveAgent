@@ -20,6 +20,13 @@ import {
 } from "@liveagent/ui/lib/chat/searchJumpTarget";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import {
+  CATALOG_LIVE_DEFAULT_URL,
+  CATALOG_LIVE_GATEWAY_PATH,
+  configureCatalogLiveSources,
+  loadCatalogLiveSupplement,
+  startCatalogLiveRefresh,
+} from "@liveagent/ui/lib/models/catalogLive";
 import { loadThinkingLiveSupplement } from "@liveagent/ui/lib/models/thinkingLive";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -467,6 +474,15 @@ function useGatewayAppController() {
       sidebarStore.stop();
     };
   }, [api, sidebarStore]);
+
+  // 运行期模型目录：先走同源 Gateway 代理（国内部署可经 Gateway 的出站代理回源），
+  // 失败再直连 raw.githubusercontent.com。磁盘缓存在本 effect 内同步生效；失败
+  // 静默，维持「快照 + 兜底」的现状。
+  useEffect(() => {
+    configureCatalogLiveSources([CATALOG_LIVE_GATEWAY_PATH, CATALOG_LIVE_DEFAULT_URL]);
+    void loadCatalogLiveSupplement();
+    return startCatalogLiveRefresh();
+  }, []);
 
   // 思考档位运行期补充（models.dev）：启动后台拉一次，TTL 内幂等；失败静默，
   // 档位解析维持在「快照 + 兜底」的现状。models.dev 带 ACAO:*，浏览器直连可达，
