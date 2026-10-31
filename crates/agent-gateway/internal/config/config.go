@@ -11,6 +11,10 @@ import (
 
 const DefaultMaxMessageBytes = 64 * 1024 * 1024
 
+// DefaultModelCatalogURL is the runtime model catalog published by
+// .github/workflows/publish-model-catalog.yml.
+const DefaultModelCatalogURL = "https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/data/model-catalog/model-catalog.v1.json"
+
 // 三条 v2 链路并发连接上限的默认值；浏览器/终端按"每 Agent 数个会话"的
 // 使用形态放大（100 Agent × 若干浏览器页签/终端页）。
 const (
@@ -57,6 +61,9 @@ type Config struct {
 	KBrainAgentID  string
 	KBrainProvider string
 	KBrainModel    string
+	// ModelCatalogURL is the upstream runtime model catalog served at
+	// /api/public/model-catalog; empty disables the proxy.
+	ModelCatalogURL string
 }
 
 func Load() *Config {
@@ -76,6 +83,7 @@ func Load() *Config {
 	flag.StringVar(&cfg.HTTPAddr, "http-addr", getenv("LIVEAGENT_GATEWAY_HTTP_ADDR", defaultHTTPAddr()), "HTTP listen address")
 	flag.StringVar(&cfg.TLSCert, "tls-cert", getenv("LIVEAGENT_GATEWAY_TLS_CERT", ""), "TLS certificate path")
 	flag.StringVar(&cfg.TLSKey, "tls-key", getenv("LIVEAGENT_GATEWAY_TLS_KEY", ""), "TLS private key path")
+	flag.StringVar(&cfg.ModelCatalogURL, "model-catalog-url", getenv("LIVEAGENT_GATEWAY_MODEL_CATALOG_URL", DefaultModelCatalogURL), "runtime model catalog served to WebUI at /api/public/model-catalog (\"off\" disables)")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
 	flag.DurationVar(&cfg.ChatDeliveryTimeout, "chat-delivery-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT", 5*time.Second), "timeout delivering an accepted chat command to the desktop agent stream")
@@ -103,6 +111,9 @@ func Load() *Config {
 	flag.StringVar(&cfg.KBrainModel, "kbrain-model", getenv("LIVEAGENT_GATEWAY_KBRAIN_MODEL", ""), "default K-brain model for Gateway chat")
 	os.Args = normalizeLegacyArgs(os.Args)
 	flag.Parse()
+	if strings.EqualFold(strings.TrimSpace(cfg.ModelCatalogURL), "off") {
+		cfg.ModelCatalogURL = ""
+	}
 	for _, secret := range []struct {
 		value *string
 		env   string

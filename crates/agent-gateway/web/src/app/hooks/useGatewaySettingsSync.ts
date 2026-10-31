@@ -5,6 +5,7 @@ import {
   type HooksSnapshot,
   initAutomation,
 } from "@liveagent/ui/lib/automation/index";
+import { useCatalogLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import {
   applyGatewaySettingsSyncPayload,
@@ -20,6 +21,7 @@ import { GatewaySettingsUpdateError } from "@/lib/gatewaySocketRpc";
 import {
   type AppSettings,
   normalizeSettings,
+  refreshCatalogDerivedModelLimits,
   resolveEffectiveTheme,
   subscribeToSystemThemePreference,
 } from "@/lib/settings";
@@ -111,6 +113,17 @@ export function useGatewaySettingsSync(params: {
 
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
+
+  // 运行期模型目录到达后，按生效目录重解析 catalog/fallback 来源的限额（只改内存，
+  // 不触发保存；与桌面端同一规则）。版本 0 = 仅内置快照，加载时已按它解析过。
+  const catalogLiveVersion = useCatalogLiveVersion();
+  useEffect(() => {
+    if (catalogLiveVersion === 0) return;
+    const refreshed = refreshCatalogDerivedModelLimits(settingsRef.current);
+    if (refreshed === settingsRef.current) return;
+    settingsRef.current = refreshed;
+    setSettingsState(refreshed);
+  }, [catalogLiveVersion]);
 
   useEffect(() => {
     if (settings.theme !== "system") return;

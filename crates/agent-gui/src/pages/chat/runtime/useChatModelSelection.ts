@@ -1,4 +1,7 @@
-import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
+import {
+  useCatalogLiveVersion,
+  useThinkingLiveVersion,
+} from "@liveagent/ui/lib/models/useThinkingLive";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
@@ -111,13 +114,16 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     [sidebarStore, updateConversationRuntimeEntry],
   );
 
+  // 运行期模型目录只改模态/档位时设置对象不变，版本号让选择器的视觉/推理标记跟进。
+  const catalogLiveVersion = useCatalogLiveVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: catalogLiveVersion 是刻意的失效信号，运行期目录到达后重建选项。
   const modelOptions = useMemo(
     () =>
       buildModelOptions(
         { customProviders: settings.customProviders },
         { floatSelectedFirst: false },
       ),
-    [settings.customProviders],
+    [settings.customProviders, catalogLiveVersion],
   );
   const activeSelectedModel = resolveActiveModelSelection(
     settings,

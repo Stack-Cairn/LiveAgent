@@ -83,6 +83,8 @@ func NewHTTPServerWithLocalImages(cfg *config.Config, sm *session.Manager, token
 	rootMux.HandleFunc("/t/", publicTunnelProxy(sm))
 	rootMux.HandleFunc("GET /image-proxy", handler.ImageProxy(cfg.RequestTimeout))
 	rootMux.HandleFunc("GET /api/public/history-shares/{token}", publicHistoryShare(cfg, sm))
+	// Public: the runtime model catalog is published data; WebUI fetches it before sign-in.
+	rootMux.Handle("GET /api/public/model-catalog", handler.NewModelCatalogProxy(cfg.ModelCatalogURL, cfg.RequestTimeout))
 
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("GET /api/image/identity", images.identity())

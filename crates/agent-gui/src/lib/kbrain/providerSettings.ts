@@ -27,10 +27,14 @@ function providerType(provider: KBrainSettingsProvider): ProviderId {
 }
 
 export function customProviderFromKBrain(provider: KBrainSettingsProvider): CustomProvider {
-  const models = provider.models.map((model) => ({
+  // K-brain 回传同一输出上限的 maxOutputTokens 与 maxOutputToken 两个字段。只保留单数：
+  // 复数字段会被 normalize 当成供应商 /v1/models 的实时声明，把后端存的 catalog/fallback
+  // 来源一律改写成 provider，运行期目录的重解析与对账随之失效。provider 来源只由
+  // “刷新模型列表”的抓取路径写入。
+  const models = provider.models.map(({ maxOutputTokens, ...model }) => ({
     ...model,
     displayName: model.displayName ?? model.name,
-    maxOutputToken: model.maxOutputToken ?? model.maxOutputTokens,
+    maxOutputToken: model.maxOutputToken ?? maxOutputTokens,
     inputModalities:
       model.inputModalities ?? (model.vision === true ? ["text", "image"] : undefined),
     limitsSource: model.limitsSource ?? "provider",
@@ -166,6 +170,40 @@ export function kBrainSettingsUpdateForMissingInputModalities(
     ),
   );
   if (!needsBackfill) return undefined;
+  const update = settingsUpdateFromProviders(providers, providers, selectedModel);
+  delete update.deleteProviders;
+  return update;
+}
+
+/**
+ * 运行期模型目录生效后对账（设计 C7）：后端里来源为 catalog/fallback 的模型，限额与
+ * 按当前生效目录重解析的结果不同；或缺少输入模态、但当前目录能确认支持图片。两类都
+ * 补推一次，让 K-brain 与界面用同一份目录。user/provider 来源不比较、不改写；没有
+ * 差异时返回 undefined，不产生写入。
+ */
+export function kBrainSettingsUpdateForCatalogRefresh(
+  document: KBrainSettingsDocument,
+): KBrainSettingsUpdate | undefined {
+  const providers = appProvidersFromKBrain(document);
+  const selectedModel =
+    document.defaultProvider && document.defaultModel
+      ? { customProviderId: document.defaultProvider, model: document.defaultModel }
+      : undefined;
+  const backendById = new Map(document.providers.map((provider) => [provider.id, provider]));
+  const limitsDrifted = providers.some((provider) => {
+    const backendModels = backendById.get(provider.id)?.models ?? [];
+    return provider.models.some((model) => {
+      if (model.limitsSource !== "catalog" && model.limitsSource !== "fallback") return false;
+      const backend = backendModels.find((item) => item.id === model.id);
+      if (!backend) return false;
+      return (
+        backend.contextWindow !== model.contextWindow ||
+        (backend.maxOutputToken ?? backend.maxOutputTokens) !== model.maxOutputToken
+      );
+    });
+  });
+  if (!limitsDrifted)
+    return kBrainSettingsUpdateForMissingInputModalities(providers, selectedModel);
   const update = settingsUpdateFromProviders(providers, providers, selectedModel);
   delete update.deleteProviders;
   return update;

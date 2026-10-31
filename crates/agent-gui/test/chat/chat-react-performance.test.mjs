@@ -101,10 +101,10 @@ test("real pane host stops unchanged context broadcasts but accepts bindings, id
 test("model options retain identity across theme changes and update with providers", async () => {
   const source = readFileSync(new URL("../../src/pages/chat/runtime/useChatModelSelection.ts", import.meta.url), "utf8");
   const block = source.slice(source.indexOf("  const modelOptions ="), source.indexOf("  const activeSelectedModel ="));
-  const compute = new Function("useMemo", "buildModelOptions", "settings", transpileTypeScriptModule(block + "\nreturn modelOptions;", "/tmp/options.ts"));
+  const compute = new Function("useMemo", "buildModelOptions", "settings", "catalogLiveVersion", transpileTypeScriptModule(block + "\nreturn modelOptions;", "/tmp/options.ts"));
   let builds = 0, result;
   const build = settings => { builds++; return settings.customProviders.slice(); };
-  function Page({ settings }) { result = compute(React.useMemo, build, settings); return null; }
+  function Page({ settings, catalogLiveVersion = 0 }) { result = compute(React.useMemo, build, settings, catalogLiveVersion); return null; }
   await withRoot(async root => {
     const customProviders = [{ id: "a" }];
     await act(async () => root.render(React.createElement(Page, { settings: { customProviders, theme: "light" } })));
@@ -115,5 +115,11 @@ test("model options retain identity across theme changes and update with provide
     await act(async () => root.render(React.createElement(Page, { settings: { customProviders: [{ id: "b" }], theme: "dark" } })));
     assert.equal(builds, 2);
     assert.equal(result[0].id, "b");
+    // 运行期模型目录到达（版本号变化）时，即使 providers 不变也要重建选项。
+    const providersB = { customProviders: [{ id: "b" }], theme: "dark" };
+    await act(async () => root.render(React.createElement(Page, { settings: providersB })));
+    const built = builds;
+    await act(async () => root.render(React.createElement(Page, { settings: providersB, catalogLiveVersion: 1 })));
+    assert.equal(builds, built + 1, "a live catalog version bump rebuilds model options");
   });
 });

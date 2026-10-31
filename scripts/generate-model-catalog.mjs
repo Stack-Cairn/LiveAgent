@@ -7,14 +7,20 @@
 //   crates/agent-ui/src/lib/models/catalog.generated.ts
 //
 // Usage: node scripts/generate-model-catalog.mjs
-//          [--source <url|file>] [--codex-source <url|file>] [--check]
+//          [--source <url|file>] [--codex-source <url|file>] [--check] [--json <path>]
 //   --source        alternate models.dev api.json URL or local file path
 //   --codex-source  alternate Codex models.json URL or local file path
 //   --check         compare against the checked-in snapshot without writing;
 //                   exits 1 when the data differs
+//   --json          also write the runtime catalog (model-catalog.v1.json) built
+//                   from the same validated sections; written even when the TS
+//                   snapshot is unchanged or --check is set
 //
-// Automated refresh: .github/workflows/update-model-catalog.yml
+// Automated refresh: .github/workflows/update-model-catalog.yml (bundled TS
+// snapshot) and .github/workflows/publish-model-catalog.yml (runtime JSON,
+// consumed by crates/agent-ui/src/lib/models/catalogLive.ts).
 
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -243,11 +249,20 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const args = { source: DEFAULT_SOURCE, codexSource: DEFAULT_CODEX_SOURCE, check: false };
+  const args = {
+    source: DEFAULT_SOURCE,
+    codexSource: DEFAULT_CODEX_SOURCE,
+    check: false,
+    json: undefined,
+  };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--check") {
       args.check = true;
+    } else if (arg === "--json") {
+      i += 1;
+      if (!argv[i]) fail("--json requires a value");
+      args.json = argv[i];
     } else if (arg === "--source") {
       i += 1;
       if (!argv[i]) fail("--source requires a value");
@@ -517,83 +532,151 @@ function readExisting(path) {
   }
 }
 
-const args = parseArgs(process.argv);
-const [upstream, codexUpstream] = await Promise.all([
-  loadUpstream(args.source, "models.dev"),
-  loadUpstream(args.codexSource, "Codex"),
-]);
-const codexModels = extractCodexOpenAIModels(codexUpstream);
+// ---------------------------------------------------------------------------
+// Runtime catalog (model-catalog.v1.json)
+// ---------------------------------------------------------------------------
+// The same validated sections the TS snapshot is rendered from, published by
+// publish-model-catalog.yml and applied at runtime by catalogLive.ts. Clients
+// only validate this document — every merge/normalization rule stays here.
+// `sha256` covers JSON.stringify(sections) with the fixed key order produced by
+// canonicalEntry, so a client re-serializing the parsed object reproduces the
+// exact hashed bytes (JSON.parse preserves key order).
+export const CATALOG_JSON_SCHEMA_VERSION = 1;
+export const CATALOG_JSON_FILE_NAME = "model-catalog.v1.json";
 
-const catalog = {};
-const claimedLower = new Map();
-for (const section of SECTIONS) {
-  const entries = extractSection(section, upstream, claimedLower, codexModels);
-  if (entries.length < section.min) {
-    fail(
-      `section ${section.key}: only ${entries.length} models after filtering ` +
-        `(expected >= ${section.min}); upstream data looks truncated`,
-    );
-  }
-  catalog[section.key] = entries;
-}
-for (const sentinel of SENTINELS) {
-  const entry = catalog[sentinel.section].find((candidate) => candidate.id === sentinel.id);
-  if (!entry) {
-    fail(
-      `sentinel model ${sentinel.section}/${sentinel.id} missing; upstream schema may have changed`,
-    );
-  }
-  if (sentinel.level && !entry.thinking?.levels.includes(sentinel.level)) {
-    fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected thinking level "${sentinel.level}"; ` +
-        "upstream reasoning_options schema may have changed",
-    );
-  }
-  if (sentinel.off !== undefined && entry.thinking?.off !== sentinel.off) {
-    fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected thinking.off=${sentinel.off}; ` +
-        "upstream reasoning_options schema may have changed",
-    );
-  }
-  if (sentinel.inputModality && !entry.inputModalities?.includes(sentinel.inputModality)) {
-    fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected input modality ` +
-        `"${sentinel.inputModality}"; upstream modalities schema may have changed`,
-    );
-  }
-  if (
-    sentinel.contextWindow !== undefined &&
-    entry.contextWindow !== sentinel.contextWindow
-  ) {
-    fail(
-      `sentinel ${sentinel.section}/${sentinel.id}: expected contextWindow=` +
-        `${sentinel.contextWindow}, got ${entry.contextWindow}; Codex precedence may have changed`,
-    );
-  }
+function canonicalEntry(entry) {
+  return {
+    id: entry.id,
+    contextWindow: entry.contextWindow,
+    maxOutputToken: entry.maxOutputToken,
+    ...(entry.inputModalities ? { inputModalities: [...entry.inputModalities] } : {}),
+    ...(entry.thinking
+      ? { thinking: { levels: [...entry.thinking.levels], off: entry.thinking.off } }
+      : {}),
+  };
 }
 
-const existingContents = OUTPUT_PATHS.map(readExisting);
-const today = new Date().toISOString().slice(0, 10);
-const nextContent = renderCatalog(catalog, today);
+export function canonicalSectionsJson(sections) {
+  return JSON.stringify(sections);
+}
 
-const unchanged =
-  existingContents.every((content) => content !== null) &&
-  existingContents.every((content) => stripSnapshotDate(content) === stripSnapshotDate(nextContent));
-
-if (args.check) {
-  if (!unchanged) {
-    console.error("catalog snapshot is stale; run: node scripts/generate-model-catalog.mjs");
-    process.exit(1);
+export function buildCatalogJson(catalog, { snapshotDate, generatedAt, commit }) {
+  const sections = {};
+  const minimums = {};
+  for (const section of SECTIONS) {
+    sections[section.key] = catalog[section.key].map(canonicalEntry);
+    minimums[section.key] = section.min;
   }
-  console.log("catalog snapshot is up to date.");
-  process.exit(0);
+  return {
+    schemaVersion: CATALOG_JSON_SCHEMA_VERSION,
+    snapshotDate,
+    generatedAt,
+    generator: {
+      commit,
+      sources: [DEFAULT_CODEX_SOURCE, DEFAULT_SOURCE],
+    },
+    sections,
+    minimums,
+    sha256: createHash("sha256").update(canonicalSectionsJson(sections)).digest("hex"),
+  };
 }
 
-if (unchanged) {
-  console.log("catalog unchanged");
-  process.exit(0);
+export { renderCatalog, SECTIONS };
+
+async function main() {
+  const args = parseArgs(process.argv);
+  const [upstream, codexUpstream] = await Promise.all([
+    loadUpstream(args.source, "models.dev"),
+    loadUpstream(args.codexSource, "Codex"),
+  ]);
+  const codexModels = extractCodexOpenAIModels(codexUpstream);
+
+  const catalog = {};
+  const claimedLower = new Map();
+  for (const section of SECTIONS) {
+    const entries = extractSection(section, upstream, claimedLower, codexModels);
+    if (entries.length < section.min) {
+      fail(
+        `section ${section.key}: only ${entries.length} models after filtering ` +
+          `(expected >= ${section.min}); upstream data looks truncated`,
+      );
+    }
+    catalog[section.key] = entries;
+  }
+  for (const sentinel of SENTINELS) {
+    const entry = catalog[sentinel.section].find((candidate) => candidate.id === sentinel.id);
+    if (!entry) {
+      fail(
+        `sentinel model ${sentinel.section}/${sentinel.id} missing; upstream schema may have changed`,
+      );
+    }
+    if (sentinel.level && !entry.thinking?.levels.includes(sentinel.level)) {
+      fail(
+        `sentinel ${sentinel.section}/${sentinel.id}: expected thinking level "${sentinel.level}"; ` +
+          "upstream reasoning_options schema may have changed",
+      );
+    }
+    if (sentinel.off !== undefined && entry.thinking?.off !== sentinel.off) {
+      fail(
+        `sentinel ${sentinel.section}/${sentinel.id}: expected thinking.off=${sentinel.off}; ` +
+          "upstream reasoning_options schema may have changed",
+      );
+    }
+    if (sentinel.inputModality && !entry.inputModalities?.includes(sentinel.inputModality)) {
+      fail(
+        `sentinel ${sentinel.section}/${sentinel.id}: expected input modality ` +
+          `"${sentinel.inputModality}"; upstream modalities schema may have changed`,
+      );
+    }
+    if (
+      sentinel.contextWindow !== undefined &&
+      entry.contextWindow !== sentinel.contextWindow
+    ) {
+      fail(
+        `sentinel ${sentinel.section}/${sentinel.id}: expected contextWindow=` +
+          `${sentinel.contextWindow}, got ${entry.contextWindow}; Codex precedence may have changed`,
+      );
+    }
+  }
+
+  const existingContents = OUTPUT_PATHS.map(readExisting);
+  const today = new Date().toISOString().slice(0, 10);
+  const nextContent = renderCatalog(catalog, today);
+
+  if (args.json) {
+    const document = buildCatalogJson(catalog, {
+      snapshotDate: today,
+      generatedAt: new Date().toISOString(),
+      commit: process.env.GITHUB_SHA || "local",
+    });
+    writeFileSync(resolve(args.json), `${JSON.stringify(document, null, 2)}\n`);
+    console.log(`runtime catalog written to ${args.json} (sha256 ${document.sha256})`);
+  }
+
+  const unchanged =
+    existingContents.every((content) => content !== null) &&
+    existingContents.every((content) => stripSnapshotDate(content) === stripSnapshotDate(nextContent));
+
+  if (args.check) {
+    if (!unchanged) {
+      console.error("catalog snapshot is stale; run: node scripts/generate-model-catalog.mjs");
+      process.exit(1);
+    }
+    console.log("catalog snapshot is up to date.");
+    process.exit(0);
+  }
+
+  if (unchanged) {
+    console.log("catalog unchanged");
+    process.exit(0);
+  }
+
+  for (const path of OUTPUT_PATHS) writeFileSync(path, nextContent);
+  const total = SECTIONS.reduce((sum, section) => sum + catalog[section.key].length, 0);
+  console.log(`catalog updated (${total} models, snapshot ${today})`);
 }
 
-for (const path of OUTPUT_PATHS) writeFileSync(path, nextContent);
-const total = SECTIONS.reduce((sum, section) => sum + catalog[section.key].length, 0);
-console.log(`catalog updated (${total} models, snapshot ${today})`);
+// Run only as a CLI; tests import the pure builders above without fetching.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}
