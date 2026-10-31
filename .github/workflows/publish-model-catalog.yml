@@ -1,0 +1,73 @@
+name: Publish Model Catalog
+
+# Publishes the runtime model catalog (model-catalog.v1.json) to the orphan
+# branch data/model-catalog. Clients fetch it through raw.githubusercontent.com
+# (or a Gateway's /api/public/model-catalog) and fall back to the bundled
+# snapshot. Pushing the data branch triggers no other workflow: ci.yml only
+# runs on pull_request and pushes to main, and the default ruleset only covers
+# the default branch. See docs/design/2026-10-30-model-catalog-live-sync.md.
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-model-catalog
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 22.19.0
+  DATA_BRANCH: data/model-catalog
+  CATALOG_FILE: model-catalog.v1.json
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Generate runtime catalog
+        # The generator's section minimums and sentinels fail this step (and
+        # therefore skip publishing) when upstream data looks truncated.
+        run: node scripts/generate-model-catalog.mjs --json "$RUNNER_TEMP/$CATALOG_FILE"
+
+      - name: Publish to data branch
+        run: |
+          set -euo pipefail
+          next="$RUNNER_TEMP/$CATALOG_FILE"
+          data_dir="$RUNNER_TEMP/catalog-data"
+          next_hash="$(jq -r '.sha256' "$next")"
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin "$DATA_BRANCH" >/dev/null; then
+            git fetch --depth=1 origin "$DATA_BRANCH"
+            git worktree add --detach "$data_dir" FETCH_HEAD
+            previous_hash="$(jq -r '.sha256 // empty' "$data_dir/$CATALOG_FILE" 2>/dev/null || true)"
+            if [ "$previous_hash" = "$next_hash" ]; then
+              echo "Catalog unchanged (sha256 $next_hash); nothing to publish."
+              exit 0
+            fi
+          else
+            git worktree add --detach "$data_dir"
+            git -C "$data_dir" checkout --orphan catalog-data
+            git -C "$data_dir" rm -rf --quiet --ignore-unmatch .
+          fi
+
+          cp "$next" "$data_dir/$CATALOG_FILE"
+          git -C "$data_dir" add "$CATALOG_FILE"
+          git -C "$data_dir" commit --quiet -m "data(models): publish catalog $(jq -r '.snapshotDate' "$next")" \
+            -m "sha256 $next_hash" -m "Generated from $GITHUB_SHA by $GITHUB_WORKFLOW #$GITHUB_RUN_NUMBER."
+          git -C "$data_dir" push origin "HEAD:refs/heads/$DATA_BRANCH"
+          echo "Published catalog sha256 $next_hash to $DATA_BRANCH."
