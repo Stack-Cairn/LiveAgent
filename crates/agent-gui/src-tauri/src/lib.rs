@@ -835,6 +835,10 @@ pub fn run() {
     // 非 Windows 平台为空操作。
     runtime::windows_sandbox::run_sandbox_launcher_if_requested();
 
+    // 必须先于任何 tauri::async_runtime 调用:换成栈更大的 tokio 运行时,
+    // 否则调试版处理 Gateway 消息时会撑爆默认 2 MiB 的 worker 栈。
+    runtime::async_runtime::install_tauri_async_runtime();
+
     let automation_store = Arc::new(
         services::automation::AutomationStore::open()
             .expect("failed to initialize LiveAgent automation store"),
