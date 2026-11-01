@@ -20,10 +20,32 @@ test("K-brain capabilities disable the replaced desktop runtime", () => {
   });
 });
 
+// LA-4 (option A): the desktop mirrors its own K-brain runs to a paired Gateway so a WebUI
+// can watch them and answer their approvals; the replaced runtime stays off.
+test("the desktop host can mirror K-brain runs to the Gateway", () => {
+  const previous = globalThis.window;
+  globalThis.window = { __TAURI_INTERNALS__: {} };
+  try {
+    assert.deepEqual(createTsModuleLoader().loadModule("src/lib/host.ts").liveAgentRuntimeCapabilities(), {
+      frontendContext: false,
+      gatewayMirror: true,
+      checkpoints: false,
+      trajectory: false,
+    });
+  } finally {
+    if (previous === undefined) delete globalThis.window;
+    else globalThis.window = previous;
+  }
+});
+
 for (const executionMode of ["agent", "chat"]) {
-  for (const remote of [false, true]) {
+  // local: no Gateway paired; remote: a WebUI request; paired: a desktop run with a
+  // paired Gateway, mirrored so a WebUI can watch it.
+  for (const mode of ["local", "remote", "paired"]) {
+    const remote = mode === "remote";
+    const mirrors = mode !== "local";
     for (const workdir of ["/workspace", "C:\\Users\\Tester\\workspace"]) {
-      test(`shipped useSendChatTurn ${executionMode} ${remote ? "remote" : "local"} ${workdir} runs only K-brain`, async () => {
+      test(`shipped useSendChatTurn ${executionMode} ${mode} ${workdir} runs only K-brain`, async () => {
         const ipc = [];
         const forbidden = (name) => () => {
           ipc.push(name);
@@ -31,16 +53,26 @@ for (const executionMode of ["agent", "chat"]) {
         };
         let sent = false;
         const mirrored = [];
+        const nativeMirror = [];
         const loader = createTsModuleLoader({
           mocks: {
             react: { useCallback: (callback) => callback },
             [source("lib/host.ts")]: {
-              liveAgentRuntimeCapabilities: () => capabilities,
+              liveAgentRuntimeCapabilities: () => ({ ...capabilities, gatewayMirror: true }),
               isKBrainBackendEnabled: () => true,
               isKBrainBrowserHost: () => false,
               isTauriHost: () => true,
             },
-            "@tauri-apps/api/core": { invoke: forbidden("native invoke") },
+            "@tauri-apps/api/core": {
+              // A mirrored desktop run tells the Gateway it started (and if it was cancelled).
+              invoke: async (command) => {
+                if (mode === "paired" && command.startsWith("gateway_chat_mark_local_")) {
+                  nativeMirror.push(command);
+                  return null;
+                }
+                return forbidden(`native invoke ${command}`)();
+              },
+            },
             [source("lib/trajectory/recorderRegistry.ts")]: {
               acquireTrajectoryRecorder: forbidden("trajectory recorder"),
               resolveTrajectoryTurnNumber: forbidden("trajectory number"),
@@ -68,7 +100,7 @@ for (const executionMode of ["agent", "chat"]) {
         settings.system.workdir = workdir;
         settings.remote = {
           ...settings.remote,
-          enabled: false,
+          enabled: mode === "paired",
           gatewayUrl: "https://old-gateway.invalid",
           token: "old-token",
         };
@@ -159,12 +191,12 @@ for (const executionMode of ["agent", "chat"]) {
           resetLiveTranscript: noop,
           settleLiveTranscript: noop,
           updateToolStatus: noop,
-          queueGatewayBridgeEventForRequest: remote
+          queueGatewayBridgeEventForRequest: mirrors
             ? (_id, event) => mirrored.push(event)
             : forbidden("gateway events"),
-          flushGatewayBridgeEventsForRequest: remote ? noop : forbidden("gateway flush"),
-          registerGatewayRunMirror: remote ? noop : forbidden("gateway register"),
-          finishGatewayRunMirror: remote ? noop : forbidden("gateway finish"),
+          flushGatewayBridgeEventsForRequest: mirrors ? noop : forbidden("gateway flush"),
+          registerGatewayRunMirror: mirrors ? noop : forbidden("gateway register"),
+          finishGatewayRunMirror: mirrors ? noop : forbidden("gateway finish"),
           gatewayBridgeHistorySummaryRef: { current: new Map() },
           availableSkills: [],
           skillsRootDir: "/desktop/skills",
@@ -197,7 +229,8 @@ for (const executionMode of ["agent", "chat"]) {
           true,
         );
         assert.equal(markedStarted, remote);
-        if (remote) assert(mirrored.some((event) => event.type === "user_message"));
+        if (mirrors) assert(mirrored.some((event) => event.type === "user_message"));
+        if (mode === "paired") assert.deepEqual(nativeMirror, ["gateway_chat_mark_local_started"]);
         assert.equal(sent, true);
         assert.deepEqual(ipc, []);
       });

@@ -16,6 +16,7 @@ import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { type Locale, t } from "../../i18n/config";
 import type { AppSettings, Theme, WorkspaceProject } from "../settings";
 import { workspaceProjectPathKey } from "../settings";
+import { isRemoteSettingsConfigured } from "../settings/remoteGateway";
 import { readGlobalShortcutBindings } from "../shortcuts/globalShortcuts";
 import type { TrayPrefs } from "./trayPrefs";
 
@@ -151,8 +152,8 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
     checked: task.enabled,
   }));
 
-  const remoteConfigured =
-    input.remote.gatewayUrl.trim() !== "" && input.remote.token.trim() !== "";
+  // A Gateway hosted on this computer keeps its token in localGatewayToken.
+  const remoteConfigured = isRemoteSettingsConfigured(input.remote);
   const gatewayStatusText = !remoteConfigured
     ? null
     : input.gatewayOnline

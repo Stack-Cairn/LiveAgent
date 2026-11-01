@@ -60,6 +60,7 @@ import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection
 import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { isTauriHost, liveAgentRuntimeCapabilities } from "../../../lib/host";
 import { showGoalProgress } from "../../../lib/kbrain/goalNotice";
+import { kBrainSidebarSync } from "../../../lib/kbrain/sidebarSync";
 import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import {
   type AppSettings,
@@ -114,7 +115,10 @@ import {
   type GatewayRuntimeSnapshotState,
 } from "../gateway/chatRuntimeSnapshot";
 import type { ActiveGatewayBridgeRequest } from "../gateway/gatewayBridgeTypes";
-import { createLocalGatewayChatRunId } from "../gateway/gatewayRuntimeStatusModel";
+import {
+  createLocalGatewayChatRunId,
+  mirrorsLocalRunsToGateway,
+} from "../gateway/gatewayRuntimeStatusModel";
 import type { useGatewayRunMirrorCoordinator } from "../gateway/useGatewayRunMirrorCoordinator";
 import type { PersistConversationAction } from "../history/useConversationHistoryActions";
 import type { useChatPageRuntimeStore } from "../hooks/useChatPageRuntimeStore";
@@ -409,11 +413,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const selectedSkillNames = effectiveSkillsEnabled ? workspaceResources.skillNames : [];
     const getEffectiveMcpSettings = () =>
       filterMcpSettingsForWorkspace(getMcpSettings(), workspaceResources);
-    const hasRemoteGatewayTarget =
-      capabilities.gatewayMirror &&
-      settings.remote.enabled &&
-      settings.remote.gatewayUrl.trim() !== "" &&
-      settings.remote.token.trim() !== "";
+    const hasRemoteGatewayTarget = mirrorsLocalRunsToGateway(
+      settings.remote,
+      capabilities.gatewayMirror,
+    );
     const mirrorsLocalRunToGateway = !gatewayBridgeRequest && hasRemoteGatewayTarget;
     const gatewayBridgeRequestId =
       gatewayBridgeRequest?.requestId ?? createLocalGatewayChatRunId(conversationId);
@@ -684,17 +687,19 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     }
 
     if (shouldCreatePendingHistoryItem) {
-      sidebarStore.upsertLocal(
-        createPendingHistoryItem({
-          conversationId,
-          title: pendingConversationTitle,
-          providerId,
-          model,
-          sessionId,
-          cwd: historyCwd,
-          createdAt,
-        }),
-      );
+      const pendingItem = createPendingHistoryItem({
+        conversationId,
+        title: pendingConversationTitle,
+        providerId,
+        model,
+        sessionId,
+        cwd: historyCwd,
+        createdAt,
+      });
+      sidebarStore.upsertLocal(pendingItem);
+      // K-brain lists the session only after its first message is saved; until then the
+      // Gateway list serves this row so a WebUI can open the run (e.g. to approve a tool).
+      kBrainSidebarSync.markRunning(pendingItem);
     }
 
     clearAbortSnapshot(transcriptStore);
@@ -815,6 +820,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     }
 
     function releaseConversationRunUi() {
+      if (shouldCreatePendingHistoryItem) kBrainSidebarSync.clearRunning(conversationId);
       if (!conversationRunStarted || conversationUiReleased) return;
       conversationUiReleased = true;
       releaseChatRunUi({

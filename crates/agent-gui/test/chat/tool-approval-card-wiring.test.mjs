@@ -186,3 +186,33 @@ test("WebUI rebuilds the Edit preview from the synced call and marks a cut one",
   assert.equal(remote?.preview?.truncated, true, "the cut preview is marked");
   assert.equal((remote?.preview?.after.length ?? 0) < long.length, true, "WebUI does not get the whole 200k text");
 });
+
+// The WebUI reads a mirrored tool result from `content`/`isError` in the call's round;
+// a result sent as `result` arrived empty and never marked as failed.
+test("a denied call's result reaches WebUI with its content, error flag and the call's round", async (t) => {
+  const { gatewayEvents, errors } = await runTurn(t, {
+    answers: [["deny"]],
+    events: (event) => {
+      event("tool.call", { tool_call: { id: "call", name: "Bash", arguments: { command: "npm test" } } });
+      event("permission.requested", {
+        permission_id: "permission", tool: "Bash", command: "npm test", rule: "npm test", tool_call_id: "call",
+        options: allowAlwaysOptions,
+      });
+    },
+    onPermissionPost: (decision, count, json, { event, finish }) => {
+      json({ ok: true });
+      event("permission.resolved", { permission_id: decision.permission_id });
+      event("tool.result", { tool_result: { id: "call", name: "Bash", output: "Permission denied: the user rejected this action", failed: true } });
+      finish();
+      return true;
+    },
+  });
+  assert.equal(errors.length, 0, `turn failed: ${errors.join(" | ")}`);
+  const call = gatewayEvents.find((value) => value.type === "tool_call" && value.id === "call");
+  const result = gatewayEvents.find((value) => value.type === "tool_result" && value.id === "call");
+  assert.equal(Boolean(result), true, "the result is mirrored");
+  assert.equal(JSON.stringify(result.content ?? null).includes("Permission denied"), true, `content: ${JSON.stringify(result)}`);
+  assert.equal(result.isError, true);
+  assert.equal(result.round, call.round);
+  assert.equal("result" in result, false, "no unread result field");
+});

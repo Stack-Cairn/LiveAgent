@@ -1,5 +1,8 @@
 import { createUuid } from "@liveagent/ui/lib/shared/id";
-import type { AppSettings } from "../../../lib/settings";
+import {
+  isRemoteSettingsConfigured,
+  type RemoteGatewaySettings,
+} from "../../../lib/settings/remoteGateway";
 
 export type GatewayRuntimeStatus = {
   online: boolean;
@@ -12,21 +15,17 @@ export type GatewayRuntimeStatus = {
   lastError?: string | null;
 };
 
-type GatewayFallbackSettings = Pick<
-  AppSettings["remote"],
-  "enabled" | "gatewayUrl" | "token" | "managedLocal" | "localGatewayPort" | "localGatewayToken"
->;
+type GatewayFallbackSettings = RemoteGatewaySettings;
 
-export function isRemoteSettingsConfigured(remote: GatewayFallbackSettings) {
-  if (remote.managedLocal) {
-    return (
-      Number.isInteger(remote.localGatewayPort) &&
-      remote.localGatewayPort >= 1 &&
-      remote.localGatewayPort <= 65_535 &&
-      remote.localGatewayToken.trim() !== ""
-    );
-  }
-  return remote.gatewayUrl.trim() !== "" && remote.token.trim() !== "";
+export { isRemoteSettingsConfigured };
+
+/**
+ * Whether runs started on this desktop are mirrored to the Gateway so a WebUI can watch
+ * them and answer their approvals. A Gateway hosted on this computer (managedLocal) keeps
+ * its token in localGatewayToken, so the external URL + token test alone missed it.
+ */
+export function mirrorsLocalRunsToGateway(remote: GatewayFallbackSettings, gatewayMirror: boolean) {
+  return gatewayMirror && remote.enabled && isRemoteSettingsConfigured(remote);
 }
 
 export function buildFallbackGatewayStatus(remote: GatewayFallbackSettings): GatewayRuntimeStatus {

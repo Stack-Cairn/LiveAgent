@@ -23,7 +23,10 @@ export function liveAgentRuntimeCapabilities() {
   const desktopRuntime = !isKBrainBackendEnabled();
   return {
     frontendContext: desktopRuntime,
-    gatewayMirror: desktopRuntime,
+    // The desktop mirrors its own runs (K-brain ones included) to a paired Gateway so a
+    // WebUI can watch them and answer their approvals; whether a Gateway is paired is
+    // decided per run from the remote settings.
+    gatewayMirror: isTauriHost(),
     checkpoints: desktopRuntime,
     trajectory: desktopRuntime,
   };
