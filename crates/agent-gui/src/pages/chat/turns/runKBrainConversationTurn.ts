@@ -1,7 +1,10 @@
 import type { AssistantMessage, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import { resolveKBrainPermissionMode } from "@liveagent/ui/lib/chat/permissionModes";
-import { clampApprovalText } from "@liveagent/ui/lib/chat/toolApprovalArgs";
+import {
+  approvalPreviewFromToolCall,
+  clampApprovalText,
+} from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { appendMessagesToConversation } from "../../../lib/chat/conversation/conversationState";
 import { buildConversationStateFromWindow } from "../../../lib/chat/history/chatHistory";
 import {
@@ -38,7 +41,10 @@ import { requestBackendQuestion } from "../../../lib/tools/askUserQuestionTools"
 import { recordPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { projectBackendPlan } from "../../../lib/tools/planModeTools";
 import { hasPendingToolApproval, requestToolApproval } from "../../../lib/tools/toolApproval";
-import { buildGatewayToolCallPreviewArguments } from "./gatewayToolPreview";
+import {
+  buildGatewayToolCallPreviewArguments,
+  withoutApprovalSyntheticArgs,
+} from "./gatewayToolPreview";
 import type { RunAgentConversationTurnParams } from "./runAgentConversationTurn";
 import type { RunTextConversationTurnParams } from "./runTextConversationTurn";
 
@@ -162,7 +168,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       name: call.name,
       arguments: autoResolvedCallIds.has(call.id)
         ? buildGatewayToolCallPreviewArguments(call)
-        : call.arguments,
+        : withoutApprovalSyntheticArgs(call.arguments),
       conversation_id: params.conversationId,
       round,
     });
@@ -298,7 +304,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
             ...(answer.custom ? { custom: true } : {}),
           }));
         },
-        onPermissionRequest: async (request, signal) => {
+        onPermissionRequest: async (request, signal, refusal) => {
           // Key the approval by its tool call so the Gateway preview overlays the
           // pending marker and scope on that call for WebUI; re-push the call when
           // the approval starts and settles. Without a known, free call id the
@@ -333,6 +339,9 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
             sessionWide: request.scope === "session",
             rememberRules,
             defaultScope: request.suggestion?.default_scope,
+            // The edit being approved, from the call's full arguments.
+            preview: call ? approvalPreviewFromToolCall(request.tool, call.arguments) : undefined,
+            notice: refusal,
             signal: signal
               ? AbortSignal.any([approvalController.signal, signal])
               : approvalController.signal,

@@ -13,6 +13,7 @@ import {
   normalizeToolApprovalRules,
   normalizeToolApprovalScope,
   type ToolApprovalAnswerOptions,
+  type ToolApprovalPreview,
   type ToolApprovalRememberScope,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 
@@ -43,6 +44,10 @@ type PendingToolApproval = {
   /** 允许并记住时后端会存的规则;空表示只能按本会话授权(或不能记住)。 */
   rememberRules: string[];
   defaultScope: ToolApprovalRememberScope;
+  /** Edit/Write 的改动预览。 */
+  preview?: ToolApprovalPreview;
+  /** 审批重新弹出的原因(后端拒绝了上次的应答),空表示没有。 */
+  notice: string;
   settle: (settlement: ToolApprovalSettlement) => void;
 };
 
@@ -120,6 +125,8 @@ export type PendingToolApprovalSummary = {
   sessionWide: boolean;
   rememberRules: string[];
   defaultScope: ToolApprovalRememberScope;
+  preview?: ToolApprovalPreview;
+  notice?: string;
 };
 
 export function listPendingToolApprovalsForConversation(
@@ -139,6 +146,8 @@ export function listPendingToolApprovalsForConversation(
         sessionWide: pending.sessionWide,
         rememberRules: pending.rememberRules,
         defaultScope: pending.defaultScope,
+        ...(pending.preview ? { preview: pending.preview } : {}),
+        ...(pending.notice ? { notice: pending.notice } : {}),
       });
     }
   }
@@ -207,6 +216,8 @@ export function requestToolApproval(params: {
   sessionWide?: boolean;
   rememberRules?: string[];
   defaultScope?: string;
+  preview?: ToolApprovalPreview;
+  notice?: string;
   signal?: AbortSignal;
   timeoutMs?: number | null;
 }): Promise<ToolApprovalSettlement> {
@@ -246,6 +257,8 @@ export function requestToolApproval(params: {
       sessionWide: params.sessionWide === true,
       rememberRules: normalizeToolApprovalRules(params.rememberRules),
       defaultScope: normalizeToolApprovalScope(params.defaultScope) ?? "session",
+      ...(params.preview ? { preview: params.preview } : {}),
+      notice: params.notice?.trim() ?? "",
       settle,
     };
     pendingByToolCallId.set(toolCallId, pending);
