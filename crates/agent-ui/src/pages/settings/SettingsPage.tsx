@@ -13,6 +13,7 @@ import {
   Key,
   Mic,
   Settings2,
+  ShieldCheck,
   Wrench,
   Zap,
 } from "@liveagent/ui/components/IconSet";
@@ -24,6 +25,7 @@ import { CalendarSection } from "./CalendarSection";
 import { CronSection } from "./CronSection";
 import { HooksSection } from "./HooksSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
+import { PermissionRulesSection } from "./PermissionRulesSection";
 import { ProvidersSection } from "./ProvidersSection";
 import { RemoteSection } from "./RemoteSection";
 import { ResourceHubSection } from "./ResourceHubSection";
@@ -177,6 +179,23 @@ export function SettingsPage(props: SettingsPageProps) {
           </div>
         ),
       },
+      // Only hosts that can reach the K-brain rules API get the page.
+      ...(props.settingsHost?.kbrain?.listPermissionRules
+        ? [
+            {
+              id: "permissions",
+              groupKey: "settings.groupIntelligence",
+              groupOrder: 25,
+              order: 25,
+              labelKey: "settings.navPermissions",
+              icon: <ShieldCheck className={extension.iconClassName} />,
+              render: () =>
+                props.settingsHost?.kbrain ? (
+                  <PermissionRulesSection kbrain={props.settingsHost.kbrain} settings={settings} />
+                ) : null,
+            } satisfies SettingsSectionDefinition<void>,
+          ]
+        : []),
       {
         id: "stt",
         groupKey: "settings.groupIntelligence",

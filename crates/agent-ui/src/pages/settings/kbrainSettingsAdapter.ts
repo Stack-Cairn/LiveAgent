@@ -70,6 +70,31 @@ export type KBrainRuntimeConnection = {
   token: string;
 };
 
+export type PermissionRuleScope = "session" | "project" | "user";
+export type PermissionRuleEffect = "allow" | "deny";
+
+/** One remembered rule from K-brain `/v1/permissions/rules`. */
+export type PermissionRule = {
+  id: string;
+  rule: string;
+  effect: PermissionRuleEffect;
+  scope: PermissionRuleScope;
+  createdAt?: string;
+  sourceSession?: string;
+};
+
+export type PermissionRuleList = { projectRoot?: string; rules: PermissionRule[] };
+
+/** A rule to add; `workspace` names the project for project scope. */
+export type PermissionRuleInput = {
+  rule: string;
+  effect: PermissionRuleEffect;
+  scope: "project" | "user";
+  workspace?: string;
+};
+
+export type PermissionRuleRef = { id: string; scope: PermissionRuleScope; workspace?: string };
+
 export type KBrainSettingsAdapter = {
   isKbrain: true;
   runtimeConnection: () => KBrainRuntimeConnection | null;
@@ -81,6 +106,14 @@ export type KBrainSettingsAdapter = {
   getCapabilities?: () => Promise<Record<string, unknown>>;
   /** Parsed `/v1/health` handshake for diagnostics; only hosts talking to K-brain directly provide it. */
   getHealth?: () => Promise<KBrainHealth>;
+  /**
+   * K-brain permission rules (`capabilities.permission_rules`). Lists all-project rules and,
+   * with `workspace`, that project's rules. Hosts that cannot reach the rules API leave
+   * these out and Settings hides the page.
+   */
+  listPermissionRules?: (query: { workspace?: string }) => Promise<PermissionRuleList>;
+  addPermissionRule?: (input: PermissionRuleInput) => Promise<PermissionRule>;
+  deletePermissionRule?: (ref: PermissionRuleRef) => Promise<void>;
 };
 
 export type SettingsHostAdapter = {
