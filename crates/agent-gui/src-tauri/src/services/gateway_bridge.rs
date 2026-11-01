@@ -1641,6 +1641,118 @@ async fn kbrain_memory_manage(
     Ok(proto::MemoryManageResponse { result_json })
 }
 
+/// 设置 → 权限（WebUI 经网关）：查看、添加、删除 K-brain 记住的权限规则。
+pub async fn handle_permission_rules(
+    app: AppHandle,
+    request: proto::PermissionRulesRequest,
+) -> Result<proto::PermissionRulesResponse, String> {
+    let connection = ensure_kbrain_connection(&app).await?;
+    kbrain_permission_rules(&connection, request).await
+}
+
+fn invalid_permission_rules(reason: &str) -> String {
+    format!("invalid permission rules request: {reason}")
+}
+
+/// 设置页只会发 workspace/rule/effect/scope/id；其余字段（session_id 等）不转发，
+/// 会话规则不经这里。K-brain 的应答 JSON 原样返回。
+async fn kbrain_permission_rules(
+    connection: &KBrainBackendConnection,
+    request: proto::PermissionRulesRequest,
+) -> Result<proto::PermissionRulesResponse, String> {
+    let raw = request.input_json.trim();
+    let input = if raw.is_empty() {
+        serde_json::Map::new()
+    } else {
+        match serde_json::from_str::<Value>(raw) {
+            Ok(Value::Object(object)) => object,
+            _ => return Err(invalid_permission_rules("input must be a JSON object")),
+        }
+    };
+    let field = |key: &str| {
+        input
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    };
+    let workspace = field("workspace");
+    let scope = field("scope");
+    let check_scope = || match scope.as_str() {
+        "user" => Ok(()),
+        "project" if !workspace.is_empty() => Ok(()),
+        "project" => Err(invalid_permission_rules("project scope needs a workspace")),
+        _ => Err(invalid_permission_rules("scope must be project or user")),
+    };
+    let (method, path, body) = match request.action.trim() {
+        "list" => {
+            let query = if workspace.is_empty() {
+                String::new()
+            } else {
+                format!("?workspace={}", urlencoding::encode(&workspace))
+            };
+            (
+                reqwest::Method::GET,
+                format!("/v1/permissions/rules{query}"),
+                None,
+            )
+        }
+        "add" => {
+            let rule = field("rule");
+            if rule.is_empty() {
+                return Err(invalid_permission_rules("rule is required"));
+            }
+            let effect = field("effect");
+            if effect != "allow" && effect != "deny" {
+                return Err(invalid_permission_rules("effect must be allow or deny"));
+            }
+            check_scope()?;
+            let mut create = json!({ "rule": rule, "effect": effect, "scope": scope });
+            if scope == "project" {
+                create["workspace"] = json!(workspace);
+            }
+            (
+                reqwest::Method::POST,
+                "/v1/permissions/rules".to_string(),
+                Some(create),
+            )
+        }
+        "delete" => {
+            let id = field("id");
+            if id.is_empty() {
+                return Err(invalid_permission_rules("id is required"));
+            }
+            check_scope()?;
+            let mut query = format!("?scope={}", urlencoding::encode(&scope));
+            if scope == "project" {
+                query.push_str(&format!("&workspace={}", urlencoding::encode(&workspace)));
+            }
+            (
+                reqwest::Method::DELETE,
+                format!("/v1/permissions/rules/{}{query}", urlencoding::encode(&id)),
+                None,
+            )
+        }
+        _ => {
+            return Err(invalid_permission_rules(
+                "action must be list, add or delete",
+            ))
+        }
+    };
+    let result = kbrain_json_request(
+        connection,
+        method,
+        &path,
+        body,
+        KBRAIN_COMMANDS_REQUEST_TIMEOUT,
+    )
+    .await?;
+    let result_json = serde_json::to_string(&result)
+        .map_err(|e| format!("serialize permission rules result failed: {e}"))?;
+    Ok(proto::PermissionRulesResponse { result_json })
+}
+
 /// `memory.manage` 里与记忆库无关的会话历史命令，仍由桌面端本地处理。
 fn handle_history_manage_sync(
     request: proto::MemoryManageRequest,
@@ -2184,10 +2296,11 @@ mod tests {
     use super::{
         decode_kbrain_terminal_response, flatten_history_messages_json,
         flatten_history_messages_json_window, is_builtin_share_tool_name, is_kbrain_memory_command,
-        kbrain_memory_manage, kbrain_provider_models, kbrain_slash_commands,
-        kbrain_terminal_request, parse_occurrence_query, parse_runs_limit, prompt_workdir_query,
-        provider_models_request_config, proto, redact_builtin_tool_content_json,
-        sanitize_provider_summaries, KBrainBackendConnection, KBRAIN_MEMORY_COMMANDS,
+        kbrain_memory_manage, kbrain_permission_rules, kbrain_provider_models,
+        kbrain_slash_commands, kbrain_terminal_request, parse_occurrence_query, parse_runs_limit,
+        prompt_workdir_query, proto, provider_models_request_config,
+        redact_builtin_tool_content_json, sanitize_provider_summaries, KBrainBackendConnection,
+        KBRAIN_MEMORY_COMMANDS,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -2324,6 +2437,133 @@ mod tests {
         .await
         .expect_err("invalid args");
         assert!(error.contains("invalid memory_read args JSON"), "{error}");
+    }
+
+    /// 设置 → 权限（WebUI 经网关）：list/add/delete 映射到 K-brain 规则接口，只带设置页
+    /// 需要的字段；会话规则与格式不对的请求不发给 K-brain。
+    #[tokio::test]
+    async fn kbrain_permission_rules_maps_actions_and_rejects_bad_input() {
+        async fn one(
+            status: &'static str,
+            answer: &'static str,
+            action: &str,
+            input: &str,
+        ) -> (
+            String,
+            Option<Value>,
+            Result<proto::PermissionRulesResponse, String>,
+        ) {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind local K-brain fixture");
+            let address = listener.local_addr().expect("fixture address");
+            let server = tokio::spawn(serve_one_prompt_request(listener, status, answer));
+            let result = kbrain_permission_rules(
+                &prompt_fixture_connection(address),
+                proto::PermissionRulesRequest {
+                    action: action.to_string(),
+                    input_json: input.to_string(),
+                },
+            )
+            .await;
+            let (headers, body) = server.await.expect("fixture task");
+            (headers, body, result)
+        }
+
+        let (headers, body, result) = one(
+            "200 OK",
+            r#"{"project_root":"D:\\w","rules":[]}"#,
+            "list",
+            r#"{"workspace":"D:\\w","session_id":"s1"}"#,
+        )
+        .await;
+        assert!(
+            headers.starts_with("GET /v1/permissions/rules?workspace=D%3A%5Cw "),
+            "{headers}"
+        );
+        assert_eq!(body, None);
+        assert_eq!(
+            serde_json::from_str::<Value>(&result.expect("list").result_json).expect("JSON"),
+            json!({"project_root": "D:\\w", "rules": []})
+        );
+
+        let (headers, body, result) = one(
+            "201 Created",
+            r#"{"id":"r_9","rule":"Bash(rm:*)","effect":"deny","scope":"project"}"#,
+            "add",
+            r#"{"rule":"Bash(rm:*)","effect":"deny","scope":"project","workspace":"/w","extra":1}"#,
+        )
+        .await;
+        assert!(
+            headers.starts_with("POST /v1/permissions/rules "),
+            "{headers}"
+        );
+        assert_eq!(
+            body,
+            Some(
+                json!({"rule": "Bash(rm:*)", "effect": "deny", "scope": "project", "workspace": "/w"})
+            )
+        );
+        assert!(result.expect("add").result_json.contains("r_9"));
+
+        let (headers, _, result) = one(
+            "200 OK",
+            r#"{"ok":true}"#,
+            "delete",
+            r#"{"id":"r 1/x","scope":"user"}"#,
+        )
+        .await;
+        assert!(
+            headers.starts_with("DELETE /v1/permissions/rules/r%201%2Fx?scope=user "),
+            "{headers}"
+        );
+        result.expect("delete");
+
+        let (_, _, result) = one(
+            "400 Bad Request",
+            r#"{"error":"permission rule \"Bash(\": missing closing parenthesis"}"#,
+            "add",
+            r#"{"rule":"Bash(","effect":"deny","scope":"user"}"#,
+        )
+        .await;
+        let error = result.expect_err("refused rule");
+        assert!(error.contains("missing closing parenthesis"), "{error}");
+
+        // 本地拒绝：不连 K-brain（地址是关着的端口，连了就会报连接错误而不是校验错误）。
+        let closed = prompt_fixture_connection("127.0.0.1:9".parse().expect("addr"));
+        for (action, input) in [
+            (
+                "add",
+                r#"{"rule":"Bash(rm:*)","effect":"deny","scope":"session"}"#,
+            ),
+            (
+                "add",
+                r#"{"rule":"Bash(rm:*)","effect":"ask","scope":"user"}"#,
+            ),
+            ("add", r#"{"rule":"  ","effect":"deny","scope":"user"}"#),
+            (
+                "add",
+                r#"{"rule":"Bash(rm:*)","effect":"deny","scope":"project"}"#,
+            ),
+            ("delete", r#"{"scope":"user"}"#),
+            ("delete", r#"{"id":"r_1","scope":"session"}"#),
+            ("rename", "{}"),
+            ("add", "[1]"),
+        ] {
+            let error = kbrain_permission_rules(
+                &closed,
+                proto::PermissionRulesRequest {
+                    action: action.to_string(),
+                    input_json: input.to_string(),
+                },
+            )
+            .await
+            .expect_err("rejected locally");
+            assert!(
+                error.starts_with("invalid permission rules request"),
+                "{action} {input}: {error}"
+            );
+        }
     }
 
     fn prompt_fixture_connection(address: std::net::SocketAddr) -> KBrainBackendConnection {

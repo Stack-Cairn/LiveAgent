@@ -1,6 +1,7 @@
 package pbws
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -18,12 +19,14 @@ const (
 	defaultHistoryListPageSize = 80
 	maxWorkspaceRootGrants     = 64
 	maxSlashCommandWorkdirLen  = 32768
+	maxPermissionRulesInputLen = 32768
 )
 
 const (
 	errComposerCommandsUnsupported = "desktop app does not support composer commands; update LiveAgent on the desktop"
 	errComposerGoalUnsupported     = "/goal is not available on a direct K-brain target"
 	errProxyDetectUnsupported      = "desktop app does not support proxy detection; update LiveAgent on the desktop"
+	errPermissionRulesUnsupported  = "desktop app does not support permission rules; update LiveAgent on the desktop"
 )
 
 func requireComposerCommands(sm session.AgentView) error {
@@ -123,6 +126,12 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 			return errors.New(errProxyDetectUnsupported)
 		}
 		return vetProxyDetect(payload.ProxyDetect)
+	// 权限规则（设置 → 权限）：只发给声明了 PERMISSION_RULES_V1 的桌面端，理由同上。
+	case *gatewayv2.GatewayEnvelope_PermissionRules:
+		if !sm.SupportsCapability(gatewayv2.PermissionRulesV1Capability) {
+			return errors.New(errPermissionRulesUnsupported)
+		}
+		return vetPermissionRules(payload.PermissionRules)
 
 	// ---- 带功能门控 / 限额的直通臂 ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
@@ -184,6 +193,26 @@ func vetCuaDriver(req *gatewayv2.CuaDriverRequest) error {
 	default:
 		return errors.New("unsupported cua_driver action")
 	}
+}
+
+// 权限规则：只放行 list/add/delete，参数是 JSON 对象且限长（解释器命令的建议规则
+// 可能和命令一样长）。字段白名单与作用域由桌面端和直连 K-brain 的 relay 再校验。
+func vetPermissionRules(req *gatewayv2.PermissionRulesRequest) error {
+	if req == nil || len(req.GetInputJson()) > maxPermissionRulesInputLen {
+		return errors.New("invalid permission_rules request")
+	}
+	switch strings.TrimSpace(req.GetAction()) {
+	case "list", "add", "delete":
+	default:
+		return errors.New("unsupported permission_rules action")
+	}
+	if input := strings.TrimSpace(req.GetInputJson()); input != "" {
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(input), &object); err != nil || object == nil {
+			return errors.New("permission_rules input must be a JSON object")
+		}
+	}
+	return nil
 }
 
 // 代理服务检测：只放行检测与测速两个只读动作，测速参数限长；桌面端另外只接受

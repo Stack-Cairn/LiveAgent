@@ -153,6 +153,9 @@ export function PermissionRulesSection({
       return true;
     } catch (reason) {
       setActionError(messageOf(reason));
+      // The change may have reached K-brain before its answer was lost (a dropped
+      // connection): list what is there now so a deleted rule does not linger.
+      await reload(workspaceRef.current);
       return false;
     } finally {
       setBusy(false);

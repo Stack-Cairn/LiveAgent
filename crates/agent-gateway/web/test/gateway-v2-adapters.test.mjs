@@ -832,3 +832,51 @@ test("Planning v2 preserves CAS and taxonomy payloads and identifies the invalid
   const changed = decodeServerFrame(roundtrip(serverFrame({agent_id:"agent-1",planning_changed:{seq:"9"}})),{agentOnline:true});
   assert.equal(changed.type,"planning.changed");assert.equal(changed.agentId,"agent-1");assert.equal(changed.payload.seq,9);
 });
+
+test("permission rules requests carry the action and only the rule fields", () => {
+  const list = decodeClientFrame(
+    encodeRequestFrame("rules-1", "permission.rules.list", { workspace: "D:\\w", session_id: "s1" }, "agent-1"),
+  );
+  assert.equal(list.payload.value.payload.case, "permissionRules");
+  assert.equal(list.payload.value.payload.value.action, "list");
+  assert.deepEqual(JSON.parse(list.payload.value.payload.value.inputJson), { workspace: "D:\\w" });
+
+  const add = decodeClientFrame(
+    encodeRequestFrame(
+      "rules-2",
+      "permission.rules.add",
+      { rule: " Bash(rm:*) ", effect: "deny", scope: "project", workspace: "/w", extra: 1 },
+      "agent-1",
+    ),
+  );
+  assert.equal(add.payload.value.payload.value.action, "add");
+  assert.deepEqual(JSON.parse(add.payload.value.payload.value.inputJson), {
+    rule: "Bash(rm:*)",
+    effect: "deny",
+    scope: "project",
+    workspace: "/w",
+  });
+
+  const remove = decodeClientFrame(
+    encodeRequestFrame("rules-3", "permission.rules.delete", { id: "r_1", scope: "user" }, "agent-1"),
+  );
+  assert.equal(remove.payload.value.payload.value.action, "delete");
+  assert.deepEqual(JSON.parse(remove.payload.value.payload.value.inputJson), { id: "r_1", scope: "user" });
+
+  const rules = { project_root: "D:\\w", rules: [{ id: "r_1", rule: "Bash(ls:*)", effect: "allow", scope: "project" }] };
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "rules-1",
+        agent_id: "agent-1",
+        agent_response: {
+          request_id: "rules-1",
+          permission_rules_resp: { result_json: JSON.stringify(rules) },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.equal(decoded.kind, "response");
+  assert.deepEqual(decoded.payload, rules);
+});

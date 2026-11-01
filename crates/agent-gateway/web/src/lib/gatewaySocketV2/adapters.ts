@@ -75,6 +75,7 @@ import {
   LoopManageRequestSchema,
   ManagedProcessRequestSchema,
   MemoryManageRequestSchema,
+  PermissionRulesRequestSchema,
   PlanningRequestSchema,
   ProviderCustomHeaderSchema,
   ProviderCustomHeadersSchema,
@@ -148,6 +149,17 @@ function rec(value: unknown): J {
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+const PERMISSION_RULES_FIELDS = ["workspace", "rule", "effect", "scope", "id"] as const;
+
+function permissionRulesInput(body: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of PERMISSION_RULES_FIELDS) {
+    const value = trimStr(body[key]);
+    if (value) out[key] = value;
+  }
+  return out;
 }
 
 function trimStr(value: unknown): string {
@@ -799,6 +811,17 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
             host: trimStr(body.host),
             port: n32(body.port),
           }),
+        }),
+      };
+    // 设置 → 权限：只带设置页需要的字段，会话规则不经这里。
+    case "permission.rules.list":
+    case "permission.rules.add":
+    case "permission.rules.delete":
+      return {
+        case: "permissionRules",
+        value: create(PermissionRulesRequestSchema, {
+          action: type.slice("permission.rules.".length),
+          inputJson: JSON.stringify(permissionRulesInput(body)),
         }),
       };
     case "files.preview":
@@ -1600,6 +1623,8 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
     case "cuaDriverResp":
       return unmarshalJsonPayload(payload.value.resultJson);
     case "proxyDetectResp":
+      return unmarshalJsonPayload(payload.value.resultJson);
+    case "permissionRulesResp":
       return unmarshalJsonPayload(payload.value.resultJson);
     case "sftpResponse":
       return sftpResponsePayload(payload.value);

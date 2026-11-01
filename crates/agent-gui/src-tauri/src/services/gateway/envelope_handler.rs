@@ -1255,6 +1255,34 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 500, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::PermissionRules(request)) => {
+                // 读写 K-brain 规则文件，spawn 出去，别占单线程调度循环。
+                let this = Arc::clone(self);
+                tauri::async_runtime::spawn(async move {
+                    let result = match gateway_bridge::handle_permission_rules(
+                        this.app_handle.clone(),
+                        request,
+                    )
+                    .await
+                    {
+                        Ok(response) => {
+                            this.send_agent_envelope(proto::AgentEnvelope {
+                                request_id: request_id.clone(),
+                                timestamp: now_unix_seconds(),
+                                payload: Some(proto::agent_envelope::Payload::PermissionRulesResp(
+                                    response,
+                                )),
+                            })
+                            .await
+                        }
+                        Err(error) => this.send_error_response(request_id, 400, error).await,
+                    };
+                    if let Err(error) = result {
+                        eprintln!("handle permission rules failed: {error}");
+                    }
+                });
+                Ok(())
+            }
             Some(proto::gateway_envelope::Payload::ProxyDetect(request)) => {
                 // 检测要等握手超时（约 1.5s），测速最长 10s；spawn 出去，别让 Ping、
                 // 聊天探活（ChatPrepareTimeout 2s）在单线程调度循环里排队。

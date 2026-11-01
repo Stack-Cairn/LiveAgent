@@ -20,3 +20,8 @@ const ComposerCommandsV1Capability = "COMPOSER_COMMANDS_V1"
 // proxy_detect agent request (app proxy settings: detect running local proxy
 // services and test them).
 const ProxyDetectV1Capability = "PROXY_DETECT_V1"
+
+// PermissionRulesV1Capability identifies desktop runtimes that handle the
+// permission_rules agent request (Settings → Permissions: list, add and delete
+// K-brain's remembered permission rules).
+const PermissionRulesV1Capability = "PERMISSION_RULES_V1"
