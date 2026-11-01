@@ -231,11 +231,13 @@ jobs:
               # build.rs 编译 gateway protos 并从 package.json 读取应用版本。
               - 'crates/agent-gateway/proto/**'
               - 'crates/agent-gui/package.json'
-              # Rust 测试 include_str! 引用的 src-tauri 之外的文件。
+              # --lib 编译时 include_str! 引用的 src-tauri 之外的文件,
+              # 以及 tauri-build 编译期拷贝的 resources。
               - 'crates/agent-gui/src/lib/kbrain/memory.ts'
-              - 'crates/agent-gui/test/chat/kbrain-health-adversarial*-vectors.json'
+              - 'crates/agent-gui/test/fixtures/provider-import-acceptance.json'
               - 'crates/agent-ui/src/lib/kbrain/health-contract-vectors.json'
               - 'crates/agent-ui/src/lib/tools/builtinToolCatalog.ts'
+              - 'crates/agent-gui/browser-extension/**'
               - '.github/workflows/ci.yml'
             # Desktop Gateway 三平台:Rust 编译输入,加上它构建的 Go sidecar
             # (含嵌入 WebUI 的构建配置)与下载 K-brain 的脚本和锁。
@@ -246,9 +248,10 @@ jobs:
               - 'Cargo.lock'
               - 'crates/agent-gui/package.json'
               - 'crates/agent-gui/src/lib/kbrain/memory.ts'
-              - 'crates/agent-gui/test/chat/kbrain-health-adversarial*-vectors.json'
+              - 'crates/agent-gui/test/fixtures/provider-import-acceptance.json'
               - 'crates/agent-ui/src/lib/kbrain/health-contract-vectors.json'
               - 'crates/agent-ui/src/lib/tools/builtinToolCatalog.ts'
+              - 'crates/agent-gui/browser-extension/**'
               - 'crates/agent-gateway/*'
               - 'crates/agent-gateway/cmd/**'
               - 'crates/agent-gateway/internal/**'
