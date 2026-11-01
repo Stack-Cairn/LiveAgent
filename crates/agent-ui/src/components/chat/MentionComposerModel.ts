@@ -233,6 +233,11 @@ export interface MentionComposerProps {
    * popup.
    */
   commandHost?: ComposerCommandHost;
+  /**
+   * Shift+Tab with no completion popup open. When omitted Shift+Tab keeps its
+   * browser meaning (focus the previous control).
+   */
+  onCycleMode?: () => void;
   className?: string;
 }
 

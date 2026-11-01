@@ -27,3 +27,28 @@ export function resolveKBrainPermissionMode(
       return "normal";
   }
 }
+
+export interface ComposerPermissionModeState {
+  commandSafetyMode: CommandSafetyMode | undefined;
+  planModeEnabled: boolean;
+}
+
+/**
+ * Shift+Tab in the composer: ask → auto edit → plan → ask. Plan is its own
+ * switch, so entering it keeps the permission mode underneath (turning plan off
+ * from its pill restores that mode). Any other mode returns to ask; always allow
+ * and the sandboxes are only chosen from the picker.
+ */
+export function nextComposerPermissionMode(state: ComposerPermissionModeState): {
+  commandSafetyMode: CommandSafetyMode;
+  planModeEnabled: boolean;
+  shown: "ask" | "autoEdit" | "plan";
+} {
+  if (!state.planModeEnabled && state.commandSafetyMode === "ask") {
+    return { commandSafetyMode: "autoEdit", planModeEnabled: false, shown: "autoEdit" };
+  }
+  if (!state.planModeEnabled && state.commandSafetyMode === "autoEdit") {
+    return { commandSafetyMode: "autoEdit", planModeEnabled: true, shown: "plan" };
+  }
+  return { commandSafetyMode: "ask", planModeEnabled: false, shown: "ask" };
+}

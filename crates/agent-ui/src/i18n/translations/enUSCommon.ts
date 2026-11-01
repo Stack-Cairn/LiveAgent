@@ -519,6 +519,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.safety.sandboxOfflineDesc": "Runs inside the sandbox, with no network access for commands",
   "chat.safety.sandboxUnavailable": "Sandbox mechanism unavailable on this platform",
   "chat.safety.sandboxOfflineUnavailable": "Offline sandbox unavailable on this platform",
+  "chat.safety.cycleShortcut": "Shift+Tab to switch",
+  "chat.safety.cycleNextTurn": "next turn",
+  "chat.safety.cycleNewMessages": "new messages",
   "chat.emptyRound": "(No reply)",
   "chat.inputHint": "Type a message, @ to reference files, prompts can be queued...",
   "chat.inputHintWithSkills":
