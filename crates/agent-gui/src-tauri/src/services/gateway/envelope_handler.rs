@@ -712,6 +712,12 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::SettingsUpdate(request)) => {
                 match parse_settings_sync_payload(&request.settings_json) {
                     Ok(mut snapshot) => {
+                        let sync_client = match take_settings_sync_client(&mut snapshot) {
+                            Ok(client) => client,
+                            Err(error) => {
+                                return self.send_error_response(request_id, 400, error).await;
+                            }
+                        };
                         // The memory switch and the AI approval reviewer go to K-brain and
                         // never into LiveAgent's own settings; an update carrying only
                         // them ends here.
@@ -755,6 +761,19 @@ impl GatewayController {
                                 return self.send_error_response(request_id, 502, error).await;
                             }
                             if snapshot.as_object().is_some_and(|map| map.is_empty()) {
+                                // Nothing reaches LiveAgent settings, but the WebUI still
+                                // waits for this seq: let the frontend ack it in order.
+                                if sync_client.is_some() {
+                                    let ack_only = with_settings_sync_client(
+                                        Value::Object(serde_json::Map::new()),
+                                        sync_client.as_ref(),
+                                    );
+                                    if let Err(error) =
+                                        self.app_handle.emit(GATEWAY_SETTINGS_SYNC_EVENT, ack_only)
+                                    {
+                                        eprintln!("emit gateway settings sync ack failed: {error}");
+                                    }
+                                }
                                 return self
                                     .send_agent_envelope(proto::AgentEnvelope {
                                         request_id,
@@ -805,8 +824,11 @@ impl GatewayController {
                                     .await;
                             }
 
-                            let fresh_snapshot = match self.current_settings_snapshot().await {
-                                Ok(snapshot) => snapshot,
+                            let (fresh_snapshot, stamp) = match self
+                                .current_settings_snapshot_stamped()
+                                .await
+                            {
+                                Ok(read) => read,
                                 Err(error) => {
                                     return self.send_error_response(request_id, 500, error).await;
                                 }
@@ -818,7 +840,9 @@ impl GatewayController {
                                     snapshot.clone(),
                                     merged_ssh,
                                 ) {
-                                    Ok(payload) => payload,
+                                    Ok(payload) => {
+                                        with_settings_sync_client(payload, sync_client.as_ref())
+                                    }
                                     Err(error) => {
                                         return self
                                             .send_error_response(request_id, 400, error)
@@ -837,7 +861,9 @@ impl GatewayController {
                                     )
                                     .await;
                             }
-                            if let Err(error) = self.publish_settings_sync(fresh_snapshot).await {
+                            if let Err(error) =
+                                self.publish_settings_sync(fresh_snapshot, stamp).await
+                            {
                                 eprintln!("publish gateway ssh settings sync failed: {error}");
                             }
                             return self
@@ -858,7 +884,9 @@ impl GatewayController {
 
                         let event_payload =
                             match build_local_settings_update_event_payload(snapshot.clone()) {
-                                Ok(payload) => payload,
+                                Ok(payload) => {
+                                    with_settings_sync_client(payload, sync_client.as_ref())
+                                }
                                 Err(error) => {
                                     return self.send_error_response(request_id, 400, error).await;
                                 }
@@ -873,12 +901,13 @@ impl GatewayController {
                         // {"theme":"dark"}). Overlay it onto the current full snapshot;
                         // storing it as-is would drop every other cached field and let
                         // rebuilt snapshots revert UI-only settings like theme.
-                        let current_snapshot = match self.current_settings_snapshot().await {
-                            Ok(snapshot) => snapshot,
-                            Err(error) => {
-                                return self.send_error_response(request_id, 500, error).await;
-                            }
-                        };
+                        let (current_snapshot, stamp) =
+                            match self.current_settings_snapshot_stamped().await {
+                                Ok(read) => read,
+                                Err(error) => {
+                                    return self.send_error_response(request_id, 500, error).await;
+                                }
+                            };
                         let removed_project_ids = match removed_workspace_project_ids(
                             &current_snapshot,
                             &public_update,
@@ -890,7 +919,7 @@ impl GatewayController {
                         };
                         let merged_snapshot = match merge_settings_update_into_snapshot(
                             current_snapshot,
-                            public_update,
+                            public_update.clone(),
                         ) {
                             Ok(payload) => payload,
                             Err(error) => {
@@ -905,7 +934,16 @@ impl GatewayController {
                         {
                             return self.send_error_response(request_id, 500, error).await;
                         }
-                        if let Err(error) = self.store_settings_snapshot(merged_snapshot) {
+                        // A frontend publish may land while this update was being merged:
+                        // overlay the update onto that newer snapshot rather than overwrite it.
+                        if let Err(error) = self
+                            .store_merged_settings_update(
+                                merged_snapshot,
+                                stamp.generation,
+                                &public_update,
+                            )
+                            .await
+                        {
                             return self.send_error_response(request_id, 500, error).await;
                         }
                         match self

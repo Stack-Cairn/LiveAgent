@@ -7,9 +7,8 @@ use crate::services::gateway::{
     GatewayChatCheckpointCommitResult, GatewayChatCheckpointInput, GatewayChatClaimedRequest,
     GatewayChatIngressAcceptResult, GatewayChatIngressBatchInput, GatewayChatQueueEventInput,
     GatewayChatQueueResponseInput, GatewayClarifyDeltaInput, GatewayClarifyRespondInput,
-    GatewayComposerActionRespondInput,
-    GatewayController, GatewayHistorySyncPublishInput, GatewayHistorySyncPublishResult,
-    GatewayStatusSnapshot,
+    GatewayComposerActionRespondInput, GatewayController, GatewayHistorySyncPublishInput,
+    GatewayHistorySyncPublishResult, GatewayStatusSnapshot, SettingsSyncAck,
 };
 use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
 use crate::services::tunnel::{
@@ -281,9 +280,12 @@ pub async fn gateway_publish_chat_queue_event(
 #[tauri::command]
 pub async fn gateway_publish_settings_sync(
     payload: Value,
+    sync_acks: Option<Vec<SettingsSyncAck>>,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
-    gateway_controller.publish_settings_sync(payload).await
+    gateway_controller
+        .publish_settings_sync_with_acks(payload, sync_acks.as_deref().unwrap_or_default())
+        .await
 }
 
 #[tauri::command(rename_all = "snake_case")]

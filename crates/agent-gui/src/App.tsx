@@ -23,7 +23,9 @@ import {
 import {
   applyGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncPayload,
+  type GatewaySettingsSyncAck,
   type GatewaySettingsSyncPayload,
+  readGatewaySettingsSyncClient,
 } from "@liveagent/ui/lib/settings/sync";
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
@@ -500,8 +502,30 @@ export default function App() {
     });
   }, [settings.retryErrorSettings]);
 
+  // A WebUI update's seq is acknowledged by the snapshot published from the same
+  // ordered chains, so an ack never overtakes an earlier update's snapshot: once the
+  // WebUI sees seq N it treats every later snapshot as at least that new.
+  const queueSettingsSyncAck = useCallback((acks: GatewaySettingsSyncAck[]) => {
+    saveChainRef.current = saveChainRef.current
+      .catch(() => undefined)
+      .then(() => {
+        gatewaySyncChainRef.current = gatewaySyncChainRef.current
+          .catch(() => undefined)
+          .then(() => publishGatewaySettingsSync(settingsRef.current, acks))
+          .catch((error) => {
+            console.error("publish gateway settings sync ack failed", error);
+          });
+      });
+  }, []);
+
   const queueSettingsSave = useCallback(
-    (prev: AppSettings, next: AppSettings, fallback: string, publishSync: boolean) => {
+    (
+      prev: AppSettings,
+      next: AppSettings,
+      fallback: string,
+      publishSync: boolean,
+      syncAcks: GatewaySettingsSyncAck[] = [],
+    ) => {
       const saveSequence = ++saveSequenceRef.current;
       setSettingsSaveState({ status: "saving" });
 
@@ -542,12 +566,12 @@ export default function App() {
           if (persistResult.providerError) {
             throw persistResult.providerError;
           }
-          if (publishSync) {
+          if (publishSync || syncAcks.length > 0) {
             // Gateway synchronization is a secondary broadcast. Keep it ordered, but do not
             // hold the local config write queue on a slow or temporarily unavailable Gateway.
             gatewaySyncChainRef.current = gatewaySyncChainRef.current
               .catch(() => undefined)
-              .then(() => publishGatewaySettingsSync(publishTarget))
+              .then(() => publishGatewaySettingsSync(publishTarget, syncAcks))
               .catch((error) => {
                 if (saveSequenceRef.current === saveSequence) {
                   console.error("publish gateway settings sync failed", error);
@@ -565,6 +589,19 @@ export default function App() {
           }
         })
         .catch((error) => {
+          if (syncAcks.length > 0) {
+            // Still inside this save's step, so later saves have not reached the
+            // gateway chain yet: publishing here keeps the error ack ahead of their
+            // higher seqs (the desktop keeps only the highest seq per tab).
+            const message = getSettingsErrorMessage(error, fallback, next.locale, translate);
+            const failed = syncAcks.map((ack) => ({ ...ack, error: message }));
+            gatewaySyncChainRef.current = gatewaySyncChainRef.current
+              .catch(() => undefined)
+              .then(() => publishGatewaySettingsSync(settingsRef.current, failed))
+              .catch((publishError) => {
+                console.error("publish gateway settings sync ack failed", publishError);
+              });
+          }
           if (saveSequenceRef.current === saveSequence) {
             console.error("persist settings failed", error);
             setSettingsSaveState({
@@ -848,8 +885,12 @@ export default function App() {
           applyGatewaySettingsSyncPayload(prev, event.payload),
           defaultWorkdirRef.current,
         );
+        const syncClient = readGatewaySettingsSyncClient(event.payload);
+        const syncAcks = syncClient ? [syncClient] : [];
         const publicChanged = hasSettingsSyncChanged(prev, next);
         if (!publicChanged && !hasSensitiveSettingsUpdatesPayload(event.payload)) {
+          // The WebUI still waits for this seq even when nothing changed here.
+          if (syncAcks.length > 0) queueSettingsSyncAck(syncAcks);
           return;
         }
         settingsRef.current = next;
@@ -859,6 +900,7 @@ export default function App() {
           next,
           translate("app.gatewaySettingsSyncFailed", next.locale),
           publicChanged,
+          syncAcks,
         );
       },
     );
@@ -867,7 +909,7 @@ export default function App() {
       cancelled = true;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [queueSettingsSave, settingsReady]);
+  }, [queueSettingsSave, queueSettingsSyncAck, settingsReady]);
 
   if (!settingsReady) {
     return (

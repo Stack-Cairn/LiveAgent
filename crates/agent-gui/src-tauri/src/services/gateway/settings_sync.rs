@@ -12,9 +12,16 @@ use crate::commands::settings::{
 
 use super::*;
 
+/// A cache read that keeps losing to newer stores gives up after this many tries.
+const SETTINGS_READ_ATTEMPTS: usize = 3;
+
 impl GatewayController {
-    pub(crate) async fn current_settings_snapshot(&self) -> Result<Value, String> {
-        Ok(self.settings_snapshot_and_backend().await?.0)
+    /// The current snapshot plus the stamp it must be published with.
+    pub(crate) async fn current_settings_snapshot_stamped(
+        &self,
+    ) -> Result<(Value, SettingsSyncStamp), String> {
+        let (snapshot, _backend, stamp) = self.settings_snapshot_and_backend().await?;
+        Ok((snapshot, stamp))
     }
 
     /// The settings.get answer: the snapshot plus K-brain's memory switch and AI approval
@@ -22,7 +29,7 @@ impl GatewayController {
     /// carries them for a backend that has them. Neither is cached or synced as LiveAgent
     /// settings.
     pub(crate) async fn settings_get_snapshot(&self) -> Result<Value, String> {
-        let (mut snapshot, backend) = self.settings_snapshot_and_backend().await?;
+        let (mut snapshot, backend, stamp) = self.settings_snapshot_and_backend().await?;
         if let Some(map) = snapshot.as_object_mut() {
             if let Some(switch) = super::kbrain_memory::switch_from_settings(&backend) {
                 map.insert(
@@ -37,45 +44,223 @@ impl GatewayController {
                 );
             }
         }
-        Ok(snapshot)
+        Ok(attach_settings_sync_stamp(snapshot, &stamp))
     }
 
-    async fn settings_snapshot_and_backend(&self) -> Result<(Value, Value), String> {
-        let cached_snapshot = self
-            .settings_snapshot
+    pub(crate) fn applied_client_seqs_value(&self) -> Value {
+        self.applied_settings_client_seqs
             .lock()
-            .map_err(|_| "gateway settings snapshot lock poisoned".to_string())?
-            .clone();
-
-        let db_snapshot = tauri::async_runtime::spawn_blocking(move || {
-            let conn = open_db()?;
-            load_gateway_settings_sync_snapshot(&conn)
-        })
-        .await
-        .map_err(|e| format!("load gateway settings snapshot join failed: {e}"))??;
-
-        let mut snapshot = merge_settings_sync_snapshot(db_snapshot, cached_snapshot.as_ref())?;
-        let backend =
-            crate::services::gateway_bridge::kbrain_gateway_settings(self.app_handle.clone())
-                .await?;
-        apply_kbrain_model_settings(&mut snapshot, &backend)?;
-        let mcp =
-            crate::services::gateway_bridge::kbrain_gateway_mcp_settings(self.app_handle.clone())
-                .await?;
-        apply_kbrain_mcp_settings(&mut snapshot, &mcp)?;
-        Ok((self.store_settings_snapshot(snapshot)?, backend))
+            .map(|table| table.to_value())
+            .unwrap_or_else(|_| Value::Object(serde_json::Map::new()))
     }
 
-    pub(crate) fn store_settings_snapshot(&self, payload: Value) -> Result<Value, String> {
-        let snapshot =
-            redact_gateway_settings_sync_payload(normalize_settings_sync_payload(payload)?)?;
-        let mut guard = self
+    pub(crate) fn record_settings_sync_acks(&self, acks: &[SettingsSyncAck]) {
+        if acks.is_empty() {
+            return;
+        }
+        if let Ok(mut table) = self.applied_settings_client_seqs.lock() {
+            for ack in acks {
+                table.record(ack);
+            }
+        }
+    }
+
+    /// Assembles the snapshot from the cache, the settings DB and K-brain, and writes it
+    /// back only if no newer snapshot was stored while it was being assembled; otherwise
+    /// it reads again. The stamp names the cache generation the result belongs to.
+    async fn settings_snapshot_and_backend(
+        &self,
+    ) -> Result<(Value, Value, SettingsSyncStamp), String> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            // Acks are recorded under the cache lock together with their snapshot (see
+            // store_settings_snapshot_with_acks), so reading both under it yields acks
+            // that the cached content already reflects, and none it does not.
+            let (cached_snapshot, read_at, epoch, acks) = {
+                let cache = self
+                    .settings_snapshot
+                    .lock()
+                    .map_err(|_| "gateway settings snapshot lock poisoned".to_string())?;
+                let acks = self.applied_client_seqs_value();
+                (
+                    cache.value.clone(),
+                    cache.generation,
+                    cache.epoch.clone(),
+                    acks,
+                )
+            };
+
+            let db_snapshot = tauri::async_runtime::spawn_blocking(move || {
+                let conn = open_db()?;
+                load_gateway_settings_sync_snapshot(&conn)
+            })
+            .await
+            .map_err(|e| format!("load gateway settings snapshot join failed: {e}"))??;
+
+            let mut snapshot = merge_settings_sync_snapshot(db_snapshot, cached_snapshot.as_ref())?;
+            let backend =
+                crate::services::gateway_bridge::kbrain_gateway_settings(self.app_handle.clone())
+                    .await?;
+            apply_kbrain_model_settings(&mut snapshot, &backend)?;
+            let mcp = crate::services::gateway_bridge::kbrain_gateway_mcp_settings(
+                self.app_handle.clone(),
+            )
+            .await?;
+            apply_kbrain_mcp_settings(&mut snapshot, &mcp)?;
+            let snapshot = prepare_settings_snapshot(snapshot)?;
+            if let Some(generation) =
+                self.store_prepared_snapshot(snapshot.clone(), Some(read_at))?
+            {
+                let stamp = SettingsSyncStamp {
+                    acks,
+                    epoch,
+                    generation,
+                };
+                return Ok((snapshot, backend, stamp));
+            }
+            if attempt >= SETTINGS_READ_ATTEMPTS {
+                // Stamped with the generation it was read at, so a WebUI that already
+                // applied a newer snapshot discards it.
+                let stamp = SettingsSyncStamp {
+                    acks,
+                    epoch,
+                    generation: read_at,
+                };
+                return Ok((snapshot, backend, stamp));
+            }
+        }
+    }
+
+    /// Stores unconditionally and records `acks` in the same critical section, so no
+    /// reader can see this snapshot without its acks or the acks without the snapshot.
+    /// Lock order is cache, then ack table, everywhere both are held.
+    pub(crate) fn store_settings_snapshot_with_acks(
+        &self,
+        payload: Value,
+        acks: &[SettingsSyncAck],
+    ) -> Result<(Value, SettingsSyncStamp), String> {
+        let snapshot = prepare_settings_snapshot(payload)?;
+        let mut cache = self
             .settings_snapshot
             .lock()
             .map_err(|_| "gateway settings snapshot lock poisoned".to_string())?;
-        *guard = Some(snapshot.clone());
-        Ok(snapshot)
+        cache.store(snapshot.clone(), None);
+        self.record_settings_sync_acks(acks);
+        let stamp = SettingsSyncStamp {
+            acks: self.applied_client_seqs_value(),
+            epoch: cache.epoch.clone(),
+            generation: cache.generation,
+        };
+        Ok((snapshot, stamp))
     }
+
+    pub(crate) fn store_settings_snapshot(&self, payload: Value) -> Result<Value, String> {
+        Ok(self.store_settings_snapshot_with_acks(payload, &[])?.0)
+    }
+
+    /// Stores a snapshot assembled from a cache read at `read_at`, unless a newer one
+    /// was stored meanwhile. Returns whether it was stored.
+    pub(crate) fn store_settings_snapshot_read_at(
+        &self,
+        payload: Value,
+        read_at: u64,
+    ) -> Result<bool, String> {
+        let snapshot = prepare_settings_snapshot(payload)?;
+        Ok(self
+            .store_prepared_snapshot(snapshot, Some(read_at))?
+            .is_some())
+    }
+
+    /// Stores `merged` (an update overlaid on the snapshot read at `read_at`); if a newer
+    /// snapshot was stored meanwhile, overlays the update on that one instead.
+    pub(crate) async fn store_merged_settings_update(
+        &self,
+        merged: Value,
+        read_at: u64,
+        update: &Value,
+    ) -> Result<(), String> {
+        if self.store_settings_snapshot_read_at(merged.clone(), read_at)? {
+            return Ok(());
+        }
+        let mut last = merged;
+        for _ in 1..SETTINGS_READ_ATTEMPTS {
+            let (current, stamp) = self.current_settings_snapshot_stamped().await?;
+            last = merge_settings_update_into_snapshot(current, update.clone())?;
+            if self.store_settings_snapshot_read_at(last.clone(), stamp.generation)? {
+                return Ok(());
+            }
+        }
+        self.store_settings_snapshot(last).map(|_| ())
+    }
+
+    fn store_prepared_snapshot(
+        &self,
+        snapshot: Value,
+        read_at: Option<u64>,
+    ) -> Result<Option<u64>, String> {
+        let mut cache = self
+            .settings_snapshot
+            .lock()
+            .map_err(|_| "gateway settings snapshot lock poisoned".to_string())?;
+        Ok(cache.store(snapshot, read_at).then_some(cache.generation))
+    }
+}
+
+fn prepare_settings_snapshot(payload: Value) -> Result<Value, String> {
+    let mut snapshot =
+        redact_gateway_settings_sync_payload(normalize_settings_sync_payload(payload)?)?;
+    // Sync bookkeeping is attached on the way out only, never cached as settings.
+    if let Some(map) = snapshot.as_object_mut() {
+        map.remove(APPLIED_CLIENT_SEQS_FIELD);
+        map.remove(SETTINGS_SYNC_VERSION_FIELD);
+        map.remove(SYNC_CLIENT_FIELD);
+    }
+    Ok(snapshot)
+}
+
+/// Cached settings snapshot. `generation` bumps on every store so a slow read can tell
+/// whether it is still the latest; `epoch` is new for every desktop process, so a WebUI
+/// can tell a restarted desktop (generation back to 1, ack table empty) from an old one.
+#[derive(Debug)]
+pub(crate) struct SettingsSnapshotCache {
+    value: Option<Value>,
+    generation: u64,
+    epoch: String,
+}
+
+impl Default for SettingsSnapshotCache {
+    fn default() -> Self {
+        Self {
+            value: None,
+            generation: 0,
+            epoch: Uuid::new_v4().to_string(),
+        }
+    }
+}
+
+impl SettingsSnapshotCache {
+    pub(crate) fn store(&mut self, snapshot: Value, read_at: Option<u64>) -> bool {
+        if read_at.is_some_and(|generation| generation != self.generation) {
+            return false;
+        }
+        self.value = Some(snapshot);
+        self.generation += 1;
+        true
+    }
+
+    #[cfg(test)]
+    pub(crate) fn value(&self) -> Option<&Value> {
+        self.value.as_ref()
+    }
+}
+
+/// What an outbound snapshot carries besides settings: the acks it reflects and the
+/// cache generation (within this desktop process) it was read or stored at.
+pub(crate) struct SettingsSyncStamp {
+    pub(crate) acks: Value,
+    pub(crate) epoch: String,
+    pub(crate) generation: u64,
 }
 
 pub(crate) fn apply_kbrain_mcp_settings(
@@ -364,4 +549,126 @@ pub(crate) fn parse_settings_sync_payload(raw: &str) -> Result<Value, String> {
 pub(crate) fn serialize_settings_sync_payload(payload: &Value) -> Result<String, String> {
     serde_json::to_string(payload)
         .map_err(|e| format!("serialize gateway settings sync payload failed: {e}"))
+}
+
+/// WebUI → desktop: which tab sent a settings update and its per-tab sequence.
+pub(crate) const SYNC_CLIENT_FIELD: &str = "syncClient";
+/// Desktop → WebUI: highest sequence handled per tab, attached to every snapshot.
+pub(crate) const APPLIED_CLIENT_SEQS_FIELD: &str = "appliedClientSeqs";
+/// Desktop → WebUI: `{ epoch, generation }` of the cached snapshot this one was read at.
+pub(crate) const SETTINGS_SYNC_VERSION_FIELD: &str = "settingsSyncVersion";
+const MAX_SYNC_CLIENT_ID_LEN: usize = 128;
+const MAX_TRACKED_SYNC_CLIENTS: usize = 64;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SettingsSyncClient {
+    pub id: String,
+    pub seq: u64,
+}
+
+/// One settings update the desktop finished handling (`error` when saving failed).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct SettingsSyncAck {
+    pub id: String,
+    pub seq: u64,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+fn valid_sync_client_id(id: &str) -> bool {
+    !id.trim().is_empty() && id.len() <= MAX_SYNC_CLIENT_ID_LEN
+}
+
+/// Every snapshot leaving the desktop carries the ack table, even when empty (its
+/// presence tells the WebUI this desktop understands `syncClient` markers), and its
+/// version, so the WebUI can discard a snapshot older than one it already applied.
+pub(crate) fn attach_settings_sync_stamp(mut snapshot: Value, stamp: &SettingsSyncStamp) -> Value {
+    if let Some(map) = snapshot.as_object_mut() {
+        map.insert(APPLIED_CLIENT_SEQS_FIELD.to_string(), stamp.acks.clone());
+        map.insert(
+            SETTINGS_SYNC_VERSION_FIELD.to_string(),
+            serde_json::json!({ "epoch": stamp.epoch, "generation": stamp.generation }),
+        );
+    }
+    snapshot
+}
+
+/// Removes the WebUI marker (and any stray ack table) from an update so neither
+/// is merged into settings.
+pub(crate) fn take_settings_sync_client(
+    payload: &mut Value,
+) -> Result<Option<SettingsSyncClient>, String> {
+    let Some(map) = payload.as_object_mut() else {
+        return Ok(None);
+    };
+    map.remove(APPLIED_CLIENT_SEQS_FIELD);
+    map.remove(SETTINGS_SYNC_VERSION_FIELD);
+    let Some(raw) = map.remove(SYNC_CLIENT_FIELD) else {
+        return Ok(None);
+    };
+    let client = serde_json::from_value::<SettingsSyncClient>(raw)
+        .map_err(|error| format!("invalid settings sync client marker: {error}"))?;
+    if !valid_sync_client_id(&client.id) || client.seq == 0 {
+        return Err("invalid settings sync client marker".to_string());
+    }
+    Ok(Some(client))
+}
+
+/// Hands the marker to the desktop frontend with the update, so the ack is
+/// published from the same ordered save chain as the resulting snapshot.
+pub(crate) fn with_settings_sync_client(
+    mut event_payload: Value,
+    client: Option<&SettingsSyncClient>,
+) -> Value {
+    if let (Some(client), Some(map)) = (client, event_payload.as_object_mut()) {
+        map.insert(
+            SYNC_CLIENT_FIELD.to_string(),
+            serde_json::json!({ "id": client.id, "seq": client.seq }),
+        );
+    }
+    event_payload
+}
+
+/// Per-tab highest handled sequence. Kept per client so two WebUI tabs never
+/// overwrite each other's acks; the least recently acknowledged tab is evicted.
+#[derive(Debug, Default)]
+pub(crate) struct AppliedClientSeqs {
+    entries: Vec<(String, u64, Option<String>)>,
+}
+
+impl AppliedClientSeqs {
+    pub(crate) fn record(&mut self, ack: &SettingsSyncAck) {
+        if !valid_sync_client_id(&ack.id) || ack.seq == 0 {
+            return;
+        }
+        let error = ack
+            .error
+            .as_ref()
+            .map(|error| error.trim().to_string())
+            .filter(|error| !error.is_empty());
+        let mut entry = (ack.id.clone(), ack.seq, error);
+        if let Some(position) = self.entries.iter().position(|(id, _, _)| *id == ack.id) {
+            let existing = self.entries.remove(position);
+            if existing.1 > ack.seq {
+                entry = existing;
+            }
+        }
+        self.entries.push(entry);
+        if self.entries.len() > MAX_TRACKED_SYNC_CLIENTS {
+            self.entries.remove(0);
+        }
+    }
+
+    pub(crate) fn to_value(&self) -> Value {
+        let mut map = serde_json::Map::new();
+        for (id, seq, error) in &self.entries {
+            let mut ack = serde_json::Map::new();
+            ack.insert("seq".to_string(), Value::from(*seq));
+            if let Some(error) = error {
+                ack.insert("error".to_string(), Value::String(error.clone()));
+            }
+            map.insert(id.clone(), Value::Object(ack));
+        }
+        Value::Object(map)
+    }
 }

@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
-use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::commands::git::GitCloneTaskRegistry;
@@ -139,7 +138,8 @@ pub struct GatewayController {
     outbound_tx: Mutex<Option<GatewayOutboundSender>>,
     outbound_control_tx: Mutex<Option<GatewayOutboundSender>>,
     terminal_stream_tx: Mutex<Option<mpsc::Sender<proto::TerminalStreamFrame>>>,
-    settings_snapshot: Mutex<Option<Value>>,
+    settings_snapshot: Mutex<SettingsSnapshotCache>,
+    applied_settings_client_seqs: Mutex<AppliedClientSeqs>,
     remote_chat_inbox: Mutex<HashMap<String, RemoteChatInboxRecord>>,
     chat_run_ledger: Mutex<ChatRunLedger>,
     runtime_status_republish: Mutex<Option<RuntimeStatusRepublishRecord>>,
