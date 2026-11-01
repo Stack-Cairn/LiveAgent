@@ -4,6 +4,8 @@
 // 纯展示 + 决定回调;数据(pending 列表)与提交动作由各端注入:GUI 直连桌面审批服务,
 // WebUI 走网关 tool_approval，端差异一律留在各端宿主。
 
+import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
+import { isImeKeyboardEvent } from "@liveagent/ui/components/chat/MentionComposerInputUtils";
 import { ChevronDown, Loader2, Terminal } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
@@ -18,8 +20,11 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 import type {
   ToolApprovalAnswerOptions,
+  ToolApprovalPreview,
   ToolApprovalRememberScope,
 } from "../../lib/chat/toolApprovalArgs";
+
+const REMEMBER_SCOPES: readonly ToolApprovalRememberScope[] = ["session", "project", "user"];
 
 /** approve:本次放行;deny:本次拒绝;approve_session:请后端在本会话内记住这条授权范围。 */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
@@ -42,7 +47,18 @@ export type PendingApprovalItem = {
   /** 允许并记住会存的规则;非空时可以选作用域。 */
   rememberRules?: string[];
   defaultScope?: ToolApprovalRememberScope;
+  /** Edit/Write 的改动预览。 */
+  preview?: ToolApprovalPreview;
+  /** 审批重新弹出的原因,如后端存不下记住的规则。 */
+  notice?: string;
 };
+
+function isEditableTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    target.closest("button,input,textarea,select,[contenteditable=true],[role=menuitem]") !== null
+  );
+}
 
 function formatCountdown(remainingMs: number) {
   const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
@@ -94,13 +110,32 @@ export function ToolApprovalBar({
     text: string;
   } | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const [reason, setReason] = useState("");
   const panelRef = useRef<HTMLElement | null>(null);
+  const reasonRef = useRef<HTMLInputElement | null>(null);
   const deadlines = pending
     .map((item) => item.deadlineAt)
     .filter((value): value is number => typeof value === "number");
   const remainingMs = useEarliestCountdown(pending.length > 0, deadlines);
   const submitting = submittingAction !== null;
   const currentToolCallId = pending[0]?.toolCallId ?? "";
+  const currentDefaultScope = pending[0]?.defaultScope ?? "session";
+  const [rememberScope, setRememberScope] = useState(currentDefaultScope);
+  const [cardFor, setCardFor] = useState(currentToolCallId);
+
+  // Each approval starts from its own default scope with the reason field closed,
+  // reset while rendering so the next card never shows the previous card's state.
+  if (cardFor !== currentToolCallId) {
+    setCardFor(currentToolCallId);
+    setRememberScope(currentDefaultScope);
+    setReasonOpen(false);
+    setReason("");
+  }
+
+  useEffect(() => {
+    if (reasonOpen) reasonRef.current?.focus({ preventScroll: true });
+  }, [reasonOpen]);
 
   useEffect(() => {
     if (!currentToolCallId) return;
@@ -134,7 +169,12 @@ export function ToolApprovalBar({
     current.toolName.toLowerCase() === "bash" ? t("chat.toolApproval.terminal") : current.toolName;
   const errorText = submissionError?.toolCallId === current.toolCallId ? submissionError.text : "";
   const offerSession = current.allowSession === true;
-  const hasMoreActions = offerSession || pending.length > 1;
+  // With rules to remember the card shows its own remember option; the menu keeps the
+  // old session item only for backends without rules (Computer Use grants).
+  const rememberRules = offerSession ? (current.rememberRules ?? []) : [];
+  const offerRemember = rememberRules.length > 0;
+  const offerLegacySession = offerSession && !offerRemember;
+  const hasMoreActions = offerLegacySession || pending.length > 1;
   const sessionTarget = current.sessionScope
     ? `${displayToolName} · ${current.sessionScope}`
     : displayToolName;
@@ -165,6 +205,28 @@ export function ToolApprovalBar({
     }
   };
 
+  const approveOnce = () =>
+    void runGuarded(`approve:${current.toolCallId}`, () => onDecide(current.toolCallId, "approve"));
+  const remember = () => {
+    if (offerRemember) {
+      void runGuarded(`session:${current.toolCallId}`, () =>
+        onDecide(current.toolCallId, "approve_session", { scope: rememberScope }),
+      );
+    } else if (offerLegacySession) {
+      void runGuarded(`session:${current.toolCallId}`, () =>
+        onDecide(current.toolCallId, "approve_session"),
+      );
+    }
+  };
+  const deny = (withReason?: string) => {
+    const text = withReason?.trim();
+    void runGuarded(`deny:${current.toolCallId}`, () =>
+      text
+        ? onDecide(current.toolCallId, "deny", { reason: text })
+        : onDecide(current.toolCallId, "deny"),
+    );
+  };
+
   return (
     <section
       ref={panelRef}
@@ -187,22 +249,25 @@ export function ToolApprovalBar({
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
-          void runGuarded(`deny:${current.toolCallId}`, () => onDecide(current.toolCallId, "deny"));
+          deny();
           return;
         }
-        const target = event.target;
-        if (
-          event.key !== "Enter" ||
-          (target instanceof Element &&
-            target.closest("button,input,textarea,select,[contenteditable=true],[role=menuitem]"))
-        ) {
-          return;
-        }
+        // Keys typed into a field (the reason, the scope select) are the field's own.
+        if (isEditableTarget(event.target)) return;
+        const handlers: Record<string, () => void> = {
+          Enter: approveOnce,
+          "1": approveOnce,
+          "2": remember,
+          "3": () => {
+            setReasonOpen(true);
+            reasonRef.current?.focus({ preventScroll: true });
+          },
+        };
+        const handle = handlers[event.key];
+        if (!handle || (event.key === "2" && !offerRemember && !offerLegacySession)) return;
         event.preventDefault();
         event.stopPropagation();
-        void runGuarded(`approve:${current.toolCallId}`, () =>
-          onDecide(current.toolCallId, "approve"),
-        );
+        handle();
       }}
       className={cn(
         "@container relative flex min-h-32 w-full flex-col",
@@ -239,22 +304,165 @@ export function ToolApprovalBar({
             : t("chat.toolApproval.body").replace("{tool}", displayToolName)}
         </p>
 
+        {/* The whole command, wrapped and scrollable: approving what one cut line shows
+            is approving blind. */}
         {current.summary ? (
           <pre
-            title={current.summary}
-            className="mt-1.5 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs leading-1p45 text-muted-foreground"
+            data-approval-command=""
+            className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-1p45 text-muted-foreground"
           >
             {current.summary}
           </pre>
         ) : null}
+
+        {current.preview ? (
+          <>
+            {/* Above the scroll box, so a long preview cannot push it out of view. */}
+            {current.preview.truncated ? (
+              <p className="mt-2 text-tiny text-muted-foreground">
+                {t("chat.toolApproval.previewTruncated")}
+              </p>
+            ) : null}
+            <div data-approval-preview="" className="mt-2 max-h-56 overflow-auto">
+              {current.preview.split ? (
+                // Two separately cut sides: a diff of them would hide or invent changes.
+                <div className="space-y-2">
+                  {current.preview.path ? (
+                    <p className="break-all font-mono text-xs text-foreground">
+                      {current.preview.path}
+                    </p>
+                  ) : null}
+                  {(
+                    [
+                      ["before", current.preview.before],
+                      ["after", current.preview.after],
+                    ] as const
+                  ).map(([side, text]) => (
+                    <div key={side} data-approval-preview-side={side}>
+                      <p className="text-tiny text-muted-foreground">
+                        {t(`chat.toolApproval.preview.${side}`)}
+                      </p>
+                      <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/50 p-2 font-mono text-xs leading-1p45 text-foreground">
+                        {text}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EditDiffView
+                  beforeText={current.preview.before}
+                  afterText={current.preview.after}
+                  filePath={current.preview.path}
+                />
+              )}
+            </div>
+          </>
+        ) : null}
+
+        {current.notice ? (
+          <p
+            data-approval-notice=""
+            role="status"
+            className="mt-2 break-words text-tiny text-amber-700 dark:text-amber-400"
+          >
+            {t("chat.toolApproval.rememberRefused").replace("{reason}", current.notice)}
+          </p>
+        ) : null}
+
+        {offerRemember ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="min-w-0 break-all font-mono">
+              {t("chat.toolApproval.rememberRules").replace("{rules}", rememberRules.join(", "))}
+            </span>
+            <select
+              data-remember-scope=""
+              aria-label={t("chat.toolApproval.rememberScope")}
+              value={rememberScope}
+              disabled={submitting}
+              onChange={(event) => {
+                const value = event.target.value;
+                if ((REMEMBER_SCOPES as readonly string[]).includes(value)) {
+                  setRememberScope(value as ToolApprovalRememberScope);
+                }
+              }}
+              className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            >
+              {REMEMBER_SCOPES.map((scope) => (
+                <option key={scope} value={scope}>
+                  {t(`chat.toolApproval.scope.${scope}`)}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={submitting}
+              aria-busy={submittingAction === `session:${current.toolCallId}`}
+              aria-keyshortcuts="2"
+              onClick={remember}
+              className="h-7 shrink-0 px-3 text-xs"
+            >
+              {submittingAction === `session:${current.toolCallId}` ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : null}
+              {t("chat.toolApproval.remember")}
+              <ShortcutChip>2</ShortcutChip>
+            </Button>
+          </div>
+        ) : null}
+
+        {reasonOpen ? (
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              ref={reasonRef}
+              data-deny-reason=""
+              value={reason}
+              disabled={submitting}
+              placeholder={t("chat.toolApproval.denyReasonPlaceholder")}
+              aria-label={t("chat.toolApproval.denyReasonPlaceholder")}
+              onChange={(event) => setReason(event.target.value)}
+              onKeyDown={(event) => {
+                // WebKit sends the Enter that commits an IME candidate after
+                // compositionend (keyCode 229); that Enter picks a word, it does not deny.
+                if (isImeKeyboardEvent(event)) return;
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  deny(reason);
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setReasonOpen(false);
+                  setReason("");
+                  panelRef.current?.focus({ preventScroll: true });
+                }
+              }}
+              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+            />
+          </div>
+        ) : null}
       </div>
 
-      <div className="flex h-9 shrink-0 items-center justify-end gap-1.5 px-3 pb-2">
+      <div className="flex min-h-9 shrink-0 flex-wrap items-center justify-end gap-1.5 px-3 pb-2">
         {errorText ? (
           <span role="alert" className="mr-auto min-w-0 flex-1 truncate text-tiny text-destructive">
             {errorText}
           </span>
         ) : null}
+
+        {reasonOpen ? null : (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={submitting}
+            aria-keyshortcuts="3"
+            onClick={() => setReasonOpen(true)}
+            className="h-7 shrink-0 px-2 text-xs text-muted-foreground"
+          >
+            {t("chat.toolApproval.denyWithReason")}
+            <ShortcutChip>3</ShortcutChip>
+          </Button>
+        )}
 
         <Button
           variant="outline"
@@ -262,11 +470,7 @@ export function ToolApprovalBar({
           disabled={submitting}
           aria-busy={submittingAction === `deny:${current.toolCallId}`}
           aria-keyshortcuts="Escape"
-          onClick={() =>
-            void runGuarded(`deny:${current.toolCallId}`, () =>
-              onDecide(current.toolCallId, "deny"),
-            )
-          }
+          onClick={() => deny(reasonOpen ? reason : undefined)}
           className="h-7 shrink-0 px-3 text-xs"
         >
           {submittingAction === `deny:${current.toolCallId}` ? (
@@ -291,11 +495,8 @@ export function ToolApprovalBar({
               disabled={submitting}
               aria-busy={submittingAction === `approve:${current.toolCallId}`}
               aria-keyshortcuts="Enter"
-              onClick={() =>
-                void runGuarded(`approve:${current.toolCallId}`, () =>
-                  onDecide(current.toolCallId, "approve"),
-                )
-              }
+              title={t("chat.toolApproval.approveShortcutHint")}
+              onClick={approveOnce}
               className={cn("h-7 px-3 text-xs shadow-none", hasMoreActions && "rounded-r-none")}
             >
               {submittingAction === `approve:${current.toolCallId}` ? (
@@ -332,15 +533,8 @@ export function ToolApprovalBar({
             ) : null}
           </div>
           <DropdownMenuContent variant="soft" side="top" align="end" className="min-w-32">
-            {offerSession ? (
-              <DropdownMenuItem
-                disabled={submitting}
-                onSelect={() =>
-                  void runGuarded(`session:${current.toolCallId}`, () =>
-                    onDecide(current.toolCallId, "approve_session"),
-                  )
-                }
-              >
+            {offerLegacySession ? (
+              <DropdownMenuItem disabled={submitting} onSelect={remember}>
                 {t("chat.toolApproval.approveSession").replace("{tool}", sessionTarget)}
               </DropdownMenuItem>
             ) : null}
@@ -365,5 +559,16 @@ export function ToolApprovalBar({
         </DropdownMenu>
       </div>
     </section>
+  );
+}
+
+function ShortcutChip({ children }: { children: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="rounded bg-muted px-1 py-0.5 font-sans text-tiny font-normal leading-none text-muted-foreground"
+    >
+      {children}
+    </span>
   );
 }

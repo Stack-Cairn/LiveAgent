@@ -194,9 +194,11 @@ export type KBrainTurnParams = {
     request: KBrainQuestionRequest,
     signal?: AbortSignal,
   ) => Promise<KBrainQuestionAnswer[]>;
+  /** refusal: K-brain's reason for refusing the previous answer to this prompt (400). */
   onPermissionRequest?: (
     request: KBrainPermissionRequest,
     signal?: AbortSignal,
+    refusal?: string,
   ) => Promise<KBrainPermissionAnswer>;
   onPermissionAutoResolved?: (resolved: KBrainPermissionAutoResolved) => void;
   applyConversationState?: (state: ConversationViewState) => void;
@@ -926,8 +928,9 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         pendingPermissions.set(request.permission_id, permissionController);
         const onPermissionRequest = params.onPermissionRequest;
         const answerPermission = async () => {
+          let refusal: string | undefined;
           for (let attempt = 0; ; attempt += 1) {
-            const answer = await onPermissionRequest(request, permissionController.signal);
+            const answer = await onPermissionRequest(request, permissionController.signal, refusal);
             if (permissionController.signal.aborted) return;
             const { decision, scope, reason } = permissionAnswerFields(answer);
             try {
@@ -951,6 +954,7 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
                 attempt < PERMISSION_ANSWER_RETRIES &&
                 !permissionController.signal.aborted
               ) {
+                refusal = error instanceof Error ? error.message : String(error);
                 continue;
               }
               throw error;

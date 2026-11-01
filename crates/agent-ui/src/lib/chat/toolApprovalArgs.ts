@@ -1,3 +1,5 @@
+import { deriveFileToolPreview, readStreamPreviewMeta } from "./toolPreview";
+
 // 工具审批的网关同步契约:桌面端在同步给 WebUI 的工具参数上盖“待审批 + 截止
 // 时间”标记(见 gatewayToolPreview),WebUI 据此渲染审批卡片并显示倒计时。
 // 这些是 __ 前缀的合成参数,不参与展示(见 toolCallArgsForDisplay 过滤),也不
@@ -22,6 +24,172 @@ export const TOOL_APPROVAL_REMEMBER_RULES_ARG = "__toolApprovalRememberRules";
 export const TOOL_APPROVAL_DEFAULT_SCOPE_ARG = "__toolApprovalDefaultScope";
 /** 后端没有询问就放行了这次调用(permission.auto_resolved):{source, rule?, scope?}。 */
 export const TOOL_PERMISSION_AUTO_RESOLVED_ARG = "__toolPermissionAutoResolved";
+/** 审批重新弹出的原因(如后端存不下记住的规则),审批卡片照原文显示。 */
+export const TOOL_APPROVAL_NOTICE_ARG = "__toolApprovalNotice";
+
+/**
+ * 待审批的文件改动:Edit 的替换前后、Write 的新内容。truncated 表示不是全文;split 表示
+ * 两边是各自截断的片段,不能拿来对比,卡片分开显示原内容和新内容。
+ */
+export type ToolApprovalPreview = {
+  path?: string;
+  before: string;
+  after: string;
+  truncated: boolean;
+  split?: boolean;
+};
+
+/** 待审批改动的预览,桌面端算好后同步给 WebUI,两端显示同一份。 */
+export const TOOL_APPROVAL_PREVIEW_ARG = "__toolApprovalPreview";
+
+/** 只能由桌面端写的审批与权限合成参数;模型参数里的同名键在同步前丢掉。 */
+export const TOOL_APPROVAL_SYNTHETIC_ARG_KEYS: readonly string[] = [
+  TOOL_APPROVAL_PENDING_ARG,
+  TOOL_APPROVAL_DEADLINE_ARG,
+  TOOL_APPROVAL_SUMMARY_ARG,
+  TOOL_APPROVAL_ALLOW_SESSION_ARG,
+  TOOL_APPROVAL_SESSION_SCOPE_ARG,
+  TOOL_APPROVAL_SESSION_WIDE_ARG,
+  TOOL_APPROVAL_REMEMBER_RULES_ARG,
+  TOOL_APPROVAL_DEFAULT_SCOPE_ARG,
+  TOOL_PERMISSION_AUTO_RESOLVED_ARG,
+  TOOL_APPROVAL_NOTICE_ARG,
+  TOOL_APPROVAL_PREVIEW_ARG,
+];
+
+const PREVIEW_CONTEXT_LINES = 3;
+const PREVIEW_CONTEXT_CHARS = 200;
+const PREVIEW_MAX_CHARS = 4000;
+const PREVIEW_ELLIPSIS = "…";
+
+function capPreviewText(text: string) {
+  if (text.length <= PREVIEW_MAX_CHARS) return { text, cut: false };
+  // The marker counts toward the limit, so the synced copy stays inside it.
+  const marker = `\n...[${text.length} chars in all]...`;
+  let end = PREVIEW_MAX_CHARS - marker.length;
+  // Never leave half of a surrogate pair at the cut.
+  const last = text.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return { text: text.slice(0, end) + marker, cut: true };
+}
+
+const fits = (before: string, after: string) =>
+  before.length <= PREVIEW_MAX_CHARS && after.length <= PREVIEW_MAX_CHARS;
+
+// Cut both sides at the same shared text so the diff of what is left is still exact:
+// whole shared lines first, then shared characters (one long line). Only when the
+// differing part alone is over the limit are the sides cut on their own, and then they
+// are shown apart instead of diffed, so no change is hidden and no kept line shows as
+// deleted.
+function editPreview(before: string, after: string) {
+  if (fits(before, after)) return { before, after, truncated: false };
+
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const shortest = Math.min(a.length, b.length);
+  let prefix = 0;
+  while (prefix < shortest && a[prefix] === b[prefix]) prefix += 1;
+  let suffix = 0;
+  while (suffix < shortest - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) {
+    suffix += 1;
+  }
+  const head = Math.max(0, prefix - PREVIEW_CONTEXT_LINES);
+  const tail = Math.max(0, suffix - PREVIEW_CONTEXT_LINES);
+  const lineBefore = a.slice(head, a.length - tail).join("\n");
+  const lineAfter = b.slice(head, b.length - tail).join("\n");
+  if (fits(lineBefore, lineAfter)) return { before: lineBefore, after: lineAfter, truncated: true };
+
+  const charShortest = Math.min(lineBefore.length, lineAfter.length);
+  let same = 0;
+  while (same < charShortest && lineBefore[same] === lineAfter[same]) same += 1;
+  let sameEnd = 0;
+  while (
+    sameEnd < charShortest - same &&
+    lineBefore[lineBefore.length - 1 - sameEnd] === lineAfter[lineAfter.length - 1 - sameEnd]
+  ) {
+    sameEnd += 1;
+  }
+  // Step out of a surrogate pair so no cut leaves half an emoji.
+  const isLow = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+  let from = Math.max(0, same - PREVIEW_CONTEXT_CHARS);
+  if (from > 0 && isLow(lineBefore.charCodeAt(from))) from -= 1;
+  let dropEnd = Math.max(0, sameEnd - PREVIEW_CONTEXT_CHARS);
+  if (dropEnd > 0 && isLow(lineBefore.charCodeAt(lineBefore.length - dropEnd))) dropEnd -= 1;
+  const clip = (text: string) =>
+    (from > 0 ? PREVIEW_ELLIPSIS : "") +
+    text.slice(from, text.length - dropEnd) +
+    (dropEnd > 0 ? PREVIEW_ELLIPSIS : "");
+  const charBefore = clip(lineBefore);
+  const charAfter = clip(lineAfter);
+  if (fits(charBefore, charAfter)) return { before: charBefore, after: charAfter, truncated: true };
+
+  return {
+    before: capPreviewText(charBefore).text,
+    after: capPreviewText(charAfter).text,
+    truncated: true,
+    split: true,
+  };
+}
+
+/**
+ * 从工具参数取审批卡片的改动预览。桌面端拿完整参数:没超上限显示全文,超了先聚焦到
+ * 改动处。WebUI 优先用桌面同步来的预览;没有时退回网关截断后的副本,Edit 有一边被
+ * 截断就分开显示。不是 Edit/Write 或缺内容时返回 undefined。
+ */
+export function approvalPreviewFromToolCall(
+  toolName: string,
+  args: unknown,
+): ToolApprovalPreview | undefined {
+  if (toolName !== "Edit" && toolName !== "Write") return undefined;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
+  const record = args as Record<string, unknown>;
+  const rawPath = typeof record.path === "string" ? record.path : record.file_path;
+  const path = typeof rawPath === "string" && rawPath.trim() ? { path: rawPath.trim() } : {};
+  if (readStreamPreviewMeta(record)) {
+    // The Gateway's copy: each side was cut on its own, so a cut Edit is not diffed.
+    const file = deriveFileToolPreview({ name: toolName, arguments: record });
+    if (file?.kind === "edit" && file.oldString.has && file.newString.has) {
+      const cut = file.oldString.truncated || file.newString.truncated;
+      return {
+        ...path,
+        before: file.oldString.text,
+        after: file.newString.text,
+        truncated: cut,
+        ...(cut ? { split: true } : {}),
+      };
+    }
+    if (file?.kind === "write" && file.content.has) {
+      return { ...path, before: "", after: file.content.text, truncated: file.content.truncated };
+    }
+    return undefined;
+  }
+  if (toolName === "Edit") {
+    const { old_string: before, new_string: after } = record;
+    if (typeof before !== "string" || typeof after !== "string") return undefined;
+    return { ...path, ...editPreview(before, after) };
+  }
+  if (typeof record.content !== "string") return undefined;
+  const content = capPreviewText(record.content);
+  return { ...path, before: "", after: content.text, truncated: content.cut };
+}
+
+/** 读同步来的预览参数;不是 Edit/Write 或形状不对时返回 undefined。 */
+function syncedApprovalPreview(toolName: string, value: unknown): ToolApprovalPreview | undefined {
+  if (toolName !== "Edit" && toolName !== "Write") return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const { path, before, after, truncated, split } = value as Record<string, unknown>;
+  if (typeof before !== "string" || typeof after !== "string") return undefined;
+  const old = capPreviewText(before);
+  const next = capPreviewText(after);
+  const apart = split === true || (toolName === "Edit" && (old.cut || next.cut));
+  return {
+    ...(typeof path === "string" && path.trim() ? { path: path.trim() } : {}),
+    before: old.text,
+    after: next.text,
+    truncated: truncated === true || old.cut || next.cut,
+    ...(apart ? { split: true } : {}),
+  };
+}
 
 /** 审批决定:allow=本次放行;deny=本次拒绝;approve_session=请后端记住这条授权范围。 */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
@@ -177,6 +345,8 @@ export type RemoteToolApprovalItem = {
   /** 允许并记住会存的规则;非空时才能选作用域。 */
   rememberRules?: string[];
   defaultScope?: ToolApprovalRememberScope;
+  preview?: ToolApprovalPreview;
+  notice?: string;
 };
 
 /** 从同步过来的工具调用参数还原待审批项;未待审批时返回 null。两个 WebUI 收集器共用。 */
@@ -198,6 +368,18 @@ export function pendingToolApprovalFromToolCall(toolCall: {
     sessionScope: typeof scope === "string" && scope.trim() ? scope.trim() : undefined,
     sessionWide: record[TOOL_APPROVAL_SESSION_WIDE_ARG] === true,
     ...rememberFields(record),
+    ...previewAndNotice(toolCall.name, record),
+  };
+}
+
+function previewAndNotice(toolName: string, record: Record<string, unknown>) {
+  const preview =
+    syncedApprovalPreview(toolName, record[TOOL_APPROVAL_PREVIEW_ARG]) ??
+    approvalPreviewFromToolCall(toolName, record);
+  const notice = record[TOOL_APPROVAL_NOTICE_ARG];
+  return {
+    ...(preview ? { preview } : {}),
+    ...(typeof notice === "string" && notice.trim() ? { notice: notice.trim() } : {}),
   };
 }
 

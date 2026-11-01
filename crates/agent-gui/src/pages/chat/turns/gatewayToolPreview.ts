@@ -15,11 +15,14 @@ import {
   TOOL_APPROVAL_ALLOW_SESSION_ARG,
   TOOL_APPROVAL_DEADLINE_ARG,
   TOOL_APPROVAL_DEFAULT_SCOPE_ARG,
+  TOOL_APPROVAL_NOTICE_ARG,
   TOOL_APPROVAL_PENDING_ARG,
+  TOOL_APPROVAL_PREVIEW_ARG,
   TOOL_APPROVAL_REMEMBER_RULES_ARG,
   TOOL_APPROVAL_SESSION_SCOPE_ARG,
   TOOL_APPROVAL_SESSION_WIDE_ARG,
   TOOL_APPROVAL_SUMMARY_ARG,
+  TOOL_APPROVAL_SYNTHETIC_ARG_KEYS,
   TOOL_PERMISSION_AUTO_RESOLVED_ARG,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import {
@@ -135,6 +138,19 @@ function buildHeadTailPreview(input: string, maxChars = GATEWAY_TOOL_TEXT_PREVIE
   };
 }
 
+/**
+ * Approval markers come only from the desktop's own store: the same keys in the model's
+ * arguments are dropped before anything is synced, or a model could fake the WebUI
+ * approval card. Every tool_call sent to the Gateway goes through this.
+ */
+export function withoutApprovalSyntheticArgs(
+  args: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(args || {}).filter(([key]) => !TOOL_APPROVAL_SYNTHETIC_ARG_KEYS.includes(key)),
+  );
+}
+
 // The canonical producer of streaming tool previews: bridge events
 // (tool_call / tool_call_delta / tool_result) and runtime snapshot entries
 // all pass through here, so every remote representation of a file tool's
@@ -142,7 +158,7 @@ function buildHeadTailPreview(input: string, maxChars = GATEWAY_TOOL_TEXT_PREVIE
 export function buildGatewayToolCallPreviewArguments(
   toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
 ) {
-  const sourceArgs = toolCall.arguments || {};
+  const sourceArgs = withoutApprovalSyntheticArgs(toolCall.arguments);
   // 待审批标记:任意工具在 beforeToolCall 处挂起等待批准时,盖到同步给 WebUI 的
   // 参数上,让远端渲染审批卡片并显示与桌面同源的倒计时。审批消解后重发的快照
   // 不再带此标记,卡片随之隐藏。__ 前缀合成参数不入展示、不影响本地执行。
@@ -179,6 +195,15 @@ export function buildGatewayToolCallPreviewArguments(
                 TOOL_APPROVAL_SUMMARY_MAX_CHARS,
               ),
               [TOOL_APPROVAL_DEFAULT_SCOPE_ARG]: pending.defaultScope,
+            }
+          : {}),
+        ...(pending.preview ? { [TOOL_APPROVAL_PREVIEW_ARG]: pending.preview } : {}),
+        ...(pending.notice
+          ? {
+              [TOOL_APPROVAL_NOTICE_ARG]: clampApprovalText(
+                pending.notice,
+                TOOL_APPROVAL_SUMMARY_MAX_CHARS,
+              ),
             }
           : {}),
         ...(autoResolved ? { [TOOL_PERMISSION_AUTO_RESOLVED_ARG]: autoResolved } : {}),

@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 
-export function isImeKeyboardEvent(event: KeyboardEvent<HTMLDivElement>) {
+export function isImeKeyboardEvent(event: KeyboardEvent<Element>) {
   const nativeEvent = event.nativeEvent as globalThis.KeyboardEvent & {
     isComposing?: boolean;
     keyCode?: number;
