@@ -5,9 +5,17 @@ on:
   push:
     branches:
       - main
+      # PR 默认以 v2-kbrian 为基线;PR 只能恢复基线分支和默认分支的缓存,
+      # 所以合入 v2-kbrian 后也要跑一轮,为后续 PR 产出 Rust/Docker 缓存。
+      - v2-kbrian
 
 permissions:
   contents: read
+
+# 同一 PR 连续推送时取消旧的运行;push 运行各自独立成组,全部保留以便产出缓存。
+concurrency:
+  group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: 22.19.0
@@ -86,7 +94,8 @@ jobs:
           load: true
           tags: liveagent-gateway:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # 只在长期分支写缓存:PR 写入的层会挤掉共享缓存(仓库缓存上限 10GB)。
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
 
       - name: Smoke test container
         run: |
@@ -165,15 +174,41 @@ jobs:
       - name: Download checksum-verified K-brain release
         run: node scripts/release/prepare-kbrain.mjs --release
 
-      - name: Test frontend modules
-        working-directory: crates/agent-gui
-        run: pnpm test:frontend
-
       - name: Test release scripts
         working-directory: crates/agent-gui
         run: |
           pnpm test:release
           node --test ../../scripts/release/*.test.mjs
+
+  gui-frontend:
+    # 前端模块测试约 500 个文件,每个文件在独立进程里重新加载模块;
+    # 按文件轮转分片并行跑,两个分片合起来覆盖全部文件。
+    name: GUI frontend (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        # GUI frontend tests load shared Gateway WebUI modules (including STT adapters).
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter liveagent... --filter @liveagent/gateway-webui...
+
+      - name: Download checksum-verified K-brain release
+        run: node scripts/release/prepare-kbrain.mjs --release
+
+      - name: Test frontend modules
+        working-directory: crates/agent-gui
+        run: pnpm test:frontend --shard ${{ matrix.shard }}/2
 
   changes:
     name: Detect Changes
@@ -183,6 +218,7 @@ jobs:
       pull-requests: read
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
+      desktop: ${{ steps.filter.outputs.desktop }}
     steps:
       - uses: dorny/paths-filter@v3
         id: filter
@@ -195,6 +231,37 @@ jobs:
               # build.rs 编译 gateway protos 并从 package.json 读取应用版本。
               - 'crates/agent-gateway/proto/**'
               - 'crates/agent-gui/package.json'
+              # Rust 测试 include_str! 引用的 src-tauri 之外的文件。
+              - 'crates/agent-gui/src/lib/kbrain/memory.ts'
+              - 'crates/agent-gui/test/chat/kbrain-health-adversarial*-vectors.json'
+              - 'crates/agent-ui/src/lib/kbrain/health-contract-vectors.json'
+              - 'crates/agent-ui/src/lib/tools/builtinToolCatalog.ts'
+              - '.github/workflows/ci.yml'
+            # Desktop Gateway 三平台:Rust 编译输入,加上它构建的 Go sidecar
+            # (含嵌入 WebUI 的构建配置)与下载 K-brain 的脚本和锁。
+            # WebUI 源码改动由 Gateway 与 Gateway WebUI 两个 Linux job 构建和测试。
+            desktop:
+              - 'crates/agent-gui/src-tauri/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'crates/agent-gui/package.json'
+              - 'crates/agent-gui/src/lib/kbrain/memory.ts'
+              - 'crates/agent-gui/test/chat/kbrain-health-adversarial*-vectors.json'
+              - 'crates/agent-ui/src/lib/kbrain/health-contract-vectors.json'
+              - 'crates/agent-ui/src/lib/tools/builtinToolCatalog.ts'
+              - 'crates/agent-gateway/*'
+              - 'crates/agent-gateway/cmd/**'
+              - 'crates/agent-gateway/internal/**'
+              - 'crates/agent-gateway/proto/**'
+              - 'crates/agent-gateway/web/*'
+              - 'crates/agent-gateway/web/public/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.npmrc'
+              - 'scripts/prepare-gateway.mjs'
+              - 'scripts/release/prepare-kbrain.mjs'
+              - 'scripts/release/kbrain.lock.json'
               - '.github/workflows/ci.yml'
 
   tauri-rust:
@@ -202,7 +269,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: changes
-    # push 到 main 时始终运行以持续更新共享缓存;PR 仅在 Rust 相关路径变更时运行。
+    # push 到 main / v2-kbrian 时始终运行以持续更新共享缓存;PR 仅在 Rust 相关路径变更时运行。
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') }}
     env:
       # 行号级 debuginfo:显著降低 codegen 与链接开销,同时保留可读的失败回溯。
@@ -244,6 +311,8 @@ jobs:
           # Cargo workspace 根在仓库根目录(Cargo.lock 与 target/ 均在此),
           # 指向子目录会导致依赖产物完全不被缓存。
           workspaces: .
+          # PR 只恢复基线分支的缓存;每个 PR 各存一份会超出 10GB 上限并挤掉基线缓存。
+          save-if: ${{ github.event_name == 'push' }}
 
       # tauri-build 要求 externalBin 的 sidecar 存在;--lib 单元测试不会执行它,放置空占位即可。
       - name: Stub K-brain sidecars
@@ -273,6 +342,9 @@ jobs:
     name: Desktop Gateway (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    needs: changes
+    # push 时始终运行;PR 仅在 desktop 过滤器命中时运行。
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true') }}
     strategy:
       fail-fast: false
       matrix:
@@ -340,6 +412,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
+          save-if: ${{ github.event_name == 'push' }}
 
       - name: Install frontend dependencies
         run: |
