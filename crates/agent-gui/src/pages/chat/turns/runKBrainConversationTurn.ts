@@ -197,13 +197,15 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       ...attachToolResultToRound(target, call, enriched),
       runningToolCallIds: target.runningToolCallIds.filter((id) => id !== call.id),
     }));
+    // WebUI reads `content`/`isError` and attaches the result in the call's round.
     gatewayBridgeEvents.queueEvent({
       type: "tool_result",
       id: call.id,
       name: call.name,
-      result: result.content,
+      content: result.content,
+      isError: result.isError === true,
       conversation_id: params.conversationId,
-      round,
+      round: callRounds.get(call.id) ?? round,
     });
   };
   const onToolResult = (call: ToolCall, result: ToolResultMessage) => {

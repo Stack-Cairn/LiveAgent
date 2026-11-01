@@ -42,6 +42,43 @@ let backendEpoch = "";
 let deliverySeq = 0;
 let desired = new Map<string, SidebarConversation>();
 let delivered = new Map<string, SidebarConversation>();
+// Conversations a desktop turn is running that K-brain has not listed yet: K-brain lists a
+// session once its first message is saved, so a turn waiting on an approval would have no
+// row and a WebUI could neither open it nor answer. They are served until K-brain lists them.
+const running = new Map<string, SidebarConversation>();
+// K-brain lists a finished turn's session a moment after the turn ends; dropping the row at
+// turn end published a delete in between and a WebUI showing it went back home. A finished
+// turn's row stays until K-brain lists it, or this long if it never does (stopped early).
+const FINISHED_RUN_GRACE_MS = 60_000;
+const finishing = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Once K-brain lists a conversation its row is authoritative: drop the running row and its
+// grace timer, so a later delete publishes a delete instead of bringing the pending row back.
+function releaseListedRunning() {
+  for (const id of [...running.keys()]) if (desired.has(id)) dropRunning(id);
+}
+
+function dropRunning(id: string) {
+  running.delete(id);
+  const timer = finishing.get(id);
+  if (timer !== undefined) clearTimeout(timer);
+  finishing.delete(id);
+}
+
+function clearAllRunning() {
+  for (const timer of finishing.values()) clearTimeout(timer);
+  finishing.clear();
+  running.clear();
+}
+
+function withRunning<T extends { id: string }>(
+  listed: Iterable<[string, T]>,
+  extra: Map<string, T>,
+) {
+  const out = new Map(listed);
+  for (const [id, conversation] of extra) if (!out.has(id)) out.set(id, conversation);
+  return out;
+}
 let needsSnapshot = true;
 let publication: Promise<void> | undefined;
 let publishAgain = false;
@@ -127,7 +164,7 @@ function queuePublication() {
   publication = (async () => {
     while (owners && publishAgain && requestGeneration === generation) {
       publishAgain = false;
-      const current = new Map(desired);
+      const current = withRunning(desired, running);
       const currentWorkdirs = workdirs;
       if (deliverySeq > Number.MAX_SAFE_INTEGER - current.size - delivered.size - 1) {
         generation = createUuid();
@@ -248,6 +285,7 @@ function onSnapshot(snapshot: KBrainSessionSyncSnapshot) {
     updatedAt: Date.parse(item.updated_at) || 0,
   }));
   desired = new Map(items.map((item) => [item.id, item]));
+  releaseListedRunning();
   const event: SidebarBackendEvent = {
     kind: "reset",
     conversations: items,
@@ -258,7 +296,10 @@ function onSnapshot(snapshot: KBrainSessionSyncSnapshot) {
   withKBrainMappingBatch(() => {
     for (const backendId of snapshot.deletedSessionIds ?? []) {
       const id = getKBrainConversationId(backendId);
-      if (id) clearKBrainSessionId(id);
+      if (!id) continue;
+      clearKBrainSessionId(id);
+      // Same as a delete change: a resync's deletes cover never-listed running rows too.
+      dropRunning(id);
     }
   });
   // A bounded authoritative state can remove old browser aliases even if the
@@ -298,7 +339,12 @@ function onChanges(input: {
         nextDesired.delete(conversationId);
         nextItems.delete(conversationId);
         pendingEvents.push({ kind: "delete", conversationId, authoritative: true });
-        if (change.kind === "delete") clearKBrainSessionId(conversationId);
+        if (change.kind === "delete") {
+          clearKBrainSessionId(conversationId);
+          // A delete is authoritative even for a session K-brain never listed: drop the
+          // running row too, or the overlay would publish it again.
+          dropRunning(conversationId);
+        }
         continue;
       }
       const id = ensureKBrainConversationId(backendId);
@@ -316,6 +362,7 @@ function onChanges(input: {
     }
   });
   desired = nextDesired;
+  releaseListedRunning();
   items = [...nextItems.values()];
   workdirs = input.workdirs.map((item) => ({
     path: item.cwd,
@@ -350,6 +397,8 @@ function changedConnection() {
   needsSnapshot = true;
   delivered = new Map();
   desired = new Map();
+  // Another backend: rows of runs against the previous one do not belong to it.
+  clearAllRunning();
   items = [];
   workdirs = [];
   sync.restart();
@@ -430,10 +479,38 @@ export const kBrainSidebarSync = {
   },
   list(page: number, pageSize: number, scope: SidebarScope) {
     const all = sortSidebarConversations(
-      items.filter((item) => conversationMatchesScope(item, scope)),
+      [
+        ...withRunning(
+          items.map((item) => [item.id, item]),
+          running,
+        ).values(),
+      ].filter((item) => conversationMatchesScope(item, scope)),
     );
     return { items: all.slice((page - 1) * pageSize, page * pageSize), totalCount: all.length };
   },
   pinned: () => sortSidebarConversations(items.filter((item) => item.isPinned === true)),
   workdirs: () => workdirs,
+  /** A desktop turn started this conversation; serve it until K-brain lists it. */
+  markRunning(conversation: SidebarConversation) {
+    const timer = finishing.get(conversation.id);
+    if (timer !== undefined) clearTimeout(timer);
+    finishing.delete(conversation.id);
+    running.set(conversation.id, conversation);
+    queuePublication();
+  },
+  /** The turn ended. A conversation K-brain lists keeps K-brain's row. */
+  clearRunning(conversationId: string) {
+    if (!running.has(conversationId) || finishing.has(conversationId)) return;
+    if (desired.has(conversationId)) {
+      running.delete(conversationId);
+      return;
+    }
+    finishing.set(
+      conversationId,
+      setTimeout(() => {
+        finishing.delete(conversationId);
+        if (running.delete(conversationId)) queuePublication();
+      }, FINISHED_RUN_GRACE_MS),
+    );
+  },
 };
