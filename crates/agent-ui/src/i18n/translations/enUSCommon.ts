@@ -900,13 +900,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.toolApproval.failed": "Submit failed. Please retry.",
   "chat.toolApproval.remember": "Allow and remember",
   "chat.toolApproval.rememberRules": "Remember: {rules}",
-  "chat.toolApproval.rememberScope": "Remember for",
   "chat.toolApproval.scope.session": "This session",
   "chat.toolApproval.scope.project": "This project",
   "chat.toolApproval.scope.user": "All projects",
-  "chat.toolApproval.denyWithReason": "Deny with a note",
-  "chat.toolApproval.denyReasonPlaceholder":
-    "Tell the model why and what to do instead; Enter to send",
   "chat.toolApproval.previewTruncated": "Preview is cut; the actual change is what runs",
   "chat.toolApproval.rememberRefused": "Could not remember last time: {reason}",
   "chat.toolApproval.approveShortcutHint": "Press 1 or Enter to allow once",

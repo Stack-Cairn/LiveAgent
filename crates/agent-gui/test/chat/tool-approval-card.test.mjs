@@ -73,18 +73,26 @@ test("1 allows once and 2 remembers in the default scope", async () => {
   }
 });
 
-test("the remember option names the rules and offers the three scopes", async () => {
-  const { env, host, decisions, key, cleanup } = await renderBar([remembering]);
+// Like Claude Code: 2 remembers in the scope the backend suggests (no scope picker; Settings
+// → 权限 changes or deletes a rule), and there is one deny (Esc or 3) with no reason field —
+// the user tells the model what to do next in the composer.
+test("the remember option names the rules and the scope they go to, without a picker", async () => {
+  const { host, decisions, key, cleanup } = await renderBar([remembering]);
   try {
     assert.match(host.textContent, /Bash\(npm test:\*\)/);
-    const select = host.querySelector("select[data-remember-scope]");
-    assert.equal(Boolean(select), true, "a scope select is shown");
-    assert.deepEqual([...select.options].map((o) => o.value), ["session", "project", "user"]);
-    assert.equal(select.value, "project");
-    await env.act(async () => {
-      select.value = "user";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    assert.match(host.textContent, /本项目/);
+    assert.equal(Boolean(host.querySelector("select")), false, "no scope picker");
+    await key("2");
+    assert.deepEqual(decisions, [["c1", "approve_session", { scope: "project" }]]);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("the backend's default scope decides where 2 remembers", async () => {
+  const { host, decisions, key, cleanup } = await renderBar([{ ...remembering, defaultScope: "user" }]);
+  try {
+    assert.match(host.textContent, /所有项目/);
     await key("2");
     assert.deepEqual(decisions, [["c1", "approve_session", { scope: "user" }]]);
   } finally {
@@ -92,36 +100,21 @@ test("the remember option names the rules and offers the three scopes", async ()
   }
 });
 
-test("3 opens a reason field; Enter there denies with the reason and digits there are text", async () => {
-  const { env, host, decisions, key, cleanup } = await renderBar([remembering]);
+test("3 denies like Esc, and there is no reason field", async () => {
+  const { host, decisions, key, cleanup } = await renderBar([remembering]);
   try {
+    assert.equal(Boolean(host.querySelector("input")), false, "no reason field");
+    assert.equal(/拒绝并说明/.test(host.textContent), false, "one deny only");
     await key("3");
-    const input = host.querySelector("input[data-deny-reason]");
-    assert.equal(Boolean(input), true, "the reason field opens");
-    assert.equal(document.activeElement === input, true, "and takes focus");
-    await key("1", input);
-    await key("2", input);
-    assert.deepEqual(decisions, [], "digits typed in the field do not answer");
-    await env.act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-      setter.call(input, "edit utils.ts instead");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await key("Enter", input);
-    assert.deepEqual(decisions, [["c1", "deny", { reason: "edit utils.ts instead" }]]);
+    assert.deepEqual(decisions, [["c1", "deny"]]);
   } finally {
     await cleanup();
   }
 });
 
-test("Esc in the reason field closes it; Esc on the card still denies", async () => {
-  const { host, decisions, key, cleanup } = await renderBar([remembering]);
+test("Esc on the card denies", async () => {
+  const { decisions, key, cleanup } = await renderBar([remembering]);
   try {
-    await key("3");
-    const input = host.querySelector("input[data-deny-reason]");
-    await key("Escape", input);
-    assert.equal(Boolean(host.querySelector("input[data-deny-reason]")), false, "the field closes");
-    assert.deepEqual(decisions, [], "closing the field does not deny");
     await key("Escape");
     assert.deepEqual(decisions, [["c1", "deny"]]);
   } finally {
