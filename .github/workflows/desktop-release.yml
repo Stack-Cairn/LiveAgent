@@ -54,7 +54,7 @@ jobs:
             target: x86_64-apple-darwin
             suffix: x64
           - name: Apple Silicon
-            runner: macos-14
+            runner: macos-15
             target: aarch64-apple-darwin
             suffix: aarch64
     steps:
