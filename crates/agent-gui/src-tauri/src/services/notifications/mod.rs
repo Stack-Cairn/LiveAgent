@@ -5,14 +5,14 @@
 //! （通知中心、专注模式 / 勿扰、激活应用），这里不重复实现。
 //!
 //! 投递方式：macOS 从 .app 运行时用 `UNUserNotificationCenter`（见 `macos.rs`）；
-//! 其它平台与 `tauri dev` 用 tauri-plugin-notification。
+//! Windows / Linux 直接调用 notify-rust 并保留投递错误；macOS `tauri dev` 回退插件。
 
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 #[cfg(target_os = "macos")]
 use std::sync::atomic::Ordering;
@@ -115,7 +115,7 @@ impl Notice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum NotifyOutcome {
-    /// 已交给系统（插件只表示已排队，系统是否真正展示取决于用户的系统设置）。
+    /// 已提交到通知通道；是否展示仍取决于系统设置。macOS 开发回退插件只确认排队。
     Sent,
     /// 该类别在设置里关闭。
     Disabled,
@@ -140,10 +140,16 @@ pub const PERMISSION_DENIED: &str = "E:permission_denied";
 
 type Sender = dyn Fn(&str, &str) -> Result<(), String> + Send + Sync;
 
+#[derive(Default)]
+struct ThrottleState {
+    last_sent: HashMap<String, i64>,
+    in_flight: HashSet<String>,
+}
+
 pub struct NotificationService {
     sender: RwLock<Option<Arc<Sender>>>,
     labels: RwLock<HashMap<String, String>>,
-    last_sent: Mutex<HashMap<String, i64>>,
+    throttle: Mutex<ThrottleState>,
     /// 是否走 macOS 原生通道（能读写真实权限）。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     native: AtomicBool,
@@ -160,13 +166,13 @@ impl NotificationService {
         Self {
             sender: RwLock::new(None),
             labels: RwLock::new(HashMap::new()),
-            last_sent: Mutex::new(HashMap::new()),
+            throttle: Mutex::new(ThrottleState::default()),
             native: AtomicBool::new(false),
         }
     }
 
     /// 接入桌面。`on_activate` 在用户点击通知时调用（调出主窗口）。macOS 从 .app 运行时
-    /// 用原生通道；否则经 tauri-plugin-notification 投递（插件没有点击回调）。
+    /// 用原生通道；Windows / Linux 同步提交，macOS 开发模式回退插件。
     pub fn attach(&self, app: tauri::AppHandle, on_activate: impl Fn() + Send + Sync + 'static) {
         #[cfg(target_os = "macos")]
         if macos::available() {
@@ -176,6 +182,25 @@ impl NotificationService {
             return;
         }
         let _ = on_activate;
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        self.set_sender(Arc::new(move |title: &str, body: &str| {
+            let mut notification = notify_rust::Notification::new();
+            notification.summary(title).body(body).auto_icon();
+            #[cfg(target_os = "windows")]
+            {
+                let exe = tauri::utils::platform::current_exe().map_err(|e| e.to_string())?;
+                // Match Tauri's development fallback: unpackaged target binaries
+                // have no registered AppUserModelID and use the default identity.
+                let dir = exe.parent().ok_or("E:executable_directory")?;
+                if !(dir.ends_with("target/debug") || dir.ends_with("target/release")) {
+                    notification.app_id(&app.config().identifier);
+                }
+            }
+            #[cfg(target_os = "linux")]
+            let _ = &app;
+            notification.show().map(|_| ()).map_err(|e| e.to_string())
+        }));
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         self.set_sender(Arc::new(move |title: &str, body: &str| {
             use tauri_plugin_notification::NotificationExt;
             app.notification()
@@ -255,16 +280,6 @@ impl NotificationService {
         if !preferences.allows(notice.kind) {
             return Ok(NotifyOutcome::Disabled);
         }
-        if let Some((key, interval)) = &notice.throttle {
-            let last = self
-                .last_sent
-                .lock()
-                .ok()
-                .and_then(|sent| sent.get(key).copied());
-            if last.is_some_and(|last| now >= last && now - last < *interval) {
-                return Ok(NotifyOutcome::Throttled);
-            }
-        }
         let title = clean(&notice.title, TITLE_MAX_CHARS);
         if title.is_empty() {
             return Err("E:title_required".into());
@@ -276,15 +291,30 @@ impl NotificationService {
             .ok()
             .and_then(|slot| slot.clone())
             .ok_or("E:unavailable")?;
-        match sender(&title, &body) {
+        // Reserve a key atomically, but never hold the mutex while calling the OS
+        // (permission prompts can block). Unrelated keys remain independent.
+        if let Some((key, interval)) = &notice.throttle {
+            let mut state = self.throttle.lock().map_err(|_| "E:throttle_unavailable")?;
+            let last = state.last_sent.get(key).copied();
+            if state.in_flight.contains(key)
+                || last.is_some_and(|last| now >= last && now - last < *interval)
+            {
+                return Ok(NotifyOutcome::Throttled);
+            }
+            state.in_flight.insert(key.clone());
+        }
+        let result = sender(&title, &body);
+        if let Some((key, _)) = notice.throttle {
+            let mut state = self.throttle.lock().map_err(|_| "E:throttle_unavailable")?;
+            state.in_flight.remove(&key);
+            if result.is_ok() {
+                state.last_sent.insert(key, now);
+            }
+        }
+        match result {
             Ok(()) => {}
             Err(error) if error == PERMISSION_DENIED => return Ok(NotifyOutcome::PermissionDenied),
             Err(error) => return Err(error),
-        }
-        if let Some((key, _)) = notice.throttle {
-            if let Ok(mut sent) = self.last_sent.lock() {
-                sent.insert(key, now);
-            }
         }
         Ok(NotifyOutcome::Sent)
     }

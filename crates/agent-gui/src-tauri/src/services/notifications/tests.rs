@@ -7,12 +7,7 @@ use super::*;
 type Calls = Arc<Mutex<Vec<(String, String)>>>;
 
 fn service() -> (NotificationService, Calls) {
-    let service = NotificationService {
-        sender: RwLock::new(None),
-        labels: RwLock::new(HashMap::new()),
-        last_sent: Mutex::new(HashMap::new()),
-        native: AtomicBool::new(false),
-    };
+    let service = NotificationService::new();
     let calls = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&calls);
     service.set_sender(Arc::new(move |title: &str, body: &str| {
@@ -124,6 +119,50 @@ fn notifications_failed_delivery_does_not_start_the_throttle_window() {
 }
 
 #[test]
+fn notifications_concurrent_same_key_is_throttled_while_other_keys_can_send() {
+    use std::sync::{mpsc, Condvar};
+    use std::time::Duration;
+
+    let service = Arc::new(NotificationService::new());
+    let release = Arc::new((Mutex::new(false), Condvar::new()));
+    let gate = Arc::clone(&release);
+    let (entered_tx, entered_rx) = mpsc::channel();
+    service.set_sender(Arc::new(move |title, _| {
+        if title == "first" {
+            entered_tx.send(()).unwrap();
+            let (lock, wake) = &*gate;
+            let guard = lock.lock().unwrap();
+            drop(wake.wait_while(guard, |released| !*released).unwrap());
+        }
+        Ok(())
+    }));
+    let first_service = Arc::clone(&service);
+    let first = std::thread::spawn(move || {
+        first_service.notify_with(
+            &NotificationPreferences::default(),
+            10_000,
+            Notice::new(NotificationKind::AgentMessage, "first", "").throttled("agent", 30_000),
+        )
+    });
+    entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let same = service.notify_with(
+        &NotificationPreferences::default(),
+        10_001,
+        Notice::new(NotificationKind::AgentMessage, "second", "").throttled("agent", 30_000),
+    );
+    let other = service.notify_with(
+        &NotificationPreferences::default(),
+        10_001,
+        Notice::new(NotificationKind::CronFailure, "other", "").throttled("cron:other", 30_000),
+    );
+    *release.0.lock().unwrap() = true;
+    release.1.notify_all();
+    assert_eq!(first.join().unwrap(), Ok(NotifyOutcome::Sent));
+    assert_eq!(same, Ok(NotifyOutcome::Throttled));
+    assert_eq!(other, Ok(NotifyOutcome::Sent));
+}
+
+#[test]
 fn notifications_clean_text_and_require_a_title() {
     let (service, calls) = service();
     let prefs = NotificationPreferences::default();
@@ -190,4 +229,21 @@ fn notifications_permission_denied_is_reported_but_not_an_error() {
     );
     assert_eq!(outcome, Ok(NotifyOutcome::PermissionDenied));
     assert_eq!(service.permission(), PermissionState::Unknown);
+}
+
+#[test]
+fn notifications_permission_denied_releases_the_in_flight_key() {
+    let (service, _) = service();
+    let notice =
+        || Notice::new(NotificationKind::AgentMessage, "title", "").throttled("agent", 30_000);
+    service.set_sender(Arc::new(|_, _| Err(PERMISSION_DENIED.to_string())));
+    assert_eq!(
+        service.notify_with(&NotificationPreferences::default(), 0, notice()),
+        Ok(NotifyOutcome::PermissionDenied)
+    );
+    service.set_sender(Arc::new(|_, _| Ok(())));
+    assert_eq!(
+        service.notify_with(&NotificationPreferences::default(), 1, notice()),
+        Ok(NotifyOutcome::Sent)
+    );
 }
