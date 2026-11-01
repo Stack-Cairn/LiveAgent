@@ -1,14 +1,16 @@
 use super::{
-    attach_stt_secret_sync, build_chat_queue_event_envelope, build_gateway_runtime_status_envelope,
-    build_local_settings_update_event_payload, effective_agent_id,
-    gateway_connection_needs_restart, gateway_connection_stale_after, gateway_reconnect_backoff,
-    history_share_resolve_error_code, ignore_gateway_outbound_offline,
+    attach_settings_sync_stamp, attach_stt_secret_sync, build_chat_queue_event_envelope,
+    build_gateway_runtime_status_envelope, build_local_settings_update_event_payload,
+    effective_agent_id, gateway_connection_needs_restart, gateway_connection_stale_after,
+    gateway_reconnect_backoff, history_share_resolve_error_code, ignore_gateway_outbound_offline,
     is_chat_runtime_wake_request_id, merge_settings_sync_snapshot,
     merge_settings_update_into_snapshot, proto, removed_workspace_project_ids,
-    required_terminal_project_path_key, set_disconnected_status, GatewayChatQueueEventInput,
+    required_terminal_project_path_key, set_disconnected_status, take_settings_sync_client,
+    with_settings_sync_client, AppliedClientSeqs, GatewayChatQueueEventInput,
     GatewayChatRequestEvent, GatewayController, GatewayStatusSnapshot, RemoteChatInboxRecord,
-    GATEWAY_CHAT_LEASE_MS, GATEWAY_CHAT_RUNNING_LEASE_MS, GATEWAY_OUTBOUND_OFFLINE_ERROR,
-    GATEWAY_RECONNECT_MAX, GATEWAY_RECONNECT_MIN, GATEWAY_RECONNECT_STABLE_AFTER,
+    SettingsSnapshotCache, SettingsSyncAck, SettingsSyncStamp, GATEWAY_CHAT_LEASE_MS,
+    GATEWAY_CHAT_RUNNING_LEASE_MS, GATEWAY_OUTBOUND_OFFLINE_ERROR, GATEWAY_RECONNECT_MAX,
+    GATEWAY_RECONNECT_MIN, GATEWAY_RECONNECT_STABLE_AFTER,
     GATEWAY_RUNTIME_STATUS_REPUBLISH_MAX_AGE, GATEWAY_WEBVIEW_REPORT_FRESH_WINDOW,
 };
 use crate::commands::settings::RemoteSettingsPayload;
@@ -1097,4 +1099,142 @@ mod review4_kbrain_memory {
             "{request}"
         );
     }
+}
+
+fn sync_ack(id: &str, seq: u64, error: Option<&str>) -> SettingsSyncAck {
+    SettingsSyncAck {
+        id: id.to_string(),
+        seq,
+        error: error.map(str::to_string),
+    }
+}
+
+#[test]
+fn settings_sync_client_marker_is_taken_out_of_the_update() {
+    let mut update = json!({
+        "theme": "dark",
+        "syncClient": { "id": "tab-a", "seq": 3 },
+        "appliedClientSeqs": { "tab-a": { "seq": 99 } },
+        "settingsSyncVersion": { "epoch": "e", "generation": 9 },
+    });
+    let client = take_settings_sync_client(&mut update)
+        .expect("valid marker")
+        .expect("marker present");
+    assert_eq!((client.id.as_str(), client.seq), ("tab-a", 3));
+    assert_eq!(
+        update,
+        json!({ "theme": "dark" }),
+        "neither key may reach the snapshot"
+    );
+
+    let mut legacy = json!({ "theme": "light" });
+    assert_eq!(
+        take_settings_sync_client(&mut legacy).expect("no marker"),
+        None
+    );
+
+    for bad in [
+        json!({ "id": "", "seq": 1 }),
+        json!({ "id": "tab", "seq": 0 }),
+        json!({ "id": "tab", "seq": -1 }),
+        json!({ "id": "x".repeat(129), "seq": 1 }),
+        json!("tab"),
+    ] {
+        let mut update = json!({ "syncClient": bad });
+        assert!(take_settings_sync_client(&mut update).is_err(), "{update}");
+    }
+}
+
+#[test]
+fn settings_sync_client_marker_rides_along_to_the_frontend_event() {
+    let mut update = json!({ "syncClient": { "id": "tab-a", "seq": 7 } });
+    let client = take_settings_sync_client(&mut update).unwrap();
+    let event = with_settings_sync_client(json!({ "theme": "dark" }), client.as_ref());
+    assert_eq!(event["syncClient"], json!({ "id": "tab-a", "seq": 7 }));
+    assert_eq!(
+        with_settings_sync_client(json!({ "theme": "dark" }), None),
+        json!({ "theme": "dark" })
+    );
+}
+
+#[test]
+fn applied_client_seqs_track_each_tab_independently_and_never_go_backwards() {
+    let mut table = AppliedClientSeqs::default();
+    assert_eq!(
+        table.to_value(),
+        json!({}),
+        "an empty table still marks ack support"
+    );
+    table.record(&sync_ack("tab-a", 2, None));
+    table.record(&sync_ack("tab-b", 9, None));
+    table.record(&sync_ack("tab-a", 1, Some("late"))); // out of order: ignored
+    table.record(&sync_ack("tab-a", 3, Some("  disk full  ")));
+    assert_eq!(
+        table.to_value(),
+        json!({
+            "tab-b": { "seq": 9 },
+            "tab-a": { "seq": 3, "error": "disk full" },
+        })
+    );
+    table.record(&sync_ack("tab-a", 4, Some("   ")));
+    assert_eq!(
+        table.to_value()["tab-a"],
+        json!({ "seq": 4 }),
+        "a later success clears the error"
+    );
+    table.record(&sync_ack("", 5, None));
+    table.record(&sync_ack("tab-c", 0, None));
+    assert_eq!(table.to_value().as_object().unwrap().len(), 2);
+}
+
+#[test]
+fn applied_client_seqs_evict_the_least_recently_acknowledged_tab() {
+    let mut table = AppliedClientSeqs::default();
+    for index in 0..64 {
+        table.record(&sync_ack(&format!("tab-{index}"), 1, None));
+    }
+    table.record(&sync_ack("tab-0", 2, None)); // refreshes tab-0
+    table.record(&sync_ack("tab-new", 1, None));
+    let value = table.to_value();
+    let acks = value.as_object().unwrap();
+    assert_eq!(acks.len(), 64);
+    assert!(acks.contains_key("tab-0"));
+    assert!(acks.contains_key("tab-new"));
+    assert!(
+        !acks.contains_key("tab-1"),
+        "oldest untouched tab is evicted"
+    );
+}
+
+#[test]
+fn a_slow_settings_read_never_overwrites_a_snapshot_stored_meanwhile() {
+    let mut cache = SettingsSnapshotCache::default();
+    assert!(cache.store(json!({ "theme": "light" }), None));
+    let read_at = 1; // a reconcile reads the cache here, then awaits DB and K-brain
+    assert!(cache.store(json!({ "theme": "dark" }), None)); // frontend publish lands
+    assert!(!cache.store(json!({ "theme": "light" }), Some(read_at)));
+    assert_eq!(cache.value(), Some(&json!({ "theme": "dark" })));
+    assert!(
+        cache.store(json!({ "theme": "system" }), Some(2)),
+        "an up-to-date read stores"
+    );
+    assert_eq!(cache.value(), Some(&json!({ "theme": "system" })));
+}
+
+#[test]
+fn outbound_snapshots_carry_acks_and_their_cache_version() {
+    let stamp = SettingsSyncStamp {
+        acks: json!({ "tab-a": { "seq": 2 } }),
+        epoch: "desktop-1".to_string(),
+        generation: 7,
+    };
+    let snapshot = attach_settings_sync_stamp(json!({ "theme": "dark" }), &stamp);
+    assert_eq!(
+        snapshot,
+        json!({
+            "theme": "dark",
+            "appliedClientSeqs": { "tab-a": { "seq": 2 } },
+            "settingsSyncVersion": { "epoch": "desktop-1", "generation": 7 },
+        })
+    );
 }

@@ -94,7 +94,8 @@ impl GatewayController {
             outbound_tx: Mutex::new(None),
             outbound_control_tx: Mutex::new(None),
             terminal_stream_tx: Mutex::new(None),
-            settings_snapshot: Mutex::new(None),
+            settings_snapshot: Mutex::new(SettingsSnapshotCache::default()),
+            applied_settings_client_seqs: Mutex::new(AppliedClientSeqs::default()),
             remote_chat_inbox: Mutex::new(HashMap::new()),
             chat_run_ledger: Mutex::new(ChatRunLedger::new()),
             runtime_status_republish: Mutex::new(None),
@@ -436,8 +437,25 @@ impl GatewayController {
         }
     }
 
-    pub async fn publish_settings_sync(&self, payload: Value) -> Result<(), String> {
-        let snapshot = self.store_settings_snapshot(payload)?;
+    /// Publishes a snapshot the desktop frontend just built from its live settings,
+    /// recording its acks together with it, so the ack and the snapshot that
+    /// reflects it reach the WebUI together.
+    pub async fn publish_settings_sync_with_acks(
+        &self,
+        payload: Value,
+        acks: &[SettingsSyncAck],
+    ) -> Result<(), String> {
+        let (stored, stamp) = self.store_settings_snapshot_with_acks(payload, acks)?;
+        self.publish_settings_sync(stored, stamp).await
+    }
+
+    /// Publishes a snapshot already stored in (or read from) the cache, with its stamp.
+    pub(crate) async fn publish_settings_sync(
+        &self,
+        stored: Value,
+        stamp: SettingsSyncStamp,
+    ) -> Result<(), String> {
+        let snapshot = attach_settings_sync_stamp(stored, &stamp);
 
         if !self.status().online {
             return Ok(());

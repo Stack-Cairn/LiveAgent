@@ -800,8 +800,8 @@ impl GatewayController {
     }
 
     pub(crate) async fn publish_current_settings_sync(&self) -> Result<(), String> {
-        let snapshot = self.current_settings_snapshot().await?;
-        self.publish_settings_sync(snapshot).await
+        let (snapshot, stamp) = self.current_settings_snapshot_stamped().await?;
+        self.publish_settings_sync(snapshot, stamp).await
     }
 
     pub(crate) async fn publish_current_terminal_sessions(&self) -> Result<(), String> {
@@ -825,11 +825,11 @@ impl GatewayController {
     }
 
     pub async fn refresh_settings_sync_from_db(&self) -> Result<Value, String> {
-        let snapshot = self.current_settings_snapshot().await?;
+        let (snapshot, stamp) = self.current_settings_snapshot_stamped().await?;
         self.app_handle
             .emit(GATEWAY_SETTINGS_SYNC_EVENT, snapshot.clone())
             .map_err(|e| format!("emit gateway settings sync failed: {e}"))?;
-        self.publish_settings_sync(snapshot.clone()).await?;
+        self.publish_settings_sync(snapshot.clone(), stamp).await?;
         Ok(snapshot)
     }
 }

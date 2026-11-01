@@ -11,6 +11,7 @@ import {
   applyGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncUpdatePayload,
   type GatewaySettingsSyncUpdatePayload,
+  type GatewaySettingsSyncVersion,
   redactSettingsForWebStorage,
 } from "@liveagent/ui/lib/settings/sync";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
@@ -31,6 +32,18 @@ import { loadWebSettings, persistWebSettings, type WebSettingsSaveState } from "
 
 import { asErrorMessage } from "../chatEventUtils";
 import { hasSettingsSyncChanged, resolveAppWorkspaceProjects } from "../historyUtils";
+import {
+  createSettingsSyncClientId,
+  keepPendingFields,
+  type PendingSettingsField,
+  pendingFieldsForUpdate,
+  readAppliedClientSeqs,
+  readSettingsSyncVersion,
+  SETTINGS_ECHO_ACK_TIMEOUT_MS,
+  SETTINGS_ECHO_SETTLE_MS,
+} from "./settingsEcho";
+
+export { SETTINGS_ECHO_ACK_TIMEOUT_MS, SETTINGS_ECHO_SETTLE_MS };
 
 export function getGatewaySettingsErrorMessage(error: unknown, fallback: string, locale: Locale) {
   if (error instanceof GatewaySettingsUpdateError && error.code === "settings_changed") {
@@ -109,6 +122,25 @@ export function useGatewaySettingsSync(params: {
   // crypto.randomUUID() inside caller updaters) twice per call.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Echo guard: fields this tab saved but the desktop has not confirmed yet keep
+  // their local value. A field is released once the desktop acknowledges its seq
+  // (appliedClientSeqs) or any later seq. Updates sent without a marker (older
+  // desktop, K-brain relay, or before ack support was detected) can never be
+  // acknowledged: their pushes are held and replayed once the save chain has been
+  // quiet for a while.
+  const syncClientIdRef = useRef<string | null>(null);
+  syncClientIdRef.current ??= createSettingsSyncClientId();
+  const syncSeqRef = useRef(0);
+  const ackedSeqRef = useRef(0);
+  const syncVersionRef = useRef<GatewaySettingsSyncVersion | null>(null);
+  const echoAckSupportedRef = useRef(false);
+  const pendingFieldsRef = useRef(
+    new Map<PendingSettingsField, { seq: number; marked: boolean }>(),
+  );
+  const heldPushesRef = useRef<GatewaySettingsSyncUpdatePayload[]>([]);
+  const savesInFlightRef = useRef(0);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [systemThemeVersion, setSystemThemeVersion] = useState(0);
 
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
@@ -166,81 +198,9 @@ export function useGatewaySettingsSync(params: {
     );
   }, [token]);
 
-  const queueSettingsSave = useCallback(
-    (prev: AppSettings, next: AppSettings, fallback: string, syncGateway: boolean) => {
-      const saveSequence = ++settingsSaveSequenceRef.current;
-      setSettingsSaveState({ status: "saving" });
-      const redactedNext = redactSettingsForWebStorage(next);
-      const gatewayUpdate =
-        syncGateway && api
-          ? buildGatewaySettingsSyncUpdatePayload(prev, next, {
-              includeProviderApiKeyUpdates: true,
-            })
-          : null;
-      if (gatewayUpdate?.system && backendPromptResourcesRef.current) {
-        projectPromptSettingsUpdate(gatewayUpdate, prev, next);
-      }
-
-      settingsSaveChainRef.current = settingsSaveChainRef.current
-        .catch(() => undefined)
-        .then(() => {
-          persistWebSettings(redactedNext);
-        })
-        .then(async () => {
-          if (gatewayUpdate && Object.keys(gatewayUpdate).length > 0) {
-            await api?.updateSettings(gatewayUpdate);
-          }
-        })
-        .then(() => {
-          if (settingsSaveSequenceRef.current === saveSequence) {
-            setSettingsSaveState({ status: "saved" });
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to persist gateway settings", error);
-          if (syncGateway && api) {
-            void api
-              .getSettings()
-              .then((payload) => {
-                const current = settingsRef.current;
-                const refreshed = redactSettingsForWebStorage(
-                  resolveAppWorkspaceProjects(applyGatewaySettingsSyncPayload(current, payload)),
-                );
-                settingsRef.current = refreshed;
-                persistWebSettings(refreshed);
-                setSettingsState(refreshed);
-              })
-              .catch(() => undefined);
-          }
-          if (settingsSaveSequenceRef.current === saveSequence) {
-            setSettingsSaveState({
-              status: "error",
-              message: getGatewaySettingsErrorMessage(error, fallback, settingsRef.current.locale),
-            });
-          }
-        });
-    },
-    [api],
-  );
-
-  const applyGatewaySettings = useCallback((payload: GatewaySettingsSyncUpdatePayload) => {
-    if (Object.hasOwn(payload, "projectPrompts")) backendPromptResourcesRef.current = true;
-    // Automation snapshots ride along on the settings-sync channel but are
-    // desktop-owned state with their own revision — feed them straight into
-    // the automation store instead of the settings state.
-    const automation = payload as {
-      automationCron?: CronSnapshot;
-      automationHooks?: HooksSnapshot;
-    };
-    if (automation.automationCron) {
-      feedCronSnapshot(automation.automationCron);
-    }
-    if (automation.automationHooks) {
-      feedHooksSnapshot(automation.automationHooks);
-    }
+  const commitSyncedSettings = useCallback((rawNext: AppSettings) => {
     const prev = settingsRef.current;
-    const rawNext = resolveAppWorkspaceProjects(applyGatewaySettingsSyncPayload(prev, payload));
-    const next = redactSettingsForWebStorage(rawNext);
+    const next = redactSettingsForWebStorage(resolveAppWorkspaceProjects(rawNext));
     if (!hasSettingsSyncChanged(prev, next)) {
       return;
     }
@@ -259,6 +219,212 @@ export function useGatewaySettingsSync(params: {
     }
   }, []);
 
+  const clearEchoTimers = useCallback(() => {
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    if (ackTimerRef.current) clearTimeout(ackTimerRef.current);
+    settleTimerRef.current = null;
+    ackTimerRef.current = null;
+  }, []);
+
+  // Each agent is its own desktop with its own ack table, and a reconnect may land
+  // on a restarted desktop: forget everything learned about the previous one.
+  const resetEchoGuard = useCallback(() => {
+    clearEchoTimers();
+    pendingFieldsRef.current.clear();
+    heldPushesRef.current = [];
+    echoAckSupportedRef.current = false;
+    ackedSeqRef.current = 0;
+    syncVersionRef.current = null;
+  }, [clearEchoTimers]);
+
+  const hasUnmarkedPending = useCallback(() => {
+    for (const entry of pendingFieldsRef.current.values()) if (!entry.marked) return true;
+    return false;
+  }, []);
+
+  // The desktop handles one tab's updates in order, so acknowledging seq N also
+  // settles every earlier update from this tab, with or without a marker.
+  const releasePendingThrough = useCallback(
+    (seq: number) => {
+      for (const [field, entry] of pendingFieldsRef.current) {
+        if (entry.seq <= seq) pendingFieldsRef.current.delete(field);
+      }
+      if (!hasUnmarkedPending()) {
+        if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+        heldPushesRef.current = [];
+      }
+      if (pendingFieldsRef.current.size === 0) clearEchoTimers();
+    },
+    [clearEchoTimers, hasUnmarkedPending],
+  );
+
+  const settleHeldPushes = useCallback(() => {
+    settleTimerRef.current = null;
+    if (savesInFlightRef.current > 0) return;
+    const held = heldPushesRef.current;
+    heldPushesRef.current = [];
+    for (const [field, entry] of pendingFieldsRef.current) {
+      if (!entry.marked) pendingFieldsRef.current.delete(field);
+    }
+    if (held.length === 0) return;
+    const current = settingsRef.current;
+    let rawNext = current;
+    for (const payload of held) rawNext = applyGatewaySettingsSyncPayload(rawNext, payload);
+    commitSyncedSettings(keepPendingFields(rawNext, current, pendingFieldsRef.current));
+  }, [commitSyncedSettings]);
+
+  const scheduleEchoSettle = useCallback(() => {
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = null;
+    if (savesInFlightRef.current > 0 || !hasUnmarkedPending()) return;
+    settleTimerRef.current = setTimeout(settleHeldPushes, SETTINGS_ECHO_SETTLE_MS);
+  }, [hasUnmarkedPending, settleHeldPushes]);
+
+  const applyGatewaySettings = useCallback(
+    (payload: GatewaySettingsSyncUpdatePayload) => {
+      if (Object.hasOwn(payload, "projectPrompts")) backendPromptResourcesRef.current = true;
+      // Automation snapshots ride along on the settings-sync channel but are
+      // desktop-owned state with their own revision — feed them straight into
+      // the automation store instead of the settings state.
+      const automation = payload as {
+        automationCron?: CronSnapshot;
+        automationHooks?: HooksSnapshot;
+      };
+      if (automation.automationCron) {
+        feedCronSnapshot(automation.automationCron);
+      }
+      if (automation.automationHooks) {
+        feedHooksSnapshot(automation.automationHooks);
+      }
+      const version = readSettingsSyncVersion(payload);
+      if (version) {
+        const seen = syncVersionRef.current;
+        if (seen?.epoch === version.epoch) {
+          // Read from an older cache than a snapshot already applied: all of it is stale.
+          if (version.generation < seen.generation) return;
+        } else if (seen) {
+          // A restarted desktop never saw this tab's pending updates and will never
+          // acknowledge them; its snapshot is the truth now.
+          resetEchoGuard();
+        }
+        syncVersionRef.current = version;
+      }
+      const acks = readAppliedClientSeqs(payload);
+      if (acks) {
+        echoAckSupportedRef.current = true;
+        const ack = syncClientIdRef.current ? acks[syncClientIdRef.current] : undefined;
+        if (ack && typeof ack.seq === "number" && ack.seq > ackedSeqRef.current) {
+          ackedSeqRef.current = ack.seq;
+          releasePendingThrough(ack.seq);
+          if (typeof ack.error === "string" && ack.error.trim()) {
+            setSettingsSaveState({ status: "error", message: ack.error });
+          }
+        }
+      }
+      const prev = settingsRef.current;
+      const pending = pendingFieldsRef.current;
+      const rawNext = keepPendingFields(
+        applyGatewaySettingsSyncPayload(prev, payload),
+        prev,
+        pending,
+      );
+      if (hasUnmarkedPending()) {
+        heldPushesRef.current.push(payload);
+        scheduleEchoSettle();
+      }
+      commitSyncedSettings(rawNext);
+    },
+    [
+      commitSyncedSettings,
+      hasUnmarkedPending,
+      releasePendingThrough,
+      resetEchoGuard,
+      scheduleEchoSettle,
+    ],
+  );
+
+  const calibrateFromGateway = useCallback(() => {
+    if (!api) return;
+    void api
+      .getSettings()
+      .then((payload) => applyGatewaySettings(payload))
+      .catch(() => undefined);
+  }, [api, applyGatewaySettings]);
+
+  const queueSettingsSave = useCallback(
+    (prev: AppSettings, next: AppSettings, fallback: string, syncGateway: boolean) => {
+      const saveSequence = ++settingsSaveSequenceRef.current;
+      setSettingsSaveState({ status: "saving" });
+      const redactedNext = redactSettingsForWebStorage(next);
+      const gatewayUpdate =
+        syncGateway && api
+          ? buildGatewaySettingsSyncUpdatePayload(prev, next, {
+              includeProviderApiKeyUpdates: true,
+            })
+          : null;
+      if (gatewayUpdate?.system && backendPromptResourcesRef.current) {
+        projectPromptSettingsUpdate(gatewayUpdate, prev, next);
+      }
+      const sendsGatewayUpdate = gatewayUpdate !== null && Object.keys(gatewayUpdate).length > 0;
+      const syncSeq = sendsGatewayUpdate ? ++syncSeqRef.current : 0;
+      if (gatewayUpdate && sendsGatewayUpdate) {
+        // Only desktops that already report appliedClientSeqs understand the
+        // marker; older desktops and the K-brain relay reject unknown fields.
+        const marked = echoAckSupportedRef.current && syncClientIdRef.current !== null;
+        for (const field of pendingFieldsForUpdate(gatewayUpdate)) {
+          pendingFieldsRef.current.set(field, { seq: syncSeq, marked });
+        }
+        if (marked && syncClientIdRef.current) {
+          gatewayUpdate.syncClient = { id: syncClientIdRef.current, seq: syncSeq };
+          if (ackTimerRef.current) clearTimeout(ackTimerRef.current);
+          ackTimerRef.current = setTimeout(() => {
+            ackTimerRef.current = null;
+            if (pendingFieldsRef.current.size === 0) return;
+            pendingFieldsRef.current.clear();
+            calibrateFromGateway();
+          }, SETTINGS_ECHO_ACK_TIMEOUT_MS);
+        }
+        savesInFlightRef.current += 1;
+        if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+
+      settingsSaveChainRef.current = settingsSaveChainRef.current
+        .catch(() => undefined)
+        .then(() => {
+          persistWebSettings(redactedNext);
+        })
+        .then(async () => {
+          if (gatewayUpdate && sendsGatewayUpdate) {
+            await api?.updateSettings(gatewayUpdate);
+          }
+        })
+        .then(() => {
+          if (settingsSaveSequenceRef.current === saveSequence) {
+            setSettingsSaveState({ status: "saved" });
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to persist gateway settings", error);
+          if (syncSeq > 0) releasePendingThrough(syncSeq);
+          if (syncGateway && api) calibrateFromGateway();
+          if (settingsSaveSequenceRef.current === saveSequence) {
+            setSettingsSaveState({
+              status: "error",
+              message: getGatewaySettingsErrorMessage(error, fallback, settingsRef.current.locale),
+            });
+          }
+        })
+        .finally(() => {
+          if (syncSeq === 0) return;
+          savesInFlightRef.current -= 1;
+          scheduleEchoSettle();
+        });
+    },
+    [api, calibrateFromGateway, releasePendingThrough, scheduleEchoSettle],
+  );
+
   const setSettings = useCallback(
     (updater: (prev: AppSettings) => AppSettings) => {
       const prev = settingsRef.current;
@@ -276,6 +442,7 @@ export function useGatewaySettingsSync(params: {
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching the active agent intentionally starts a fresh settings synchronization
   useEffect(() => {
     backendPromptResourcesRef.current = false;
+    resetEchoGuard();
     if (!api) {
       setSettingsSyncReady(token.trim() === "");
       setSettingsSyncError(null);
@@ -298,6 +465,24 @@ export function useGatewaySettingsSync(params: {
       setSettingsSyncError(null);
     };
     const unsubscribe = api.subscribeSettings(applySyncedSettings);
+    // Acks cannot be trusted across a dropped socket (the desktop may have
+    // restarted and lost its ack table): drop pending fields, recalibrate.
+    let connectionLost = false;
+    const unsubscribeConnection = api.subscribeConnection((connected) => {
+      if (!connected) {
+        connectionLost = true;
+        return;
+      }
+      if (!connectionLost || cancelled) return;
+      connectionLost = false;
+      resetEchoGuard();
+      void api
+        .getSettings()
+        .then((payload) => {
+          if (!cancelled) applySyncedSettings(payload);
+        })
+        .catch(() => undefined);
+    });
 
     void api
       .getSettings()
@@ -339,8 +524,10 @@ export function useGatewaySettingsSync(params: {
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeConnection();
+      clearEchoTimers();
     };
-  }, [api, activeAgentId, applyGatewaySettings, token]);
+  }, [api, activeAgentId, applyGatewaySettings, clearEchoTimers, resetEchoGuard, token]);
 
   return {
     settings,

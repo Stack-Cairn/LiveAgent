@@ -3,6 +3,7 @@ import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarSho
 import {
   buildGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncUpdatePayload,
+  type GatewaySettingsSyncAck,
 } from "@liveagent/ui/lib/settings/sync";
 import { type Locale, normalizeLocale } from "../../i18n/config";
 import { isKBrainBackendEnabled, isKBrainBrowserHost } from "../host";
@@ -1060,9 +1061,13 @@ export async function persistSettings(
   return result;
 }
 
-export async function publishGatewaySettingsSync(settings: AppSettings): Promise<void> {
+export async function publishGatewaySettingsSync(
+  settings: AppSettings,
+  syncAcks: GatewaySettingsSyncAck[] = [],
+): Promise<void> {
   if (isKBrainBrowserHost()) return;
   await invokeSettingsCommand("gateway_sync_failed", "gateway_publish_settings_sync", {
     payload: buildGatewaySettingsSyncPayload(settings),
+    ...(syncAcks.length > 0 ? { syncAcks } : {}),
   });
 }
