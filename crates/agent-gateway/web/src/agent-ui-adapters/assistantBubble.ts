@@ -2,7 +2,10 @@ import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuesti
 import { readAskUserQuestionDeadlineAt } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
 import { readPlanApprovedMarker, readPlanPendingMarker } from "@liveagent/ui/lib/chat/planMode";
-import { readToolApprovalPending } from "@liveagent/ui/lib/chat/toolApprovalArgs";
+import {
+  readToolApprovalPending,
+  readToolPermissionAutoResolved,
+} from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { useSyncExternalStore } from "react";
 import { submitAskUserQuestionAnswer } from "../lib/chat/askUserQuestionBridge";
 import {
@@ -20,6 +23,13 @@ export function usePendingToolApproval(
   toolArguments: Record<string, unknown>,
 ) {
   return readToolApprovalPending(toolArguments);
+}
+
+export function usePermissionAutoResolved(
+  _toolCallId: string,
+  toolArguments: Record<string, unknown>,
+) {
+  return readToolPermissionAutoResolved(toolArguments);
 }
 
 export function readAskUserQuestionDeadline(

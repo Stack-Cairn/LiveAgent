@@ -1,6 +1,7 @@
 import type { AssistantMessage, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import { resolveKBrainPermissionMode } from "@liveagent/ui/lib/chat/permissionModes";
+import { clampApprovalText } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { appendMessagesToConversation } from "../../../lib/chat/conversation/conversationState";
 import { buildConversationStateFromWindow } from "../../../lib/chat/history/chatHistory";
 import {
@@ -22,7 +23,7 @@ import {
 import { getKBrainHistoryWindow } from "../../../lib/kbrain/history";
 import { getKBrainSessionId } from "../../../lib/kbrain/mapping";
 import { canonicalKBrainToolPolicies } from "../../../lib/kbrain/toolPolicies";
-import { runKBrainTurn } from "../../../lib/kbrain/turn";
+import { type KBrainPermissionAutoResolved, runKBrainTurn } from "../../../lib/kbrain/turn";
 import type {
   KBrainGoalState,
   KBrainQuestionAnswer,
@@ -34,11 +35,16 @@ import {
   withUploadStagingRoot,
 } from "../../../lib/kbrain/uploadStagingRoot";
 import { requestBackendQuestion } from "../../../lib/tools/askUserQuestionTools";
+import { recordPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { projectBackendPlan } from "../../../lib/tools/planModeTools";
 import { hasPendingToolApproval, requestToolApproval } from "../../../lib/tools/toolApproval";
 import { buildGatewayToolCallPreviewArguments } from "./gatewayToolPreview";
 import type { RunAgentConversationTurnParams } from "./runAgentConversationTurn";
 import type { RunTextConversationTurnParams } from "./runTextConversationTurn";
+
+// The bar menu names the rules "allow for this session" stores; an interpreter rule can be
+// as long as the command, so the label is cut.
+const SESSION_SCOPE_LABEL_MAX_CHARS = 300;
 
 type Params = RunAgentConversationTurnParams | RunTextConversationTurnParams;
 
@@ -140,6 +146,9 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       gatewayBridgeEvents.queueToolStatus(value);
     }
   };
+  // Calls K-brain allowed without asking, keyed by tool call; the marker can arrive
+  // before or after the call itself.
+  const autoResolvedCallIds = new Set<string>();
   const onToolCall = (call: ToolCall) => {
     calls.set(call.id, call);
     callRounds.set(call.id, round);
@@ -151,9 +160,26 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       type: "tool_call",
       id: call.id,
       name: call.name,
-      arguments: call.arguments,
+      arguments: autoResolvedCallIds.has(call.id)
+        ? buildGatewayToolCallPreviewArguments(call)
+        : call.arguments,
       conversation_id: params.conversationId,
       round,
+    });
+  };
+  const onPermissionAutoResolved = (resolved: KBrainPermissionAutoResolved) => {
+    const { toolCallId, ...marker } = resolved;
+    if (!recordPermissionAutoResolved(toolCallId, marker)) return;
+    autoResolvedCallIds.add(toolCallId);
+    const call = calls.get(toolCallId);
+    if (!call) return;
+    gatewayBridgeEvents.queueEvent({
+      type: "tool_call",
+      id: call.id,
+      name: call.name,
+      arguments: buildGatewayToolCallPreviewArguments(call),
+      conversation_id: params.conversationId,
+      round: callRounds.get(call.id) ?? round,
     });
   };
   const projectToolResult = (call: ToolCall, result: ToolResultMessage) => {
@@ -290,24 +316,41 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
               round: callRounds.get(tiedCall.id) ?? round,
             });
           };
+          // Backends with permission_rules say which rules "allow and remember" stores;
+          // the session item then names those rules instead of the prompt's first
+          // segment. K-brain waits for the answer, so the approval has no deadline.
+          const rememberRules = request.suggestion?.rules ?? [];
           const approval = requestToolApproval({
             toolCallId: tiedCall?.id ?? request.permission_id,
             toolName: request.tool,
             summary: [request.command, request.description].filter(Boolean).join("\n\n"),
             conversationId: params.conversationId,
             allowSession: request.options?.some((option) => option.id === "allow_always") === true,
-            sessionScope: request.rule,
+            sessionScope:
+              rememberRules.length > 0
+                ? clampApprovalText(rememberRules.join(", "), SESSION_SCOPE_LABEL_MAX_CHARS)
+                : request.rule,
             sessionWide: request.scope === "session",
+            rememberRules,
+            defaultScope: request.suggestion?.default_scope,
             signal: signal
               ? AbortSignal.any([approvalController.signal, signal])
               : approvalController.signal,
+            timeoutMs: null,
           });
           syncGatewayCall();
           const settlement = await approval;
           syncGatewayCall();
-          if (settlement.kind !== "decided" || settlement.decision === "deny") return "reject";
-          return settlement.decision === "approve_session" ? "allow_always" : "allow_once";
+          if (settlement.kind !== "decided") return "reject";
+          if (settlement.decision === "deny") {
+            return settlement.reason ? { decision: "reject", reason: settlement.reason } : "reject";
+          }
+          if (settlement.decision !== "approve_session") return "allow_once";
+          // The bar's session item stays a session rule unless a scope was picked.
+          const scope = settlement.scope ?? (rememberRules.length > 0 ? "session" : undefined);
+          return scope ? { decision: "allow_always", scope } : "allow_always";
         },
+        onPermissionAutoResolved,
         onSubagent: (subagent) => {
           const id = `kbrain-subagent:${subagent.id}`;
           const call: ToolCall = {

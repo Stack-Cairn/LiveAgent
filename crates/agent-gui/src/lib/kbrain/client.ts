@@ -870,6 +870,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     decision: "allow_once" | "allow_always" | "reject",
     runId = "",
     reason?: string,
+    scope?: string,
   ): Promise<void> {
     await request<unknown>(
       `/v1/sessions/${encodeURIComponent(conversationId)}/permissions/${encodeURIComponent(permissionId)}`,
@@ -882,6 +883,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
             permission_id: permissionId,
             decision,
             ...(reason ? { reason } : {}),
+            ...(scope ? { scope } : {}),
           },
         }),
       },

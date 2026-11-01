@@ -16,7 +16,10 @@ import {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
-import { ASK_USER_QUESTION_TIMEOUT_MS } from "../../lib/chat/askUserQuestion";
+import type {
+  ToolApprovalAnswerOptions,
+  ToolApprovalRememberScope,
+} from "../../lib/chat/toolApprovalArgs";
 
 /** approve:本次放行;deny:本次拒绝;approve_session:请后端在本会话内记住这条授权范围。 */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
@@ -28,14 +31,17 @@ export type PendingApprovalItem = {
   toolName: string;
   /** 命令/参数摘要(Bash 显示命令等);空则只显示工具名。 */
   summary?: string;
-  /** 权威应答截止时间戳(毫秒);缺省以挂载时刻近似。 */
-  deadlineAt?: number;
+  /** 权威应答截止时间戳(毫秒);缺省或 null 表示一直等到用户决定,不显示倒计时(K-brain 审批)。 */
+  deadlineAt?: number | null;
   /** 后端会记住本会话授权时为 true 才提供 approve_session;缺省不提供(远端旧数据同样不显示)。 */
   allowSession?: boolean;
   /** approve_session 生效的授权范围(如 call:click),显示在该选项里。 */
   sessionScope?: string;
   /** 本次允许即对本会话同类操作生效(如 Computer Use);正文与按钮据此说明。 */
   sessionWide?: boolean;
+  /** 允许并记住会存的规则;非空时可以选作用域。 */
+  rememberRules?: string[];
+  defaultScope?: ToolApprovalRememberScope;
 };
 
 function formatCountdown(remainingMs: number) {
@@ -45,20 +51,27 @@ function formatCountdown(remainingMs: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-// 倒计时取列表中最早的 deadline(最紧迫者驱动整栏)。缺失时以挂载时刻近似。
-// 超时后桌面按“拒绝”落定,pending 消失,本栏随之隐藏。
+// 倒计时取列表中最早的 deadline(最紧迫者驱动整栏)。没有任何 deadline 时(K-brain
+// 审批一直等到用户决定)返回 null,不显示倒计时。超时后桌面按“拒绝”落定,pending
+// 消失,本栏随之隐藏。
 function useEarliestCountdown(active: boolean, deadlines: number[]) {
-  const [fallbackDeadline] = useState(() => Date.now() + ASK_USER_QUESTION_TIMEOUT_MS);
-  const earliest = deadlines.length > 0 ? Math.min(...deadlines) : fallbackDeadline;
-  const [remainingMs, setRemainingMs] = useState(() => earliest - Date.now());
+  const earliest = deadlines.length > 0 ? Math.min(...deadlines) : null;
+  const [remainingMs, setRemainingMs] = useState(() =>
+    earliest === null ? null : earliest - Date.now(),
+  );
   useEffect(() => {
-    if (!active) return;
+    if (!active || earliest === null) {
+      setRemainingMs(null);
+      return;
+    }
     const tick = () => setRemainingMs(earliest - Date.now());
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, [active, earliest]);
-  return remainingMs;
+  // The deadline set can change between renders; never show a stale countdown for it.
+  if (earliest === null) return null;
+  return remainingMs ?? earliest - Date.now();
 }
 
 export function ToolApprovalBar({
@@ -70,6 +83,7 @@ export function ToolApprovalBar({
   onDecide: (
     toolCallId: string,
     decision: ToolApprovalDecision,
+    options?: ToolApprovalAnswerOptions,
   ) => Promise<ToolApprovalSubmitOutcome>;
   onDecideAll: (decision: "approve" | "deny") => Promise<void>;
 }) {
@@ -200,14 +214,22 @@ export function ToolApprovalBar({
         <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
           <Terminal className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-xs leading-none">{displayToolName}</span>
-          <span
-            role="timer"
-            title={`${formatCountdown(remainingMs)} ${t("chat.toolApproval.timeoutHint")}`}
-            className="shrink-0 text-tiny tabular-nums text-muted-foreground/65"
-          >
-            {pending.length > 1 ? `1 / ${pending.length} · ` : null}
-            {formatCountdown(remainingMs)}
-          </span>
+          {remainingMs === null ? (
+            pending.length > 1 ? (
+              <span className="shrink-0 text-tiny tabular-nums text-muted-foreground/65">
+                {`1 / ${pending.length}`}
+              </span>
+            ) : null
+          ) : (
+            <span
+              role="timer"
+              title={`${formatCountdown(remainingMs)} ${t("chat.toolApproval.timeoutHint")}`}
+              className="shrink-0 text-tiny tabular-nums text-muted-foreground/65"
+            >
+              {pending.length > 1 ? `1 / ${pending.length} · ` : null}
+              {formatCountdown(remainingMs)}
+            </span>
+          )}
         </div>
 
         {/* Wraps instead of truncating: on phones the session-wide explanation must stay readable. */}
