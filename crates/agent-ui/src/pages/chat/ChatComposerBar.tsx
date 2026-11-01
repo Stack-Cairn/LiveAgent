@@ -69,6 +69,7 @@ import {
   registerConversationReferenceDropZone,
 } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import { nextComposerPermissionMode } from "@liveagent/ui/lib/chat/permissionModes";
 import {
   clearActiveWorkspacePathDrag,
   getActiveWorkspacePathDrag,
@@ -209,6 +210,7 @@ export type ChatQueueTurnPreview = {
 const COMPOSER_EXPAND_ANIMATION_MS = 280;
 const COMPOSER_EXPAND_EASING = "--ease-ui-curve-4";
 const CONVERSATION_DROP_NOTICE_MS = 800;
+const MODE_CYCLE_NOTICE_MS = 1500;
 
 // 宿主未注入澄清执行器时的占位：clarifyEnabled=false 已把入口全部藏起，
 // 该函数永远不会被真正调用；仅用于满足 useClarifySession 的非空签名。
@@ -311,6 +313,12 @@ export type ChatComposerBarProps = {
   /** 命令执行方式(ask/auto/sandbox/sandboxOffline);缺省不渲染选择器。 */
   commandSafetyMode?: CommandSafetyMode;
   onCommandSafetyModeChange?: (mode: CommandSafetyMode) => void;
+  /**
+   * Runs a Shift+Tab mode step. Background panes pass a guard that focuses the
+   * pane instead, like their other controls; the step only runs through
+   * `apply`, so its two settings change together or not at all.
+   */
+  guardModeCycle?: (apply: () => void) => void;
   reasoningOptions: ReasoningLevel[];
   thinkingAlwaysOn: boolean;
   gitClient?: GitClient | null;
@@ -428,6 +436,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     chatRuntimeControls,
     commandSafetyMode,
     onCommandSafetyModeChange,
+    guardModeCycle,
     reasoningOptions,
     thinkingAlwaysOn,
     gitClient,
@@ -527,6 +536,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     result: Exclude<ConversationReferenceInsertResult, "inserted">;
     key: number;
   } | null>(null);
+  const modeCycleNoticeCounterRef = useRef(0);
+  const [modeCycleNotice, setModeCycleNotice] = useState<{ text: string; key: number } | null>(
+    null,
+  );
   const attachmentListRef = useRef<HTMLDivElement | null>(null);
   const previousPendingUploadCountRef = useRef(0);
   /** 切换瞬间记录的卡片旧高度，供 FLIP 动画用；消费后立即置空。 */
@@ -780,6 +793,61 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     );
     return () => window.clearTimeout(timeout);
   }, [conversationDropNotice]);
+
+  useEffect(() => {
+    if (!modeCycleNotice) return;
+    const timeout = window.setTimeout(() => setModeCycleNotice(null), MODE_CYCLE_NOTICE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [modeCycleNotice]);
+
+  // Shift+Tab in the editor. The mode is sent when a run starts, so a change
+  // made while a turn runs applies from the next one.
+  const canCycleMode =
+    isAgentMode && !controlsDisabled && Boolean(commandSafetyMode && onCommandSafetyModeChange);
+  // Queued turns keep the mode they were queued with (strictest wins when they
+  // run), so with a queue the change only reaches new messages.
+  const queueHoldsTurns = queuedTurns.length > 0;
+  const handleCycleMode = useCallback(() => {
+    if (!onCommandSafetyModeChange) return;
+    const apply = () => {
+      const planModeEnabled = Boolean(chatRuntimeControls.planModeEnabled);
+      const next = nextComposerPermissionMode({ commandSafetyMode, planModeEnabled });
+      if (next.commandSafetyMode !== commandSafetyMode) {
+        onCommandSafetyModeChange(next.commandSafetyMode);
+      }
+      if (next.planModeEnabled !== planModeEnabled) {
+        onChatRuntimeControlsChange({ planModeEnabled: next.planModeEnabled });
+      }
+      const label = t(
+        next.shown === "plan"
+          ? "chat.runtime.planMode"
+          : next.shown === "autoEdit"
+            ? "chat.safety.autoEdit"
+            : "chat.safety.ask",
+      );
+      const when = queueHoldsTurns
+        ? t("chat.safety.cycleNewMessages")
+        : isSending
+          ? t("chat.safety.cycleNextTurn")
+          : null;
+      modeCycleNoticeCounterRef.current += 1;
+      setModeCycleNotice({
+        text: when ? `${label} · ${when}` : label,
+        key: modeCycleNoticeCounterRef.current,
+      });
+    };
+    if (guardModeCycle) guardModeCycle(apply);
+    else apply();
+  }, [
+    chatRuntimeControls.planModeEnabled,
+    commandSafetyMode,
+    guardModeCycle,
+    isSending,
+    onChatRuntimeControlsChange,
+    onCommandSafetyModeChange,
+    queueHoldsTurns,
+    t,
+  ]);
 
   const conversationDropNoticeText = conversationDropNotice
     ? conversationDropNotice.result === "self"
@@ -1606,6 +1674,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 currentConversationId={conversationId}
                 mentionApps={mentionApps}
                 commandHost={effectiveCommandHost}
+                onCycleMode={canCycleMode ? handleCycleMode : undefined}
                 className={cn(
                   // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
                   // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。
@@ -1852,14 +1921,30 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-              {commandSafetyMode && onCommandSafetyModeChange ? (
-                <CommandSafetyModeSelector
-                  value={commandSafetyMode}
-                  disabled={controlsDisabled || !isAgentMode}
-                  onChange={onCommandSafetyModeChange}
-                  onConfigureAutoReview={() => onOpenSettings("systemTools")}
-                />
-              ) : null}
+              {/* The mode notice floats over the controls beside the picker
+                  instead of pushing them out of a narrow deck. */}
+              <span className="relative flex shrink-0 items-center">
+                {commandSafetyMode && onCommandSafetyModeChange ? (
+                  <CommandSafetyModeSelector
+                    value={commandSafetyMode}
+                    disabled={controlsDisabled || !isAgentMode}
+                    onChange={onCommandSafetyModeChange}
+                    onConfigureAutoReview={() => onOpenSettings("systemTools")}
+                    shortcutHint={canCycleMode ? t("chat.safety.cycleShortcut") : undefined}
+                  />
+                ) : null}
+                <span role="status" aria-live="polite">
+                  {modeCycleNotice ? (
+                    <span
+                      key={modeCycleNotice.key}
+                      data-mode-cycle-notice=""
+                      className="pointer-events-none absolute top-1/2 left-full z-10 ml-1 -translate-y-1/2 whitespace-nowrap rounded-full border border-border bg-popover px-2 py-0.5 text-xs font-medium text-popover-foreground shadow-sm"
+                    >
+                      {modeCycleNotice.text}
+                    </span>
+                  ) : null}
+                </span>
+              </span>
 
               <ComposerModelControls
                 executionMode={executionMode}

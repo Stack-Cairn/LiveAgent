@@ -211,6 +211,7 @@ export const MentionComposer = memo(
       currentConversationId,
       mentionApps = [],
       commandHost,
+      onCycleMode,
       className,
     }: MentionComposerProps,
     ref,
@@ -1903,6 +1904,20 @@ export const MentionComposer = memo(
           setCommandPanel(null);
           return;
         }
+        // Any open popup, even one still loading or empty, keeps Tab for itself.
+        if (
+          onCycleMode &&
+          !popupVisible &&
+          e.key === "Tab" &&
+          e.shiftKey &&
+          !e.ctrlKey &&
+          !e.altKey &&
+          !e.metaKey
+        ) {
+          e.preventDefault();
+          onCycleMode();
+          return;
+        }
 
         // Shell-style ↑/↓ recall of previously sent prompts. Only fires with
         // the caret on the first/last logical line so plain caret movement
@@ -2030,6 +2045,7 @@ export const MentionComposer = memo(
         restorePromptHistoryStash,
         resetPromptHistoryRecall,
         returnToMentionRoot,
+        onCycleMode,
       ],
     );
 

@@ -1000,6 +1000,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             chatRuntimeControls={paneRuntimeControls}
             commandSafetyMode={context.commandSafetyMode}
             onCommandSafetyModeChange={context.onCommandSafetyModeChange}
+            guardModeCycle={usePrimary && primary ? undefined : () => onFocusPane()}
             reasoningOptions={paneReasoningOptions}
             thinkingAlwaysOn={paneThinkingAlwaysOn}
             contextUsageTokensSource={contextUsageTokensSource}

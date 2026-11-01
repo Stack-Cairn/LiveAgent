@@ -101,10 +101,12 @@ export function CommandSafetyModeSelector(props: {
   onChange: (mode: CommandSafetyMode) => void;
   /** Opens the settings page that holds the AI approval reviewer model. */
   onConfigureAutoReview?: () => void;
+  /** Keyboard shortcut that cycles the mode, shown in the trigger's tooltip. */
+  shortcutHint?: string;
 }) {
   // Plan mode has its own switch in the composer's plus menu; this menu only
   // picks the permission mode, and choosing one leaves plan mode as it is.
-  const { value, disabled, onChange, onConfigureAutoReview } = props;
+  const { value, disabled, onChange, onConfigureAutoReview, shortcutHint } = props;
   const { t } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
   // Counts openings only, so the reviewer check re-reads on open and not on close.
@@ -169,7 +171,7 @@ export function CommandSafetyModeSelector(props: {
             )}
           />
         }
-        title={selectedLabel}
+        title={shortcutHint ? `${selectedLabel} (${shortcutHint})` : selectedLabel}
         aria-label={`${t("chat.safety.label")}: ${selectedLabel}`}
       >
         {modeIcon(selected, triggerIconClass(selected, reviewerMissing))}

@@ -3804,6 +3804,7 @@ function ChatPageContent(props: ChatPageProps) {
         onSelectExecutionMode: handleSelectExecutionMode,
         onOpenSettings,
         onChatRuntimeControlsChange: focusGuard(handleChatRuntimeControlsChange),
+        guardModeCycle: (apply) => focusGuard(apply)(),
         onPickReadableFiles: focusGuard(pickReadableFiles),
         onPickWorkspaceFolder: focusGuard(() => {
           void pickWorkspaceFolder(conversationId, workspaceRoot ?? "");
