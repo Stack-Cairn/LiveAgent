@@ -35,8 +35,8 @@ function PendingToolApprovalBarContent(props: {
   return (
     <ToolApprovalBar
       pending={pending}
-      onDecide={(toolCallId, decision) =>
-        Promise.resolve(answerToolApproval(toolCallId, decision, { conversationId }))
+      onDecide={(toolCallId, decision, options) =>
+        Promise.resolve(answerToolApproval(toolCallId, decision, { conversationId, ...options }))
       }
       onDecideAll={async (decision) => {
         for (const item of pending) {

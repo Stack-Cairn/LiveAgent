@@ -164,6 +164,9 @@ function createToolCallItemRenderer() {
         usePendingToolApproval() {
           return null;
         },
+        usePermissionAutoResolved() {
+          return null;
+        },
       },
       "@liveagent/ui/components/chat/AskUserQuestionCard": {
         AskUserQuestionCard: NullComponent,

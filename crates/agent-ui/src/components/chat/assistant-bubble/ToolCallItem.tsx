@@ -4,6 +4,7 @@ import {
   submitAskUserQuestionAnswers,
   submitPlanDecision,
   usePendingToolApproval,
+  usePermissionAutoResolved,
   usePlanDecisionState,
 } from "@liveagent/adapters/assistantBubble";
 import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
@@ -52,6 +53,7 @@ import {
   isBuiltinShareToolName,
   isSubagentCardToolCall,
 } from "./assistantBubbleUtils";
+import { ToolPermissionMarker } from "./ToolPermissionMarker";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
 
 // 折叠摘要里行内命令的展示上限:远超任何实际窗口一行可容纳的字符数,视觉
@@ -170,6 +172,11 @@ function ToolCallItem({
   // 工具审批由宿主适配器读取。审批发生在工具执行前，不能用 isRunning 作门。
   const pendingApproval = usePendingToolApproval(item.toolCall.id, item.toolCall.arguments);
   const isApprovalPending = !readOnly && !isRedactedToolContent && !result && pendingApproval;
+  // 后端没有询问就放行(只读或已记住的规则)时,工具行带一个小标记说明原因。
+  const permissionAutoResolved = usePermissionAutoResolved(
+    item.toolCall.id,
+    item.toolCall.arguments,
+  );
   const shouldAutoOpen =
     !isRedactedToolContent &&
     (item.toolCall.name === "Image" || builtinResultKind === "display_image" || shouldKeepAskOpen);
@@ -355,6 +362,7 @@ function ToolCallItem({
           />
         ) : null}
       </span>
+      <ToolPermissionMarker marker={permissionAutoResolved} />
     </>
   ) : compactChip ? (
     <>
@@ -401,6 +409,7 @@ function ToolCallItem({
         <span className="min-w-0 flex-1" />
       )}
 
+      <ToolPermissionMarker marker={permissionAutoResolved} />
       {displayIsRunning || result?.isError || shellSessionFailed ? (
         <span className={cn("shrink-0 text-tiny", statusTextClass)}>{statusLabel}</span>
       ) : null}
@@ -442,6 +451,7 @@ function ToolCallItem({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <ToolPermissionMarker marker={permissionAutoResolved} />
         {displayIsRunning ? (
           <AssistantStatus
             className="min-h-0 gap-1.5 text-xs text-foreground/45"

@@ -135,6 +135,9 @@ export function contextToKBrainMessages(context: Context): KBrainMessage[] {
   return messages;
 }
 
+/** How many times a prompt K-brain kept waiting after a refused answer is asked again. */
+const PERMISSION_ANSWER_RETRIES = 3;
+
 /** permission.requested payload. `rule` scopes an allow_always answer, which K-brain only
  *  remembers when it lists that option; older backends offer allow_once/reject only. */
 export type KBrainPermissionRequest = {
@@ -148,6 +151,26 @@ export type KBrainPermissionRequest = {
   scope?: string;
   /** The model tool call waiting on this decision, when K-brain knows it. */
   tool_call_id?: string;
+  /** Shell the command runs in (bash, pwsh, cmd); empty for non-shell tools. */
+  shell?: string;
+  /** What allow_always would remember, from backends with permission_rules. */
+  suggestion?: { rules: string[]; default_scope?: string };
+};
+
+/** The answer to a permission request: a bare decision, or one with the remember
+ *  scope (allow_always) or the reason given to the model (reject). */
+export type KBrainPermissionAnswer =
+  | KBrainPermissionDecision
+  | { decision: KBrainPermissionDecision; scope?: string; reason?: string };
+
+export type KBrainPermissionDecision = "allow_once" | "allow_always" | "reject";
+
+/** permission.auto_resolved: the backend allowed a call without asking. */
+export type KBrainPermissionAutoResolved = {
+  toolCallId: string;
+  source: "rule" | "read_only";
+  rule?: string;
+  scope?: string;
 };
 
 export type KBrainTurnParams = {
@@ -174,7 +197,8 @@ export type KBrainTurnParams = {
   onPermissionRequest?: (
     request: KBrainPermissionRequest,
     signal?: AbortSignal,
-  ) => Promise<"allow_once" | "allow_always" | "reject">;
+  ) => Promise<KBrainPermissionAnswer>;
+  onPermissionAutoResolved?: (resolved: KBrainPermissionAutoResolved) => void;
   applyConversationState?: (state: ConversationViewState) => void;
   getConversationState?: () => ConversationViewState;
   baseUrl?: string;
@@ -900,25 +924,40 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         }
         const permissionController = new AbortController();
         pendingPermissions.set(request.permission_id, permissionController);
-        let decisionPromise: Promise<"allow_once" | "allow_always" | "reject">;
-        try {
-          decisionPromise = Promise.resolve(
-            params.onPermissionRequest(request, permissionController.signal),
-          );
-        } catch (error) {
-          decisionPromise = Promise.reject(error);
-        }
-        void decisionPromise
-          .then((decision) => {
+        const onPermissionRequest = params.onPermissionRequest;
+        const answerPermission = async () => {
+          for (let attempt = 0; ; attempt += 1) {
+            const answer = await onPermissionRequest(request, permissionController.signal);
             if (permissionController.signal.aborted) return;
-            return client
-              .resolvePermission(kbrainSessionId, request.permission_id, decision, accepted.run_id)
-              .catch((error) => {
-                // A concurrent session grant can consume this waiter before its SSE resolution arrives.
-                if ((error as { status?: number }).status === 404) return;
-                throw error;
-              });
-          })
+            const { decision, scope, reason } = permissionAnswerFields(answer);
+            try {
+              await client.resolvePermission(
+                kbrainSessionId,
+                request.permission_id,
+                decision,
+                accepted.run_id,
+                reason,
+                scope,
+              );
+              return;
+            } catch (error) {
+              const status = (error as { status?: number }).status;
+              // A concurrent session grant can consume this waiter before its SSE resolution arrives.
+              if (status === 404) return;
+              // K-brain answers 400 and keeps the prompt waiting when it cannot store the
+              // remembered rules (a scope it cannot keep, a failed write): ask again.
+              if (
+                status === 400 &&
+                attempt < PERMISSION_ANSWER_RETRIES &&
+                !permissionController.signal.aborted
+              ) {
+                continue;
+              }
+              throw error;
+            }
+          }
+        };
+        void answerPermission()
           .catch((error) => {
             if (permissionController.signal.aborted) return;
             permissionFailure = error instanceof Error ? error : new Error(String(error));
@@ -930,6 +969,25 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
               pendingPermissions.delete(request.permission_id);
             }
           });
+        break;
+      }
+      case "permission.auto_resolved": {
+        const resolved = eventPayload<{
+          tool_call_id?: string;
+          source?: string;
+          rule?: string;
+          scope?: string;
+        }>(event);
+        const toolCallId = resolved?.tool_call_id?.trim();
+        const source = resolved?.source;
+        if (toolCallId && (source === "rule" || source === "read_only")) {
+          params.onPermissionAutoResolved?.({
+            toolCallId,
+            source,
+            ...(resolved?.rule ? { rule: resolved.rule } : {}),
+            ...(resolved?.scope ? { scope: resolved.scope } : {}),
+          });
+        }
         break;
       }
       case "permission.resolved": {
@@ -1049,4 +1107,21 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
     );
   }
   return message;
+}
+
+// Scope only goes with allow_always and a reason only with reject, so a stray field
+// cannot widen or explain a different decision.
+function permissionAnswerFields(answer: KBrainPermissionAnswer): {
+  decision: KBrainPermissionDecision;
+  scope?: string;
+  reason?: string;
+} {
+  if (typeof answer === "string") return { decision: answer };
+  const scope = answer.decision === "allow_always" ? answer.scope?.trim() : undefined;
+  const reason = answer.decision === "reject" ? answer.reason?.trim() : undefined;
+  return {
+    decision: answer.decision,
+    ...(scope ? { scope } : {}),
+    ...(reason ? { reason } : {}),
+  };
 }

@@ -784,8 +784,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     pendingToolApprovals.length > 0 ? (
       <ToolApprovalBar
         pending={pendingToolApprovals}
-        onDecide={(toolCallId, decision) =>
-          submitToolApprovalDecision(toolCallId, decision, conversationId)
+        onDecide={(toolCallId, decision, options) =>
+          submitToolApprovalDecision(toolCallId, decision, conversationId, options)
         }
         onDecideAll={async (decision) => {
           for (const item of pendingToolApprovals) {

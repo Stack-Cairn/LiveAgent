@@ -5,6 +5,7 @@ import type {
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
+import { parseToolApprovalRequestJson } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import {
@@ -1028,28 +1029,23 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       }
 
       // WebUI 对工具审批卡片的决定:itemId 即 toolCallId,request_json 携带
-      // {"decision":"approve"|"deny"|"approve_session"},落到桌面审批挂起表。
+      // {"decision":"approve"|"deny"|"approve_session","scope"?,"reason"?},落到桌面
+      // 审批挂起表;scope 是"允许并记住"的作用域,reason 是拒绝时交给模型的说明。
       if (action === "tool_approval") {
         if (!itemId) {
           fail("tool_approval requires item_id", "invalid_request");
           return;
         }
-        let decision: unknown;
-        try {
-          decision = JSON.parse(request.requestJson || "{}");
-        } catch {
-          fail("invalid tool approval payload", "invalid_payload");
-          return;
-        }
-        const raw =
-          decision && typeof decision === "object"
-            ? (decision as { decision?: unknown }).decision
-            : decision;
-        if (raw !== "approve" && raw !== "deny" && raw !== "approve_session") {
+        const parsed = parseToolApprovalRequestJson(request.requestJson);
+        if (!parsed) {
           fail("invalid tool approval decision", "invalid_payload");
           return;
         }
-        const outcome = answerToolApproval(itemId, raw, { conversationId });
+        const outcome = answerToolApproval(itemId, parsed.decision, {
+          conversationId,
+          scope: parsed.scope,
+          reason: parsed.reason,
+        });
         if (!outcome.ok) {
           fail(outcome.message || "approval not pending", "not_found");
           return;

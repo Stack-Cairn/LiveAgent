@@ -10,12 +10,17 @@ import {
   EXIT_PLAN_MODE_TOOL_NAME,
 } from "@liveagent/ui/lib/chat/planMode";
 import {
+  clampApprovalRules,
+  clampApprovalText,
   TOOL_APPROVAL_ALLOW_SESSION_ARG,
   TOOL_APPROVAL_DEADLINE_ARG,
+  TOOL_APPROVAL_DEFAULT_SCOPE_ARG,
   TOOL_APPROVAL_PENDING_ARG,
+  TOOL_APPROVAL_REMEMBER_RULES_ARG,
   TOOL_APPROVAL_SESSION_SCOPE_ARG,
   TOOL_APPROVAL_SESSION_WIDE_ARG,
   TOOL_APPROVAL_SUMMARY_ARG,
+  TOOL_PERMISSION_AUTO_RESOLVED_ARG,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import {
   countTextLines,
@@ -26,6 +31,7 @@ import {
 } from "@liveagent/ui/lib/chat/toolPreview";
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
 import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
+import { getPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { isPlanApprovalToolCall, isPlanDecisionPending } from "../../../lib/tools/planModeTools";
 import { getPendingToolApproval } from "../../../lib/tools/toolApproval";
 
@@ -142,21 +148,44 @@ export function buildGatewayToolCallPreviewArguments(
   // 不再带此标记,卡片随之隐藏。__ 前缀合成参数不入展示、不影响本地执行。
   // 授权范围随标记同步,远端审批栏与桌面一致地说明"允许"的效果、决定是否提供
   // "本会话始终允许";摘要优先用审批登记的文本(K-brain 下含 AI 审查说明)。
+  // K-brain 审批不设截止时间(deadlineAt 为 null),不发截止标记,远端也不显示倒计时;
+  // 有可记住的规则时带上规则与默认作用域,远端审批栏据此提供"允许并记住"。
+  // 后端没有询问就放行的调用(permission.auto_resolved)带上来源标记。
   const pending = toolCall.id ? getPendingToolApproval(toolCall.id) : null;
+  const autoResolved = toolCall.id ? getPermissionAutoResolved(toolCall.id) : null;
   const approvalOverlay: Record<string, unknown> | null = pending
     ? {
         [TOOL_APPROVAL_PENDING_ARG]: true,
-        [TOOL_APPROVAL_DEADLINE_ARG]: pending.deadlineAt,
+        ...(pending.deadlineAt === null
+          ? {}
+          : { [TOOL_APPROVAL_DEADLINE_ARG]: pending.deadlineAt }),
         [TOOL_APPROVAL_SUMMARY_ARG]: pending.summary
           ? clampApprovalSummary(pending.summary)
           : summarizeToolCallForApproval(toolCall),
         [TOOL_APPROVAL_ALLOW_SESSION_ARG]: pending.allowSession,
         [TOOL_APPROVAL_SESSION_WIDE_ARG]: pending.sessionWide,
         ...(pending.sessionScope
-          ? { [TOOL_APPROVAL_SESSION_SCOPE_ARG]: pending.sessionScope }
+          ? {
+              [TOOL_APPROVAL_SESSION_SCOPE_ARG]: clampApprovalText(
+                pending.sessionScope,
+                TOOL_APPROVAL_SUMMARY_MAX_CHARS,
+              ),
+            }
           : {}),
+        ...(pending.rememberRules.length > 0
+          ? {
+              [TOOL_APPROVAL_REMEMBER_RULES_ARG]: clampApprovalRules(
+                pending.rememberRules,
+                TOOL_APPROVAL_SUMMARY_MAX_CHARS,
+              ),
+              [TOOL_APPROVAL_DEFAULT_SCOPE_ARG]: pending.defaultScope,
+            }
+          : {}),
+        ...(autoResolved ? { [TOOL_PERMISSION_AUTO_RESOLVED_ARG]: autoResolved } : {}),
       }
-    : null;
+    : autoResolved
+      ? { [TOOL_PERMISSION_AUTO_RESOLVED_ARG]: autoResolved }
+      : null;
   // AskUserQuestion：附带权威应答截止时间，WebUI 卡片倒计时与桌面计时同源
   //（execute 挂起时复用同一预置值；见 askUserQuestionTools）。ask 工具只读、
   // 永不进入审批门,故此处无需叠加 approvalOverlay。
