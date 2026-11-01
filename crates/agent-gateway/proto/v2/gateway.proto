@@ -77,6 +77,7 @@ message GatewayEnvelope {
     LoopManageRequest loop_manage = 108;
     ProxyDetectRequest proxy_detect = 109;
     HistoryResyncRequest history_resync = 110;
+    PermissionRulesRequest permission_rules = 111;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -170,6 +171,7 @@ message AgentEnvelope {
     ProxyDetectResponse proxy_detect_resp = 116;
     HistorySyncStatus history_sync_status = 117;
     HistorySyncSnapshot history_sync_snapshot = 118;
+    PermissionRulesResponse permission_rules_resp = 119;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1333,6 +1335,21 @@ message ProxyDetectResponse {
   // 与桌面 invoke 同一份序列化：services/proxy_detect 的 ProxyDetectResult /
   // ProxyTestResult（camelCase），不含任何凭据。
   string result_json = 2;
+}
+
+// 设置 → 权限：查看、添加、删除 K-brain 记住的权限规则（/v1/permissions/rules）。
+// 桌面端或直连 K-brain 的网关只转发设置页需要的字段，会话规则不经这里。
+message PermissionRulesRequest {
+  // "list" | "add" | "delete"。
+  string action = 1;
+  // list: {"workspace"?}；add: {"rule","effect":"allow"|"deny","scope":"project"|"user","workspace"?}；
+  // delete: {"id","scope":"project"|"user","workspace"?}。project 作用域必须带 workspace。
+  string input_json = 2;
+}
+
+message PermissionRulesResponse {
+  // K-brain 的应答 JSON 原样返回：list 为 {project_root?, rules[]}，add 为新规则，delete 为 {ok}。
+  string result_json = 1;
 }
 
 message FsRoot {

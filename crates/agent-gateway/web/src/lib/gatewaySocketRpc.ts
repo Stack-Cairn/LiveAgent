@@ -1262,6 +1262,18 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     return this.request<T>("proxy.test", input);
   }
 
+  /** 设置 → 权限：K-brain 记住的权限规则。返回 K-brain 的应答 JSON（snake_case）。
+   *  只有读取会在重连后重发；添加和删除不重放。 */
+  async permissionRules<T>(
+    action: "list" | "add" | "delete",
+    input: Record<string, unknown>,
+  ): Promise<T> {
+    const type = `permission.rules.${action}`;
+    return action === "list"
+      ? this.requestWithRecovery<T>(type, input)
+      : this.request<T>(type, input);
+  }
+
   async listFsRoots(): Promise<FsRootsResponse> {
     return this.requestWithRecovery<FsRootsResponse>("fs.roots", {});
   }

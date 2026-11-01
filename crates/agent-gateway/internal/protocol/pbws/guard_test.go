@@ -463,3 +463,52 @@ func TestVetAgentRequestRejectsInvalidGoalAndLoopRequests(t *testing.T) {
 		}
 	}
 }
+
+// 权限规则（设置 → 权限）：只放行 list/add/delete，参数必须是 JSON 对象且限长。
+func TestVetAgentRequestPermissionRulesAllowsOnlyListAddDelete(t *testing.T) {
+	view := permissionRulesAgentView(t)
+	for _, req := range []*gatewayv2.PermissionRulesRequest{
+		{Action: "list", InputJson: `{"workspace":"D:\\work\\a"}`},
+		{Action: "list"},
+		{Action: "add", InputJson: `{"rule":"Bash(rm:*)","effect":"deny","scope":"user"}`},
+		{Action: "delete", InputJson: `{"id":"r_1","scope":"project","workspace":"/w"}`},
+	} {
+		env := &gatewayv2.GatewayEnvelope{Payload: &gatewayv2.GatewayEnvelope_PermissionRules{PermissionRules: req}}
+		if err := vetAgentRequest(view, env); err != nil {
+			t.Fatalf("vetAgentRequest(%q) error = %v", req.GetAction(), err)
+		}
+	}
+	for _, req := range []*gatewayv2.PermissionRulesRequest{
+		{Action: "update", InputJson: `{}`},
+		{Action: ""},
+		{Action: "add", InputJson: `["Bash(rm:*)"]`},
+		{Action: "add", InputJson: `{not json`},
+		{Action: "add", InputJson: `{"rule":"` + strings.Repeat("x", 40000) + `"}`},
+	} {
+		env := &gatewayv2.GatewayEnvelope{Payload: &gatewayv2.GatewayEnvelope_PermissionRules{PermissionRules: req}}
+		if err := vetAgentRequest(view, env); err == nil {
+			t.Fatalf("vetAgentRequest(action=%q, len=%d) expected rejection", req.GetAction(), len(req.GetInputJson()))
+		}
+	}
+}
+
+// 旧桌面端不认识 permission_rules 载荷臂，会静默丢弃；网关要立即拒绝并提示更新桌面端。
+func TestVetAgentRequestPermissionRulesRequiresDesktopCapability(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_PermissionRules{PermissionRules: &gatewayv2.PermissionRulesRequest{Action: "list"}},
+	}
+	err := vetAgentRequest(proxyDetectAgentView(t), env)
+	if err == nil || !strings.Contains(err.Error(), "update LiveAgent") {
+		t.Fatalf("vetAgentRequest() error = %v, want capability rejection", err)
+	}
+}
+
+func permissionRulesAgentView(t *testing.T) session.AgentView {
+	t.Helper()
+	manager := session.NewManager()
+	agent := session.NewAgentSession(session.AuthSnapshot{AgentID: "agent-1", SessionID: "session-1"})
+	agent.SetCapabilities([]string{gatewayv2.PermissionRulesV1Capability})
+	manager.SetSession(agent)
+	t.Cleanup(func() { manager.ClearSession(agent) })
+	return manager.AgentView("agent-1")
+}

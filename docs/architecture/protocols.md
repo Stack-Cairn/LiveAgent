@@ -203,6 +203,7 @@ Git 面板与文件树不再轮询：桌面端 `workspace_watch` 服务（notify
 | Skills 列表和管理 | `SkillFilesListRequest`、`SkillManageRequest`、`SkillMetadataReadRequest`、`SkillTextReadRequest` | `system_ensure_builtin_skills`、`system_manage_skill`、`system_read_skill_*`、`commands/app/system.rs`、`services/skills/*` |
 | Memory 管理 | `MemoryManageRequest` | `services/gateway_bridge.rs` 的 `handle_memory_manage`：记忆命令交给 K-brain `/v1/memory/manage`，`history_shared_list`、`chat_history_search` 在桌面端本地处理 |
 | Cron 管理 | `CronManageRequest` | `commands/automation/cron.rs`、`services/automation/*`、settings cron 表 |
+| 权限规则（设置 → 权限） | `PermissionRulesRequest`（action `list`/`add`/`delete`，需桌面端声明 `PERMISSION_RULES_V1`） | `services/gateway_bridge.rs` 的 `handle_permission_rules`：只转发 workspace/rule/effect/scope/id，交给 K-brain `/v1/permissions/rules`；直连 K-brain 时由 Gateway `internal/kbrain/permission_rules.go` 转发 |
 
 ## 恢复与去重机制
 
