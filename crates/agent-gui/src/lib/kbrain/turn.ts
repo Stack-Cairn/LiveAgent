@@ -190,6 +190,8 @@ export type KBrainTurnParams = {
   onHostedSearch?: (search: HostedSearchBlock) => void;
   onToolCall: (call: ToolCall) => void;
   onToolResult: (call: ToolCall, result: ToolResultMessage) => void;
+  /** 命令运行中的输出尾部快照（整体替换，非增量）；结果到达后不再回调。 */
+  onToolOutput?: (toolCallId: string, output: string) => void;
   onSubagent?: (subagent: KBrainSubagent) => void;
   onStatus?: (status: string | null) => void;
   content?: KBrainContentBlock[];
@@ -644,6 +646,8 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
   let thinking = "";
   let finalMessage: KBrainMessage | undefined;
   const calls = new Map<string, ToolCall>();
+  // 已出结果的调用：之后到达的运行中输出一律忽略。
+  const settledCalls = new Set<string>();
   let afterSeq = accepted.accepted_seq;
   let terminal: "stop" | "error" | "aborted" = "stop";
   let errorMessage: string | undefined;
@@ -739,6 +743,7 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           name: result.toolName,
           arguments: {},
         };
+        settledCalls.add(result.toolCallId);
         params.onToolResult(call, result);
         break;
       }
@@ -792,9 +797,20 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
       }
       case "tool.status": {
         const payload = eventPayload<{
+          tool_call_id?: string | null;
           status?: string | null;
           text?: string | null;
+          message?: string | null;
         }>(event);
+        // 带 tool_call_id 的 running 状态是命令运行中的输出快照（#975）：交给对应
+        // 工具卡展示，不能当作整轮的状态文字覆盖运行进度。
+        const toolCallId = typeof payload?.tool_call_id === "string" ? payload.tool_call_id : "";
+        if (toolCallId && payload?.status === "running" && typeof payload.message === "string") {
+          if (calls.has(toolCallId) && !settledCalls.has(toolCallId)) {
+            params.onToolOutput?.(toolCallId, payload.message);
+          }
+          break;
+        }
         reportStatus(payload?.status ?? payload?.text ?? null);
         break;
       }

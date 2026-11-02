@@ -27,6 +27,11 @@ import { isSubagentCardToolCall } from "../../subagents/card";
 export type ToolTraceItem = {
   toolCall: ToolCall;
   toolResult?: ToolResultMessage;
+  /**
+   * 命令运行中由后端推送的输出尾部快照（K-brain tool.status，有上限）。只活在
+   * 实时轮次里：结果到达即丢弃，不写入历史或持久化消息。
+   */
+  liveOutput?: string;
 };
 
 export type UiRoundContentBlock =
@@ -313,10 +318,12 @@ function upsertToolBlock(
     const existing = blocks[existingIdx];
     if (existing.kind !== "tool") return blocks;
     const next = blocks.slice();
+    // 结果到达后由最终输出取代运行中快照。
+    const { liveOutput: _liveOutput, ...settledItem } = existing.item;
     next[existingIdx] = {
       kind: "tool",
       item: {
-        ...existing.item,
+        ...(toolResult ? settledItem : existing.item),
         toolCall: toolCallSnapshot,
         toolResult: toolResult ?? existing.item.toolResult,
       },
@@ -350,6 +357,26 @@ export function attachToolResultToRound<TRound extends Pick<UiRound, "blocks">>(
     ...round,
     blocks: upsertToolBlock(round.blocks, toolCall, toolResult),
   };
+}
+
+/**
+ * 写入运行中命令的输出快照。快照是截至此刻的完整尾部（不是增量），整体替换；
+ * 已有结果或找不到对应工具块时原样返回，避免晚到的快照盖住最终结果。
+ */
+export function setToolLiveOutputInRound<TRound extends Pick<UiRound, "blocks">>(
+  round: TRound,
+  toolCallId: string,
+  output: string,
+): TRound {
+  const idx = round.blocks.findIndex(
+    (block) => block.kind === "tool" && block.item.toolCall.id === toolCallId,
+  );
+  const existing = idx >= 0 ? round.blocks[idx] : undefined;
+  if (existing?.kind !== "tool" || existing.item.toolResult) return round;
+  if (existing.item.liveOutput === output) return round;
+  const blocks = round.blocks.slice();
+  blocks[idx] = { kind: "tool", item: { ...existing.item, liveOutput: output } };
+  return { ...round, blocks };
 }
 
 function findLastTextBlockIndex(blocks: UiRoundContentBlock[]) {

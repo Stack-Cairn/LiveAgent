@@ -177,11 +177,18 @@ function ToolCallItem({
     item.toolCall.id,
     item.toolCall.arguments,
   );
+  // 命令运行中收到输出（#975）就展开卡片显示实时输出；成功结束后再自动收起，
+  // 失败时保持展开以便查看错误。用户手动开合过则不再干预。
+  const hasLiveOutput = isBash && !result && Boolean(item.liveOutput);
   const shouldAutoOpen =
     !isRedactedToolContent &&
-    (item.toolCall.name === "Image" || builtinResultKind === "display_image" || shouldKeepAskOpen);
+    (item.toolCall.name === "Image" ||
+      builtinResultKind === "display_image" ||
+      shouldKeepAskOpen ||
+      hasLiveOutput);
   const [open, setOpen] = useState(readOnly || isRedactedToolContent ? false : shouldAutoOpen);
   const userInteractedRef = useRef(false);
+  const liveAutoOpenedRef = useRef(false);
   const isSubagentCard = isSubagentCardToolCall(item.toolCall);
   const hasArgs = Object.keys(item.toolCall.arguments || {}).length > 0;
   const isStreamingFilePreviewTool = FILE_TOOL_TEXT_FIELDS[item.toolCall.name] !== undefined;
@@ -299,6 +306,7 @@ function ToolCallItem({
   const statusTextClass =
     result?.isError || shellSessionFailed ? "text-[hsl(var(--chat-error))]" : "text-foreground/45";
 
+  const liveOutputSettledOk = Boolean(result) && !result?.isError && !shellSessionFailed;
   useEffect(() => {
     if (readOnly || isRedactedToolContent) return;
     if (userInteractedRef.current) return;
@@ -307,9 +315,21 @@ function ToolCallItem({
     } else if (shouldCloseAnsweredAsk) {
       setOpen(false);
     } else if (shouldAutoOpen) {
+      if (hasLiveOutput) liveAutoOpenedRef.current = true;
       setOpen(true);
+    } else if (liveAutoOpenedRef.current && liveOutputSettledOk) {
+      liveAutoOpenedRef.current = false;
+      setOpen(false);
     }
-  }, [isRedactedToolContent, readOnly, shouldAutoOpen, shouldCloseAnsweredAsk, shouldKeepAskOpen]);
+  }, [
+    hasLiveOutput,
+    isRedactedToolContent,
+    liveOutputSettledOk,
+    readOnly,
+    shouldAutoOpen,
+    shouldCloseAnsweredAsk,
+    shouldKeepAskOpen,
+  ]);
 
   const canExpand =
     !isRedactedToolContent &&
@@ -655,6 +675,7 @@ export function areToolTraceItemsEqual(previous: ToolTraceItem, next: ToolTraceI
   return (
     previous.toolCall.id === next.toolCall.id &&
     previous.toolCall.name === next.toolCall.name &&
+    previous.liveOutput === next.liveOutput &&
     areStableValuesEqual(previous.toolCall.arguments, next.toolCall.arguments) &&
     areToolResultsEqual(previous.toolResult, next.toolResult)
   );

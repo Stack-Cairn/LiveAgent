@@ -52,6 +52,11 @@ const GLOBAL_BASH_MAX_TIMEOUT_MS = 600_000;
 export type ToolTraceItem = {
   toolCall: ToolCall;
   toolResult?: ToolResultMessage;
+  /**
+   * 命令运行中由后端推送的输出尾部快照（K-brain tool.status，有上限）。只活在
+   * 实时轮次里：结果到达即丢弃，不写入历史或持久化消息。
+   */
+  liveOutput?: string;
 };
 
 export type UiRoundContentBlock =
@@ -1243,10 +1248,12 @@ function upsertToolBlock(
     const existing = baseBlocks[existingIdx];
     if (existing.kind !== "tool") return baseBlocks;
     const next = baseBlocks.slice();
+    // 结果到达后由最终输出取代运行中快照。
+    const { liveOutput: _liveOutput, ...settledItem } = existing.item;
     next[existingIdx] = {
       kind: "tool",
       item: {
-        ...existing.item,
+        ...(toolResult ? settledItem : existing.item),
         toolCall: toolCallSnapshot,
         toolResult: toolResult ?? existing.item.toolResult,
       },

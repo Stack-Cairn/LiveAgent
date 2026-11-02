@@ -34,12 +34,14 @@ import {
   toolResultMessageToText,
   type WriteResultDetails,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
+import { formatLiveShellOutput } from "@liveagent/ui/lib/chat/liveShellOutput";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
   SubagentMessageDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Search } from "../../IconSet";
 import {
   displayString,
@@ -52,6 +54,9 @@ import {
   shouldShowSubagentWorktreeLocation,
 } from "./assistantBubbleUtils";
 import { getToolResultImages, ToolResultImagePreview } from "./ToolImages";
+
+// 距底部不超过这么多像素视为“跟随最新输出”；用户上翻查看时不抢滚动位置。
+const LIVE_OUTPUT_STICK_THRESHOLD_PX = 24;
 
 type ShellResultDetails = {
   exit_code: number;
@@ -448,7 +453,30 @@ export function ShellToolDisplay({
       ? item.toolCall.arguments.command.trim()
       : "";
   const output = getShellDisplayOutput(result);
-  if (!command && !output) return null;
+  // 尚无结果时展示后端推送的输出尾部（编译进度等，#975）；结果到达后由最终输出取代。
+  const rawLiveOutput = result ? "" : (item.liveOutput ?? "");
+  const liveOutput = useMemo(() => formatLiveShellOutput(rawLiveOutput), [rawLiveOutput]);
+  const isLive = liveOutput !== "";
+  const preRef = useRef<HTMLPreElement>(null);
+  const followRef = useRef(true);
+  useEffect(() => {
+    const element = preRef.current;
+    if (!element || !isLive) return;
+    const onScroll = () => {
+      followRef.current =
+        element.scrollHeight - element.scrollTop - element.clientHeight <=
+        LIVE_OUTPUT_STICK_THRESHOLD_PX;
+    };
+    element.addEventListener("scroll", onScroll, { passive: true });
+    return () => element.removeEventListener("scroll", onScroll);
+  }, [isLive]);
+  useLayoutEffect(() => {
+    const element = preRef.current;
+    if (!element || !liveOutput || !followRef.current) return;
+    element.scrollTop = element.scrollHeight;
+  }, [liveOutput]);
+  const body = output ? previewText(output, 6000) : liveOutput;
+  if (!command && !body) return null;
 
   return (
     <section
@@ -458,6 +486,7 @@ export function ShellToolDisplay({
     >
       <div className="px-3 pb-0.5 pt-2.5 text-xs font-medium text-muted-foreground/75">Shell</div>
       <ToolScrollablePre
+        ref={preRef}
         className={cn(
           "max-h-72 rounded-none bg-transparent px-3 pb-3 pt-1.5 text-foreground/78",
           result?.isError && "text-red-700/90 dark:text-red-300/90",
@@ -467,10 +496,16 @@ export function ShellToolDisplay({
           <>
             <span className="select-none text-muted-foreground/45">$ </span>
             {command}
-            {output ? "\n" : null}
+            {body ? "\n" : null}
           </>
         ) : null}
-        {output ? previewText(output, 6000) : null}
+        {isLive && !output ? (
+          <span className="text-foreground/62" data-shell-live-output="">
+            {liveOutput}
+          </span>
+        ) : (
+          body || null
+        )}
       </ToolScrollablePre>
     </section>
   );
