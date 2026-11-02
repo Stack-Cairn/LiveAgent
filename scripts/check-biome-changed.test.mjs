@@ -24,5 +24,6 @@ test("CI warning gate uses installed pnpm without dropping strict checks", () =>
   assert.deepEqual(local, { command: "mise", args: ["exec", "--", "pnpm", ...ci.args] });
   assert.ok(ci.args.includes("--error-on-warnings"));
   assert.ok(ci.args.includes("--line-ending=lf"));
+  assert.ok(ci.args.includes("--no-errors-on-unmatched"));
   assert.ok(ci.args.includes("src/sidebar/store.ts"));
 });
