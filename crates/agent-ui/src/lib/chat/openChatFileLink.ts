@@ -28,5 +28,6 @@ export function openChatFileLink(params: OpenChatFileLinkParams) {
     end_line: params.endLine,
     column: params.column,
     open_in_file_manager: params.openInFileManager,
+    open_with_default_app: params.openWithDefaultApp,
   });
 }

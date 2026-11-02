@@ -198,13 +198,19 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       ...attachToolResultToRound(target, call, enriched),
       runningToolCallIds: target.runningToolCallIds.filter((id) => id !== call.id),
     }));
-    // WebUI reads `content`/`isError` and attaches the result in the call's round.
+    // WebUI reads `content`/`isError` and attaches the result in the call's round;
+    // an Image call also needs its display_image details to render at all.
+    const displayImage =
+      (enriched.details as { kind?: unknown } | undefined)?.kind === "display_image"
+        ? { details: enriched.details }
+        : {};
     gatewayBridgeEvents.queueEvent({
       type: "tool_result",
       id: call.id,
       name: call.name,
       content: result.content,
       isError: result.isError === true,
+      ...displayImage,
       conversation_id: params.conversationId,
       round: callRounds.get(call.id) ?? round,
     });

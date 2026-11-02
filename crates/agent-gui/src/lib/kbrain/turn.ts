@@ -23,6 +23,7 @@ import { createKBrainClient } from "./client";
 import { getKBrainSessionId, setKBrainSessionId } from "./mapping";
 import { questionResultDetails } from "./questions";
 import { aiReviewTitle, localizeAIReviewReason } from "./reviewNotice";
+import { displayImageResultDetails, kbrainToolImages } from "./toolImages";
 import type {
   KBrainClientToolRequest,
   KBrainClientToolResult,
@@ -287,22 +288,18 @@ function toolResult(
   runId: string,
   revision: number,
 ): ToolResultMessage {
+  const isError = result.failed === true || result.cancelled === true;
+  const images = kbrainToolImages(result.content, result.output);
   return {
     role: "toolResult",
     toolCallId: result.id,
     toolName: result.name ?? "tool",
-    content: [
-      { type: "text", text: result.output },
-      ...(result.content ?? []).flatMap((block): ToolResultMessage["content"] =>
-        block.type === "image" && block.image_url
-          ? [{ type: "image", data: block.image_url, mimeType: block.mime_type || "image/png" }]
-          : [],
-      ),
-    ],
+    content: [{ type: "text", text: result.output }, ...images.content],
     details:
       questionResultDetails(result.name, result.output) ??
-      taskResultDetails(result.name, call?.arguments, result, runId, revision),
-    isError: result.failed === true || result.cancelled === true,
+      taskResultDetails(result.name, call?.arguments, result, runId, revision) ??
+      displayImageResultDetails(result.name, images.images, isError),
+    isError,
     timestamp: Date.now(),
   };
 }

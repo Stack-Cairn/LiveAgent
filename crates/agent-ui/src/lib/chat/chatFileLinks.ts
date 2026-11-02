@@ -4,6 +4,12 @@ export type ChatFileLink = {
   endLine?: number;
   column?: number;
   source: "absolute" | "relative" | "file-url";
+  /** Set by the link's context menu to reveal the target in the host file
+   * manager; never parsed from or encoded into message text. */
+  openInFileManager?: boolean;
+  /** Set by the link's context menu (desktop only) to hand the file to the
+   * host's default app or browser; never parsed from message text. */
+  openWithDefaultApp?: boolean;
 };
 
 const WINDOWS_DRIVE_PATH_PATTERN = /^[a-zA-Z]:[\\/]/;

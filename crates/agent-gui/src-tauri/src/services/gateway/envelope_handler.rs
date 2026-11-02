@@ -1123,8 +1123,15 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::ChatFileOpen(request)) => {
                 let sender = self.current_outbound_sender()?;
+                let controller = Arc::clone(self);
                 tauri::async_runtime::spawn(async move {
-                    let envelope = match gateway_bridge::handle_chat_file_open(request).await {
+                    let conversation_id = request.conversation_id.clone();
+                    let lookup_id = format!("{request_id}:chat-file-workdir");
+                    let current_workdir =
+                        || controller.kbrain_conversation_workdir(lookup_id, conversation_id);
+                    let result =
+                        gateway_bridge::handle_chat_file_open(request, current_workdir).await;
+                    let envelope = match result {
                         Ok(response) => proto::AgentEnvelope {
                             request_id,
                             timestamp: now_unix_seconds(),

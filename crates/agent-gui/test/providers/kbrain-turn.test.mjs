@@ -37,7 +37,8 @@ test("backend computer screenshots survive live tool result events", async () =>
     event(4, "run.completed"),
   )] });
   await runKBrainTurn({ ...baseParams, fetch, onToolResult: (_call, result) => results.push(result) });
-  assert.equal(results[0].content[1].data, image);
+  // Transcript images hold raw base64; the renderer adds the data URL prefix.
+  assert.equal(results[0].content[1].data, "aW1hZ2U=");
   assert.equal(results[0].content[1].mimeType, "image/png");
 });
 

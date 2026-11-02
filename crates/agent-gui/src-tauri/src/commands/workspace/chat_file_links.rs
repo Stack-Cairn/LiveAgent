@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::fs;
+use std::future::Future;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
@@ -165,6 +166,23 @@ const EXECUTABLE_EXTENSIONS: &[&str] = &[
     "workflow",
     "xbap",
     "xpi",
+];
+
+// Professional-app documents without an in-app preview. A plain click reveals
+// them; the link menu can hand them to the default app.
+const OFFICE_EXTENSIONS: &[&str] = &[
+    "epub", "key", "mpp", "numbers", "odg", "odp", "odt", "one", "pages", "pps", "ppsx", "ppt",
+    "pptx", "pub", "vsd", "vsdx",
+];
+// Types the link menu may hand to the default app or browser. Scripts,
+// executables and the macro-enabled OOXML formats (docm, xlsm, pptm...) are
+// not on it; legacy doc/xls/ppt stay, as Office asks before running macros.
+const DEFAULT_APP_EXTENSIONS: &[&str] = &[
+    "avif", "bmp", "csv", "doc", "docx", "epub", "flac", "gif", "htm", "html", "ico", "jpeg",
+    "jpg", "json", "key", "log", "m4a", "m4v", "md", "mov", "mp3", "mp4", "mpp", "numbers", "odg",
+    "odp", "ods", "odt", "oga", "ogg", "ogv", "one", "pages", "pdf", "png", "pps", "ppsx", "ppt",
+    "pptx", "pub", "rtf", "svg", "tsv", "txt", "vsd", "vsdx", "wav", "webm", "webp", "xhtml",
+    "xls", "xlsx", "xltx", "xml", "yaml", "yml",
 ];
 
 // Build artifacts the chat frequently links to (release archives, exports).
@@ -348,6 +366,7 @@ fn preview_target(
     ))
 }
 
+#[cfg(test)]
 fn build_chat_file_link_plan(
     conversation_id: &str,
     workdir: &str,
@@ -357,6 +376,48 @@ fn build_chat_file_link_plan(
     end_line: Option<u32>,
     column: Option<u32>,
     open_in_file_manager: bool,
+) -> Result<ChatFileLinkPlan, ChatFileLinkError> {
+    build_chat_file_link_plan_with(
+        conversation_id,
+        workdir,
+        path,
+        source,
+        line,
+        end_line,
+        column,
+        open_in_file_manager,
+        false,
+    )
+}
+
+fn opened_plan(target: PathBuf, kind: &str, outside_workspace: bool) -> ChatFileLinkPlan {
+    ChatFileLinkPlan {
+        response: ChatFileLinkOpenResponse {
+            action: "opened".to_string(),
+            kind: kind.to_string(),
+            workdir: None,
+            path: None,
+            line: None,
+            end_line: None,
+            column: None,
+            outside_workspace,
+        },
+        target,
+        system_mode: Some("open"),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_chat_file_link_plan_with(
+    conversation_id: &str,
+    workdir: &str,
+    path: &str,
+    source: &str,
+    line: Option<u32>,
+    end_line: Option<u32>,
+    column: Option<u32>,
+    open_in_file_manager: bool,
+    open_with_default_app: bool,
 ) -> Result<ChatFileLinkPlan, ChatFileLinkError> {
     if conversation_id.trim().is_empty() || conversation_id.len() > 256 {
         return Err(ChatFileLinkError::new(
@@ -445,6 +506,15 @@ fn build_chat_file_link_plan(
         }
         let inside_workspace =
             target.starts_with(&conversation_workdir) && target != conversation_workdir;
+        if open_with_default_app {
+            if target.to_string_lossy().contains(',') {
+                return Err(ChatFileLinkError::new(
+                    ChatFileLinkErrorCode::UnsupportedTarget,
+                    "This folder cannot be opened with the default app safely.",
+                ));
+            }
+            return Ok(opened_plan(target, "directory", !inside_workspace));
+        }
         if inside_workspace && !open_in_file_manager {
             let (response_workdir, response_path, outside_workspace) =
                 preview_target(&conversation_workdir, &target)?;
@@ -484,6 +554,41 @@ fn build_chat_file_link_plan(
             "The linked path is not a regular file or directory.",
         ));
     }
+    let outside_workspace = !target.starts_with(&conversation_workdir);
+    if open_with_default_app {
+        // The menu's "open with the default app/browser" launches the file's
+        // handler, so only document, media and web types qualify.
+        // Explorer splits a command line at commas, so a comma in the path
+        // could make it open a different file than the one checked here.
+        if !has_extension(&target, DEFAULT_APP_EXTENSIONS)
+            || has_shebang(&target)
+            || target.to_string_lossy().contains(',')
+        {
+            return Err(ChatFileLinkError::new(
+                ChatFileLinkErrorCode::UnsupportedTarget,
+                "This file type cannot be opened with the default app safely.",
+            ));
+        }
+        return Ok(opened_plan(target, "file", outside_workspace));
+    }
+    // "Open containing folder": revealing selects the file in the file manager
+    // and never launches it, so every file type may be revealed.
+    if open_in_file_manager {
+        return Ok(ChatFileLinkPlan {
+            response: ChatFileLinkOpenResponse {
+                action: "revealed".to_string(),
+                kind: "file".to_string(),
+                workdir: None,
+                path: None,
+                line: None,
+                end_line: None,
+                column: None,
+                outside_workspace: !target.starts_with(&conversation_workdir),
+            },
+            target,
+            system_mode: Some("reveal"),
+        });
+    }
 
     let script = has_extension(&target, SCRIPT_EXTENSIONS) || has_shebang(&target);
     let executable = has_extension(&target, EXECUTABLE_EXTENSIONS)
@@ -492,7 +597,10 @@ fn build_chat_file_link_plan(
         "editor"
     } else if has_extension(&target, PREVIEW_EXTENSIONS) {
         "preview"
-    } else if executable || has_extension(&target, ARCHIVE_EXTENSIONS) {
+    } else if executable
+        || has_extension(&target, ARCHIVE_EXTENSIONS)
+        || has_extension(&target, OFFICE_EXTENSIONS)
+    {
         "revealed"
     } else if is_probably_text(&target) {
         "editor"
@@ -538,6 +646,7 @@ fn build_chat_file_link_plan(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn open_chat_file_link_sync(
     conversation_id: String,
     workdir: String,
@@ -547,8 +656,9 @@ pub(crate) fn open_chat_file_link_sync(
     end_line: Option<u32>,
     column: Option<u32>,
     open_in_file_manager: bool,
+    open_with_default_app: bool,
 ) -> Result<ChatFileLinkOpenResponse, ChatFileLinkError> {
-    let plan = build_chat_file_link_plan(
+    let plan = build_chat_file_link_plan_with(
         &conversation_id,
         &workdir,
         &path,
@@ -557,6 +667,7 @@ pub(crate) fn open_chat_file_link_sync(
         end_line,
         column,
         open_in_file_manager,
+        open_with_default_app,
     )?;
     if let Some(mode) = plan.system_mode {
         spawn_workspace_open_command(&plan.target, mode).map_err(|_| {
@@ -569,38 +680,66 @@ pub(crate) fn open_chat_file_link_sync(
     Ok(plan.response)
 }
 
-pub(crate) async fn open_chat_file_link_for_conversation(
+/// Picks the conversation working directory. `current_workdir` is the
+/// authoritative answer (K-brain owns history in K-brain mode, and migrated
+/// conversations keep a stale local row); the desktop's own history database
+/// is the fallback, and an id neither knows stays rejected.
+async fn resolve_conversation_workdir<F, Fut, L, LFut>(
+    current_workdir: F,
+    local_summary_cwd: L,
+) -> Result<String, ChatFileLinkError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Option<String>>,
+    L: FnOnce() -> LFut,
+    LFut: Future<Output = Result<Option<String>, String>>,
+{
+    let non_empty = |value: &String| !value.trim().is_empty();
+    if let Some(cwd) = current_workdir().await.filter(non_empty) {
+        return Ok(cwd);
+    }
+    let cwd = local_summary_cwd().await.map_err(|_| {
+        ChatFileLinkError::new(
+            ChatFileLinkErrorCode::InvalidRequest,
+            "The conversation is unavailable on this device.",
+        )
+    })?;
+    cwd.filter(non_empty).ok_or_else(|| {
+        ChatFileLinkError::new(
+            ChatFileLinkErrorCode::InvalidWorkdir,
+            "The conversation working directory is unavailable.",
+        )
+    })
+}
+
+/// `current_workdir` resolves the conversation's working directory from the
+/// history that currently owns it. Gateway callers must answer it from the
+/// desktop's own session record, never from the request.
+pub(crate) async fn open_chat_file_link_for_conversation<F, Fut>(
     conversation_id: String,
-    requested_workdir: String,
     path: String,
     source: String,
     line: Option<u32>,
     end_line: Option<u32>,
     column: Option<u32>,
     open_in_file_manager: bool,
-) -> Result<ChatFileLinkOpenResponse, ChatFileLinkError> {
+    open_with_default_app: bool,
+    current_workdir: F,
+) -> Result<ChatFileLinkOpenResponse, ChatFileLinkError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Option<String>>,
+{
     tokio::time::timeout(CHAT_FILE_OPEN_TIMEOUT, async move {
-        // Finding the id in the target agent's own history database is the
-        // conversation/worker ownership check. The request-supplied workdir is
-        // never used as the base for a relative path.
-        let summary = chat_history::chat_history_get_summary_inner(conversation_id.clone())
-            .await
-            .map_err(|_| {
-                ChatFileLinkError::new(
-                    ChatFileLinkErrorCode::InvalidRequest,
-                    "The conversation is unavailable on this device.",
-                )
-            })?;
-        let workdir = summary
-            .cwd
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| {
-                ChatFileLinkError::new(
-                    ChatFileLinkErrorCode::InvalidWorkdir,
-                    "The conversation working directory is unavailable.",
-                )
-            })?;
-        let _ = requested_workdir;
+        // Finding the id in the owning history (K-brain session or the
+        // desktop's own database) is the conversation/worker ownership check.
+        let local_id = conversation_id.clone();
+        let workdir = resolve_conversation_workdir(current_workdir, || async move {
+            chat_history::chat_history_get_summary_inner(local_id)
+                .await
+                .map(|summary| summary.cwd)
+        })
+        .await?;
         let permit = Arc::clone(&CHAT_FILE_OPEN_SEMAPHORE)
             .acquire_owned()
             .await
@@ -622,6 +761,7 @@ pub(crate) async fn open_chat_file_link_for_conversation(
                 end_line,
                 column,
                 open_in_file_manager,
+                open_with_default_app,
             )
         })
         .await
@@ -651,16 +791,21 @@ pub async fn open_chat_file_link(
     end_line: Option<u32>,
     column: Option<u32>,
     open_in_file_manager: Option<bool>,
+    open_with_default_app: Option<bool>,
 ) -> Result<ChatFileLinkOpenResponse, ChatFileLinkError> {
+    // The desktop webview owns this device and already reads any workdir
+    // through the fs commands, so the workdir it shows for the conversation
+    // is trusted.
     open_chat_file_link_for_conversation(
         conversation_id,
-        workdir,
         path,
         source,
         line,
         end_line,
         column,
         open_in_file_manager.unwrap_or(false),
+        open_with_default_app.unwrap_or(false),
+        || async move { Some(workdir) },
     )
     .await
 }
@@ -699,6 +844,166 @@ mod tests {
             false,
         )
         .expect("build plan")
+    }
+
+    fn resolve(
+        current: Option<&str>,
+        local: Result<Option<String>, String>,
+    ) -> Result<String, ChatFileLinkError> {
+        let current = current.map(str::to_string);
+        tauri::async_runtime::block_on(resolve_conversation_workdir(
+            || async move { current },
+            || async move { local },
+        ))
+    }
+
+    #[test]
+    fn conversation_workdir_prefers_the_owning_history_over_a_stale_local_row() {
+        let workdir =
+            resolve(Some("/kbrain"), Ok(Some("/migrated-stale".into()))).expect("current cwd");
+        assert_eq!(workdir, "/kbrain");
+    }
+
+    #[test]
+    fn kbrain_conversations_missing_from_local_history_use_the_owning_workdir() {
+        let workdir = resolve(Some("/kbrain"), Err("not found".into())).expect("current cwd");
+        assert_eq!(workdir, "/kbrain");
+    }
+
+    #[test]
+    fn local_history_answers_when_the_owning_history_has_no_workdir() {
+        let workdir = resolve(None, Ok(Some("/local".into()))).expect("local cwd");
+        assert_eq!(workdir, "/local");
+        let workdir = resolve(Some("  "), Ok(Some("/local".into()))).expect("blank current");
+        assert_eq!(workdir, "/local");
+    }
+
+    #[test]
+    fn unknown_conversations_stay_unavailable() {
+        let error = resolve(None, Err("not found".into())).expect_err("unknown id");
+        assert_eq!(error.code, ChatFileLinkErrorCode::InvalidRequest);
+        let error = resolve(None, Ok(Some("  ".into()))).expect_err("empty cwd");
+        assert_eq!(error.code, ChatFileLinkErrorCode::InvalidWorkdir);
+    }
+
+    #[test]
+    fn kbrain_temp_artifacts_outside_the_workspace_resolve_to_a_preview_root() {
+        let root = temp_workspace();
+        let outside = std::env::temp_dir().join(format!(
+            "liveagent-chat-artifact-{}-{}.png",
+            std::process::id(),
+            NEXT_TEMP_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::write(&outside, b"\x89PNG").expect("write temp artifact");
+        let workdir =
+            resolve(Some(&root.to_string_lossy()), Err("not found".into())).expect("current cwd");
+        let planned = build_chat_file_link_plan(
+            "kbrain-conversation",
+            &workdir,
+            &outside.to_string_lossy(),
+            "absolute",
+            None,
+            None,
+            None,
+            false,
+        )
+        .expect("plan temp artifact");
+        assert_eq!(planned.response.action, "preview");
+        assert!(planned.response.outside_workspace);
+        fs::remove_file(outside).expect("remove temp artifact");
+        fs::remove_dir_all(root).expect("remove temp workspace");
+    }
+
+    fn default_app_plan(root: &Path, path: &str) -> Result<ChatFileLinkPlan, ChatFileLinkError> {
+        build_chat_file_link_plan_with(
+            "conversation-test",
+            &root.to_string_lossy(),
+            path,
+            "relative",
+            None,
+            None,
+            None,
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    fn default_app_opens_documents_and_web_pages_but_never_scripts_or_macros() {
+        let root = temp_workspace();
+        for name in ["deck.pptx", "report.docx", "sheet.xlsx", "page.html", "notes.md"] {
+            fs::write(root.join(name), b"content").expect("write document");
+            let planned = default_app_plan(&root, name).expect("default app plan");
+            assert_eq!(planned.response.action, "opened", "{name}");
+            assert_eq!(planned.system_mode, Some("open"), "{name}");
+        }
+        for name in [
+            "run.ps1",
+            "setup.exe",
+            "macro.docm",
+            "macro.xlsm",
+            "start.bat",
+            "opaque.custom",
+        ] {
+            fs::write(root.join(name), b"content").expect("write unsafe file");
+            let error = match default_app_plan(&root, name) {
+                Ok(planned) => panic!("{name} would launch: {:?}", planned.response),
+                Err(error) => error,
+            };
+            assert_eq!(error.code, ChatFileLinkErrorCode::UnsupportedTarget, "{name}");
+        }
+        fs::write(root.join("notes"), b"#!/bin/sh\necho hi\n").expect("write shebang");
+        fs::rename(root.join("notes"), root.join("notes.txt")).expect("rename shebang");
+        assert!(default_app_plan(&root, "notes.txt").is_err());
+        let directory = default_app_plan(&root, "src").expect("directory plan");
+        assert_eq!(directory.response.action, "opened");
+        fs::remove_dir_all(root).expect("remove temp workspace");
+    }
+
+    #[test]
+    fn default_app_refuses_paths_explorer_would_split_on_a_comma() {
+        let root = temp_workspace();
+        fs::write(root.join("run.bat"), b"@echo off\r\n").expect("write bat");
+        fs::write(root.join("run.bat,report.pdf"), b"%PDF-1.4").expect("write decoy");
+        assert!(default_app_plan(&root, "run.bat,report.pdf").is_err());
+        fs::create_dir(root.join("run.bat,docs")).expect("comma dir");
+        assert!(default_app_plan(&root, "run.bat,docs").is_err());
+        fs::remove_dir_all(root).expect("remove temp workspace");
+    }
+
+    #[test]
+    fn office_documents_without_a_preview_reveal_on_a_plain_click() {
+        let root = temp_workspace();
+        fs::write(root.join("deck.pptx"), [0x50_u8, 0x4b, 0x03, 0x04]).expect("write pptx");
+        let planned = plan(&root, "deck.pptx", "relative");
+        assert_eq!(planned.response.action, "revealed");
+        assert_eq!(planned.system_mode, Some("reveal"));
+        fs::remove_dir_all(root).expect("remove temp workspace");
+    }
+
+    #[test]
+    fn open_in_file_manager_reveals_files_of_every_type_without_launching() {
+        let root = temp_workspace();
+        fs::write(root.join("src/a.ts"), "const value = 1;\n").expect("write source");
+        fs::write(root.join("setup.exe"), [0_u8, 1, 2, 3]).expect("write exe");
+        fs::write(root.join("opaque.custom"), [0_u8, 1, 2, 3]).expect("write opaque");
+        for name in ["src/a.ts", "setup.exe", "opaque.custom"] {
+            let planned = build_chat_file_link_plan(
+                "conversation-test",
+                &root.to_string_lossy(),
+                name,
+                "relative",
+                Some(3),
+                None,
+                None,
+                true,
+            )
+            .expect("reveal plan");
+            assert_eq!(planned.response.action, "revealed", "{name}");
+            assert_eq!(planned.system_mode, Some("reveal"), "{name}");
+            assert!(!planned.response.outside_workspace, "{name}");
+        }
+        fs::remove_dir_all(root).expect("remove temp workspace");
     }
 
     #[test]

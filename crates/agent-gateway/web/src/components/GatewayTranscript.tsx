@@ -3,6 +3,7 @@ import {
   LiveAssistantStatus,
 } from "@liveagent/ui/components/chat/AssistantBubble";
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
+import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatFileLinkContextMenu";
 import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
 import { EditableUserMessageBubble } from "@liveagent/ui/components/chat/EditableUserMessageBubble";
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
@@ -1204,6 +1205,7 @@ export function GatewayTranscript({
         ) : null}
       </div>
       <div className="col-2 h-gateway-transcript-bottom-spacer-h" />
+      <ChatFileLinkContextMenuHost />
     </div>
   );
 }

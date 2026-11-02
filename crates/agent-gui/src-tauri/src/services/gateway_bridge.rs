@@ -1329,18 +1329,27 @@ pub async fn handle_fs_read_workspace_image(
     })
 }
 
-pub async fn handle_chat_file_open(
+/// `current_workdir` looks the conversation up in the history that owns it;
+/// `request.workdir` is never trusted as the link base.
+pub async fn handle_chat_file_open<F, Fut>(
     request: proto::ChatFileOpenRequest,
-) -> Result<proto::ChatFileOpenResponse, String> {
+    current_workdir: F,
+) -> Result<proto::ChatFileOpenResponse, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Option<String>>,
+{
     open_chat_file_link_for_conversation(
         request.conversation_id,
-        request.workdir,
         request.path,
         request.source,
         request.line,
         request.end_line,
         request.column,
         request.open_in_file_manager,
+        // Launching apps on the host is a desktop-window choice only.
+        false,
+        current_workdir,
     )
     .await
     .map_err(|error| error.message)
