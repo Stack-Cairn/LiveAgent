@@ -6,7 +6,10 @@ import type {
   ToolResultMessage,
 } from "@liveagent/app/lib/agentTypes";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
-import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
+import {
+  type HostedSearchBlock,
+  normalizeHostedSearchBlock,
+} from "@liveagent/ui/lib/chat/hostedSearch";
 import {
   encodeRunProgress,
   parseRunProgress,
@@ -184,7 +187,7 @@ export type KBrainTurnParams = {
   signal: AbortSignal;
   onTextDelta: (text: string) => void;
   onThinkingDelta: (text: string) => void;
-  onHostedSearch?: (search: KBrainHostedSearch) => void;
+  onHostedSearch?: (search: HostedSearchBlock) => void;
   onToolCall: (call: ToolCall) => void;
   onToolResult: (call: ToolCall, result: ToolResultMessage) => void;
   onSubagent?: (subagent: KBrainSubagent) => void;
@@ -315,14 +318,9 @@ function finalContent(
       content.push({ type: "thinking", thinking: block.text });
   }
   for (const search of message?.hosted_search ?? []) {
-    content.push({
-      type: "hostedSearch",
-      id: search.id,
-      provider: search.provider,
-      status: search.status,
-      queries: search.queries,
-      sources: search.sources,
-    } as HostedSearchBlock);
+    // K-brain（Go）把空切片序列化成 null，必须先归一化，否则渲染时崩溃（#1069）。
+    const block = normalizeHostedSearchBlock(search);
+    if (block) content.push(block);
   }
   for (const call of message?.tool_calls ?? []) content.push(toolCall(call));
   const hasThinking = content.some(
@@ -712,8 +710,9 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         break;
       }
       case "assistant.sources": {
-        const search = eventPayload<KBrainHostedSearch>(event);
-        if (search?.type === "hostedSearch" && search.id) params.onHostedSearch?.(search);
+        // 搜索刚开始时 queries/sources 尚为空，K-brain 会发 null；归一化后再进 UI（#1069）。
+        const search = normalizeHostedSearchBlock(eventPayload<KBrainHostedSearch>(event));
+        if (search) params.onHostedSearch?.(search);
         break;
       }
       case "tool.call": {

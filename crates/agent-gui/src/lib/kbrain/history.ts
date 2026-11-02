@@ -5,7 +5,10 @@ import type {
   Message,
   TextContent,
 } from "@liveagent/app/lib/agentTypes";
-import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
+import {
+  type HostedSearchBlock,
+  normalizeHostedSearchBlock,
+} from "@liveagent/ui/lib/chat/hostedSearch";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
 import { parseUserMessageContentWithUploads } from "@liveagent/ui/lib/chat/uploadedFiles";
 import {
@@ -113,14 +116,11 @@ function historyStopReason(reason: string | undefined): AssistantMessage["stopRe
 }
 
 function toHostedSearch(value: KBrainMessage["hosted_search"]): HostedSearchBlock[] {
-  return (value ?? []).map((search) => ({
-    type: "hostedSearch" as const,
-    id: search.id,
-    provider: search.provider,
-    status: search.status,
-    queries: search.queries,
-    sources: search.sources,
-  }));
+  // 已落库的旧记录里 queries/sources 可能是 null，回读时同样归一化（#1069）。
+  return (value ?? []).flatMap((search) => {
+    const block = normalizeHostedSearchBlock(search);
+    return block ? [block] : [];
+  });
 }
 
 function toMessage(

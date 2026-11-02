@@ -128,12 +128,15 @@ export type KBrainHostedSearch = {
   id: string;
   provider?: string;
   status: "searching" | "completed" | "failed";
-  queries: string[];
-  sources: {
-    url: string;
-    title?: string;
-    sourceType?: "source" | "citation";
-  }[];
+  // Go 端 nil 切片会序列化为 null。
+  queries: string[] | null;
+  sources:
+    | {
+        url: string;
+        title?: string;
+        sourceType?: "source" | "citation";
+      }[]
+    | null;
   error?: string;
 };
 
