@@ -157,3 +157,19 @@ export async function finalizeChatRunInOrder(params: {
     throw finalizationError;
   }
 }
+
+/**
+ * 停止后侧栏占位行的去留只取决于「这次提问有没有落库」：
+ * 首次落库尚未发起（null）、返回 false 或抛错都视为未落库，占位行可以删除；
+ * 已落库则保留，由落库的 upsert 原地转正，避免行先消失再被推回来。
+ */
+export async function shouldKeepPendingRowAfterAbort(
+  initialPersist: Promise<boolean> | null,
+): Promise<boolean> {
+  if (!initialPersist) return false;
+  try {
+    return (await initialPersist) === true;
+  } catch {
+    return false;
+  }
+}
