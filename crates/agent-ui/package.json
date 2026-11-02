@@ -28,6 +28,7 @@
     "docx-preview": "^0.4.0",
     "ical.js": "^2.2.1",
     "jszip": "^3.10.1",
+    "modern-screenshot": "^4.7.0",
     "monaco-editor": "^0.56.0",
     "motion": "13.2.0",
     "postal-mime": "^3.0.1",

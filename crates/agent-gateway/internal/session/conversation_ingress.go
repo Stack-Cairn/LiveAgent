@@ -57,6 +57,9 @@ func (m *Manager) ingestChatEvent(agentID, requestID string, event *gatewayv2.Ch
 	}
 
 	if event.GetType() == gatewayv2.ChatEvent_USER_MESSAGE {
+		if record := s.runs[agentScopedKey(agentID, runID)]; record != nil && record.composerCommand && !record.started {
+			s.runStartedLocked(stream, runID, "", now)
+		}
 		if record := s.runs[agentScopedKey(agentID, runID)]; record != nil && record.userMessageSeeded {
 			messageID, _ := payload["message_id"].(string)
 			if strings.TrimSpace(messageID) == "" {
@@ -208,6 +211,11 @@ func (m *Manager) ingestChatControl(agentID, requestID string, control *gatewayv
 		}
 		s.runStartedLocked(stream, runID, "", now)
 	case "completed", "failed", "cancelled":
+		record := s.runRecordLocked(agentID, runID, conversationID)
+		if controlType == "failed" && record.composerCommand && !record.started {
+			s.rejectComposerCommandLocked(stream, runID, record, errorCode, message, now)
+			return
+		}
 		inferredLoss := controlType == "failed" && isInferredRunLossCode(errorCode)
 		if stream.runFinishedRecently(runID) {
 			if inferredLoss || !s.resurrectRunLocked(stream, runID) {
@@ -434,12 +442,20 @@ func (s *conversationStreamStore) bindPendingRunLocked(
 	}
 	record := s.runRecordLocked(pending.agentID, pending.runID, conversationID)
 	record.clientRequestID = pending.clientRequestID
+	record.composerCommand = pending.composerCommand
+	if pending.composerCommand {
+		record.deferredSeeds = pending.seeded
+	}
 	s.markRunQueuedLocked(stream, pending.runID, pending.clientRequestID, now)
+	seeds := pending.seeded
+	if pending.composerCommand {
+		seeds = nil
+	}
 	acceptedSeq := s.appendSeededPayloadsLocked(
-		stream, pending.runID, pending.clientRequestID, pending.seeded, now,
+		stream, pending.runID, pending.clientRequestID, seeds, now,
 	)
-	record.userMessageSeeded = seededPayloadsIncludeUserMessage(pending.seeded)
-	record.rebaseSeeded = seededPayloadsIncludeRebased(pending.seeded)
+	record.userMessageSeeded = seededPayloadsIncludeUserMessage(seeds)
+	record.rebaseSeeded = seededPayloadsIncludeRebased(seeds)
 	s.updateChatCommandDedupeLocked(
 		pending.agentID,
 		pending.clientRequestID,

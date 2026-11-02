@@ -72,7 +72,11 @@ type AlertDialogContentProps = React.ComponentPropsWithoutRef<typeof AlertDialog
 export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentProps>(
   ({ className, children, style, ...props }, ref) => {
     // 同 dialog.tsx：把缩放档位经 context 带过弹层的 portal 边界。
-    const zoneFontScale = resolveZoneFontScale(style, ALERT_DIALOG_FONT_SCALE);
+    const inheritedFontScale = React.useContext(ZoneFontScaleContext);
+    const zoneFontScale = resolveZoneFontScale(
+      style,
+      inheritedFontScale ?? ALERT_DIALOG_FONT_SCALE,
+    );
     return (
       <AlertDialogPortal>
         <AlertDialogOverlay />
@@ -87,7 +91,7 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
             ref={ref}
             data-slot="alert-dialog-content"
             style={{
-              ...({ "--zone-font-scale": ALERT_DIALOG_FONT_SCALE } as React.CSSProperties),
+              ...({ "--zone-font-scale": zoneFontScale } as React.CSSProperties),
               ...style,
             }}
             className={cn(

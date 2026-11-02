@@ -1,3 +1,5 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import {
   normalizeSftpActionResponse,
   normalizeSftpListResponse,
@@ -13,8 +15,6 @@ import {
   type RawSftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/normalization";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 
 export const tauriSftpClient: SftpClient = {
   async list(params) {

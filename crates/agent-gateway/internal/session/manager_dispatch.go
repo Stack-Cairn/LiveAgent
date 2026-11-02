@@ -21,6 +21,24 @@ func (m *Manager) DispatchFromAgentForSession(session *AgentSession, env *gatewa
 	m.dispatchFromAgent(session, env)
 }
 
+// IngestRemoteChatEvent feeds a canonical remote backend event through the same
+// stream normalizer used by desktop Agent ingress.
+func (m *Manager) IngestRemoteChatEvent(agentID, runID string, event *gatewayv2.ChatEvent) {
+	m.ingestChatEvent(agentID, runID, event)
+}
+
+// IngestRemoteChatControl feeds a remote backend lifecycle event through the
+// same terminal and queue state machine used by desktop Agent control events.
+func (m *Manager) IngestRemoteChatControl(agentID, runID string, control *gatewayv2.ChatControlEvent) {
+	m.ingestChatControl(agentID, runID, control)
+}
+
+// BroadcastRemoteChatQueue publishes a K-brain relay queue snapshot through the
+// existing Gateway queue subscription and replay path.
+func (m *Manager) BroadcastRemoteChatQueue(agentID string, event *gatewayv2.ChatQueueEvent) {
+	m.broadcastChatQueueEvent(agentID, event)
+}
+
 func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.AgentEnvelope) {
 	// 严格校验 expected 仍是所属登记项的在线会话；被顶替连接的迟到事件直接丢弃。
 	var session *AgentSession
@@ -105,6 +123,16 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 			return
 		}
 		m.broadcastHistorySync(agentID, historySync)
+		return
+	}
+
+	if historyStatus := env.GetHistorySyncStatus(); historyStatus != nil {
+		m.updateHistorySyncStatus(agentID, historyStatus)
+		return
+	}
+
+	if historySnapshot := env.GetHistorySyncSnapshot(); historySnapshot != nil {
+		m.updateHistorySyncSnapshot(agentID, historySnapshot)
 		return
 	}
 

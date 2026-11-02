@@ -1,4 +1,61 @@
 export const EN_US_SETTINGS_TRANSLATIONS = {
+  "settings.aiApproval.title": "AI approval",
+  "settings.aiApproval.description":
+    "An isolated K-brain reviewer checks sandbox operations, sensitive data, model behavior and tool-content injection.",
+  "settings.aiApproval.mode": "Approval mode",
+  "settings.aiApproval.off": "Off",
+  "settings.aiApproval.risk_only": "Risk warnings only",
+  "settings.aiApproval.auto": "Automatic approval",
+  "settings.aiApproval.off.description":
+    "Use existing tool permissions without calling an AI reviewer.",
+  "settings.aiApproval.risk_only.description":
+    "Show risk warnings without changing existing permissions or approval decisions.",
+  "settings.aiApproval.auto.description":
+    "Approve clearly low-risk actions once; ask for manual confirmation when uncertain.",
+  "settings.aiApproval.model": "Reviewer model",
+  "settings.aiApproval.modelHint":
+    "Choose a fast, low-cost small model. Turning approval off keeps your model selection.",
+  "settings.aiApproval.selectModel": "Select a reviewer model",
+  "settings.aiApproval.unavailable": "unavailable",
+  "settings.aiApproval.modelUnavailable":
+    "The selected reviewer model is unavailable. Choose another model or turn AI approval off.",
+  "settings.aiApproval.modelRequired": "Select a reviewer model before saving an enabled mode.",
+  "settings.aiApproval.noModels":
+    "No models are available. Configure and enable a model in provider settings first.",
+  "settings.aiApproval.permissions":
+    "Sandbox restrictions and explicit denials remain authoritative. Changes apply on the next turn.",
+  "settings.aiApproval.privacy":
+    "Review adds model requests and cost. Actions, user requests and tool text are sent to the selected provider after common sensitive values are redacted; not all secrets can be detected. Automatic mode withholds tool output that cannot be verified.",
+  "settings.aiApproval.webNotice":
+    "This WebUI transport has no manual approval controls. Actions requiring confirmation are rejected; continue in LiveAgent desktop or K-brain TUI.",
+  "settings.aiApproval.save": "Save approval settings",
+  "settings.aiApproval.reload": "Reload",
+  "settings.aiApproval.discard": "Discard unsaved approval settings and reload?",
+  "settings.aiApproval.loading": "Loading…",
+  "settings.aiApproval.saving": "Saving…",
+  "settings.aiApproval.saved": "Saved",
+  "settings.aiApproval.unsaved": "Unsaved changes",
+  "settings.aiApproval.upgrade": "Upgrade K-brain to use AI approval.",
+  "settings.aiApproval.connectionChanged":
+    "The backend connection changed. Reload approval settings.",
+
+  "settings.cuaBackend.description":
+    "LiveAgent displays requests and results. K-brain owns tools, permissions, Cua execution and session cleanup. Changes apply to the next run.",
+  "settings.cuaBackend.upgrade":
+    "This K-brain version does not expose computer settings. Upgrade the backend; no local execution fallback will be used.",
+  "settings.cuaBackend.permissions":
+    "Installation does not prove desktop readiness. Grant OS permissions on the backend machine; this page never drives your desktop.",
+  "settings.cuaBackend.enabled": "Enable backend computer use",
+  "settings.cuaBackend.backend": "Backend driver",
+  "settings.cuaBackend.policy": "Backend approval policy",
+  "settings.cuaBackend.ask": "Ask before execution",
+  "settings.cuaBackend.allow": "Use run approval policy",
+  "settings.cuaBackend.deny": "Deny computer use",
+  "settings.cuaBackend.command": "Backend command argv (JSON array; [] for automatic discovery)",
+  "settings.cuaBackend.commandError": "Command must be a JSON array of strings.",
+  "settings.cuaBackend.legacy":
+    "Legacy app restrictions are preserved. Configure a Cua capability manifest on the backend before removing obsolete restrictions. Existing Cua MCP entries are not executed in parallel.",
+  "settings.cuaBackend.refresh": "Reload backend state",
   "git.branchSelector.switchConfirmTitle": "Switch to {branch}?",
   "git.branchSelector.switchConfirmDescription":
     "This changes the Git branch in the current working directory and updates its files. Uncommitted changes may carry over or cause Git to reject the switch.",
@@ -13,18 +70,64 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.showSidebarShortcut": "Show {name} in sidebar",
   "settings.navSystem": "System",
   "settings.navSystemTools": "System Tools",
+  "settings.navPermissions": "Permissions",
+  "settings.permissions.title": "Permission rules",
+  "settings.permissions.description":
+    'Rules saved with "Allow and remember" on an approval, and rules added here. Deny rules win over allow rules, and a deleted rule stops applying at once. Rules for a single session stay with that session and are not listed here.',
+  "settings.permissions.userScope": "All projects",
+  "settings.permissions.projectScope": "This project",
+  "settings.permissions.project": "Choose a project",
+  "settings.permissions.noProject": "No project to choose",
+  "settings.permissions.empty": "No rules yet",
+  "settings.permissions.allow": "Allow",
+  "settings.permissions.deny": "Deny",
+  "settings.permissions.addedAt": "Added {time}",
+  "settings.permissions.fromSession": "From session {id}",
+  "settings.permissions.delete": "Delete rule",
+  "settings.permissions.addTitle": "Add a rule",
+  "settings.permissions.rule": "Rule",
+  "settings.permissions.rulePlaceholder": "For example Bash(rm:*), Edit(src/**), Read",
+  "settings.permissions.effect": "Allow or deny",
+  "settings.permissions.scope": "Applies to",
+  "settings.permissions.add": "Add",
+  "settings.permissions.upgrade":
+    "This K-brain version has no permission rules. Upgrade the backend to use them.",
+  "settings.permissions.connectionChanged": "The K-brain connection changed. Reopen this page.",
   "settings.navStt": "Speech to Text",
   "settings.toolPermissionsOverridden": "{count} customized",
   "settings.toolPolicy.allow": "Allow",
   "settings.toolPolicy.ask": "Ask",
   "settings.toolPolicy.deny": "Deny",
-  "settings.navProviders": "Providers",
+  "settings.navProviders": "Provider settings",
+  "settings.kbrainDeleteProvider": "Delete provider",
+  "settings.kbrainClearApiKey": "Clear API key",
+  "settings.kbrainAddProvider": "Add provider",
+  "settings.navKBrain": "Provider settings",
+  "settings.kbrainTitle": "Provider settings",
+  "settings.kbrainDescription":
+    "Credentials stay in K-brain. This page never calls a provider directly.",
+  "settings.kbrainLoading": "Loading K-brain settings…",
+  "settings.kbrainProviderId": "Provider ID",
+  "settings.kbrainProviderName": "Provider name",
+  "settings.kbrainApi": "API",
+  "settings.kbrainBaseUrl": "Base URL",
+  "settings.kbrainApiKey": "API key",
+  "settings.kbrainApiKeyReplace": "Replace API key (leave blank to keep it)",
+  "settings.kbrainKeyConfigured": "API key configured",
+  "settings.kbrainModels": "Models",
+  "settings.kbrainModelPlaceholder": "Model ID",
+  "settings.kbrainAddModel": "Add model",
+  "settings.kbrainSaved": "K-brain settings saved",
+  "settings.kbrainNoProviders": "No K-brain providers configured",
   "settings.navHooks": "Hooks",
   "settings.navAgents": "Prompt Templates",
   "settings.navSsh": "SSH",
   "settings.navCron": "Scheduled tasks",
   "settings.navRemote": "Remote",
   "settings.navSkills": "Skills",
+  "settings.navImageStudio": "Image Studio",
+  "settings.imageStudioUnsupported":
+    "Image Studio is not connected on this host yet. Chat remains available.",
   "settings.navPlanning": "Calendar",
   "settings.navMemory": "Memory",
   "settings.groupGeneral": "General",
@@ -39,6 +142,13 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memoryTitle": "Memory",
   "settings.memoryBrowseDescription":
     "Manage information kept across conversations, project knowledge, and journals.",
+  "settings.memorySwitchTitle": "Enable memory",
+  "settings.memorySwitchOnDescription":
+    "Conversations read saved memories, and new memories are extracted in the background.",
+  "settings.memorySwitchOffDescription":
+    "Off: conversations neither read nor extract memories, and the agent cannot write them. Saved memories stay and can still be viewed and edited here.",
+  "settings.memorySwitchSaveFailed":
+    "Could not save the memory switch; restored the backend's current state.",
   "settings.memoryHealthy": "Healthy",
   "settings.memoryQuotaGlobal": "Global",
   "settings.memoryQuotaProject": "Project",
@@ -83,6 +193,16 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.memorySummaryModelFollow": "Follow conversation model",
   "settings.memoryModelNone": "No selection",
   "settings.memoryModelEmpty": "No models are configured for the current provider.",
+  "settings.memoryBackendOwned": "Memory execution is owned by K-brain.",
+  "settings.memoryOrganizerBackendDescription":
+    "K-brain scans memories and proposes changes. Review the operations below before applying the whole proposal. This UI runs no model or background organizer.",
+  "settings.memoryOrganizerApplyProposal": "Apply this proposal",
+  "settings.memoryBackendManaged":
+    "Memory is managed by the K-brain backend; local memory actions are unavailable.",
+  "settings.skillsBackendManaged":
+    "Skills are managed by the K-brain backend; local scanning and editing are unavailable.",
+  "settings.memoryOrganizerUnsupported":
+    "This UI does not support K-brain memory organization or extraction settings. Configure memory in K-brain; no local model or background organizer runs here.",
   "settings.memoryOrganizerTitle": "Memory organization",
   "settings.memoryOrganizerToggle": "Enable memory organization",
   "settings.memoryOrganizerSchedule": "Schedule",
@@ -271,6 +391,26 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.systemProxyPassword": "Password (optional)",
   "settings.systemProxyPasswordConfigured": "Proxy password saved",
   "settings.systemProxyPasswordClear": "Clear",
+  "settings.systemProxyDetected": "Detected proxy services",
+  "settings.systemProxyDetectAgain": "Detect again",
+  "settings.systemProxyDetecting": "Looking for proxy services on this computer…",
+  "settings.systemProxyDetectEmpty": "No running proxy service found",
+  "settings.systemProxyDetectFailed": "Detection failed",
+  "settings.systemProxyDetectHostHint":
+    "Detection runs on the computer running LiveAgent, not on the device this browser is on.",
+  "settings.systemProxyDetectFill": "Fill in {target}",
+  "settings.systemProxyDetectTesting": "Testing",
+  "settings.systemProxyDetectUnavailable": "Unavailable",
+  "settings.systemProxyDetectCurrent": "Current",
+  "settings.systemProxyDetectAuth": "Auth required",
+  "settings.systemProxySourceOs": "System proxy",
+  "settings.systemProxySourceEnv": "Environment variable",
+  "settings.systemProxySourceListen": "Local port",
+  "settings.systemProxySourceGateway": "Router",
+  "settings.systemProxyTestTimeout": "Timed out reaching the internet",
+  "settings.systemProxyTestConnect": "Could not reach the internet through it",
+  "settings.systemProxyTestStatus": "The internet check returned HTTP {status}",
+  "settings.systemProxyTestRequest": "The internet check failed",
   "settings.providerUseSystemProxy": "Use app proxy",
   "settings.providerUseSystemProxyDesc":
     "Route this provider's model requests through the app proxy. Falls back to a direct connection while the app proxy is disabled.",
@@ -293,8 +433,14 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.languageDesc":
     "Choose the display language for the interface. Changes take effect immediately.",
   "settings.defaultTimeZone": "Default time zone",
+  "settings.calendarNotifications": "Calendar notifications",
+  "settings.notificationTest": "Test system notification",
+  "settings.notificationTestHint":
+    "Request permission and send a test notification. Enable banners in macOS System Settings; Focus may hide banners.",
+  "settings.notificationSubmitted":
+    "The system accepted the test notification. Check banners or Notification Center; acceptance does not confirm banner visibility.",
   "settings.defaultTimeZoneDesc":
-    "Used by the schedule, scheduled tasks and background date math; follows the system by default.",
+    "Shared by all clients through the calendar backend. Automatic follows the backend system time zone. Does not change scheduled task trigger time zones.",
   "settings.defaultTimeZoneAuto": "Automatic (system: {zone})",
   "settings.timeZoneSearch": "Search time zones or cities",
   "settings.timeZoneEmpty": "No matching time zones",
@@ -304,6 +450,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.fontSizeSidebar": "Sidebar",
   "settings.fontSizeChat": "Chat Area",
   "settings.fontSizeRightDock": "Tools Panel",
+  "settings.fontSizeSettings": "Settings Window",
   "settings.fontSizeSmall": "Small",
   "settings.fontSizeStandard": "Standard",
   "settings.fontSizeLarge": "Large",
@@ -490,6 +637,16 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.toolBadgeBuiltin": "Built-in",
   "settings.toolBadgeCustom": "Custom",
   "settings.toolConditionalNote": "Conditional",
+  "settings.legacyProviderImportFailed":
+    "{count} legacy provider(s) could not be imported into K-brain",
+  "settings.legacyProviderImportFailedHint":
+    "These providers share model ids with providers already imported, but the model metadata differs, so K-brain rejected them. Their models are unavailable in this version; editing a provider retries the import automatically.",
+  "settings.legacyProviderImportRetry": "Retry import",
+  "settings.legacyProviderImportDismiss": "Dismiss",
+  "settings.legacyProviderImportDismissTitle": "Dismiss this notice?",
+  "settings.legacyProviderImportDismissDescription":
+    "These import failures will be ignored and never shown again. This cannot be undone. The providers still won't be imported into K-brain; editing one of them later triggers a new import attempt.",
+  "settings.legacyProviderImportDismissConfirm": "Dismiss permanently",
   "settings.addProvider": "Add Provider",
   "settings.addProviderShort": "Add",
   "settings.importProviders": "Import",
@@ -503,6 +660,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.providerFullUrl": "Full URL",
   "settings.providerFullUrlHint":
     "When enabled, this address is used as the final request URL without appending an API path.",
+  "settings.providerBaseUrlInvalid":
+    "The address must start with http:// or https:// and cannot contain a username, password, or # fragment.",
   "settings.providerModelsUrl": "Models URL (optional)",
   "settings.providerModelsUrlPlaceholder": "For example: https://api.example.com/v1/models",
   "settings.providerModelsUrlHint":
@@ -729,6 +888,13 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.estimatedLimitsBadge": "Estimated",
   "settings.contextWindow": "Context Window",
   "settings.maxOutputToken": "Max Output Token",
+  "settings.modelImage": "Image generation",
+  "settings.modelImageAuto": "Auto-detect (recommended)",
+  "settings.modelImageOn": "Yes",
+  "settings.modelImageOff": "No",
+  "settings.modelImageHint":
+    'Enabled models set to Yes appear in Image Studio. Auto-detect uses the model name: names containing "image" or on the known image model list count.',
+  "settings.modelImageBadge": "Image",
   "settings.modelInputModalities": "Input capabilities",
   "settings.modelInputModalitiesAuto": "Auto-detect (recommended)",
   "settings.modelInputModalitiesText": "Text only",
@@ -972,6 +1138,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.sshImportDesc": "Scan ~/.ssh/config and common private key files in the user directory",
   "settings.sshImportScanning": "Scanning ~/.ssh ...",
   "settings.sshImportFailed": "Scan failed",
+  "settings.sshImportDesktopHostRequired":
+    "Importing reads the local ~/.ssh directory: use LiveAgent on the desktop, or a Gateway WebUI connected to a desktop app.",
   "settings.sshImportFound": "Found {count} Host entries and {keys} readable private key files.",
   "settings.sshImportEmpty": "No importable SSH config found",
   "settings.sshImportEmptyHint": "Make sure ~/.ssh/config contains Host entries.",
@@ -1071,6 +1239,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cronViewClose": "Close",
   "settings.cronViewRunNow": "Run once now",
   "settings.cronViewRunningNow": "Task running",
+  "settings.cronViewCancelRun": "Stop task",
   "settings.cronViewRunNowFailed": "Failed to run task",
   "settings.cronViewRunNowTimeout":
     "Timed out waiting for this run; check the execution logs before retrying",
@@ -1092,6 +1261,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cronViewLogSuccess": "Success",
   "settings.cronViewLogFailed": "Failed",
   "settings.cronViewLogExpired": "Expired",
+  "settings.cronViewLogCancelled": "Cancelled",
   "settings.cronViewLogRunning": "Running",
   "settings.cronViewLogsLoadFailed": "Failed to load logs",
   "settings.cronScheduleError": "Schedule error",
@@ -1100,7 +1270,15 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cronViewLogConclusion": "Conclusion",
   "settings.cronViewLogExit": "Exit code",
   "settings.remoteTitle": "Remote Access",
-  "settings.remoteDesc": "Control your local LiveAgent remotely via cloud Gateway",
+  "settings.remoteDesc": "Connect LiveAgent to a local or external Gateway for WebUI access",
+  "settings.remoteManagedLocal": "Host Gateway on this computer",
+  "settings.remoteManagedLocalHint":
+    "Start and stop Gateway with LiveAgent. Turn this off to use your saved external Gateway connection.",
+  "settings.remoteLocalHint":
+    "Open this address in a browser on this computer to use WebUI. Changing the port restarts the local Gateway.",
+  "settings.remoteLocalTokenHint":
+    "This installation's access token is generated automatically. Copy it to sign in to the local WebUI.",
+  "settings.remoteRetry": "Retry Gateway connection",
   "settings.remoteConnected": "Connected",
   "settings.remoteConnectedProtocol": "Connected ({protocol})",
   "settings.remoteDisconnected": "Disconnected",
@@ -1465,4 +1643,34 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Install from the desktop app: the script is downloaded and run on the desktop host, and the person at that machine has to review the full command first.",
   "settings.cuaDriver.desktopOnlyGrant":
     "Grant from the desktop app: the system permission dialogs only appear on the desktop host's screen.",
+  "settings.cuaDriver.desktopOnlyRuntime":
+    "This runtime cannot read Computer Use status: the browser host has no desktop app behind it. Open the desktop app, or the Gateway WebUI connected to a desktop host, to manage the driver.",
+  "settings.localGatewayError.portInUse":
+    "Local Gateway port {port} is already in use. Close the program using it (for example another running LiveAgent), then retry the Gateway connection.",
+  "settings.localGatewayError.executableMissing": "Local Gateway executable was not found.",
+  "settings.localGatewayError.notExecutable": "Local Gateway must be a Windows executable (.exe).",
+  "settings.localGatewayError.startupTimeout":
+    "Local Gateway startup timed out waiting for its health check.",
+  "settings.localGatewayError.startFailed": "Unable to start the local Gateway executable.",
+  "settings.localGatewayError.stopFailed": "Unable to stop the local Gateway process.",
+  "settings.localGatewayError.inspectFailed": "Unable to inspect the local Gateway process.",
+  "settings.localGatewayError.collectFailed": "Unable to collect the local Gateway process.",
+  "settings.localGatewayError.dataDir": "Unable to prepare the local Gateway data directory.",
+  "settings.localGatewayError.healthCheck": "Unable to prepare the local Gateway health check.",
+  "settings.localGatewayError.imageBackend": "Unable to update the local Gateway image backend.",
+  "settings.localGatewayError.exitedBeforeReady":
+    "Local Gateway exited before becoming ready ({status}).",
+  "settings.localGatewayError.exitedDuringHealthCheck":
+    "Local Gateway exited during its health check.",
+  "settings.localGatewayError.permissionDenied":
+    "Permission denied starting the local Gateway executable.",
+  "settings.localGatewayError.invalidToken": "Local Gateway requires a valid authentication token.",
+  "settings.localGatewayError.invalidPort": "Local Gateway requires a nonzero loopback port.",
+  "settings.localGatewayError.startupCancelled": "Local Gateway startup was cancelled.",
+  "settings.localGatewayError.controlPipe": "Local Gateway control pipe is unavailable.",
+  "settings.localGatewayError.supervisorFailed": "Local gateway supervisor task failed.",
+  "settings.localGatewayError.desktopExecutable": "Unable to locate desktop executable.",
+  "settings.localGatewayError.desktopDirectory": "Unable to locate desktop directory.",
+  "settings.providerModelsNeedApiKey":
+    "The address changed. Enter the API key again to fetch the model list automatically.",
 } as const satisfies Record<string, string>;

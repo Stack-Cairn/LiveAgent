@@ -36,6 +36,7 @@ const { createGatewayConversationActions } = loader.loadModule(
   "src/app/gatewayConversationActions.ts",
 );
 const { createSidebarStore } = loader.loadModule("@liveagent/ui/lib/sidebar/store.ts");
+const { useSidebarSelector } = loader.loadModule("@liveagent/ui/lib/sidebar/useSidebarSelector.ts");
 const { createConversationOpenController } = loader.loadModule(
   "@liveagent/ui/lib/sidebar/openController.ts",
 );
@@ -52,7 +53,23 @@ const summary = (id, cwd, updatedAt = 1) => ({
   updatedAt,
 });
 
-async function harness(t, { mode = "tools", archived = [], missing = [] } = {}) {
+async function harness(
+  t,
+  {
+    mode = "tools",
+    archived = [],
+    missing = [],
+    activeProjectId = "a",
+    workspaceProjects = ["a", "b", "c"].map((id) => ({
+      id,
+      path: "/repo/" + id,
+      name: id,
+      kind: "manual",
+      createdAt: 1,
+      updatedAt: 1,
+    })),
+  } = {},
+) {
   const pending = new Map();
   const transport = {
     getHistory: (id) => new Promise((resolve, reject) => pending.set(id, { resolve, reject })),
@@ -88,15 +105,8 @@ async function harness(t, { mode = "tools", archived = [], missing = [] } = {}) 
       ...defaults.system,
       workdir: "/repo/a",
       executionMode: mode,
-      workspaceProjects: ["a", "b", "c"].map((id) => ({
-        id,
-        path: "/repo/" + id,
-        name: id,
-        kind: "manual",
-        createdAt: 1,
-        updatedAt: 1,
-      })),
-      activeWorkspaceProjectId: "a",
+      workspaceProjects,
+      activeWorkspaceProjectId: activeProjectId,
       archivedWorkspaceProjectPaths: archived,
       missingWorkspaceProjectPaths: missing,
     },
@@ -296,6 +306,56 @@ test("gateway empty authoritative cwd clears stale scope and project highlight",
   assert.equal(h.store.peek("text").cwd, undefined);
   assert.equal(h.writes, 0);
   assert.equal(h.api.searchConversationWorkdir, "");
+});
+
+test("gateway startup hydrates workspace projects from remote workdirs after scope assignment", async (t) => {
+  const defaults = getDefaultSettings();
+  const settings = { ...defaults, system: { ...defaults.system, executionMode: "tools", workdir: "", workspaceProjects: [] } };
+  const workdirs = [{ path: "/remote/workspace", conversationCount: 5, updatedAt: 100 }];
+  const store = createSidebarStore({
+    listConversations: async () => ({ items: [summary("remote", "/remote/workspace", 100)], totalCount: 1 }),
+    listWorkdirs: async () => workdirs,
+    subscribeEvents: () => () => {},
+  });
+  let workspace;
+  function Host() {
+    React.useEffect(() => {
+      store.start();
+      return () => store.stop();
+    }, []);
+    const sidebarWorkdirs = useSidebarSelector(store, (snapshot) => snapshot.workdirs);
+    workspace = useGatewayWorkspaceProjects({
+      api: null,
+      displayedConversationWorkdirRef: ref(""),
+      settings,
+      setSettings: () => assert.fail("history hydration must not write settings"),
+      sidebarStore: store,
+      sidebarWorkdirs,
+      setActiveView() {},
+      setRightDockOpen() {},
+      setSidebarOpen() {},
+      startNewConversationRef: ref(() => assert.fail("history hydration must not start a conversation")),
+    });
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  t.after(async () => { await act(async () => root.unmount()); });
+  await act(async () => {
+    root.render(React.createElement(React.StrictMode, null, React.createElement(Host)));
+    await tick();
+  });
+  assert.deepEqual(store.getSnapshot().workdirs, workdirs);
+  assert.deepEqual(workspace.workspaceProjects.map((project) => project.path), ["/remote/workspace"]);
+  assert.equal(workspace.activeWorkspaceProjectPath, "/remote/workspace");
+  assert.equal(store.getSnapshot().scopeKey, "cwd:/remote/workspace");
+  assert.equal(store.getSnapshot().byId.get("remote").cwd, "/remote/workspace");
+  assert.deepEqual(settings.system.workspaceProjects, []);
+});
+
+test("gateway agent mode uses remote all history when no project is selected", async (t) => {
+  const h = await harness(t, { activeProjectId: "missing-project", workspaceProjects: [] });
+  assert.equal(h.api.activeWorkspaceProject, undefined);
+  assert.equal(h.store.getSnapshot().scopeKey, "all");
 });
 
 test("gateway text mode supports unscoped history and cross-workspace navigation", async (t) => {

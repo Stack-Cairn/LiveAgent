@@ -7,6 +7,7 @@ import {
   Home,
   Loader2,
   Plus,
+  RefreshCw,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
@@ -153,6 +154,9 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   const [roots, setRoots] = useState<FsRoot[]>([]);
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [rootsRevision, setRootsRevision] = useState(0);
+  const [pathInput, setPathInput] = useState(initialPath);
+  const [openingPath, setOpeningPath] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
@@ -173,8 +177,6 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   const focusedPath = typeof focusedItem === "string" && focusedItem !== ROOT_ID ? focusedItem : "";
   const activePath = (selectedPath || focusedPath).trim();
 
-  const headerPath = (selectedPath || initialPath || "").trim();
-
   const activeMeta = activePath ? (items[activePath]?.data ?? null) : null;
   const activeChildren = activePath ? (items[activePath]?.children ?? null) : null;
   const createFolderName = newFolderName.trim();
@@ -185,9 +187,11 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
 
   const selectedMeta = selectedPath ? (items[selectedPath]?.data ?? null) : null;
   const canConfirm =
-    mode === "file"
+    !openingPath &&
+    normalizePathForCompare(pathInput) === normalizePathForCompare(selectedPath) &&
+    (mode === "file"
       ? selectedMeta?.kind === "file"
-      : Boolean(selectedPath && selectedMeta?.kind !== "file");
+      : Boolean(selectedPath && selectedMeta?.kind !== "file"));
 
   const statusLine = useMemo(() => {
     if (loadError) {
@@ -245,7 +249,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     });
   }
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: root loading is a one-shot modal initialization using stable state helpers
+  // biome-ignore lint/correctness/useExhaustiveDependencies: root loading follows explicit retries using stable state helpers
   useEffect(() => {
     let cancelled = false;
 
@@ -254,7 +258,9 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       setLoadError(null);
       try {
         const resp = await invoke<FsRootsResponse>("fs_roots");
+        if (cancelled) return;
         const roots = Array.isArray(resp.roots) ? resp.roots : [];
+        if (roots.length === 0) throw new Error(t("settings.pathPickerNoRoots"));
         const rootChildren = roots.map((root) => root.path).filter(Boolean);
 
         setRoots(roots);
@@ -294,13 +300,16 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rootsRevision]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: initial-path expansion is driven only by its path and loaded roots
   useEffect(() => {
     if (loadingRoots || didExpandInitialPathRef.current) return;
 
-    const targetPath = stripTrailingPathSeparators(initialPath);
+    const targetPath =
+      stripTrailingPathSeparators(initialPath) ||
+      roots.find((root) => root.kind === "home")?.path ||
+      roots[0]?.path;
     if (!targetPath || roots.length === 0) return;
 
     const root = findBestRootForPath(targetPath, roots);
@@ -350,6 +359,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       const selectedPathForState = reachedTarget
         ? currentPath
         : (route[route.length - 1] ?? root.path);
+      setPathInput(selectedPathForState);
       const expandedRoute = [ROOT_ID, ...route];
 
       updateTreeViewState(TREE_ID, (treePrev) => ({
@@ -466,6 +476,48 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     }
   }
 
+  async function openPath() {
+    const path = stripTrailingPathSeparators(pathInput);
+    if (!path || openingPath) return;
+    setOpeningPath(true);
+    setLoadError(null);
+    try {
+      const response = await invoke<FsListDirsResponse>("fs_list_dirs", {
+        path,
+        max_results: DEFAULT_MAX_RESULTS,
+      });
+      const directory = response.path || path;
+      const entries = response.entries ?? [];
+      setItems((prev) => {
+        const next = { ...prev };
+        next[ROOT_ID] = {
+          ...next[ROOT_ID],
+          children: mergeTreeIndexes(next[ROOT_ID].children, [directory]),
+        };
+        next[directory] = createNodeItem(directory, directory, "dir");
+        for (const entry of entries) {
+          next[entry.path] = createNodeItem(entry.path, entry.name, "dir");
+        }
+        next[directory].children = entries.map((entry) => entry.path);
+        next[directory].data.loaded = mode === "directory";
+        next[directory].data.truncated = response.truncated;
+        return next;
+      });
+      updateTreeViewState(TREE_ID, (prev) => ({
+        ...prev,
+        expandedItems: mergeTreeIndexes(prev.expandedItems, [ROOT_ID, directory]),
+        selectedItems: [directory],
+        focusedItem: directory,
+      }));
+      setPathInput(directory);
+      if (mode === "file") await loadDirectoryChildren(directory);
+    } catch (error) {
+      setLoadError(toErrorMessage(error, "Failed to list directories"));
+    } finally {
+      setOpeningPath(false);
+    }
+  }
+
   async function createFolderInActivePath() {
     const parent = activePath.trim();
     const name = createFolderName;
@@ -553,7 +605,27 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
             <div className="w-24 shrink-0 text-xs font-medium text-muted-foreground">
               {mode === "file" ? t("settings.pathPickerPathLabel") : t("settings.workdir")}
             </div>
-            <Input variant="plain" value={headerPath} readOnly className="font-mono text-sm" />
+            <Input
+              variant="plain"
+              aria-label={t("settings.pathPickerPathLabel")}
+              value={pathInput}
+              onChange={(event) => setPathInput(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void openPath();
+                }
+              }}
+              className="min-w-0 font-mono text-sm"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!pathInput.trim() || openingPath}
+              onClick={() => void openPath()}
+            >
+              {t("settings.pathPickerOpen")}
+            </Button>
           </div>
         </DialogSubheader>
 
@@ -660,6 +732,8 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
                   ...treePrev,
                   selectedItems,
                 }));
+                const path = selectedItems[0];
+                if (typeof path === "string" && path !== ROOT_ID) setPathInput(path);
               }}
               onFocusItem={(item, treeId) => {
                 updateTreeViewState(treeId, (treePrev) => ({
@@ -691,6 +765,21 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
                 <FolderOpen className="mt-0.5 size-4 shrink-0" />
               )}
               <span className="min-w-0 flex-1">{statusLine.text}</span>
+              {statusLine.kind === "error" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (pathInput.trim() && pathInput !== selectedPath) void openPath();
+                    else if (activePath)
+                      void loadDirectoryChildren(activePath).catch(() => undefined);
+                    else setRootsRevision((revision) => revision + 1);
+                  }}
+                >
+                  <RefreshCw className="size-3.5" />
+                  {t("chat.retry")}
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </DialogBody>

@@ -10,6 +10,8 @@ import (
 
 	"github.com/liveagent/agent-gateway/internal/chatcmd"
 	"github.com/liveagent/agent-gateway/internal/config"
+	"github.com/liveagent/agent-gateway/internal/handler"
+	"github.com/liveagent/agent-gateway/internal/kbrain"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 	"github.com/liveagent/agent-gateway/internal/transport/wscore"
@@ -19,6 +21,10 @@ import (
 
 // handleStatusGet 处理指定 Agent 的 status.get。
 func (c *browserConn) handleStatusGet(requestID, agentID string) {
+	if c.srv.kbrainRelay != nil && agentID == c.srv.kbrainTargetID {
+		_ = c.send(wscore.FrameResponse, "status", &gatewayv2.WebServerFrame{RequestId: requestID, AgentId: agentID, Payload: &gatewayv2.WebServerFrame_Status{Status: &gatewayv2.StatusEvent{Online: true, AgentReady: true, ChatRuntimeReady: true, AgentId: agentID}}})
+		return
+	}
 	status := c.sm.Status(agentID)
 	_ = c.send(wscore.FrameResponse, "status", &gatewayv2.WebServerFrame{
 		RequestId: requestID,
@@ -56,6 +62,27 @@ func (c *browserConn) handleAgentList(requestID string) {
 			agents = append(agents, &gatewayv2.StatusEvent{AgentId: entry.AgentID, Name: entry.Name})
 		}
 	}
+	if c.srv.kbrainRelay != nil {
+		for _, agent := range agents {
+			if agent.GetAgentId() == c.srv.kbrainTargetID {
+				agent.Online = true
+				agent.AgentReady = true
+				agent.ChatRuntimeReady = true
+				agent.Name = "K-brain"
+			}
+		}
+
+		found := false
+		for _, agent := range agents {
+			if agent.GetAgentId() == c.srv.kbrainTargetID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			agents = append(agents, &gatewayv2.StatusEvent{AgentId: c.srv.kbrainTargetID, Name: "K-brain", Online: true, AgentReady: true, ChatRuntimeReady: true})
+		}
+	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i].GetAgentId() < agents[j].GetAgentId() })
 	_ = c.send(wscore.FrameResponse, "agent_list", &gatewayv2.WebServerFrame{
 		RequestId: requestID,
@@ -68,6 +95,16 @@ func (c *browserConn) handleAgentList(requestID string) {
 // handleChatPrepare 处理 chat.prepare：探活/唤醒目标桌面运行时后返回与 status_get
 // 同构的状态（客户端共享一个状态归一化器）。
 func (c *browserConn) handleChatPrepare(requestID, agentID string, _ *gatewayv2.ChatPrepareRequest) {
+	if c.srv.kbrainRelay != nil && agentID == c.srv.kbrainTargetID {
+		_ = c.send(wscore.FrameControl, "status", &gatewayv2.WebServerFrame{
+			RequestId: requestID,
+			AgentId:   agentID,
+			Payload: &gatewayv2.WebServerFrame_Status{Status: &gatewayv2.StatusEvent{
+				Online: true, AgentReady: true, ChatRuntimeReady: true, AgentId: agentID,
+			}},
+		})
+		return
+	}
 	if c.sm.IsOnline(agentID) && !c.sm.ChatIngressV1Ready(agentID) {
 		status := c.sm.Status(agentID)
 		_ = c.send(wscore.FrameControl, "status", &gatewayv2.WebServerFrame{
@@ -149,8 +186,22 @@ func (c *browserConn) handleChatCommand(requestID, agentID string, cmd *gatewayv
 		return
 	}
 
+	if c.srv.kbrainRelay != nil && agentID == c.srv.kbrainTargetID {
+		// 直连 K-brain 只支持提示词指令；/goal 需要桌面端的目标栏与续跑挂接。
+		if body.GoalAction != "" {
+			_ = c.sendLocalError(requestID, errComposerGoalUnsupported)
+			return
+		}
+		c.handleKBrainChatCommand(requestID, agentID, body)
+		return
+	}
 	if !c.sm.IsOnline(agentID) {
 		_ = c.sendLocalError(requestID, "agent offline")
+		return
+	}
+	if chatcmd.HasComposerCommand(body) &&
+		!c.sm.SupportsCapability(agentID, gatewayv2.ComposerCommandsV1Capability) {
+		_ = c.sendLocalError(requestID, errComposerCommandsUnsupported)
 		return
 	}
 	if len(body.ReferencedConversations) > 0 &&
@@ -179,6 +230,7 @@ func (c *browserConn) handleChatCommand(requestID, agentID string, cmd *gatewayv
 		body.Workdir,
 		body.ClientRequestID,
 		chatcmd.BuildAcceptedCommandPayloads(body, baseMessageRef),
+		chatcmd.HasComposerCommand(body),
 	)
 	if start.Deduped {
 		c.respondChatCommandDeduped(requestID, start)
@@ -192,6 +244,123 @@ func (c *browserConn) handleChatCommand(requestID, agentID string, cmd *gatewayv
 	go chatcmd.DispatchAcceptedCommand(
 		context.Background(), c.cfg, c.sm, agentID, cleanupWatch, start, body, baseMessageRef, chatcmd.NewTraceID(),
 	)
+}
+
+func (c *browserConn) handleKBrainChatCommand(requestID, agentID string, body handler.ChatRequestBody) {
+	if body.ConversationID == "" {
+		body.ConversationID = uuid.NewString()
+	}
+	runID := "kbrain-command-" + uuid.NewString()
+	start := c.sm.StartChatCommand(agentID, runID, body.ConversationID, body.Workdir, body.ClientRequestID, chatcmd.BuildAcceptedCommandPayloads(body, nil), chatcmd.HasComposerCommand(body))
+	if start.Deduped {
+		c.respondChatCommandDeduped(requestID, start)
+		return
+	}
+	if err := c.sendChatCommandAccepted(requestID, start); err != nil {
+		return
+	}
+	updates, cleanup := c.sm.WatchChatCommand(agentID, runID)
+	go c.forwardChatCommandUpdates(updates, cleanup)
+	var model *kbrain.ModelRef
+	if body.SelectedModel != nil {
+		provider := strings.TrimSpace(body.SelectedModel.CustomProviderID)
+		if provider == "" {
+			provider = strings.TrimSpace(body.SelectedModel.ProviderType)
+		}
+		model = &kbrain.ModelRef{Provider: provider, Model: body.SelectedModel.Model}
+	}
+	options := kbrainOptions(body)
+	callbacks := c.srv.kbrainCallbacks(start.AgentID)
+	ready := make(chan struct{})
+	onEvent, onControl := callbacks.OnEvent, callbacks.OnControl
+	callbacks.OnEvent = func(runID string, event *gatewayv2.ChatEvent) {
+		<-ready
+		onEvent(runID, event)
+	}
+	callbacks.OnControl = func(runID string, control *gatewayv2.ChatControlEvent) {
+		<-ready
+		onControl(runID, control)
+	}
+	queued, err := c.srv.kbrainRelay.StartWithCWD(context.Background(), start.RunID, start.ConversationID, body.ClientRequestID, body.Workdir, kbrain.PromptRequest{Prompt: body.Message, PromptCommand: body.PromptCommand, Model: model, Options: options}, body.QueuePolicy, callbacks, chatcmd.HasComposerCommand(body))
+	if err == nil && queued {
+		// Settle the browser startup watchdog before a queued run can start.
+		onControl(start.RunID, &gatewayv2.ChatControlEvent{RequestId: start.RunID, ConversationId: start.ConversationID, Type: "queued_in_gui"})
+	}
+	close(ready)
+	if err != nil {
+		code := "kbrain_relay_error"
+		if strings.Contains(err.Error(), "already running") {
+			code = "conversation_busy"
+		}
+		c.sm.FailChatCommand(agentID, runID, code, err.Error())
+	}
+}
+
+func kbrainOptions(body handler.ChatRequestBody) *kbrain.RunOptions {
+	options := &kbrain.RunOptions{
+		Mode:           "chat",
+		Search:         "disabled",
+		ApprovalPolicy: "ask",
+		PermissionMode: "normal",
+	}
+	if body.ExecutionMode == "tools" || body.ExecutionMode == "agent-dev" {
+		options.Mode = "agent"
+	}
+	switch body.CommandSafetyMode {
+	case "autoEdit":
+		options.PermissionMode = "auto_edit"
+	case "always", "auto":
+		// "auto" is the retired "full access" mode; clients migrate it to "always".
+		options.PermissionMode = "always"
+	case "autoReview":
+		options.PermissionMode = "auto_review"
+	case "sandboxOffline":
+		options.ApprovalPolicy = "deny"
+	}
+	if body.RuntimeControls != nil {
+		options.Reasoning = body.RuntimeControls.Reasoning
+		if body.RuntimeControls.ThinkingEnabled != nil && !*body.RuntimeControls.ThinkingEnabled {
+			options.Reasoning = "off"
+		}
+		if body.RuntimeControls.NativeWebSearchEnabled != nil && *body.RuntimeControls.NativeWebSearchEnabled {
+			options.Search = "enabled"
+		}
+		if body.RuntimeControls.PlanModeEnabled != nil {
+			options.PlanModeEnabled = *body.RuntimeControls.PlanModeEnabled
+			if options.PlanModeEnabled {
+				options.PermissionMode = "plan"
+			}
+		}
+	}
+	if body.PlanCommand {
+		options.PlanModeEnabled = true
+		options.PermissionMode = "plan"
+	}
+	if strings.TrimSpace(body.Workdir) != "" {
+		options.WorkspaceRoots = []kbrain.WorkspaceRoot{{Path: body.Workdir, Access: "write"}}
+	}
+	return options
+}
+
+func (s *Server) kbrainCallbacks(agentID string) kbrain.Callbacks {
+	return kbrain.Callbacks{
+		OnEvent: func(runID string, event *gatewayv2.ChatEvent) { s.sm.IngestRemoteChatEvent(agentID, runID, event) },
+		OnControl: func(runID string, control *gatewayv2.ChatControlEvent) {
+			s.sm.IngestRemoteChatControl(agentID, runID, control)
+		},
+		OnQueue: func(conversationID, snapshot string, revision uint64) {
+			s.sm.BroadcastRemoteChatQueue(agentID, &gatewayv2.ChatQueueEvent{ConversationId: conversationID, SnapshotJson: snapshot, Revision: revision})
+		},
+		OnHistoryEvent: func(event *gatewayv2.HistorySyncEvent) {
+			s.sm.IngestRemoteHistoryEvent(agentID, event)
+		},
+		OnHistoryStatus: func(status *gatewayv2.HistorySyncStatus) {
+			s.sm.IngestRemoteHistoryStatus(agentID, status)
+		},
+		OnHistorySnapshot: func(snapshot *gatewayv2.HistorySyncSnapshot) {
+			s.sm.IngestRemoteHistorySnapshot(agentID, snapshot)
+		},
+	}
 }
 
 // respondChatCommandDeduped 用既有运行应答重复的 client_request_id 并转发其（回放的）
@@ -271,6 +440,22 @@ func (c *browserConn) handleChatCancel(requestID, agentID string, cancelReq *gat
 		_ = c.sendLocalError(requestID, "conversation_id is required")
 		return
 	}
+	if c.srv.kbrainRelay != nil && agentID == c.srv.kbrainTargetID {
+		requestedRunID := strings.TrimSpace(cancelReq.GetRunId())
+		runID, active := c.sm.MarkConversationCancelling(agentID, conversationID, requestedRunID)
+		if requestedRunID == "" {
+			requestedRunID = runID
+		}
+		cancelled, _ := c.srv.kbrainRelay.Cancel(context.Background(), conversationID, requestedRunID)
+		if cancelled {
+			active = true
+			if runID == "" {
+				runID = requestedRunID
+			}
+		}
+		_ = c.sendChatCancelResult(requestID, active, runID, conversationID)
+		return
+	}
 	if !c.sm.IsOnline(agentID) {
 		_ = c.sendLocalError(requestID, "agent offline")
 		return
@@ -279,7 +464,7 @@ func (c *browserConn) handleChatCancel(requestID, agentID string, cancelReq *gat
 	// 不终结运行：活动状态翻为 cancelling，以桌面端终态信号为准，超时由看门狗强制收尾。
 	runID, active := c.sm.MarkConversationCancelling(agentID, conversationID, strings.TrimSpace(cancelReq.GetRunId()))
 	if !active {
-		_ = c.sendChatCancelResult(requestID, true, "", conversationID)
+		_ = c.sendChatCancelResult(requestID, false, "", conversationID)
 		return
 	}
 

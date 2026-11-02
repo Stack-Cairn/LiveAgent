@@ -7,6 +7,7 @@ import { createUuid } from "@liveagent/ui/lib/shared/id";
 
 export { hashText } from "@liveagent/ui/lib/shared/hash";
 
+import type { ToolCall, ToolResultMessage, Usage } from "@liveagent/ui/lib/chat/agentTypes";
 import {
   type HostedSearchBlock,
   normalizeHostedSearchBlock,
@@ -20,7 +21,7 @@ import {
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { hashText } from "@liveagent/ui/lib/shared/hash";
-import type { Message, ToolCall, ToolResultMessage, Usage } from "@/lib/agentTypes";
+import type { Message as WireMessage } from "@/lib/agentTypes";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import { summarizeToolCall as summarizeDesktopToolCall, type UiRound } from "@/lib/chat/uiMessages";
 
@@ -115,7 +116,7 @@ type NormalizedAssistantBlock =
   | { type: "toolCall"; toolCall: ToolCallLike }
   | { type: "hostedSearch"; hostedSearch: HostedSearchBlock };
 
-type UploadedFilesUserMessage = Pick<Message, "role" | "content"> & Record<string, unknown>;
+type UploadedFilesUserMessage = Pick<WireMessage, "role" | "content"> & Record<string, unknown>;
 
 const LIVE_UPLOADED_FILE_KINDS = new Set<string>([
   "text",
@@ -350,16 +351,42 @@ function asUploadedFilesUserMessage(message: StoredMessage): UploadedFilesUserMe
   return {
     ...asRecord(message),
     role: "user",
-    content: message.content as Message["content"],
+    content: message.content as WireMessage["content"],
   };
 }
 
 export function safeStringify(value: unknown) {
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(value, null, 2) ?? String(value);
   } catch {
     return String(value);
   }
+}
+
+function normalizeUsage(value: unknown): Usage | undefined {
+  const source = asRecord(value);
+  if (Object.keys(source).length === 0) return undefined;
+  const cost = asRecord(source.cost);
+  return {
+    input: readNumber(source.input) ?? 0,
+    output: readNumber(source.output) ?? 0,
+    cacheRead: readNumber(source.cacheRead) ?? 0,
+    cacheWrite: readNumber(source.cacheWrite) ?? 0,
+    ...(readNumber(source.cacheWrite1h) !== undefined
+      ? { cacheWrite1h: readNumber(source.cacheWrite1h) }
+      : {}),
+    ...(readNumber(source.reasoning) !== undefined
+      ? { reasoning: readNumber(source.reasoning) }
+      : {}),
+    totalTokens: readNumber(source.totalTokens) ?? 0,
+    cost: {
+      input: readNumber(cost.input) ?? 0,
+      output: readNumber(cost.output) ?? 0,
+      cacheRead: readNumber(cost.cacheRead) ?? 0,
+      cacheWrite: readNumber(cost.cacheWrite) ?? 0,
+      total: readNumber(cost.total) ?? 0,
+    },
+  };
 }
 
 export function buildAssistantMeta(params: {
@@ -370,8 +397,7 @@ export function buildAssistantMeta(params: {
   usage?: unknown;
   contextRelevant?: unknown;
 }) {
-  const usage =
-    params.usage && typeof params.usage === "object" ? (params.usage as Usage) : undefined;
+  const usage = normalizeUsage(params.usage);
 
   // 增量构建：只 set 已定义的字段，绝不物化出 own-property undefined 键。后者在
   // `{ ...target.meta, ...meta }` 合并时会用 undefined 覆盖此前事件送达的
@@ -506,6 +532,7 @@ function buildToolResult(params: {
   content?: unknown;
   details?: unknown;
   isError?: unknown;
+  usage?: unknown;
   timestamp?: unknown;
   fallbackToolCallId?: string;
 }) {
@@ -520,6 +547,7 @@ function buildToolResult(params: {
     toolName,
     content: normalizeToolResultContent(params.content),
     details: params.details,
+    ...(normalizeUsage(params.usage) ? { usage: normalizeUsage(params.usage) } : {}),
     isError: Boolean(params.isError),
     timestamp,
   } as ToolResultMessage;
@@ -643,6 +671,7 @@ export function buildToolResultEntry(
     toolName: message.toolName,
     content: message.content,
     details: message.details,
+    usage: message.usage,
     isError: message.isError,
     timestamp: message.timestamp,
     fallbackToolCallId: options?.fallbackToolCallId,
@@ -705,7 +734,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
   let turnEntrySeq = 0;
   const nextEntryId = () => `${turnKey}>${turnEntrySeq++}`;
 
-  for (const item of parsed) {
+  for (const [historyIndex, item] of parsed.entries()) {
     const message = asRecord(item) as StoredMessage;
     const role = readString(message.role);
 
@@ -715,7 +744,25 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
       const text = getUserMessageDisplayText(userRecord);
       const attachments = getUserMessageAttachments(userRecord);
       const referencedConversations = getUserMessageReferencedConversations(userRecord);
-      const messageRef = readHistoryMessageRef(userRecord.liveAgentHistoryRef);
+      const messageId = readString(message.id).trim();
+      // K-brain Gateway history carries each message's whole-session offset;
+      // search hits report that offset, so prefer it over the window position.
+      const canonicalIndex = readNumber((message as { messageIndex?: unknown }).messageIndex);
+      const messageRef =
+        readHistoryMessageRef(userRecord.liveAgentHistoryRef) ??
+        (messageId
+          ? {
+              segmentIndex: 0,
+              messageIndex:
+                typeof canonicalIndex === "number" && canonicalIndex >= 0
+                  ? Math.floor(canonicalIndex)
+                  : historyIndex,
+              segmentId: "gateway-history",
+              messageId,
+              role: "user",
+              contentHash: hashText(text),
+            }
+          : undefined);
       if (text.trim() || attachments.length > 0) {
         const baseId = messageRef ? `hu:${messageRef.messageId}` : `hu:~${hashText(text)}`;
         const occurrence = usedUserIds.get(baseId) ?? 0;

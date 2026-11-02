@@ -15,6 +15,8 @@ import type {
 export type TerminalCreateParams = {
   cwd: string;
   projectPathKey: string;
+  conversationId?: string;
+  runId?: string;
   shell?: string;
   title?: string;
   cols?: number;
@@ -127,6 +129,8 @@ export function buildTerminalCreatePayload(params: TerminalCreateParams) {
   return {
     cwd: params.cwd,
     project_path_key: params.projectPathKey,
+    conversation_id: params.conversationId,
+    run_id: params.runId,
     shell: params.shell,
     title: params.title,
     cols: params.cols,

@@ -17,13 +17,21 @@ import {
   useState,
 } from "react";
 import { PaneLoadingSkeleton } from "../../../components/app/PaneLoadingSkeleton";
+import { isKBrainBackendEnabled } from "../../../lib/host";
 import { ConversationStatsBarHost } from "../components/ConversationStatsBarHost";
 import { CurrentTaskProgress } from "../components/CurrentTaskProgress";
 import { DesktopCheckpointRewindProvider } from "../components/DesktopCheckpointRewindProvider";
+import { KBrainCheckpointRewindProvider } from "../components/KBrainCheckpointRewindProvider";
 import { PendingToolApprovalBar } from "../components/PendingToolApprovalBar";
+import { KBrainGoalBarHost } from "../composer/KBrainGoalBarHost";
 import type { ConversationPaneHostHandle } from "../conversations/useConversationPaneHostBridge";
 import { useConversationSurfaceSnapshot } from "../conversations/useConversationSurfaceSnapshot";
 import { buildQueuedChatTurnPreview } from "../queue/chatTurnQueue";
+
+const CheckpointRewindProvider = isKBrainBackendEnabled()
+  ? KBrainCheckpointRewindProvider
+  : DesktopCheckpointRewindProvider;
+
 import { ChatTranscript } from "../transcript/ChatTranscript";
 import {
   type ConversationPaneRegistration,
@@ -93,7 +101,9 @@ function RegisteredRestorableConversationPaneHostContent(props: {
       return;
     }
     if (typeof window.requestIdleCallback === "function") {
-      const idleCallback = window.requestIdleCallback(hydrate, { timeout: 800 });
+      const idleCallback = window.requestIdleCallback(hydrate, {
+        timeout: 800,
+      });
       return () => {
         cancelled = true;
         window.cancelIdleCallback(idleCallback);
@@ -244,7 +254,7 @@ const RegisteredConversationPaneHostContent = forwardRef<
             trajectory?.renderContent(snapshot)
           ) : (
             <ChangedFilesActionsProvider value={changedFilesActions}>
-              <DesktopCheckpointRewindProvider
+              <CheckpointRewindProvider
                 conversationId={snapshot.conversationId}
                 workspaceRoot={transcript.workspaceRoot}
                 project={checkpointRewind.project}
@@ -263,7 +273,7 @@ const RegisteredConversationPaneHostContent = forwardRef<
                   floatingOverhangPx={composerFloatingOverhang}
                   composerCenterOffsetPx={composerCenterOffset}
                 />
-              </DesktopCheckpointRewindProvider>
+              </CheckpointRewindProvider>
             </ChangedFilesActionsProvider>
           ),
           composer: (
@@ -277,6 +287,14 @@ const RegisteredConversationPaneHostContent = forwardRef<
               isSending={isSending}
               pendingUploadedFiles={snapshot.uploads}
               queuedTurns={queuedTurns}
+              goalBar={
+                <KBrainGoalBarHost
+                  key={`goal-${snapshot.conversationId}`}
+                  conversationId={snapshot.conversationId}
+                  commandHost={composer.commandHost}
+                  enabled={isKBrainBackendEnabled()}
+                />
+              }
               onStop={controller.stop}
               onManualCompactConfirm={controller.compact}
               manualCompactBlocked={isCompactionRunning}

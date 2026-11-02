@@ -51,6 +51,7 @@ export function useGatewayTransportStatus({
     const unsubscribeConnection = api.subscribeConnection((connected) => {
       applyFreshnessEvent({ type: "connection", connected });
       if (connected) {
+        if (wasConnected) chatCommandPipeline.resumePendingCommands();
         wasConnected = true;
         setGatewayConnectionLost(false);
       } else if (wasConnected) {
@@ -69,6 +70,7 @@ export function useGatewayTransportStatus({
     };
   }, [
     api,
+    chatCommandPipeline,
     setGatewayConnectionLost,
     setSidebarAgentStatusFresh,
     setStatus,
@@ -88,6 +90,7 @@ export function useGatewayTransportStatus({
           event.conversationId,
           event.runId,
           event.clientRequestId ?? undefined,
+          event.running,
         );
       }
     });

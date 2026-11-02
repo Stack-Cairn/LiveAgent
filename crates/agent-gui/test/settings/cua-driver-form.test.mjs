@@ -24,6 +24,26 @@ const managed = (over = {}) => ({
 
 test.beforeEach(() => form.resetCuaProbeCache());
 
+test("宿主缺少桌面命令时报错可识别，页面据此走本地化引导", () => {
+  // K-brain 浏览器宿主与未连桌面端的 WebUI 各自抛自己的内部文案，
+  // 两者都不是用户操作失败。
+  assert.equal(
+    form.isCuaHostCommandUnavailable(
+      new Error("Tauri command cua_driver_probe is unavailable in K-brain browser mode"),
+    ),
+    true,
+  );
+  assert.equal(
+    form.isCuaHostCommandUnavailable(
+      new Error('WebUI shim does not implement invoke("cua_driver_probe")'),
+    ),
+    true,
+  );
+  // 真实失败必须继续原样显示，不能被吞掉。
+  assert.equal(form.isCuaHostCommandUnavailable(new Error("probe spawn failed: permission denied")), false);
+  assert.equal(form.isCuaHostCommandUnavailable(undefined), false);
+});
+
 test("受管条目的查找对大小写与空白不敏感", () => {
   const servers = [managed({ id: "other" }), managed({ id: " CUA-Driver " })];
   assert.equal(form.findCuaDriverServer(servers)?.id, " CUA-Driver ");

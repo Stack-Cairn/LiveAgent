@@ -130,6 +130,7 @@ const hostSourceTranslations = [
 const builtinToolCatalog = guiLoader.loadModule(
   "@liveagent/ui/lib/tools/builtinToolCatalog.ts",
 );
+const imagingErrors = guiLoader.loadModule("@liveagent/ui/lib/imaging/errors.ts");
 const dynamicTranslationKeys = [
   ...[
     "preparing",
@@ -163,6 +164,9 @@ const dynamicTranslationKeys = [
     "invalid-value",
     "malformed-header",
   ].map((reason) => `settings.customHeaderImportIssue.${reason}`),
+  ...imagingErrors.IMAGE_ERROR_CODES.map((code) => `imageStudio.error.${code}`),
+  "imageStudio.error.IMAGE_EMPTY_RESULT",
+  "imageStudio.error.generic",
   ...builtinToolCatalog.BUILTIN_TOOL_CATEGORIES.map((category) => category.labelKey),
   ...builtinToolCatalog.BUILTIN_TOOL_CATALOG.flatMap((entry) => [
     `settings.builtinTool.${entry.id}.name`,

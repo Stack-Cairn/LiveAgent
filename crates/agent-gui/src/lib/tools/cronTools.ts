@@ -1,4 +1,4 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import {
   applyCronOps,
   type CronRunRecord,

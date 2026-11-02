@@ -1,3 +1,7 @@
+import {
+  providerSupportsNativeWebSearch,
+  resolveProviderApi,
+} from "../providers/providerCapabilities";
 import { findCatalogModelAcrossProviders } from "./modelCatalog";
 import { toModelValue } from "./modelValue";
 
@@ -8,6 +12,7 @@ export type SharedModelOption<TProviderType extends string = string> = {
   providerName: string;
   providerType: TProviderType;
   model: string;
+  nativeWebSearchSupported?: boolean;
   reasoning?: boolean;
   vision?: boolean;
   contextWindow?: number;
@@ -25,6 +30,7 @@ export type ModelOptionsSettings<TProviderType extends string = string> = {
     id: string;
     name: string;
     type: TProviderType;
+    requestFormat?: string;
     activeModels: readonly string[];
     models?: readonly {
       id: string;
@@ -118,6 +124,10 @@ export function buildModelOptions<TProviderType extends string>(
         model,
         value: toModelValue(provider.id, model),
         label: configured?.displayName?.trim() || model,
+        nativeWebSearchSupported: providerSupportsNativeWebSearch(
+          provider.type,
+          resolveProviderApi(provider.type, provider.requestFormat),
+        ),
         reasoning: Boolean(catalog?.thinking),
         vision: (configured?.inputModalities ?? catalog?.inputModalities)?.includes("image"),
         contextWindow:

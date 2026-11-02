@@ -57,7 +57,9 @@ test("composer model pages preserve selection, reasoning, search and return navi
     assert.equal(secondGroup.getAttribute('aria-expanded'), 'true', 'search expands matching groups');
     await clickText("Beta");
     assert.deepEqual(values, [{ customProviderId: "two", model: "Beta" }]);
-    await open();
+    // Selecting a model returns to the root panel instead of closing the popover, so the
+    // reasoning entry is immediately available without reopening the picker.
+    assert.equal(document.querySelector('input[placeholder="chat.searchModel"]'), null, "back on the root panel");
     await clickText("chat.runtime.reasoningsettings.reasoning.low");
     await env.act(async () => document.querySelector('input[value="high"]').click());
     assert.deepEqual(patches.at(-1), { thinkingEnabled: true, reasoning: "high" });
@@ -66,5 +68,47 @@ test("composer model pages preserve selection, reasoning, search and return navi
     assert.ok(back && back.textContent.includes("chat.runtime.reasoning"), "reasoning page back button");
     await env.act(async () => back.click());
     assert.ok([...document.querySelectorAll('button')].some(n => n.textContent.includes('settings.reasoning.high')));
+  } finally { await env.act(async () => root.unmount()); env.cleanup(); }
+});
+
+test("composer reflects selected protocol capability without rewriting the search preference", async () => {
+  const icon = () => null;
+  const env = await createDomTestEnv({ mocks: {
+    "@liveagent/ui/components/IconSet": new Proxy({}, { get: (_target, name) => (name === "__esModule" ? true : icon) }),
+    "@liveagent/ui/components/ProviderBrandIcon": { ProviderBrandIcon: icon },
+    "@liveagent/ui/i18n/index": { useLocale: () => ({ t: key => key }) },
+  } });
+  window.HTMLElement.prototype.getAnimations ??= () => [];
+  const { ComposerModelControls } = env.loadModule("@liveagent/ui/components/chat/ComposerModelControls.tsx");
+  const { buildModelOptions } = env.loadModule("@liveagent/ui/lib/models/modelOptions.ts");
+  const { normalizeCustomProvider, DEFAULT_CHAT_RUNTIME_CONTROLS } = env.loadModule("@liveagent/ui/lib/settings/index.ts");
+  const modelOptions = buildModelOptions({ customProviders: [
+    ["compatible", "codex", "openai-completions"],
+    ["responses", "codex", "openai-responses"],
+    ["gemini", "gemini", undefined],
+  ].map(([id, type, requestFormat]) => normalizeCustomProvider({ id, name: id, type, requestFormat, models: ["model"], activeModels: ["model"] })) });
+  const patches = [];
+  const controls = Object.freeze({ ...DEFAULT_CHAT_RUNTIME_CONTROLS, nativeWebSearchEnabled: true });
+  const root = env.createRoot(document.body.appendChild(document.createElement("div")));
+  const render = async (index) => env.act(async () => root.render(env.React.createElement(ComposerModelControls, {
+    executionMode: "text", hasModels: true, currentModelLabel: "model", selectedValue: modelOptions[index].value,
+    modelOptions, chatRuntimeControls: controls, reasoningOptions: [], thinkingAlwaysOn: false,
+    onSelectModel() {}, onSelectExecutionMode() {}, onOpenSettings() {}, onChatRuntimeControlsChange: (patch) => patches.push(patch),
+  })));
+  try {
+    await render(1);
+    await env.act(async () => document.querySelector('[data-slot="popover-trigger"]').click());
+    for (const index of [1, 0, 2, 0, 1]) {
+      await render(index);
+      const control = document.querySelector('[role="switch"][aria-label="chat.runtime.webSearch"]');
+      assert.ok(control);
+      assert.equal(control.getAttribute("aria-checked"), index === 0 ? "false" : "true");
+      assert.equal(control.hasAttribute("data-disabled"), index === 0);
+      if (index === 0) await env.act(async () => control.click());
+      assert.equal(controls.nativeWebSearchEnabled, true);
+      assert.deepEqual(patches, []);
+    }
+    await env.act(async () => document.querySelector('[role="switch"][aria-label="chat.runtime.webSearch"]').click());
+    assert.deepEqual(patches, [{ nativeWebSearchEnabled: false }]);
   } finally { await env.act(async () => root.unmount()); env.cleanup(); }
 });

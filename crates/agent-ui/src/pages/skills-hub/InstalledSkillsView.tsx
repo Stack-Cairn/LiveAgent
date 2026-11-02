@@ -22,6 +22,7 @@ type InstalledSkillsViewProps = {
   bulkMode: boolean;
   hasSkills: boolean;
   loadError: string | null;
+  backendManaged?: boolean;
   skillsEnabled: boolean;
   rootDir: string;
   category: StoreCategoryValue;
@@ -48,6 +49,7 @@ export function InstalledSkillsView({
   bulkMode,
   hasSkills,
   loadError,
+  backendManaged = false,
   skillsEnabled,
   rootDir,
   category,
@@ -86,12 +88,20 @@ export function InstalledSkillsView({
           />
         ) : null}
 
-        {loadError ? (
+        {loadError && !backendManaged ? (
           <GlassPanel tone="error">
             <div className="flex items-center gap-2">
               <AlertTriangle className="size-4 shrink-0 text-destructive" />
               <span className="text-xs text-destructive">{loadError}</span>
             </div>
+          </GlassPanel>
+        ) : null}
+
+        {backendManaged ? (
+          <GlassPanel tone="muted">
+            <p className="py-2 text-center text-xs text-muted-foreground">
+              {t("settings.skillsBackendManaged")}
+            </p>
           </GlassPanel>
         ) : null}
 
@@ -106,7 +116,7 @@ export function InstalledSkillsView({
           </GlassPanel>
         ) : null}
 
-        {!loading && !hasSkills && !loadError ? (
+        {!backendManaged && !loading && !hasSkills && !loadError ? (
           <GlassPanel>
             <div className="flex flex-col items-center gap-3 py-8 text-center">
               <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
@@ -124,6 +134,7 @@ export function InstalledSkillsView({
                 size="sm"
                 className="mt-1 gap-1.5 rounded-full"
                 onClick={onRescan}
+                disabled={backendManaged}
               >
                 <RefreshCw data-refresh-icon className="size-3.5" />
                 {t("settings.skillsRescan")}
@@ -132,7 +143,7 @@ export function InstalledSkillsView({
           </GlassPanel>
         ) : null}
 
-        {loading && !hasSkills ? (
+        {!backendManaged && loading && !hasSkills ? (
           <SkillsContentLoadingState
             title={t("settings.skillsScanning")}
             description={t("settings.skillsHubScanning")}
@@ -155,18 +166,19 @@ export function InstalledSkillsView({
                     primaryCategory={categories[0] ?? "other"}
                     alwaysEnabled={alwaysEnabled}
                     checked={alwaysEnabled || selected.has(skill.name)}
-                    skillsEnabled={skillsEnabled}
+                    skillsEnabled={skillsEnabled && !backendManaged}
                     bulkMode={bulkMode}
                     bulkSelected={bulkSelection.has(skill.name)}
                     deleting={deletingSkillName === skill.name}
-                    deleteDisabled={deletingSkillName !== null}
+                    deleteDisabled={backendManaged || deletingSkillName !== null}
+                    previewDisabled={backendManaged}
                     searchQuery={searchQuery}
-                    onToggle={onToggle}
+                    onToggle={backendManaged ? () => {} : onToggle}
                     onEnterBulkMode={onEnterBulkMode}
                     onToggleBulkSelection={onToggleBulkSelection}
                     onBulkCardClick={onBulkCardClick}
                     onOpenPreview={onOpenPreview}
-                    onDelete={onDelete}
+                    onDelete={backendManaged ? () => {} : onDelete}
                     onSelectCategory={onSelectCategory}
                   />
                 </div>

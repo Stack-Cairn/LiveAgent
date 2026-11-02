@@ -32,6 +32,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { localizeLocalGatewayError } from "@liveagent/ui/lib/settings/localGatewayError";
 import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -48,11 +49,13 @@ function PasswordInput({
   value,
   onChange,
   placeholder,
+  readOnly,
 }: {
   id?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  readOnly?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   const { t } = useLocale();
@@ -64,6 +67,7 @@ function PasswordInput({
         id={id}
         type={visible ? "text" : "password"}
         value={value}
+        readOnly={readOnly}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="pr-16 font-mono text-sm"
@@ -183,8 +187,10 @@ function usePositiveIntegerDraft(
   };
 }
 
-function buildGatewayEndpointPreview(settings: AppSettings["remote"]) {
-  return buildGatewayPublicBaseUrl(settings.gatewayUrl, settings.gatewayPort);
+function buildGatewayEndpointPreview(settings: AppSettings["remote"], managedLocal: boolean) {
+  return managedLocal
+    ? buildGatewayPublicBaseUrl("http://127.0.0.1", settings.localGatewayPort)
+    : buildGatewayPublicBaseUrl(settings.gatewayUrl, settings.gatewayPort);
 }
 
 function formatTimestamp(value?: number | null) {
@@ -193,11 +199,19 @@ function formatTimestamp(value?: number | null) {
   return new Date(timestampMs).toLocaleString();
 }
 
-export function RemoteSection(props: SettingsSectionProps) {
-  const { settings, setSettings } = props;
+export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop" | "web" }) {
+  const { settings, setSettings, surface = "web" } = props;
+  const showLocalGateway = surface === "desktop";
+  const managedLocal = showLocalGateway && settings.remote.managedLocal;
   const { t } = useLocale();
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const localGatewayPortDraft = usePositiveIntegerDraft(
+    settings.remote.localGatewayPort,
+    { min: 1, max: REMOTE_GATEWAY_PORT_MAX },
+    (localGatewayPort) => updateRemoteSettings(setSettings, { localGatewayPort }),
+  );
   const remoteGatewayPortDraft = usePositiveIntegerDraft(
     settings.remote.gatewayPort,
     { min: 1, max: REMOTE_GATEWAY_PORT_MAX },
@@ -219,8 +233,9 @@ export function RemoteSection(props: SettingsSectionProps) {
     enabled: settings.remote.enabled,
     configured: false,
   });
-  const remoteConfigured =
-    settings.remote.gatewayUrl.trim() !== "" && settings.remote.token.trim() !== "";
+  const remoteConfigured = managedLocal
+    ? settings.remote.localGatewayToken.trim() !== ""
+    : settings.remote.gatewayUrl.trim() !== "" && settings.remote.token.trim() !== "";
 
   useEffect(() => {
     let cancelled = false;
@@ -238,7 +253,7 @@ export function RemoteSection(props: SettingsSectionProps) {
             online: false,
             enabled: settings.remote.enabled,
             configured: remoteConfigured,
-            gatewayUrl: settings.remote.gatewayUrl.trim(),
+            gatewayUrl: buildGatewayEndpointPreview(settings.remote, managedLocal),
             sessionId: null,
             connectedSince: null,
             lastHeartbeat: null,
@@ -249,7 +264,7 @@ export function RemoteSection(props: SettingsSectionProps) {
     return () => {
       cancelled = true;
     };
-  }, [remoteConfigured, settings.remote.enabled, settings.remote.gatewayUrl]);
+  }, [managedLocal, remoteConfigured, settings.remote]);
 
   useEffect(() => {
     let cancelled = false;
@@ -274,17 +289,34 @@ export function RemoteSection(props: SettingsSectionProps) {
 
   const isConnected = Boolean(status.online);
   const gatewayEndpointPreview = useMemo(
-    () => buildGatewayEndpointPreview(settings.remote),
-    [settings.remote],
+    () => buildGatewayEndpointPreview(settings.remote, managedLocal),
+    [settings.remote, managedLocal],
   );
 
+  const retryGateway = async () => {
+    setRetrying(true);
+    try {
+      await invoke("gateway_nudge_connection", {
+        reason: "settings_retry",
+        force_reconnect: true,
+      });
+    } catch (error) {
+      setStatus((prev) => ({ ...prev, lastError: String(error) }));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const connectedProtocol = status.protocol?.trim();
+  const lastError = status.lastError?.trim()
+    ? localizeLocalGatewayError(status.lastError.trim(), t)
+    : null;
   const statusText = isConnected
     ? connectedProtocol
       ? t("settings.remoteConnectedProtocol").replace("{protocol}", connectedProtocol)
       : t("settings.remoteConnected")
     : settings.remote.enabled
-      ? status.lastError?.trim() || t("settings.remoteDisconnected")
+      ? lastError || t("settings.remoteDisconnected")
       : t("settings.remoteDisconnected");
 
   return (
@@ -302,7 +334,7 @@ export function RemoteSection(props: SettingsSectionProps) {
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : "bg-muted/50 text-muted-foreground",
               )}
-              title={status.lastError ?? undefined}
+              title={lastError ?? undefined}
             >
               {isConnected ? (
                 <Wifi className="size-3.5 shrink-0" />
@@ -328,6 +360,19 @@ export function RemoteSection(props: SettingsSectionProps) {
       />
 
       <SettingsSection>
+        {showLocalGateway ? (
+          <SettingsRow
+            title={t("settings.remoteManagedLocal")}
+            description={t("settings.remoteManagedLocalHint")}
+            control={
+              <AgentActivationSwitch
+                checked={managedLocal}
+                title={t("settings.remoteManagedLocal")}
+                onToggle={() => updateRemoteSettings(setSettings, { managedLocal: !managedLocal })}
+              />
+            }
+          />
+        ) : null}
         <SettingsRow
           title={t("settings.remoteGatewayConnection")}
           description={remoteConfigured ? gatewayEndpointPreview : t("settings.remoteSetupHint")}
@@ -354,122 +399,172 @@ export function RemoteSection(props: SettingsSectionProps) {
             <DialogDescription>{t("settings.remoteConfigHint")}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-5">
-            <div className="space-y-4">
+            {managedLocal ? (
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="remote-gateway-url"
-                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-                  >
-                    <Link2 className="size-3" />
-                    {t("settings.remoteGatewayUrl")}
-                  </label>
-                  <div className="space-y-2">
-                    <Input
-                      variant="plain"
-                      id="remote-gateway-url"
-                      type="url"
-                      value={settings.remote.gatewayUrl}
-                      onChange={(e) =>
-                        updateRemoteSettings(setSettings, {
-                          gatewayUrl: e.target.value,
-                        })
-                      }
-                      placeholder="https://gateway.example.com"
-                      className="min-w-0 flex-1 font-mono text-sm"
-                    />
-                    <label
-                      htmlFor="remote-gateway-port"
-                      className="block pt-2 text-xs font-medium text-muted-foreground"
-                    >
-                      {t("settings.remotePortLabel")}
-                    </label>
-                    <Input
-                      variant="plain"
-                      id="remote-gateway-port"
-                      type="text"
-                      inputMode="numeric"
-                      value={remoteGatewayPortDraft.draft}
-                      onBlur={remoteGatewayPortDraft.handleBlur}
-                      onChange={(e) => remoteGatewayPortDraft.handleChange(e.target.value)}
-                      placeholder="443"
-                      className="w-full font-mono text-sm"
-                    />
-                  </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground/70">
-                    {t("settings.remoteGatewayUrlHint")}
-                  </p>
+                <p className="text-sm text-muted-foreground">{t("settings.remoteLocalHint")}</p>
+                <div className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-sm">
+                  <Globe className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate font-mono">
+                    {gatewayEndpointPreview}
+                  </span>
+                  <SettingsCopyButton value={gatewayEndpointPreview} />
                 </div>
-
-                {gatewayEndpointPreview ? (
-                  <div
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2",
-                      "text-xs text-muted-foreground",
-                    )}
-                  >
-                    <Globe className="size-3.5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate font-mono">
-                      {gatewayEndpointPreview}
-                    </span>
-                    <SettingsCopyButton value={gatewayEndpointPreview} />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-4">
                 <div className="space-y-1.5">
                   <label
-                    htmlFor="remote-gateway-token"
-                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                    htmlFor="local-gateway-port"
+                    className="text-xs font-medium text-muted-foreground"
                   >
-                    <Key className="size-3" />
+                    {t("settings.remotePortLabel")}
+                  </label>
+                  <Input
+                    variant="plain"
+                    id="local-gateway-port"
+                    type="text"
+                    inputMode="numeric"
+                    value={localGatewayPortDraft.draft}
+                    onBlur={localGatewayPortDraft.handleBlur}
+                    onChange={(e) => localGatewayPortDraft.handleChange(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="local-gateway-token"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
                     {t("settings.remoteToken")}
                   </label>
                   <PasswordInput
-                    id="remote-gateway-token"
-                    value={settings.remote.token}
-                    onChange={(value) =>
-                      updateRemoteSettings(setSettings, {
-                        token: value,
-                      })
-                    }
-                    placeholder={t("settings.remoteTokenPlaceholder")}
+                    id="local-gateway-token"
+                    value={settings.remote.localGatewayToken}
+                    onChange={() => {}}
+                    readOnly
                   />
-                  <p className="text-xs leading-relaxed text-muted-foreground/70">
-                    {t("settings.remoteTokenHint")}
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="remote-agent-id"
-                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-                  >
-                    <MonitorSmartphone className="size-3" />
-                    {t("settings.remoteAgentId")}
-                  </label>
-                  <div className="relative">
-                    <Input
-                      variant="plain"
-                      id="remote-agent-id"
-                      type="text"
-                      readOnly
-                      value={settings.remote.agentId}
-                      className="pr-12 font-mono text-sm"
-                    />
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                      <SettingsCopyButton value={settings.remote.agentId} />
-                    </div>
-                  </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground/70">
-                    {t("settings.remoteAgentIdHint")}
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.remoteLocalTokenHint")}
                   </p>
                 </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="remote-gateway-url"
+                        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                      >
+                        <Link2 className="size-3" />
+                        {t("settings.remoteGatewayUrl")}
+                      </label>
+                      <div className="space-y-2">
+                        <Input
+                          variant="plain"
+                          id="remote-gateway-url"
+                          type="url"
+                          value={settings.remote.gatewayUrl}
+                          onChange={(e) =>
+                            updateRemoteSettings(setSettings, {
+                              gatewayUrl: e.target.value,
+                            })
+                          }
+                          placeholder="https://gateway.example.com"
+                          className="min-w-0 flex-1 font-mono text-sm"
+                        />
+                        <label
+                          htmlFor="remote-gateway-port"
+                          className="block pt-2 text-xs font-medium text-muted-foreground"
+                        >
+                          {t("settings.remotePortLabel")}
+                        </label>
+                        <Input
+                          variant="plain"
+                          id="remote-gateway-port"
+                          type="text"
+                          inputMode="numeric"
+                          value={remoteGatewayPortDraft.draft}
+                          onBlur={remoteGatewayPortDraft.handleBlur}
+                          onChange={(e) => remoteGatewayPortDraft.handleChange(e.target.value)}
+                          placeholder="443"
+                          className="w-full font-mono text-sm"
+                        />
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground/70">
+                        {t("settings.remoteGatewayUrlHint")}
+                      </p>
+                    </div>
+
+                    {gatewayEndpointPreview ? (
+                      <div
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2",
+                          "text-xs text-muted-foreground",
+                        )}
+                      >
+                        <Globe className="size-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate font-mono">
+                          {gatewayEndpointPreview}
+                        </span>
+                        <SettingsCopyButton value={gatewayEndpointPreview} />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="remote-gateway-token"
+                        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                      >
+                        <Key className="size-3" />
+                        {t("settings.remoteToken")}
+                      </label>
+                      <PasswordInput
+                        id="remote-gateway-token"
+                        value={settings.remote.token}
+                        onChange={(value) =>
+                          updateRemoteSettings(setSettings, {
+                            token: value,
+                          })
+                        }
+                        placeholder={t("settings.remoteTokenPlaceholder")}
+                      />
+                      <p className="text-xs leading-relaxed text-muted-foreground/70">
+                        {t("settings.remoteTokenHint")}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="remote-agent-id"
+                        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                      >
+                        <MonitorSmartphone className="size-3" />
+                        {t("settings.remoteAgentId")}
+                      </label>
+                      <div className="relative">
+                        <Input
+                          variant="plain"
+                          id="remote-agent-id"
+                          type="text"
+                          readOnly
+                          value={settings.remote.agentId}
+                          className="pr-12 font-mono text-sm"
+                        />
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                          <SettingsCopyButton value={settings.remote.agentId} />
+                        </div>
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground/70">
+                        {t("settings.remoteAgentIdHint")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </DialogBody>
           <DialogFooter>
             <Button size="sm" onClick={() => setConnectionOpen(false)}>
@@ -588,8 +683,20 @@ export function RemoteSection(props: SettingsSectionProps) {
         <summary className="cursor-pointer text-sm font-medium">
           {t("settings.remoteConnectionStatus")}
         </summary>
-        {status.lastError ? (
-          <p className="mt-3 break-words text-xs text-destructive">{status.lastError}</p>
+        {lastError ? (
+          <p className="mt-3 break-words text-xs text-destructive">{lastError}</p>
+        ) : null}
+        {managedLocal && settings.remote.enabled && !isConnected ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            disabled={retrying}
+            onClick={retryGateway}
+          >
+            <RefreshCw className={cn("size-3.5", retrying && "animate-spin")} />
+            {t("settings.remoteRetry")}
+          </Button>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl bg-settings-tile px-4 py-3">

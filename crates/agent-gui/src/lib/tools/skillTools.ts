@@ -1,4 +1,4 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import { isAlwaysEnabledSkillName } from "@liveagent/ui/lib/skills/builtin";
 
 import { manageSkill, notifySkillsDiscoveryUpdated } from "@liveagent/ui/lib/skills/index";

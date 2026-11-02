@@ -533,7 +533,10 @@ pub fn install(app: &AppHandle) -> Result<CuaDriverProbe, String> {
         handle.map(|reader| {
             std::thread::spawn(move || {
                 use std::io::BufRead;
-                for line in std::io::BufReader::new(reader).lines().map_while(Result::ok) {
+                for line in std::io::BufReader::new(reader)
+                    .lines()
+                    .map_while(Result::ok)
+                {
                     let _ = app.emit(
                         INSTALL_PROGRESS_EVENT,
                         InstallProgress {
@@ -620,7 +623,10 @@ mod tests {
         // 展示给用户的命令必须真的包含那个 URL——确认对话框的全部意义
         // 就在于「看到的即将执行的」。
         assert!(preview.display.contains(&preview.source_url));
-        assert!(preview.args.iter().any(|arg| arg.contains(&preview.source_url)));
+        assert!(preview
+            .args
+            .iter()
+            .any(|arg| arg.contains(&preview.source_url)));
     }
 
     /// 真跑一遍 bash（curl 支持 file://，不出网、不依赖装没装驱动），钉住
@@ -634,7 +640,8 @@ mod tests {
     fn unix_install_script_parses_the_payload_as_a_script_and_propagates_curl_failure() {
         use std::io::Write;
 
-        let dir = std::env::temp_dir().join(format!("cua-install-wrapper-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("cua-install-wrapper-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let script = dir.join("install.sh");
         std::fs::File::create(&script)
@@ -654,7 +661,11 @@ mod tests {
         // 带 shebang 的脚本应被完整解析执行（shebang 行是注释），退出码是
         // 脚本自己的 42，而不是「找不到命令 #!/bin/bash」的 127。
         let ok = run(&format!("file://{}", script.display()));
-        assert_eq!(ok.code(), Some(42), "脚本应按脚本解析执行，而不是被当作一条命令");
+        assert_eq!(
+            ok.code(),
+            Some(42),
+            "脚本应按脚本解析执行，而不是被当作一条命令"
+        );
 
         // curl 拉不到时整条管道必须以非零退出——没有 pipefail 的话 bash 收到
         // 空输入会以 0 退出，安装失败被静默当成成功。

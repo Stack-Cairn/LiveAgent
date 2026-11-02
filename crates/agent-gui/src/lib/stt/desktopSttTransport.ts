@@ -1,10 +1,10 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen, type UnlistenFn } from "@liveagent/app/shims/tauriEvent";
 import type {
   SttRuntimeEvent,
   SttTransport,
   SttTransportOpenOptions,
 } from "@liveagent/ui/lib/stt/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 class DesktopSttTransport implements SttTransport {
   private unlisten: UnlistenFn | null = null;

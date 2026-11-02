@@ -600,3 +600,64 @@ test("upsertLocal and removeLocal manage pending drafts", async () => {
   assert.equal(store.peek("draft"), undefined);
   store.stop();
 });
+
+test("a refresh issued before a local upsert cannot drop the upserted conversation", async () => {
+  const fake = createFakeBackend();
+  fake.state.pages.set("cwd:/tmp/a", [conversation("source", { cwd: "/tmp/a", updatedAt: 10 })]);
+  const store = createSidebarStore(fake.backend);
+  store.setScope(SCOPE_A);
+  store.start();
+  await tick();
+
+  // A refresh is in flight when the edit-resend branch is created and opened.
+  // Only that first response is held back; requests queued later answer normally.
+  let releaseStale;
+  fake.state.listImpl = () => {
+    fake.state.listImpl = null;
+    return new Promise((resolve) => {
+      releaseStale = () =>
+        resolve({ items: [conversation("source", { cwd: "/tmp/a", updatedAt: 10 })], totalCount: 1 });
+    });
+  };
+  const staleRefresh = store.refresh();
+  await tick();
+  store.upsertLocal(conversation("branch", { cwd: "/tmp/a", updatedAt: 20 }));
+  fake.state.pages.set("cwd:/tmp/a", [
+    conversation("branch", { cwd: "/tmp/a", updatedAt: 20 }),
+    conversation("source", { cwd: "/tmp/a", updatedAt: 10 }),
+  ]);
+  // Record every list the UI sees while the stale response lands.
+  const seen = [];
+  const unsubscribe = store.subscribe(() => {
+    seen.push(store.getSnapshot().conversations.map((item) => item.id).join(","));
+  });
+  releaseStale();
+  await staleRefresh;
+  unsubscribe();
+  assert.ok(seen.length > 0, "the stale response must have been applied");
+  assert.ok(
+    seen.every((ids) => ids.split(",").includes("branch")),
+    `a response that predates the upsert must not drop the branch: ${JSON.stringify(seen)}`,
+  );
+  // A refresh issued after the upsert is authoritative again: it confirms...
+  await store.refresh();
+  assert.deepEqual(store.getSnapshot().conversations.map((item) => item.id), ["branch", "source"]);
+  // ...and a later deletion elsewhere still removes it.
+  fake.state.pages.set("cwd:/tmp/a", [conversation("source", { cwd: "/tmp/a", updatedAt: 10 })]);
+  await store.refresh();
+  assert.deepEqual(store.getSnapshot().conversations.map((item) => item.id), ["source"]);
+  store.stop();
+});
+
+test("a refresh issued after a local upsert that omits it removes the conversation", async () => {
+  const fake = createFakeBackend();
+  fake.state.pages.set("cwd:/tmp/a", [conversation("source", { cwd: "/tmp/a", updatedAt: 10 })]);
+  const store = createSidebarStore(fake.backend);
+  store.setScope(SCOPE_A);
+  store.start();
+  await tick();
+  store.upsertLocal(conversation("gone", { cwd: "/tmp/a", updatedAt: 20 }));
+  await store.refresh();
+  assert.deepEqual(store.getSnapshot().conversations.map((item) => item.id), ["source"]);
+  store.stop();
+});

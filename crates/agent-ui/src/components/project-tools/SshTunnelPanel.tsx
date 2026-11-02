@@ -46,6 +46,7 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { SshLocalForwardState } from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
@@ -171,8 +172,8 @@ function sshStatusLabel(session: TerminalSession, t: (key: string) => string) {
   return t("projectTools.sshTunnelConnected");
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+function errorMessage(error: unknown, unavailableMessage = "") {
+  return hostAwareErrorMessage(error, unavailableMessage);
 }
 
 function isTerminalSessionNotFoundError(error: unknown) {
@@ -384,13 +385,13 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         });
       })
       .catch((error) => {
-        if (!cancelled) setListError(errorMessage(error));
+        if (!cancelled) setListError(errorMessage(error, t("projectTools.runtimeUnsupported")));
       });
     return () => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [active]);
+  }, [active, t]);
 
   const refreshSessionLatency = useCallback(
     (session: TerminalSession) => {
@@ -458,31 +459,34 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     [clearForwardError],
   );
 
-  const handleStopForward = useCallback((forwardId: string, sessionId: string) => {
-    setStoppingForwardIds((current) => new Set(current).add(forwardId));
-    setForwardErrorsBySessionId((current) => ({
-      ...current,
-      [sessionId]: "",
-    }));
-    void sshLocalForwardClient
-      .stop({ forwardId, sessionId })
-      .then((response) => {
-        setLocalForwards((current) => reduceSshLocalForwardState(current, response));
-      })
-      .catch((error) => {
-        setForwardErrorsBySessionId((current) => ({
-          ...current,
-          [sessionId]: errorMessage(error),
-        }));
-      })
-      .finally(() => {
-        setStoppingForwardIds((current) => {
-          const next = new Set(current);
-          next.delete(forwardId);
-          return next;
+  const handleStopForward = useCallback(
+    (forwardId: string, sessionId: string) => {
+      setStoppingForwardIds((current) => new Set(current).add(forwardId));
+      setForwardErrorsBySessionId((current) => ({
+        ...current,
+        [sessionId]: "",
+      }));
+      void sshLocalForwardClient
+        .stop({ forwardId, sessionId })
+        .then((response) => {
+          setLocalForwards((current) => reduceSshLocalForwardState(current, response));
+        })
+        .catch((error) => {
+          setForwardErrorsBySessionId((current) => ({
+            ...current,
+            [sessionId]: errorMessage(error, t("projectTools.runtimeUnsupported")),
+          }));
+        })
+        .finally(() => {
+          setStoppingForwardIds((current) => {
+            const next = new Set(current);
+            next.delete(forwardId);
+            return next;
+          });
         });
-      });
-  }, []);
+    },
+    [t],
+  );
 
   const handleCopyForward = useCallback(
     (forwardId: string, address: string) => {
@@ -597,7 +601,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
       })
       .catch((err) => {
         pendingCreateRef.current = null;
-        setCreateError(err instanceof Error ? err.message : String(err));
+        setCreateError(errorMessage(err, t("projectTools.runtimeUnsupported")));
       })
       .finally(() => setCreating(false));
   }, [
@@ -609,6 +613,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     finishCreatedSnapshot,
     projectPathKey,
     selectedCreateHost,
+    t,
   ]);
 
   const handleSubmitPrompt = useCallback(() => {
@@ -642,9 +647,9 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
           finishCreatedSnapshot(result.snapshot);
         }
       })
-      .catch((err) => setListError(err instanceof Error ? err.message : String(err)))
+      .catch((err) => setListError(errorMessage(err, t("projectTools.runtimeUnsupported"))))
       .finally(() => setAnsweringPrompt(false));
-  }, [answeringPrompt, client, finishCreatedSnapshot, prompt, promptAnswer]);
+  }, [answeringPrompt, client, finishCreatedSnapshot, prompt, promptAnswer, t]);
 
   const handleCancelPrompt = useCallback(() => {
     const promptId = prompt?.id;
@@ -678,7 +683,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
             onSessionClosed(session.id);
             return;
           }
-          setListError(errorMessage(err));
+          setListError(errorMessage(err, t("projectTools.runtimeUnsupported")));
         })
         .finally(() =>
           setClosingSessionIds((current) => {
@@ -706,7 +711,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         if (isTerminalSessionNotFoundError(err)) {
           onSessionClosed(session.id);
         } else {
-          setListError(errorMessage(err));
+          setListError(errorMessage(err, t("projectTools.runtimeUnsupported")));
           return;
         }
       }
@@ -739,10 +744,10 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         }
       } catch (err) {
         pendingCreateRef.current = null;
-        setListError(errorMessage(err));
+        setListError(errorMessage(err, t("projectTools.runtimeUnsupported")));
       }
     },
-    [client, cwd, onSessionClosed, onSessionSnapshot, projectPathKey],
+    [client, cwd, onSessionClosed, onSessionSnapshot, projectPathKey, t],
   );
 
   const handleReconnectSession = useCallback(
@@ -753,7 +758,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
       try {
         await client.sshReconnect(session.id, session.projectPathKey);
       } catch (err) {
-        const message = errorMessage(err);
+        const message = errorMessage(err, t("projectTools.runtimeUnsupported"));
         if (message.includes("already in progress")) {
           // The automatic reconnect loop owns the session right now; every
           // attempt re-reads the saved settings, so nothing else to do.

@@ -5,6 +5,8 @@
 import type { TrajectoryHost } from "@liveagent/ui/contracts/trajectory";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { createInvokeTrajectoryHost } from "@liveagent/ui/lib/trajectory/host";
+import { isKBrainBackendEnabled } from "../lib/host";
+import { createKBrainTrajectoryHost } from "../lib/kbrain/trajectory";
 import { invoke } from "../shims/tauriCore";
 
 /**
@@ -16,6 +18,11 @@ import { invoke } from "../shims/tauriCore";
 export function createTauriTrajectoryHost(
   openFileLink?: (link: ChatFileLink) => void,
 ): TrajectoryHost {
+  if (isKBrainBackendEnabled()) {
+    return createKBrainTrajectoryHost({
+      ...(openFileLink === undefined ? {} : { openFileLink }),
+    });
+  }
   return createInvokeTrajectoryHost(invoke, {
     ...(openFileLink === undefined ? {} : { openFileLink }),
   });

@@ -117,6 +117,7 @@ export function useGatewayConversationRuntime({
             targetConversationId,
             runId,
             eventClientRequestId || undefined,
+            false,
           );
           activityStore.settleRun(targetConversationId, runId);
           const finishedTitle =
@@ -131,6 +132,7 @@ export function useGatewayConversationRuntime({
             targetConversationId,
             readEventRunId(event),
             eventClientRequestId || undefined,
+            false,
           );
           if (!isReplay) refreshChatQueueSnapshot(targetConversationId);
           return;
@@ -156,7 +158,7 @@ export function useGatewayConversationRuntime({
 
   const handleConversationStreamSync = useCallback(
     (targetConversationId: string, result: ConversationSubscribeResult) => {
-      if (result.activity) {
+      if (result.activity && result.activity.state !== "queued") {
         chatCommandPipeline.handleRunSignal(
           targetConversationId,
           result.activity.runId,

@@ -24,6 +24,7 @@ const icons = [
   "Folder",
   "FolderClosed",
   "FolderOpen",
+  "ImageIcon",
   "ListChecks",
   "Loader2",
   "PanelLeftClose",

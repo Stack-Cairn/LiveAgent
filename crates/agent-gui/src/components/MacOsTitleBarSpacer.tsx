@@ -1,7 +1,7 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import { PanelLeft, PanelLeftClose, Settings } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { AppUpdateController } from "../lib/appUpdates";
 import { AppUpdateButton } from "./AppUpdateButton";

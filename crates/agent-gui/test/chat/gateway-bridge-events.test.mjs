@@ -27,8 +27,8 @@ function createController(options = {}) {
   return { controller, sent };
 }
 
-test("gateway bridge event controller emits nothing when disabled", () => {
-  const { controller, sent } = createController({ enabled: false });
+test("gateway bridge event controller emits nothing when disabled", async () => {
+  const { controller, sent } = createController({ enabled: false, flushEvents: () => assert.fail("disabled transport must not flush") });
 
   controller.queueToken("hello", { round: 1 });
   controller.queueTitle("New title", true);
@@ -36,6 +36,7 @@ test("gateway bridge event controller emits nothing when disabled", () => {
   controller.queueEvent({ type: "done", conversation_id: "conversation-1" });
   controller.emitError("failed");
 
+  await controller.close();
   assert.deepEqual(sent, []);
   assert.equal(controller.hasForwardedText(), true);
 });

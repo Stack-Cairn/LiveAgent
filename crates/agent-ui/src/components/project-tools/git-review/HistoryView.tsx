@@ -27,6 +27,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitCommitFile, GitCommitSummary } from "@liveagent/ui/lib/git/types";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -794,10 +795,10 @@ export function GitReviewHistoryView(props: {
       const url = gitHubCommitUrl(state.remoteUrl, commit.sha);
       if (!url) return;
       void openUrl(url).catch((err) => {
-        setHistoryError(err instanceof Error ? err.message : String(err));
+        setHistoryError(hostAwareErrorMessage(err, t("git.branchSelector.runtimeUnsupported")));
       });
     },
-    [setHistoryError, state.remoteUrl],
+    [setHistoryError, state.remoteUrl, t],
   );
 
   const openCreateBranchFromCommit = useCallback((commit: GitCommitSummary) => {
@@ -874,10 +875,10 @@ export function GitReviewHistoryView(props: {
           });
         })
         .catch((err) => {
-          setHistoryError(err instanceof Error ? err.message : String(err));
+          setHistoryError(hostAwareErrorMessage(err, t("git.branchSelector.runtimeUnsupported")));
         });
     },
-    [loadCommitDetails, onInsertCommitMention, setHistoryError, state.remoteUrl],
+    [loadCommitDetails, onInsertCommitMention, setHistoryError, state.remoteUrl, t],
   );
 
   const addHistoryFileToContext = useCallback(

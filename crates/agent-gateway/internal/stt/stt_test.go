@@ -232,12 +232,8 @@ func TestEmitIncomingUnblocksWhenConsumerIsCancelled(t *testing.T) {
 }
 
 func TestSttHelloTimesOutWithoutFirstFrame(t *testing.T) {
-	previous := sttHelloTimeout
-	sttHelloTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { sttHelloTimeout = previous })
-
 	manager := NewManager(fixtureStore(t))
-	server := httptest.NewServer(manager.WebSocketHandler("token"))
+	server := httptest.NewServer(manager.webSocketHandler("token", 50*time.Millisecond))
 	t.Cleanup(server.Close)
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)

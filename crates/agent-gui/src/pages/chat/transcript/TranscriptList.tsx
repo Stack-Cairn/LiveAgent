@@ -51,7 +51,7 @@ import { ReplyHoverProvider } from "./rowInteraction";
 import { createTranscriptRowModel } from "./rowModel";
 import { UserMessageRow } from "./UserMessageRow";
 
-const TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION = "assistant-activity-v2";
+const TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION = "assistant-activity-v3";
 
 function buildVersionedTranscriptLayoutKey(viewportWidth: number, contentWidth: number) {
   const layoutKey = buildTranscriptLayoutKey(viewportWidth, contentWidth);

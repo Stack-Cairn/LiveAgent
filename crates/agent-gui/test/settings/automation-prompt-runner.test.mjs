@@ -71,8 +71,11 @@ test.beforeEach(() => {
   invokeCalls.length = 0;
 });
 
-test("Auto Prompt resolves global and project prompts from the task workdir", () => {
-  assert.match(runnerSource, /resolveEffectivePromptSettings\(settings, workdir\)\.prompt/);
+test("K-brain Auto Prompt uses the claimed workdir for the backend session", () => {
+  assert.match(runnerSource, /const workdir = request\.workdir\.trim\(\)/);
+  assert.match(runnerSource, /runKBrainTurn\(/);
+  assert.match(runnerSource, /cwd: workdir/);
+  assert.doesNotMatch(runnerSource, /resolveEffectivePromptSettings/);
 });
 
 test("Auto Prompt completion uses the Rust camelCase wire contract", async () => {
@@ -121,10 +124,30 @@ test("Cron manual run uses the task-scoped run-now command", async () => {
 
 test("Cron manual run stays wired in shared UI", () => {
   assert.match(cronViewSource, /const response = await runCronNow\(selectedTaskId\)/);
-  assert.match(cronViewSource, /disabled=\{isRunningNow\}/);
+  assert.match(cronViewSource, /disabled=\{isCancelling \|\| \(isRunningNow && !canCancelRun\)\}/);
+  assert.match(cronViewSource, /settings\.cronViewCancelRun/);
+  assert.match(cronViewSource, /settings\.cronViewLogCancelled/);
+  assert.match(cronViewSource, /terminationReason === "cancelled"/);
+  assert.match(cronViewSource, /settings\.cronViewLogExpired/);
+  assert.match(
+    cronViewSource,
+    /cancelCronRun\(selectedTaskId, manualRunExecutionId \?\? undefined\)/,
+  );
+  const cancelHandler = cronViewSource.split("async function handleCancelRun")[1].split("return (")[0];
+  assert.doesNotMatch(cancelHandler, /setIsRunningNow\(false\)|setManualRunStartedAt\(null\)/);
+  assert.match(cronViewSource, /onRunsLoaded=\{handleRunsLoaded\}/);
+  assert.match(cronViewSource, /setManualRunStartedAt\(activeRun.startedAt\)/);
   assert.match(cronViewSource, /if \(runNowLockRef\.current\) return/);
   assert.match(cronViewSource, /setManualRunStartedAt\(response\.startedAt\)/);
   assert.match(cronViewSource, /listCronRuns\(taskId, 500\)/);
+  assert.match(cronViewSource, /requestGenerationRef/);
+  assert.match(cronViewSource, /clearInFlightRef/);
+  assert.match(cronViewSource, /activeTaskIdRef\.current !== loadedTaskId/);
+  assert.match(cronViewSource, /setManualRunStartedAt\(null\)/);
+  assert.match(cronViewSource, /setIsCancelling\(false\)/);
+  assert.match(cronViewSource, /activeRun\.counted !== true/);
+  assert.match(cronViewSource, /refreshKey=\{runsRefreshKey\}/);
+  assert.match(cronViewSource, /key=\{task\.id\}/);
   assert.match(cronViewSource, /settings\.cronViewRunNow/);
   assertJsxDimensions(cronViewSource, "Play", { width: "3.5", height: "3.5" });
   assert.match(
@@ -142,6 +165,7 @@ test("Cron manual run remains locked until its non-skip run reaches a terminal s
     startedAt,
     durationMs: 0,
     output,
+    counted: false,
   });
   const marker = 1_000;
   const skip = run(
@@ -154,38 +178,47 @@ test("Cron manual run remains locked until its non-skip run reaches a terminal s
   assert.equal(MANUAL_CRON_RUN_POLL_INTERVAL_MS, 1_000);
   assert.equal(MANUAL_CRON_RUN_TIMEOUT_MS, 6 * 60_000);
   assert.equal(findManualCronRun([skip], marker), undefined);
+  assert.equal(
+    findManualCronRun([{ ...run("scheduler", "leased", marker + 2), counted: true }], marker),
+    undefined,
+  );
+  assert.equal(
+    findManualCronRun([{ ...run("manual", "leased", marker + 2), counted: false }], marker)?.id,
+    "manual",
+  );
+  assert.equal(
+    findManualCronRun([{ ...run("legacy", "leased", marker + 2) }], marker)?.id,
+    "legacy",
+    "legacy snapshots without counted remain manual-compatible",
+  );
+  assert.equal(
+    findManualCronRun(
+      [{ ...run("other", "done", marker + 2), counted: false }, { ...run("manual", "leased", marker + 3), counted: false }],
+      marker,
+      "manual",
+    )?.id,
+    "manual",
+  );
+  assert.equal(
+    isManualCronRunFinished(
+      [{ ...run("scheduler", "done", marker + 2), counted: true }],
+      marker,
+    ),
+    false,
+  );
   assert.equal(isManualCronRunFinished([skip, run("pending", "pending", marker + 2)], marker), false);
   assert.equal(isManualCronRunFinished([skip, run("leased", "leased", marker + 2)], marker), false);
   assert.equal(isManualCronRunFinished([skip, run("done", "done", marker + 2)], marker), true);
   assert.equal(isManualCronRunFinished([skip, run("expired", "expired", marker + 2)], marker), true);
 });
 
-test("Auto Prompt reconciles pending runs without relying only on events", () => {
-  assert.equal(PROMPT_RUN_RECONCILE_INTERVAL_MS, 15_000);
-  assert.match(
-    runnerSource,
-    /window\.setInterval\(requestClaim, PROMPT_RUN_RECONCILE_INTERVAL_MS\)/,
-  );
-  assert.match(runnerSource, /window\.clearInterval\(reconcileTimer\)/);
-});
-
-test("Auto Prompt run prefers the queue-time workdir with a global fallback", () => {
-  assert.match(
-    runnerSource,
-    /const workdir = \(request\.workdir \?\? ""\)\.trim\(\) \|\| settings\.system\.workdir\.trim\(\)/,
-  );
-  assert.match(runnerSource, /resolveWorkspaceResources\(settings, workdir\)/);
-  assert.match(
-    runnerSource,
-    /filterMcpSettingsForWorkspace\(settings\.mcp, workspaceResources\)/,
-  );
-});
-
-test("Auto Prompt applies the system command safety mode to its shell registry", () => {
-  assert.match(
-    runnerSource,
-    /sandbox:\s*resolveShellSandboxSettings\(settings\.system\.commandSafetyMode\)/,
-  );
+test("K-brain Auto Prompt claims and completes through the backend-owned runner", () => {
+  assert.match(runnerSource, /let claimed: PromptRunRequest\[\] = \[\]/);
+  assert.match(runnerSource, /backend\.claimPromptRuns\(\)/);
+  assert.match(runnerSource, /createCompletePromptRunInput\(/);
+  assert.match(runnerSource, /backend\.completePromptRun\(/);
+  assert.doesNotMatch(runnerSource, /resolveWorkspaceResources/);
+  assert.doesNotMatch(runnerSource, /resolveShellSandboxSettings/);
 });
 
 test("Cron workspace pin stays wired in shared UI", () => {
@@ -290,4 +323,13 @@ test("Cron timeout upper bound is per task kind and mirrors Rust", () => {
   // the authority for the per-kind rejection.
   assert.match(cronToolsSource, /maximum: 3600/);
   assert.match(cronToolsSource, /up to 3600 for type=prompt/);
+});
+
+test("legacy automation hosts retain their existing run behavior", async () => {
+  assert.equal(backend.canCancelRun(), false);
+  await assert.rejects(backend.cancelRun("task"), /unavailable on this host/);
+  assert.deepEqual(invokeCalls, []);
+  assert.match(webAutomationBackendSource, /async cancelRun\(taskId: string, executionId\?: string\): Promise<void>/);
+  assert.match(webAutomationBackendSource, /executionId \? \{ executionId \} : undefined/);
+  assert.match(webAutomationBackendSource, /canCancelRun\(\): boolean \{\s*return true/);
 });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { cn } from "../../../agent-ui/src/lib/shared/utils.ts";
 import styleTokenNames from "../../../agent-ui/src/lib/shared/style-token-names.generated.json" with {
   type: "json",
@@ -61,7 +62,7 @@ test("every registered composite utility compiles and preserves caller colors", 
     '@import "tailwindcss" source(none);\n@import "../../agent-ui/src/styles/tokens.css";\n@source inline(' +
       JSON.stringify(candidates.join(" ")) +
       ");",
-    { from: new URL("../../src/style-token-contract.css", import.meta.url).pathname },
+    { from: fileURLToPath(new URL("../../src/style-token-contract.css", import.meta.url)) },
   );
   const selectors = new Set();
   result.root.walkRules((r) => selectors.add(r.selector));

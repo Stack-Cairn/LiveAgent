@@ -40,12 +40,19 @@ import type {
   ChatQueueSnapshot,
   GatewayChatRuntimeControls,
   GatewayHistoryEvent,
+  GatewayHistorySyncSnapshot,
+  GatewayHistorySyncStatus,
   GatewaySelectedModel,
   MemoryManagePayload,
 } from "./gatewayTypes";
 
 export type StatusListener = (status: AgentStatus | null, error: string | null) => void;
 export type HistoryListener = (event: GatewayHistoryEvent) => void;
+export type HistorySyncListener = (
+  update:
+    | { kind: "status"; status: GatewayHistorySyncStatus }
+    | { kind: "snapshot"; snapshot: GatewayHistorySyncSnapshot },
+) => void;
 export type SettingsListener = (event: GatewaySettingsSyncPayload) => void;
 export type GatewaySettingsUpdateResponse = {
   accepted?: boolean;
@@ -89,6 +96,11 @@ export type GatewayChatCommandInput = {
   runtimeControls?: GatewayChatRuntimeControls;
   baseMessageRef?: HistoryMessageRef;
   queuePolicy?: "auto" | "append" | "interrupt";
+  /** 输入框“/”指令的单轮语义：经 K-brain 的 goal 接口开始本轮，或本条是提示词指令。 */
+  goalAction?: "set" | "resume";
+  goalText?: string;
+  promptCommand?: boolean;
+  planCommand?: boolean;
 };
 
 export type SkillListResponse = {
@@ -110,6 +122,40 @@ export type MentionListResponse = {
  *  camelCase 序列化，空串表示缺失（无 bundle id / 取不到图标）。 */
 export type InstalledAppsListResponse = {
   apps: Array<{ name: string; bundleId: string; path: string; iconDataUrl: string }>;
+};
+
+/** 桌面端“/”指令目录：action 由客户端处理，prompt 由 K-brain 展开。 */
+export type SlashCommandSummary = {
+  name: string;
+  description: string;
+  argumentHint: string;
+  kind: string;
+  source: string;
+};
+
+export type SlashCommandListResponse = {
+  commands: SlashCommandSummary[];
+};
+
+export type GoalManageResponse = {
+  conversationId: string;
+  goal: string;
+  status: string;
+  round: number;
+  maxRounds: number;
+  reason: string;
+};
+
+export type LoopSummary = {
+  id: string;
+  interval: string;
+  cron: string;
+  prompt: string;
+  enabled: boolean;
+};
+
+export type LoopManageResponse = {
+  loops: LoopSummary[];
 };
 
 export type FsRoot = {
@@ -508,6 +554,10 @@ export function buildChatCommandPayload(input: GatewayChatCommandInput) {
             provider_type: input.selectedModel.providerType,
           }
         : undefined,
+      goal_action: input.goalAction ?? "",
+      goal_text: input.goalText ?? "",
+      prompt_command: input.promptCommand === true,
+      plan_command: input.planCommand === true,
       runtime_controls: input.runtimeControls
         ? {
             thinking_enabled: input.runtimeControls.thinkingEnabled,
@@ -557,13 +607,15 @@ export function parseJsonPayload<T>(raw: string | undefined, fallback: T): T {
 
 export function normalizeChatQueueResponse(input: RawChatQueueResponse): ChatQueueResponse {
   const normalized = input as RawChatQueueResponse & Partial<ChatQueueResponse>;
+  const item =
+    normalized.item ?? parseJsonPayload<ChatQueueResponse["item"]>(input.item_json, undefined);
   return {
     accepted: input.accepted === true,
     message: input.message,
     snapshot:
       normalized.snapshot ??
       parseJsonPayload<ChatQueueSnapshot | undefined>(input.snapshot_json, undefined),
-    item: normalized.item ?? parseJsonPayload(input.item_json, undefined),
+    item: item ? { ...item, uploadedFilesJson: item.uploadedFilesJson?.trim() || "[]" } : undefined,
     errorCode: normalized.errorCode ?? input.error_code,
     revision: input.revision,
   };
@@ -588,6 +640,7 @@ export function normalizeChatQueueSnapshot(
   return {
     conversationId,
     revision,
+    ...(typeof raw.paused === "boolean" ? { paused: raw.paused } : {}),
     items: Array.isArray(raw.items) ? raw.items : [],
   };
 }

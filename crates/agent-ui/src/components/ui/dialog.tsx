@@ -73,7 +73,8 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
     // through their own portals and would fall back to scale 1.0; the context
     // carries the dialog's scale — including a call-site `style` override —
     // across that boundary.
-    const zoneFontScale = resolveZoneFontScale(style, DIALOG_FONT_SCALE);
+    const inheritedFontScale = React.useContext(ZoneFontScaleContext);
+    const zoneFontScale = resolveZoneFontScale(style, inheritedFontScale ?? DIALOG_FONT_SCALE);
     return (
       <DialogPortal>
         <DialogOverlay
@@ -101,7 +102,7 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
             data-layout={layout}
             data-has-close-button={showCloseButton ? "true" : undefined}
             style={{
-              ...({ "--zone-font-scale": DIALOG_FONT_SCALE } as React.CSSProperties),
+              ...({ "--zone-font-scale": zoneFontScale } as React.CSSProperties),
               ...style,
             }}
             className={cn(

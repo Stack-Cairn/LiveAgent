@@ -1,4 +1,5 @@
 pub mod db;
+pub mod kbrain_occurrences;
 pub mod occurrences;
 pub mod scheduler;
 pub mod store;

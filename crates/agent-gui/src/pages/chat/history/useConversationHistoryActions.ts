@@ -1,4 +1,4 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { Message } from "@liveagent/app/lib/agentTypes";
 import type { ConversationOpenRequest } from "@liveagent/ui/lib/sidebar/openController";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useRef } from "react";
@@ -11,9 +11,11 @@ import {
   prependTranscriptProjection,
 } from "../../../lib/chat/conversation/conversationState";
 import {
+  branchChatHistory,
   buildChatHistoryRevision,
   buildConversationStateFromWindow,
   CHAT_HISTORY_WINDOW_MESSAGES,
+  type ChatHistoryWindowRecord,
   type ConversationPersistenceCursor,
   getChatHistoryWindow,
   persistConversationRuntime,
@@ -24,6 +26,7 @@ import {
   createConversationIdentity,
   waitForTitleLookahead,
 } from "../../../lib/chat/page/chatPageHelpers";
+import { getProviderRuntimeBackend } from "../../../lib/providers/runtime/providerRuntimeConfig";
 import { type SelectedModel, serializeSelectedModelJson } from "../../../lib/settings";
 import type { ConversationHydrationStore } from "../conversations/conversationHydrationStore";
 import {
@@ -61,6 +64,45 @@ export type PersistConversationParams = {
 export type PersistConversationAction = (
   params: PersistConversationParams,
 ) => Promise<ConversationViewState | null>;
+
+// The K-brain backend answers a stale CAS token with 409 "history revision
+// conflict" and the client adds its own local-guard text. Both mean the same
+// thing: the projection we hold is behind the backend, so re-request it.
+export function isKBrainRevisionConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /revision conflict/i.test(error.message);
+}
+
+// After a reload the caller only knows the original message id, so resolve the
+// current ref (offset + content hash) for the same message in the fresh window.
+export function findReloadedMessageRef(
+  state: ConversationViewState,
+  messageRef: HistoryMessageRef,
+): HistoryMessageRef | undefined {
+  return state.transcript.items
+    .flatMap((item) => (item.kind === "user" && item.messageRef ? [item.messageRef] : []))
+    .find((ref) => ref.messageId === messageRef.messageId);
+}
+
+export async function branchConversationWithReload(
+  conversationId: string,
+  messageRef: HistoryMessageRef,
+  reload: (
+    conversationId: string,
+  ) => Promise<{ state: ConversationViewState; revision: string } | null>,
+) {
+  try {
+    return await branchChatHistory(conversationId, messageRef);
+  } catch (error) {
+    if (!isKBrainRevisionConflict(error)) throw error;
+    const refreshed = await reload(conversationId);
+    const freshRef = refreshed && findReloadedMessageRef(refreshed.state, messageRef);
+    if (!freshRef || freshRef.contentHash !== messageRef.contentHash) {
+      throw new Error("历史消息已发生变化，请重新选择要重试或分支的消息");
+    }
+    return branchChatHistory(conversationId, freshRef);
+  }
+}
 
 type UseConversationHistoryActionsParams = {
   conversationState: ConversationViewState;
@@ -294,6 +336,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
 
       if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
       const state = buildConversationStateFromWindow(record);
+      const selectedModel = resolveConversationSelectedModel(record.conversation.selectedModelJson);
       // Runtime may have advanced while metadata was loading (including streaming turns).
       const latestCached = fromSearch ? conversationRuntimeCacheRef.current.get(id) : undefined;
       const reuseCached =
@@ -306,7 +349,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
             sessionId: record.conversation.sessionId ?? record.conversation.id,
             createdAt: record.conversation.createdAt,
             workdir: record.conversation.cwd,
-            selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
+            selectedModel,
           });
       if (fromSearch) {
         request?.beforeCommit?.(record.conversation);
@@ -367,12 +410,15 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           includeActiveSegment: true,
         });
         if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+        const selectedModel = resolveConversationSelectedModel(
+          record.conversation.selectedModelJson,
+        );
         const entry = createConversationRuntimeEntry({
           state: buildConversationStateFromWindow(record),
           sessionId: record.conversation.sessionId ?? record.conversation.id,
           createdAt: record.conversation.createdAt,
           workdir: record.conversation.cwd,
-          selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
+          selectedModel,
         });
         setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, id, entry);
         conversationPersistenceCursorRef.current.set(id, {
@@ -397,7 +443,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     const existing = earlierPageLoadsRef.current.get(id);
     if (existing) return existing;
 
-    const task = (async () => {
+    async function attempt(): Promise<void> {
       const entry = conversationRuntimeCacheRef.current.get(id);
       const transcript = entry?.state.transcript;
       if (!entry || !transcript?.hasMoreBefore || !transcript.revision) return;
@@ -430,11 +476,75 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           state: prependTranscriptProjection(current.state, projection),
         };
       });
+    }
+
+    const task = (async () => {
+      try {
+        await attempt();
+      } catch (error) {
+        if (!isKBrainRevisionConflict(error)) throw error;
+        // Re-request the newest window without the stale token and adopt its
+        // revision. Raw offsets only ever grow, so the already-paged rows and
+        // the paging cursor stay valid.
+        const fresh = await getChatHistoryWindow({
+          id,
+          maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+          includeActiveSegment: false,
+        });
+        updateConversationRuntimeEntry(id, (current) => ({
+          ...current,
+          state: {
+            ...current.state,
+            transcript: { ...current.state.transcript, revision: fresh.revision },
+          },
+        }));
+        await attempt();
+      }
     })().finally(() => {
       earlierPageLoadsRef.current.delete(id);
     });
     earlierPageLoadsRef.current.set(id, task);
     return task;
+  }
+
+  // Re-request the authoritative window after a revision conflict and commit it
+  // into the runtime caches (plus the visible pane when it is the open one).
+  // The fresh revision is returned alongside the state: it is the CAS token for
+  // the retry, while the projection's own field stays nullable.
+  async function reloadConversation(
+    conversationId: string,
+  ): Promise<{ state: ConversationViewState; revision: string } | null> {
+    const id = conversationId.trim();
+    if (!id) return null;
+    const record = await getChatHistoryWindow({
+      id,
+      maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+      includeActiveSegment: true,
+    });
+    if (!record.activeSegment) return null;
+    const state = buildConversationStateFromWindow(record);
+    const previous = conversationRuntimeCacheRef.current.get(id);
+    const entry = previous
+      ? { ...previous, state, errorMessage: null }
+      : createConversationRuntimeEntry({
+          state,
+          sessionId: record.conversation.sessionId ?? record.conversation.id,
+          createdAt: record.conversation.createdAt,
+          workdir: record.conversation.cwd,
+          selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
+        });
+    setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, id, entry);
+    conversationPersistenceCursorRef.current.set(id, {
+      activeSegmentIndex: record.activeSegment.segmentIndex,
+      activeSegmentId: record.activeSegment.segmentId,
+    });
+    if (currentConversationIdRef.current === id) {
+      setErrorMessage(null);
+      syncVisibleConversationRuntime(id, entry);
+    }
+    markLocalHistorySnapshotSynced(id, record.updatedAt);
+    sidebarStore.upsertLocal({ ...record.conversation, isPending: undefined });
+    return { state, revision: record.revision };
   }
 
   async function replaceConversationAtMessage(
@@ -452,13 +562,35 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       throw new Error("历史会话缺少 revision，无法安全替换消息");
     }
 
-    const replaced = await replaceChatHistoryFromMessage({
-      id,
-      baseMessageRef: messageRef,
-      replacementMessage,
-      maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
-      expectedRevision,
-    });
+    let replaced: ChatHistoryWindowRecord;
+    try {
+      replaced = await replaceChatHistoryFromMessage({
+        id,
+        baseMessageRef: messageRef,
+        replacementMessage,
+        maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+        expectedRevision,
+      });
+    } catch (error) {
+      if (!isKBrainRevisionConflict(error)) throw error;
+
+      // A concurrent run may have advanced the history after the view rendered.
+      // Reload the authoritative window before retrying so both the CAS token
+      // and the message projection are current.
+      const refreshed = await reloadConversation(id);
+      if (!refreshed) throw new Error("重新加载会话后缺少活跃分段");
+      const refreshedRef = findReloadedMessageRef(refreshed.state, messageRef);
+      if (!refreshedRef || refreshedRef.contentHash !== messageRef.contentHash) {
+        throw new Error("历史消息已发生变化，请重新选择要编辑的消息");
+      }
+      replaced = await replaceChatHistoryFromMessage({
+        id,
+        baseMessageRef: refreshedRef,
+        replacementMessage,
+        maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+        expectedRevision: refreshed.revision,
+      });
+    }
     if (!replaced.activeSegment) throw new Error("历史替换结果缺少活跃分段");
     const state = buildConversationStateFromWindow(replaced);
     const entry = {
@@ -617,7 +749,11 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     const initialStoredTitle = titleToStore;
     void titlePromise
       .then(async (resolvedTitle) => {
-        if (!resolvedTitle || resolvedTitle === initialStoredTitle) return;
+        if (!resolvedTitle) return;
+        // K-brain persists messages itself; the local summary has not saved the title.
+        if (resolvedTitle === initialStoredTitle && getProviderRuntimeBackend() !== "kbrain") {
+          return;
+        }
 
         const currentItem = sidebarStore.peek(conversationId);
         if (!currentItem || currentItem.title !== initialStoredTitle) return;
@@ -655,6 +791,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     hydrateInBackground,
     loadEarlier,
     replaceConversationAtMessage,
+    reloadConversation,
     cleanupDeletedConversation,
     persistConversation,
   };

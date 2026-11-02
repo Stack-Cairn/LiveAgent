@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 const require = createRequire(new URL("../../package.json", import.meta.url));
 
 test("popup transitions include Tailwind v4's independent scale and translate properties", async () => {
@@ -15,7 +16,7 @@ test("popup transitions include Tailwind v4's independent scale and translate pr
       require("@tailwindcss/postcss")({ optimize: false }),
     ]).process(
       '@import "tailwindcss" source(none);\n@source inline(' + JSON.stringify(candidates.join(" ")) + ');',
-      { from: new URL("../../src/popup-transition-check.css", import.meta.url).pathname },
+      { from: fileURLToPath(new URL("../../src/popup-transition-check.css", import.meta.url)) },
     );
     const transitions = [];
     result.root.walkDecls("transition-property", (decl) => transitions.push(decl.value.split(",").map((v) => v.trim())));

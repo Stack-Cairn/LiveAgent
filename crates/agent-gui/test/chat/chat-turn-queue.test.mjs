@@ -141,3 +141,19 @@ test("queued chat turn preview keeps structured draft hints compact", () => {
   assert.equal(queue.queuedChatTurnHasContent(richDraft, []), true);
   assert.equal(queue.queuedChatTurnHasContent(draft(""), [{ fileName: "a.txt" }]), true);
 });
+
+test("editing a queued WebUI command drops its command semantics unless the text is unchanged", () => {
+  const request = {
+    requestId: "r1",
+    composerCommand: { kind: "goal", action: "set", goal: "A" },
+  };
+  assert.equal(queue.gatewayRequestAfterQueuedEdit(request, "/goal A", " /goal A "), request);
+  const edited = queue.gatewayRequestAfterQueuedEdit(request, "/goal A", "/goal B");
+  assert.equal(edited.requestId, "r1");
+  assert.equal("composerCommand" in edited, false);
+  assert.equal(
+    "composerCommand" in queue.gatewayRequestAfterQueuedEdit({ requestId: "r2", composerCommand: { kind: "prompt" } }, "/review", "just text"),
+    false,
+  );
+  assert.equal(queue.gatewayRequestAfterQueuedEdit(undefined, "a", "b"), undefined);
+});

@@ -1,7 +1,9 @@
+import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { isPendingUserInteractionBlock } from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
 import { LiveSparkle } from "@liveagent/ui/components/chat/LiveSparkle";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import { parseRunProgress } from "@liveagent/ui/lib/chat/runProgress";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { memo, useMemo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
@@ -82,7 +84,13 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
       ))}
       {/* 整个回合存活期间常驻的脉冲星标：工具/思考的空档、压缩总结阶段都
           保持可见，告诉用户对话仍在进行；回合落定（live=false）即消失。 */}
-      {row.live ? <LiveSparkle className="pt-1" paused={awaitingDecision} /> : null}
+      {row.live ? (
+        !awaitingDecision && parseRunProgress(toolStatus) ? (
+          <LiveAssistantStatus status={toolStatus} />
+        ) : (
+          <LiveSparkle className="pt-1" paused={awaitingDecision} />
+        )
+      ) : null}
     </div>
   );
 });

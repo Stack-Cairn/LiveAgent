@@ -7,6 +7,7 @@ package pbws
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/liveagent/agent-gateway/internal/auth/agenttoken"
 	"github.com/liveagent/agent-gateway/internal/config"
+	"github.com/liveagent/agent-gateway/internal/kbrain"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
@@ -54,7 +56,9 @@ type Server struct {
 	cfg *config.Config
 	sm  *session.Manager
 	// tokens 是每 Agent 凭证存储；生产网关启动时始终非 nil，nil 仅供轻量测试构造。
-	tokens *agenttoken.Store
+	tokens         *agenttoken.Store
+	kbrainRelay    *kbrain.Relay
+	kbrainTargetID string
 
 	agentConns    atomic.Int64
 	browserConns  atomic.Int64
@@ -63,7 +67,37 @@ type Server struct {
 
 // NewServer 构造 v2 协议服务端；tokens 传 nil 仅用于不涉及持久化的单元测试。
 func NewServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store) *Server {
-	return &Server{cfg: cfg, sm: sm, tokens: tokens}
+	s := &Server{cfg: cfg, sm: sm, tokens: tokens}
+	if cfg != nil && cfg.KBrainURL != "" && cfg.KBrainAgentID != "" {
+		if client, err := kbrain.New(cfg.KBrainURL, cfg.KBrainToken, nil); err == nil {
+			queuePath := ""
+			if cfg.AgentDB != "" {
+				queuePath = cfg.AgentDB + ".kbrain-queue.json"
+			}
+			relay, relayErr := kbrain.NewRelayWithQueueState(client, cfg.KBrainAgentID, kbrain.ModelRef{Provider: cfg.KBrainProvider, Model: cfg.KBrainModel}, "", queuePath, s.kbrainCallbacks(cfg.KBrainAgentID))
+			if relayErr == nil {
+				callbacks := s.kbrainCallbacks(cfg.KBrainAgentID)
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				if err := relay.EnableBackendQueue(ctx, callbacks); err != nil {
+					slog.Warn("K-brain queue capability negotiation failed", "err", err)
+				}
+				cancel()
+				if err := relay.StartHistorySync(callbacks); err != nil {
+					slog.Warn("K-brain history synchronization unavailable", "err", err)
+				}
+				s.kbrainRelay = relay
+				s.kbrainTargetID = cfg.KBrainAgentID
+			}
+		}
+	}
+	return s
+}
+
+func (s *Server) Close() {
+	if s.kbrainRelay != nil {
+		s.kbrainRelay.Close()
+		s.sm.ClearHistorySyncState(s.kbrainTargetID)
+	}
 }
 
 // acquireConnSlot 在升级前占用一个连接槽位；超限返回 false（调用方回 503）。

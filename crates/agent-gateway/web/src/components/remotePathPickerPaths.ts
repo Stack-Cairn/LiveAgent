@@ -2,6 +2,7 @@
 // desktop's file system, so every helper must accept both POSIX ("/a/b") and
 // Windows ("C:\\a", "C:/a", "\\\\server\\share") shapes regardless of the
 // browser's own platform.
+import { workspaceProjectPathKey } from "@liveagent/ui/lib/settings/workspaceProjects";
 
 export type RemoteFsRoot = {
   id: string;
@@ -24,8 +25,7 @@ export function stripTrailingPathSeparators(path: string) {
 }
 
 export function normalizePathForCompare(path: string) {
-  const normalized = stripTrailingPathSeparators(path).replace(/\\/g, "/");
-  return /^[A-Za-z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
+  return workspaceProjectPathKey(path);
 }
 
 export function isSameOrDescendantPath(path: string, ancestor: string) {

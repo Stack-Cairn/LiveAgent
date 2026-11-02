@@ -1,6 +1,6 @@
 import { type ToolPolicy, updateMcp, updateSystem } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
-import { invoke } from "@liveagent/app/shims/tauriCore";
+import { invoke, isTauri } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
 import { ToolPolicyToggle } from "@liveagent/ui/components/hub/ToolPolicyToggle";
 import {
@@ -59,6 +59,7 @@ import {
   cuaDisplayCommand,
   findCuaDriverServer,
   findCuaDriverServerIndex,
+  isCuaHostCommandUnavailable,
   patchCuaProbeCachePermissions,
   readCuaPolicy,
   readCuaProbeCache,
@@ -143,7 +144,10 @@ const TIMEOUT_PRESETS = [
 export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSurface }) {
   const { settings, setSettings, surface = "desktop" } = props;
   const { t } = useLocale();
-  const canProvision = surface === "desktop";
+  // 安装与授权只能在真正的桌面宿主上做：WebUI 面（surface="web"）由桌面机
+  // 中继状态但动作仍要人坐在那台机器前；K-brain 浏览器宿主根本没有桌面宿主，
+  // `isTauri()` 为 false，入口同样必须收起。
+  const canProvision = surface === "desktop" && isTauri();
 
   const [initialSnapshot] = useState(() => readCuaProbeCache());
   const [probe, setProbe] = useState<CuaProbe | null>(initialSnapshot?.probe ?? null);
@@ -160,6 +164,9 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
   const [permissionsLoading, setPermissionsLoading] = useState(!initialSnapshot);
   const [log, setLog] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // 宿主没有这条能力（K-brain 浏览器宿主、WebUI 尚未连上 Gateway）不等于
+  // 用户操作失败：单独记一个状态，页面显示本地化引导而不是宿主抛出的英文原文。
+  const [hostUnsupported, setHostUnsupported] = useState(false);
   const mountedRef = useRef(true);
 
   // 总开关的真实状态就是这个 MCP server 的启用状态
@@ -183,6 +190,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
 
     setChecking(true);
     setError(null);
+    setHostUnsupported(false);
     setPermissionsLoading(true);
     const probeTask = invoke<CuaProbe>("cua_driver_probe");
     const permissionsTask = invoke<CuaPermissions>("cua_driver_permissions_status").catch(
@@ -196,7 +204,12 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
       setProbe(probed);
       setPermissions(perms);
     } catch (err) {
-      if (mountedRef.current) setError(String(err));
+      if (!mountedRef.current) return;
+      if (isCuaHostCommandUnavailable(err)) {
+        setHostUnsupported(true);
+      } else {
+        setError(String(err));
+      }
     } finally {
       if (mountedRef.current) {
         setChecking(false);
@@ -409,7 +422,11 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
               <AlertCircle className="size-4 text-destructive" />
             )}
             <p className="text-sm text-muted-foreground">
-              {checking ? t("settings.cuaDriver.heroChecking") : error}
+              {checking
+                ? t("settings.cuaDriver.heroChecking")
+                : hostUnsupported
+                  ? t("settings.cuaDriver.desktopOnlyRuntime")
+                  : error}
             </p>
             {!checking ? (
               <Button

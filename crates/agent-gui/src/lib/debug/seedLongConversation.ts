@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Message, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import {
   appendMessagesToConversation,

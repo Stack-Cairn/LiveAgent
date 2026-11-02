@@ -1,4 +1,4 @@
-import type { Message, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Message, TextContent, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";

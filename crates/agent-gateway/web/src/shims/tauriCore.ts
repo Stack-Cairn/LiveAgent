@@ -85,7 +85,17 @@ async function pickFilePathInBrowser(): Promise<string | null> {
   });
 }
 
+/** The WebUI always runs in a plain browser; there is no Tauri core to reach. */
+export function isTauri(): boolean {
+  return false;
+}
+
 export async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (command.startsWith("cua_driver_") || command.startsWith("browser_")) {
+    throw new Error(
+      `Desktop tool command ${command} is owned by K-brain; frontend execution is unavailable`,
+    );
+  }
   if (command.startsWith("memory_")) {
     return invokeGatewayMemory<T>(command, args);
   }
@@ -252,6 +262,17 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
       return (await getGatewayWebSocketClient(loadToken().trim()).cuaDriverStatus<T>(
         "permissions_status",
       )) as T;
+    // 应用代理设置：检测的是桌面宿主上运行的代理服务，经 Gateway 直通中继。
+    case "system_proxy_detect":
+      return (await getGatewayWebSocketClient(loadToken().trim()).detectProxies<T>()) as T;
+    case "system_proxy_test": {
+      const input = (args?.input ?? {}) as Record<string, unknown>;
+      return (await getGatewayWebSocketClient(loadToken().trim()).testProxy<T>({
+        type: String(input.type ?? ""),
+        host: String(input.host ?? "").trim(),
+        port: typeof input.port === "number" ? input.port : Number(input.port ?? 0),
+      })) as T;
+    }
     case "system_list_skill_files":
       return (await getGatewayWebSocketClient(loadToken().trim()).listSkillFiles()) as T;
     case "system_read_skill_metadata":
@@ -288,6 +309,7 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         String(args?.provider_id ?? ""),
         typeof args?.is_full_url === "boolean" ? args.is_full_url : undefined,
         Array.isArray(args?.custom_headers) ? args.custom_headers : undefined,
+        typeof args?.request_format === "string" ? args.request_format : undefined,
       )) as T;
     case "settings_reset_ssh_known_host": {
       const host = String(args?.host ?? "").trim();

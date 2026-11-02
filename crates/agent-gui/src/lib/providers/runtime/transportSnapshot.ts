@@ -26,7 +26,7 @@ export function captureTransportSnapshot(
 ): TransportSnapshot {
   const byLowerName = new Map<string, string>();
   for (const [name, value] of Object.entries(headers ?? {})) {
-    // null 是"删除该头"标记（pi-ai ProviderHeaders 语义），不会出现在出站请求里。
+    // null 是本地 provider-header contract 的"删除该头"标记，不会出现在出站请求里。
     if (value === null) continue;
     byLowerName.set(name.toLowerCase(), value);
   }

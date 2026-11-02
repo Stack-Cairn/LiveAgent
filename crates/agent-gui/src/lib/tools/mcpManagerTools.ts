@@ -1,6 +1,6 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
-import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
 import {
   type McpAuthConfig,

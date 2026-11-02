@@ -35,6 +35,8 @@ func (a *AliyunDashScopeAdapter) Test(ctx context.Context, cfg map[string]any) (
 	return readyProtocolTest(ctx, a, cfg)
 }
 func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[string]any, commands <-chan Command, events chan<- Event) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	endpoint, err := websocketEndpoint(cfg, dashScopeEndpoint)
 	if err != nil {
 		return stageError("DashScope", "validate", err)
@@ -70,16 +72,25 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 	if err = writeProviderJSON(conn, start); err != nil {
 		return stageError("DashScope", "start", err)
 	}
-	incoming := make(chan map[string]any, 8)
-	readErr := make(chan error, 1)
+	type providerFrame struct {
+		message map[string]any
+		err     error
+	}
+	incoming := make(chan providerFrame, 8)
 	go func() {
 		for {
 			var msg map[string]any
-			if err := conn.ReadJSON(&msg); err != nil {
-				readErr <- stageError("DashScope", "receive", err)
+			err := conn.ReadJSON(&msg)
+			frame := providerFrame{message: msg}
+			if err != nil {
+				frame.err = stageError("DashScope", "receive", err)
+			}
+			select {
+			case incoming <- frame:
+			case <-ctx.Done():
 				return
 			}
-			if !emitIncoming(ctx, incoming, msg) {
+			if err != nil {
 				return
 			}
 		}
@@ -93,11 +104,6 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 		select {
 		case <-ctx.Done():
 			return nil
-		case err := <-readErr:
-			if finishing && finishSent && isWebSocketCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				return stageError("DashScope", "close", errors.New("connection closed before task-finished"))
-			}
-			return err
 		case cmd := <-commands:
 			if cmd.Cancel {
 				return nil
@@ -118,8 +124,14 @@ func (a *AliyunDashScopeAdapter) Run(ctx context.Context, id string, cfg map[str
 					finishSent = true
 				}
 			}
-		case msg := <-incoming:
-			body, _ := json.Marshal(msg)
+		case frame := <-incoming:
+			if frame.err != nil {
+				if finishing && finishSent && isWebSocketCloseError(frame.err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					return stageError("DashScope", "close", errors.New("connection closed before task-finished"))
+				}
+				return frame.err
+			}
+			body, _ := json.Marshal(frame.message)
 			var wire struct {
 				Header struct {
 					Event        string `json:"event"`

@@ -1,3 +1,5 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import { Terminal } from "@liveagent/ui/components/IconSet";
 import type { ConfirmDialogOptions } from "@liveagent/ui/components/ui/confirm-dialog";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -6,9 +8,8 @@ import {
   sortTerminalSessions,
 } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
+import { isKBrainBrowserHost } from "../../../lib/host";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import { asErrorMessage } from "../chatPageUtils";
 import { terminalAppExitGuard } from "../workbench/terminalPaneRuntime";
@@ -36,7 +37,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
 
   useEffect(() => {
     setTerminalSessionsLoaded(false);
-    if (!terminalProjectPathKey) {
+    if (isKBrainBrowserHost() || !terminalProjectPathKey) {
       setTerminalSessions([]);
       return;
     }
@@ -64,7 +65,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
   }, [terminalProjectPathKey]);
 
   useEffect(() => {
-    if (!terminalProjectPathKey) return;
+    if (isKBrainBrowserHost() || !terminalProjectPathKey) return;
     return tauriTerminalClient.subscribe((event) => {
       if (event.kind === "output") return;
       setTerminalSessions((current) => applyTerminalEventToSessions(current, event));
@@ -75,6 +76,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
   // dock 写回竞态等)。终端视口报错时按后端权威列表校验一次;确认消失则
   // 整表刷新,幽灵从 dock 与 Pane 同步退场。会话仍在则视为瞬时错误,不动列表。
   const verifyTerminalSessionAlive = useCallback((sessionId: string) => {
+    if (isKBrainBrowserHost()) return;
     const key = sessionId.trim();
     if (!key) return;
     void tauriTerminalClient
@@ -87,6 +89,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
   }, []);
 
   useEffect(() => {
+    if (isKBrainBrowserHost()) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
 

@@ -17,6 +17,7 @@ type UseProjectToolsRuntimeParams = {
   statusSessionId?: string | null;
   terminalProjectPath: string;
   terminalProjectPathKey: string;
+  terminalIdentity?: { conversationId?: string; runId?: string } | null;
   rightDockFileTreeOpen: boolean;
   rightDockSshTunnelOpen: boolean;
 };
@@ -31,6 +32,7 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     statusSessionId,
     terminalProjectPath,
     terminalProjectPathKey,
+    terminalIdentity,
     rightDockFileTreeOpen,
     rightDockSshTunnelOpen,
   } = params;
@@ -108,7 +110,7 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     let cancelled = false;
     const requestVersion = terminalSessionsVersionRef.current;
     void terminalClient
-      .list()
+      .list(undefined, terminalIdentity ?? undefined)
       .then((sessions) => {
         if (!cancelled && terminalSessionsVersionRef.current === requestVersion) {
           setTerminalSessions(sortTerminalSessions(sessions));
@@ -129,6 +131,7 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     statusOnline,
     statusSessionId,
     terminalClient,
+    terminalIdentity,
     webTerminalSessionsEnabled,
   ]);
 
@@ -155,7 +158,7 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
 
     let cancelled = false;
     void terminalClient
-      .list(terminalProjectPathKey)
+      .list(terminalProjectPathKey, terminalIdentity ?? undefined)
       .then((sessions) => {
         if (cancelled) return;
         terminalSessionsVersionRef.current += 1;
@@ -173,6 +176,7 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     settingsSyncReady,
     statusOnline,
     terminalClient,
+    terminalIdentity,
     terminalProjectPathKey,
     webTerminalSessionsEnabled,
   ]);

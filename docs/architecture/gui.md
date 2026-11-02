@@ -1,5 +1,15 @@
 # 桌面 GUI 与 Tauri 架构
 
+## 当前 K-brain 边界（2026-10-24）
+
+模型和 Agent 的执行真相源是 K-brain，不是 WebView。当前入口为
+`src/lib/kbrain`、`pages/chat/turns/runKBrainConversationTurn.ts` 和
+`src-tauri/src/services/kbrain_backend.rs`。宿主启动配套后端、提供连接信息并回收自己启动的进程；前端只提交请求、消费事件和展示审批。
+
+Memory 整理通过 KB 的统一管理命令执行；Skills 通过后端资源适配器读取和保存；MCP 的配置和工具执行属于 KB。原生终端、文件选择和 SSH 等外围宿主服务并未因此全部迁移。
+
+下文保留迁移前的模块地图，涉及前端模型/工具循环、SQLite 聊天真相源、前端 Cron/Memory runner 的描述属于 **legacy 实现**，不能据此接回执行路径。当前架构以 [overview.md](overview.md) 为准；已验收范围和未补齐项见 [功能验收记录](../testing/2026-10-24-full-capability-audit.md)。
+
 ## 模块边界
 
 | 模块 | 路径 | 职责 |
@@ -45,7 +55,7 @@
 | text 模式 | 只做模型文本流式，不注入本地工具。 | `pages/chat/turns/runTextConversationTurn.ts`、`lib/providers/llm.ts` |
 | tools/agent-dev 模式 | 构造 builtin tools，执行模型 tool loop，写工具 trace，并同步 Gateway chat event。 | `pages/chat/turns/runAgentConversationTurn.ts`、`lib/chat/conversation/run/*` |
 | 历史持久化 | V3 segment 写入 Tauri SQLite，支持 append segment、active segment update、rename/delete/pin/share。 | `lib/chat/conversation/conversationState.ts`、`src-tauri/src/commands/history/chat_history/*` |
-| 上下文压缩 | 在 pre-send、post-tool、反应式 overflow 与手动触发时生成 summary checkpoint，避免超上下文。 | `pages/chat/runtime/conversationContextBuilders.ts`、`lib/chat/compaction/*` |
+| 上下文压缩 | 在 pre-send、mid-stream、post-tool 等阶段生成 summary checkpoint，避免超上下文。 | `pages/chat/runtime/conversationContextBuilders.ts`、`lib/chat/compaction/*` |
 | 记忆注入 | 每轮根据 workdir 读取 memory overview，并附加到 system prompt。 | `lib/chat/memory/*`、`src-tauri/src/services/memory/*` |
 | Skills 注入 | 根据 Settings Skills 选择与 always-on builtin skills 生成 skills prompt。 | `crates/agent-ui/src/lib/skills/index.ts`、`crates/agent-ui/src/lib/skills/useChatSkills.ts` |
 | 上传 | GUI 直接调用 Tauri import readable files/image preview；工作区外文件复制到 `~/.liveagent/uploads` 暂存区（不污染工作区），工作区内文件原地引用。 | `pages/chat/hooks/usePendingUploads.ts`、`src-tauri/src/commands/app/system.rs` |

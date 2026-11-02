@@ -39,6 +39,13 @@ impl SshPatchConflictCode {
 pub struct RemoteSettingsPayload {
     #[serde(default)]
     pub enabled: bool,
+    /// Missing on existing installations: preserve the external Gateway selection.
+    #[serde(default)]
+    pub managed_local: bool,
+    #[serde(default = "default_local_gateway_port")]
+    pub local_gateway_port: u16,
+    #[serde(default)]
+    pub local_gateway_token: String,
     #[serde(default)]
     pub gateway_url: String,
     #[serde(default = "default_remote_gateway_port", alias = "grpcPort")]

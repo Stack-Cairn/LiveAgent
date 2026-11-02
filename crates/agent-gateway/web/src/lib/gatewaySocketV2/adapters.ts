@@ -58,6 +58,7 @@ import {
   FsWriteTextRequestSchema,
   GatewayEnvelopeSchema,
   GitRequestSchema,
+  GoalManageRequestSchema,
   HistoryBranchRequestSchema,
   HistoryDeleteRequestSchema,
   HistoryGetRequestSchema,
@@ -65,19 +66,23 @@ import {
   HistoryPinRequestSchema,
   HistoryPrefixRequestSchema,
   HistoryRenameRequestSchema,
+  HistoryResyncRequestSchema,
   HistorySetCwdRequestSchema,
   HistoryShareGetRequestSchema,
   HistoryShareSetRequestSchema,
   HistoryWorkdirsRequestSchema,
   InstalledAppsListRequestSchema,
+  LoopManageRequestSchema,
   ManagedProcessRequestSchema,
   MemoryManageRequestSchema,
+  PermissionRulesRequestSchema,
   PlanningRequestSchema,
   ProviderCustomHeaderSchema,
   ProviderCustomHeadersSchema,
   ProviderListRequestSchema,
   ProviderModelsRequestSchema,
   ProviderUsageRequestSchema,
+  ProxyDetectRequestSchema,
   SettingsGetRequestSchema,
   SettingsResetSshKnownHostRequestSchema,
   SettingsUpdateRequestSchema,
@@ -86,6 +91,7 @@ import {
   SkillManageRequestSchema,
   SkillMetadataReadRequestSchema,
   SkillTextReadRequestSchema,
+  SlashCommandListRequestSchema,
   TerminalRequestSchema,
   TerminalStreamFrameSchema,
   TrajectoryFetchRequestSchema,
@@ -113,6 +119,7 @@ import {
   ChatUnsubscribeRequestSchema,
   ClientHelloSchema,
   ClientRole,
+  HistoryResyncAckSchema,
   PongFrameSchema,
   StatusGetRequestSchema,
   TerminalClientFrameSchema,
@@ -144,6 +151,17 @@ function str(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+const PERMISSION_RULES_FIELDS = ["workspace", "rule", "effect", "scope", "id"] as const;
+
+function permissionRulesInput(body: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of PERMISSION_RULES_FIELDS) {
+    const value = trimStr(body[key]);
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
 function trimStr(value: unknown): string {
   return str(value).trim();
 }
@@ -173,9 +191,22 @@ function toI64(value: unknown): bigint {
   return Number.isFinite(parsed) ? BigInt(Math.trunc(parsed)) : 0n;
 }
 
+function toU64(value: unknown): bigint {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? BigInt(parsed) : 0n;
+}
+
 // 64 位整数入站边界：bigint → number（详见文件头注释）。
 function num(value: number | bigint | undefined): number {
   return Number(value ?? 0);
+}
+
+function safeU64(value: number | bigint | undefined): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error("Gateway history synchronization sequence exceeds the JavaScript safe range");
+  }
+  return parsed;
 }
 
 function parseJson(text: string): unknown {
@@ -302,6 +333,27 @@ function buildRequestFrame(requestId: string, type: string, payload: unknown): W
         "workspaceUnsubscribe",
         create(WorkspaceUnsubscribeRequestSchema, { workdir: trimStr(body.workdir) }),
       );
+    case "history.resync":
+      return webFrame(
+        requestId,
+        "historyResync",
+        create(HistoryResyncRequestSchema, {
+          resyncToken: trimStr(body.resync_token),
+          offset: n32(body.offset),
+          limit: n32(body.limit),
+        }),
+      );
+    case "history.resync_ack":
+      return webFrame(
+        requestId,
+        "historyResyncAck",
+        create(HistoryResyncAckSchema, {
+          sourceId: trimStr(body.source_id),
+          generation: trimStr(body.generation),
+          resyncToken: trimStr(body.resync_token),
+          appliedDeliverySeq: toU64(body.applied_delivery_seq),
+        }),
+      );
     default:
       return create(WebClientFrameSchema, {
         requestId,
@@ -318,7 +370,9 @@ type WebFrameCase =
   | "chatUnsubscribe"
   | "chatActivities"
   | "workspaceSubscribe"
-  | "workspaceUnsubscribe";
+  | "workspaceUnsubscribe"
+  | "historyResync"
+  | "historyResyncAck";
 
 function webFrame(requestId: string, frameCase: WebFrameCase, value: unknown): WebClientFrame {
   return create(WebClientFrameSchema, {
@@ -372,6 +426,10 @@ function buildChatCommand(body: J) {
       clientRequestId: str(inner.client_request_id),
       runtimeControls: buildRuntimeControls(inner.runtime_controls),
       queuePolicy: str(inner.queue_policy),
+      goalAction: str(inner.goal_action),
+      goalText: str(inner.goal_text),
+      promptCommand: bool(inner.prompt_command),
+      planCommand: bool(inner.plan_command),
     }),
     baseMessageRef: inner.base_message_ref
       ? buildMessageRef(rec(inner.base_message_ref))
@@ -423,6 +481,8 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       case: "terminalRequest",
       value: create(TerminalRequestSchema, {
         action: type.slice("terminal.".length),
+        conversationId: trimStr(body.conversation_id),
+        runId: trimStr(body.run_id),
         sessionId: trimStr(body.session_id),
         projectPathKey: trimStr(body.project_path_key),
         cwd: trimStr(body.cwd),
@@ -636,6 +696,7 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
                 ),
               })
             : undefined,
+          requestFormat: trimStr(body.request_format),
         }),
       };
     case "provider.usage.query":
@@ -695,6 +756,33 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       };
     case "apps.installed.list":
       return { case: "installedAppsList", value: create(InstalledAppsListRequestSchema, {}) };
+    // 输入框“/”提示词指令：桌面端转调 K-brain 的提示词模板接口。
+    case "commands.list":
+      return {
+        case: "slashCommandList",
+        value: create(SlashCommandListRequestSchema, { workdir: trimStr(body.workdir) }),
+      };
+    case "goal.manage":
+      return {
+        case: "goalManage",
+        value: create(GoalManageRequestSchema, {
+          conversationId: trimStr(body.conversationId),
+          action: trimStr(body.action),
+        }),
+      };
+    case "loops.manage":
+      return {
+        case: "loopManage",
+        value: create(LoopManageRequestSchema, {
+          conversationId: trimStr(body.conversationId),
+          action: trimStr(body.action),
+          cron: trimStr(body.cron),
+          interval: trimStr(body.interval),
+          prompt: typeof body.prompt === "string" ? body.prompt : "",
+          reasoning: trimStr(body.reasoning),
+          loopId: trimStr(body.loopId),
+        }),
+      };
     // Computer Use 设置页的只读引导状态。action 与桌面端的两条 Tauri 命令同名，
     // 写动作（安装 / 授权）不在这条通道上——见 proto 的 CuaDriverRequest 注释。
     case "cua.driver.probe":
@@ -706,6 +794,35 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       return {
         case: "cuaDriver",
         value: create(CuaDriverRequestSchema, { action: "permissions_status" }),
+      };
+    // 应用代理设置的代理服务检测：在桌面宿主上执行，结果与 Tauri 命令同一份 JSON。
+    case "proxy.detect":
+      return {
+        case: "proxyDetect",
+        value: create(ProxyDetectRequestSchema, { action: "detect" }),
+      };
+    case "proxy.test":
+      return {
+        case: "proxyDetect",
+        value: create(ProxyDetectRequestSchema, {
+          action: "test",
+          inputJson: JSON.stringify({
+            type: body.type === "socks5" ? "socks5" : "http",
+            host: trimStr(body.host),
+            port: n32(body.port),
+          }),
+        }),
+      };
+    // 设置 → 权限：只带设置页需要的字段，会话规则不经这里。
+    case "permission.rules.list":
+    case "permission.rules.add":
+    case "permission.rules.delete":
+      return {
+        case: "permissionRules",
+        value: create(PermissionRulesRequestSchema, {
+          action: type.slice("permission.rules.".length),
+          inputJson: JSON.stringify(permissionRulesInput(body)),
+        }),
       };
     case "files.preview":
       return {
@@ -1101,6 +1218,41 @@ export function decodeServerFrame(
         agentId,
         payload: historyEventPayload(payload.value),
       };
+    case "historySyncStatus":
+      return {
+        kind: "event",
+        type: "history.sync_status",
+        agentId,
+        payload: {
+          source_id: payload.value.sourceId.trim(),
+          generation: payload.value.generation.trim(),
+          latest_delivery_seq: safeU64(payload.value.latestDeliverySeq),
+          available: payload.value.available,
+          needs_resync: payload.value.needsResync,
+          resync_token: payload.value.resyncToken.trim(),
+        },
+      };
+    case "historySyncSnapshot":
+      return {
+        kind: requestId ? "response" : "event",
+        ...(requestId ? { requestId } : { type: "history.sync_snapshot" }),
+        agentId,
+        payload: {
+          source_id: payload.value.sourceId.trim(),
+          generation: payload.value.generation.trim(),
+          cut_delivery_seq: safeU64(payload.value.cutDeliverySeq),
+          resync_token: payload.value.resyncToken.trim(),
+          conversations: payload.value.conversations.map(conversationSummaryPayload),
+          workdirs: payload.value.workdirs.map((item) => ({
+            path: item.path,
+            conversationCount: item.conversationCount,
+            updatedAt: num(item.updatedAt),
+          })),
+          offset: payload.value.offset,
+          next_offset: payload.value.nextOffset,
+          total_count: payload.value.totalCount,
+        },
+      } as DecodedServerFrame;
     case "settingsEvent": {
       // settings_json 在客户端解析为现有设置事件对象。
       const parsed = settingsEventPayload(payload.value);
@@ -1309,6 +1461,35 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
           iconDataUrl: app.iconDataUrl,
         })),
       };
+    case "slashCommandListResp":
+      return {
+        commands: payload.value.commands.map((command) => ({
+          name: command.name,
+          description: command.description,
+          argumentHint: command.argumentHint,
+          kind: command.kind,
+          source: command.source,
+        })),
+      };
+    case "goalManageResp":
+      return {
+        conversationId: payload.value.conversationId,
+        goal: payload.value.goal,
+        status: payload.value.status,
+        round: payload.value.round,
+        maxRounds: payload.value.maxRounds,
+        reason: payload.value.reason,
+      };
+    case "loopManageResp":
+      return {
+        loops: payload.value.loops.map((loop) => ({
+          id: loop.id,
+          interval: loop.interval,
+          cron: loop.cron,
+          prompt: loop.prompt,
+          enabled: loop.enabled,
+        })),
+      };
     case "uploadedImagePreviewResp":
       return { mimeType: payload.value.mimeType, data: payload.value.data };
     case "memoryManageResp":
@@ -1441,6 +1622,10 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
       return unmarshalJsonPayload(payload.value.resultJson);
     case "cuaDriverResp":
       return unmarshalJsonPayload(payload.value.resultJson);
+    case "proxyDetectResp":
+      return unmarshalJsonPayload(payload.value.resultJson);
+    case "permissionRulesResp":
+      return unmarshalJsonPayload(payload.value.resultJson);
     case "sftpResponse":
       return sftpResponsePayload(payload.value);
     case "chatQueueResp":
@@ -1516,6 +1701,9 @@ function historyEventPayload(event: HistorySyncEvent): J {
   const payload: J = {
     kind: event.kind.trim(),
     conversation_id: event.conversationId.trim(),
+    source_id: event.sourceId.trim(),
+    generation: event.generation.trim(),
+    delivery_seq: safeU64(event.deliverySeq),
   };
   if (event.conversation) {
     payload.conversation = conversationSummaryPayload(event.conversation);

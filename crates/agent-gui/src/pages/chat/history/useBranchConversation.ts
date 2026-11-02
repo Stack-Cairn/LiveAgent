@@ -7,9 +7,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
-import { branchChatHistory } from "../../../lib/chat/history/chatHistory";
+import type {
+  ConversationViewState,
+  HistoryMessageRef,
+} from "../../../lib/chat/conversation/conversationState";
 import { asErrorMessage } from "../chatPageUtils";
+import { branchConversationWithReload } from "./useConversationHistoryActions";
 
 type UseBranchConversationParams = {
   currentConversationIdRef: MutableRefObject<string>;
@@ -18,6 +21,10 @@ type UseBranchConversationParams = {
   isConversationHydrationFailed: boolean;
   sidebarStore: SidebarStore;
   handleSelectConversation: (id: string) => void;
+  /** Re-request the authoritative window after a backend revision conflict. */
+  reloadConversation: (
+    conversationId: string,
+  ) => Promise<{ state: ConversationViewState; revision: string } | null>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   t: (key: string) => string;
 };
@@ -34,6 +41,7 @@ export function useBranchConversation(params: UseBranchConversationParams) {
     isConversationHydrationFailed,
     sidebarStore,
     handleSelectConversation,
+    reloadConversation,
     setErrorMessage,
     t,
   } = params;
@@ -52,7 +60,11 @@ export function useBranchConversation(params: UseBranchConversationParams) {
       branchInFlightRef.current = true;
       setBranchPendingMessageId(messageRef.messageId);
       try {
-        const summary = await branchChatHistory(conversationId, messageRef);
+        const summary = await branchConversationWithReload(
+          conversationId,
+          messageRef,
+          reloadConversation,
+        );
         sidebarStore.upsertLocal({ ...summary, isPending: undefined });
         handleSelectConversation(summary.id);
       } catch (error) {
@@ -68,6 +80,7 @@ export function useBranchConversation(params: UseBranchConversationParams) {
       isConversationHydrating,
       isConversationHydrationFailed,
       isSending,
+      reloadConversation,
       setErrorMessage,
       sidebarStore,
       t,

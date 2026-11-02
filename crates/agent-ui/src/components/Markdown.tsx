@@ -10,7 +10,9 @@ import {
   type ReactElement,
   type ReactNode,
   useId,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import remarkBreaks from "remark-breaks";
@@ -487,6 +489,77 @@ function CodeBlockActions({ code }: { code: string }) {
   );
 }
 
+/** 代码块折叠前的最大显示高度（约 12 行，行高 22px）。 */
+const CODE_BLOCK_CLAMP_PX = 280;
+const CODE_BLOCK_EXPANDED_CLASSNAME = "max-h-[60vh] w-full overflow-y-auto";
+// 设了 overflow 的容器不再与代码块的 my-4 外边距折叠，复制按钮会比代码块高出一截；
+// 把外边距移到容器上，按钮仍与代码块顶部对齐。
+const CODE_BLOCK_OVERFLOW_CLASSNAME = "my-4 [&_[data-streamdown='code-block']]:!my-0";
+
+/**
+ * 代码自动换行后，长行也会占多行：按实际渲染高度判断是否折叠，而不是逻辑行数。
+ * 超出时只显示前一段并给出展开按钮；展开后限高、可上下滚动。
+ */
+function HeightClampedCode({ children }: { children: ReactNode }) {
+  const { t } = useLocale();
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useLayoutEffect(() => {
+    const node = contentRef.current;
+    if (!node) return;
+    const measure = () => setOverflowing(node.scrollHeight > CODE_BLOCK_CLAMP_PX + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const clamped = overflowing && !expanded;
+  return (
+    <>
+      <div
+        ref={contentRef}
+        className={cn(
+          "relative w-full",
+          overflowing && CODE_BLOCK_OVERFLOW_CLASSNAME,
+          expanded && CODE_BLOCK_EXPANDED_CLASSNAME,
+        )}
+        style={clamped ? { maxHeight: CODE_BLOCK_CLAMP_PX, overflow: "hidden" } : undefined}
+      >
+        {children}
+        {clamped ? (
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b",
+              "from-transparent via-background/70 to-background",
+            )}
+          />
+        ) : null}
+      </div>
+      {overflowing ? (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md px-2 py-0.5",
+              "text-xs font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground",
+            )}
+          >
+            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            <span>
+              {expanded ? t("chat.markdown.collapseCode") : t("chat.markdown.expandAllCode")}
+            </span>
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 type CollapsibleCodePreProps = MarkdownPreProps & { allowMermaidFullscreen?: boolean };
 
 function ReadOnlyCollapsibleCodePre(props: MarkdownPreProps) {
@@ -520,7 +593,7 @@ export function CollapsibleCodePre({
     return (
       <div className="relative w-full">
         {isMermaid ? null : <CodeBlockActions code={codeContent} />}
-        {codeBlock}
+        {isMermaid ? codeBlock : <HeightClampedCode>{codeBlock}</HeightClampedCode>}
       </div>
     );
   }
@@ -531,11 +604,15 @@ export function CollapsibleCodePre({
     <div className="relative w-full">
       <CodeBlockActions code={codeContent} />
       {expanded ? (
-        <div className="w-full">{cloneElement(childElement, { "data-block": "true" })}</div>
+        <div className={cn(CODE_BLOCK_OVERFLOW_CLASSNAME, CODE_BLOCK_EXPANDED_CLASSNAME)}>
+          {cloneElement(childElement, { "data-block": "true" })}
+        </div>
       ) : (
         <div
           className="mt-2 w-full overflow-hidden rounded-xl bg-muted/40"
           data-liveagent-code-preview="collapsed"
+          // 预览会自动换行：超长单行或长行多行同样按渲染高度限高，与 HeightClampedCode 一致。
+          style={{ maxHeight: CODE_BLOCK_CLAMP_PX }}
         >
           <div className="flex h-8 items-center px-3 text-xs font-medium tracking-0p06em text-muted-foreground/85">
             {language || DEFAULT_CODE_BLOCK_LANGUAGE}
@@ -543,7 +620,7 @@ export function CollapsibleCodePre({
           <pre className="!m-0 !overflow-x-auto !pb-2">
             <code
               className={cn(
-                "block w-max min-w-full whitespace-pre py-4",
+                "block w-full whitespace-pre-wrap py-4 [overflow-wrap:anywhere]",
                 "font-mono text-sm leading-5 text-foreground/92",
               )}
             >
@@ -742,7 +819,7 @@ const MARKDOWN_EMBED_CLASSNAME = cn(
   "[&_[data-streamdown='code-block']>div:last-child]:!w-full [&_[data-streamdown='code-block']>div:last-child]:min-w-0 [&_[data-streamdown='code-block']>div:last-child]:rounded-none [&_[data-streamdown='code-block']>div:last-child]:border-0 [&_[data-streamdown='code-block']>div:last-child]:bg-transparent [&_[data-streamdown='code-block']>div:last-child]:p-0 [&_[data-streamdown='code-block']>div:last-child]:shadow-none",
   "[&_[data-streamdown='code-block-body']]:!rounded-none [&_[data-streamdown='code-block-body']]:!bg-transparent",
   "[&_pre]:my-0 [&_pre]:block [&_pre]:!w-full [&_pre]:!min-w-0 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:overflow-y-hidden [&_pre]:border-0 [&_pre]:bg-transparent [&_pre]:p-0 [&_pre]:shadow-none [&_pre]:outline-none [&_pre]:ring-0",
-  "[&_pre>code]:block [&_pre>code]:w-max [&_pre>code]:min-w-full [&_pre>code]:max-w-none [&_pre>code]:border-0 [&_pre>code]:bg-transparent [&_pre>code]:px-4 [&_pre>code]:py-3.5 [&_pre>code]:font-mono [&_pre>code]:text-sm [&_pre>code]:leading-22px [&_pre>code]:text-foreground/92 [&_pre>code]:shadow-none [&_pre>code]:outline-none [&_pre>code]:ring-0",
+  "[&_pre>code]:block [&_pre>code]:w-full [&_pre>code]:whitespace-pre-wrap [&_pre>code]:[overflow-wrap:anywhere] [&_pre>code]:border-0 [&_pre>code]:bg-transparent [&_pre>code]:px-4 [&_pre>code]:py-3.5 [&_pre>code]:font-mono [&_pre>code]:text-sm [&_pre>code]:leading-22px [&_pre>code]:text-foreground/92 [&_pre>code]:shadow-none [&_pre>code]:outline-none [&_pre>code]:ring-0",
   "[&_strong]:font-medium [&_[data-streamdown='strong']]:font-medium",
 );
 

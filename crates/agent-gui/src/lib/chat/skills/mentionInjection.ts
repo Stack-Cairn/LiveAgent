@@ -72,3 +72,28 @@ export const skillMentionInjection = {
     states.clear();
   },
 };
+
+export function attachSkillMentionUpdates<T extends object>(
+  messages: T[],
+  updates?: SkillMentionUpdateMap | null,
+): T[] {
+  if (!updates || updates.size === 0) return messages;
+  let changed = false;
+  const next = messages.map((message) => {
+    const record = message as { role?: unknown; content?: unknown; id?: unknown };
+    if (record.role !== "user") return message;
+    const id = typeof record.id === "string" ? record.id : "";
+    const update = id ? updates.get(id) : undefined;
+    if (!update) return message;
+    if (typeof record.content === "string") {
+      changed = true;
+      return { ...message, content: `${record.content}\n\n${update}` };
+    }
+    if (Array.isArray(record.content)) {
+      changed = true;
+      return { ...message, content: [...record.content, { type: "text", text: update }] };
+    }
+    return message;
+  });
+  return changed ? next : messages;
+}

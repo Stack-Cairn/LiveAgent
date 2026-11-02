@@ -30,15 +30,16 @@ type AuthSnapshot struct {
 }
 
 type Manager struct {
-	registry         *sessionRegistry
-	syncHub          *syncHub
-	convStreams      *conversationStreamStore
-	tunnels          *tunnelRuntime
-	workspaceHub     *workspaceActivityHub
-	managedProcesses *managedProcessHub
-	statusSubs       *statusSubscriberHub
-	clarifyDeltas    *clarifyDeltaHub
-	sttSettingsSync  func(context.Context, json.RawMessage) (any, error)
+	registry             *sessionRegistry
+	syncHub              *syncHub
+	convStreams          *conversationStreamStore
+	tunnels              *tunnelRuntime
+	workspaceHub         *workspaceActivityHub
+	localWorkspaceOwners map[string]*localWorkspaceActivityOwner
+	managedProcesses     *managedProcessHub
+	statusSubs           *statusSubscriberHub
+	clarifyDeltas        *clarifyDeltaHub
+	sttSettingsSync      func(context.Context, json.RawMessage) (any, error)
 }
 
 type AgentSession struct {
@@ -84,13 +85,14 @@ type Status struct {
 
 func NewManager() *Manager {
 	m := &Manager{
-		registry:         newSessionRegistry(),
-		syncHub:          newSyncHub(),
-		tunnels:          newTunnelRuntime(),
-		workspaceHub:     newWorkspaceActivityHub(),
-		managedProcesses: newManagedProcessHub(),
-		statusSubs:       newStatusSubscriberHub(),
-		clarifyDeltas:    newClarifyDeltaHub(),
+		registry:             newSessionRegistry(),
+		syncHub:              newSyncHub(),
+		tunnels:              newTunnelRuntime(),
+		workspaceHub:         newWorkspaceActivityHub(),
+		localWorkspaceOwners: make(map[string]*localWorkspaceActivityOwner),
+		managedProcesses:     newManagedProcessHub(),
+		statusSubs:           newStatusSubscriberHub(),
+		clarifyDeltas:        newClarifyDeltaHub(),
 	}
 	m.convStreams = newConversationStreamStore(m.IsOnline)
 	go m.tunnelExpirySweepLoop()

@@ -142,6 +142,13 @@ export function createSidebarStore(
   let running = new Map<string, { workdir: string | null; updatedAt: number }>();
   const runningStatusUpdatedAt = new Map<string, number>();
   const positionLocks = new Map<string, number>();
+  let hasAuthoritativeProjection = false;
+  let backendIdentity: string | undefined;
+  let mutationGeneration = 0;
+  const mutationEvents = new Map<
+    string,
+    Extract<SidebarBackendEvent, { kind: "upsert" | "delete" }>
+  >();
   let snapshot: SidebarSnapshot = {
     workspaceHistory: new Map(),
     revision: 0,
@@ -171,15 +178,23 @@ export function createSidebarStore(
   // pre-disconnect loadMore failure from landing after the fresh page succeeds
   // and resurrecting a stale listError.
   let listGeneration = 0;
+  // Local upserts newer than a first-page request: that response was computed
+  // before the row existed (an edit-resend branch, a just-created session), so
+  // its absence there proves nothing. Only a request issued after the upsert
+  // may confirm or drop the row.
+  let localUpsertSeq = 0;
+  const localUpsertSeqById = new Map<string, number>();
   let loadedPageCount = 0;
   let listRequestInFlight = false;
   let queuedListRequest: { authoritative: boolean } | null = null;
   let loadMoreRequestToken: symbol | null = null;
   let workdirsInFlight = false;
   let workdirsQueued = false;
+  let workdirsRequestSeq = 0;
   let wasDisconnected = false;
   let unsubscribeEvents: (() => void) | null = null;
   let unsubscribeConnection: (() => void) | null = null;
+  let unsubscribeSyncState: (() => void) | null = null;
   let reconcileTimer: ReturnType<typeof setInterval> | null = null;
   let workdirsFallbackTimer: ReturnType<typeof setInterval> | null = null;
   let workdirsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -341,6 +356,7 @@ export function createSidebarStore(
   const invalidateWorkspaceRequests = () => {
     workspaceGeneration += 1;
     pinnedRequest = null;
+    workspaceDeletedIds.clear();
     commit({
       workspaceHistory: new Map(
         Array.from(snapshot.workspaceHistory, ([key, value]) => [
@@ -371,8 +387,11 @@ export function createSidebarStore(
 
   let revealedConversationId: string | null = null;
 
-  const retainedConversationIds = () => {
+  const retainedConversationIds = (upsertSeqAtRequest = Number.POSITIVE_INFINITY) => {
     const ids = new Set<string>(snapshot.mutations.keys());
+    for (const [id, seq] of localUpsertSeqById) {
+      if (seq > upsertSeqAtRequest) ids.add(id);
+    }
     if (revealedConversationId) ids.add(revealedConversationId);
     for (const id of backend.getProtectedConversationIds?.() ?? []) {
       const trimmed = id.trim();
@@ -438,6 +457,10 @@ export function createSidebarStore(
     conversations: readonly SidebarConversation[],
     extra?: Partial<SidebarSnapshot>,
   ) => {
+    if (hasAuthoritativeProjection) {
+      commitAuthoritativeProjection(extra);
+      return;
+    }
     const totalCount =
       extra?.totalCount ?? totalCountAfterListChange(snapshot.conversations, conversations);
     commit({
@@ -452,13 +475,202 @@ export function createSidebarStore(
   const scopedFromCache = () =>
     sortSidebarConversations(filterConversationsForScope(Array.from(byId.values()), scope));
 
+  const commitAuthoritativeProjection = (extra?: Partial<SidebarSnapshot>) => {
+    const all = scopedFromCache();
+    const conversations = all.slice(0, pageSize * Math.max(1, loadedPageCount));
+    const counts = new Map<
+      string,
+      { path: string; total: number; unpinned: number; updatedAt: number }
+    >();
+    for (const item of byId.values()) {
+      if (item.isPending) continue;
+      const key = workspaceProjectPathKey(item.cwd ?? "");
+      const count = counts.get(key) ?? {
+        path: item.cwd ?? "",
+        total: 0,
+        unpinned: 0,
+        updatedAt: 0,
+      };
+      count.total += 1;
+      if (!item.isPinned) count.unpinned += 1;
+      count.updatedAt = Math.max(count.updatedAt, item.updatedAt);
+      counts.set(key, count);
+    }
+    const workspaceHistory = new Map(snapshot.workspaceHistory);
+    for (const [key, state] of workspaceHistory) {
+      const count = counts.get(key);
+      workspaceHistory.set(key, {
+        ...state,
+        totalCount: count?.total ?? 0,
+        hasMore: (count?.unpinned ?? 0) > state.limit,
+        loading: false,
+        loaded: true,
+        error: null,
+      });
+    }
+    const workdirs = [...counts.values()]
+      .filter((count) => count.path.trim())
+      .map((count) => ({
+        path: count.path,
+        conversationCount: count.total,
+        updatedAt: count.updatedAt,
+      }));
+    const workdirActivity = new Map(extra?.workdirActivity ?? snapshot.workdirActivity);
+    for (const key of workdirActivity.keys()) {
+      if (!counts.has(key) && !snapshot.runningWorkdirPathKeys.has(key))
+        workdirActivity.delete(key);
+    }
+    commit({
+      ...extra,
+      byId,
+      conversations,
+      totalCount: persistedCount(all),
+      hasMore: persistedCount(conversations) < persistedCount(all),
+      workspaceHistory,
+      workdirs,
+      workdirActivity,
+      isLoadingMore: false,
+      listStatus: "ready",
+      listError: null,
+      listErrorDetail: null,
+    });
+  };
+
   const applyEvent = (event: SidebarBackendEvent) => {
+    if ((event.kind === "upsert" || event.kind === "delete") && event.authoritative) {
+      // A legacy list may have been captured before this ordered change. Its
+      // result must not overwrite either the new remote row or a local overlay.
+      requestSeq += 1;
+      listGeneration += 1;
+      workspaceGeneration += 1;
+      pinnedRequest = null;
+      loadMoreRequestToken = null;
+      workspaceDeletedIds.clear();
+      localUpsertSeqById.delete(event.conversationId);
+    }
+    if (
+      (event.kind === "upsert" || event.kind === "delete") &&
+      snapshot.mutations.has(event.conversationId)
+    ) {
+      // Keep remote truth separately from the optimistic overlay. A failed
+      // mutation must restore this value, not the pre-request stale backup.
+      mutationEvents.set(event.conversationId, event);
+      return;
+    }
     switch (event.kind) {
+      case "workdirs": {
+        // Invalidate a pending legacy refresh before applying the authoritative
+        // counts that accompanied a validated increment. Keep the row lists
+        // and their identities intact.
+        workdirsRequestSeq += 1;
+        if (workdirsDebounceTimer !== null) {
+          clearTimeout(workdirsDebounceTimer);
+          workdirsDebounceTimer = null;
+        }
+        let workdirActivity = snapshot.workdirActivity;
+        const counts = new Map<string, number>();
+        for (const workdir of event.workdirs) {
+          counts.set(workspaceProjectPathKey(workdir.path), workdir.conversationCount);
+          workdirActivity = bumpWorkdirActivity(workdirActivity, workdir.path, workdir.updatedAt);
+        }
+        const workspaceHistory = new Map(snapshot.workspaceHistory);
+        for (const [key, state] of workspaceHistory) {
+          const totalCount = counts.get(key) ?? 0;
+          const pinnedCount = [...byId.values()].filter(
+            (item) => item.isPinned && workspaceProjectPathKey(item.cwd ?? "") === key,
+          ).length;
+          workspaceHistory.set(key, {
+            ...state,
+            totalCount,
+            hasMore: Math.max(0, totalCount - pinnedCount) > state.limit,
+          });
+        }
+        commit({ workdirs: event.workdirs, workdirActivity, workspaceHistory });
+        return;
+      }
+      case "reset": {
+        hasAuthoritativeProjection = true;
+        if (event.sourceIdentity && backendIdentity && event.sourceIdentity !== backendIdentity) {
+          mutationGeneration += 1;
+          mutationEvents.clear();
+          commit({ mutations: new Map(), mutationErrors: new Map() });
+        }
+        if (event.sourceIdentity) backendIdentity = event.sourceIdentity;
+        requestSeq += 1;
+        listGeneration += 1;
+        workdirsRequestSeq += 1;
+        invalidateWorkspaceRequests();
+        loadMoreRequestToken = null;
+        const remote = new Map(event.conversations.map((item) => [item.id, item]));
+        const nextById = new Map(remote);
+        for (const [id, kind] of snapshot.mutations) {
+          const incoming = remote.get(id);
+          mutationEvents.set(
+            id,
+            incoming
+              ? { kind: "upsert", conversationId: id, conversation: incoming }
+              : { kind: "delete", conversationId: id },
+          );
+          const optimistic = byId.get(id);
+          if (kind === "delete" || !optimistic) nextById.delete(id);
+          else nextById.set(id, optimistic);
+        }
+        for (const [id, item] of byId) {
+          if (item.isPending && !remote.has(id)) nextById.set(id, item);
+        }
+        for (const id of localUpsertSeqById.keys()) {
+          if (remote.has(id) || (!nextById.get(id)?.isPending && !snapshot.mutations.has(id))) {
+            localUpsertSeqById.delete(id);
+          }
+        }
+        for (const id of positionLocks.keys()) {
+          if (!nextById.has(id)) positionLocks.delete(id);
+        }
+        for (const id of runningStatusUpdatedAt.keys()) {
+          if (!nextById.has(id) && !running.has(id)) runningStatusUpdatedAt.delete(id);
+        }
+        byId = nextById;
+        const all = sortSidebarConversations(
+          filterConversationsForScope([...byId.values()], scope),
+        );
+        const limit = pageSize * Math.max(1, loadedPageCount);
+        const conversations = all.slice(0, limit);
+        const workspaceHistory = new Map(snapshot.workspaceHistory);
+        for (const [key, state] of workspaceHistory) {
+          const matching = event.conversations.filter(
+            (item) => workspaceProjectPathKey(item.cwd ?? "") === key,
+          );
+          workspaceHistory.set(key, {
+            ...state,
+            totalCount: matching.length,
+            hasMore: matching.filter((item) => !item.isPinned).length > state.limit,
+            loading: false,
+            loaded: true,
+            error: null,
+          });
+        }
+        workspaceDeletedIds.clear();
+        commit({
+          byId,
+          conversations,
+          totalCount: persistedCount(all),
+          hasMore: persistedCount(conversations) < persistedCount(all),
+          workspaceHistory,
+          ...(event.workdirs ? { workdirs: event.workdirs } : {}),
+          isLoadingMore: false,
+          listStatus: "ready",
+          listError: null,
+          listErrorDetail: null,
+        });
+        return;
+      }
       case "upsert": {
         const incoming = event.conversation;
+        const previousCwd = byId.get(incoming.id)?.cwd;
         const preserveUpdatedAtIds = activePositionLockIds();
         const merged = mergeSidebarConversation(byId.get(incoming.id), incoming, {
           preserveExistingUpdatedAt: preserveUpdatedAtIds.includes(incoming.id),
+          authoritative: event.authoritative,
         });
         byId = new Map(byId);
         byId.set(merged.id, merged);
@@ -468,8 +680,12 @@ export function createSidebarStore(
           merged.updatedAt,
         );
         const cwdKey = workspaceProjectPathKey(merged.cwd ?? "");
-        if (cwdKey && !knownWorkdirPathKeys().has(cwdKey)) {
+        if (previousCwd !== merged.cwd || (cwdKey && !knownWorkdirPathKeys().has(cwdKey))) {
           scheduleWorkdirsDebounce();
+        }
+        if (event.authoritative && hasAuthoritativeProjection) {
+          commitAuthoritativeProjection({ workdirActivity });
+          return;
         }
         const inScope = conversationMatchesScope(merged, scope);
         const wasListed = snapshot.conversations.some((item) => item.id === merged.id);
@@ -488,13 +704,23 @@ export function createSidebarStore(
         return;
       }
       case "delete": {
-        workspaceDeletedIds.set(event.conversationId, ++workspaceDeleteVersion);
+        if (!event.authoritative) {
+          if (workspaceDeletedIds.size >= 1024) invalidateWorkspaceRequests();
+          workspaceDeletedIds.set(event.conversationId, ++workspaceDeleteVersion);
+        }
         if (byId.has(event.conversationId)) {
           byId = new Map(byId);
           byId.delete(event.conversationId);
         }
         const next = snapshot.conversations.filter((item) => item.id !== event.conversationId);
         scheduleWorkdirsDebounce();
+        if (event.authoritative && hasAuthoritativeProjection) {
+          positionLocks.delete(event.conversationId);
+          runningStatusUpdatedAt.delete(event.conversationId);
+          localUpsertSeqById.delete(event.conversationId);
+          commitAuthoritativeProjection();
+          return;
+        }
         if (next === snapshot.conversations || next.length === snapshot.conversations.length) {
           commit({ byId });
           return;
@@ -583,6 +809,7 @@ export function createSidebarStore(
   const runFirstPageRequest = async (authoritative: boolean) => {
     const seq = requestSeq;
     const generation = ++listGeneration;
+    const upsertSeqAtRequest = localUpsertSeq;
     // Release the current-generation pagination gate immediately. Its
     // transport promise may still settle later, but the generation checks
     // make that result inert and a fresh page-2 request need not wait for it.
@@ -617,8 +844,12 @@ export function createSidebarStore(
         return;
       }
       const authoritativeItems = filterConversationsForScope(page.items, requestScope);
+      // Upserts this response already covers are settled by it either way.
+      for (const [id, upsertSeq] of localUpsertSeqById) {
+        if (upsertSeq <= upsertSeqAtRequest) localUpsertSeqById.delete(id);
+      }
       const reconciled = reconcileSidebarConversations(snapshot.conversations, authoritativeItems, {
-        retainConversationIds: retainedConversationIds(),
+        retainConversationIds: retainedConversationIds(upsertSeqAtRequest),
         preserveUpdatedAtConversationIds: activePositionLockIds(),
         authoritativeComplete: page.items.length < pageSize,
       });
@@ -672,11 +903,12 @@ export function createSidebarStore(
     try {
       do {
         workdirsQueued = false;
-        const seq = requestSeq;
+        // Workdirs are global; conversation scope changes cannot invalidate them.
+        const seq = workdirsRequestSeq;
         try {
           const workdirs = await backend.listWorkdirs();
-          if (seq !== requestSeq || startCount === 0) {
-            return;
+          if (seq !== workdirsRequestSeq || startCount === 0) {
+            continue;
           }
           let workdirActivity = snapshot.workdirActivity;
           for (const workdir of workdirs) {
@@ -684,6 +916,7 @@ export function createSidebarStore(
           }
           commit({ workdirs, workdirActivity });
         } catch {
+          if (seq !== workdirsRequestSeq) continue;
           // Workdir summaries are auxiliary (project ordering/activity); the
           // conversation list and the next scheduled refresh are unaffected.
           return;
@@ -703,6 +936,7 @@ export function createSidebarStore(
     execute: () => Promise<SidebarConversation | null>;
   }): Promise<boolean> => {
     const { id, kind, failureCode, blockedCode } = params;
+    const generation = mutationGeneration;
     if (snapshot.mutations.has(id)) {
       return false;
     }
@@ -739,12 +973,15 @@ export function createSidebarStore(
 
     try {
       const confirmed = await params.execute();
+      if (generation !== mutationGeneration) return false;
+      mutationEvents.delete(id);
       const nextMutations = new Map(snapshot.mutations);
       nextMutations.delete(id);
       if (confirmed) {
         positionLocks.set(id, now() + positionLockMs);
         const merged = mergeSidebarConversation(byId.get(id), confirmed, {
           preserveExistingUpdatedAt: true,
+          authoritative: hasAuthoritativeProjection,
         });
         byId = new Map(byId);
         byId.set(id, merged);
@@ -752,24 +989,33 @@ export function createSidebarStore(
         const next = conversationMatchesScope(merged, scope)
           ? sortSidebarConversations([merged, ...rest])
           : rest;
-        commitScopedList(next, { mutations: nextMutations });
+        if (hasAuthoritativeProjection) commitAuthoritativeProjection({ mutations: nextMutations });
+        else commitScopedList(next, { mutations: nextMutations });
       } else {
         commit({ mutations: nextMutations, byId });
       }
       return true;
     } catch (error) {
       void error;
+      if (generation !== mutationGeneration) return false;
       const nextMutations = new Map(snapshot.mutations);
       nextMutations.delete(id);
       const nextErrors = new Map(snapshot.mutationErrors);
       nextErrors.set(id, failureCode);
+      const remote = mutationEvents.get(id);
+      mutationEvents.delete(id);
+      const recovered = remote?.kind === "upsert" ? remote.conversation : remote ? null : previous;
       byId = new Map(byId);
-      byId.set(id, previous);
+      if (recovered) byId.set(id, recovered);
+      else byId.delete(id);
       const rest = snapshot.conversations.filter((item) => item.id !== id);
-      const next = conversationMatchesScope(previous, scope)
-        ? sortSidebarConversations([previous, ...rest])
-        : rest;
-      commitScopedList(next, { mutations: nextMutations, mutationErrors: nextErrors });
+      const next =
+        recovered && conversationMatchesScope(recovered, scope)
+          ? sortSidebarConversations([recovered, ...rest])
+          : rest;
+      if (hasAuthoritativeProjection)
+        commitAuthoritativeProjection({ mutations: nextMutations, mutationErrors: nextErrors });
+      else commitScopedList(next, { mutations: nextMutations, mutationErrors: nextErrors });
       return false;
     }
   };
@@ -850,6 +1096,22 @@ export function createSidebarStore(
     );
   };
 
+  const configureReconcile = () => {
+    if (reconcileTimer !== null) clearInterval(reconcileTimer);
+    reconcileTimer = null;
+    if (startCount === 0) return;
+    const syncError = backend.getSyncError?.();
+    if (syncError) commit({ listError: "listFailed", listErrorDetail: syncError });
+    const interval = backend.getReconcileIntervalMs?.();
+    if (interval === null) return;
+    const delay = interval ?? reconcileIntervalMs;
+    if (!Number.isFinite(delay) || delay <= 0) return;
+    reconcileTimer = setInterval(() => {
+      refreshWorkspaceHistory();
+      void fetchFirstPage(false);
+    }, delay);
+  };
+
   return {
     getSnapshot: () => snapshot,
     subscribe: (listener) => {
@@ -868,6 +1130,7 @@ export function createSidebarStore(
       unsubscribeConnection =
         backend.subscribeConnection?.((connected) => {
           if (!connected) {
+            hasAuthoritativeProjection = false;
             invalidateWorkspaceRequests();
             wasDisconnected = true;
             return;
@@ -879,10 +1142,8 @@ export function createSidebarStore(
             refreshWorkspaceHistory();
           }
         }) ?? null;
-      reconcileTimer = setInterval(() => {
-        refreshWorkspaceHistory();
-        void fetchFirstPage(false);
-      }, reconcileIntervalMs);
+      configureReconcile();
+      unsubscribeSyncState = backend.subscribeSyncState?.(configureReconcile) ?? null;
       workdirsFallbackTimer = setInterval(() => {
         void refreshWorkdirs("fallback");
       }, workdirsFallbackMs);
@@ -899,6 +1160,14 @@ export function createSidebarStore(
       if (startCount > 0) {
         return;
       }
+      mutationGeneration += 1;
+      hasAuthoritativeProjection = false;
+      for (const event of mutationEvents.values()) {
+        if (event.kind === "upsert") byId.set(event.conversationId, event.conversation);
+        else byId.delete(event.conversationId);
+      }
+      mutationEvents.clear();
+      snapshot = { ...snapshot, mutations: new Map() };
       invalidateWorkspaceRequests();
       requestSeq += 1;
       listGeneration += 1;
@@ -906,6 +1175,8 @@ export function createSidebarStore(
       unsubscribeEvents = null;
       unsubscribeConnection?.();
       unsubscribeConnection = null;
+      unsubscribeSyncState?.();
+      unsubscribeSyncState = null;
       if (reconcileTimer !== null) {
         clearInterval(reconcileTimer);
         reconcileTimer = null;
@@ -920,6 +1191,7 @@ export function createSidebarStore(
       }
       queuedListRequest = null;
       loadMoreRequestToken = null;
+      workdirsRequestSeq++;
       workdirsQueued = false;
       wasDisconnected = false;
     },
@@ -1023,6 +1295,7 @@ export function createSidebarStore(
 
     upsertLocal: (conversation, options) => {
       if (options?.reveal) revealedConversationId = conversation.id;
+      localUpsertSeqById.set(conversation.id, ++localUpsertSeq);
       const existing = byId.get(conversation.id);
       const merged = mergeSidebarConversation(
         options?.reveal && existing ? { ...existing, cwd: conversation.cwd } : existing,
@@ -1050,6 +1323,7 @@ export function createSidebarStore(
     },
 
     removeLocal: (conversationId) => {
+      localUpsertSeqById.delete(conversationId);
       workspaceDeletedIds.set(conversationId, ++workspaceDeleteVersion);
       if (!byId.has(conversationId)) {
         return;

@@ -144,7 +144,7 @@ test("preset scripts stay in sync with the Rust builtin presets", async () => {
     forms.USAGE_QUERY_PRESET_SCRIPTS.newapi,
   ]) {
     assert.ok(
-      rustSource.includes(`r#"${preset}"#`),
+      rustSource.replace(/\r\n/g, "\n").includes(`r#"${preset}"#`),
       "preset script must match the Rust builtin byte-for-byte",
     );
   }

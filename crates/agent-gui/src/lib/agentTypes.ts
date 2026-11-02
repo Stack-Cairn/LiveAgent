@@ -1,8 +1,20 @@
 export type {
+  Api,
   AssistantMessage,
+  AssistantMessageEvent,
+  AssistantMessageEventStream,
+  Context,
+  FileContent,
   ImageContent,
   Message,
+  Model,
+  StopReason,
+  TextContent,
+  ThinkingContent,
+  Tool,
   ToolCall,
+  ToolCallArguments,
   ToolResultMessage,
   Usage,
-} from "@earendil-works/pi-ai";
+  UserMessage,
+} from "@liveagent/ui/lib/chat/agentTypes";

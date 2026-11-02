@@ -5,8 +5,10 @@ import {
 import type { UsageDetailEntry } from "@liveagent/ui/components/chat/UsagePanel";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import type { ReplyShareSource } from "@liveagent/ui/lib/chat/replyShare";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { useMemo } from "react";
 import type {
   HistoryMessageRef,
   RenderUserMessage,
@@ -46,6 +48,11 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
   const branchPending = branchPendingMessageId != null;
   const isRowBranchPending =
     branchPending && !!retryMessageRef && branchPendingMessageId === retryMessageRef.messageId;
+  const retryPrompt = retryTarget?.text;
+  const shareSource = useMemo<ReplyShareSource>(
+    () => ({ reply: replyText, prompt: retryPrompt, timestamp }),
+    [replyText, retryPrompt, timestamp],
+  );
 
   return (
     <TranscriptAssistantMessageActions
@@ -76,6 +83,7 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
       onBranch={() => {
         if (retryMessageRef) onBranchConversation?.(retryMessageRef);
       }}
+      shareSource={shareSource}
     />
   );
 }

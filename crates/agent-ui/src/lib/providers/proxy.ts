@@ -1,60 +1,16 @@
-import type { ProviderId } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 
 export const LIVEAGENT_PROXY_TOKEN_HEADER = "x-liveagent-proxy-token";
 export const LIVEAGENT_UPSTREAM_ORIGIN_HEADER = "x-liveagent-upstream-origin";
-// 完整 URL 模式下携带最终上游地址。本地反代会忽略 SDK 自动追加的路径，
-// 但仍保留 SDK 请求所需的查询参数（例如 Gemini 的 alt=sse）。
+// Hub/registry 请求通过本地宿主代理出网；模型请求统一交给 K-brain。
 export const LIVEAGENT_UPSTREAM_URL_HEADER = "x-liveagent-upstream-url";
-// 上游头覆盖包：base64(utf8(JSON))。WebView 的 fetch 会静默丢弃 User-Agent /
-// Cookie / Referer 等 forbidden header names，SDK 也可能自行注入同名头，所以最终
-// 头集经这一条通道下发，由本地反代在转发前作为最后一步覆盖写入上游请求——
-// “自定义头覆盖内置默认头”的唯一裁决点就在那里。
 export const LIVEAGENT_UPSTREAM_HEADERS_HEADER = "x-liveagent-upstream-headers";
-// 布尔标记头：声明该请求经系统代理出网。代理地址/凭据只存于桌面 Rust 侧，
-// 由本地反代按此头选择带代理的 client（x-liveagent-* 头不会转发给上游）。
 export const LIVEAGENT_USE_SYSTEM_PROXY_HEADER = "x-liveagent-use-system-proxy";
-
-// 鉴权头不进覆盖包：它们不属浏览器禁止名（常规通道必然送达），且是保留头用户
-// 改不了，没有覆盖需求——不必把密钥再复制一份进旁路通道。
-const UPSTREAM_HEADER_OVERRIDE_EXCLUDED_KEYS = new Set([
-  "authorization",
-  "x-api-key",
-  "x-goog-api-key",
-]);
-const UPSTREAM_HEADER_OVERRIDE_MAX_BYTES = 8 * 1024;
 
 type ProxyServerInfo = {
   baseUrl: string;
   token: string;
 };
-
-export type PreparedProxyRequest = {
-  baseUrl: string;
-  headers: Record<string, string>;
-};
-
-export function encodeUpstreamHeaderOverrides(headers: Record<string, string>): string | undefined {
-  const overrides: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (UPSTREAM_HEADER_OVERRIDE_EXCLUDED_KEYS.has(key.toLowerCase())) continue;
-    if (key.toLowerCase().startsWith("x-liveagent-")) continue;
-    overrides[key] = value;
-  }
-  if (Object.keys(overrides).length === 0) return undefined;
-
-  // base64 而非裸 JSON：既杜绝取值里的 CR/LF 造成 header 注入，也免去引号与逗号
-  // 在 header 值里的解析歧义。
-  const encoded = new TextEncoder().encode(JSON.stringify(overrides));
-  if (encoded.byteLength > UPSTREAM_HEADER_OVERRIDE_MAX_BYTES) {
-    throw new Error(
-      `Custom request headers are too large (${encoded.byteLength} bytes, limit ${UPSTREAM_HEADER_OVERRIDE_MAX_BYTES}). Trim the provider's custom request headers.`,
-    );
-  }
-  let binary = "";
-  for (const byte of encoded) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
 
 let proxyServerInfoPromise: Promise<ProxyServerInfo> | null = null;
 
@@ -111,52 +67,6 @@ function parseAbsoluteHttpUrl(rawUrl: string, label: string): URL {
   return parsed;
 }
 
-export function buildProxyBaseUrl(
-  providerId: ProviderId,
-  upstreamBaseUrl: string,
-  proxyServerBaseUrl: string,
-  options?: { isFullUrl?: boolean },
-): { baseUrl: string; upstreamOrigin: string; upstreamUrl?: string } {
-  const normalizedUpstream = upstreamBaseUrl.trim();
-  if (!normalizedUpstream) {
-    throw new Error("Base URL cannot be empty");
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(normalizedUpstream);
-  } catch (error) {
-    throw new Error(
-      `Base URL must be an absolute URL: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  if (parsed.username || parsed.password) {
-    throw new Error("Base URL cannot include embedded username or password");
-  }
-  if (parsed.hash) {
-    throw new Error("Base URL cannot include a fragment");
-  }
-  if (!options?.isFullUrl && parsed.search) {
-    throw new Error("Base URL cannot include query parameters or fragments");
-  }
-
-  const normalizedProxyServerBaseUrl = proxyServerBaseUrl.trim().replace(/\/+$/, "");
-  if (options?.isFullUrl) {
-    return {
-      baseUrl: `${normalizedProxyServerBaseUrl}/proxy/${providerId}`,
-      upstreamOrigin: parsed.origin,
-      upstreamUrl: parsed.toString(),
-    };
-  }
-  const pathname = parsed.pathname.replace(/\/+$/, "");
-
-  return {
-    baseUrl: `${normalizedProxyServerBaseUrl}/proxy/${providerId}${pathname}`,
-    upstreamOrigin: parsed.origin,
-  };
-}
-
 export function buildImageProxyUrl(imageUrl: string, proxyServerBaseUrl: string): string {
   const normalizedImageUrl = imageUrl.trim();
   if (!normalizedImageUrl) {
@@ -182,13 +92,12 @@ export type PreparedUpstreamProxyRequest = {
   headers: Record<string, string>;
 };
 
-/** 本地反代的路径段仅用于区分链路（Rust 侧不校验取值），hub = 商店类出网。 */
+/** 本地反代仅服务 hub/registry 资源，模型请求统一由 K-brain 执行。 */
 const HUB_PROXY_ROUTE = "hub";
 
 /**
- * 把任意完整上游 URL 改写为经本地反代的请求：路径与查询原样保留，
- * origin 移入 upstream-origin 头。恒带 use-system-proxy —— 反代按应用代理
- * 配置出网（未启用=直连，配置异常 502 fail fast，绝不静默降级为直连）。
+ * 把任意完整资源 URL 改写为经本地反代的 hub 请求：路径与查询原样保留，
+ * origin 移入 upstream-origin 头。模型供应商 URL 不得使用此入口。
  */
 export async function prepareUpstreamProxyRequest(
   targetUrl: string,
@@ -210,36 +119,6 @@ export async function prepareUpstreamProxyRequest(
       [LIVEAGENT_UPSTREAM_ORIGIN_HEADER]: parsed.origin,
       [LIVEAGENT_PROXY_TOKEN_HEADER]: proxyServerInfo.token,
       [LIVEAGENT_USE_SYSTEM_PROXY_HEADER]: "1",
-    },
-  };
-}
-
-export async function prepareProxyRequest(
-  providerId: ProviderId,
-  upstreamBaseUrl: string,
-  headers: Record<string, string>,
-  options?: { useSystemProxy?: boolean; isFullUrl?: boolean },
-): Promise<PreparedProxyRequest> {
-  const proxyServerInfo = await getProxyServerInfo();
-  const { baseUrl, upstreamOrigin, upstreamUrl } = buildProxyBaseUrl(
-    providerId,
-    upstreamBaseUrl,
-    proxyServerInfo.baseUrl,
-    { isFullUrl: options?.isFullUrl },
-  );
-  const upstreamHeaderOverrides = encodeUpstreamHeaderOverrides(headers);
-
-  return {
-    baseUrl,
-    headers: {
-      ...headers,
-      ...(upstreamHeaderOverrides
-        ? { [LIVEAGENT_UPSTREAM_HEADERS_HEADER]: upstreamHeaderOverrides }
-        : {}),
-      [LIVEAGENT_UPSTREAM_ORIGIN_HEADER]: upstreamOrigin,
-      ...(upstreamUrl ? { [LIVEAGENT_UPSTREAM_URL_HEADER]: upstreamUrl } : {}),
-      [LIVEAGENT_PROXY_TOKEN_HEADER]: proxyServerInfo.token,
-      ...(options?.useSystemProxy ? { [LIVEAGENT_USE_SYSTEM_PROXY_HEADER]: "1" } : {}),
     },
   };
 }

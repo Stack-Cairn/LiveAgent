@@ -28,6 +28,8 @@ Object.defineProperty(navigator, "platform", { value: "Win32", configurable: tru
 Object.defineProperty(navigator, "userAgent", { value: "Windows NT 10.0", configurable: true });
 window.__TAURI_INTERNALS__ = {};
 const { WindowsTitleBar } = env.loadModule(fileURLToPath(new URL("../../src/components/WindowsTitleBar.tsx", import.meta.url)));
+const { WindowsSettingsHeader } = env.loadModule(fileURLToPath(new URL("../../src/components/WindowsSettingsHeader.tsx", import.meta.url)));
+const { AppWorkbenchChrome } = env.loadModule("@liveagent/ui/application/AppWorkbenchChrome.tsx");
 const { AppBootShell } = env.loadModule(fileURLToPath(new URL("../../src/components/app/AppBootShell.tsx", import.meta.url)));
 const { ChatHeader } = env.loadModule("@liveagent/ui/components/chat/ChatHeader.tsx");
 const { AppErrorBoundary } = env.loadModule("@liveagent/ui/components/AppErrorBoundary.tsx");
@@ -59,6 +61,55 @@ test("Windows workbench has one header with live native controls and a marked dr
   } finally { await act(async () => root.unmount()); host.remove(); }
   assert.ok(calls.includes("unlisten-resize"));
   assert.ok(calls.includes("unlisten-focus"));
+});
+
+test("Windows settings reuses the workbench frame and native controls across navigation", async () => {
+  const host = document.createElement("div"); document.body.append(host);
+  const root = createRoot(host);
+  const chat = React.createElement(AppWorkbenchChrome, {
+    settings: { theme: "light" }, sidebarOpen: false,
+    onOpenSidebar() {}, onOpenSettings() {}, onToggleTheme() {},
+    windowControls: React.createElement(WindowsTitleBar, { controlsOnly: true }),
+  });
+  try {
+    await act(async () => root.render(chat));
+    const frame = host.firstElementChild;
+    const frameClass = frame.className;
+    const frameHeight = frame.style.height;
+    await act(async () => root.render(React.createElement(WindowsSettingsHeader)));
+    assert.equal(host.firstElementChild.className, frameClass);
+    assert.equal(host.firstElementChild.style.height, frameHeight);
+    assert.equal(host.querySelectorAll("header").length, 1);
+    assert.ok(host.querySelector("[data-windows-settings-header][data-tauri-drag-region]"));
+    assert.ok(host.querySelector("header > div.flex-1[data-tauri-drag-region]"));
+    assert.equal(host.querySelectorAll("[data-windows-window-controls]").length, 1);
+    const controls = host.querySelectorAll("[data-windows-window-controls] button");
+    const before = calls.length;
+    await act(async () => controls[0].click());
+    const label = controls[1].getAttribute("aria-label");
+    await act(async () => controls[1].click());
+    assert.notEqual(controls[1].getAttribute("aria-label"), label);
+    await act(async () => controls[1].click());
+    assert.equal(controls[1].getAttribute("aria-label"), label);
+    await act(async () => controls[2].click());
+    assert.deepEqual(calls.slice(before), ["minimize", "maximize", "maximize", "close"]);
+    // Back to chat lives in the settings sidebar; the header has no second back button.
+    assert.equal(host.querySelector("header > button"), null);
+    assert.equal(host.querySelectorAll("header button").length, controls.length);
+    await act(async () => root.render(chat));
+    assert.equal(host.querySelectorAll("[data-windows-window-controls]").length, 1);
+    assert.equal(host.querySelector("[data-windows-settings-header]"), null);
+    for (const platform of ["MacIntel", "Linux x86_64"]) {
+      Object.defineProperty(navigator, "platform", { value: platform, configurable: true });
+      Object.defineProperty(navigator, "userAgent", { value: platform, configurable: true });
+      await act(async () => root.render(React.createElement(WindowsSettingsHeader)));
+      assert.equal(host.childElementCount, 0);
+    }
+  } finally {
+    Object.defineProperty(navigator, "platform", { value: "Win32", configurable: true });
+    Object.defineProperty(navigator, "userAgent", { value: "Windows NT 10.0", configurable: true });
+    await act(async () => root.unmount()); host.remove();
+  }
 });
 
 test("Windows boot and error fallback retain window controls; non-Windows renders none", async () => {

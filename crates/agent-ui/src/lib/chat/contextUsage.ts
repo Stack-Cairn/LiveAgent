@@ -279,8 +279,8 @@ export function contentReplaysReasoning(
 }
 
 // 内容块的统一估算：文本/思维链按 CJK 感知直估，Responses 重放的
-// thinkingSignature 按签名正文估，携带 base64 负载的二进制块（pi-ai
-// ImageContent 等 {type, data, mimeType} 形态）按常量，其余小型结构块按
+// thinkingSignature 按签名正文估，携带 base64 负载的二进制块（如
+// {type, data, mimeType} 形态）按常量，其余小型结构块按
 // 序列化。GUI TokenLedger 与 WebUI 倒扫共用，两端口径一致。
 export function estimateContentBlockTokenUnits(block: unknown): number {
   if (typeof block === "string") return estimateTextTokenUnits(block);
@@ -416,7 +416,7 @@ export function positiveTokenCount(value: unknown): number | undefined {
     : undefined;
 }
 
-// 供应商 usage 的结构投影（pi-ai Usage 结构兼容；中转可能缺字段或报零）。
+// 供应商 usage 的结构投影（中转可能缺字段或报零）。
 export type ContextUsageAnchorUsage = {
   input?: number;
   output?: number;

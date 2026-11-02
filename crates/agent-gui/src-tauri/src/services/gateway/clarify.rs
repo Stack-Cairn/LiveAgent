@@ -13,12 +13,12 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tokio::sync::oneshot;
 
-use super::GatewayChatRuntimeControlsEvent;
-use super::GatewayController;
 use super::proto::{
     agent_envelope, AgentEnvelope, ClarifyTurnDelta, ClarifyTurnRequest, ClarifyTurnResponse,
 };
 use super::util::now_unix_seconds;
+use super::GatewayChatRuntimeControlsEvent;
+use super::GatewayController;
 
 pub(crate) const GATEWAY_CLARIFY_TURN_REQUESTED_EVENT: &str = "gateway:clarify-turn-requested";
 
@@ -101,7 +101,8 @@ impl GatewayController {
         request_id: String,
         request: ClarifyTurnRequest,
     ) -> Result<(), String> {
-        let event_payload = GatewayClarifyTurnRequestEvent::from_request(request_id.clone(), request);
+        let event_payload =
+            GatewayClarifyTurnRequestEvent::from_request(request_id.clone(), request);
 
         let (tx, rx) = oneshot::channel();
         self.pending_clarify_turns
@@ -175,9 +176,9 @@ impl GatewayController {
         self.send_agent_envelope(AgentEnvelope {
             request_id,
             timestamp: now_unix_seconds(),
-            payload: Some(agent_envelope::Payload::ClarifyTurnDelta(ClarifyTurnDelta {
-                text,
-            })),
+            payload: Some(agent_envelope::Payload::ClarifyTurnDelta(
+                ClarifyTurnDelta { text },
+            )),
         })
         .await
     }

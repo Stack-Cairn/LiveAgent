@@ -642,7 +642,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
     ),
     {
       thinkingEnabled: true,
-      nativeWebSearchEnabled: true,
+      nativeWebSearchEnabled: false,
       planModeEnabled: false,
       // gpt-5.2 的表含 xhigh:表内档原样展示,存储桶透传。
       reasoning: "xhigh",

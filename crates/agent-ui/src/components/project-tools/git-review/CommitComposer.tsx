@@ -9,6 +9,7 @@
 import { Loader2, Undo2, WandSparkles } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitStatusEntry } from "@liveagent/ui/lib/git/types";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
@@ -147,7 +148,7 @@ export function GitCommitComposer(props: {
       textareaRef.current?.focus();
     } catch (err) {
       if (controller.signal.aborted || generationRequestRef.current !== requestId) return;
-      setGenerationError(err instanceof Error ? err.message : String(err));
+      setGenerationError(hostAwareErrorMessage(err, t("git.branchSelector.runtimeUnsupported")));
     } finally {
       if (generationRequestRef.current === requestId) {
         generationAbortRef.current = null;
@@ -166,6 +167,7 @@ export function GitCommitComposer(props: {
     stagedEntries,
     textGenerationClient,
     writeDisabled,
+    t,
   ]);
 
   // The backend rejects commits with an empty index, so surface that state as

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 test("conversation mention search uses complete indexed history, deduplicates, and ranks cwd", async () => {
@@ -176,7 +177,7 @@ test("global history API invokes the dedicated chat history command", async () =
 
 test("Gateway shim forwards global history search without a workdir scope", async () => {
   const calls = [];
-  const gatewayRoot = new URL("../../../agent-gateway/web", import.meta.url).pathname;
+  const gatewayRoot = fileURLToPath(new URL("../../../agent-gateway/web", import.meta.url));
   const { invoke } = createTsModuleLoader({
     rootDir: gatewayRoot,
     mocks: {
@@ -213,5 +214,52 @@ test("Gateway shim forwards global history search without a workdir scope", asyn
       command: "chat_history_search",
       args: { query: "global", limit: 12 },
     },
+  ]);
+});
+
+test("desktop K-brain history search maps backend session ids to local conversation ids", async () => {
+  const calls = [];
+  const mappings = [];
+  const local = createTsModuleLoader().resolveLocal;
+  const { invoke } = createTsModuleLoader({
+    mocks: {
+      [local("src/lib/host.ts")]: {
+        isKBrainBackendEnabled: () => true,
+        isKBrainBrowserHost: () => false,
+        isTauriHost: () => true,
+        kBrainOwnedDesktopCommand: () => true,
+      },
+      [local("src/lib/kbrain/client.ts")]: {
+        createKBrainClient: () => ({
+          async searchHistory(args) {
+            calls.push(args);
+            return {
+              matches: [
+                { conversationId: "kb-known", messageId: "m1", messageIndex: 3 },
+                { conversationId: "kb-new", messageId: "m2", messageIndex: 7 },
+              ],
+            };
+          },
+        }),
+      },
+      [local("src/lib/kbrain/mapping.ts")]: {
+        ensureKBrainConversationId: (backendId) => (backendId === "kb-known" ? "local-1" : "local-new"),
+        setKBrainSessionId: (localId, backendId, baseUrl) => mappings.push([localId, backendId, baseUrl]),
+      },
+      [local("src/lib/kbrain/runtimeConnection.ts")]: {
+        getConfiguredKBrainConnection: () => ({ baseUrl: "http://127.0.0.1:9" }),
+      },
+    },
+  }).loadModule("src/shims/tauriCore");
+
+  const result = await invoke("chat_history_search", { args: { query: "goal" } });
+  assert.deepEqual(calls, [{ query: "goal" }]);
+  assert.deepEqual(
+    result.matches.map((match) => match.conversationId),
+    ["local-1", "local-new"],
+  );
+  assert.deepEqual(mappings, [
+    ["local-1", "kb-known", "http://127.0.0.1:9"],
+    ["local-new", "kb-new", "http://127.0.0.1:9"],
   ]);
 });

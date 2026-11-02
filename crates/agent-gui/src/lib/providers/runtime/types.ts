@@ -1,4 +1,8 @@
-import type { SimpleStreamOptions } from "@earendil-works/pi-ai";
+type SimpleStreamOptions = {
+  signal?: AbortSignal;
+  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+};
+
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import type {
   CodexRequestFormat,
@@ -24,8 +28,13 @@ declare const PROVIDER_RUNTIME_CONFIG_BRAND: unique symbol;
  * 请求头在聊天全链路上失效的根因。需要派生请用展开（{...runtime, reasoning}），
  * 品牌随展开保留。
  */
+export type ProviderRuntimeBackend = "kbrain";
+
 export type ProviderRuntimeConfig = {
   readonly [PROVIDER_RUNTIME_CONFIG_BRAND]: true;
+  backend: ProviderRuntimeBackend;
+  /** Opaque K-brain catalog provider ID; never a vendor credential. */
+  backendModelProvider?: string;
   baseUrl: string;
   isFullUrl: boolean;
   apiKey: string;
@@ -52,15 +61,7 @@ export type ToolChoice =
     };
 
 export type StreamOptionsEx = SimpleStreamOptions & {
-  /**
-   * 注意：pi-ai 的 streamSimpleAnthropic() 在内部会通过 buildBaseOptions() 丢弃 toolChoice，
-   * 所以这里我们自己调用 streamAnthropic() 并把 toolChoice 显式传下去。
-   */
   toolChoice?: ToolChoice;
-  /** DeepSeek-only wire override for callers that must explicitly disable thinking. */
-  deepSeekThinking?: "disabled";
-  /** Conversation workdir used to resolve provider-native local attachments. */
   workdir?: string;
-  /** Escape hatch for the unified provider stream retry in streamByApi.ts. */
   streamRetry?: StreamRetryConfig;
 };

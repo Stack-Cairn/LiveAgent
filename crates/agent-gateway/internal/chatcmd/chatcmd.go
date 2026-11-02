@@ -83,7 +83,47 @@ func NormalizeRequestBody(body *handler.ChatRequestBody) error {
 	if body.Message == "" && len(body.UploadedFiles) == 0 {
 		return errors.New("message is required")
 	}
+	return normalizeComposerCommand(body)
+}
+
+// MaxGoalTextLen 是 /goal set 目标正文的上限（与 K-brain 侧目标长度同量级）。
+const MaxGoalTextLen = 16 * 1024
+
+// normalizeComposerCommand 校验输入框“/”指令的单轮语义：goal_action 只放行 set/resume，
+// set 必须带非空且不超限的目标正文；goal 与 prompt_command 互斥。
+func normalizeComposerCommand(body *handler.ChatRequestBody) error {
+	body.GoalAction = strings.TrimSpace(body.GoalAction)
+	body.GoalText = strings.TrimSpace(body.GoalText)
+	if body.PlanCommand && (body.GoalAction != "" || body.GoalText != "" || body.PromptCommand) {
+		return errors.New("plan_command cannot be combined with goal or prompt commands")
+	}
+	switch body.GoalAction {
+	case "":
+		if body.GoalText != "" {
+			return errors.New("goal_text requires goal_action")
+		}
+		return nil
+	case "set":
+		if body.GoalText == "" {
+			return errors.New("goal_text is required for goal set")
+		}
+		if len(body.GoalText) > MaxGoalTextLen {
+			return errors.New("goal_text is too long")
+		}
+	case "resume":
+		body.GoalText = ""
+	default:
+		return errors.New("goal_action must be set or resume")
+	}
+	if body.PromptCommand {
+		return errors.New("goal_action and prompt_command are mutually exclusive")
+	}
 	return nil
+}
+
+// HasComposerCommand 报告请求是否带输入框“/”指令语义（需要桌面端支持 COMPOSER_COMMANDS_V1）。
+func HasComposerCommand(body handler.ChatRequestBody) bool {
+	return body.GoalAction != "" || body.PromptCommand || body.PlanCommand
 }
 
 func normalizeQueuePolicy(value string) string {
@@ -335,6 +375,10 @@ func buildProtoRequest(body handler.ChatRequestBody) *gatewayv2.ChatRequest {
 		UploadedFiles:           handler.ToProtoChatUploadedFiles(body.UploadedFiles),
 		ReferencedConversations: handler.ToProtoChatConversationReferences(body.ReferencedConversations),
 		QueuePolicy:             body.QueuePolicy,
+		GoalAction:              body.GoalAction,
+		GoalText:                body.GoalText,
+		PromptCommand:           body.PromptCommand,
+		PlanCommand:             body.PlanCommand,
 	}
 }
 
@@ -367,6 +411,10 @@ func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 		Workdir:           req.GetWorkdir(),
 		CommandSafetyMode: req.GetCommandSafetyMode(),
 		QueuePolicy:       req.GetQueuePolicy(),
+		GoalAction:        req.GetGoalAction(),
+		GoalText:          req.GetGoalText(),
+		PromptCommand:     req.GetPromptCommand(),
+		PlanCommand:       req.GetPlanCommand(),
 	}
 	for _, reference := range req.GetReferencedConversations() {
 		body.ReferencedConversations = append(

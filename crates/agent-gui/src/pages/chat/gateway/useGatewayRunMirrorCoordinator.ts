@@ -1,9 +1,9 @@
-import type { Message } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import type { Message } from "@liveagent/app/lib/agentTypes";
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import { useCallback, useEffect, useRef } from "react";
-
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import { isKBrainBackendEnabled, isTauriHost } from "../../../lib/host";
 import {
   buildGatewayRuntimeSnapshotEntries,
   type GatewayRuntimeSnapshotState,
@@ -559,6 +559,7 @@ export function useGatewayRunMirrorCoordinator() {
   );
 
   useEffect(() => {
+    if (isKBrainBackendEnabled() && !isTauriHost()) return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listen<GatewayRunMirrorCheckpointRequest>("gateway:chat-checkpoint-requested", (event) => {
@@ -580,6 +581,7 @@ export function useGatewayRunMirrorCoordinator() {
   }, [commitRunningCheckpoint]);
 
   useEffect(() => {
+    if (isKBrainBackendEnabled() && !isTauriHost()) return;
     const timer = setInterval(() => {
       const now = Date.now();
       for (const run of runsRef.current.values()) {

@@ -1,4 +1,5 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import { getResourceHostCapabilities } from "../resourceHost";
 
 import { sortSkillsForDisplay } from "./builtin";
 import type { ClawHubSkillCard } from "./clawHub";
@@ -110,7 +111,7 @@ export type SkillInstallJobSnapshot = {
   updatedAt: number;
   finishedAt?: number | null;
 };
-type SystemManageSkillResponse = {
+export type SystemManageSkillResponse = {
   action: string;
   rootDir: string;
   path?: string | null;
@@ -211,8 +212,12 @@ function isSkillMentionNameChar(value: string) {
   return /^[A-Za-z0-9_:-]$/.test(value);
 }
 
-export function extractSkillMentionNamesFromText(text: string): string[] {
+export function extractSkillMentionNamesFromText(
+  text: string,
+  excludedNames: readonly string[] = [],
+): string[] {
   const names: string[] = [];
+  const excluded = new Set(excludedNames.map((name) => name.toLowerCase()));
   const seen = new Set<string>();
 
   for (let index = 0; index < text.length; index += 1) {
@@ -232,8 +237,16 @@ export function extractSkillMentionNamesFromText(text: string): string[] {
     // A slash right after the name means a filesystem path (/usr/bin), not a skill.
     if (text[nameEnd] === "/") continue;
 
-    const name = text.slice(nameStart, nameEnd);
+    // “/skill:名称”是显式引用形态：冒号后才是技能名，前缀本身不是指令。冒号也是
+    // 名称字符，所以上面的扫描已把整个“skill:名称”读进来，这里去掉前缀。
+    let name = text.slice(nameStart, nameEnd);
+    if (name.toLowerCase().startsWith("skill:")) {
+      name = name.slice("skill:".length);
+      if (!name) continue;
+    }
     if (isCommonSkillMentionEnvVar(name)) continue;
+    // 输入框只把草稿开头的“/名称”当指令，句中的同名引用仍按 Skill 解析。
+    if (!text.slice(0, index).trim() && excluded.has(name.toLowerCase())) continue;
     if (seen.has(name)) continue;
     seen.add(name);
     names.push(name);
@@ -247,6 +260,8 @@ export function resolveExplicitSkillMentions(params: {
   text?: string | null;
   structured?: ExplicitSkillMentionReference[] | null;
   enabledSkills: SkillSummary[];
+  /** Registered action-command names skipped by the text scan (structured chips still count). */
+  excludedCommandNames?: readonly string[];
 }): SkillSummary[] {
   const enabledSkills = params.enabledSkills;
   if (enabledSkills.length === 0) return [];
@@ -272,7 +287,10 @@ export function resolveExplicitSkillMentions(params: {
   for (const item of params.structured ?? []) {
     pushName(item);
   }
-  for (const name of extractSkillMentionNamesFromText(params.text ?? "")) {
+  for (const name of extractSkillMentionNamesFromText(
+    params.text ?? "",
+    params.excludedCommandNames,
+  )) {
     pushName(name);
   }
 
@@ -343,6 +361,7 @@ function normalizeSkillSourceMetadata(
     return null;
   }
   return {
+    ...source,
     registry: source.registry,
     slug: source.slug,
     version: typeof source.version === "string" ? source.version : null,
@@ -355,6 +374,17 @@ function isSkillReadmePath(path: string) {
 }
 
 export async function ensureBuiltinSkills() {
+  const adapter = getResourceHostCapabilities().skillsAdapter;
+  if (adapter) {
+    const response = await adapter.list();
+    return (response.skills ?? [])
+      .filter((skill) => skill.builtIn)
+      .map((skill) => ({
+        name: skill.name,
+        target: skill.target,
+        action: "existing",
+      }));
+  }
   try {
     return await invoke<SystemBuiltinSkillSeedResponse[]>("system_ensure_builtin_skills");
   } catch (error) {
@@ -403,9 +433,12 @@ async function maybeAttachReadmeFallbackInline(skill: SkillSummary): Promise<Ski
   }
 
   try {
-    const metadata = await invoke<SystemReadSkillMetadataResponse>("system_read_skill_metadata", {
-      path: skill.skillFile,
-    });
+    const adapter = getResourceHostCapabilities().skillsAdapter;
+    const metadata = adapter
+      ? {}
+      : await invoke<SystemReadSkillMetadataResponse>("system_read_skill_metadata", {
+          path: skill.skillFile,
+        });
     const hasDeclaredMetadata = Boolean(
       typeof metadata.name === "string" &&
         metadata.name.trim() &&
@@ -498,8 +531,13 @@ async function managedSkillListToDiscovery(
 }
 
 async function loadSkillsDiscovery(): Promise<SkillDiscovery> {
-  await ensureBuiltinSkills();
-  const discovery = await managedSkillListToDiscovery(await manageSkill({ action: "list" }));
+  const adapter = getResourceHostCapabilities().skillsAdapter;
+  if (!adapter) await ensureBuiltinSkills();
+  const response = adapter ? await adapter.list() : await manageSkill({ action: "list" });
+  if (adapter && (!Array.isArray(response.skills) || typeof response.rootDir !== "string")) {
+    throw new Error("Invalid K-brain skills list response");
+  }
+  const discovery = await managedSkillListToDiscovery(response);
   return discovery;
 }
 
@@ -540,6 +578,14 @@ export async function readSkillText(params: {
   offset?: number;
   length?: number;
 }): Promise<SystemReadSkillTextResponse> {
+  const adapter = getResourceHostCapabilities().skillsAdapter;
+  if (adapter) {
+    return adapter.read(
+      params.path,
+      params.offset,
+      params.length,
+    ) as Promise<SystemReadSkillTextResponse>;
+  }
   return invoke<SystemReadSkillTextResponse>("system_read_skill_text", {
     path: params.path,
     offset: params.offset,
@@ -550,9 +596,12 @@ export async function readSkillText(params: {
 export async function manageSkill(
   params: Record<string, unknown>,
 ): Promise<SystemManageSkillResponse> {
-  const response = await invoke<SystemManageSkillResponse>("system_manage_skill", {
-    payload: params,
-  });
+  const adapter = getResourceHostCapabilities().skillsAdapter;
+  const response = adapter
+    ? await adapter.manage(params)
+    : await invoke<SystemManageSkillResponse>("system_manage_skill", {
+        payload: params,
+      });
   const action = typeof params.action === "string" ? params.action : "";
   if (
     action === "install" ||
@@ -669,7 +718,7 @@ const EXPLICIT_SKILL_MENTIONS_CLOSE = "</skill-mentions>";
  * 前缀。system prompt 排在所有消息之前,它变一个字节,system 块连同其后全部
  * 历史一起作废,代价远大于这段文字本身。
  *
- * 因此改由 host 把它挂到当轮 user 消息尾部:那里复用 pi-ai 已经打在最后一条
+ * 因此改由 host 把它挂到当轮 user 消息尾部:那里复用运行时已经打在最后一条
  * user 消息上的 cache_control 断点,不额外占用 Anthropic 的 4 个名额。
  *
  * 纯函数:不含时间量与随机量,同一输入永远得到同一输出,也不 import 任何 host。

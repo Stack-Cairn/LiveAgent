@@ -123,7 +123,7 @@ test("ChatPage passes only tool lease state into the dock", () => {
   assert.match(dockProps, /leasedTools=\{leasedDockTools\}/);
   assert.match(
     chatPageSource,
-    /leasedProjectToolKinds\(workbench\.layout, terminalProjectPathKey, PROJECT_TOOL_SURFACE_KINDS\)/,
+    /leasedProjectToolKinds\(\s*workbench\.layout,\s*terminalProjectPathKey,\s*PROJECT_TOOL_SURFACE_KINDS\s*,?\s*\)/,
   );
   assert.equal(dockProps.includes("onFocusFileTreePane"), false);
   // (onGitReviewFocusRequest* 是 git 面板内部的滚动/选中请求,与 Pane 焦点

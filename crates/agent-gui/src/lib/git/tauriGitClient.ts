@@ -1,3 +1,4 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import {
   type GitClient,
   normalizeGitBranchesResponse,
@@ -10,7 +11,6 @@ import {
   normalizeGitRepositoryState,
   normalizeGitWorktreeResponse,
 } from "@liveagent/ui/lib/git/types";
-import { invoke } from "@tauri-apps/api/core";
 
 export const tauriGitClient: GitClient = {
   async status(workdir) {

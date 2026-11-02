@@ -306,13 +306,20 @@ impl GatewayController {
     ) {
         let mut reconnect_delay = GATEWAY_RECONNECT_MIN;
         loop {
-            let config = config_rx.borrow().clone();
-            if !config.enabled || !is_remote_configured(&config) {
+            let config = config_rx.borrow_and_update().clone();
+            let effective = config.effective_gateway_settings();
+            if !config.enabled || !is_remote_configured(&effective) {
+                let manager = Arc::clone(&self.local_gateway);
+                let stop_error =
+                    match tauri::async_runtime::spawn_blocking(move || manager.stop()).await {
+                        Ok(result) => result.err(),
+                        Err(_) => Some("Local Gateway cleanup task failed".to_string()),
+                    };
                 reconnect_delay = GATEWAY_RECONNECT_MIN;
                 self.set_outbound_sender(None);
                 self.set_outbound_control_sender(None);
                 self.set_terminal_stream_sender(None);
-                self.publish_disconnected_status(&config, None);
+                self.publish_disconnected_status(&effective, stop_error);
                 if config_rx.changed().await.is_err() {
                     break;
                 }
@@ -321,25 +328,30 @@ impl GatewayController {
 
             let current_config = config.clone();
             let attempt_started = Instant::now();
-            let connect_result = self
-                .connect_and_serve(current_config.clone(), &mut config_rx)
-                .await;
+            // The supervisor remains responsive to settings changes while child
+            // startup runs off the async executor. Await cancellation so an old
+            // launch cannot escape into a newer configuration.
+            let connect_result = match self.prepare_local_gateway(&config, &mut config_rx).await {
+                Ok(false) => continue,
+                Err(error) => Err(error),
+                Ok(true) => {
+                    self.connect_and_serve(current_config.clone(), &mut config_rx)
+                        .await
+                }
+            };
             let latest_config = config_rx.borrow().clone();
             let reconfigured = latest_config != current_config;
 
             self.set_outbound_sender(None);
             self.set_outbound_control_sender(None);
             self.set_terminal_stream_sender(None);
-            if reconfigured {
+            if reconfigured || connect_result.is_ok() {
                 reconnect_delay = GATEWAY_RECONNECT_MIN;
-                self.publish_disconnected_status(&latest_config, None);
+                self.publish_disconnected_status(&latest_config.effective_gateway_settings(), None);
                 continue;
             }
 
-            self.publish_disconnected_status(
-                &current_config,
-                connect_result.as_ref().err().cloned(),
-            );
+            self.publish_disconnected_status(&effective, connect_result.as_ref().err().cloned());
 
             if config_rx.has_changed().unwrap_or(false) {
                 continue;
@@ -368,6 +380,45 @@ impl GatewayController {
         }
     }
 
+    async fn prepare_local_gateway(
+        &self,
+        config: &RemoteSettingsPayload,
+        config_rx: &mut watch::Receiver<RemoteSettingsPayload>,
+    ) -> Result<bool, String> {
+        let start_epoch = self.local_gateway.start_epoch();
+        if config_rx.has_changed().unwrap_or(true) {
+            return Ok(false);
+        }
+        let options = if config.managed_local {
+            Some(crate::services::local_gateway::LocalGatewayOptions {
+                binary: local_gateway_binary()?,
+                data_dir: crate::commands::settings::config_dir()?.join("gateway"),
+                port: config.local_gateway_port,
+                token: config.local_gateway_token.clone(),
+            })
+        } else {
+            None
+        };
+        // The Image Studio backend is the manager's concern (see GatewayController::new):
+        // read from the live K-Brain at spawn and rebound over stdin, never started here.
+        let manager = Arc::clone(&self.local_gateway);
+        let mut task = tauri::async_runtime::spawn_blocking(move || match options {
+            Some(options) => manager.start_with_epoch(options, start_epoch).map(|_| ()),
+            None => manager.stop(),
+        });
+        tokio::select! {
+            result = &mut task => {
+                result.map_err(|_| "Local gateway supervisor task failed".to_string())??;
+                Ok(!config_rx.has_changed().unwrap_or(true))
+            }
+            _ = config_rx.changed() => {
+                self.local_gateway.cancel_start();
+                let _ = task.await;
+                Ok(false)
+            }
+        }
+    }
+
     /// v2 主链路：hello 握手完成鉴权与会话登记后双向收发
     /// 信封（双通道合并、状态迁移、对账、分发），外加传输层存活看门狗。任何失败（网关不可达、
     /// 握手失败、鉴权被拒、链路中断）一律上抛错误消息，由外层 run 循环统一退避重连。
@@ -376,13 +427,14 @@ impl GatewayController {
         config: RemoteSettingsPayload,
         config_rx: &mut watch::Receiver<RemoteSettingsPayload>,
     ) -> Result<(), String> {
+        let effective = config.effective_gateway_settings();
         let ws_url = build_ws_url(
-            &config.gateway_url,
-            config.gateway_port,
+            &effective.gateway_url,
+            effective.gateway_port,
             GATEWAY_WS_AGENT_PATH,
         )?;
         let hello = build_client_hello(
-            &config.token,
+            &effective.token,
             effective_agent_id(&config)?,
             crate::app_version().to_string(),
         );
@@ -406,7 +458,7 @@ impl GatewayController {
         self.set_outbound_sender(Some(outbound_tx));
         self.set_outbound_control_sender(Some(outbound_control_tx));
         let (terminal_stop_tx, terminal_stop_rx) = watch::channel(false);
-        let terminal_task = self.spawn_terminal_stream_ws(config.clone(), terminal_stop_rx);
+        let terminal_task = self.spawn_terminal_stream_ws(effective.clone(), terminal_stop_rx);
 
         let serve_result = async {
             let connected_at = now_unix_seconds();
@@ -414,7 +466,7 @@ impl GatewayController {
                 status.online = true;
                 status.enabled = true;
                 status.configured = true;
-                status.gateway_url = config.gateway_url.clone();
+                status.gateway_url = effective.gateway_url.clone();
                 status.agent_id = config.agent_id.clone();
                 status.session_id = Some(server_hello.session_id.clone());
                 status.connected_since = Some(connected_at);
@@ -483,10 +535,9 @@ impl GatewayController {
                         if changed.is_err() {
                             break Ok(());
                         }
-                        let next = config_rx.borrow().clone();
-                        if next != config {
-                            break Ok(());
-                        }
+                        // An unchanged payload can be an explicit retry/resume
+                        // request. The watch version is the reconnect signal.
+                        break Ok(());
                     }
                     failure = failure_rx.recv() => {
                         match failure {
@@ -628,7 +679,7 @@ impl GatewayController {
             .lock()
             .map_err(|_| "gateway outbound sender lock poisoned".to_string())?
             .clone()
-            .ok_or_else(|| "gateway outbound stream is offline".to_string())
+            .ok_or_else(|| GATEWAY_OUTBOUND_OFFLINE_ERROR.to_string())
     }
 
     pub(crate) fn current_outbound_control_sender(&self) -> Result<GatewayOutboundSender, String> {
@@ -749,8 +800,8 @@ impl GatewayController {
     }
 
     pub(crate) async fn publish_current_settings_sync(&self) -> Result<(), String> {
-        let snapshot = self.current_settings_snapshot().await?;
-        self.publish_settings_sync(snapshot).await
+        let (snapshot, stamp) = self.current_settings_snapshot_stamped().await?;
+        self.publish_settings_sync(snapshot, stamp).await
     }
 
     pub(crate) async fn publish_current_terminal_sessions(&self) -> Result<(), String> {
@@ -774,36 +825,78 @@ impl GatewayController {
     }
 
     pub async fn refresh_settings_sync_from_db(&self) -> Result<Value, String> {
-        let snapshot = self.current_settings_snapshot().await?;
+        let (snapshot, stamp) = self.current_settings_snapshot_stamped().await?;
         self.app_handle
             .emit(GATEWAY_SETTINGS_SYNC_EVENT, snapshot.clone())
             .map_err(|e| format!("emit gateway settings sync failed: {e}"))?;
-        self.publish_settings_sync(snapshot.clone()).await?;
+        self.publish_settings_sync(snapshot.clone(), stamp).await?;
         Ok(snapshot)
     }
 }
 
 pub(crate) async fn await_abortable_on_reconfigure<T>(
-    config: &RemoteSettingsPayload,
+    _config: &RemoteSettingsPayload,
     config_rx: &mut watch::Receiver<RemoteSettingsPayload>,
     fut: impl Future<Output = Result<T, String>>,
 ) -> Result<Option<T>, String> {
     tokio::pin!(fut);
 
-    loop {
-        tokio::select! {
-            result = &mut fut => return result.map(Some),
-            changed = config_rx.changed() => {
-                if changed.is_err() {
-                    return Ok(None);
-                }
-                let next = config_rx.borrow().clone();
-                if next != *config {
-                    return Ok(None);
-                }
-            }
+    tokio::select! {
+        result = &mut fut => result.map(Some),
+        _ = config_rx.changed() => Ok(None),
+    }
+}
+
+/// The desktop's running K-Brain, offered to the WebUI Image Studio through the
+/// managed Gateway. Read-only: following K-Brain must never launch it (startup,
+/// updates). When K-Brain is down the Gateway (and chat) runs without images.
+pub(crate) fn local_image_backend(
+    app: &tauri::AppHandle,
+) -> Option<crate::services::local_gateway::LocalImageBackend> {
+    use tauri::Manager as _;
+    let state = app.try_state::<Arc<crate::services::kbrain_backend::KBrainBackendState>>()?;
+    let connection = state.running_connection()?;
+    let backend = crate::services::local_gateway::LocalImageBackend {
+        url: connection.base_url,
+        token: connection.token,
+    };
+    backend.is_authenticated_loopback().then_some(backend)
+}
+
+fn local_gateway_binary() -> Result<std::path::PathBuf, String> {
+    let name = if cfg!(windows) {
+        "liveagent-gateway.exe"
+    } else {
+        "liveagent-gateway"
+    };
+    let executable =
+        std::env::current_exe().map_err(|_| "Unable to locate desktop executable".to_string())?;
+    let directory = executable
+        .parent()
+        .ok_or("Unable to locate desktop directory")?;
+    // Installed sidecars are adjacent to the desktop executable on every
+    // supported platform, including Contents/MacOS in the macOS app bundle.
+    let bundled = directory.join(name);
+    if bundled.is_file() {
+        return Ok(bundled);
+    }
+    #[cfg(debug_assertions)]
+    {
+        let suffix = if cfg!(windows) { ".exe" } else { "" };
+        let dev = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join(format!(
+                "liveagent-gateway-{}{suffix}",
+                env!("LIVEAGENT_TARGET_TRIPLE")
+            ));
+        if dev.is_file() {
+            return Ok(dev);
         }
     }
+    Err(
+        "Local Gateway program is missing; reinstall LiveAgent or prepare the development sidecar"
+            .to_string(),
+    )
 }
 
 pub(crate) async fn send_agent_envelope_to(
@@ -877,6 +970,18 @@ pub(crate) fn ensure_rustls_crypto_provider() {
 
 pub(crate) fn is_remote_configured(config: &RemoteSettingsPayload) -> bool {
     !config.gateway_url.trim().is_empty() && !config.token.trim().is_empty()
+}
+
+pub(crate) const GATEWAY_OUTBOUND_OFFLINE_ERROR: &str = "gateway outbound stream is offline";
+
+/// Best-effort publishes (queue snapshots, runtime status) have nothing to
+/// deliver while the Gateway is disabled or disconnected; that is the normal
+/// state, not a failure. Real send errors still propagate.
+pub(crate) fn ignore_gateway_outbound_offline(result: Result<(), String>) -> Result<(), String> {
+    match result {
+        Err(error) if error == GATEWAY_OUTBOUND_OFFLINE_ERROR => Ok(()),
+        other => other,
+    }
 }
 
 pub(crate) fn effective_agent_id(config: &RemoteSettingsPayload) -> Result<String, String> {

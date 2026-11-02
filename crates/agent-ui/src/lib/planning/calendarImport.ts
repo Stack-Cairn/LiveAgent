@@ -131,6 +131,29 @@ export function parseCalendar(
     try {
       if (!event.uid) throw Error(translate("planner.import.missingUid"));
       if (event.isRecurring()) {
+        // RDATE-only expansion omits DTSTART in ical.js; it still belongs to the recurrence set.
+        if (!component.hasProperty("rrule") && component.hasProperty("rdate")) {
+          const excluded = component
+            .getAllProperties("exdate")
+            .some((property) =>
+              property
+                .getValues()
+                .some(
+                  (value) =>
+                    calendarTime(value as IcalTime, event, false, zone) ===
+                    calendarTime(event.startDate, event, false, zone),
+                ),
+            );
+          if (!excluded) {
+            const firstOccurrence = event.getOccurrenceDetails(event.startDate);
+            append(
+              firstOccurrence.item,
+              firstOccurrence.startDate,
+              firstOccurrence.endDate,
+              `${event.uid}/${event.startDate.toString()}`,
+            );
+          }
+        }
         const iterator = event.iterator();
         let attempts = 0;
         while (true) {

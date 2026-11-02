@@ -1,10 +1,10 @@
+import type { ToolCall, ToolResultMessage } from "@liveagent/ui/lib/chat/agentTypes";
 import {
   assembleContinuousReply,
   type ReplyStitchClass,
   stitchCompactedReplies,
 } from "@liveagent/ui/lib/chat/replyContinuity";
 import type { SubagentBatchDetails } from "@liveagent/ui/lib/subagents/protocol";
-import type { ToolCall, ToolResultMessage } from "@/lib/agentTypes";
 import {
   appendTextDeltaToRound,
   appendThinkingDeltaToRound,

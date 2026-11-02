@@ -94,6 +94,21 @@ test("fetchSharedHistory reads public share details that parse into transcript e
   }
 });
 
+test("parseHistoryMessagesJson uses canonical history ids for editable user rows", () => {
+  const entries = chatUi.parseHistoryMessagesJson(JSON.stringify([
+    { id: "msg-canonical-user-1", role: "user", content: "hello" },
+  ]));
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].messageId, "msg-canonical-user-1");
+  assert.equal(entries[0].messageRef.segmentIndex, 0);
+  assert.equal(entries[0].messageRef.messageIndex, 0);
+  assert.equal(entries[0].messageRef.segmentId, "gateway-history");
+  assert.equal(entries[0].messageRef.messageId, "msg-canonical-user-1");
+  assert.equal(entries[0].messageRef.role, "user");
+  assert.equal(entries[0].messageRef.contentHash, "m3bicr");
+});
+
 test("parseHistoryMessagesJson preserves upload display text and checkpoint metadata", () => {
   const entries = chatUi.parseHistoryMessagesJson(JSON.stringify([
     {
@@ -881,9 +896,14 @@ test("GatewayTranscript renders folded and live rows in one virtualized list", (
     forwardRef(render) {
       return render;
     },
+    // Module-load shim: TranscriptMessageActions lazy-loads the reply share dialog.
+    lazy() {
+      return () => null;
+    },
     memo(component) {
       return component;
     },
+    Suspense: "Suspense",
     useCallback(callback) {
       return callback;
     },

@@ -1,3 +1,4 @@
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { ExternalLink, Sparkles } from "@liveagent/ui/components/IconSet";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -12,7 +13,6 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ReleaseAnnouncementController } from "../lib/releaseAnnouncement";
 import { releaseNotesBody, releaseTitle } from "../lib/releaseNotes";
 import { formatReleaseDate } from "../pages/settings/aboutDate";

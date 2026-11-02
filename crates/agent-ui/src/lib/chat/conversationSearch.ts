@@ -18,6 +18,8 @@ export type PersistedConversationSearchResult = {
   cwd?: string;
   updatedAt?: number;
   searchPreview?: string;
+  messageId?: string;
+  messageIndex?: number;
 };
 
 function normalizeHistoryMatches(
@@ -43,6 +45,8 @@ function normalizeHistoryMatches(
       cwd: match.cwd?.trim() || undefined,
       updatedAt: match.updatedAt,
       searchPreview: normalizePreview(match.snippet),
+      messageId: match.messageId?.trim() || undefined,
+      messageIndex: typeof match.messageIndex === "number" ? match.messageIndex : undefined,
       score,
     });
   }

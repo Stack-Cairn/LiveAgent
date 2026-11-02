@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -58,9 +59,18 @@ func main() {
 	})
 	sttManager := stt.NewManager(sttStore)
 
+	images := server.NewLocalImageHub(cfg)
+	httpHandler := server.NewHTTPServerWithLocalImages(cfg, sm, tokens, images, sttManager)
+	if closer, ok := httpHandler.(io.Closer); ok {
+		defer func() {
+			if err := closer.Close(); err != nil {
+				slog.Warn("http handler cleanup error", "err", err)
+			}
+		}()
+	}
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewHTTPServer(cfg, sm, tokens, sttManager),
+		Handler:           httpHandler,
 		ReadHeaderTimeout: 10 * time.Second,
 		// 空闲 keep-alive 连接必须回收，否则 REST/静态资源访问方挂住连接会把 fd
 		// 慢性耗尽到 ulimit。刻意不设全局 Read/WriteTimeout：流式上传与隧道长响应
@@ -85,8 +95,18 @@ func main() {
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
+	var parentClosed <-chan struct{}
+	if os.Getenv("LIVEAGENT_GATEWAY_DESKTOP_PARENT") == "1" {
+		// The desktop retains the pipe's write handle for its whole lifetime and
+		// writes only control lines (Image Studio backend rebinds). EOF also covers
+		// force termination and development rebuilds, where no desktop exit
+		// callback or Rust destructor can run.
+		parentClosed = server.WatchDesktopParent(os.Stdin, images)
+	}
 
 	select {
+	case <-parentClosed:
+		slog.Info("desktop parent exited, shutting down")
 	case sig := <-signalCh:
 		slog.Info("received signal, shutting down", "signal", sig.String())
 	case err := <-errCh:

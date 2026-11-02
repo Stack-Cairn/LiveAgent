@@ -176,8 +176,10 @@ test("stream token metadata preserves raw usage and render-only markers", () => 
   assert.deepEqual(rows[0].rounds[0].meta.usage, {
     input: 9_000,
     cacheRead: 800,
+    cacheWrite: 0,
     output: 200,
     totalTokens: 10_000,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   });
   assert.equal(rows[0].rounds[0].meta.stopReason, "stop");
   assert.equal(rows[0].rounds[0].meta.contextRelevant, false);

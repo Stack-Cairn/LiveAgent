@@ -78,6 +78,7 @@ export function SkillsStoreView(props: {
   pendingInstallKeys: ReadonlySet<string>;
   installingByStoreKey: Record<string, string>;
   installJobs: Record<string, SkillInstallJobSnapshot>;
+  backendManaged?: boolean;
   onLoadMore: () => void;
   onInstall: (skill: ClawHubSkillCard) => void;
 }) {
@@ -93,6 +94,7 @@ export function SkillsStoreView(props: {
     pendingInstallKeys,
     installingByStoreKey,
     installJobs,
+    backendManaged = false,
     onLoadMore,
     onInstall,
   } = props;
@@ -154,11 +156,20 @@ export function SkillsStoreView(props: {
   // 分类是本地过滤：选中分类后结果太少且还有下一页时自动补页，
   // 避免出现"一屏只剩两张卡"的稀疏页面。
   useEffect(() => {
-    if (storeCategory === "all" || searching) return;
+    if (backendManaged || storeCategory === "all" || searching) return;
     if (!cursor || loading || loadingMore) return;
     if (filteredItems.length >= STORE_CATEGORY_FILL_TARGET) return;
     onLoadMore();
-  }, [cursor, filteredItems.length, loading, loadingMore, onLoadMore, searching, storeCategory]);
+  }, [
+    backendManaged,
+    cursor,
+    filteredItems.length,
+    loading,
+    loadingMore,
+    onLoadMore,
+    searching,
+    storeCategory,
+  ]);
 
   useEffect(() => {
     if (!previewSkill) {
@@ -246,7 +257,7 @@ export function SkillsStoreView(props: {
             className="sticky top-0 z-30 -mx-0.5 bg-background/95 px-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/90"
           />
 
-          {error ? (
+          {error && !backendManaged ? (
             <GlassPanel tone="error">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 shrink-0 text-destructive" />
@@ -290,7 +301,15 @@ export function SkillsStoreView(props: {
             </>
           ) : null}
 
-          {!loading && items.length === 0 && !error ? (
+          {backendManaged ? (
+            <GlassPanel tone="muted">
+              <p className="py-2 text-center text-xs text-muted-foreground">
+                {t("settings.skillsBackendManaged")}
+              </p>
+            </GlassPanel>
+          ) : null}
+
+          {!backendManaged && !loading && items.length === 0 && !error ? (
             <GlassPanel>
               <div className="flex flex-col items-center gap-3 py-8 text-center">
                 <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
@@ -320,6 +339,7 @@ export function SkillsStoreView(props: {
                   onOpenPreview={setPreviewSkill}
                   onSelectCategory={setStoreCategory}
                   onInstall={onInstall}
+                  installDisabled={backendManaged}
                 />
               ))}
             </div>
@@ -359,6 +379,7 @@ export function SkillsStoreView(props: {
         error={previewError}
         installState={previewSkill ? getInstallState(previewDetail ?? previewSkill) : null}
         onClose={() => setPreviewSkill(null)}
+        installDisabled={backendManaged}
         onInstall={() => {
           const target = previewDetail ?? previewSkill;
           if (target) onInstall(target);
@@ -375,9 +396,10 @@ function SkillsStorePreviewDrawer(props: {
   error: string | null;
   installState: StoreSkillInstallState | null;
   onClose: () => void;
+  installDisabled?: boolean;
   onInstall: () => void;
 }) {
-  const { onClose, onInstall } = props;
+  const { onClose, onInstall, installDisabled = false } = props;
   const presence = useDrawerPresence(
     props.skill && props.installState
       ? {
@@ -406,6 +428,7 @@ function SkillsStorePreviewDrawer(props: {
           loading={snapshot.loading || !presence.entered}
           error={snapshot.error}
           installState={snapshot.installState}
+          installDisabled={installDisabled}
           onInstall={onInstall}
         />
       ) : null}
@@ -419,9 +442,10 @@ function SkillsStorePreviewPopup(props: {
   loading: boolean;
   error: string | null;
   installState: StoreSkillInstallState;
+  installDisabled?: boolean;
   onInstall: () => void;
 }) {
-  const { skill, detail, loading, error, installState, onInstall } = props;
+  const { skill, detail, loading, error, installState, installDisabled = false, onInstall } = props;
   const { t } = useLocale();
   const data = detail ?? skill;
   const link = data.webUrl ?? buildClawHubSkillUrl(data);
@@ -633,7 +657,7 @@ function SkillsStorePreviewPopup(props: {
           variant={installState.done ? "outline" : "default"}
           size="sm"
           className="h-9 flex-1 gap-1.5"
-          disabled={installState.done || installState.installing}
+          disabled={installDisabled || installState.done || installState.installing}
           aria-busy={installState.installing}
           onClick={onInstall}
         >

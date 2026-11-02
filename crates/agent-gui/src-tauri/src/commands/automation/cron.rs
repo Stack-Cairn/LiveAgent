@@ -48,16 +48,11 @@ pub async fn automation_hooks_apply(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn automation_cron_occurrences(
+    app: tauri::AppHandle,
     from: i64,
     to: i64,
-    store: tauri::State<'_, Arc<AutomationStore>>,
 ) -> Result<CronOccurrencesResponse, String> {
-    let store = Arc::clone(store.inner());
-    tauri::async_runtime::spawn_blocking(move || {
-        store.cron_occurrences(CronOccurrenceQuery { from, to })
-    })
-    .await
-    .map_err(|e| format!("automation_cron_occurrences join 失败：{e}"))?
+    crate::services::automation::kbrain_occurrences::query(app, CronOccurrenceQuery { from, to }).await
 }
 
 #[tauri::command(rename_all = "snake_case")]

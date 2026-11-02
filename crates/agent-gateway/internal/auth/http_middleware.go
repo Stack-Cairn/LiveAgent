@@ -11,6 +11,10 @@ import (
 func HTTPMiddleware(expectedToken string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !ValidateBearerHeader(r.Header.Get("Authorization"), expectedToken) {
+			if r.URL.Path == "/api/image" || strings.HasPrefix(r.URL.Path, "/api/image/") {
+				writeImageAuthRequired(w)
+				return
+			}
 			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}

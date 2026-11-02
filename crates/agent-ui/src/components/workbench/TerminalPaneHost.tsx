@@ -1,3 +1,4 @@
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLocale } from "../../i18n/index";
@@ -187,7 +188,11 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
             ? { kind: "ssh-prompt" }
             : {
                 kind: "create-failed",
-                message: error instanceof Error ? error.message : String(error),
+                message: hostAwareErrorMessage(
+                  error,
+                  t("projectTools.desktopTerminalOnly"),
+                  t("workbench.terminalError"),
+                ),
               },
         );
       });
@@ -203,6 +208,7 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     session,
     sessionsLoaded,
     surface,
+    t,
   ]);
 
   useEffect(() => {

@@ -20,6 +20,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitStatusEntry } from "@liveagent/ui/lib/git/types";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
@@ -310,10 +311,10 @@ export function GitReviewStatusView(props: {
       setChangeContextMenu(null);
       setError("");
       void gitClient?.openSystemFileLocation?.(cwd, entry.path).catch((err) => {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(hostAwareErrorMessage(err, t("git.branchSelector.runtimeUnsupported")));
       });
     },
-    [cwd, gitClient, setError],
+    [cwd, gitClient, setError, t],
   );
 
   const renderChangeEntry = (entry: GitStatusEntry, section: ChangeListSection) => {

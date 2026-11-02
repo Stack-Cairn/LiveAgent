@@ -4,9 +4,9 @@
   "version": "../package.json",
   "identifier": "com.xiaofei.liveagent",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm prepare:kbrain && pnpm gateway:prepare && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm prepare:kbrain && pnpm gateway:prepare && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "externalBin": ["binaries/k-brain", "binaries/k-brain-computer", "binaries/liveagent-gateway"],
     "targets": "all",
     "resources": {
       "../browser-extension": "browser-extension"

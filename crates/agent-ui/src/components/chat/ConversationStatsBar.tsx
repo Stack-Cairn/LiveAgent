@@ -16,6 +16,7 @@ import {
 } from "../../lib/trajectory/stats";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
 import { LabelTooltip } from "../ui/label-tooltip";
+import { RollingStatText } from "./RollingStatText";
 
 /** 心跳与 hook 的重建节流同频（docs/design/composer-context-stats-bar.md §4.2）。 */
 const HEARTBEAT_MS = 1_000;
@@ -374,7 +375,14 @@ export function ConversationStatsBar(props: {
           {index > 0 ? (
             <span aria-hidden="true" className="mx-2.5 h-2.5 w-px shrink-0 bg-border/70" />
           ) : null}
-          <span>{group.metrics.map((metric) => metric.short).join(" · ")}</span>
+          <span>
+            {group.metrics.map((metric, metricIndex) => (
+              <Fragment key={metric.key}>
+                {metricIndex > 0 ? <span> · </span> : null}
+                <RollingStatText text={metric.short} />
+              </Fragment>
+            ))}
+          </span>
         </span>
       ))}
     </div>

@@ -57,3 +57,11 @@ func (v AgentView) ApplyTerminalResponseSnapshot(
 ) {
 	v.m.ApplyTerminalResponseSnapshot(v.resolvedID(), action, projectPathKey, resp)
 }
+
+// SupportsCapability 报告目标 Agent 当前在线连接是否声明了该能力；零值视图恒为 false。
+func (v AgentView) SupportsCapability(capability string) bool {
+	if v.m == nil {
+		return false
+	}
+	return v.m.SupportsCapability(v.resolvedID(), capability)
+}

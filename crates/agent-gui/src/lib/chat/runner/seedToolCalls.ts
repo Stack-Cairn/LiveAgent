@@ -1,4 +1,4 @@
-import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ToolCall } from "@liveagent/app/lib/agentTypes";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 
 const SEED_TOOL_CALL_DISPLAY_PATTERN = /<seed:tool_call>[\s\S]*?(?:<\/seed:tool_call>|$)/gi;

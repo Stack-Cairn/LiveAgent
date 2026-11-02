@@ -61,6 +61,7 @@ test("provider model requests carry the stored provider identity to the desktop"
       models_url: "https://relay.example.com/models",
       provider_id: "provider-a",
       is_full_url: true,
+      request_format: "openai-completions",
     },
     "agent-1",
   );
@@ -76,6 +77,7 @@ test("provider model requests carry the stored provider identity to the desktop"
       modelsUrl: frame.payload.value.payload.value.modelsUrl,
       providerId: frame.payload.value.payload.value.providerId,
       isFullUrl: frame.payload.value.payload.value.isFullUrl,
+      requestFormat: frame.payload.value.payload.value.requestFormat,
     },
     {
       providerType: "codex",
@@ -85,6 +87,7 @@ test("provider model requests carry the stored provider identity to the desktop"
       modelsUrl: "https://relay.example.com/models",
       providerId: "provider-a",
       isFullUrl: true,
+      requestFormat: "openai-completions",
     },
   );
 });
@@ -563,6 +566,8 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
 
   const terminalFrame = decodeClientFrame(
     encodeRequestFrame("req-2", "terminal.create", {
+      conversation_id: "conversation-1",
+      run_id: "run-1",
       cwd: "/workspace",
       project_path_key: "/workspace",
       cols: 120,
@@ -571,6 +576,8 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
   );
   assert.equal(terminalFrame.payload.value.payload.case, "terminalRequest");
   assert.equal(terminalFrame.payload.value.payload.value.action, "create");
+  assert.equal(terminalFrame.payload.value.payload.value.conversationId, "conversation-1");
+  assert.equal(terminalFrame.payload.value.payload.value.runId, "run-1");
   assert.equal(terminalFrame.payload.value.payload.value.cols, 120);
 
   // chat.command 的 64 位字段在出站边界收窄为 bigint。
@@ -697,6 +704,122 @@ test("cua driver status requests carry the read-only action and decode the host 
   });
 });
 
+test("queue edit responses decode through the real adapter into native editor JSON fields", () => {
+  for (const uploadedFilesJson of [undefined, "", "[]", '[{"id":"file-1"}]']) {
+    const item = {
+      id: "queued-1", previewText: "edit me", fileCount: 0, createdAt: 1,
+      source: "webui", editable: true,
+      draftJson: JSON.stringify({ text: "edit me", segments: [{ type: "text", text: "edit me" }] }),
+      ...(uploadedFilesJson === undefined ? {} : { uploadedFilesJson }),
+    };
+    const decoded = decodeServerFrame(roundtrip(serverFrame({
+      requestId: "queue-edit", agentId: "kbrain",
+      agentResponse: { chatQueueResp: {
+        accepted: true, revision: "6", itemJson: JSON.stringify(item),
+        snapshotJson: JSON.stringify({ conversationId: "conv-1", revision: 6, items: [] }),
+      } },
+    })), { agentOnline: true });
+    const response = socketShared.normalizeChatQueueResponse(decoded.payload);
+    assert.equal(response.accepted, true);
+    assert.equal(response.item.id, "queued-1");
+    assert.equal(response.snapshot.revision, 6);
+    assert.equal(JSON.parse(response.item.draftJson).text, "edit me");
+    assert.deepEqual(JSON.parse(response.item.uploadedFilesJson), JSON.parse(uploadedFilesJson || "[]"));
+    const commit = decodeClientFrame(encodeRequestFrame("queue-commit", "chat_queue.edit_commit", {
+      conversation_id: "conv-1", item_id: response.item.id, revision: response.snapshot.revision,
+      draft_json: response.item.draftJson, uploaded_files_json: response.item.uploadedFilesJson,
+    }, "kbrain"));
+    assert.equal(commit.payload.value.payload.value.draftJson, response.item.draftJson);
+    assert.equal(commit.payload.value.payload.value.uploadedFilesJson, response.item.uploadedFilesJson);
+  }
+});
+
+test("queued command update decoded by the adapter settles the actual startup pipeline", async () => {
+  const { ChatCommandPipeline } = loader.loadModule("src/lib/chat/stream/chatCommandPipeline.ts");
+  const errors = [];
+  const pipeline = new ChatCommandPipeline({
+    getTranscriptStore: () => ({ removeOptimisticUserEntry() {}, appendLocalError: (message) => errors.push(message) }),
+  });
+  try {
+    await pipeline.submit({ conversationId: "conv-1", clientRequestId: "client-1", message: "queued", optimistic: false,
+      submit: async () => ({ runId: "run-1", conversationId: "conv-1", acceptedSeq: 1 }),
+    });
+    assert.equal(pipeline.hasPending("conv-1"), true);
+    const decoded = decodeServerFrame(roundtrip(serverFrame({ chatCommandUpdate: {
+      runId: "run-1", clientRequestId: "client-1", conversationId: "conv-1", phase: "queued_in_gui",
+    } })), { agentOnline: true });
+    pipeline.handleCommandUpdate({ runId: decoded.payload.run_id, clientRequestId: decoded.payload.client_request_id,
+      conversationId: decoded.payload.conversation_id, phase: decoded.payload.phase });
+    assert.equal(pipeline.hasPending("conv-1"), false);
+    assert.deepEqual(errors, []);
+  } finally {
+    pipeline.reset();
+  }
+});
+
+test("queue edit cancel preserves the original conversation and removed item identity", () => {
+  const encoded = decodeClientFrame(encodeRequestFrame("cancel-edit", "chat_queue.edit_cancel", {
+    conversation_id: "conversation-original",
+    item_id: "removed-queue-item",
+  }, "kbrain"));
+  assert.equal(encoded.agentId, "kbrain");
+  assert.equal(encoded.payload.value.payload.value.action, "edit_cancel");
+  assert.equal(encoded.payload.value.payload.value.conversationId, "conversation-original");
+  assert.equal(encoded.payload.value.payload.value.itemId, "removed-queue-item");
+});
+
+// 代理服务检测：检测与测速都在桌面宿主上执行，测速参数规整成固定三个字段，
+// 返回的 JSON 与桌面 Tauri 命令同一份。
+test("proxy detect requests carry the action and normalized test input", () => {
+  const detect = decodeClientFrame(encodeRequestFrame("proxy-1", "proxy.detect", {}, "agent-1"));
+  assert.equal(detect.payload.value.payload.case, "proxyDetect");
+  assert.equal(detect.payload.value.payload.value.action, "detect");
+  assert.equal(detect.payload.value.payload.value.inputJson, "");
+
+  const probe = decodeClientFrame(
+    encodeRequestFrame(
+      "proxy-2",
+      "proxy.test",
+      { type: "socks5", host: " 127.0.0.1 ", port: 7891, password: "secret" },
+      "agent-1",
+    ),
+  );
+  assert.equal(probe.payload.value.payload.case, "proxyDetect");
+  assert.equal(probe.payload.value.payload.value.action, "test");
+  assert.deepEqual(JSON.parse(probe.payload.value.payload.value.inputJson), {
+    type: "socks5",
+    host: "127.0.0.1",
+    port: 7891,
+  });
+
+  const candidates = [
+    {
+      id: "http://127.0.0.1:7890",
+      type: "http",
+      host: "127.0.0.1",
+      port: 7890,
+      processName: "FlClashCore",
+      sources: ["os", "listen"],
+      authRequired: false,
+    },
+  ];
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "proxy-1",
+        agent_id: "agent-1",
+        agent_response: {
+          request_id: "proxy-1",
+          proxy_detect_resp: { action: "detect", result_json: JSON.stringify({ candidates }) },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.equal(decoded.kind, "response");
+  assert.deepEqual(decoded.payload, { candidates });
+});
+
 test("Planning v2 preserves CAS and taxonomy payloads and identifies the invalidated Agent", () => {
   const input = { requestId: "request-stable", action: "todo.update", id: "todo-1", expectedRevision: 7, data: { groupId: "group-1", tagIds: ["tag-1"], projectId: "project-1", reminderMinutes: 15 } };
   const frame = decodeClientFrame(encodeRequestFrame("planning-1", "planning.manage", { action: "mutate", input }, "agent-1"));
@@ -708,4 +831,52 @@ test("Planning v2 preserves CAS and taxonomy payloads and identifies the invalid
   assert.equal(decoded.kind,"response");assert.deepEqual(decoded.payload,conflict);
   const changed = decodeServerFrame(roundtrip(serverFrame({agent_id:"agent-1",planning_changed:{seq:"9"}})),{agentOnline:true});
   assert.equal(changed.type,"planning.changed");assert.equal(changed.agentId,"agent-1");assert.equal(changed.payload.seq,9);
+});
+
+test("permission rules requests carry the action and only the rule fields", () => {
+  const list = decodeClientFrame(
+    encodeRequestFrame("rules-1", "permission.rules.list", { workspace: "D:\\w", session_id: "s1" }, "agent-1"),
+  );
+  assert.equal(list.payload.value.payload.case, "permissionRules");
+  assert.equal(list.payload.value.payload.value.action, "list");
+  assert.deepEqual(JSON.parse(list.payload.value.payload.value.inputJson), { workspace: "D:\\w" });
+
+  const add = decodeClientFrame(
+    encodeRequestFrame(
+      "rules-2",
+      "permission.rules.add",
+      { rule: " Bash(rm:*) ", effect: "deny", scope: "project", workspace: "/w", extra: 1 },
+      "agent-1",
+    ),
+  );
+  assert.equal(add.payload.value.payload.value.action, "add");
+  assert.deepEqual(JSON.parse(add.payload.value.payload.value.inputJson), {
+    rule: "Bash(rm:*)",
+    effect: "deny",
+    scope: "project",
+    workspace: "/w",
+  });
+
+  const remove = decodeClientFrame(
+    encodeRequestFrame("rules-3", "permission.rules.delete", { id: "r_1", scope: "user" }, "agent-1"),
+  );
+  assert.equal(remove.payload.value.payload.value.action, "delete");
+  assert.deepEqual(JSON.parse(remove.payload.value.payload.value.inputJson), { id: "r_1", scope: "user" });
+
+  const rules = { project_root: "D:\\w", rules: [{ id: "r_1", rule: "Bash(ls:*)", effect: "allow", scope: "project" }] };
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "rules-1",
+        agent_id: "agent-1",
+        agent_response: {
+          request_id: "rules-1",
+          permission_rules_resp: { result_json: JSON.stringify(rules) },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.equal(decoded.kind, "response");
+  assert.deepEqual(decoded.payload, rules);
 });

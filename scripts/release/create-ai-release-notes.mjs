@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseReleaseVersion } from "./release-version.mjs";
 
-const DEFAULT_BASE_URL = "https://api.deepseek.com/v1";
+const DEFAULT_KBRAIN_URL = "http://127.0.0.1:47321";
+const DEFAULT_PROVIDER = "deepseek";
 const DEFAULT_MODEL = "deepseek-flash";
-const DEFAULT_REASONING_EFFORT = "";
 const DEFAULT_MAX_OUTPUT_TOKENS = 8000;
 const MAX_CONTEXT_CHARS = 22000;
 
-/** Output item/part types that carry a reasoning model's chain of thought. */
 const REASONING_TYPES = new Set([
   "analysis",
   "reasoning",
@@ -35,16 +34,12 @@ function fail(message, code = 1) {
 
 function initializeFromCli() {
   const [releaseTagArg, outputPathArg, fallbackNotesPathArg] = process.argv.slice(2);
-  if (!releaseTagArg || !outputPathArg) {
-    fail(usage());
-  }
-
+  if (!releaseTagArg || !outputPathArg) fail(usage());
   try {
     releaseVersion = parseReleaseVersion(releaseTagArg);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
-
   outputPath = outputPathArg;
   fallbackNotesPath = fallbackNotesPathArg;
 }
@@ -73,25 +68,16 @@ function fallbackNotes() {
       const fallback = readFileSync(fallbackNotesPath, "utf8").trim();
       if (fallback) return fallback;
     } catch {
-      // Fall through to a minimal note.
+      // Use the minimal note when the optional fallback file is unavailable.
     }
   }
   return `# LiveAgent ${releaseVersion.releaseTag}\n\nRelease ${releaseVersion.releaseTag}.`;
 }
 
 function writeFallback(reason) {
-  console.warn(`AI release notes unavailable: ${reason}`);
-  if (fallbackNotesPath) {
-    try {
-      copyFileSync(fallbackNotesPath, outputPath);
-      console.log(`Wrote fallback release notes: ${outputPath}`);
-      return;
-    } catch {
-      // Fall through to generated fallback notes.
-    }
-  }
-  writeFileSync(outputPath, `${fallbackNotes()}\n`);
-  console.log(`Wrote fallback release notes: ${outputPath}`);
+  const notes = fallbackNotes();
+  writeFileSync(outputPath, `${notes.trim()}\n`);
+  console.warn(`Using fallback release notes: ${reason}`);
 }
 
 function stripCodeFence(markdown) {
@@ -100,27 +86,18 @@ function stripCodeFence(markdown) {
   return match ? match[1].trim() : trimmed;
 }
 
-/**
- * Release notes must start with the H1 the prompt mandates. Reasoning models can emit their chain
- * of thought first, so keep only the block that starts at that heading and reject output that never
- * reaches it instead of publishing unverified text.
- */
 export function normalizeMarkdown(markdown, releaseTag) {
   const output = stripCodeFence(markdown);
   if (!output) return "";
-
   const heading = `# LiveAgent ${releaseTag}`;
   const lines = output.split("\n");
   const headingIndex = lines.findIndex((line) => line.trim() === heading);
   if (headingIndex === -1) return "";
-
   return `${lines.slice(headingIndex).join("\n").trim()}\n`;
 }
 
 function previousTagFor(releaseCommit) {
-  return runGit(["describe", "--tags", "--abbrev=0", `${releaseCommit}^`], {
-    optional: true,
-  });
+  return runGit(["describe", "--tags", "--abbrev=0", `${releaseCommit}^`], { optional: true });
 }
 
 function collectContext() {
@@ -128,23 +105,14 @@ function collectContext() {
   const previousTag = previousTagFor(releaseCommit);
   const range = previousTag ? `${previousTag}..${releaseCommit}` : releaseCommit;
   const repository = process.env.GITHUB_REPOSITORY?.trim() || "Stack-Cairn/LiveAgent";
-
-  const commitLog = runGit([
-    "log",
-    "--date=short",
-    "--format=%h%x09%ad%x09%an%x09%s",
-    range,
-  ]);
+  const commitLog = runGit(["log", "--date=short", "--format=%h%x09%ad%x09%an%x09%s", range]);
   const diffStat = previousTag
     ? runGit(["diff", "--stat", previousTag, releaseCommit], { optional: true })
     : runGit(["show", "--stat", "--oneline", "--no-renames", releaseCommit], { optional: true });
   const changedFiles = previousTag
     ? runGit(["diff", "--name-status", previousTag, releaseCommit], { optional: true })
     : runGit(["show", "--name-status", "--format=", releaseCommit], { optional: true });
-  const githubNotes = fallbackNotesPath
-    ? readFileSync(fallbackNotesPath, "utf8").trim()
-    : "";
-
+  const githubNotes = fallbackNotesPath ? readFileSync(fallbackNotesPath, "utf8").trim() : "";
   return {
     appVersion: releaseVersion.appVersion,
     changedFiles: compact(changedFiles, 7000),
@@ -174,7 +142,7 @@ function buildPrompt(context) {
     "- Do not invent features, fixes, metrics, dates, warnings, contributors, or compatibility claims.",
     "- Use only the provided GitHub notes, commit log, diff stat, and changed files.",
     "- Write for end users first, developers second.",
-    "- Start with exactly this H1: # LiveAgent " + context.releaseTag,
+    `- Start with exactly this H1: # LiveAgent ${context.releaseTag}`,
     "- Add a one-sentence blockquote summary after the H1.",
     "- Use concise sections: Overview, Highlights, Added, Changed, Fixed, Internal.",
     "- Omit a section if there is no evidence for it.",
@@ -204,226 +172,124 @@ function buildPrompt(context) {
 }
 
 function isReasoningOutput(value) {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    typeof value.type === "string" &&
-    REASONING_TYPES.has(value.type.toLowerCase())
-  );
+  const type = typeof value === "string" ? value : value && typeof value === "object" ? value.type : undefined;
+  return typeof type === "string" && REASONING_TYPES.has(type.toLowerCase());
 }
 
 export function responseText(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  if (typeof payload.text === "string") return payload.text;
   if (typeof payload.output_text === "string") return payload.output_text;
-
-  const output = payload.output;
-  if (Array.isArray(output)) {
-    const parts = [];
-    for (const item of output) {
-      // Reasoning is returned as its own output item by reasoning models; it must never reach the
-      // release notes.
-      if (isReasoningOutput(item)) continue;
-      if (!Array.isArray(item.content)) continue;
-      for (const content of item.content) {
-        if (isReasoningOutput(content)) continue;
-        if (typeof content.text === "string") parts.push(content.text);
-      }
+  const output = Array.isArray(payload.output) ? payload.output : [];
+  const outputParts = [];
+  for (const item of output) {
+    if (!item || typeof item !== "object" || isReasoningOutput(item.type)) continue;
+    const content = Array.isArray(item.content) ? item.content : [];
+    for (const part of content) {
+      if (!part || typeof part !== "object" || isReasoningOutput(part.type)) continue;
+      if (typeof part.text === "string") outputParts.push(part.text);
     }
-    if (parts.length > 0) return parts.join("\n");
   }
-
+  if (outputParts.length > 0) return outputParts.join("\n");
   const choice = payload.choices?.[0]?.message?.content;
   if (typeof choice === "string") return choice;
   if (Array.isArray(choice)) {
     return choice
-      .filter((part) => !isReasoningOutput(part))
-      .map((part) => (typeof part.text === "string" ? part.text : ""))
+      .filter((part) => !isReasoningOutput(part?.type))
+      .map((part) => (typeof part?.text === "string" ? part.text : ""))
       .filter(Boolean)
       .join("\n");
   }
-
   return "";
 }
 
 function normalizeReasoningEffort(value) {
   const effort = value.trim().toLowerCase();
-  if (!effort || effort === "none" || effort === "off" || effort === "false" || effort === "xhigh") {
-    return "";
-  }
+  if (!effort || effort === "none" || effort === "off" || effort === "false" || effort === "xhigh") return "";
   return effort;
 }
 
-async function fetchJsonWithTimeout(endpoint, { apiKey, body, timeoutMs }) {
+async function fetchJsonWithTimeout(endpoint, { token, body, timeoutMs }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`K-brain returned HTTP ${response.status}: ${text.slice(0, 500)}`);
+    return JSON.parse(text);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function generateWithKBrain({ token, baseUrl, provider, model, maxOutputTokens, prompt, timeoutMs }) {
+  const endpoint = `${baseUrl.replace(/\/+$/, "")}/v1/text/generate`;
+  const payload = await fetchJsonWithTimeout(endpoint, {
+    token,
+    timeoutMs,
+    body: {
+      model: { provider, model },
+      messages: [
+        {
+          role: "system",
+          content: [{ type: "text", text: "You are a precise release-notes editor. You never make claims that are not grounded in the provided repository context." }],
+        },
+        { role: "user", content: [{ type: "text", text: prompt }] },
+      ],
+      output: "text",
+      max_output_tokens: maxOutputTokens,
     },
-    signal: controller.signal,
-    body: JSON.stringify(body),
-  }).finally(() => clearTimeout(timeout));
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`API returned HTTP ${response.status}: ${text.slice(0, 500)}`);
-  }
-  return JSON.parse(text);
-}
-
-async function createResponse({
-  apiKey,
-  baseUrl,
-  maxOutputTokens,
-  model,
-  prompt,
-  reasoningEffort,
-  timeoutMs,
-}) {
-  const endpoint = `${baseUrl.replace(/\/+$/, "")}/responses`;
-  const body = {
-    input: [
-      {
-        role: "system",
-        content: [
-          {
-            type: "input_text",
-            text: "You are a precise release-notes editor. You never make claims that are not grounded in the provided repository context.",
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [{ type: "input_text", text: prompt }],
-      },
-    ],
-    max_output_tokens: maxOutputTokens,
-    model,
-    store: false,
-  };
-  if (reasoningEffort) {
-    body.reasoning = { effort: reasoningEffort };
-  }
-  return fetchJsonWithTimeout(endpoint, {
-    apiKey,
-    timeoutMs,
-    body,
   });
-}
-
-async function createChatCompletion({
-  apiKey,
-  baseUrl,
-  maxOutputTokens,
-  model,
-  prompt,
-  reasoningEffort,
-  timeoutMs,
-}) {
-  const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  const body = {
-    max_tokens: maxOutputTokens,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a precise release-notes editor. You never make claims that are not grounded in the provided repository context.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    model,
-  };
-  if (reasoningEffort) {
-    body.reasoning_effort = reasoningEffort;
+  if (payload.version !== "kbrain.agent.v1" || typeof payload.text !== "string") {
+    throw new Error("K-brain returned a malformed text-generation response");
   }
-  return fetchJsonWithTimeout(endpoint, {
-    apiKey,
-    timeoutMs,
-    body,
-  });
+  return payload.text;
 }
 
 async function main() {
   initializeFromCli();
-
-  const apiKey =
-    process.env.AI_RELEASE_NOTES_API_KEY?.trim() || process.env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) {
-    writeFallback("missing AI_RELEASE_NOTES_API_KEY/DEEPSEEK_API_KEY");
+  const token = process.env.KBRAIN_TOKEN?.trim() || process.env.K_BRAIN_TOKEN?.trim();
+  if (!token) {
+    writeFallback("missing KBRAIN_TOKEN/K_BRAIN_TOKEN");
     return;
   }
-
-  const baseUrl = process.env.AI_RELEASE_NOTES_BASE_URL?.trim() || DEFAULT_BASE_URL;
+  const baseUrl = process.env.KBRAIN_URL?.trim() || process.env.K_BRAIN_URL?.trim() || DEFAULT_KBRAIN_URL;
+  const provider = process.env.AI_RELEASE_NOTES_PROVIDER?.trim() || DEFAULT_PROVIDER;
   const model = process.env.AI_RELEASE_NOTES_MODEL?.trim() || DEFAULT_MODEL;
-  const reasoningEffort = normalizeReasoningEffort(
-    process.env.AI_RELEASE_NOTES_REASONING_EFFORT ?? DEFAULT_REASONING_EFFORT,
-  );
+  const reasoningEffort = normalizeReasoningEffort(process.env.AI_RELEASE_NOTES_REASONING_EFFORT ?? "");
   const parsedTimeoutMs = Number.parseInt(process.env.AI_RELEASE_NOTES_TIMEOUT_MS ?? "60000", 10);
   const timeoutMs = Number.isFinite(parsedTimeoutMs) ? parsedTimeoutMs : 60000;
-  const parsedMaxOutputTokens = Number.parseInt(
-    process.env.AI_RELEASE_NOTES_MAX_OUTPUT_TOKENS ?? String(DEFAULT_MAX_OUTPUT_TOKENS),
-    10,
-  );
-  const maxOutputTokens = Number.isFinite(parsedMaxOutputTokens)
-    ? parsedMaxOutputTokens
-    : DEFAULT_MAX_OUTPUT_TOKENS;
-
+  const parsedMaxOutputTokens = Number.parseInt(process.env.AI_RELEASE_NOTES_MAX_OUTPUT_TOKENS ?? String(DEFAULT_MAX_OUTPUT_TOKENS), 10);
+  const maxOutputTokens = Number.isFinite(parsedMaxOutputTokens) ? parsedMaxOutputTokens : DEFAULT_MAX_OUTPUT_TOKENS;
   try {
     const context = collectContext();
-    const prompt = buildPrompt(context);
-    let markdown = "";
-    let chatCompleted = false;
-    try {
-      const chatPayload = await createChatCompletion({
-        apiKey,
-        baseUrl,
-        maxOutputTokens,
-        model,
-        prompt,
-        reasoningEffort,
-        timeoutMs,
-      });
-      chatCompleted = true;
-      markdown = normalizeMarkdown(responseText(chatPayload), releaseVersion.releaseTag);
-    } catch (error) {
-      console.warn(
-        `Chat completions unavailable: ${
-          error instanceof Error ? error.message : String(error)
-        }; trying Responses API fallback.`,
-      );
-    }
+    const prompt = [
+      buildPrompt(context),
+      "",
+      `Write concise Markdown release notes. Start with the exact heading \`# LiveAgent ${releaseVersion.releaseTag}\`.`,
+      reasoningEffort ? `Reasoning preference: ${reasoningEffort}.` : "",
+    ].filter(Boolean).join("\n");
+    const markdown = normalizeMarkdown(
+      await generateWithKBrain({ token, baseUrl, provider, model, maxOutputTokens, prompt, timeoutMs }),
+      releaseVersion.releaseTag,
+    );
     if (!markdown) {
-      if (chatCompleted) {
-        console.warn(
-          "Chat completions returned unusable release notes; trying Responses API fallback.",
-        );
-      }
-      const responsesPayload = await createResponse({
-        apiKey,
-        baseUrl,
-        maxOutputTokens,
-        model,
-        prompt,
-        reasoningEffort,
-        timeoutMs,
-      });
-      markdown = normalizeMarkdown(responseText(responsesPayload), releaseVersion.releaseTag);
-    }
-    if (!markdown) {
-      writeFallback("model returned release notes without the required heading");
+      writeFallback("K-brain returned notes without the required heading");
       return;
     }
     writeFileSync(outputPath, markdown);
-    console.log(`Wrote AI release notes with ${model}: ${outputPath}`);
+    console.log(`Wrote K-brain release notes with ${provider}/${model}: ${outputPath}`);
   } catch (error) {
     writeFallback(error instanceof Error ? error.message : String(error));
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main();
-}
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

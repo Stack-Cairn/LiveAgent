@@ -3,13 +3,14 @@
 // is the per-platform adapter — the web frontend ships its own copy speaking
 // the gateway process.* protocol.
 
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import type {
   ManagedProcessBackend,
   ManagedProcessRecord,
   ManagedProcessState,
 } from "@liveagent/ui/lib/managed-process/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { isKBrainBrowserHost } from "../host";
 
 const MANAGED_PROCESS_CHANGED_EVENT = "managed-process:changed";
 
@@ -70,12 +71,23 @@ function normalizeSnapshot(raw: RawManagedProcessSnapshot): ManagedProcessState 
   };
 }
 
+const EMPTY_STATE: ManagedProcessState = {
+  ready: true,
+  agentOnline: false,
+  revision: 0,
+  processes: [],
+};
+
 export const backend: ManagedProcessBackend = {
   async fetchState(): Promise<ManagedProcessState> {
+    if (isKBrainBrowserHost()) return EMPTY_STATE;
     return normalizeSnapshot(await invoke<RawManagedProcessSnapshot>("managed_process_snapshot"));
   },
 
   async stop(id: string): Promise<ManagedProcessState | null> {
+    if (isKBrainBrowserHost()) {
+      throw new Error("K-brain browser mode does not support managed processes");
+    }
     // The stop response carries a single record; the refreshed snapshot
     // arrives through the change event the stop triggers.
     await invoke("managed_process_stop", { process_id: id });
@@ -83,6 +95,7 @@ export const backend: ManagedProcessBackend = {
   },
 
   async clear(id?: string): Promise<ManagedProcessState | null> {
+    if (isKBrainBrowserHost()) return EMPTY_STATE;
     return normalizeSnapshot(
       await invoke<RawManagedProcessSnapshot>("managed_process_clear", {
         process_id: id ?? null,
@@ -91,6 +104,9 @@ export const backend: ManagedProcessBackend = {
   },
 
   async readLog(id: string, maxBytes?: number) {
+    if (isKBrainBrowserHost()) {
+      throw new Error("K-brain browser mode does not support managed process logs");
+    }
     const response = await invoke<RawManagedProcessLogResponse>("managed_process_read_log", {
       process_id: id,
       max_bytes: maxBytes ?? null,

@@ -1,6 +1,17 @@
 /** Planning (calendar + tasks) messages. Backend error codes live under `planner.error.*`. */
 export const PLANNING_TRANSLATIONS = {
   "zh-CN": {
+    "planner.timezoneNotice.title": "日程时区需要检查",
+    "planner.timezoneNotice.invalid": "日程或旧数据迁移中的时区无法识别，部分日程功能暂不可用。",
+    "planner.timezoneNotice.unsupported":
+      "当前客户端无法识别日程时区「{effective}」，显示的时间可能不准确。",
+    "planner.timezoneNotice.mismatch":
+      "设置的时区「{preference}」与日程实际使用的「{effective}」不一致。",
+    "planner.timezoneNotice.device":
+      "本机当前时区为「{device}」，日程仍按「{effective}」显示。系统时区的修改会在重启应用后生效。",
+    "planner.timezoneNotice.preserved": "原设置与数据已保留，聊天不受影响。",
+    "planner.timezoneNotice.settings": "查看时区设置",
+    "planner.timezoneNotice.dismiss": "关闭提示",
     "planner.agenda.dayMeta": "{month}，{weekday}",
     "planner.agenda.due": "{title}（截止）",
     "planner.agenda.emptyToday": "今天没有安排",
@@ -153,6 +164,8 @@ export const PLANNING_TRANSLATIONS = {
     "planner.error.data_not_object": "data 必须是对象",
     "planner.error.data_version_newer": "计划数据版本高于当前应用",
     "planner.error.cron_range": "查询范围无效或超过 93 天",
+    "planner.error.desktop_required":
+      "日程数据目前由 LiveAgent 桌面端保存。请在桌面端打开日程，或通过网关连接桌面端。仅连接 K-brain 的浏览器暂不支持日程。",
     "planner.error.date_format": "日期必须为 YYYY-MM-DD",
     "planner.error.date_invalid": "日期无效",
     "planner.error.default_calendar_required": "必须保留一个默认可写日历",
@@ -224,6 +237,12 @@ export const PLANNING_TRANSLATIONS = {
     "planner.error.subscription_interval_invalid": "刷新间隔无效",
     "planner.error.subscription_missing": "订阅不存在",
     "planner.error.subscription_not_ics": "链接返回的不是日历文件",
+    "planner.error.subscription_auth_required":
+      "订阅地址需要登录或已失效，请更新可直接下载的 ICS 地址。当前不支持账户登录或 CalDAV/Graph 同步。",
+    "planner.error.subscription_unavailable": "订阅不存在或已撤销，请重新复制发布的 ICS 地址。",
+    "planner.error.subscription_rate_limited": "日历服务暂时限制请求，请稍后重试。",
+    "planner.subscription.providerHelp":
+      "Google：日历设置 → 整合日历 → iCal 地址。iCloud：共享日历 → 公共日历 → 复制链接。Outlook/Exchange：设置 → 日历 → 共享日历 → 发布日历 → ICS。iCloud/Outlook 发布可能使持有链接的人读取日历，请按账户的共享范围选择；组织未开放发布时不能用登录页替代。这里只读订阅，不回写源账户。",
     "planner.error.subscription_too_large": "日历文件超过 10 MB",
     "planner.error.subscription_url_invalid": "请输入有效的 https:// 或 webcal:// 日历链接",
     "planner.error.tags_invalid": "标签不存在、重复或超过 30 个",
@@ -578,6 +597,18 @@ export const PLANNING_TRANSLATIONS = {
     "planner.yesterday": "昨天",
   },
   "en-US": {
+    "planner.timezoneNotice.title": "Check the calendar time zone",
+    "planner.timezoneNotice.invalid":
+      "A calendar or legacy migration time zone is not recognized. Some calendar features are unavailable.",
+    "planner.timezoneNotice.unsupported":
+      "This client does not recognize the calendar time zone “{effective}”. Displayed times may be inaccurate.",
+    "planner.timezoneNotice.mismatch":
+      "The selected time zone “{preference}” differs from the calendar’s effective time zone “{effective}”.",
+    "planner.timezoneNotice.device":
+      "This device is now on “{device}”, but the calendar still shows “{effective}”. System time zone changes apply after you restart the app.",
+    "planner.timezoneNotice.preserved": "Your settings and data are preserved. Chat is unaffected.",
+    "planner.timezoneNotice.settings": "Time zone settings",
+    "planner.timezoneNotice.dismiss": "Dismiss",
     "planner.agenda.dayMeta": "{month}, {weekday}",
     "planner.agenda.due": "{title} (due)",
     "planner.agenda.emptyToday": "Nothing planned today",
@@ -734,6 +765,8 @@ export const PLANNING_TRANSLATIONS = {
     "planner.error.data_not_object": "data must be an object",
     "planner.error.data_version_newer": "The calendar data is from a newer version of the app",
     "planner.error.cron_range": "The query range is invalid or longer than 93 days",
+    "planner.error.desktop_required":
+      "Planning data is currently stored by LiveAgent desktop. Open Planning on desktop or connect to it through the gateway. A browser connected only to K-brain does not yet support Planning.",
     "planner.error.date_format": "Dates must be YYYY-MM-DD",
     "planner.error.date_invalid": "Invalid date",
     "planner.error.default_calendar_required": "Keep one default writable calendar",
@@ -809,6 +842,14 @@ export const PLANNING_TRANSLATIONS = {
     "planner.error.subscription_interval_invalid": "Invalid refresh interval",
     "planner.error.subscription_missing": "The subscription doesn’t exist",
     "planner.error.subscription_not_ics": "The link didn’t return a calendar file",
+    "planner.error.subscription_auth_required":
+      "The feed requires login or has expired. Replace it with a directly downloadable ICS URL. Account login and CalDAV/Graph sync are not supported.",
+    "planner.error.subscription_unavailable":
+      "The subscription is missing or revoked. Copy a new published ICS URL.",
+    "planner.error.subscription_rate_limited":
+      "The calendar service is rate limiting requests. Retry later.",
+    "planner.subscription.providerHelp":
+      "Google: Calendar settings → Integrate calendar → iCal address. iCloud: Share calendar → Public calendar → Copy link. Outlook/Exchange: Settings → Calendar → Shared calendars → Publish calendar → ICS. Publishing may allow anyone holding the link to read the calendar; choose the appropriate sharing scope. Login pages cannot replace a published feed. Subscriptions are read-only and do not write back to the account.",
     "planner.error.subscription_too_large": "The calendar file is larger than 10 MB",
     "planner.error.subscription_url_invalid": "Enter a valid https:// or webcal:// calendar link",
     "planner.error.tags_invalid": "Tags don’t exist, are duplicated, or exceed 30",

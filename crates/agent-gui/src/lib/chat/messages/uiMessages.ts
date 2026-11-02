@@ -4,7 +4,7 @@ import type {
   ToolCall,
   ToolResultMessage,
   Usage,
-} from "@earendil-works/pi-ai";
+} from "@liveagent/app/lib/agentTypes";
 import {
   enrichHostedSearchContentWithText,
   type HostedSearchBlock,
@@ -461,6 +461,13 @@ function buildUiRoundBlocks(
     const hostedSearch = normalizeHostedSearchBlock(block);
     if (hostedSearch) {
       blocks = upsertHostedSearchBlock(blocks, hostedSearch);
+    }
+  }
+  const hasTextBlock = blocks.some((block) => block.kind === "text" && block.text.trim());
+  if (!hasTextBlock && (assistant.stopReason === "error" || assistant.stopReason === "aborted")) {
+    const fallbackText = getMessageText(assistant);
+    if (fallbackText.trim()) {
+      blocks = appendTextLikeBlock(blocks, "text", fallbackText);
     }
   }
   return blocks;

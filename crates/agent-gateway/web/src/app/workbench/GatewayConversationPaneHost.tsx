@@ -1,3 +1,5 @@
+import { sendComposerCommandTurn } from "../sendComposerCommandTurn";
+import { createWebComposerCommandHost } from "../webComposerCommandHost";
 // 会话 Pane 的统一宿主——复刻桌面端 RestorableConversationPaneHost:
 // 每个 Pane 始终挂同一组件,焦点切换只换 primary/background 绑定,不拆宿主。
 // 发送/停止/排队/上传/审批按本 Pane 的 conversationId 路由;选模型、编辑队列
@@ -27,13 +29,13 @@ import {
   CheckpointRewindProvider,
   type CheckpointRewoundInfo,
 } from "@liveagent/ui/lib/chat/checkpointRewind";
+import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
 import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import {
-  readToolApprovalDeadlineAt,
-  readToolApprovalPending,
-  readToolApprovalSummary,
+  pendingToolApprovalFromToolCall,
+  type RemoteToolApprovalItem,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import {
   mergePendingUploadedFiles,
@@ -195,12 +197,15 @@ export type GatewayConversationPrimarySurface = {
   pendingUploadedFiles: PendingUploadedFile[];
   onRemovePendingUpload: ChatComposerBarProps["onRemovePendingUpload"];
   queuedTurns: ChatQueueTurnPreview[];
+  queuePaused?: boolean;
   onRunQueuedTurnNow: ChatComposerBarProps["onRunQueuedTurnNow"];
   onMoveQueuedTurnUp: ChatComposerBarProps["onMoveQueuedTurnUp"];
   onEditQueuedTurn: ChatComposerBarProps["onEditQueuedTurn"];
   onRemoveQueuedTurn: ChatComposerBarProps["onRemoveQueuedTurn"];
   onManualCompactConfirm: ChatComposerBarProps["onManualCompactConfirm"];
   manualCompactBlocked: boolean;
+  /** 主 Pane 的“/”指令宿主；背景 Pane 只提供 /stop 等按本会话路由的指令。 */
+  commandHost?: ComposerCommandHost;
   approvalBar: ReactNode;
   taskProgressBar: ReactNode;
   statsBar: ReactNode;
@@ -380,11 +385,21 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
 
   // ---- 每会话队列:订阅网关中继的队列快照,revision 单调递增去旧 ----------
   const [queuedTurns, setQueuedTurns] = useState<ChatQueueTurnPreview[]>([]);
+  const [queuePaused, setQueuePaused] = useState<boolean | undefined>();
+  const [queueControlPending, setQueueControlPending] = useState(false);
+  const queueControlPendingRef = useRef(false);
   const queuedTurnsRef = useRef<ChatQueueTurnPreview[]>([]);
   const queueRevisionRef = useRef(0);
+  const queueConversationRef = useRef(conversationId);
+  queueConversationRef.current = conversationId;
   const applyQueueSnapshot = useCallback(
     (snapshot: ChatQueueSnapshotLike | null | undefined) => {
-      if (!snapshot || snapshot.conversationId !== conversationId) return;
+      if (
+        !snapshot ||
+        snapshot.conversationId !== conversationId ||
+        queueConversationRef.current !== conversationId
+      )
+        return;
       const revision = Number(snapshot.revision ?? 0);
       if (revision < queueRevisionRef.current) return;
       queueRevisionRef.current = revision;
@@ -395,6 +410,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       }));
       queuedTurnsRef.current = items;
       setQueuedTurns(items);
+      setQueuePaused(typeof snapshot.paused === "boolean" ? snapshot.paused : undefined);
     },
     [conversationId],
   );
@@ -403,6 +419,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     queueRevisionRef.current = 0;
     queuedTurnsRef.current = [];
     setQueuedTurns([]);
+    setQueuePaused(undefined);
     let cancelled = false;
     const unsubscribe = api.subscribeChatQueue(applyQueueSnapshot);
     void api
@@ -416,6 +433,33 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       unsubscribe();
     };
   }, [api, applyQueueSnapshot, conversationId, isDraft]);
+
+  const handleQueuePausedChange = useCallback(
+    async (paused: boolean) => {
+      if (queueControlPendingRef.current) return;
+      queueControlPendingRef.current = true;
+      setQueueControlPending(true);
+      try {
+        const response = await api.chatQueueSetPaused(
+          conversationId,
+          paused,
+          queueRevisionRef.current,
+        );
+        applyQueueSnapshot(response.snapshot);
+        if (!response.accepted) throw new Error(response.message || t("chat.queue.controlFailed"));
+      } catch (error) {
+        context.notifyError(error instanceof Error ? error.message : t("chat.queue.controlFailed"));
+        void api
+          .chatQueueGet(conversationId)
+          .then((response) => applyQueueSnapshot(response.snapshot))
+          .catch(() => undefined);
+      } finally {
+        queueControlPendingRef.current = false;
+        setQueueControlPending(false);
+      }
+    },
+    [api, applyQueueSnapshot, context, conversationId, t],
+  );
 
   // 队列操作直接以本会话 id 走网关 RPC(等价桌面端按会话路由);编辑队列项
   // 需要页面级编辑会话,与桌面端一致先聚焦本 Pane。
@@ -605,12 +649,36 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const handleStop = useCallback(() => {
     // 与桌面端/聚焦舞台一致:有排队回合先"停当前、跑下一条",否则纯停止。
     const nextQueuedTurn = queuedTurnsRef.current[0];
-    if (nextQueuedTurn) {
+    if (nextQueuedTurn && !queuePaused) {
       handleRunQueuedTurnNow(nextQueuedTurn.id);
       return;
     }
     void context.cancelChat(conversationId);
-  }, [context, conversationId, handleRunQueuedTurnNow]);
+  }, [context, conversationId, handleRunQueuedTurnNow, queuePaused]);
+  // 背景 Pane 的“/”指令：目录、发送、目标清除与定时任务都按本会话路由；
+  // /plan、/model 与 /rewind 依赖主 Pane 的开关、模型与回退上下文，这里不提供。
+  // context 每次渲染都是新对象：读数经 ref 取最新值，宿主引用只随 api 与会话变化，
+  // 否则输入框会在每次渲染时重新拉指令目录。
+  const commandLatestRef = useRef({ context, paneRuntimeControls });
+  commandLatestRef.current = { context, paneRuntimeControls };
+  const commandApi = context.api;
+  const backgroundCommandHost = useMemo<ComposerCommandHost>(
+    () =>
+      createWebComposerCommandHost({
+        t,
+        client: commandApi,
+        getConversationId: () => conversationId,
+        getWorkdir: () => workdirRef.current || undefined,
+        getRuntimeControls: () => commandLatestRef.current.paneRuntimeControls,
+        sendTurn: (text, command, runtimeControls) =>
+          sendComposerCommandTurn(commandLatestRef.current.context.sendChat, t, text, command, {
+            conversationId,
+            runtimeControls,
+            isBusy: () => commandLatestRef.current.context.isConversationBusy(conversationId),
+          }),
+      }),
+    [commandApi, conversationId, t],
+  );
 
   // ---- 草稿:挂载恢复缓存,卸载(聚焦切换/关 Pane)写回缓存(桌面端口径) --
   // hydrated 必须参与触发:背景 Pane 冷启动时先渲染加载占位,composer 尚未
@@ -697,25 +765,15 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [transcript.rows],
   );
   const pendingToolApprovals = useMemo(() => {
-    const result: {
-      toolCallId: string;
-      toolName: string;
-      summary?: string;
-      deadlineAt?: number;
-    }[] = [];
+    const result: RemoteToolApprovalItem[] = [];
     for (const row of transcript.rows) {
       if (row.kind !== "assistant") continue;
       for (const round of row.rounds) {
         for (const block of round.blocks) {
           if (block.kind !== "tool") continue;
           const { toolCall, toolResult } = block.item;
-          if (toolResult || !readToolApprovalPending(toolCall.arguments)) continue;
-          result.push({
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
-            summary: readToolApprovalSummary(toolCall.arguments),
-            deadlineAt: readToolApprovalDeadlineAt(toolCall.arguments) ?? undefined,
-          });
+          const pending = toolResult ? null : pendingToolApprovalFromToolCall(toolCall);
+          if (pending) result.push(pending);
         }
       }
     }
@@ -726,8 +784,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     pendingToolApprovals.length > 0 ? (
       <ToolApprovalBar
         pending={pendingToolApprovals}
-        onDecide={(toolCallId, decision) =>
-          submitToolApprovalDecision(toolCallId, decision, conversationId)
+        onDecide={(toolCallId, decision, options) =>
+          submitToolApprovalDecision(toolCallId, decision, conversationId, options)
         }
         onDecideAll={async (decision) => {
           for (const item of pendingToolApprovals) {
@@ -933,6 +991,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             mentionableConversations={context.mentionableConversations}
             searchMentionableConversations={context.searchMentionableConversations}
             mentionApps={context.mentionApps}
+            commandHost={usePrimary && primary ? primary.commandHost : backgroundCommandHost}
             executionMode={context.settings.system.executionMode}
             hasModels={context.hasModels}
             currentModelLabel={modelLabel}
@@ -941,6 +1000,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             chatRuntimeControls={paneRuntimeControls}
             commandSafetyMode={context.commandSafetyMode}
             onCommandSafetyModeChange={context.onCommandSafetyModeChange}
+            guardModeCycle={usePrimary && primary ? undefined : () => onFocusPane()}
             reasoningOptions={paneReasoningOptions}
             thinkingAlwaysOn={paneThinkingAlwaysOn}
             contextUsageTokensSource={contextUsageTokensSource}
@@ -1006,6 +1066,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                   }
             }
             queuedTurns={usePrimary && primary ? primary.queuedTurns : queuedTurns}
+            queuePaused={usePrimary ? primary?.queuePaused : queuePaused}
+            queueControlPending={queueControlPending}
+            onQueuePausedChange={handleQueuePausedChange}
             onRunQueuedTurnNow={
               usePrimary && primary ? primary.onRunQueuedTurnNow : handleRunQueuedTurnNow
             }

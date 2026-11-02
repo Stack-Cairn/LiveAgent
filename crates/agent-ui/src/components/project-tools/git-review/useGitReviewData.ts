@@ -24,6 +24,7 @@ import type {
 } from "@liveagent/ui/lib/git/types";
 import { emptyGitRepositoryState } from "@liveagent/ui/lib/git/types";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { hostAwareErrorMessage } from "../../../lib/shared/hostErrors";
 import type { WorkspaceInvalidationHint } from "../../../lib/workspace-activity/useWorkspaceInvalidation";
 import { useWorkspaceInvalidation } from "../../../lib/workspace-activity/useWorkspaceInvalidation";
 import { useRightDockToolContext } from "../RightDockContext";
@@ -73,6 +74,12 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
   const canWrite = context.capabilities.gitWriteEnabled;
   const disabledMessage = context.capabilities.gitDisabledMessage;
   const { t } = useLocale();
+  // `git_*` 是桌面命令：浏览器宿主/WebUI 离线时会返回内部诊断文案，
+  // 这里统一换成本地化说明，真实 git 失败仍原样透出。
+  const gitErrorMessage = useCallback(
+    (error: unknown) => hostAwareErrorMessage(error, t("git.branchSelector.runtimeUnsupported")),
+    [t],
+  );
 
   // Subdirectory repository support (modeled on VSCode's workspace-folder
   // scanning): when the workspace folder is not itself a repository, git
@@ -400,11 +407,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         } else {
           branchDiffSignatureRef.current = "";
           setBranchDiff(null);
-          setBranchError(
-            branchResult.reason instanceof Error
-              ? branchResult.reason.message
-              : String(branchResult.reason),
-          );
+          setBranchError(gitErrorMessage(branchResult.reason));
         }
         if (worktreeResult.status === "fulfilled") {
           const signature = gitDiffSignature(worktreeResult.value);
@@ -416,15 +419,11 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         } else {
           worktreeDiffSignatureRef.current = "";
           setWorktreeDiff(null);
-          setError(
-            worktreeResult.reason instanceof Error
-              ? worktreeResult.reason.message
-              : String(worktreeResult.reason),
-          );
+          setError(gitErrorMessage(worktreeResult.reason));
         }
       } catch (err) {
         if (diffRequestIdRef.current === requestId) {
-          setError(err instanceof Error ? err.message : String(err));
+          setError(gitErrorMessage(err));
         }
       } finally {
         if (diffRequestIdRef.current === requestId) {
@@ -444,7 +443,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         }
       }
     },
-    [clearDiffs, cwd, gitClient],
+    [clearDiffs, cwd, gitClient, gitErrorMessage],
   );
 
   const refresh = useCallback(
@@ -518,7 +517,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
       } catch (err) {
         if (refreshRequestIdRef.current !== requestId) return;
         if (!silent || force) {
-          setError(err instanceof Error ? err.message : String(err));
+          setError(gitErrorMessage(err));
         }
       } finally {
         if (refreshRequestIdRef.current === requestId) {
@@ -535,7 +534,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         }
       }
     },
-    [clearDiffs, cwd, gitClient, loadDiffForPath],
+    [clearDiffs, cwd, gitClient, loadDiffForPath, gitErrorMessage],
   );
 
   const loadCommitDiff = useCallback(
@@ -558,7 +557,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         }
       } catch (err) {
         if (commitDiffRequestIdRef.current === requestId) {
-          setHistoryError(err instanceof Error ? err.message : String(err));
+          setHistoryError(gitErrorMessage(err));
         }
       } finally {
         if (commitDiffRequestIdRef.current === requestId) {
@@ -566,7 +565,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         }
       }
     },
-    [cwd, gitClient],
+    [cwd, gitClient, gitErrorMessage],
   );
 
   const clearCommitDiff = useCallback(() => {
@@ -763,7 +762,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         }
       } catch (err) {
         if (historyRequestIdRef.current !== requestId) return;
-        const message = err instanceof Error ? err.message : String(err);
+        const message = gitErrorMessage(err);
         if (append) {
           setHistoryLoadMoreError(message);
           setHistoryHasMoreValue(true);
@@ -799,6 +798,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
       loadCommitDiff,
       resetHistorySelection,
       setHistoryHasMoreValue,
+      gitErrorMessage,
     ],
   );
 
@@ -953,7 +953,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         }
         return true;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = gitErrorMessage(err);
         if (
           noticeAction &&
           isRemoteSetupAction(noticeAction) &&
@@ -984,6 +984,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
       refresh,
       showOperationNotice,
       t,
+      gitErrorMessage,
     ],
   );
 
@@ -1012,7 +1013,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         }
         return true;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = gitErrorMessage(err);
         if (isCheckoutOverwriteError(message)) {
           setBranchSwitchConflict({ branch, kind: kind ?? "" });
         } else {
@@ -1034,6 +1035,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
       loadHistory,
       refresh,
       t,
+      gitErrorMessage,
     ],
   );
 
@@ -1060,7 +1062,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
       return true;
     } catch (err) {
       setBranchSwitchConflict(null);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(gitErrorMessage(err));
       return false;
     } finally {
       finishGitOperation(operationName);
@@ -1077,6 +1079,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
     loadHistory,
     refresh,
     t,
+    gitErrorMessage,
   ]);
 
   const closeRemoteSetup = useCallback(() => {
@@ -1116,7 +1119,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
       showOperationNotice("success", remoteSetupAction);
       return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = gitErrorMessage(err);
       setRemoteSetupError(message);
       showOperationNotice("error", remoteSetupAction, message);
       return false;
@@ -1137,6 +1140,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
     remoteSetupUrl,
     showOperationNotice,
     t,
+    gitErrorMessage,
   ]);
 
   const selectPath = useCallback(
@@ -1263,7 +1267,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         })
         .catch((err) => {
           if (commitDiffRequestIdRef.current !== requestId) return;
-          setHistoryError(err instanceof Error ? err.message : String(err));
+          setHistoryError(gitErrorMessage(err));
         })
         .finally(() => {
           if (commitDiffRequestIdRef.current === requestId) {
@@ -1271,7 +1275,7 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
           }
         });
     },
-    [cwd, focusCommitData, gitClient, state.upstream, t],
+    [cwd, focusCommitData, gitClient, state.upstream, t, gitErrorMessage],
   );
 
   return {

@@ -4,12 +4,14 @@ import type {
   Tool,
   ToolCall,
   ToolResultMessage,
-} from "@earendil-works/pi-ai";
+} from "@liveagent/app/lib/agentTypes";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import {
   hardcodedServerPolicyDefault,
   isCuaDriverServer,
 } from "@liveagent/ui/contracts/mcpServerDefaults";
-import { invoke } from "@tauri-apps/api/core";
+import { isKBrainBackendEnabled } from "../host";
+import { createKBrainClient } from "../kbrain/client";
 
 import type { McpServerConfig, ToolPolicy } from "../settings";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
@@ -100,6 +102,11 @@ function buildSafeToolName(serverId: string, toolName: string) {
 
 export async function createMcpTools(params: {
   servers: McpServerConfig[];
+  cwd?: string;
+  kbrain?: {
+    discoverMcpTools(input: { cwd?: string; server_ids?: string[] }): Promise<unknown>;
+    callMcpTool(input: { name: string; arguments?: unknown; cwd?: string }): Promise<unknown>;
+  };
   onLoadError?: (message: string) => void;
   loadFailureMode?: "continue" | "throw";
   /**
@@ -116,6 +123,8 @@ export async function createMcpTools(params: {
 > {
   const servers = params.servers ?? [];
   const enabledServers = servers.filter((s) => s.enabled);
+  const kbrain = isKBrainBackendEnabled() ? createKBrainClient() : undefined;
+  if (kbrain) params.kbrain = kbrain;
 
   /**
    * 挂着 cua-driver 的那些 server 的 id。
@@ -202,12 +211,23 @@ export async function createMcpTools(params: {
     };
   }
 
-  // Ask Rust side to (re)sync servers and list tools.
+  // K-brain owns discovery and execution; native invoke remains the non-K-brain adapter.
   let toolInfos: McpToolInfo[] = [];
   try {
-    toolInfos = await invoke<McpToolInfo[]>("mcp_list_tools", {
-      servers: enabledServers,
-    });
+    if (params.kbrain) {
+      const result = (await params.kbrain.discoverMcpTools({
+        cwd: params.cwd,
+        server_ids: enabledServers.map((server) => server.id),
+      })) as { tools?: Array<McpToolInfo & { toolName?: string }> };
+      toolInfos = (result.tools ?? []).map((info) => ({
+        ...info,
+        name: info.toolName ?? info.name,
+      }));
+    } else {
+      toolInfos = await invoke<McpToolInfo[]>("mcp_list_tools", {
+        servers: enabledServers,
+      });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (params.loadFailureMode === "throw") {
@@ -331,17 +351,28 @@ export async function createMcpTools(params: {
           }
 
           const runId = createToolRunId("mcp", toolCall.id);
-          const res = await invokeWithAbort<McpCallToolResponse>(
-            "mcp_call_tool",
-            {
-              server_id: mapped.serverId,
-              tool_name: mapped.toolName,
-              arguments: toolCall.arguments ?? {},
-              run_id: runId,
-            },
-            signal,
-            { onAbort: () => requestRuntimeCancel(runId) },
-          );
+          const res = params.kbrain
+            ? await (async () => {
+                const result = (await params.kbrain?.callMcpTool({
+                  name: toolCall.name,
+                  arguments: toolCall.arguments ?? {},
+                })) as { output?: string; failed?: boolean };
+                return {
+                  content: [{ type: "text", text: result.output ?? "" }],
+                  isError: result.failed,
+                } as McpCallToolResponse;
+              })()
+            : await invokeWithAbort<McpCallToolResponse>(
+                "mcp_call_tool",
+                {
+                  server_id: mapped.serverId,
+                  tool_name: mapped.toolName,
+                  arguments: toolCall.arguments ?? {},
+                  run_id: runId,
+                },
+                signal,
+                { onAbort: () => requestRuntimeCancel(runId) },
+              );
 
           // 出参过滤：把宿主自己的记录从窗口 / 应用枚举里摘掉，顺手记下
           // 它的 window_id 供后续入参拦截使用。

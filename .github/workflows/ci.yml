@@ -5,9 +5,17 @@ on:
   push:
     branches:
       - main
+      # PR 默认以 v2-kbrian 为基线;PR 只能恢复基线分支和默认分支的缓存,
+      # 所以合入 v2-kbrian 后也要跑一轮,为后续 PR 产出 Rust/Docker 缓存。
+      - v2-kbrian
 
 permissions:
   contents: read
+
+# 同一 PR 连续推送时取消旧的运行;push 运行各自独立成组,全部保留以便产出缓存。
+concurrency:
+  group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: 22.19.0
@@ -19,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # buf breaking 需要完整历史以对比 origin/main 的 proto 契约。
+          # buf breaking uses the actual PR base, including v2 integration PRs.
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -51,12 +59,14 @@ jobs:
           pnpm --filter @liveagent/gateway-webui build
 
       - name: Proto lint and breaking-change check
-        run: make proto-check BUF_BREAKING_AGAINST='../../.git#branch=origin/main,subdir=crates/agent-gateway'
+        env:
+          PROTO_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: make proto-check BUF_BREAKING_AGAINST="../../.git#ref=${PROTO_BASE_SHA},subdir=crates/agent-gateway"
 
       - name: Check generated protobuf
         run: |
           make proto
-          git diff --exit-code -- crates/agent-gateway/internal/proto
+          git diff --exit-code -- crates/agent-gateway/internal/proto crates/agent-gateway/web/src/lib/proto/gen
 
       - name: Lint gateway
         uses: golangci/golangci-lint-action@v8
@@ -84,7 +94,8 @@ jobs:
           load: true
           tags: liveagent-gateway:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # 只在长期分支写缓存:PR 写入的层会挤掉共享缓存(仓库缓存上限 10GB)。
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
 
       - name: Smoke test container
         run: |
@@ -160,13 +171,44 @@ jobs:
         working-directory: crates/agent-gui
         run: pnpm lint
 
-      - name: Test frontend modules
-        working-directory: crates/agent-gui
-        run: pnpm test:frontend
+      - name: Download checksum-verified K-brain release
+        run: node scripts/release/prepare-kbrain.mjs --release
 
       - name: Test release scripts
         working-directory: crates/agent-gui
-        run: pnpm test:release
+        run: |
+          pnpm test:release
+          node --test ../../scripts/release/*.test.mjs
+
+  gui-frontend:
+    # 前端模块测试约 500 个文件,每个文件在独立进程里重新加载模块;
+    # 按文件轮转分片并行跑,两个分片合起来覆盖全部文件。
+    name: GUI frontend (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        # GUI frontend tests load shared Gateway WebUI modules (including STT adapters).
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter liveagent... --filter @liveagent/gateway-webui...
+
+      - name: Download checksum-verified K-brain release
+        run: node scripts/release/prepare-kbrain.mjs --release
+
+      - name: Test frontend modules
+        working-directory: crates/agent-gui
+        run: pnpm test:frontend --shard ${{ matrix.shard }}/2
 
   changes:
     name: Detect Changes
@@ -176,6 +218,7 @@ jobs:
       pull-requests: read
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
+      desktop: ${{ steps.filter.outputs.desktop }}
     steps:
       - uses: dorny/paths-filter@v3
         id: filter
@@ -188,6 +231,40 @@ jobs:
               # build.rs 编译 gateway protos 并从 package.json 读取应用版本。
               - 'crates/agent-gateway/proto/**'
               - 'crates/agent-gui/package.json'
+              # --lib 编译时 include_str! 引用的 src-tauri 之外的文件,
+              # 以及 tauri-build 编译期拷贝的 resources。
+              - 'crates/agent-gui/src/lib/kbrain/memory.ts'
+              - 'crates/agent-gui/test/fixtures/provider-import-acceptance.json'
+              - 'crates/agent-ui/src/lib/kbrain/health-contract-vectors.json'
+              - 'crates/agent-ui/src/lib/tools/builtinToolCatalog.ts'
+              - 'crates/agent-gui/browser-extension/**'
+              - '.github/workflows/ci.yml'
+            # Desktop Gateway 三平台:Rust 编译输入,加上它构建的 Go sidecar
+            # (含嵌入 WebUI 的构建配置)与下载 K-brain 的脚本和锁。
+            # WebUI 源码改动由 Gateway 与 Gateway WebUI 两个 Linux job 构建和测试。
+            desktop:
+              - 'crates/agent-gui/src-tauri/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'crates/agent-gui/package.json'
+              - 'crates/agent-gui/src/lib/kbrain/memory.ts'
+              - 'crates/agent-gui/test/fixtures/provider-import-acceptance.json'
+              - 'crates/agent-ui/src/lib/kbrain/health-contract-vectors.json'
+              - 'crates/agent-ui/src/lib/tools/builtinToolCatalog.ts'
+              - 'crates/agent-gui/browser-extension/**'
+              - 'crates/agent-gateway/*'
+              - 'crates/agent-gateway/cmd/**'
+              - 'crates/agent-gateway/internal/**'
+              - 'crates/agent-gateway/proto/**'
+              - 'crates/agent-gateway/web/*'
+              - 'crates/agent-gateway/web/public/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.npmrc'
+              - 'scripts/prepare-gateway.mjs'
+              - 'scripts/release/prepare-kbrain.mjs'
+              - 'scripts/release/kbrain.lock.json'
               - '.github/workflows/ci.yml'
 
   tauri-rust:
@@ -195,7 +272,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: changes
-    # push 到 main 时始终运行以持续更新共享缓存;PR 仅在 Rust 相关路径变更时运行。
+    # push 到 main / v2-kbrian 时始终运行以持续更新共享缓存;PR 仅在 Rust 相关路径变更时运行。
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') }}
     env:
       # 行号级 debuginfo:显著降低 codegen 与链接开销,同时保留可读的失败回溯。
@@ -203,13 +280,29 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Tauri Linux dependencies
-        uses: awalsh128/cache-apt-pkgs-action@v1
+      - uses: actions/setup-go@v5
         with:
-          packages: protobuf-compiler libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-          version: 1.0
-          # 缓存恢复时执行安装脚本(如 ldconfig 触发器),保证测试运行期动态链接可用。
-          execute_install_scripts: true
+          go-version-file: crates/agent-gateway/go.mod
+          cache-dependency-path: crates/agent-gateway/go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Prepare Gateway sidecar required by tauri-build
+        run: |
+          npm install -g pnpm@10.32.1
+          pnpm install --frozen-lockfile --filter liveagent-workspace --filter @liveagent/gateway-webui...
+          node scripts/prepare-gateway.mjs --target x86_64-unknown-linux-gnu
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler libglib2.0-dev libwebkit2gtk-4.1-dev \
+            libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+          pkg-config --atleast-version=2.70 glib-2.0
+          pkg-config --exists gtk+-3.0 webkit2gtk-4.1
 
       - name: Install mold linker
         uses: rui314/setup-mold@v1
@@ -221,6 +314,17 @@ jobs:
           # Cargo workspace 根在仓库根目录(Cargo.lock 与 target/ 均在此),
           # 指向子目录会导致依赖产物完全不被缓存。
           workspaces: .
+          # PR 只恢复基线分支的缓存;每个 PR 各存一份会超出 10GB 上限并挤掉基线缓存。
+          save-if: ${{ github.event_name == 'push' }}
+
+      # tauri-build 要求 externalBin 的 sidecar 存在;--lib 单元测试不会执行它,放置空占位即可。
+      - name: Stub K-brain sidecars
+        working-directory: crates/agent-gui/src-tauri
+        run: |
+          mkdir -p binaries
+          for bin in k-brain k-brain-computer; do
+            install -m 755 /dev/null "binaries/$bin-x86_64-unknown-linux-gnu"
+          done
 
       - name: Build Tauri backend tests
         env:
@@ -234,12 +338,108 @@ jobs:
         run: >
           cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib --
           chat_history ssh_local_forward shell_runner integration_commands::mcp
+          services::system_proxy services::kbrain_backend
+          history_sync_v2_tests history_sync_command_tests
+
+  managed-gateway:
+    name: Desktop Gateway (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    needs: changes
+    # push 时始终运行;PR 仅在 desktop 过滤器命中时运行。
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: macOS
+            runner: macos-15
+            target: aarch64-apple-darwin
+          - name: Linux
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: crates/agent-gateway/go.mod
+          cache-dependency-path: crates/agent-gateway/go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libclang-dev
+          # Ubuntu 22.04 protoc requires the optional-field flag; use the same
+          # modern compiler as desktop releases instead.
+          curl -fsSL -o "$RUNNER_TEMP/protoc.zip" https://github.com/protocolbuffers/protobuf/releases/download/v34.0/protoc-34.0-linux-x86_64.zip
+          sudo unzip -oq "$RUNNER_TEMP/protoc.zip" -d /usr/local 'bin/protoc' 'include/*'
+          echo "PROTOC=/usr/local/bin/protoc" >> "$GITHUB_ENV"
+
+      - name: Install macOS protobuf compiler
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Install Linux mold linker
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
+
+      - name: Install Windows protobuf compiler
+        if: runner.os == 'Windows'
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "protoc.zip"
+          $destination = Join-Path $env:RUNNER_TEMP "protoc-34.0"
+          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v34.0/protoc-34.0-win64.zip" -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath $destination -Force
+          $protoc = Join-Path $destination "bin\protoc.exe"
+          & $protoc --version
+          if ($LASTEXITCODE -ne 0) { throw "protoc verification failed: $LASTEXITCODE" }
+          "PROTOC=$protoc" | Out-File -Append $env:GITHUB_ENV
+          (Split-Path $protoc) | Out-File -Append $env:GITHUB_PATH
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: Install frontend dependencies
+        run: |
+          npm install -g pnpm@10.32.1
+          pnpm install --frozen-lockfile --filter liveagent-workspace --filter liveagent... --filter @liveagent/gateway-webui...
+
+      - name: Build sidecar with embedded WebUI
+        run: node scripts/prepare-gateway.mjs --target ${{ matrix.target }}
+
+      - name: Download checksum-verified K-brain release
+        env:
+          TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/release/prepare-kbrain.mjs --release
+
+      - name: Run existing Gateway and settings tests
+        run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib -- settings::tests services::gateway::tests services::gateway::connection::transport_supervisor_tests history_sync_v2_tests history_sync_command_tests
 
   ui-boundaries:
     name: Shared UI Boundaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -261,10 +461,12 @@ jobs:
       - name: Run check script tests
         run: pnpm check:script-tests
 
-      - name: Check shared UI dependency boundaries
-        run: pnpm check:ui-boundaries
+      - name: Check shared UI dependency boundaries and mirrors
+        run: node scripts/check-mirror.mjs
 
       - name: Reject new Biome warnings
+        env:
+          LIVEAGENT_CHECK_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           node scripts/check-biome-changed.mjs ui
           node scripts/check-biome-changed.mjs gui

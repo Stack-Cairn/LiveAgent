@@ -1,7 +1,8 @@
-import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
+import { homeDir } from "@liveagent/app/shims/tauriPath";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
-import { homeDir } from "@tauri-apps/api/path";
+import { isKBrainBackendEnabled } from "../host";
 import type { RuntimePlatform } from "../runtimePlatform";
 import {
   type McpSettings,
@@ -10,12 +11,6 @@ import {
   type SshHostConfig,
   selectEnabledMcpServers,
 } from "../settings";
-import {
-  createSendMessageTools,
-  createSubagentTools,
-  SUBAGENT_PARENT_ID,
-  type SubagentRuntimeConfig,
-} from "../subagents";
 import type { AdditionalProjectRoot } from "./additionalProjectRoots";
 import { createAskUserQuestionTools } from "./askUserQuestionTools";
 import { createBrowserTools } from "./browserTools";
@@ -26,7 +21,7 @@ import type {
 } from "./builtinTypes";
 import { createConversationTools } from "./conversationTools";
 import { createCronTools } from "./cronTools";
-import { createFileToolState, type FileToolState } from "./fileToolState";
+import type { FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
@@ -63,9 +58,9 @@ const UNTRUSTED_TOOL_GROUPS: ReadonlySet<BuiltinToolBundle["groupId"]> = new Set
 // 不再给内置工具声明 JSON-schema 约束采样(strict)。曾经声明过 "prefer"
 // (pi 0.84.2 升级时引入),但部分 OpenAI 兼容 provider(如 Moonshot/Kimi)在
 // strict 模式下按白名单校验 schema 关键字,内置工具常用的 minimum / maxItems
-// 等一律 400,一个工具的 schema 就打死整轮请求;而 pi-ai 的本地预检
-// (makeStrictJsonSchema)只拦结构性问题,拦不住这类关键字白名单差异,
-// "prefer" 的降级判定在这里完全失效。v1.2.4 及之前不声明 strict,各家都能用
+// 等一律 400,一个工具的 schema 就打死整轮请求；本地预检只拦结构性问题，
+// 拦不住这类关键字白名单差异，"prefer" 的降级判定在这里完全失效。
+// v1.2.4 及之前不声明 strict,各家都能用
 // ——回到那个行为。约束采样能消灭的"参数名写错、必填漏传"坏调用,由工具
 // 实现自身的参数校验兜底。
 
@@ -217,6 +212,11 @@ type BaseBuiltinToolBundles = {
 async function buildBaseBuiltinToolBundles(
   params: BuildBuiltinBaseToolRegistryParams,
 ): Promise<BaseBuiltinToolBundles> {
+  if (isKBrainBackendEnabled()) {
+    throw new Error(
+      "Frontend tools are unavailable in K-brain mode; tools are owned by the backend.",
+    );
+  }
   const baseBundles: BuiltinToolBundle[] = [
     createFsTools({
       workdir: params.workdir,
@@ -311,6 +311,7 @@ async function buildBaseBuiltinToolBundles(
   if (enabledServers.length > 0) {
     mcpBusinessBundle = await createMcpTools({
       servers: enabledServers,
+      cwd: params.workdir,
       onLoadError: params.onMcpLoadError,
       loadFailureMode: params.mcpLoadFailureMode,
       cuaAllowSelfTargeting: params.cuaAllowSelfTargeting,
@@ -323,7 +324,6 @@ async function buildBaseBuiltinToolBundles(
 
 export async function buildBuiltinToolRegistry(
   params: BuildBuiltinBaseToolRegistryParams & {
-    subagentRuntime?: SubagentRuntimeConfig;
     taskStateStore?: TaskStateStore;
     /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
     askUserQuestionConversationId?: string;
@@ -419,79 +419,5 @@ export async function buildBuiltinToolRegistry(
     };
   };
 
-  const subagentRuntime = params.subagentRuntime;
-  if (!subagentRuntime) {
-    return filterForPlanMode(createBuiltinToolRegistry([...baseBundles, ...chatBundles]));
-  }
-  const subagentAdditionalRoots = params.additionalRoots?.map((root) => ({
-    ...root,
-    // Delegated agents can inspect parent-granted roots, but they never
-    // inherit mutation capability for shared directories implicitly.
-    access: "read" as const,
-  }));
-
-  const baseRegistry = createBuiltinToolRegistry(baseBundles);
-  // The Agent tool description embeds the roster, so the store must be
-  // hydrated before the bundle is created. Roster load failures degrade to an
-  // empty roster instead of blocking the whole registry.
-  try {
-    await subagentRuntime.store.ready();
-  } catch (error) {
-    console.warn("Failed to load subagent roster for the Agent tool", error);
-  }
-  const parentMessageBundle = subagentRuntime.store.conversationId
-    ? createSendMessageTools({
-        store: subagentRuntime.store,
-        senderId: SUBAGENT_PARENT_ID,
-        senderName: "Parent Agent",
-      })
-    : null;
-  const parentBundles = parentMessageBundle ? [...baseBundles, parentMessageBundle] : baseBundles;
-  return filterForPlanMode(
-    createBuiltinToolRegistry([
-      ...parentBundles,
-      ...chatBundles,
-      createSubagentTools({
-        providerId: subagentRuntime.providerId,
-        model: subagentRuntime.model,
-        runtime: subagentRuntime.runtime,
-        runtimePlatform: params.runtimePlatform,
-        workdir: params.workdir,
-        resolveHomeDir,
-        sessionId: subagentRuntime.sessionId,
-        templates: subagentRuntime.templates,
-        store: subagentRuntime.store,
-        scheduler: subagentRuntime.scheduler,
-        baseTools: baseRegistry.tools,
-        executeToolCall: baseRegistry.executeToolCall,
-        metadataByName: baseRegistry.metadataByName,
-        additionalRoots: subagentAdditionalRoots,
-        // Plan mode:子代理只许 readonly,worktree 请求按参数错误拒绝。
-        forceReadonly: planModeActive,
-        // 仅供 worktree apply 在合并回父工作区前捕获前像(blocker-2),
-        // 不进入子代理自身的工具注册表(见下方 checkpoint: undefined)。
-        checkpoint: params.checkpoint,
-        createSubagentToolRegistry: async (workdir) =>
-          createBuiltinToolRegistry(
-            (
-              await buildBaseBuiltinToolBundles({
-                ...params,
-                workdir,
-                additionalRoots: subagentAdditionalRoots,
-                fileState: createFileToolState(),
-                skillsEnabled: false,
-                applyMcpOps: undefined,
-                mcpLoadFailureMode: "continue",
-                memoryToolMode: "ro",
-                // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
-                // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
-                // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
-                // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
-                checkpoint: undefined,
-              })
-            ).bundles,
-          ),
-      }),
-    ]),
-  );
+  return filterForPlanMode(createBuiltinToolRegistry([...baseBundles, ...chatBundles]));
 }

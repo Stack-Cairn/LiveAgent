@@ -253,6 +253,12 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     [],
   );
 
+  // 已注册停止处理器 ⇔ 这一轮还没走完收尾（强制停止会先释放界面，处理器留到收尾结束）。
+  const hasConversationStopHandler = useCallback(
+    (conversationId: string) => conversationStopHandlersRef.current.has(conversationId.trim()),
+    [],
+  );
+
   const requestActiveConversationStop = useCallback(
     (conversationId: string, options: { force: boolean }) => {
       const key = conversationId.trim();
@@ -364,6 +370,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     consumeConversationStop,
     setConversationStopHandler,
     clearConversationStopHandler,
+    hasConversationStopHandler,
     requestActiveConversationStop,
     setConversationRunningState,
     setConversationSendingState,

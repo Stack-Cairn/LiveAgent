@@ -15,6 +15,8 @@ export type SidebarConversation = {
   pinnedAt?: number | null;
   isShared?: boolean;
   selectedModelJson?: string;
+  /** Backend session ID of the conversation this one was branched from. */
+  forkedFromSessionId?: string;
   // Local-only draft/persisting row; survives authoritative reconciles until
   // the backend confirms (an upsert event clears it) or it is removed locally.
   isPending?: boolean;
@@ -26,11 +28,12 @@ export type SidebarWorkdirSummary = {
   updatedAt: number;
 };
 
-// "none" means agent mode with no project selected: it resolves to an empty
-// list locally, without a backend round-trip and without a wire sentinel.
+// "all" is used by backends whose sessions are globally scoped; "none" means
+// agent mode with no project selected and resolves to an empty list locally.
 export type SidebarScope =
   | { kind: "workdir"; cwd: string }
   | { kind: "unscoped" }
+  | { kind: "all" }
   | { kind: "none" };
 
 export type SidebarListStatus = "initial" | "loading" | "syncing" | "ready";
@@ -55,8 +58,21 @@ export type SidebarRunningItem = {
 };
 
 export type SidebarBackendEvent =
-  | { kind: "upsert"; conversationId: string; conversation: SidebarConversation }
-  | { kind: "delete"; conversationId: string }
+  | {
+      kind: "reset";
+      conversations: SidebarConversation[];
+      workdirs?: SidebarWorkdirSummary[];
+      sourceIdentity?: string;
+    }
+  | {
+      kind: "upsert";
+      conversationId: string;
+      conversation: SidebarConversation;
+      /** Complete projection from the ordered snapshot/change stream. */
+      authoritative?: boolean;
+    }
+  | { kind: "delete"; conversationId: string; authoritative?: boolean }
+  | { kind: "workdirs"; workdirs: SidebarWorkdirSummary[] }
   | {
       kind: "running";
       conversationId: string;

@@ -32,6 +32,7 @@ import {
   gitDiscoveredRepositoryLabel,
   selectedGitRepositoryLabel,
 } from "@liveagent/ui/lib/git/types";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "../../../lib/shared/utils";
 import { SettingsToggleGroup, SettingsToggleGroupItem } from "../../settings/SettingsToggleGroup";
@@ -496,14 +497,14 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
       setBranches(response.branches);
     } catch (err) {
       if (requestIdRef.current !== requestId) return;
-      setBranchesError(err instanceof Error ? err.message : String(err));
+      setBranchesError(hostAwareErrorMessage(err, t("git.branchSelector.runtimeUnsupported")));
       setBranches([]);
     } finally {
       if (requestIdRef.current === requestId) {
         setBranchesLoading(false);
       }
     }
-  }, [cwd, gitClient]);
+  }, [cwd, gitClient, t]);
 
   const title = state.head || t("projectTools.gitReviewTitle");
   if (state.status !== "ready") {

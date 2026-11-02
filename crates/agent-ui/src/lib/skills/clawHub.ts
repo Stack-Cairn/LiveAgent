@@ -1,4 +1,5 @@
 import { hubFetch } from "../hubFetch";
+import { getResourceHostCapabilities } from "../resourceHost";
 
 export type ClawHubSort = "downloads" | "stars" | "installs" | "updated" | "newest";
 
@@ -84,7 +85,10 @@ export function normalizeClawHubSkillCard(raw: unknown): ClawHubSkillCard | null
     summary: asString(item.summary) ?? "",
     topics: asStringArray(item.topics),
     latestVersion:
-      asString(latestVersion.version) ?? asString(tags.latest) ?? asString(item.version),
+      asString(item.latestVersion) ??
+      asString(latestVersion.version) ??
+      asString(tags.latest) ??
+      asString(item.version),
     downloads: asNullableNumber(item.downloads) ?? asNullableNumber(stats.downloads) ?? 0,
     stars: asNullableNumber(item.stars) ?? asNullableNumber(stats.stars) ?? 0,
     installsCurrent:
@@ -160,6 +164,8 @@ export async function listClawHubSkills(params: {
   cursor?: string | null;
   limit?: number;
 }): Promise<ClawHubListResponse> {
+  const adapter = getResourceHostCapabilities().skillsAdapter;
+  if (adapter) return adapter.storeSearch({ ...params, cursor: params.cursor ?? undefined });
   const url = new URL("/api/v1/skills", CLAWHUB_API_BASE);
   url.searchParams.set("limit", String(params.limit ?? 24));
   url.searchParams.set("sort", params.sort);
@@ -184,6 +190,8 @@ export async function searchClawHubSkills(params: {
   query: string;
   limit?: number;
 }): Promise<ClawHubSkillCard[]> {
+  const adapter = getResourceHostCapabilities().skillsAdapter;
+  if (adapter) return (await adapter.storeSearch(params)).items;
   const url = new URL("/api/v1/search", CLAWHUB_API_BASE);
   url.searchParams.set("q", params.query);
   url.searchParams.set("limit", String(params.limit ?? 24));

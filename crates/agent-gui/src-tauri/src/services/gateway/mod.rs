@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
-use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::commands::git::GitCloneTaskRegistry;
@@ -26,7 +25,6 @@ use crate::runtime::sftp::SftpSessionRegistry;
 use crate::runtime::terminal::TerminalSessionRegistry;
 use crate::services::automation::AutomationStore;
 use crate::services::chat_run_ledger::ChatRunLedger;
-use crate::services::memory::MemoryStore;
 use crate::services::provider_usage::ProviderUsageService;
 use crate::services::tunnel::{TunnelProxy, TunnelStore};
 use crate::services::workspace_watch::WorkspaceWatchService;
@@ -47,10 +45,14 @@ mod chat_inbox;
 mod chat_ingress;
 mod chat_ingress_transport;
 mod clarify;
+mod composer_action;
 mod connection;
 mod controller;
 mod envelope_handler;
 mod history_sync;
+mod kbrain_history;
+mod kbrain_ai_approval;
+mod kbrain_memory;
 mod managed_process;
 mod settings_sync;
 mod sftp;
@@ -65,6 +67,7 @@ pub(crate) use chat::*;
 pub(crate) use chat_inbox::*;
 pub(crate) use chat_ingress::*;
 pub(crate) use clarify::*;
+pub(crate) use composer_action::*;
 pub(crate) use connection::*;
 pub(crate) use history_sync::*;
 pub use history_sync::{build_history_sync_delete, build_history_sync_upsert};
@@ -123,19 +126,20 @@ pub(crate) const GATEWAY_CHAT_CHECKPOINT_REQUESTED_EVENT: &str =
 pub struct GatewayController {
     app_handle: tauri::AppHandle,
     automation_store: Arc<AutomationStore>,
-    memory_store: Arc<MemoryStore>,
     provider_usage_service: Arc<ProviderUsageService>,
     terminal_registry: Arc<TerminalSessionRegistry>,
     sftp_registry: Arc<SftpSessionRegistry>,
     managed_process_registry: Arc<ManagedProcessRegistry>,
     pub(crate) git_clone_task_registry: Arc<GitCloneTaskRegistry>,
     config_tx: watch::Sender<RemoteSettingsPayload>,
+    local_gateway: Arc<crate::services::local_gateway::LocalGatewayManager>,
     runner_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     status: Mutex<GatewayStatusSnapshot>,
     outbound_tx: Mutex<Option<GatewayOutboundSender>>,
     outbound_control_tx: Mutex<Option<GatewayOutboundSender>>,
     terminal_stream_tx: Mutex<Option<mpsc::Sender<proto::TerminalStreamFrame>>>,
-    settings_snapshot: Mutex<Option<Value>>,
+    settings_snapshot: Mutex<SettingsSnapshotCache>,
+    applied_settings_client_seqs: Mutex<AppliedClientSeqs>,
     remote_chat_inbox: Mutex<HashMap<String, RemoteChatInboxRecord>>,
     chat_run_ledger: Mutex<ChatRunLedger>,
     runtime_status_republish: Mutex<Option<RuntimeStatusRepublishRecord>>,
@@ -144,8 +148,8 @@ pub struct GatewayController {
     pub(crate) tunnel_proxy: TunnelProxy,
     pub(crate) workspace_watch: Arc<WorkspaceWatchService>,
     pending_chat_queue_requests: Mutex<HashMap<String, oneshot::Sender<proto::ChatQueueResponse>>>,
-    pending_clarify_turns:
-        Mutex<HashMap<String, oneshot::Sender<proto::ClarifyTurnResponse>>>,
+    pending_clarify_turns: Mutex<HashMap<String, oneshot::Sender<proto::ClarifyTurnResponse>>>,
+    pending_composer_actions: Mutex<HashMap<String, oneshot::Sender<ComposerActionOutcome>>>,
     chat_ingress: ChatIngressMirror,
     chat_ingress_flush_lock: tokio::sync::Mutex<()>,
     terminal_forwarder_once: Once,

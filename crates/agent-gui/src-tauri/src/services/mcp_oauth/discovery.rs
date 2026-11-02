@@ -77,9 +77,7 @@ pub fn parse_resource_metadata_param(header: &str) -> Option<String> {
         let value = quoted[..end].trim();
         return (!value.is_empty()).then(|| value.to_string());
     }
-    let end = rest
-        .find([',', ' ', '\t'])
-        .unwrap_or(rest.len());
+    let end = rest.find([',', ' ', '\t']).unwrap_or(rest.len());
     let value = rest[..end].trim();
     (!value.is_empty()).then(|| value.to_string())
 }
@@ -200,9 +198,11 @@ pub fn discover(client: &Client, server_url_raw: &str) -> Result<Discovered, Str
 
     // 2) issuer：PRM 声明优先，拿不到退旧规范（AS = server origin）。
     let (issuer, scopes_supported, legacy_issuer) = match prm {
-        Some(doc) if !doc.authorization_servers.is_empty() => {
-            (doc.authorization_servers[0].clone(), doc.scopes_supported, false)
-        }
+        Some(doc) if !doc.authorization_servers.is_empty() => (
+            doc.authorization_servers[0].clone(),
+            doc.scopes_supported,
+            false,
+        ),
         Some(doc) => {
             let origin = origin_of(&server_url).to_string();
             (
@@ -304,7 +304,10 @@ mod tests {
             Some("https://s.example.com/x".to_string())
         );
         assert_eq!(parse_resource_metadata_param("Bearer realm=\"mcp\""), None);
-        assert_eq!(parse_resource_metadata_param("Bearer resource_metadata=\"\""), None);
+        assert_eq!(
+            parse_resource_metadata_param("Bearer resource_metadata=\"\""),
+            None
+        );
     }
 
     #[test]

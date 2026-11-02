@@ -50,10 +50,15 @@ export type GatewaySettingsSyncCustomSettings = Partial<AppSettings["customSetti
 export type GatewaySttSecretUpdate = AppSettings["stt"];
 
 export type GatewaySettingsSyncPayload = {
+  aiApproval?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").AIApprovalConfig;
+  computer?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainComputerConfig;
+  /** K-brain memory master switch, distinct from LiveAgent's `memory` organizer settings. */
+  kbrainMemory?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainMemoryConfig;
   system: AppSettings["system"];
   customProviders: GatewaySettingsSyncProvider[];
   mcp: AppSettings["mcp"];
   agents: AppSettings["agents"];
+  projectPrompts?: Record<string, { prompt: string; strategy: "append" | "replace" }>;
   ssh: AppSettings["ssh"];
   remote?: Pick<
     AppSettings["remote"],
@@ -78,7 +83,29 @@ export type GatewaySettingsSyncPayload = {
   systemProxyPasswordUpdate?: string;
   /** WebUI → 桌面端的一次性 STT 凭据更新；任何公开广播前必须移除。 */
   sttSecretUpdate?: GatewaySttSecretUpdate;
+  /** WebUI → 桌面端：本次更新的标签页标识与递增序号；桌面端取出后不入快照。 */
+  syncClient?: GatewaySettingsSyncClient;
+  /** 桌面端 → WebUI：每个标签页已处理到的最高序号。键存在即表示桌面端支持回执。 */
+  appliedClientSeqs?: GatewaySettingsAppliedClientSeqs;
+  /** 桌面端 → WebUI：快照对应的缓存版本；epoch 每个桌面进程一个，generation 单调递增。 */
+  settingsSyncVersion?: GatewaySettingsSyncVersion;
 };
+export type GatewaySettingsSyncVersion = { epoch: string; generation: number };
+export type GatewaySettingsSyncClient = { id: string; seq: number };
+export type GatewaySettingsSyncAck = GatewaySettingsSyncClient & { error?: string };
+export type GatewaySettingsAppliedClientSeqs = Record<string, { seq: number; error?: string }>;
+
+/** 桌面端转来的 WebUI 更新所带的标签页序号；格式不对一律当作没有。 */
+export function readGatewaySettingsSyncClient(payload: unknown): GatewaySettingsSyncClient | null {
+  const marker = (payload as { syncClient?: unknown } | null)?.syncClient as
+    | Partial<GatewaySettingsSyncClient>
+    | undefined;
+  if (!marker || typeof marker.id !== "string" || !marker.id.trim()) return null;
+  if (typeof marker.seq !== "number" || !Number.isSafeInteger(marker.seq) || marker.seq <= 0) {
+    return null;
+  }
+  return { id: marker.id, seq: marker.seq };
+}
 export type GatewaySettingsSyncUpdatePayload = Partial<GatewaySettingsSyncPayload>;
 
 const GATEWAY_SETTINGS_SYNC_FIELDS = [
@@ -185,6 +212,10 @@ export function redactSettingsForWebStorage(settings: AppSettings): AppSettings 
     },
     customProviders: redactCustomProvidersForWebStorage(settings.customProviders),
     ssh: redactSshSettingsForWebStorage(settings.ssh),
+    remote: {
+      ...settings.remote,
+      localGatewayToken: "",
+    },
     stt: redactSttSettingsForWebStorage(settings.stt),
   });
 }
@@ -508,7 +539,7 @@ function syncableCustomSettings(
     chatFontFamily: "",
     codeFontFamily: "",
     chatTranscript: { width: DEFAULT_CHAT_TRANSCRIPT_WIDTH },
-    fontScale: { sidebar: 1, chat: 1, rightDock: 1 },
+    fontScale: { sidebar: 1, chat: 1, rightDock: 1, settings: 1 },
   };
 }
 
@@ -1297,11 +1328,29 @@ export function applyGatewaySettingsSyncPayload(
     : current.customSettings;
   const incomingCustomSettings = customSettings as GatewaySettingsSyncCustomSettings;
 
+  const mergedSystem = Object.hasOwn(source, "system")
+    ? mergeSyncedSystemSettings(current.system, source.system, systemProxyPasswordUpdate)
+    : current.system;
+  const projectResources = { ...mergedSystem.workspaceResourceSettings };
+  if (source.projectPrompts && typeof source.projectPrompts === "object") {
+    for (const [path, entry] of Object.entries(projectResources)) {
+      projectResources[path] = { ...entry, projectPrompt: "", projectPromptStrategy: "append" };
+    }
+    for (const [path, value] of Object.entries(asObject(source.projectPrompts))) {
+      const project = asObject(value);
+      if (typeof project.prompt !== "string") continue;
+      const key = workspaceProjectPathKey(path);
+      projectResources[key] = {
+        ...projectResources[key],
+        projectPrompt: project.prompt,
+        projectPromptStrategy: project.strategy === "replace" ? "replace" : "append",
+      } as AppSettings["system"]["workspaceResourceSettings"][string];
+    }
+  }
+
   return normalizeSettings({
     ...current,
-    system: Object.hasOwn(source, "system")
-      ? mergeSyncedSystemSettings(current.system, source.system, systemProxyPasswordUpdate)
-      : current.system,
+    system: { ...mergedSystem, workspaceResourceSettings: projectResources },
     customProviders: mergeSyncedCustomProviders(
       current.customProviders,
       source.customProviders,

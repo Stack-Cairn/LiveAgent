@@ -3,12 +3,16 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,10 +27,45 @@ import (
 	"github.com/liveagent/agent-gateway/internal/stt"
 )
 
+type httpHandler struct {
+	http.Handler
+	closeOnce sync.Once
+	protocol  *pbws.Server
+}
+
+func (h *httpHandler) Close() error {
+	h.closeOnce.Do(h.protocol.Close)
+	return nil
+}
+
 // NewHTTPServer 构造 HTTP 路由；生产启动时 tokens 始终是已初始化的 Agent 目录与凭证存储。
 func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store, sttManagers ...*stt.Manager) http.Handler {
+	return NewHTTPServerWithLocalImages(cfg, sm, tokens, NewLocalImageHub(cfg), sttManagers...)
+}
+
+// NewHTTPServerWithImages accepts an explicitly configured trusted identity
+// adapter. The shared management bearer alone never enables image delegation.
+func NewHTTPServerWithImages(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store, images *handler.ImageGateway, sttManagers ...*stt.Manager) http.Handler {
+	return NewHTTPServerWithLocalImages(cfg, sm, tokens, fixedImageHub(cfg, images), sttManagers...)
+}
+
+// NewHTTPServerWithLocalImages serves Image Studio through a hub the owning
+// desktop can rebind at runtime (see WatchDesktopParent).
+func NewHTTPServerWithLocalImages(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store, images *LocalImageHub, sttManagers ...*stt.Manager) http.Handler {
 	rootMux := http.NewServeMux()
-	rootMux.HandleFunc("GET /healthz", handler.Health())
+	rootMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		// A public health response must never convince the desktop to adopt an
+		// unrelated listener. Only the child given this launch nonce can return it.
+		// Send only a one-way launch probe, never the Gateway access token: a
+		// different listener could win the race between reservation and bind.
+		probe := sha256.Sum256([]byte(cfg.InstanceNonce))
+		if cfg.InstanceNonce != "" && subtle.ConstantTimeCompare(
+			[]byte(r.Header.Get("X-LiveAgent-Instance-Probe")), []byte(hex.EncodeToString(probe[:])),
+		) == 1 {
+			w.Header().Set("X-LiveAgent-Instance", cfg.InstanceNonce)
+		}
+		handler.Health()(w, r)
+	})
 
 	// v2 统一协议（WebSocket+Protobuf）三链路。
 	v2 := pbws.NewServer(cfg, sm, tokens)
@@ -44,8 +83,13 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 	rootMux.HandleFunc("/t/", publicTunnelProxy(sm))
 	rootMux.HandleFunc("GET /image-proxy", handler.ImageProxy(cfg.RequestTimeout))
 	rootMux.HandleFunc("GET /api/public/history-shares/{token}", publicHistoryShare(cfg, sm))
+	// Public: the runtime model catalog is published data; WebUI fetches it before sign-in.
+	rootMux.Handle("GET /api/public/model-catalog", handler.NewModelCatalogProxy(cfg.ModelCatalogURL, cfg.RequestTimeout))
 
 	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("GET /api/image/identity", images.identity())
+	apiMux.Handle("/api/image/", images)
+	apiMux.Handle("/api/image", images)
 	apiMux.HandleFunc("GET /api/status", handler.Status(sm))
 	apiMux.HandleFunc("POST /api/files/import", handler.ImportReadableFiles(sm, cfg.RequestTimeout))
 	apiMux.HandleFunc("POST /api/files/import-directory", handler.ImportDirectory(sm, cfg.RequestTimeout))
@@ -103,7 +147,7 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 		serveIndex(w, r)
 	})
 
-	return rootMux
+	return &httpHandler{Handler: rootMux, protocol: v2}
 }
 
 func isWebUIStaticAssetPath(cleanPath string) bool {

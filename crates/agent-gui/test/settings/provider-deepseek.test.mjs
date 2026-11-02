@@ -42,6 +42,7 @@ test("CC Switch imports DeepSeek with native search enabled", () => {
       apiKey: "sk-test",
       requestFormat: "openai-completions",
       models: ["deepseek-v4-flash"],
+      customHeaders: [{ key: "X-Imported", value: "ccswitch" }],
     },
     new Set(),
   );
@@ -51,6 +52,7 @@ test("CC Switch imports DeepSeek with native search enabled", () => {
   assert.equal(provider.promptCachingEnabled, false);
   assert.equal(provider.nativeWebSearchEnabled, true);
   assert.deepEqual(provider.activeModels, ["deepseek-v4-flash"]);
+  assert.deepEqual(provider.customHeaders, [{ key: "X-Imported", value: "ccswitch" }]);
 });
 
 test("Cherry DeepSeek imports disable cache but preserve explicit native-search preferences", () => {
@@ -69,6 +71,7 @@ test("Cherry DeepSeek imports disable cache but preserve explicit native-search 
     reason: "",
     warning: "",
     excludedModelCount: 0,
+    customHeaders: [{ key: "X-Imported", value: "cherry" }],
   };
   const provider = providerImports.providerFromCherry(item, [item], {
     id: "cherry-studio-deepseek-source-deepseek-chat",
@@ -86,4 +89,5 @@ test("Cherry DeepSeek imports disable cache but preserve explicit native-search 
   assert.equal(provider.requestFormat, undefined);
   assert.equal(provider.promptCachingEnabled, false);
   assert.equal(provider.nativeWebSearchEnabled, true);
+  assert.deepEqual(provider.customHeaders, [{ key: "X-Imported", value: "cherry" }]);
 });

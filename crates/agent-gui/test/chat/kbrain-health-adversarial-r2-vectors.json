@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "source": "Adversarial review round 2. Bodies are base64 so byte-level encoding reaches each host unchanged. RFC 8259 section 8.1: JSON text exchanged between systems MUST be UTF-8 and implementations MUST NOT add a BOM. Rust rejects both rows and Go rejects the BOM row; Go replaces invalid bytes with U+FFFD, and the TS host decodes through response.json(), which strips the BOM and replaces invalid bytes with U+FFFD.",
+  "bodies": [
+    {
+      "name": "UTF-8 BOM before a valid legacy body",
+      "base64": "77u/eyJzdGF0dXMiOiJvayIsInZlcnNpb24iOiJrYnJhaW4uYWdlbnQudjEifQ==",
+      "expect": "reject"
+    },
+    {
+      "name": "invalid UTF-8 byte inside instanceId",
+      "base64": "eyJzdGF0dXMiOiJvayIsInZlcnNpb24iOiJrYnJhaW4uYWdlbnQudjEiLCJwcm90b2NvbCI6eyJuYW1lIjoia2JyYWluLmFnZW50IiwibWFqb3IiOjEsIm1pbm9yIjoxfSwiaW5zdGFuY2VJZCI6Iv8ifQ==",
+      "expect": "reject"
+    }
+  ]
+}

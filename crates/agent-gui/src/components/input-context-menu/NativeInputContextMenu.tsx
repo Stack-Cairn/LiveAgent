@@ -70,6 +70,7 @@ export function useNativeInputContextMenu(): {
   const { t } = useLocale();
   const [snapshot, setSnapshot] = useState<InputMenuSnapshot | null>(null);
   const targetRef = useRef<MenuTarget | null>(null);
+  const selectionEpoch = useRef(0);
 
   // Selection captured on right-mousedown, before WebKit's context-menu
   // preparation mutates it (see onRootMouseDownCapture).
@@ -82,6 +83,7 @@ export function useNativeInputContextMenu(): {
   } | null>(null);
 
   const closeMenu = useCallback(() => {
+    selectionEpoch.current++;
     setSnapshot(null);
   }, []);
 
@@ -173,8 +175,10 @@ export function useNativeInputContextMenu(): {
       }
       // Some WebKit paths apply the contextual selection after dispatching
       // contextmenu — re-pin once on the next frame (no-op when it stuck).
+      const epoch = ++selectionEpoch.current;
       requestAnimationFrame(() => {
-        if (targetRef.current !== target || !target.isConnected) return;
+        if (selectionEpoch.current !== epoch || targetRef.current !== target || !target.isConnected)
+          return;
         try {
           target.setSelectionRange(start, end);
         } catch {

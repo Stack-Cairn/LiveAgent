@@ -138,12 +138,22 @@ export type TerminalStreamClient = {
   attach(session: TerminalSession, options?: { maxBytes?: number }): Promise<TerminalStreamHandle>;
 };
 
+export type TerminalRequestIdentity = {
+  conversationId: string;
+  runId: string;
+};
+
 export type TerminalClient = {
   shellOptions(): Promise<TerminalShellOptions>;
-  list(projectPathKey?: string): Promise<TerminalSession[]>;
+  list(
+    projectPathKey?: string,
+    identity?: Partial<TerminalRequestIdentity>,
+  ): Promise<TerminalSession[]>;
   create(params: {
     cwd: string;
     projectPathKey: string;
+    conversationId?: string;
+    runId?: string;
     shell?: string;
     title?: string;
     cols?: number;

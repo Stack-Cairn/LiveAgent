@@ -1,8 +1,20 @@
 name: Update Model Catalog
 
+# Refreshes the bundled snapshot (offline/first-launch fallback). Runtime
+# updates reach clients through publish-model-catalog.yml without a release.
+#
+# Pull requests opened with the default GITHUB_TOKEN wait for maintainer
+# approval before CI runs (conclusion action_required). When the repository
+# variable MODEL_CATALOG_APP_ID and secret MODEL_CATALOG_APP_PRIVATE_KEY are
+# configured, the PR is opened as that GitHub App so CI starts on its own; with
+# MODEL_CATALOG_AUTO_MERGE=true (and "Allow auto-merge" enabled in repository
+# settings) it also merges itself once required checks pass. Without the App
+# the workflow behaves as before.
+
 on:
   schedule:
     - cron: "17 3 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -32,9 +44,19 @@ jobs:
       - name: Refresh model catalog
         run: node scripts/generate-model-catalog.mjs
 
+      - name: Create GitHub App token
+        id: app-token
+        if: ${{ vars.MODEL_CATALOG_APP_ID != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.MODEL_CATALOG_APP_ID }}
+          private-key: ${{ secrets.MODEL_CATALOG_APP_PRIVATE_KEY }}
+
       - name: Create or update model catalog PR
+        id: cpr
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
           base: main
           branch: automation/model-catalog-refresh
           delete-branch: true
@@ -42,3 +64,14 @@ jobs:
           commit-message: "chore(models): refresh model catalog"
           title: "chore(models): refresh model catalog"
           labels: governance-exempt
+
+      - name: Enable auto-merge
+        if: >-
+          ${{ steps.app-token.outputs.token != '' &&
+              vars.MODEL_CATALOG_AUTO_MERGE == 'true' &&
+              steps.cpr.outputs.pull-request-number != '' &&
+              steps.cpr.outputs.pull-request-operation != 'closed' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash

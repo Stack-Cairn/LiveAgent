@@ -1,24 +1,74 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const invokeCalls = [];
-const loader = createTsModuleLoader({
-  mocks: {
-    "@tauri-apps/api/core": {
-      invoke(command, args) {
-        invokeCalls.push({ command, args });
-        return Promise.resolve({
-          data: [{ planName: "Balance", remaining: 4.2, unit: "USD" }],
-          queriedAt: 123,
-          error: null,
-          isStale: false,
-        });
-      },
-    },
-  },
-});
+const usageRequests = [];
+let usageFixture;
+const loader = createTsModuleLoader();
+const runtime = loader.loadModule("src/lib/kbrain/runtimeConnection.ts");
 const usage = loader.loadModule("src/lib/providers/usageQuery.ts");
+
+async function startUsageFixture() {
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const raw = Buffer.concat(chunks).toString("utf8");
+    const body = raw ? JSON.parse(raw) : null;
+    usageRequests.push({ method: request.method, path: request.url, headers: request.headers, body });
+
+    if (request.headers.authorization !== "Bearer fixture-token") {
+      response.writeHead(401, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "unauthorized" }));
+      return;
+    }
+    if (request.method === "POST" && request.url === "/v1/providers/provider-a/usage") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        data: [{ planName: "Balance", remaining: 4.2, unit: "USD" }],
+        queriedAt: 123,
+        error: null,
+        isStale: false,
+      }));
+      return;
+    }
+    if (request.method === "POST" && request.url === "/v1/providers/provider-a/usage/test") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        data: [{ planName: "Draft", remaining: 2, unit: "USD" }],
+        queriedAt: 456,
+        error: null,
+        isStale: false,
+      }));
+      return;
+    }
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "unexpected usage request" }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+  };
+}
+
+test.before(async () => {
+  usageFixture = await startUsageFixture();
+});
+
+test.beforeEach(() => {
+  usageRequests.length = 0;
+  runtime.setKBrainRuntimeConnection({
+    baseUrl: usageFixture.baseUrl,
+    token: "fixture-token",
+    protocolVersion: "kbrain.agent.v1",
+  });
+});
+
+test.after(async () => {
+  runtime.clearKBrainRuntimeConnection();
+  await usageFixture.close();
+});
 
 test("failed refresh retains prior values and marks result stale", () => {
   const state = usage.reduceUsageState(
@@ -59,34 +109,36 @@ test("a legacy result without data is coerced to an empty array", () => {
 });
 
 test("manual refresh queries only the requested provider", async () => {
-  invokeCalls.length = 0;
-
   await usage.queryProviderUsage("provider-a", true);
 
-  assert.deepEqual(invokeCalls, [
+  assert.deepEqual(usageRequests.map(({ method, path, body }) => ({ method, path, body })), [
     {
-      command: "provider_usage_query",
-      args: { providerId: "provider-a", refresh: true },
+      method: "POST",
+      path: "/v1/providers/provider-a/usage",
+      body: { refresh: true },
     },
   ]);
+  assert.equal(usageRequests[0].headers.authorization, "Bearer fixture-token");
 });
 
 test("draft test sends the editor config verbatim regardless of the enable switch", async () => {
-  invokeCalls.length = 0;
-
-  await usage.testProviderUsage("provider-a", {
+  const config = {
     enabled: false,
     mode: "custom",
     script: "({ request: {}, extractor: () => ({}) })",
-  });
+  };
+  await usage.testProviderUsage("provider-a", config);
 
-  assert.equal(invokeCalls.length, 1);
-  assert.equal(invokeCalls[0].command, "provider_usage_test");
-  assert.equal(invokeCalls[0].args.providerId, "provider-a");
-  const draft = JSON.parse(invokeCalls[0].args.configJson);
-  assert.equal(draft.mode, "custom");
-  // 草稿原样传输,启用与否由桌面端测试路径忽略。
-  assert.equal(draft.enabled, false);
+  assert.deepEqual(usageRequests.map(({ method, path, body }) => ({ method, path, body })), [
+    {
+      method: "POST",
+      path: "/v1/providers/provider-a/usage/test",
+      body: { config },
+    },
+  ]);
+  // 草稿原样传输,启用与否由后端测试路径忽略。
+  assert.equal(usageRequests[0].body.config.mode, "custom");
+  assert.equal(usageRequests[0].body.config.enabled, false);
 });
 
 test("batch refresh targets every provider with usage query enabled", () => {

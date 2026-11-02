@@ -539,6 +539,14 @@ impl GatewayController {
                 &error_code,
                 &message,
             )?;
+            self.send_gateway_chat_control_event_with_details(
+                request_id,
+                conversation_id,
+                "failed",
+                error_code,
+                message,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -727,11 +735,7 @@ impl GatewayController {
                 .map(chat_run_report_from_entry)
                 .collect(),
         );
-        match self.send_agent_envelope(envelope).await {
-            Ok(()) => Ok(()),
-            Err(error) if error.contains("outbound stream is offline") => Ok(()),
-            Err(error) => Err(error),
-        }
+        ignore_gateway_outbound_offline(self.send_agent_envelope(envelope).await)
     }
 
     pub fn release_chat_request_lease(

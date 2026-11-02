@@ -13,18 +13,19 @@ import {
   Key,
   Mic,
   Settings2,
-  SquareMousePointer,
+  ShieldCheck,
   Wrench,
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SettingsSectionDefinition, UiExtensionRegistry } from "../../contracts/registry";
 import { AgentsSection } from "./AgentsSection";
+import { AIApprovalSection } from "./AIApprovalSection";
 import { CalendarSection } from "./CalendarSection";
 import { CronSection } from "./CronSection";
-import { CuaDriverSection } from "./CuaDriverSection";
 import { HooksSection } from "./HooksSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
+import { PermissionRulesSection } from "./PermissionRulesSection";
 import { ProvidersSection } from "./ProvidersSection";
 import { RemoteSection } from "./RemoteSection";
 import { ResourceHubSection } from "./ResourceHubSection";
@@ -51,6 +52,9 @@ export function SettingsPage(props: SettingsPageProps) {
     hiddenSections = [],
     sttSettingsService,
     onSttProviderChange,
+    rejectedLegacyProviders,
+    onRetryRejectedLegacyProviders,
+    onDismissRejectedLegacyProviders,
   } = props;
   const [pendingProviderId, setPendingProviderId] = useState(initialProviderId);
   const [sttSelectedProvider, setSttSelectedProvider] = useState<SttProviderId>(
@@ -61,7 +65,6 @@ export function SettingsPage(props: SettingsPageProps) {
   );
   const sttSelectionChangedRef = useRef(STT_SELECTED_PROVIDER_CACHE.has(sttSettingsService));
   const extension = createSettingsExtension(props);
-
   useEffect(() => setPendingProviderId(initialProviderId), [initialProviderId]);
   useEffect(() => {
     if (!sttSelectionChangedRef.current) {
@@ -104,6 +107,9 @@ export function SettingsPage(props: SettingsPageProps) {
             setSettings={setSettings}
             initialProviderId={pendingProviderId}
             onInitialProviderHandled={() => setPendingProviderId(undefined)}
+            rejectedLegacyProviders={rejectedLegacyProviders}
+            onRetryRejectedLegacyProviders={onRetryRejectedLegacyProviders}
+            onDismissRejectedLegacyProviders={onDismissRejectedLegacyProviders}
           />
         ),
       },
@@ -155,6 +161,7 @@ export function SettingsPage(props: SettingsPageProps) {
             workdir={settings.system.workdir}
             settings={settings}
             setSettings={setSettings}
+            kbrain={props.settingsHost?.kbrain}
           />
         ),
       },
@@ -165,26 +172,30 @@ export function SettingsPage(props: SettingsPageProps) {
         order: 20,
         labelKey: "settings.navSystemTools",
         icon: <Wrench className={extension.iconClassName} />,
-        render: () => <SystemToolsSection settings={settings} setSettings={setSettings} />,
-      },
-      {
-        // Computer Use（CUA）。两端同一份引导页：探测与授权状态经宿主真实读取
-        // （WebUI 走 gateway 中继），设置项两端同样可写，只有安装与授权两个必须
-        // 在桌面主机那台机器上完成的动作在 web 面收起——判定交给组件的 surface。
-        id: "cua",
-        groupKey: "settings.groupIntelligence",
-        groupOrder: 25,
-        order: 25,
-        labelKey: "settings.navCua",
-        icon: <SquareMousePointer className={extension.iconClassName} />,
         render: () => (
-          <CuaDriverSection
-            settings={settings}
-            setSettings={setSettings}
-            surface={extension.surface}
-          />
+          <div className="space-y-7">
+            {props.settingsHost?.kbrain && <AIApprovalSection kbrain={props.settingsHost.kbrain} />}
+            <SystemToolsSection settings={settings} setSettings={setSettings} />
+          </div>
         ),
       },
+      // Only hosts that can reach the K-brain rules API get the page.
+      ...(props.settingsHost?.kbrain?.listPermissionRules
+        ? [
+            {
+              id: "permissions",
+              groupKey: "settings.groupIntelligence",
+              groupOrder: 25,
+              order: 25,
+              labelKey: "settings.navPermissions",
+              icon: <ShieldCheck className={extension.iconClassName} />,
+              render: () =>
+                props.settingsHost?.kbrain ? (
+                  <PermissionRulesSection kbrain={props.settingsHost.kbrain} settings={settings} />
+                ) : null,
+            } satisfies SettingsSectionDefinition<void>,
+          ]
+        : []),
       {
         id: "stt",
         groupKey: "settings.groupIntelligence",
@@ -239,12 +250,22 @@ export function SettingsPage(props: SettingsPageProps) {
         order: 20,
         labelKey: "settings.navRemote",
         icon: <Cloud className={extension.iconClassName} />,
-        render: () => <RemoteSection settings={settings} setSettings={setSettings} />,
+        render: () => (
+          <RemoteSection
+            settings={settings}
+            setSettings={setSettings}
+            surface={extension.surface}
+          />
+        ),
       },
       ...extension.sections,
     ],
     [
       extension,
+      props.settingsHost,
+      rejectedLegacyProviders,
+      onRetryRejectedLegacyProviders,
+      onDismissRejectedLegacyProviders,
       handleSttProviderChange,
       pendingProviderId,
       saveState,
@@ -267,8 +288,9 @@ export function SettingsPage(props: SettingsPageProps) {
       context={undefined}
       saveState={saveState}
       onBack={onBack}
-      initialSection={initialSection}
+      initialSection={initialSection === "image-studio" ? "providers" : initialSection}
       hiddenSections={hiddenSections}
+      fontScale={settings.customSettings.fontScale.settings}
     />
   );
 }

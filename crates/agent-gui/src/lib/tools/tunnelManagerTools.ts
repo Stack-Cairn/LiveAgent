@@ -1,4 +1,5 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import { asRecord } from "@liveagent/ui/lib/shared/value";
 import {
   composePublicUrl,
@@ -7,7 +8,6 @@ import {
   type TunnelStatus,
   type TunnelTtlSeconds,
 } from "@liveagent/ui/lib/tunnels/constants";
-import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 

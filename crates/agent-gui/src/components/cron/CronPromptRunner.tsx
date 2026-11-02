@@ -1,33 +1,12 @@
-import type { Context } from "@earendil-works/pi-ai";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import type { CompletePromptRunInput, PromptRunRequest } from "@liveagent/ui/lib/automation/index";
-import {
-  buildSkillsSystemPrompt,
-  discoverSkills,
-  isAlwaysEnabledSkillName,
-  type SkillSummary,
-} from "@liveagent/ui/lib/skills/index";
-import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { backend } from "../../lib/automation/backend";
-import { runAssistantWithTools } from "../../lib/chat/runner/agentRunner";
-import { createStreamDebugLogger } from "../../lib/debug/agentDebug";
-import { assistantMessageToText, createProviderRuntimeConfig } from "../../lib/providers/llm";
-import { resolveRuntimePlatform } from "../../lib/runtimePlatform";
-import {
-  type AppSettings,
-  DEFAULT_CHAT_RUNTIME_CONTROLS,
-  filterMcpSettingsForWorkspace,
-  isAgentDevMode,
-  isAgentExecutionMode,
-  type ReasoningLevel,
-  resolveEffectivePromptSettings,
-  resolveWorkspaceResources,
-} from "../../lib/settings";
-import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
-import { createFileToolState } from "../../lib/tools/fileToolState";
-import { resolveShellSandboxSettings } from "../../lib/tools/sandboxPolicy";
-import type { SkillAccessPolicy } from "../../lib/tools/skillAccessPolicy";
-import { appendSystemPrompt } from "../../pages/chat";
+import { isKBrainBackendEnabled, isTauriHost } from "../../lib/host";
+import { getConfiguredKBrainConnection } from "../../lib/kbrain/runtimeConnection";
+import { runKBrainTurn } from "../../lib/kbrain/turn";
+import { assistantMessageToText } from "../../lib/providers/llm";
+import type { AppSettings } from "../../lib/settings";
 import {
   createCompletePromptRunInput,
   PROMPT_RUN_RECONCILE_INTERVAL_MS,
@@ -43,12 +22,16 @@ type CronPromptRunnerProps = {
   settings: AppSettings;
 };
 
+type CronPromptRunOptions = {
+  baseUrl?: string;
+  token?: string;
+  fetch?: typeof globalThis.fetch;
+};
+
 function buildCronSystemPrompt(taskName: string) {
   const lines = ["You are running a scheduled Auto Prompt task in LiveAgent."];
   const normalizedTaskName = taskName.trim();
-  if (normalizedTaskName) {
-    lines.push(`Task: ${normalizedTaskName}`);
-  }
+  if (normalizedTaskName) lines.push(`Task: ${normalizedTaskName}`);
   lines.push(
     "Return only the final conclusion for this run.",
     "Do not include raw JSON, tool calls, hidden reasoning, or intermediate execution logs.",
@@ -56,187 +39,58 @@ function buildCronSystemPrompt(taskName: string) {
   return lines.join("\n");
 }
 
-async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
-  const resources = resolveWorkspaceResources(settings, workdir);
-  const selectedSkillNames = resources.skillNames.filter((name) => !isAlwaysEnabledSkillName(name));
-  if (!resources.skillsEnabled || selectedSkillNames.length === 0) {
-    return {
-      enabled: false,
-      prompt: "",
-      rootDir: "",
-      accessPolicy: undefined as SkillAccessPolicy | undefined,
-    };
-  }
-
-  const discovery = await discoverSkills({ force: true });
-  const skillByName = new Map(discovery.skills.map((skill) => [skill.name, skill]));
-  const missing = selectedSkillNames.filter((name) => !skillByName.has(name));
-  if (missing.length > 0 && resources.mode !== "custom") {
-    throw new Error(`找不到以下 Skills：${missing.join(", ")}（请先重新扫描固定 Skills 目录）`);
-  }
-
-  const selectedSkills = selectedSkillNames
-    .map((name) => skillByName.get(name))
-    .filter((skill): skill is SkillSummary => Boolean(skill));
-  if (selectedSkills.length === 0) {
-    return {
-      enabled: false,
-      prompt: "",
-      rootDir: "",
-      accessPolicy: undefined as SkillAccessPolicy | undefined,
-    };
-  }
-
-  return {
-    enabled: true,
-    prompt: buildSkillsSystemPrompt({
-      rootDir: discovery.rootDir,
-      selected: selectedSkills,
-    }),
-    rootDir: discovery.rootDir,
-    accessPolicy: {
-      allowedSkillNames: selectedSkills.map((skill) => skill.name),
-      allowedSkillBaseDirs: selectedSkills.map((skill) => skill.baseDir),
-      allowSkillInventory: true,
-      allowSkillManagement: false,
-      allowSkillMutation: true,
-    },
-  };
-}
-
-const CRON_REASONING_LEVELS: ReasoningLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
-
 /**
- * Per-task thinking level from the queue row; empty/unknown values (e.g.
- * tasks saved before the field existed) fall back to the runtime default so
- * legacy tasks keep their pre-existing behavior.
+ * Runs one claimed prompt through the backend-owned K-brain session. The GUI
+ * deliberately supplies no tools or skill context; the Rust scheduler owns
+ * the lease and completion state machine.
  */
-function resolveCronReasoning(value: string | undefined): ReasoningLevel {
-  return value && (CRON_REASONING_LEVELS as string[]).includes(value)
-    ? (value as ReasoningLevel)
-    : DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning;
-}
-
-async function executeCronPromptRun(
-  settings: AppSettings,
+export async function executeCronPromptRun(
   request: PromptRunRequest,
   signal: AbortSignal,
+  options: CronPromptRunOptions = {},
 ) {
-  if (!isAgentExecutionMode(settings.system.executionMode)) {
-    throw new Error(
-      "Auto Prompt requires System -> Execution Mode to be Agent Mode or Agent Dev Mode.",
-    );
+  const workdir = request.workdir.trim();
+  if (!workdir) throw new Error("Scheduled Auto Prompt has no working directory.");
+  if (!request.providerId.trim() || !request.model.trim()) {
+    throw new Error("Scheduled Auto Prompt has an incomplete backend model.");
   }
-
-  // The request carries the workdir resolved at queue time (task pin or the
-  // global workdir); rows queued before that field existed fall back to the
-  // current global workdir.
-  const workdir = (request.workdir ?? "").trim() || settings.system.workdir.trim();
-  if (!workdir) {
-    throw new Error("Tool mode requires a project directory from the chat sidebar.");
-  }
-
-  const provider = settings.customProviders.find((item) => item.id === request.providerId);
-  if (!provider) {
-    throw new Error(`Auto Prompt provider is missing or has been removed: ${request.providerId}`);
-  }
-
-  const providerLabel = provider.name.trim() || provider.id;
-  if (!provider.baseUrl.trim()) {
-    throw new Error(`Auto Prompt provider base URL is empty: ${providerLabel}`);
-  }
-  if (!provider.apiKey.trim()) {
-    throw new Error(`Auto Prompt provider API key is empty: ${providerLabel}`);
-  }
-
-  const workspaceResources = resolveWorkspaceResources(settings, workdir);
-  const skillsContext = await buildCronSkillsContext(settings, workdir);
-  const activeAgentPrompt = resolveEffectivePromptSettings(settings, workdir).prompt;
-  const runtimePlatform = await resolveRuntimePlatform();
-  const builtinRegistry = await buildBuiltinToolRegistry({
-    workdir,
-    providerId: provider.type,
-    runtimePlatform,
-    fileState: createFileToolState(),
-    skillsEnabled: skillsContext.enabled,
-    skillsRootDir: skillsContext.rootDir,
-    skillAccessPolicy: skillsContext.accessPolicy,
-    sandbox: resolveShellSandboxSettings(settings.system.commandSafetyMode),
-    runtimeScope: "cron_auto_prompt",
-    currentChatModel: {
-      customProviderId: request.providerId,
-      model: request.model,
-    },
-    getMcpSettings: () => filterMcpSettingsForWorkspace(settings.mcp, workspaceResources),
-    mcpLoadFailureMode: "throw",
-  });
-
-  let systemPrompt = buildCronSystemPrompt(request.taskName);
-  if (activeAgentPrompt) {
-    systemPrompt = appendSystemPrompt(systemPrompt, activeAgentPrompt);
-  }
-  if (skillsContext.prompt) {
-    systemPrompt = appendSystemPrompt(systemPrompt, skillsContext.prompt);
-  }
-
-  const context: Context = {
-    systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: request.prompt.trim(),
-        timestamp: request.startedAt || Date.now(),
-      },
-    ],
-    tools: builtinRegistry.tools,
-  };
-
-  const debugLogger = createStreamDebugLogger({
-    enabled: isAgentDevMode(settings.system.executionMode),
-    conversationId: `cron-prompt-${request.executionId}`,
-    executionMode: settings.system.executionMode,
-    streamKind: "cron_auto_prompt",
-    providerId: provider.type,
-    model: request.model,
-  });
-
-  const result = await runAssistantWithTools({
-    providerId: provider.type,
-    model: request.model,
-    runtime: {
-      ...createProviderRuntimeConfig(provider, request.model, {
-        ...DEFAULT_CHAT_RUNTIME_CONTROLS,
-        reasoning: resolveCronReasoning(request.reasoning),
-      }),
-      // 后台定时任务恒开提示词缓存：与前台会话共享同一前缀，命中率远高于按
-      // 供应商开关逐个判断。
-      promptCachingEnabled: true,
-    },
-    runtimePlatform,
-    context,
-    workdir,
+  const connection = getConfiguredKBrainConnection();
+  const assistant = await runKBrainTurn({
+    conversationId: request.executionId,
     sessionId: request.executionId,
-    tools: builtinRegistry.tools,
-    executeToolCall: (toolCall, toolSignal) =>
-      builtinRegistry.executeToolCall(toolCall, toolSignal),
-    onTextDelta() {},
-    onToolStatus() {},
+    clientRequestId: request.executionId,
+    cwd: workdir,
+    model: { provider: request.providerId, model: request.model },
+    prompt: request.prompt.trim(),
+    context: {
+      systemPrompt: buildCronSystemPrompt(request.taskName),
+      messages: [
+        {
+          role: "user",
+          content: request.prompt.trim(),
+          timestamp: request.startedAt || Date.now(),
+        },
+      ],
+    },
     signal,
-    debugLogger,
+    baseUrl: options.baseUrl ?? connection?.baseUrl,
+    token: options.token ?? connection?.token,
+    fetch: options.fetch,
+    onTextDelta() {},
+    onThinkingDelta() {},
+    onToolCall() {},
+    onToolResult() {},
+    onPermissionRequest: async () => "reject",
   });
 
-  const conclusion = assistantMessageToText(result.assistant).trim();
-  if (!conclusion) {
-    throw new Error("Auto Prompt request returned an empty conclusion.");
+  if (signal.aborted || assistant.stopReason === "aborted") {
+    throw new Error("Scheduled Auto Prompt was cancelled.");
   }
+  if (assistant.stopReason !== "stop") {
+    throw new Error(assistant.errorMessage || "K-brain scheduled run failed.");
+  }
+  const conclusion = assistantMessageToText(assistant).trim();
+  if (!conclusion) throw new Error("Auto Prompt request returned an empty conclusion.");
   return conclusion;
 }
 
@@ -247,8 +101,7 @@ async function completeWithRetry(input: CompletePromptRunInput) {
       return;
     } catch (error) {
       if (attempt >= COMPLETION_RETRY_DELAYS_MS.length) {
-        // The Rust lease sweeper records the run as expired; nothing is lost
-        // silently, but the conclusion text is dropped.
+        // The Rust lease sweeper records the run as expired; nothing is lost silently.
         console.warn("Cron Auto Prompt completion failed permanently", error);
         return;
       }
@@ -261,18 +114,19 @@ async function completeWithRetry(input: CompletePromptRunInput) {
 
 /**
  * Executes prompt-type cron runs. The Rust store owns the queue: claiming is
- * an atomic pending->leased transition, so concurrent claims (StrictMode
- * double-mount, multiple polls) can never double-run a task, and completions
- * are idempotent against the lease state machine.
+ * an atomic pending->leased transition, so concurrent claims cannot double-run
+ * a task, and completions are idempotent against the lease state machine.
  */
-export function CronPromptRunner({ settings }: CronPromptRunnerProps) {
-  const settingsRef = useRef(settings);
-
+export function CronPromptRunner(_props: CronPromptRunnerProps) {
   useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
+    // Browser builds do not have the desktop automation host. In particular,
+    // do not start a reconcile timer that repeatedly emits invoke warnings.
+    if (
+      !isTauriHost() ||
+      (typeof isKBrainBackendEnabled === "function" && isKBrainBackendEnabled())
+    )
+      return;
 
-  useEffect(() => {
     let disposed = false;
     const abortControllers = new Map<string, AbortController>();
 
@@ -286,7 +140,7 @@ export function CronPromptRunner({ settings }: CronPromptRunnerProps) {
       let success = false;
       let output = "";
       try {
-        output = await executeCronPromptRun(settingsRef.current, request, controller.signal);
+        output = await executeCronPromptRun(request, controller.signal);
         success = true;
       } catch (error) {
         output = error instanceof Error ? error.message : String(error ?? "");
@@ -295,11 +149,7 @@ export function CronPromptRunner({ settings }: CronPromptRunnerProps) {
         abortControllers.delete(request.executionId);
       }
 
-      if (controller.signal.aborted && !success) {
-        // The lease sweeper on the Rust side records the timeout; a late
-        // completion would be answered with AlreadyFinished anyway.
-        return;
-      }
+      if (controller.signal.aborted && !success) return;
       await completeWithRetry(
         createCompletePromptRunInput(
           request.executionId,
@@ -319,16 +169,12 @@ export function CronPromptRunner({ settings }: CronPromptRunnerProps) {
         return;
       }
       if (disposed) {
-        // Claimed after unmount (StrictMode remount window): hand the runs
-        // back so the surviving runner instance picks them up.
         for (const request of claimed) {
           void backend.releasePromptRun(request.executionId).catch(() => undefined);
         }
         return;
       }
-      for (const request of claimed) {
-        void runClaimed(request);
-      }
+      for (const request of claimed) void runClaimed(request);
     }
 
     let claimInFlight: Promise<void> | null = null;
@@ -339,9 +185,7 @@ export function CronPromptRunner({ settings }: CronPromptRunnerProps) {
       });
     }
 
-    const unlistenPending = listen(PROMPT_PENDING_EVENT, () => {
-      requestClaim();
-    });
+    const unlistenPending = listen(PROMPT_PENDING_EVENT, requestClaim);
     const unlistenExpired = listen<{ executionId: string }>(PROMPT_EXPIRED_EVENT, (event) => {
       abortControllers.get(event.payload?.executionId ?? "")?.abort();
     });
@@ -353,9 +197,7 @@ export function CronPromptRunner({ settings }: CronPromptRunnerProps) {
       window.clearInterval(reconcileTimer);
       void unlistenPending.then((unlisten) => unlisten());
       void unlistenExpired.then((unlisten) => unlisten());
-      for (const controller of abortControllers.values()) {
-        controller.abort();
-      }
+      for (const controller of abortControllers.values()) controller.abort();
     };
   }, []);
 

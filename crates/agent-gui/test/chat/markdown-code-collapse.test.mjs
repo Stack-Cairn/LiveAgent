@@ -102,6 +102,8 @@ test("collapsed long code renders exactly 24 plain-text lines without the Stream
   const previewCode = findNode(preview, (node) => node.type === "code");
   assert.ok(previewCode);
   assert.deepEqual(previewCode.props.children.split("\n"), lines.slice(0, 24));
+  // 预览自动换行，必须按渲染高度限高，否则长行多行的“折叠”态仍会占满几屏。
+  assert.equal(preview.props.style?.maxHeight, 280);
 });
 
 test("expanding long code mounts the full Streamdown code child and removes the preview", () => {
@@ -142,4 +144,6 @@ test("very long single-line code stays out of Shiki and keeps a bounded text pre
   const previewCode = findNode(preview, (node) => node.type === "code");
   assert.ok(previewCode);
   assert.equal(previewCode.props.children.length, 8_000);
+  // 超长单行换行后会有上百行高：折叠态同样受渲染高度上限约束。
+  assert.equal(preview.props.style?.maxHeight, 280);
 });

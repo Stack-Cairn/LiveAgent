@@ -68,6 +68,7 @@ import {
 } from "@liveagent/ui/lib/skills/installedSort";
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentModeRequired } from "../../components/settings/AgentModeRequired";
+import { isUnsupportedResourceError, type ResourceHostCapabilities } from "../../lib/resourceHost";
 import { reconcileExternalToolScans } from "./externalSkillScanState";
 import {
   emptyInstalledSkillPreviewState,
@@ -130,11 +131,12 @@ type SkillsHubPageProps = {
   initialSkills?: SkillSummary[];
   initialRootDir?: string;
   isAgentMode: boolean;
+  resourceHost?: ResourceHostCapabilities;
   embedded?: boolean;
 };
 
 export function SkillsHubPage(props: SkillsHubPageProps) {
-  const { settings, setSettings, initialSkills, initialRootDir, isAgentMode } = props;
+  const { settings, setSettings, initialSkills, initialRootDir, isAgentMode, resourceHost } = props;
   const { t } = useLocale();
   const lockedByChatMode = !isAgentMode;
 
@@ -144,10 +146,15 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   );
   const [rootDir, setRootDir] = useState(initialRootDir ?? initialDiscovery?.rootDir ?? "");
   const [hasPresentedInstalledSkills, setHasPresentedInstalledSkills] = useState(false);
-  const [loading, setLoading] = useState(
-    !lockedByChatMode && initialSkills === undefined && initialDiscovery === null,
-  );
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [discoveryBackendManaged, setDiscoveryBackendManaged] = useState(false);
+  const backendManaged = resourceHost?.skillsBackendManaged === true || discoveryBackendManaged;
+  const [loading, setLoading] = useState(
+    !backendManaged &&
+      !lockedByChatMode &&
+      initialSkills === undefined &&
+      initialDiscovery === null,
+  );
   const toastScope = useId();
   useEffect(
     () => () => {
@@ -186,6 +193,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const [externalScans, setExternalScans] = useState<ExternalToolScan[] | null>(null);
   const [externalLoading, setExternalLoading] = useState(false);
   const [externalError, setExternalError] = useState<string | null>(null);
+  const [externalBackendManaged, setExternalBackendManaged] = useState(false);
   const [selectedExternal, setSelectedExternal] = useState<ReadonlySet<string>>(new Set());
   const [importQuery, setImportQuery] = useState("");
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(
@@ -247,13 +255,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   const refresh = useCallback(
     async (options?: { silent?: boolean; announce?: boolean; force?: boolean }) => {
-      if (lockedByChatMode) {
-        skillsSnapshotRef.current = [];
-        setSkills([]);
-        setRootDir("");
-        setLoadError(null);
+      if (lockedByChatMode || backendManaged) {
+        setLoadError(backendManaged ? t("settings.skillsBackendManaged") : null);
         setLoading(false);
-        discoverySignatureRef.current = buildSkillDiscoverySignature("", []);
         return;
       }
       const silent = options?.silent === true;
@@ -275,8 +279,15 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        const message = msg || t("settings.skillsHubLoadFailed");
-        setLoadError(message);
+        const unsupported = isUnsupportedResourceError(err);
+        const message = unsupported
+          ? t("settings.skillsBackendManaged")
+          : msg || t("settings.skillsHubLoadFailed");
+        if (unsupported) {
+          setDiscoveryBackendManaged(true);
+          setLoadError(t("settings.skillsBackendManaged"));
+          setLoading(false);
+        } else setLoadError(message);
         if (announce) {
           showScanFeedback({ status: "error", message });
         }
@@ -287,7 +298,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         }
       }
     },
-    [applyDiscovery, lockedByChatMode, showScanFeedback, t],
+    [applyDiscovery, backendManaged, lockedByChatMode, showScanFeedback, t],
   );
 
   useEffect(() => {
@@ -412,22 +423,37 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       });
       return true;
     } catch (err) {
-      // Keep stale scan results visible during a failed manual refresh. On the
-      // initial scan, mark the request as completed so the error can be shown.
-      setExternalScans((previous) => previous ?? []);
-      setExternalError(err instanceof Error ? err.message : String(err));
+      // Keep stale scan results visible during a failed manual refresh; a
+      // failed initial scan remains unavailable rather than becoming empty.
+      const message = err instanceof Error ? err.message : String(err);
+      if (isUnsupportedResourceError(err)) {
+        setExternalBackendManaged(true);
+        setExternalError(t("settings.skillsBackendManaged"));
+        setExternalLoading(false);
+      } else {
+        setExternalError(message);
+      }
       return false;
     } finally {
       await waitForMinimumScanDuration(startedAt);
       setExternalLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
-    if (view !== "import" || lockedByChatMode) return;
-    if (externalScans !== null || externalLoading) return;
+    if (view !== "import" || lockedByChatMode || backendManaged || externalBackendManaged) return;
+    if (externalScans !== null || externalLoading || externalError) return;
     void rescanExternalSkills();
-  }, [view, lockedByChatMode, externalScans, externalLoading, rescanExternalSkills]);
+  }, [
+    backendManaged,
+    externalBackendManaged,
+    externalError,
+    view,
+    lockedByChatMode,
+    externalScans,
+    externalLoading,
+    rescanExternalSkills,
+  ]);
 
   const externalSkillByBaseDir = useMemo(() => {
     const map = new Map<string, { baseDir: string; name: string }>();
@@ -604,12 +630,15 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       .catch((err) => {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
+        if (isUnsupportedResourceError(err)) setDiscoveryBackendManaged(true);
         setInstalledPreviewState({
           skillFile,
           content: previewInstalledSkill.inlineContent ?? "",
           truncated: previewInstalledSkill.inlineContentTruncated ?? false,
           loading: false,
-          error: msg || t("settings.skillsInstalledPreviewUnavailable"),
+          error: isUnsupportedResourceError(err)
+            ? t("settings.skillsBackendManaged")
+            : msg || t("settings.skillsInstalledPreviewUnavailable"),
         });
       });
 
@@ -672,7 +701,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   }, [completedInstallState.slugs, installedStoreState.slugs]);
 
   useEffect(() => {
-    if (view !== "store" || lockedByChatMode) return;
+    if (view !== "store" || lockedByChatMode || backendManaged) return;
     let cancelled = false;
     const query = storeQuery.trim();
     const cacheKey = buildSkillStoreCatalogKey(query, storeSort);
@@ -702,11 +731,17 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         } catch (err) {
           if (!cancelled) {
             const msg = err instanceof Error ? err.message : String(err);
-            if (!cached) {
+            if (isUnsupportedResourceError(err)) {
+              setDiscoveryBackendManaged(true);
+              setStoreError(t("settings.skillsBackendManaged"));
+            }
+            if (!cached && !isUnsupportedResourceError(err)) {
               setStoreItems([]);
               setStoreCursor(null);
             }
-            setStoreError(msg || t("settings.skillsHubStoreLoadFailed"));
+            if (!isUnsupportedResourceError(err)) {
+              setStoreError(msg || t("settings.skillsHubStoreLoadFailed"));
+            }
           }
         } finally {
           if (!cancelled) {
@@ -720,7 +755,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [lockedByChatMode, storeQuery, storeSort, t, view]);
+  }, [backendManaged, lockedByChatMode, storeQuery, storeSort, t, view]);
 
   useEffect(() => {
     if (view !== "store" || lockedByChatMode) return;
@@ -805,7 +840,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   }, [enableInstalledSkillsFromJob, installJobs, refresh, t]);
 
   async function loadMoreStore() {
-    if (!storeCursor || storeLoading || storeLoadingMore || storeQuery.trim()) return;
+    if (backendManaged || !storeCursor || storeLoading || storeLoadingMore || storeQuery.trim())
+      return;
     setStoreLoadingMore(true);
     setStoreError(null);
     try {
@@ -830,6 +866,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     const initialJob = initialJobId ? installJobs[initialJobId] : undefined;
     if (
       lockedByChatMode ||
+      backendManaged ||
       pendingInstallTokensRef.current.has(initialStoreKey) ||
       installedStoreKeys.has(initialStoreKey) ||
       (!skill.ownerHandle && installedStoreSlugs.has(skill.slug)) ||
@@ -884,7 +921,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setStoreError(msg || t("settings.skillsHubInstallFailed"));
+      if (isUnsupportedResourceError(err)) {
+        setDiscoveryBackendManaged(true);
+        setStoreError(t("settings.skillsBackendManaged"));
+      } else setStoreError(msg || t("settings.skillsHubInstallFailed"));
     } finally {
       let changed = false;
       for (const [storeKey, token] of pendingInstallTokensRef.current) {
@@ -899,7 +939,13 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   }
 
   async function deleteSkill(skill: SkillSummary) {
-    if (lockedByChatMode || isAlwaysEnabledSkillName(skill.name) || deletingSkillName) return;
+    if (
+      lockedByChatMode ||
+      backendManaged ||
+      isAlwaysEnabledSkillName(skill.name) ||
+      deletingSkillName
+    )
+      return;
     const skillName = skill.name;
     const sourceSlug = skill.source?.registry === "clawhub" ? skill.source.slug?.trim() || "" : "";
     const sourceOwnerHandle =
@@ -955,7 +1001,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   }
 
   function toggleSkill(name: string, on: boolean) {
-    if (isAlwaysEnabledSkillName(name)) return;
+    if (backendManaged || isAlwaysEnabledSkillName(name)) return;
     const next = new Set(settings.skills.selected);
     if (on) next.add(name);
     else next.delete(name);
@@ -993,7 +1039,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   const toggleBulkSelectionName = useCallback(
     (name: string) => {
-      if (isAlwaysEnabledSkillName(name)) return;
+      if (backendManaged || isAlwaysEnabledSkillName(name)) return;
       dismissBulkUndo();
       const next = toggleBulkSelection(bulkSelectionRef.current, name);
       if (next.size === 0) {
@@ -1004,11 +1050,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       setBulkSelection(next);
       bulkAnchorRef.current = name;
     },
-    [dismissBulkUndo, exitBulkMode],
+    [backendManaged, dismissBulkUndo, exitBulkMode],
   );
 
   const setBulkSelectionRange = useCallback(
     (names: readonly string[], select: boolean) => {
+      if (backendManaged) return;
       const selectable = names.filter((name) => !isAlwaysEnabledSkillName(name));
       if (selectable.length === 0) return;
       dismissBulkUndo();
@@ -1020,12 +1067,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       bulkSelectionRef.current = next;
       setBulkSelection(next);
     },
-    [dismissBulkUndo, exitBulkMode],
+    [backendManaged, dismissBulkUndo, exitBulkMode],
   );
 
   // 批量选择模式下点击卡片：只改 bulkSelection，不改启用状态、不打开预览。
   function handleBulkInstalledCardClick(name: string, orderedNames: string[], shiftKey: boolean) {
-    if (isAlwaysEnabledSkillName(name)) return;
+    if (backendManaged || isAlwaysEnabledSkillName(name)) return;
     const currentlySelected = bulkSelection.has(name);
     const target = !currentlySelected;
 
@@ -1048,6 +1095,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   // 传给 setSettings 的 updater 必须是纯函数（StrictMode 会双调用）。
   const applyBulkEnableState = useCallback(
     (target: boolean) => {
+      if (backendManaged) return;
       const names = [...bulkSelection].filter((name) => !isAlwaysEnabledSkillName(name));
       if (names.length === 0) return;
 
@@ -1086,6 +1134,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       });
     },
     [
+      backendManaged,
       bulkSelection,
       dismissBulkUndo,
       exitBulkMode,
@@ -1097,7 +1146,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   );
 
   async function deleteBulkSelectedInstalledSkills() {
-    if (lockedByChatMode || deletingSkillName || !bulkMode) return;
+    if (lockedByChatMode || backendManaged || deletingSkillName || !bulkMode) return;
     const targets = skills.filter(
       (skill) => bulkSelection.has(skill.name) && !isAlwaysEnabledSkillName(skill.name),
     );
@@ -1432,7 +1481,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   ariaLabel={t("settings.skillsHubTitle")}
                 />
 
-                {!lockedByChatMode ? (
+                {!lockedByChatMode && !backendManaged ? (
                   <div className="flex w-full min-w-0 items-center justify-end gap-2">
                     {view === "installed" ? (
                       <Button
@@ -1464,7 +1513,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         variant="outline"
                         size="sm"
                         className="h-8 shrink-0 gap-1.5 px-3"
-                        disabled={externalScans === null || externalLoading}
+                        disabled={externalLoading || backendManaged || externalBackendManaged}
                         aria-busy={externalLoading}
                         onClick={() => void rescanExternalSkills()}
                       >
@@ -1562,6 +1611,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         bulkMode={bulkMode}
                         hasSkills={skills.length > 0}
                         loadError={loadError}
+                        backendManaged={backendManaged}
                         skillsEnabled={skillsEnabled}
                         rootDir={rootDir}
                         category={installedCategory}
@@ -1588,6 +1638,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         loading={storeLoading}
                         loadingMore={storeLoadingMore}
                         error={storeError}
+                        backendManaged={backendManaged}
                         cursor={storeCursor}
                         installedKeys={installedStoreKeys}
                         installedSlugs={installedStoreSlugs}
@@ -1601,9 +1652,15 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                     <TabsContent value="import" className="h-full min-h-0">
                       <SkillsImportView
                         scans={externalScans ?? []}
-                        initializing={externalScans === null}
+                        initializing={
+                          externalLoading &&
+                          externalScans === null &&
+                          !externalBackendManaged &&
+                          !backendManaged
+                        }
                         importingExternalBaseDir={importingExternalBaseDir}
                         error={externalError}
+                        backendManaged={backendManaged || externalBackendManaged}
                         query={importQuery}
                         selected={selectedExternal}
                         installedNames={installedSkillNames}
@@ -1633,7 +1690,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         onClose={() => setPreviewInstalledSkill(null)}
       />
 
-      {bulkMode && view === "installed" && !lockedByChatMode ? (
+      {bulkMode && view === "installed" && !lockedByChatMode && !backendManaged ? (
         <div
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3",

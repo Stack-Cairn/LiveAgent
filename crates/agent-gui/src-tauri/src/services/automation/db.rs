@@ -493,63 +493,6 @@ pub fn read_runs(
     Ok(runs)
 }
 
-/// Runs of any task whose `started_at` falls in `[from, to)`, newest first.
-pub fn read_runs_between(
-    conn: &Connection,
-    from: i64,
-    to: i64,
-    limit: usize,
-) -> Result<Vec<CronRunRecord>, String> {
-    if to <= from {
-        return Ok(Vec::new());
-    }
-    let mut stmt = conn
-        .prepare(
-            "SELECT execution_id, task_id, state, success, started_at, finished_at,
-                    duration_ms, exit_code, output
-             FROM automation_cron_runs
-             WHERE started_at >= ?1 AND started_at < ?2
-             ORDER BY started_at DESC, execution_id DESC
-             LIMIT ?3",
-        )
-        .map_err(|e| format!("准备读取 automation_cron_runs 失败：{e}"))?;
-    let rows = stmt
-        .query_map(params![from, to, limit as i64], run_record_from_row)
-        .map_err(|e| format!("读取 automation_cron_runs 失败：{e}"))?;
-    let mut runs = Vec::new();
-    for row in rows {
-        runs.push(row.map_err(|e| format!("读取 automation_cron_runs 行失败：{e}"))?);
-    }
-    Ok(runs)
-}
-
-/// Latest finished (done/expired) run of each given task.
-pub fn read_last_completed_runs(
-    conn: &Connection,
-    task_ids: &[String],
-) -> Result<Vec<CronRunRecord>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT execution_id, task_id, state, success, started_at, finished_at,
-                    duration_ms, exit_code, output
-             FROM automation_cron_runs
-             WHERE task_id = ?1 AND state IN ('done', 'expired')
-             ORDER BY started_at DESC, execution_id DESC
-             LIMIT 1",
-        )
-        .map_err(|e| format!("准备读取 automation_cron_runs 失败：{e}"))?;
-    let mut runs = Vec::new();
-    for task_id in task_ids {
-        let mut rows = stmt
-            .query_map(params![task_id], run_record_from_row)
-            .map_err(|e| format!("读取 automation_cron_runs 失败：{e}"))?;
-        if let Some(row) = rows.next() {
-            runs.push(row.map_err(|e| format!("读取 automation_cron_runs 行失败：{e}"))?);
-        }
-    }
-    Ok(runs)
-}
-
 /// Deletes finished runs beyond the per-task retention window plus anything
 /// older than the global age cap. Called inside the same transaction as the
 /// insert that grows the table.

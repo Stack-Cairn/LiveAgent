@@ -4,11 +4,12 @@ import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { sliceStreamingMarkdownTail } from "@liveagent/ui/lib/chat/streamingRenderPolicy";
+import { useStreamingReveal } from "@liveagent/ui/lib/chat/streamingReveal";
 import { resolveThinkingDurationMs } from "@liveagent/ui/lib/chat/thinkingDurations";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
-import { Brain, ChevronRight } from "../../IconSet";
+import { Brain, ChevronRight, Loader2 } from "../../IconSet";
 
 /**
  * One reasoning segment in the processing trace. Streams visibly while the
@@ -73,8 +74,9 @@ export function ThinkingDisclosure(props: {
 
   // 流式中只把尾部窗口交给 Markdown：视口 max-h-320px 本来只看得到尾部，
   // 而全文重排是 O(累计思考长度)/帧。落定（active=false）后展开渲染全文。
-  const displayText =
-    active && renderMode === "streaming" ? sliceStreamingMarkdownTail(text) : text;
+  const streaming = active && renderMode === "streaming";
+  const revealedText = useStreamingReveal(text, streaming);
+  const displayText = streaming ? sliceStreamingMarkdownTail(revealedText) : text;
   const durationLabel = durationMs !== null ? formatElapsedTime(durationMs) : "";
   const settledLabel = durationLabel
     ? `${t("chat.thoughtFor")} ${durationLabel}`
@@ -100,7 +102,14 @@ export function ThinkingDisclosure(props: {
           setOpen((prev) => !prev);
         }}
       >
-        <Brain className="size-3 shrink-0 text-foreground/45" />
+        {active ? (
+          <Loader2
+            aria-hidden="true"
+            className="size-3 shrink-0 animate-spin text-foreground/45 motion-reduce:animate-none"
+          />
+        ) : (
+          <Brain className="size-3 shrink-0 text-foreground/45" />
+        )}
         <span className={cn("min-w-0 truncate", active && "shimmer")}>
           {active ? t("chat.thinking") : settledLabel}
         </span>

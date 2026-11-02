@@ -49,6 +49,7 @@ type RightDockChooserProps = RightDockLauncherActions & {
   terminalReady: boolean;
   terminalDisabledMessage?: string;
   disabledMessage?: string;
+  tunnelDisabledMessage?: string;
   projectReady: boolean;
   tunnelAvailable: boolean;
   creating: boolean;
@@ -176,6 +177,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
     terminalReady,
     terminalDisabledMessage,
     disabledMessage,
+    tunnelDisabledMessage,
     projectReady,
     tunnelAvailable,
     creating,
@@ -234,7 +236,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
           description: t(definition.descriptionKey),
           icon: definition.icon("size-4.5"),
           disabled,
-          titleAttr: definition.projectRequired ? disabledMessage : undefined,
+          titleAttr: definition.projectRequired ? disabledMessage : tunnelDisabledMessage,
           onClick: () => onStartTool(definition.kind),
           onPointerDown: toolDragHandler(definition.kind, disabled),
         };

@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage } from "@liveagent/app/lib/agentTypes";
 import { HOOK_EVENT_TRANSLATION_KEYS } from "@liveagent/ui/lib/automation/index";
 import type { HookRunWarning } from "../../../lib/automation/hookRunner";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
@@ -229,6 +229,30 @@ export function buildErrorAssistantMessage(params: {
     usage: createEmptyAssistantUsage(),
     stopReason: "error",
     errorMessage,
+    timestamp: params.timestamp ?? Date.now(),
+  };
+}
+
+export function buildPartialAssistantMessage(params: {
+  model: {
+    api: AssistantMessage["api"];
+    provider: AssistantMessage["provider"];
+    id: string;
+  };
+  text: string;
+  timestamp?: number;
+  stopReason?: AssistantMessage["stopReason"];
+}): AssistantMessage | null {
+  const content = params.text.trim();
+  if (!content) return null;
+  return {
+    role: "assistant",
+    content: [{ type: "text", text: content }],
+    api: params.model.api,
+    provider: params.model.provider,
+    model: params.model.id,
+    usage: createEmptyAssistantUsage(),
+    stopReason: params.stopReason ?? "aborted",
     timestamp: params.timestamp ?? Date.now(),
   };
 }

@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Play,
   ScrollText,
+  Square,
   Terminal,
   Timer,
   X,
@@ -20,6 +21,8 @@ import {
   type CronRunRecord,
   type CronTask,
   type CronTaskType,
+  canCancelCronRun,
+  cancelCronRun,
   clearCronRuns,
   DEFAULT_CRON_TIMEOUT_SECONDS,
   isManualCronRunFinished,
@@ -31,7 +34,7 @@ import {
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { ConfirmActionPopover } from "./shared";
@@ -123,6 +126,9 @@ function LeftPanel({
   isRunningNow,
   runNowError,
   onRunNow,
+  onCancelRun,
+  canCancelRun,
+  isCancelling,
 }: {
   task: CronTask;
   t: (key: string) => string;
@@ -130,6 +136,9 @@ function LeftPanel({
   isRunningNow: boolean;
   runNowError: string | null;
   onRunNow: () => void;
+  onCancelRun: () => void;
+  canCancelRun: boolean;
+  isCancelling: boolean;
 }) {
   const TypeIcon = cfg.icon;
   const script = task.script?.trim() ?? "";
@@ -158,13 +167,21 @@ function LeftPanel({
             <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
-                onClick={onRunNow}
-                disabled={isRunningNow}
+                onClick={isRunningNow && canCancelRun ? onCancelRun : onRunNow}
+                disabled={isCancelling || (isRunningNow && !canCancelRun)}
                 title={
-                  isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")
+                  isRunningNow
+                    ? canCancelRun
+                      ? t("settings.cronViewCancelRun")
+                      : t("settings.cronViewRunningNow")
+                    : t("settings.cronViewRunNow")
                 }
                 aria-label={
-                  isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")
+                  isRunningNow
+                    ? canCancelRun
+                      ? t("settings.cronViewCancelRun")
+                      : t("settings.cronViewRunningNow")
+                    : t("settings.cronViewRunNow")
                 }
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
@@ -175,7 +192,11 @@ function LeftPanel({
                 )}
               >
                 {isRunningNow ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+                  canCancelRun && !isCancelling ? (
+                    <Square className="size-3.5" />
+                  ) : (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  )
                 ) : (
                   <Play className="size-3.5" />
                 )}
@@ -435,42 +456,75 @@ function LeftPanel({
 
 /* ─────────────────────── Right panel ─────────────────────── */
 
-function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string }) {
+function RightPanel({
+  task,
+  t,
+  isRunningNow,
+  refreshKey,
+  onRunsLoaded,
+}: {
+  task: CronTask;
+  t: (key: string) => string;
+  isRunningNow: boolean;
+  refreshKey: number;
+  onRunsLoaded: (taskId: string, runs: CronRunRecord[]) => void;
+}) {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [logs, setLogs] = useState<CronRunRecord[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
+  const requestGenerationRef = useRef(0);
+  const clearInFlightRef = useRef(false);
 
+  // refreshKey 是外部的失效信号：不在 effect 体内读取，仅用于父层保存/删除任务后
+  // 强制重跑一次日志拉取，因此关掉多余依赖告警。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is an invalidation signal
   useEffect(() => {
     let cancelled = false;
+    const taskId = task.id;
 
     async function loadLogs() {
+      if (clearInFlightRef.current) return;
+      const requestGeneration = ++requestGenerationRef.current;
       try {
-        const nextLogs = await listCronRuns(task.id, 100);
-        if (!cancelled) {
+        const nextLogs = await listCronRuns(taskId, 100);
+        if (
+          !cancelled &&
+          !clearInFlightRef.current &&
+          requestGeneration === requestGenerationRef.current
+        ) {
           setLoadError(null);
           setLogs(Array.isArray(nextLogs) ? nextLogs : []);
+          onRunsLoaded(taskId, Array.isArray(nextLogs) ? nextLogs : []);
         }
       } catch (error) {
         // Keep the last successfully loaded list; a failed fetch must not
         // masquerade as "no logs".
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          !clearInFlightRef.current &&
+          requestGeneration === requestGenerationRef.current
+        ) {
           setLoadError(error instanceof Error ? error.message : String(error));
         }
       }
     }
 
     void loadLogs();
-    const timer = window.setInterval(() => {
-      void loadLogs();
-    }, 5_000);
+    const timer = window.setInterval(
+      () => {
+        void loadLogs();
+      },
+      isRunningNow ? MANUAL_CRON_RUN_POLL_INTERVAL_MS : 5_000,
+    );
 
     return () => {
       cancelled = true;
+      requestGenerationRef.current += 1;
       window.clearInterval(timer);
     };
-  }, [task.id]);
+  }, [isRunningNow, onRunsLoaded, refreshKey, task.id]);
 
   const runningCount = logs.filter(
     (log) => log.state === "pending" || log.state === "leased",
@@ -486,10 +540,13 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
       return;
     }
 
+    const clearTaskId = task.id;
     try {
       setIsClearing(true);
+      clearInFlightRef.current = true;
+      requestGenerationRef.current += 1;
       setClearError(null);
-      await clearCronRuns(task.id);
+      await clearCronRuns(clearTaskId);
       setExpandedLogId(null);
       setLogs((current) =>
         current.filter((log) => log.state === "pending" || log.state === "leased"),
@@ -497,6 +554,7 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
     } catch {
       setClearError(t("settings.cronViewClearLogsFailed"));
     } finally {
+      clearInFlightRef.current = false;
       setIsClearing(false);
     }
   }
@@ -619,7 +677,8 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
           <div className="space-y-2">
             {logs.map((log) => {
               const isExpanded = expandedLogId === log.id;
-              const isExpired = log.state === "expired";
+              const isCancelled = log.terminationReason === "cancelled";
+              const isExpired = log.state === "expired" && !isCancelled;
               const isRunning = log.state === "pending" || log.state === "leased";
 
               return (
@@ -668,9 +727,11 @@ function RightPanel({ task, t }: { task: CronTask; t: (key: string) => string })
                         ? t("settings.cronViewLogRunning")
                         : log.success
                           ? t("settings.cronViewLogSuccess")
-                          : isExpired
-                            ? t("settings.cronViewLogExpired")
-                            : t("settings.cronViewLogFailed")}
+                          : isCancelled
+                            ? t("settings.cronViewLogCancelled")
+                            : isExpired
+                              ? t("settings.cronViewLogExpired")
+                              : t("settings.cronViewLogFailed")}
                     </span>
                     {/* Duration — right-aligned fixed width */}
                     <span className="ml-auto w-48px shrink-0 text-right text-xs tabular-nums text-muted-foreground/50">
@@ -763,8 +824,40 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
   const task = cron.tasks.find((item) => item.id === taskId);
   const [isRunningNow, setIsRunningNow] = useState(false);
   const [manualRunStartedAt, setManualRunStartedAt] = useState<number | null>(null);
+  const [manualRunExecutionId, setManualRunExecutionId] = useState<string | null>(null);
+  const [runsRefreshKey, setRunsRefreshKey] = useState(0);
   const [runNowError, setRunNowError] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   const runNowLockRef = useRef(false);
+  const taskViewGenerationRef = useRef(0);
+  const activeTaskIdRef = useRef(taskId);
+
+  const handleRunsLoaded = useCallback((loadedTaskId: string, runs: CronRunRecord[]) => {
+    if (activeTaskIdRef.current !== loadedTaskId) return;
+    const activeRun = runs.find((run) => run.state === "pending" || run.state === "leased");
+    if (!activeRun) {
+      if (!runNowLockRef.current) setIsRunningNow(false);
+      return;
+    }
+
+    setIsRunningNow(true);
+    if (activeRun.counted !== true && !runNowLockRef.current) {
+      runNowLockRef.current = true;
+      setManualRunStartedAt(activeRun.startedAt);
+      setManualRunExecutionId(activeRun.id);
+    }
+  }, []);
+
+  useEffect(() => {
+    activeTaskIdRef.current = taskId;
+    taskViewGenerationRef.current += 1;
+    runNowLockRef.current = false;
+    setManualRunStartedAt(null);
+    setManualRunExecutionId(null);
+    setIsRunningNow(false);
+    setIsCancelling(false);
+    setRunNowError(null);
+  }, [taskId]);
   // Manual runs are watched for at least the legacy six-minute window, and
   // longer when the task timeout exceeds it (plus scheduler/completion
   // slack). Prompt runs may additionally sit in the pending claim window
@@ -784,20 +877,35 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
   useEffect(() => {
     if (manualRunStartedAt == null) return;
     const startedAt = manualRunStartedAt;
+    const executionId = manualRunExecutionId;
 
     let cancelled = false;
     let requestInFlight = false;
+    const runTaskId = taskId;
+    const runTaskGeneration = taskViewGenerationRef.current;
 
     async function reconcileManualRun() {
-      if (requestInFlight) return;
+      if (
+        requestInFlight ||
+        activeTaskIdRef.current !== runTaskId ||
+        taskViewGenerationRef.current !== runTaskGeneration
+      )
+        return;
       requestInFlight = true;
       try {
         const runs = await listCronRuns(taskId, 500);
-        if (!cancelled && isManualCronRunFinished(runs, startedAt)) {
+        if (
+          !cancelled &&
+          activeTaskIdRef.current === runTaskId &&
+          taskViewGenerationRef.current === runTaskGeneration &&
+          isManualCronRunFinished(runs, startedAt, executionId)
+        ) {
           cancelled = true;
           runNowLockRef.current = false;
           setManualRunStartedAt(null);
+          setManualRunExecutionId(null);
           setIsRunningNow(false);
+          setIsCancelling(false);
         }
       } catch {
         return;
@@ -812,11 +920,18 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
       MANUAL_CRON_RUN_POLL_INTERVAL_MS,
     );
     const timeoutTimer = window.setTimeout(() => {
-      if (cancelled) return;
+      if (
+        cancelled ||
+        activeTaskIdRef.current !== runTaskId ||
+        taskViewGenerationRef.current !== runTaskGeneration
+      )
+        return;
       cancelled = true;
       runNowLockRef.current = false;
       setManualRunStartedAt(null);
+      setManualRunExecutionId(null);
       setIsRunningNow(false);
+      setIsCancelling(false);
       setRunNowError(t("settings.cronViewRunNowTimeout"));
     }, manualRunWatchTimeoutMs);
 
@@ -825,7 +940,7 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
       window.clearInterval(pollTimer);
       window.clearTimeout(timeoutTimer);
     };
-  }, [manualRunStartedAt, taskId, manualRunWatchTimeoutMs, t]);
+  }, [manualRunStartedAt, manualRunExecutionId, taskId, manualRunWatchTimeoutMs, t]);
 
   if (!task) {
     return null;
@@ -834,16 +949,47 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
 
   async function handleRunNow(selectedTaskId: string) {
     if (runNowLockRef.current) return;
+    const requestGeneration = taskViewGenerationRef.current;
     runNowLockRef.current = true;
     try {
       setIsRunningNow(true);
       setRunNowError(null);
       const response = await runCronNow(selectedTaskId);
+      if (
+        activeTaskIdRef.current !== selectedTaskId ||
+        taskViewGenerationRef.current !== requestGeneration
+      )
+        return;
       setManualRunStartedAt(response.startedAt);
+      setManualRunExecutionId(response.executionId ?? null);
+      setRunsRefreshKey((value) => value + 1);
     } catch (error) {
+      if (
+        activeTaskIdRef.current !== selectedTaskId ||
+        taskViewGenerationRef.current !== requestGeneration
+      )
+        return;
       runNowLockRef.current = false;
       setIsRunningNow(false);
       setRunNowError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleCancelRun(selectedTaskId: string) {
+    if (isCancelling || !runNowLockRef.current) return;
+    const requestGeneration = taskViewGenerationRef.current;
+    setIsCancelling(true);
+    setRunNowError(null);
+    try {
+      await cancelCronRun(selectedTaskId, manualRunExecutionId ?? undefined);
+    } catch (error) {
+      if (
+        activeTaskIdRef.current !== selectedTaskId ||
+        taskViewGenerationRef.current !== requestGeneration
+      )
+        return;
+      setRunNowError(error instanceof Error ? error.message : String(error));
+      setIsCancelling(false);
     }
   }
 
@@ -869,12 +1015,24 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
               onRunNow={() => {
                 void handleRunNow(task.id);
               }}
+              onCancelRun={() => {
+                void handleCancelRun(task.id);
+              }}
+              canCancelRun={canCancelCronRun() && manualRunStartedAt !== null}
+              isCancelling={isCancelling}
             />
           </div>
 
           {/* ── Right: logs ── */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted/5">
-            <RightPanel task={task} t={t} />
+            <RightPanel
+              key={task.id}
+              task={task}
+              t={t}
+              isRunningNow={isRunningNow}
+              refreshKey={runsRefreshKey}
+              onRunsLoaded={handleRunsLoaded}
+            />
           </div>
         </div>
       </DialogContent>

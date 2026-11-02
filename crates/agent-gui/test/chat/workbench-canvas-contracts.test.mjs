@@ -46,6 +46,18 @@ test("pane frames are keyed by paneId and positioned with integer rects", () => 
   assert.equal(paneFrameSource.includes("transform"), false);
 });
 
+test("queue controls preserve pane focus and target their own conversation", () => {
+  const composerSource = readSource("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx");
+  const paneHostSource = readSource(
+    "../../../agent-gateway/web/src/app/workbench/GatewayConversationPaneHost.tsx",
+  );
+  assert.match(composerSource, /data-workbench-preserve-focus=""/);
+  assert.match(paneFrameSource, /closest\("\[data-workbench-preserve-focus\]"\)/);
+  assert.match(paneFrameSource, /onFocusRequest\?\.\(\)/);
+  assert.match(paneHostSource, /onQueuePausedChange=\{handleQueuePausedChange\}/);
+  assert.match(paneHostSource, /api\.chatQueueSetPaused\(\s*conversationId,/);
+});
+
 test("dividers use pointer capture and commit once per gesture", () => {
   assert.match(dividerLayerSource, /setPointerCapture/);
   assert.match(dividerLayerSource, /releasePointerCapture/);

@@ -1,3 +1,5 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import {
   buildTerminalCreatePayload,
   buildTerminalSshCreatePayload,
@@ -26,8 +28,6 @@ import type {
   TerminalStreamChunk,
   TerminalStreamSnapshot,
 } from "@liveagent/ui/lib/terminal/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 
 type TerminalEventListener = (event: TerminalEvent) => void;
 

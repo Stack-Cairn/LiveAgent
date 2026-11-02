@@ -1408,8 +1408,27 @@ export function selectionTextPosition(
   return null;
 }
 
-/** Detect an in-progress @file or /skill mention at the cursor position. */
-export function detectMention(root: HTMLElement, skillsEnabled: boolean): MentionContext | null {
+/** True when nothing but whitespace/caret anchors precedes (node, offset) in the editor. */
+function isAtDraftStart(root: HTMLElement, node: Node, offset: number) {
+  const range = document.createRange();
+  range.setStart(root, 0);
+  range.setEnd(node, offset);
+  if (removeCaretAnchors(range.toString()).trim()) return false;
+  // Chips carry visible labels, but guard icon-only elements as well.
+  const fragment = range.cloneContents();
+  return !fragment.querySelector?.("[contenteditable='false']");
+}
+
+/**
+ * Detect an in-progress @file, /skill or /command mention at the cursor. A "/"
+ * at the very start of the draft opens the command list when commandsEnabled;
+ * anywhere else it only matches skills.
+ */
+export function detectMention(
+  root: HTMLElement,
+  skillsEnabled: boolean,
+  commandsEnabled = false,
+): MentionContext | null {
   const position = selectionTextPosition(root);
   if (!position) return null;
 
@@ -1427,9 +1446,19 @@ export function detectMention(root: HTMLElement, skillsEnabled: boolean): Mentio
     }
     // "/" only triggers a skill mention at a word boundary; slashes inside an
     // @file query (e.g. "@docs/foo") must keep scanning back toward the "@".
-    if (before[i] === "/" && skillsEnabled && (i === 0 || isMentionBoundaryChar(before[i - 1]))) {
+    if (
+      before[i] === "/" &&
+      (skillsEnabled || commandsEnabled) &&
+      (i === 0 || isMentionBoundaryChar(before[i - 1]))
+    ) {
+      if (commandsEnabled && isAtDraftStart(root, node, i)) {
+        trigger = "command";
+      } else if (skillsEnabled) {
+        trigger = "skill";
+      } else {
+        return null;
+      }
       triggerIdx = i;
-      trigger = "skill";
       break;
     }
     if (isMentionBoundaryChar(before[i])) break;
@@ -1439,7 +1468,7 @@ export function detectMention(root: HTMLElement, skillsEnabled: boolean): Mentio
   // Typing a filesystem path ("/usr/bin") reaches a second "/", which can
   // never appear in a skill name — drop the skill context instead of keeping
   // an unmatchable popup query around.
-  if (trigger === "skill" && before.slice(triggerIdx + 1).includes("/")) return null;
+  if (trigger !== "file" && before.slice(triggerIdx + 1).includes("/")) return null;
 
   // Trigger must be preceded by whitespace or be the very first character.
   if (triggerIdx > 0) {
@@ -1511,6 +1540,16 @@ export function insertMentionChipElement(ctx: MentionContext, chip: HTMLElement)
   parent.removeChild(textNode);
 
   placeCaretInTextNode(afterNode, anchor.caretOffset);
+}
+
+/** Replace the "/query" text with plain text (e.g. "/model ") and park the caret after it. */
+export function replaceMentionQueryText(ctx: MentionContext, replacement: string) {
+  const { textNode, triggerOffset, query } = ctx;
+  const text = textNode.textContent || "";
+  const beforeText = text.slice(0, triggerOffset);
+  const afterText = text.slice(triggerOffset + 1 + query.length);
+  textNode.textContent = `${beforeText}${replacement}${afterText}`;
+  placeCaretInTextNode(textNode, beforeText.length + replacement.length);
 }
 
 /** Replace the @query text with a styled mention chip. */

@@ -4,7 +4,7 @@ import type {
   TextContent,
   ToolResultMessage,
   Usage,
-} from "@earendil-works/pi-ai";
+} from "@liveagent/app/lib/agentTypes";
 import { normalizeHostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import { isSubagentCardToolCall } from "../../subagents/card";
 import type { DisplayImageItemDetails, DisplayImageResultDetails } from "../../tools/builtinTypes";

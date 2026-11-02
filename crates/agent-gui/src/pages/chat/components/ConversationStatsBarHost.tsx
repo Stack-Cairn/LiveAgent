@@ -9,8 +9,9 @@
 import { ConversationStatsBar } from "@liveagent/ui/components/chat/ConversationStatsBar";
 import { useConversationStats } from "@liveagent/ui/lib/trajectory/useConversationStats";
 import type { ContextUsageTokensSource } from "@liveagent/ui/pages/chat/ChatComposerBar";
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { createTauriTrajectoryHost } from "../../../agent-ui-adapters/trajectory";
+import { isKBrainBackendEnabled } from "../../../lib/host";
 import {
   desktopLiveTrajectoryEvents,
   desktopTrajectoryReloadVersion,
@@ -47,13 +48,19 @@ export function ConversationStatsBarHost(props: {
   const authoritativeRevision = useSyncExternalStore(subscribeDesktopLiveTrajectory, () =>
     desktopTrajectoryReloadVersion(conversationId),
   );
+  const backendOwned = isKBrainBackendEnabled();
+  const [backendRevision, setBackendRevision] = useState(0);
+  useEffect(() => {
+    if (!backendOwned || !enabled) return;
+    return trajectoryHost.subscribeRefresh?.(() => setBackendRevision((value) => value + 1));
+  }, [backendOwned, enabled]);
   const { stats } = useConversationStats({
     conversationId,
     host: trajectoryHost,
     liveEvents,
     // 桌面端持有权威实时尾巴：空集也是「进程已重启」的证据，遗留 running 收敛为中断。
-    liveOwnership: "authoritative",
-    authoritativeRevision,
+    liveOwnership: backendOwned ? "observed" : "authoritative",
+    authoritativeRevision: backendOwned ? backendRevision : authoritativeRevision,
     enabled,
   });
   const contextUsageTokens = useSyncExternalStore(

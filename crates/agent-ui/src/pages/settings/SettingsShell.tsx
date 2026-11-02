@@ -1,5 +1,6 @@
 import { ArrowLeft, Search } from "@liveagent/ui/components/IconSet";
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { ZoneFontScaleContext } from "../../components/ui/zone-font-scale";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";
 import { useSettingsEscapeToClose } from "../../lib/settings/useSettingsEscapeToClose";
@@ -22,8 +23,10 @@ type SettingsShellProps<Context> = {
   context: Context;
   saveState: SettingsSaveState;
   onBack: () => void;
+  canLeaveSection?: () => boolean;
   initialSection?: string;
   hiddenSections?: readonly string[];
+  fontScale?: number;
 };
 
 function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) {
@@ -56,8 +59,10 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
     context,
     saveState,
     onBack,
+    canLeaveSection,
     initialSection = "system",
     hiddenSections = [],
+    fontScale = 1,
   } = props;
   const { t } = useLocale();
   const [section, setSection] = useState(initialSection);
@@ -122,208 +127,214 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   const showSaveIndicator = activeSection.showSaveIndicator !== false;
 
   return (
-    <div
-      className={cn(
-        "flex h-full bg-background",
-        web &&
-          "web:min-w-0 web:max-820:h-full web:max-820:min-h-0 web:max-820:flex-col web:max-820:overflow-hidden [&_.settings-section-actions]:min-w-0 [&_.settings-card-actions]:min-w-0",
-        web && WEB_SETTINGS_CONTENT_RESPONSIVE_CLASS,
-        !web &&
-          "flex-col desktop:max-640:[&_.settings-section-heading-row]:items-stretch desktop:max-640:[&_.settings-section-actions]:w-full desktop:max-640:[&_.settings-section-actions]:flex-wrap desktop:max-640:[&_.settings-hover-actions]:opacity-100 desktop:no-hover:[&_.settings-hover-actions]:opacity-100",
-      )}
-    >
-      <div className={web ? "contents" : "flex min-h-0 flex-1"}>
-        <aside
-          className={cn(
-            "flex w-68 shrink-0 flex-col bg-settings-rail",
-            "web:max-820:w-full web:max-820:flex-none web:max-820:bg-background/96",
-          )}
-        >
-          {registry.slots.sidebarLeading}
-          {web ? (
-            <div
-              className={cn(
-                "web:hidden web:max-820:flex web:max-820:items-center web:max-820:px-10px",
-                "web:max-820:pt-settings-back-bar-pt web:max-820:pb-2 web:max-640:px-8px",
-              )}
-            >
+    <ZoneFontScaleContext.Provider value={fontScale}>
+      <div
+        style={{ "--zone-font-scale": fontScale } as CSSProperties}
+        className={cn(
+          "zone-font-scale flex h-full bg-background",
+          web &&
+            "web:min-w-0 web:max-820:h-full web:max-820:min-h-0 web:max-820:flex-col web:max-820:overflow-hidden [&_.settings-section-actions]:min-w-0 [&_.settings-card-actions]:min-w-0",
+          web && WEB_SETTINGS_CONTENT_RESPONSIVE_CLASS,
+          !web &&
+            "flex-col desktop:max-640:[&_.settings-section-heading-row]:items-stretch desktop:max-640:[&_.settings-section-actions]:w-full desktop:max-640:[&_.settings-section-actions]:flex-wrap desktop:max-640:[&_.settings-hover-actions]:opacity-100 desktop:no-hover:[&_.settings-hover-actions]:opacity-100",
+        )}
+      >
+        <div className={web ? "contents" : "flex min-h-0 flex-1"}>
+          <aside
+            className={cn(
+              "flex w-68 shrink-0 flex-col bg-settings-rail",
+              "web:max-820:w-full web:max-820:flex-none web:max-820:bg-background/96",
+            )}
+          >
+            {registry.slots.sidebarLeading}
+            {web ? (
+              <div
+                className={cn(
+                  "web:hidden web:max-820:flex web:max-820:items-center web:max-820:px-10px",
+                  "web:max-820:pt-settings-back-bar-pt web:max-820:pb-2 web:max-640:px-8px",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={onBack}
+                  aria-keyshortcuts="Escape"
+                  className={cn(
+                    "settings-back-button flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5",
+                    "text-sm text-muted-foreground transition-colors duration-150 hover:bg-settings-tile-hover hover:text-foreground",
+                    "web:max-820:min-h-34px web:max-820:w-auto web:max-820:px-10px web:max-820:py-8px",
+                  )}
+                >
+                  <ArrowLeft className="size-3.5 shrink-0" />
+                  <span>{t("settings.backToChat")}</span>
+                </button>
+              </div>
+            ) : null}
+            <div className="px-3 pb-2 pt-4 web:max-820:hidden">
               <button
                 type="button"
                 onClick={onBack}
                 aria-keyshortcuts="Escape"
+                title={t("settings.backToChatHint")}
                 className={cn(
-                  "settings-back-button flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5",
+                  "settings-back-button flex w-full cursor-pointer items-center justify-start gap-1 rounded-md px-2 py-1.5 text-left",
                   "text-sm text-muted-foreground transition-colors duration-150 hover:bg-settings-tile-hover hover:text-foreground",
-                  "web:max-820:min-h-34px web:max-820:w-auto web:max-820:px-10px web:max-820:py-8px",
                 )}
               >
                 <ArrowLeft className="size-3.5 shrink-0" />
                 <span>{t("settings.backToChat")}</span>
+                <kbd
+                  className={cn(
+                    "ml-auto rounded border border-border/60 px-1.5 py-0.5",
+                    "font-sans text-tiny leading-none text-muted-foreground/70",
+                  )}
+                >
+                  Esc
+                </kbd>
               </button>
+              <div className="relative mt-2.5">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/75" />
+                <input
+                  type="search"
+                  value={navQuery}
+                  onChange={(event) => setNavQuery(event.currentTarget.value)}
+                  placeholder={t("settings.searchPlaceholder")}
+                  aria-label={t("settings.searchPlaceholder")}
+                  className={cn(
+                    "h-8 w-full rounded-full border-0 bg-background pl-8 pr-3",
+                    "text-sm outline-none transition-[background-color,box-shadow] duration-150",
+                    "placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-foreground/15",
+                  )}
+                />
+              </div>
             </div>
-          ) : null}
-          <div className="px-3 pb-2 pt-4 web:max-820:hidden">
-            <button
-              type="button"
-              onClick={onBack}
-              aria-keyshortcuts="Escape"
-              title={t("settings.backToChatHint")}
+            <nav
               className={cn(
-                "settings-back-button flex w-full cursor-pointer items-center justify-start gap-1 rounded-md px-2 py-1.5 text-left",
-                "text-sm text-muted-foreground transition-colors duration-150 hover:bg-settings-tile-hover hover:text-foreground",
+                "settings-nav flex-1 overflow-y-auto px-2.5 pb-6 pt-3.5",
+                "web:max-820:flex web:max-820:flex-none web:max-820:flex-nowrap web:max-820:gap-1.5 web:max-820:overflow-x-auto web:max-820:overscroll-x-contain",
+                "web:max-820:px-10px web:max-820:pb-10px web:max-820:pt-2 web:max-820:[scrollbar-width:none] web:max-820:[&::-webkit-scrollbar]:hidden web:max-640:px-8px",
               )}
             >
-              <ArrowLeft className="size-3.5 shrink-0" />
-              <span>{t("settings.backToChat")}</span>
-              <kbd
-                className={cn(
-                  "ml-auto rounded border border-border/60 px-1.5 py-0.5",
-                  "font-sans text-tiny leading-none text-muted-foreground/70",
-                )}
-              >
-                Esc
-              </kbd>
-            </button>
-            <div className="relative mt-2.5">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/75" />
-              <input
-                type="search"
-                value={navQuery}
-                onChange={(event) => setNavQuery(event.currentTarget.value)}
-                placeholder={t("settings.searchPlaceholder")}
-                aria-label={t("settings.searchPlaceholder")}
-                className={cn(
-                  "h-8 w-full rounded-full border-0 bg-background pl-8 pr-3",
-                  "text-sm outline-none transition-[background-color,box-shadow] duration-150",
-                  "placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-foreground/15",
-                )}
-              />
-            </div>
-          </div>
-          <nav
-            className={cn(
-              "settings-nav flex-1 overflow-y-auto px-2.5 pb-6 pt-3.5",
-              "web:max-820:flex web:max-820:flex-none web:max-820:flex-nowrap web:max-820:gap-1.5 web:max-820:overflow-x-auto web:max-820:overscroll-x-contain",
-              "web:max-820:px-10px web:max-820:pb-10px web:max-820:pt-2 web:max-820:[scrollbar-width:none] web:max-820:[&::-webkit-scrollbar]:hidden web:max-640:px-8px",
-            )}
-          >
-            {visibleGroups.map(([groupKey, definitions], groupIndex) => (
-              <div
-                key={groupKey}
-                className={cn(
-                  "web:max-820:contents web:max-820:mt-0 web:max-820:[&_>_div:last-child]:contents web:max-820:[&_>_div:last-child_>_*_+_*]:mt-0",
-                  groupIndex > 0 && "mt-3.5",
-                )}
-              >
-                <div className="mb-1.5 px-2.5 text-xs font-medium text-muted-foreground/70 web:max-820:hidden">
-                  {t(groupKey)}
-                </div>
-                <div className="space-y-px">
-                  {definitions.map((definition) => {
-                    const active = definition.id === activeSection.id;
-                    return (
-                      <button
-                        key={definition.id}
-                        type="button"
-                        onClick={() => setSection(definition.id)}
-                        aria-current={active ? "page" : undefined}
-                        data-testid={`settings-nav-${definition.id}`}
-                        data-settings-nav-id={definition.id}
-                        data-active={active ? "true" : "false"}
-                        className={cn(
-                          "sidebar-list-row group relative flex w-full cursor-pointer items-center gap-2.5 rounded-md web:max-820:h-auto",
-                          "px-2.5 py-1.5 text-left text-sm leading-tight transition-colors duration-150",
-                          "web:max-820:w-auto web:max-820:flex-none web:max-820:whitespace-nowrap web:max-820:bg-settings-tile web:max-820:px-10px web:max-820:py-8px",
-                          "web:max-820:[&_>_div]:gap-8px web:max-520:px-9px web:max-520:py-7px",
-                          active
-                            ? "bg-settings-active font-medium text-foreground"
-                            : "text-foreground/75 hover:bg-settings-tile-hover hover:text-foreground",
-                        )}
-                      >
-                        <span
+              {visibleGroups.map(([groupKey, definitions], groupIndex) => (
+                <div
+                  key={groupKey}
+                  className={cn(
+                    "web:max-820:contents web:max-820:mt-0 web:max-820:[&_>_div:last-child]:contents web:max-820:[&_>_div:last-child_>_*_+_*]:mt-0",
+                    groupIndex > 0 && "mt-3.5",
+                  )}
+                >
+                  <div className="mb-1.5 px-2.5 text-xs font-medium text-muted-foreground/70 web:max-820:hidden">
+                    {t(groupKey)}
+                  </div>
+                  <div className="space-y-px">
+                    {definitions.map((definition) => {
+                      const active = definition.id === activeSection.id;
+                      return (
+                        <button
+                          key={definition.id}
+                          type="button"
+                          onClick={() => {
+                            if (definition.id !== section && (canLeaveSection?.() ?? true))
+                              setSection(definition.id);
+                          }}
+                          aria-current={active ? "page" : undefined}
+                          data-testid={`settings-nav-${definition.id}`}
+                          data-settings-nav-id={definition.id}
+                          data-active={active ? "true" : "false"}
                           className={cn(
-                            "flex size-4 shrink-0 items-center justify-center transition-colors",
+                            "sidebar-list-row group relative flex w-full cursor-pointer items-center gap-2.5 rounded-md web:max-820:h-auto",
+                            "px-2.5 py-1.5 text-left text-sm leading-tight transition-colors duration-150",
+                            "web:max-820:w-auto web:max-820:flex-none web:max-820:whitespace-nowrap web:max-820:bg-settings-tile web:max-820:px-10px web:max-820:py-8px",
+                            "web:max-820:[&_>_div]:gap-8px web:max-520:px-9px web:max-520:py-7px",
                             active
-                              ? "text-foreground"
-                              : "text-muted-foreground group-hover:text-foreground",
-                            "web:max-820:size-24px web:max-820:rounded-8px",
+                              ? "bg-settings-active font-medium text-foreground"
+                              : "text-foreground/75 hover:bg-settings-tile-hover hover:text-foreground",
                           )}
                         >
-                          {definition.icon}
-                        </span>
-                        <span className="min-w-0 truncate leading-tight web:max-820:text-xs">
-                          {t(definition.labelKey)}
-                        </span>
-                      </button>
-                    );
-                  })}
+                          <span
+                            className={cn(
+                              "flex size-4 shrink-0 items-center justify-center transition-colors",
+                              active
+                                ? "text-foreground"
+                                : "text-muted-foreground group-hover:text-foreground",
+                              "web:max-820:size-24px web:max-820:rounded-8px",
+                            )}
+                          >
+                            {definition.icon}
+                          </span>
+                          <span className="min-w-0 truncate leading-tight web:max-820:text-xs">
+                            {t(definition.labelKey)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {visibleGroups.length === 0 ? (
+                <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  {t("settings.searchNoResults")}
+                </div>
+              ) : null}
+            </nav>
+            {!web && showSaveIndicator ? (
+              <div className="px-3 py-3">
+                <div
+                  className="flex items-center gap-1.5 px-2.5 text-xs text-muted-foreground"
+                  title={saveIndicator.title}
+                >
+                  <div className={cn("size-1.5 rounded-full", saveIndicator.dotClass)} />
+                  {saveIndicator.text}
                 </div>
               </div>
-            ))}
-            {visibleGroups.length === 0 ? (
-              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                {t("settings.searchNoResults")}
-              </div>
             ) : null}
-          </nav>
-          {!web && showSaveIndicator ? (
-            <div className="px-3 py-3">
-              <div
-                className="flex items-center gap-1.5 px-2.5 text-xs text-muted-foreground"
-                title={saveIndicator.title}
-              >
-                <div className={cn("size-1.5 rounded-full", saveIndicator.dotClass)} />
-                {saveIndicator.text}
-              </div>
-            </div>
-          ) : null}
-        </aside>
-        <main className="flex min-w-0 flex-1 flex-col web:min-w-0 web:max-820:min-h-0 web:max-820:flex-auto">
-          {registry.slots.mainLeading}
-          <header
-            className={cn(
-              "px-10 pb-2 pt-9 web:max-820:gap-3 web:max-820:px-14px web:max-820:py-10px web:max-640:px-10px web:max-640:py-9px",
-              web && "flex items-center justify-between",
-            )}
-          >
-            <div className="settings-main-title mx-auto w-full max-w-920px overflow-hidden">
-              <div key={activeSection.id} className="text-2xl font-semibold tracking-tight">
-                {t(activeSection.labelKey)}
-              </div>
-            </div>
-            {web && showSaveIndicator ? (
-              <div
-                className={cn(
-                  "flex shrink-0 items-center gap-1.5",
-                  "whitespace-nowrap text-xs text-muted-foreground web:max-820:flex-none web:max-820:whitespace-nowrap",
-                )}
-                title={saveIndicator.title}
-              >
-                <div className={cn("size-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />
-                {saveIndicator.text}
-              </div>
-            ) : null}
-          </header>
-          <div
-            key={activeSection.id}
-            className={cn(
-              "flex-1 px-8 pb-8 pt-6 web:min-w-0 web:max-820:min-h-0 web:max-820:p-14px web:max-640:p-10px",
-              `settings-content-${activeSection.id}`,
-              fillContent ? "flex min-h-0 flex-col overflow-hidden" : "overflow-auto",
-            )}
-          >
-            <div
+          </aside>
+          <main className="flex min-w-0 flex-1 flex-col web:min-w-0 web:max-820:min-h-0 web:max-820:flex-auto">
+            {registry.slots.mainLeading}
+            <header
               className={cn(
-                "relative isolate mx-auto w-full max-w-920px web:min-w-0",
-                `settings-section-shell-${activeSection.id}`,
-                fillContent ? "flex min-h-0 flex-1 flex-col" : "min-h-full",
+                "px-10 pb-2 pt-9 web:max-820:gap-3 web:max-820:px-14px web:max-820:py-10px web:max-640:px-10px web:max-640:py-9px",
+                web && "flex items-center justify-between",
               )}
             >
-              {activeSection.render(context)}
+              <div className="settings-main-title mx-auto w-full max-w-920px overflow-hidden">
+                <div key={activeSection.id} className="text-2xl font-semibold tracking-tight">
+                  {t(activeSection.labelKey)}
+                </div>
+              </div>
+              {web && showSaveIndicator ? (
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5",
+                    "whitespace-nowrap text-xs text-muted-foreground web:max-820:flex-none web:max-820:whitespace-nowrap",
+                  )}
+                  title={saveIndicator.title}
+                >
+                  <div className={cn("size-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />
+                  {saveIndicator.text}
+                </div>
+              ) : null}
+            </header>
+            <div
+              key={activeSection.id}
+              className={cn(
+                "flex-1 px-8 pb-8 pt-6 web:min-w-0 web:max-820:min-h-0 web:max-820:p-14px web:max-640:p-10px",
+                `settings-content-${activeSection.id}`,
+                fillContent ? "flex min-h-0 flex-col overflow-hidden" : "overflow-auto",
+              )}
+            >
+              <div
+                className={cn(
+                  "relative isolate mx-auto w-full max-w-920px web:min-w-0",
+                  `settings-section-shell-${activeSection.id}`,
+                  fillContent ? "flex min-h-0 flex-1 flex-col" : "min-h-full",
+                )}
+              >
+                {activeSection.render(context)}
+              </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
+    </ZoneFontScaleContext.Provider>
   );
 }

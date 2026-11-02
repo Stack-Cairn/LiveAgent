@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 
 import {
   buildSubagentCardToolCallId,

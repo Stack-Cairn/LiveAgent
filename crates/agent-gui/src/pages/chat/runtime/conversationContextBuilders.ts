@@ -1,24 +1,16 @@
-import type { Context } from "@earendil-works/pi-ai";
+import type { Context, UserMessage } from "@liveagent/app/lib/agentTypes";
 
 import {
   buildRequestContext,
   type ConversationViewState,
 } from "../../../lib/chat/conversation/conversationState";
 import type { SkillMentionUpdateMap } from "../../../lib/chat/skills/mentionInjection";
-import {
-  attachMemoryTurnUpdates,
-  type MemoryTurnUpdateMap,
-} from "../../../lib/memory/prompts/turnInjection";
+import { attachSkillMentionUpdates } from "../../../lib/chat/skills/mentionInjection";
 import { appendSystemPrompt } from "./chatPageRuntime";
 
 export type ConversationContextBuildOptions = {
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
-  /**
-   * 默认带上 checkpoint bridge：主请求、账本、用量环与压缩估值都按真实请求口径。
-   * 记忆抽取这类复用消息的旁路必须显式传 false，否则 bridge 会被当成用户发言。
-   */
-  includeCheckpointBridge?: boolean;
 };
 
 /**
@@ -62,10 +54,7 @@ export function buildCompactionContext(
   tools?: Context["tools"],
   options?: ConversationContextBuildOptions,
 ): Context {
-  const baseContext = buildRequestContext(state, {
-    ...options,
-    includeCheckpointBridge: options?.includeCheckpointBridge !== false,
-  });
+  const baseContext = buildRequestContext(state, options);
   return Array.isArray(tools) && tools.length > 0
     ? {
         ...baseContext,
@@ -79,12 +68,9 @@ export function buildPreparedContext(params: {
   tools?: Context["tools"];
   activeAgentPrompt: string;
   skillsPrompt: string;
-  memoryPrompt?: string;
-  memoryTurnUpdates?: MemoryTurnUpdateMap | null;
   skillMentionUpdates?: SkillMentionUpdateMap | null;
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
-  includeCheckpointBridge?: boolean;
   /** 轨迹埋点用的分段回调；不传时零开销。 */
   captureSlots?: (slots: PreparedSystemPromptSlots) => void;
 }): Context {
@@ -93,14 +79,12 @@ export function buildPreparedContext(params: {
   const withTools = buildCompactionContext(params.state, params.tools, {
     includeAbortedMessages: params.includeAbortedMessages,
     includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,
-    includeCheckpointBridge: params.includeCheckpointBridge,
   });
 
   params.captureSlots?.({
     ...(typeof withTools.systemPrompt === "string" ? { base: withTools.systemPrompt } : {}),
     ...(params.activeAgentPrompt ? { agent: params.activeAgentPrompt } : {}),
     ...(params.skillsPrompt ? { skills: params.skillsPrompt } : {}),
-    ...(params.memoryPrompt ? { memory: params.memoryPrompt } : {}),
   });
 
   let systemPrompt = withTools.systemPrompt;
@@ -110,17 +94,9 @@ export function buildPreparedContext(params: {
   if (params.skillsPrompt) {
     systemPrompt = appendSystemPrompt(systemPrompt, params.skillsPrompt);
   }
-  if (params.memoryPrompt) {
-    systemPrompt = appendSystemPrompt(systemPrompt, params.memoryPrompt);
-  }
-
-  // memory 的动态部分挂在对应 user 消息尾部,而不是继续往 system 段里塞:
-  // system 段一变,整条缓存前缀连同全部历史一起作废。
-  // skills 的「显式提及」同理:它只对当轮有效,留在 system 段等于一次输入连废
-  // 两次前缀。两者都走同一个挂载口径,顺序固定(memory 在前、skills 在后),
-  // 已挂上的块在后续轮次原样重放,历史区间的字节才保持稳定。
-  const withMemory = attachMemoryTurnUpdates(withTools.messages, params.memoryTurnUpdates);
-  const messages = attachMemoryTurnUpdates(withMemory, params.skillMentionUpdates);
+  const messages = params.skillMentionUpdates
+    ? attachSkillMentionUpdates(withTools.messages, params.skillMentionUpdates)
+    : withTools.messages;
   const withMessages = messages === withTools.messages ? withTools : { ...withTools, messages };
 
   return typeof systemPrompt === "string"
@@ -129,4 +105,28 @@ export function buildPreparedContext(params: {
         systemPrompt,
       }
     : withMessages;
+}
+
+export function buildResumeContext(params: {
+  state: ConversationViewState;
+  resumeMessage?: UserMessage;
+  tools?: Context["tools"];
+  activeAgentPrompt: string;
+  skillsPrompt: string;
+  skillMentionUpdates?: SkillMentionUpdateMap | null;
+  includeAbortedMessages?: boolean;
+  includeUploadedFilesMetadata?: boolean;
+  captureSlots?: (slots: PreparedSystemPromptSlots) => void;
+}): Context {
+  const baseContext = buildPreparedContext({
+    ...params,
+    includeAbortedMessages: params.includeAbortedMessages,
+  });
+  if (!params.resumeMessage) {
+    return baseContext;
+  }
+  return {
+    ...baseContext,
+    messages: [...baseContext.messages, params.resumeMessage],
+  };
 }

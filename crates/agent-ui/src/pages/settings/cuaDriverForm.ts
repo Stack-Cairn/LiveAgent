@@ -5,6 +5,7 @@ import {
   isCuaDriverServerId,
   serverPolicyKeyCandidates,
 } from "@liveagent/ui/contracts/mcpServerDefaults";
+import { isHostCommandUnavailable } from "@liveagent/ui/lib/shared/hostErrors";
 
 /**
  * CUA 设置页的纯逻辑：受管条目的查找、策略键推导、超时钳制、探测缓存、
@@ -27,6 +28,11 @@ export type CuaProbe = {
   permissionsRequired?: boolean;
   error?: string | null;
 };
+
+/** 宿主没有这条桌面命令（见 `lib/shared/hostErrors`），不是用户操作失败。 */
+export function isCuaHostCommandUnavailable(error: unknown): boolean {
+  return isHostCommandUnavailable(error);
+}
 
 export type CuaPermissions = {
   supported: boolean;

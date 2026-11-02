@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
-const core = createTsModuleLoader().loadModule(new URL("../../../virtual-core/src/index.ts", import.meta.url).pathname);
+const core = createTsModuleLoader().loadModule(fileURLToPath(new URL("../../../virtual-core/src/index.ts", import.meta.url)));
 let realVirtualizer;
 
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";

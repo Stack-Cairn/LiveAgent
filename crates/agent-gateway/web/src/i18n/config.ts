@@ -84,6 +84,8 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
     "settings.filePickerTitle": "选择文件",
     "settings.filePickerDesc": "从桌面设备中选择一个文件",
     "settings.pathPickerPathLabel": "路径",
+    "settings.pathPickerOpen": "打开",
+    "settings.pathPickerNoRoots": "远端没有返回目录。请重试，或输入远端目录的绝对路径。",
     "settings.emptyDir": "此目录为空",
     "settings.select": "选择",
     "settings.loadingDirs": "正在加载目录…",
@@ -185,6 +187,9 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
     "settings.filePickerTitle": "Select File",
     "settings.filePickerDesc": "Pick a file from the desktop device",
     "settings.pathPickerPathLabel": "Path",
+    "settings.pathPickerOpen": "Open",
+    "settings.pathPickerNoRoots":
+      "The remote host returned no folders. Retry or enter an absolute path on that host.",
     "settings.emptyDir": "This directory is empty",
     "settings.select": "Select",
     "settings.loadingDirs": "Loading directories…",

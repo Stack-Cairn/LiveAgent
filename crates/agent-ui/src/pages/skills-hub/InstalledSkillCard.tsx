@@ -148,6 +148,7 @@ type InstalledSkillCardProps = {
   bulkSelected: boolean;
   deleting: boolean;
   deleteDisabled: boolean;
+  previewDisabled?: boolean;
   searchQuery: string;
   onToggle: (name: string, on: boolean) => void;
   onEnterBulkMode: (name: string) => void;
@@ -173,6 +174,7 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
     bulkSelected,
     deleting,
     deleteDisabled,
+    previewDisabled = false,
     searchQuery,
     onToggle,
     onEnterBulkMode,
@@ -338,8 +340,9 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
       <Button
         variant="ghost"
         aria-label={`${t("settings.skillsInstalledPreviewOpen")}: ${skill.name}`}
+        disabled={previewDisabled}
         onClick={() => {
-          if (!bulkMode) onOpenPreview(skill);
+          if (!bulkMode && !previewDisabled) onOpenPreview(skill);
         }}
         className={cn(cardClassName, "h-full items-stretch justify-start whitespace-normal")}
       >
@@ -352,11 +355,12 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
     // biome-ignore lint/a11y/useSemanticElements: The card contains nested controls and cannot be a native button.
     <div
       role="button"
-      tabIndex={0}
+      tabIndex={previewDisabled ? -1 : 0}
+      aria-disabled={previewDisabled}
       aria-label={`${t("settings.skillsInstalledPreviewOpen")}: ${skill.name}`}
       onClick={(event) => {
         if (bulkMode) onBulkCardClick(skill.name, event.shiftKey);
-        else onOpenPreview(skill);
+        else if (!previewDisabled) onOpenPreview(skill);
       }}
       onMouseDown={(event) => {
         if (bulkMode && event.shiftKey) event.preventDefault();
@@ -365,7 +369,7 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         if (bulkMode) onBulkCardClick(skill.name, event.shiftKey);
-        else onOpenPreview(skill);
+        else if (!previewDisabled) onOpenPreview(skill);
       }}
       className={cn(
         cardClassName,

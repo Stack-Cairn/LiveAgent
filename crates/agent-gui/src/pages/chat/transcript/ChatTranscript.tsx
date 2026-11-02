@@ -2,6 +2,12 @@ import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ChevronDown, Copy } from "@liveagent/ui/components/IconSet";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  clearSearchJumpTarget,
+  getSearchJumpTargetSnapshot,
+  resolveSearchJumpRowKey,
+  subscribeSearchJumpTarget,
+} from "@liveagent/ui/lib/chat/searchJumpTarget";
 import { buildFloorEntries } from "@liveagent/ui/lib/chat-floor-nav/floorModel";
 import { BOTTOM_REATTACH_ZONE_PX } from "@liveagent/ui/lib/chat-scroll/scrollFollowCore";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
@@ -17,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { RowInteractionProvider, useRowInteractionStore } from "./rowInteraction";
 import { TranscriptList, type TranscriptNavHandle } from "./TranscriptList";
@@ -33,6 +40,7 @@ export type { ChatTranscriptProps } from "./transcriptTypes";
 // Short and medium conversations paint directly. Only large transcripts keep
 // the convergence gate that prevents a visible estimate-to-measure jump.
 const DEFER_REVEAL_HISTORY_ITEM_THRESHOLD = 120;
+const SEARCH_JUMP_MAX_PAGES = 20;
 
 export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscriptProps) {
   const {
@@ -121,6 +129,57 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     },
     [scrollFollowHandle],
   );
+
+  // 会话搜索跳转：目标消息在已加载窗口内就滚过去；否则逐页加载更早历史，
+  // 直到命中或没有更多历史为止（最多 SEARCH_JUMP_MAX_PAGES 页）。
+  const searchJumpPagesRef = useRef(0);
+  const pendingSearchJump = useSyncExternalStore(
+    subscribeSearchJumpTarget,
+    getSearchJumpTargetSnapshot,
+  );
+  useEffect(() => {
+    if (isHistorySwitching) return;
+    const target = pendingSearchJump?.conversationId === conversationId ? pendingSearchJump : null;
+    if (!target) {
+      searchJumpPagesRef.current = 0;
+      return;
+    }
+    const rowKey = resolveSearchJumpRowKey(
+      historyItems.map((item) => ({
+        kind: item.kind,
+        key: item.key,
+        messageId: item.kind === "user" ? item.messageRef?.messageId : undefined,
+        messageIndex:
+          item.kind === "user"
+            ? item.messageRef?.messageIndex
+            : item.kind === "assistant"
+              ? item.messageIndex
+              : undefined,
+      })),
+      target,
+    );
+    if (rowKey) {
+      clearSearchJumpTarget(target);
+      searchJumpPagesRef.current = 0;
+      const frame = requestAnimationFrame(() => handleFloorJump(rowKey));
+      return () => cancelAnimationFrame(frame);
+    }
+    if (!hasMoreHistory || searchJumpPagesRef.current >= SEARCH_JUMP_MAX_PAGES) {
+      clearSearchJumpTarget(target);
+      searchJumpPagesRef.current = 0;
+      return;
+    }
+    searchJumpPagesRef.current += 1;
+    void onLoadEarlierHistory().catch(() => clearSearchJumpTarget(target));
+  }, [
+    conversationId,
+    handleFloorJump,
+    pendingSearchJump,
+    hasMoreHistory,
+    historyItems,
+    isHistorySwitching,
+    onLoadEarlierHistory,
+  ]);
 
   // Run-scoped state reaches row action bars through this store instead of
   // row props, so settled rows stay memo-stable across run start/settle.

@@ -12,7 +12,7 @@ const {
   getPendingToolApproval,
   getToolApprovalVersion,
   subscribeToolApprovals,
-  isSessionApproved,
+  listPendingToolApprovalsForConversation,
   cancelPendingToolApprovalsForConversation,
 } = approval;
 
@@ -30,17 +30,52 @@ test("approve 决定使门放行,并从挂起表移除", async () => {
   assert.equal(hasPendingToolApproval("c1"), false);
 });
 
-test("approve_session 记住本会话该工具,后续 isSessionApproved 为真", async () => {
-  const promise = requestToolApproval({
+test("approve_session 只在后端提供会话授权时透传,并携带授权范围", async () => {
+  const offered = requestToolApproval({
     toolCallId: "c2",
+    toolName: "computer_exec",
+    conversationId: "conv2",
+    allowSession: true,
+    sessionScope: " call:click ",
+  });
+  assert.deepEqual(
+    listPendingToolApprovalsForConversation("conv2").map(({ allowSession, sessionScope }) => ({
+      allowSession,
+      sessionScope,
+    })),
+    [{ allowSession: true, sessionScope: "call:click" }],
+  );
+  answerToolApproval("c2", "approve_session");
+  assert.deepEqual(await offered, { kind: "decided", decision: "approve_session" });
+
+  // 后端不会记住时(未提供 allow_always),远端/旧入口发来的 approve_session 只算本次放行。
+  const notOffered = requestToolApproval({
+    toolCallId: "c2b",
     toolName: "Bash",
     conversationId: "conv2",
   });
-  answerToolApproval("c2", "approve_session");
-  await promise;
-  assert.equal(isSessionApproved("conv2", "Bash"), true);
-  assert.equal(isSessionApproved("conv2", "Write"), false);
-  assert.equal(isSessionApproved("other", "Bash"), false);
+  assert.equal(listPendingToolApprovalsForConversation("conv2")[0].allowSession, false);
+  answerToolApproval("c2b", "approve_session");
+  assert.deepEqual(await notOffered, { kind: "decided", decision: "approve" });
+});
+
+test("sessionWide 透传到待审批摘要,缺省为 false", async () => {
+  const wide = requestToolApproval({
+    toolCallId: "c2w",
+    toolName: "computer_exec",
+    conversationId: "conv2w",
+    sessionScope: "call:click",
+    sessionWide: true,
+  });
+  const plain = requestToolApproval({ toolCallId: "c2p", toolName: "Bash", conversationId: "conv2w" });
+  assert.deepEqual(
+    listPendingToolApprovalsForConversation("conv2w").map((item) => [item.toolCallId, item.sessionWide]),
+    [["c2w", true], ["c2p", false]],
+  );
+  answerToolApproval("c2w", "approve");
+  answerToolApproval("c2p", "approve");
+  assert.deepEqual(await wide, { kind: "decided", decision: "approve" });
+  await plain;
 });
 
 test("deny 决定返回 decided/deny", async () => {
@@ -100,7 +135,7 @@ test("串会话应答被拒;正确会话应答通过", async () => {
   await promise;
 });
 
-test("会话取消:挂起审批落定为 cancelled 并清理免审集合", async () => {
+test("会话取消:挂起审批落定为 cancelled", async () => {
   const promise = requestToolApproval({
     toolCallId: "c8",
     toolName: "Bash",

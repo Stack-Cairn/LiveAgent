@@ -351,7 +351,11 @@ mod lnk {
                 continue;
             }
             let chars = u16_at(data, offset)? as usize;
-            let bytes = if flags & IS_UNICODE != 0 { chars * 2 } else { chars };
+            let bytes = if flags & IS_UNICODE != 0 {
+                chars * 2
+            } else {
+                chars
+            };
             offset = offset.checked_add(2 + bytes)?;
         }
         // ExtraData：找 EnvironmentVariableDataBlock。BlockSize < 8 即终结哨兵。
@@ -501,10 +505,10 @@ mod windows {
     impl ComInit {
         fn new() -> Self {
             use windows_sys::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
-            let hr = unsafe {
-                CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32)
-            };
-            Self { initialized: hr >= 0 }
+            let hr = unsafe { CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32) };
+            Self {
+                initialized: hr >= 0,
+            }
         }
     }
 
@@ -612,9 +616,8 @@ mod windows {
                 .flatten()
             {
                 Some(mask_pixels) => {
-                    for (pixel, mask_pixel) in pixels
-                        .chunks_exact_mut(4)
-                        .zip(mask_pixels.chunks_exact(4))
+                    for (pixel, mask_pixel) in
+                        pixels.chunks_exact_mut(4).zip(mask_pixels.chunks_exact(4))
                     {
                         pixel[3] = if mask_pixel[0] == 0 { 255 } else { 0 };
                     }

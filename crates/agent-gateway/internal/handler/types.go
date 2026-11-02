@@ -50,6 +50,12 @@ type ChatRequestBody struct {
 	UploadedFiles           []ChatUploadedFileBody          `json:"uploaded_files,omitempty"`
 	ReferencedConversations []ChatConversationReferenceBody `json:"referenced_conversations,omitempty"`
 	QueuePolicy             string                          `json:"queue_policy,omitempty"`
+	// 输入框“/”指令的单轮语义：GoalAction 仅 set/resume（经 K-brain goal 接口开始本轮），
+	// GoalText 为 set 的目标正文；PromptCommand 表示 Message 是提示词指令，由 K-brain 展开。
+	GoalAction    string `json:"goal_action,omitempty"`
+	GoalText      string `json:"goal_text,omitempty"`
+	PromptCommand bool   `json:"prompt_command,omitempty"`
+	PlanCommand   bool   `json:"plan_command,omitempty"`
 }
 
 type CancelChatRequestBody struct {
@@ -157,11 +163,11 @@ func NormalizeWorkdir(value string) string {
 	return normalizeTrimmedText(value)
 }
 
-// NormalizeCommandSafetyMode 归一化命令安全模式。仅放行四个合法值;空串或未知值
+// NormalizeCommandSafetyMode 归一化命令安全模式。仅放行受支持的值;空串或未知值
 // 归为空串,表示"远端未指定",桌面端据此回落到本地 settings.system.commandSafetyMode。
 func NormalizeCommandSafetyMode(value string) string {
 	switch normalizeTrimmedText(value) {
-	case "ask", "auto", "sandbox", "sandboxOffline":
+	case "ask", "auto", "autoEdit", "always", "autoReview", "sandbox", "sandboxOffline":
 		return normalizeTrimmedText(value)
 	default:
 		return ""

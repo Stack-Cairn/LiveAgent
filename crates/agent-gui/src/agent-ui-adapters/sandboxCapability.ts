@@ -1,5 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import { useEffect, useState } from "react";
+import { isKBrainBrowserHost } from "../lib/host";
 
 export type SandboxCapability = {
   supported: boolean;
@@ -20,7 +21,7 @@ export function useSandboxCapability(): SandboxCapability | null {
   const [capability, setCapability] = useState<SandboxCapability | null>(cachedCapability);
 
   useEffect(() => {
-    if (cachedCapability) return;
+    if (isKBrainBrowserHost() || cachedCapability) return;
     let disposed = false;
     invoke<SandboxCapability>("system_sandbox_capability")
       .then((result) => {

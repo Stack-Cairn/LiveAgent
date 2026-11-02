@@ -265,7 +265,7 @@ Expand the Development Guide below for the full set of Make commands.
 │                   Tauri 2 · React 19 · Rust                  │
 ├──────────┬────────────┬───────────┬────────────┬─────────────┤
 │ Models   │ Runtime    │ Tools     │ Skills     │ Memory/Cron │
-│ pi-ai    │ multi-turn │ FS/Bash/  │ progressive│ SQLite+MD   │
+│ K-brain  │ multi-turn │ FS/Bash/  │ progressive│ SQLite+MD   │
 │ + Codex  │ + SubAgent │ MCP bridge│ + Hub      │ FTS index   │
 └──────────┴────────────┴───────────┴────────────┴─────────────┘
 ```
@@ -279,7 +279,7 @@ Expand the Development Guide below for the full set of Make commands.
 | **Agent GUI** · Styling | Tailwind CSS 4 + Radix UI |
 | **Agent GUI** · Rendering | streamdown + KaTeX + Mermaid + Monaco Editor |
 | **Agent GUI** · Backend | Rust + Tokio + SQLite (rusqlite) + WebSocket (tokio-tungstenite) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
+| **Agent GUI** · LLM / Agent | Bundled K-brain executable · canonical HTTP / SSE protocol |
 | **Gateway** · Language | Go 1.25 |
 | **Gateway** · Protocols | WebSocket + Protobuf + HTTP |
 | **Gateway** · Web UI | React + Vite + Tailwind CSS (embedded) |

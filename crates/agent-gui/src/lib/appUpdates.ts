@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type AppUpdateChannel = "stable" | "prerelease";

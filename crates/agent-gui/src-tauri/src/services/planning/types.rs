@@ -148,6 +148,7 @@ pub struct Event {
 }
 
 /// Sentinel for an event that opted out of its calendar's default notification.
+#[cfg(test)]
 pub const EVENT_REMINDER_OFF: i64 = -1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

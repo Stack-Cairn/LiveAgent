@@ -1,12 +1,11 @@
-// MCP 工具懒加载(ToolSearch):MCP 工具 schema 总量超过阈值时,工具仍全量注册
-// 在执行层(pi-agent-core 的 prepareToolCall 从 loop 快照查找,必须始终找得到),
-// 但**发给模型的请求**只包含已激活的 MCP 工具——未激活的经 runner 的
-// requestToolFilter 滤掉(与 provider 原生搜索"执行层可见、请求层隐藏"同机制)。
+// MCP 工具懒加载(ToolSearch):MCP 工具 schema 总量超过阈值时，工具仍全量注册
+// 在执行层的 loop 快照中，必须始终找得到；但**发给模型的请求**只包含已激活的
+// MCP 工具——未激活的经 runner 的 requestToolFilter 滤掉。
 // 模型通过 ToolSearch 检索并激活工具;直接调用未激活工具也会执行成功并自动
 // 激活(turn 层 executor wrapper),避免"调用成功但下轮看不见"的困惑。
 // 激活集按会话保存在内存(跨 turn 持久,重启后模型重新检索一次即可)。
 
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import { Type } from "typebox";
 import { estimateToolsTokens } from "../chat/compaction/tokenLedger";
 import {

@@ -3,7 +3,10 @@ package websocket_test
 // v2 多 Agent 寻址集成测试：定向直通、歧义错误、agent_list 目录、广播打标隔离。
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -276,4 +279,56 @@ func TestV2WorkspaceSubscribeRequiresExplicitAgentID(t *testing.T) {
 	if localError == nil || localError.GetMessage() != "agent_id is required" {
 		t.Fatalf("workspace subscribe without agent_id = %#v, want required-id local_error", frame)
 	}
+}
+
+func TestV2WorkspaceSubscribeOfflineAgentStreamsLocalActivity(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	workdir := filepath.Join(root, "workspace-link")
+	if err := os.Symlink(t.TempDir(), workdir); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires privileges on Windows")
+		}
+		t.Fatal(err)
+	}
+	cfg := newV2TestConfig()
+	sm := session.NewManager()
+	handler := pbws.NewServer(cfg, sm, newAgentTokenStore(t)).BrowserHandler()
+	conn, cleanup := dialV2(t, handler)
+	defer cleanup()
+	helloV2(t, conn, cfg.Token)
+
+	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
+		RequestId: "workspace-local",
+		AgentId:   "offline-kbrain",
+		Payload: &gatewayv2.WebClientFrame_WorkspaceSubscribe{
+			WorkspaceSubscribe: &gatewayv2.WorkspaceSubscribeRequest{Workdir: workdir},
+		},
+	})
+	if frame := receiveWebFrameWithID(t, conn, "workspace-local"); !frame.GetAck().GetOk() {
+		t.Fatalf("workspace subscribe ack = %#v, want ok", frame)
+	}
+
+	activityPath := filepath.Join(workdir, "activity-proof.txt")
+	if err := os.WriteFile(activityPath, []byte("one"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		frame := receiveWebFrame(t, conn)
+		event := frame.GetWorkspaceActivity()
+		if event == nil {
+			continue
+		}
+		if !strings.HasPrefix(frame.GetAgentId(), "gateway-local-workspace-") {
+			t.Fatalf("workspace activity agent_id = %q, want gateway-local-workspace identity", frame.GetAgentId())
+		}
+		if event.GetWorkdir() != workdir || event.GetRevision() == 0 || !event.GetFs() {
+			t.Fatalf("workspace activity = %#v, want canonical workdir/revision/fs", event)
+		}
+		return
+	}
+	t.Fatal("timed out waiting for workspace activity from the local owner")
 }

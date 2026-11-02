@@ -1,22 +1,11 @@
 import { isDesktopChatHeaderInset } from "@liveagent/adapters/chatHeaderChrome";
-import { type AppSettings, getNextTheme, type Theme } from "@liveagent/app/lib/settings";
-import {
-  MonitorSmartphone,
-  Moon,
-  PanelLeft,
-  Settings,
-  Sun,
-} from "@liveagent/ui/components/IconSet";
+import type { AppSettings } from "@liveagent/app/lib/settings";
+import { PanelLeft, Settings } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode } from "react";
-
-function ThemeToggleIcon(props: { theme: Theme }) {
-  if (props.theme === "light") return <Sun className="size-4" />;
-  if (props.theme === "dark") return <Moon className="size-4" />;
-  return <MonitorSmartphone className="size-4" />;
-}
+import { ThemeToggleButton } from "../ThemeToggleButton";
 
 export type ChatHeaderProps = {
   settings: AppSettings;
@@ -47,13 +36,6 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
     className,
   } = props;
   const { t } = useLocale();
-  const nextTheme = getNextTheme(settings.theme);
-  const themeToggleTitle =
-    nextTheme === "light"
-      ? t("tooltip.switchToLight")
-      : nextTheme === "dark"
-        ? t("tooltip.switchToDark")
-        : t("tooltip.switchToAuto");
   const desktopTitleBarInset = isDesktopChatHeaderInset();
 
   return (
@@ -104,16 +86,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       >
         {preThemeActions}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onToggleTheme}
-          title={themeToggleTitle}
-          aria-label={themeToggleTitle}
-          className="rounded-lg text-muted-foreground hover:text-foreground"
-        >
-          <ThemeToggleIcon theme={nextTheme} />
-        </Button>
+        <ThemeToggleButton theme={settings.theme} onToggle={onToggleTheme} />
         {!sidebarOpen && !desktopTitleBarInset ? (
           <Button
             variant="ghost"

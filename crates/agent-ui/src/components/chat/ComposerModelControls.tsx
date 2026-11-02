@@ -118,6 +118,9 @@ export type ComposerModelControlsProps = {
   onSelectExecutionMode: (mode: "text" | "tools") => void;
   onOpenSettings: (section?: "providers", providerId?: string) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
+  /** 受控开关（/model 指令从外部打开）；缺省时弹层自管开关。 */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 // Touch / coarse-pointer must not land on the search field: that opens the IME.
@@ -144,9 +147,19 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     onSelectExecutionMode,
     onOpenSettings,
     onChatRuntimeControlsChange,
+    open,
+    onOpenChange,
   } = props;
+  const nativeWebSearchSupported =
+    modelOptions.find((option) => option.value === selectedValue)?.nativeWebSearchSupported ===
+    true;
   const { t } = useLocale();
-  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const [uncontrolledModelPickerOpen, setUncontrolledModelPickerOpen] = useState(false);
+  const isModelPickerOpen = open ?? uncontrolledModelPickerOpen;
+  const setIsModelPickerOpen = (next: boolean) => {
+    if (open === undefined) setUncontrolledModelPickerOpen(next);
+    onOpenChange?.(next);
+  };
   const [modelSearch, setModelSearch] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(() => new Set());
@@ -224,6 +237,38 @@ export const ComposerModelControls = memo(function ComposerModelControls(
     const selector = view === "root" ? "button" : "[data-model-back]";
     popoverContentRef.current?.querySelector<HTMLButtonElement>(selector)?.focus();
   }, [view, isModelPickerOpen]);
+  // Entering the model list brings the active model into view, expanding its
+  // provider when collapsed, so a long catalog does not hide the current choice.
+  // A provider filter for another provider is left alone.
+  const selectedProviderId = selectedOption?.providerId;
+  // Read on entry only: changing the filter later must not jump the list.
+  const providerFilterRef = useRef(providerFilter);
+  providerFilterRef.current = providerFilter;
+  useEffect(() => {
+    if (!isModelPickerOpen || view !== "model" || !selectedProviderId) return;
+    const filter = providerFilterRef.current;
+    if (filter && filter !== selectedProviderId) return;
+    setCollapsedProviders((previous) => {
+      if (!previous.has(selectedProviderId)) return previous;
+      const next = new Set(previous);
+      next.delete(selectedProviderId);
+      return next;
+    });
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const selected = popoverContentRef.current?.querySelector<HTMLElement>(
+          'button[data-model-option][aria-pressed="true"]',
+        );
+        const viewport = selected?.closest<HTMLElement>("[data-scroll-viewport]");
+        if (!selected || !viewport) return;
+        const area = viewport.getBoundingClientRect();
+        const row = selected.getBoundingClientRect();
+        // Center the row; this also keeps it clear of the sticky provider header.
+        viewport.scrollTop += row.top - area.top - (area.height - row.height) / 2;
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isModelPickerOpen, view, selectedProviderId]);
   const resolveModelPickerInitialFocus = (openType: string) => {
     const openedByTouch = openType === "touch";
     if (openedByTouch || isCoarsePointer()) {
@@ -381,8 +426,8 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 <span>{t("chat.runtime.webSearch")}</span>
                 <Switch
                   id={`${executionModeRadioName}-web`}
-                  checked={chatRuntimeControls.nativeWebSearchEnabled}
-                  disabled={disabled}
+                  checked={nativeWebSearchSupported && chatRuntimeControls.nativeWebSearchEnabled}
+                  disabled={disabled || !nativeWebSearchSupported}
                   aria-label={t("chat.runtime.webSearch")}
                   onCheckedChange={(checked) =>
                     onChatRuntimeControlsChange({ nativeWebSearchEnabled: checked })
@@ -546,6 +591,10 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                 !collapsedProviders.has(group.id) && "rotate-90",
                               )}
                             />
+                            <ProviderBrandIcon
+                              type={group.providerType}
+                              className="size-3.5 opacity-90"
+                            />
                             <span className="min-w-0 truncate">{group.name}</span>
                             <span className="ml-auto tabular-nums">{group.opts.length}</span>
                           </button>
@@ -564,7 +613,10 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                         </div>
                         <div
                           id={`${executionModeRadioName}-models-${group.id}`}
-                          className="space-y-0.5"
+                          data-model-group-list=""
+                          // 左边线落在标题展开箭头的中线（px-2.5 + 半个 size-3），子行整体右移，
+                          // 让模型与所属供应商形成上下级。
+                          className="ml-4 space-y-0.5 border-l border-border/60 pl-1.5"
                         >
                           {!collapsedProviders.has(group.id) &&
                             group.opts.map((option) => {
@@ -579,7 +631,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                     const parsed = parseModelValue(option.value);
                                     if (!parsed) return;
                                     onSelectModel(parsed);
-                                    setIsModelPickerOpen(false);
+                                    // Return to the root panel instead of closing, so the user can
+                                    // keep adjusting reasoning effort and other run controls.
+                                    showView("root");
                                   }}
                                   className={cn(
                                     "flex h-8 w-full items-center justify-between gap-2 rounded-lg px-2.5",
@@ -589,8 +643,18 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                                       : "text-foreground/90 hover:bg-settings-tile-hover hover:text-foreground",
                                   )}
                                 >
-                                  <span className="min-w-0 flex-1 truncate" title={option.model}>
-                                    {option.label}
+                                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                                    {/* 12px，比分组标题的 14px 小一档，避免子行图标压过父行。 */}
+                                    <ProviderBrandIcon
+                                      type={option.providerType}
+                                      className={cn(
+                                        "size-3",
+                                        isSelected ? "opacity-80" : "opacity-45",
+                                      )}
+                                    />
+                                    <span className="min-w-0 flex-1 truncate" title={option.model}>
+                                      {option.label}
+                                    </span>
                                   </span>
                                   <span
                                     className={cn(

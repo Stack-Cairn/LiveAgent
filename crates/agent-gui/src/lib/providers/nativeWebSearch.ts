@@ -1,6 +1,5 @@
-import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
-import type { ProviderId } from "../settings";
 import { isRecord } from "./runtime/common";
 
 export const HIDDEN_PROVIDER_NATIVE_WEB_SEARCH_TOOL_NAMES = [
@@ -200,42 +199,4 @@ export function buildProviderNativeWebFetchBridgeResult(params: {
   };
 }
 
-export function providerSupportsNativeWebSearch(
-  providerId: ProviderId,
-  api: string | undefined,
-  options?: {
-    baseUrl?: string;
-    modelId?: string;
-  },
-) {
-  if (providerId === "codex" && api === "openai-completions") {
-    if (!options?.baseUrl?.trim()) return false;
-    if (isOfficialOpenAIBaseUrl(options.baseUrl)) {
-      return supportsOpenAIChatCompletionsNativeWebSearchModel(options.modelId);
-    }
-    return true;
-  }
-
-  return (
-    (providerId === "codex" && api === "openai-responses") ||
-    (providerId === "xai" && api === "openai-responses") ||
-    (providerId === "deepseek" && api === "deepseek-responses") ||
-    (providerId === "claude_code" && api === "anthropic-messages") ||
-    (providerId === "gemini" && api === "google-generative-ai")
-  );
-}
-
-function isOfficialOpenAIBaseUrl(baseUrl: string | undefined) {
-  if (!baseUrl?.trim()) return false;
-  try {
-    const url = new URL(baseUrl);
-    return url.hostname === "api.openai.com";
-  } catch {
-    return false;
-  }
-}
-
-function supportsOpenAIChatCompletionsNativeWebSearchModel(modelId: string | undefined) {
-  const normalized = modelId?.trim().toLowerCase() ?? "";
-  return normalized.includes("search-preview");
-}
+export { providerSupportsNativeWebSearch } from "@liveagent/ui/lib/providers/providerCapabilities";

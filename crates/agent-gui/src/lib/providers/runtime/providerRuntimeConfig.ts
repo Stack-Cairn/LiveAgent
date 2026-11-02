@@ -1,11 +1,19 @@
 import {
+  providerSupportsNativeWebSearch,
+  resolveProviderApi,
+} from "@liveagent/ui/lib/providers/providerCapabilities";
+import {
   type ChatRuntimeControls,
   type CustomProvider,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
   normalizeChatRuntimeControlsForProvider,
 } from "../../settings";
-import type { ProviderRuntimeConfig } from "./types";
+import type { ProviderRuntimeBackend, ProviderRuntimeConfig } from "./types";
+
+export function getProviderRuntimeBackend(): ProviderRuntimeBackend {
+  return "kbrain";
+}
 
 /**
  * ProviderRuntimeConfig 的唯一构造点——全仓仅此一处注入品牌。任何调用方都只能
@@ -23,11 +31,15 @@ export function createProviderRuntimeConfig(
   };
   const controls = normalizeChatRuntimeControlsForProvider(controlsInput, reasoningParams);
   const reasoningSupported = getChatRuntimeReasoningLevelsForProvider(reasoningParams).length > 0;
+  const backend = getProviderRuntimeBackend();
   return {
-    baseUrl: provider.baseUrl,
-    isFullUrl: provider.isFullUrl,
-    apiKey: provider.apiKey,
-    customHeaders: provider.customHeaders,
+    backend,
+    // K-brain owns upstream routing and credentials, including header/query secrets.
+    backendModelProvider: provider.id,
+    baseUrl: "",
+    isFullUrl: false,
+    apiKey: "",
+    customHeaders: undefined,
     requestFormat: provider.requestFormat,
     reasoning: reasoningSupported
       ? controls.thinkingEnabled
@@ -37,7 +49,12 @@ export function createProviderRuntimeConfig(
     promptCachingEnabled: provider.promptCachingEnabled,
     promptCacheHintMode: provider.promptCacheHintMode,
     promptCacheRetention: provider.promptCacheRetention,
-    nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
+    nativeWebSearchEnabled:
+      controls.nativeWebSearchEnabled &&
+      providerSupportsNativeWebSearch(
+        provider.type,
+        resolveProviderApi(provider.type, provider.requestFormat),
+      ),
     useSystemProxy: provider.useSystemProxy,
     ...(provider.retryPolicy ? { retryPolicy: provider.retryPolicy } : {}),
     modelConfig: findProviderModelConfig(provider, model),

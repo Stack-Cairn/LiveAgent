@@ -11,7 +11,7 @@
 // 远端(WebUI)按钮经 gateway chat_queue.plan_decision 转发到桌面后走同一入口
 // answerPlanDecision(approve → 宿主批准 handler;reject → 反馈作为消息发送)。
 
-import type { Message, Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Message, Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   EXIT_PLAN_MODE_TOOL_NAME,
@@ -303,6 +303,17 @@ function buildErrorResult(toolCall: ToolCall, text: string): ToolResultMessage {
     isError: true,
     timestamp: Date.now(),
   };
+}
+
+export function projectBackendPlan(
+  conversationId: string,
+  toolCall: ToolCall,
+): ExitPlanModeResultDetails | undefined {
+  const plan = sanitizePlanMarkdown(toolCall.arguments?.plan);
+  if (!plan) return undefined;
+  pendingPlanByConversation.set(conversationId, { conversationId, toolCallId: toolCall.id, plan });
+  emitChange();
+  return { kind: "exit_plan_mode", plan };
 }
 
 export function createExitPlanModeTools(params: { conversationId: string }): BuiltinToolBundle {

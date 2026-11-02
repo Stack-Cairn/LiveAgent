@@ -1,5 +1,5 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import { buildMountedRootDrafts } from "@liveagent/ui/lib/chat/mountedRootDrafts";
-import { invoke } from "@tauri-apps/api/core";
 import { type Dispatch, type SetStateAction, useCallback } from "react";
 import { desktopWorkspaceProjectRootClient } from "../../../agent-ui-adapters/workspaceProjectRoots";
 import type { WorkspaceProject } from "../../../lib/settings";

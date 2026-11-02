@@ -32,8 +32,10 @@ type CacheEntry = {
   /** 已读到的最早 segment；0 表示读完，null 表示还没读过首窗。 */
   oldestSegmentIndex: number | null;
   truncated: boolean;
-  /** 向前分页是否已经走完（含触顶挡板的情况）。 */
+  /** 向前分页是否已停止（含触顶挡板和错误停止）。 */
   complete: boolean;
+  /** 错误停止不能作为成功刷新替换旧快照。 */
+  failed: boolean;
   revision: number;
   /** 事件集合的版本号，用于跳过无变化的重建。 */
   version: number;
@@ -119,6 +121,7 @@ export function useConversationStats(
       oldestSegmentIndex: null,
       truncated: false,
       complete: false,
+      failed: false,
       revision: authoritativeRevision,
       version: 0,
     };
@@ -172,6 +175,7 @@ export function useConversationStats(
             oldestSegmentIndex: oldest,
             truncated: latest.truncated || payload.truncated,
             complete: !payload.hasMoreBefore,
+            failed: false,
             revision: authoritativeRevision,
             version: latest.version + 1,
           };
@@ -189,7 +193,7 @@ export function useConversationStats(
           // 失败不重试：读数是诊断信息，宁可停在已有窗口也不打扰会话主链路。
           const latest = cache.get(conversationId);
           if (latest !== undefined && latest.revision === authoritativeRevision) {
-            cache.set(conversationId, { ...latest, complete: true });
+            cache.set(conversationId, { ...latest, complete: true, failed: true });
           }
           setLoading(false);
           setEventVersion((value) => value + 1);
@@ -263,11 +267,41 @@ export function useConversationStats(
     const approximate =
       entry === undefined ||
       entry.truncated ||
+      entry.failed ||
       !entry.complete ||
       events.length >= STATS_EVENT_CEILING;
     return aggregateTrajectoryStats(ledger, { approximate });
     // eventVersion / liveVersion 是重建触发器：前者跟随分页，后者被节流到 1s。
   }, [conversationId, authoritativeRevision, enabled, liveOwnership, eventVersion, liveVersion]);
 
-  return { stats, loading };
+  // 刷新期间保留同一会话上次展示的快照，避免轮询清缓存时整条消失。
+  // 只保留展示结果，不把旧事件混进新账本；新版本分页完成后允许读数下降。
+  const displayedRef = useRef<{
+    conversationId: string;
+    revision: number;
+    stats: ConversationStats | null;
+  } | null>(null);
+  if (
+    !enabled ||
+    conversationId === "" ||
+    displayedRef.current?.conversationId !== conversationId
+  ) {
+    displayedRef.current = null;
+  }
+  const currentEntry = cache.get(conversationId);
+  const refreshing =
+    enabled &&
+    displayedRef.current !== null &&
+    displayedRef.current.revision !== authoritativeRevision &&
+    (currentEntry?.revision !== authoritativeRevision ||
+      !currentEntry.complete ||
+      currentEntry.failed ||
+      currentEntry.oldestSegmentIndex === null);
+  if (!refreshing) {
+    displayedRef.current = enabled
+      ? { conversationId, revision: authoritativeRevision, stats }
+      : null;
+  }
+
+  return { stats: refreshing ? (displayedRef.current?.stats ?? stats) : stats, loading };
 }

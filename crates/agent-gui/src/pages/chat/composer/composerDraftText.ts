@@ -1,10 +1,10 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { MentionComposerLargePaste } from "@liveagent/ui/components/chat/MentionComposer";
 import {
   buildPastedTextFileName,
   validateImportedPastedTextFiles,
 } from "@liveagent/ui/lib/chat/composerDraft";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
-import { invoke } from "@tauri-apps/api/core";
 
 export {
   buildTextFromComposerDraft,

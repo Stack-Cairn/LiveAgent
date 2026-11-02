@@ -1,0 +1,102 @@
+{
+  "version": "kbrain.image.evidence.v1",
+  "checkedAt": "2026-10-11",
+  "items": [
+    {
+      "vendor": "openai",
+      "product": "OpenAI Images API / GPT Image 2",
+      "checkedAt": "2026-10-11",
+      "sourceUrls": [
+        "https://developers.openai.com/api/docs/guides/image-generation",
+        "https://developers.openai.com/api/reference/resources/images/methods/generate",
+        "https://developers.openai.com/api/reference/resources/images/methods/edit",
+        "https://developers.openai.com/api/docs/models/gpt-image-2",
+        "https://developers.openai.com/api/reference/overview",
+        "https://developers.openai.com/api/docs/guides/error-codes",
+        "https://developers.openai.com/api/docs/deprecations"
+      ],
+      "execution": "direct",
+      "verifiedOperations": ["generate", "reference", "edit", "mask"],
+      "contractComplete": true,
+      "contractScope": "gpt-image-2, non-streaming, JSON generations and edits; mask-guided editing without exact pixel guarantee",
+      "liveVerified": false
+    },
+    {
+      "vendor": "google",
+      "product": "Gemini Developer API generateContent",
+      "checkedAt": "2026-10-11",
+      "sourceUrls": [
+        "https://ai.google.dev/gemini-api/docs/generate-content/image-generation",
+        "https://ai.google.dev/api/generate-content",
+        "https://ai.google.dev/gemini-api/docs/generate-content/api-errors"
+      ],
+      "execution": "direct",
+      "verifiedOperations": ["generate", "reference", "edit"],
+      "verificationBasis": "official_documentation_only",
+      "contractComplete": false,
+      "liveVerified": false
+    },
+    {
+      "vendor": "volcengine",
+      "product": "Volcano Ark Images API / Doubao Seedream 5.0 pro",
+      "checkedAt": "2026-10-11",
+      "sourceUrls": [
+        "https://docs.volcengine.com/docs/ark/image-generation-api?lang=zh",
+        "https://docs.volcengine.com/docs/ark/base-url-and-authentication?lang=zh",
+        "https://docs.volcengine.com/docs/ark/error-codes?lang=zh",
+        "https://docs.volcengine.com/docs/ark/image-generation-streaming-responses?lang=zh"
+      ],
+      "execution": "direct",
+      "verifiedOperations": ["generate", "reference", "edit"],
+      "contractComplete": true,
+      "contractScope": "seedream-5.0-pro, non-streaming, single-image, bearer, no-mask",
+      "liveVerified": false
+    },
+    {
+      "vendor": "jimeng",
+      "product": "Jimeng AI Image Generation 4.0 / Visual OpenAPI signed_request",
+      "checkedAt": "2026-10-11",
+      "sourceUrls": [
+        "https://docs.volcengine.com/docs/JimengAI/JimengAI-ImageGeneration40-InterfaceDocumentation?lang=zh",
+        "https://www.volcengine.com/docs/6444/1390583",
+        "https://www.volcengine.com/docs/6369/67268",
+        "https://www.volcengine.com/docs/6369/67269",
+        "https://www.volcengine.com/docs/6444/69728",
+        "https://docs.volcengine.com/docs/APISignatureCallGuide/Commonerrorcode-10?lang=zh",
+        "https://docs.volcengine.com/docs/AIGCAIzhongtaigongyongwendang/api-key-usage-guide?lang=zh"
+      ],
+      "execution": "async",
+      "verifiedOperations": ["generate", "reference", "edit"],
+      "contractComplete": true,
+      "contractScope": "jimeng_t2i_v40, signed submit/poll, URL inputs, no-mask, no-provider-cancel",
+      "liveVerified": false,
+      "cvOfficialFixedSignatureVectorAvailable": false
+    },
+    {
+      "vendor": "runninghub",
+      "product": "RunningHub CN ComfyUI Workflow API",
+      "checkedAt": "2026-10-11",
+      "sourceUrls": [
+        "https://www.runninghub.cn/",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/api-425749013.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/api-425749014.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/api-425749015.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/api-425749003.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/api-425749004.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/api-425767306.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/api-425749007.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/doc-8287336.md",
+        "https://www.runninghub.cn/runninghub-api-doc-cn/doc-8287338.md",
+        "https://www.runninghub.cn/runninghub-api-doc-en/doc-8287471"
+      ],
+      "execution": "workflow",
+      "verifiedOperations": [],
+      "documentedProtocolActions": ["upload", "submit", "poll", "outputs", "cancel", "getWorkflowJson"],
+      "contractComplete": false,
+      "liveVerified": false,
+      "workflowId": null,
+      "workflowMapping": null
+    }
+  ]
+}

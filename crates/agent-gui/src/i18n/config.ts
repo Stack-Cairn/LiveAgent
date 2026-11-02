@@ -13,6 +13,33 @@ export {
  */
 export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> = {
   "zh-CN": {
+    "historyImport.title": "旧版对话迁移",
+    "historyImport.action": "导入旧版对话",
+    "historyImport.description":
+      "扫描本机旧版对话并转换为 K-brain 存储格式。保留旧数据，已有对话不覆盖，已明确删除的记录不恢复。",
+    "historyImport.desktopOnly": "请在保存旧数据的桌面端执行导入，浏览器无法读取本机旧版数据。",
+    "historyImport.running": "正在导入…",
+    "historyImport.runningHint": "正在扫描与转换旧对话，可以继续使用其他功能。",
+    "historyImport.result": "新增 {imported} 条，已存在 {existing} 条，失败 {failed} 项。",
+    "historyImport.empty": "未发现可导入的旧对话；已明确删除的记录会跳过。",
+    "historyImport.partial": "{count} 条对话正文已导入，但文件回滚记录尚不完整，可稍后重试。",
+    "historyImport.failures": "查看失败详情（可再次点击导入重试）",
+    "historyImport.failedList": "{count} 条旧对话没能迁移",
+    "historyImport.reason.too_large":
+      "对话超过当前 K-brain 的单次导入大小限制。升级后端后，可点「导入旧版对话」重试。",
+    "historyImport.reason.conflict": "K-brain 里已有同一条对话，但内容不一样，K-brain 拒绝覆盖。",
+    "historyImport.reason.rejected": "K-brain 认为这条对话的数据无效，拒绝导入。",
+    "historyImport.reason.transient": "连接中断或后端出错，下次启动会自动重试。",
+    "historyImport.notice.title": "{count} 条旧对话没能迁移到 K-brain",
+    "historyImport.notice.description":
+      "这些对话在当前版本里看不到。旧数据没有删除，启动时也不会再反复上传。",
+    "historyImport.notice.view": "查看详情",
+    "historyImport.notice.dismiss": "关闭提示",
+    "historyImport.notice.dismissTitle": "关闭这条提示？",
+    "historyImport.notice.dismissDescription":
+      "关闭后不再提示这些对话的迁移失败，此操作不可撤销。设置里的失败清单仍会保留；对话内容变化后如果再次失败，会重新提示。",
+    "historyImport.notice.dismissConfirm": "关闭并不再提示",
+    "historyImport.notice.cancel": "取消",
     "app.windowPinned": "已置顶",
     "app.windowPinnedHint": "窗口已置顶，浮在其他应用上方。点击取消置顶。",
     "app.settingsLoadFailed": "加载设置失败，已回退到默认配置。",
@@ -65,6 +92,30 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.aboutDescription": "查看当前版本、发布说明和桌面端更新状态。",
     "settings.aboutApplication": "应用",
     "settings.aboutApplicationDesc": "名称、版本与当前更新通道。",
+    "settings.aboutKbrain": "K-brain 后端",
+    "settings.aboutKbrainDesc": "当前连接的后端版本、协议与能力修订，用于排查兼容问题。",
+    "settings.aboutKbrainLegacy": "旧版后端（未提供结构化版本信息）",
+    "settings.aboutKbrainProtocol": "协议",
+    "settings.aboutKbrainCapabilityRevision": "能力修订",
+    "settings.aboutKbrainInstance": "实例",
+    "settings.aboutKbrainLoading": "正在读取后端信息…",
+    "settings.aboutKbrainUnavailable": "无法读取后端信息",
+    "chat.aiReview.title": "AI 审查 · {tool}",
+    "chat.aiReview.reason.cancelled": "审查已取消，需要人工确认。",
+    "chat.aiReview.reason.unavailable": "未配置可用的审查模型，需要人工确认。",
+    "chat.aiReview.reason.evidenceTooLarge": "待审查内容超出审查上限，需要人工确认。",
+    "chat.aiReview.reason.turnBudgetExhausted": "本轮审查次数已用完，需要人工确认。",
+    "chat.aiReview.reason.busy": "审查模型繁忙，需要人工确认。",
+    "chat.aiReview.reason.failed": "审查失败或超时，需要人工确认。",
+    "chat.aiReview.reason.timedOut": "审查超时，需要人工确认。",
+    "chat.aiReview.reason.httpFailed":
+      "审查请求失败（HTTP {status}），请检查 AI 审查的模型和服务商设置，需要人工确认。",
+    "chat.aiReview.reason.modelUnresolved": "找不到 AI 审查设置里的审查模型，需要人工确认。",
+    "chat.aiReview.reason.truncated": "审查结果被输出上限截断，需要人工确认。",
+    "chat.aiReview.reason.invalidResponse": "审查模型返回的结果无法识别，需要人工确认。",
+    "chat.aiReview.reason.sensitiveRedacted": "已隐去敏感信息，需要人工确认。",
+    "chat.aiReview.reason.earlierOutput": "之前的工具输出需要人工复核。",
+    "chat.aiReview.reason.attachmentsNotReviewed": "图片或文件附件未经审查。",
     "settings.aboutSoftwareUpdate": "软件更新",
     "settings.aboutSoftwareUpdateDesc": "检查、安装桌面端更新并查看发布说明。",
     "settings.aboutReleaseNotes": "发布说明",
@@ -77,6 +128,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.aboutAnnouncementUnavailable": "暂无更新公告",
     "settings.aboutAnnouncementUnavailableDesc": "当前安装版本没有对应的发布说明。",
     "settings.aboutAnnouncementLoadFailed": "加载更新公告失败",
+    "settings.aboutDesktopHostRequired":
+      "更新与更新公告由桌面端提供：请在 LiveAgent 桌面应用中使用。",
     "settings.aboutDebugMode": "调试模式",
     "settings.aboutDebugModeDesc": "仅开发构建可见；预览最新更新公告，不会修改已读状态。",
     "settings.aboutPreviewAnnouncement": "预览更新公告",
@@ -166,6 +219,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncRemoteTitle": "远端备份",
     "settings.backupSyncCredentialNote": "账号密码仅保存在本机",
     "settings.backupSyncLoading": "正在读取同步配置…",
+    "settings.backupSyncDesktopHostRequired":
+      "WebDAV 云同步由桌面端提供：请在 LiveAgent 桌面应用中使用。",
     "settings.backupSyncStatusReady": "云同步已就绪",
     "settings.backupSyncStatusNeverSynced": "尚未同步，点击「上传」推送本机配置",
     "settings.backupSyncStatusNotConfigured": "未配置云同步",
@@ -300,6 +355,39 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.remoteHeartbeatHint": "本地 Agent 向 Gateway 上报存活状态的间隔",
   },
   "en-US": {
+    "historyImport.title": "Legacy conversation migration",
+    "historyImport.action": "Import old conversations",
+    "historyImport.description":
+      "Scan local legacy conversations and convert them to K-brain storage. Originals are preserved, existing conversations are not overwritten, and explicitly deleted records are not restored.",
+    "historyImport.desktopOnly":
+      "Import from the desktop app that holds your old data. The browser cannot read local legacy files.",
+    "historyImport.running": "Importing…",
+    "historyImport.runningHint":
+      "Scanning and converting old conversations. You can keep using other features.",
+    "historyImport.result": "{imported} imported, {existing} already present, {failed} failed.",
+    "historyImport.empty":
+      "No importable old conversations found. Explicitly deleted records are skipped.",
+    "historyImport.partial":
+      "{count} conversation transcripts were imported, but file rollback records are incomplete. You can retry later.",
+    "historyImport.failures": "View failures (click Import again to retry)",
+    "historyImport.failedList": "{count} old conversation(s) could not be migrated",
+    "historyImport.reason.too_large":
+      "The conversation exceeds the current K-brain import size limit. After upgrading the backend, retry with Import old conversations.",
+    "historyImport.reason.conflict":
+      "K-brain already holds this conversation with different content and refused to overwrite it.",
+    "historyImport.reason.rejected": "K-brain rejected this conversation's data as invalid.",
+    "historyImport.reason.transient":
+      "The connection dropped or the backend failed; it is retried on the next launch.",
+    "historyImport.notice.title": "{count} old conversation(s) were not migrated into K-brain",
+    "historyImport.notice.description":
+      "They are not visible in this version. The old data is kept and is no longer re-uploaded on every launch.",
+    "historyImport.notice.view": "View details",
+    "historyImport.notice.dismiss": "Dismiss",
+    "historyImport.notice.dismissTitle": "Dismiss this notice?",
+    "historyImport.notice.dismissDescription":
+      "These migration failures will no longer be announced. This cannot be undone. Settings keeps the list; a conversation that changes and fails again is announced anew.",
+    "historyImport.notice.dismissConfirm": "Dismiss permanently",
+    "historyImport.notice.cancel": "Cancel",
     "app.windowPinned": "Pinned",
     "app.windowPinnedHint": "Window is pinned above other apps. Click to unpin.",
     "app.settingsLoadFailed": "Failed to load settings. Default settings have been restored.",
@@ -357,6 +445,35 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
       "View the current version, release notes, and desktop update status.",
     "settings.aboutApplication": "Application",
     "settings.aboutApplicationDesc": "Name, version, and current update channel.",
+    "settings.aboutKbrain": "K-brain backend",
+    "settings.aboutKbrainDesc":
+      "Version, protocol, and capability revision of the connected backend, for compatibility troubleshooting.",
+    "settings.aboutKbrainLegacy": "Legacy backend (no structured version information)",
+    "settings.aboutKbrainProtocol": "Protocol",
+    "settings.aboutKbrainCapabilityRevision": "Capability revision",
+    "settings.aboutKbrainInstance": "Instance",
+    "settings.aboutKbrainLoading": "Reading backend information…",
+    "settings.aboutKbrainUnavailable": "Backend information unavailable",
+    "chat.aiReview.title": "AI review · {tool}",
+    "chat.aiReview.reason.cancelled": "Review cancelled; manual approval required.",
+    "chat.aiReview.reason.unavailable": "Reviewer unavailable; manual approval required.",
+    "chat.aiReview.reason.evidenceTooLarge":
+      "Evidence exceeds review budget; manual approval required.",
+    "chat.aiReview.reason.turnBudgetExhausted":
+      "Turn review budget exhausted; manual approval required.",
+    "chat.aiReview.reason.busy": "Reviewer busy; manual approval required.",
+    "chat.aiReview.reason.failed": "Reviewer failed or timed out; manual approval required.",
+    "chat.aiReview.reason.timedOut": "Reviewer timed out; manual approval required.",
+    "chat.aiReview.reason.httpFailed":
+      "Reviewer request failed (HTTP {status}); check the AI review model and provider. Manual approval required.",
+    "chat.aiReview.reason.modelUnresolved":
+      "The AI review model could not be resolved; manual approval required.",
+    "chat.aiReview.reason.truncated": "Reviewer reply was truncated; manual approval required.",
+    "chat.aiReview.reason.invalidResponse": "Invalid reviewer response; manual approval required.",
+    "chat.aiReview.reason.sensitiveRedacted":
+      "Sensitive data was redacted; manual approval required.",
+    "chat.aiReview.reason.earlierOutput": "Earlier tool output requires human review.",
+    "chat.aiReview.reason.attachmentsNotReviewed": "Non-text attachments were not reviewed.",
     "settings.aboutSoftwareUpdate": "Software Update",
     "settings.aboutSoftwareUpdateDesc": "Check and install desktop updates or view release notes.",
     "settings.aboutReleaseNotes": "Release Notes",
@@ -370,6 +487,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.aboutAnnouncementUnavailableDesc":
       "There are no release notes for the installed version.",
     "settings.aboutAnnouncementLoadFailed": "Failed to load update announcement",
+    "settings.aboutDesktopHostRequired":
+      "Updates and update announcements are provided by the desktop app: use LiveAgent on the desktop.",
     "settings.aboutDebugMode": "Debug Mode",
     "settings.aboutDebugModeDesc":
       "Visible only in development builds. Preview the latest announcement without changing its read state.",
@@ -466,6 +585,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncRemoteTitle": "Remote backup",
     "settings.backupSyncCredentialNote": "Credentials never leave this device",
     "settings.backupSyncLoading": "Loading sync settings…",
+    "settings.backupSyncDesktopHostRequired":
+      "WebDAV cloud sync is provided by the desktop app: use LiveAgent on the desktop.",
     "settings.backupSyncStatusReady": "Cloud sync ready",
     "settings.backupSyncStatusNeverSynced":
       "Not synced yet — use Upload to push this machine's config",

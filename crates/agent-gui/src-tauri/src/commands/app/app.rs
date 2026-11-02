@@ -32,6 +32,8 @@ pub fn app_window_pinned(pin_state: State<'_, Arc<WindowPinState>>) -> bool {
 
 /// HTML 的静态启动骨架完成同步布局后再显示原生窗口，避免 WebView
 /// 导航到首个可绘制帧之间暴露系统默认白色背景。
+/// 本进程首次显示时（且未最大化）把窗口收进所在显示器工作区并居中；
+/// WebView 重载再次就绪时不移动窗口。
 #[tauri::command]
 pub fn app_frontend_ready(
     window: tauri::WebviewWindow,
@@ -40,6 +42,12 @@ pub fn app_frontend_ready(
     ready_state.0.store(true, Ordering::SeqCst);
     if window.is_visible().unwrap_or(false) {
         return Ok(());
+    }
+    if super::window_placement::claim_startup_placement() && !window.is_maximized().unwrap_or(false)
+    {
+        if let Err(error) = super::window_placement::center_in_work_area(&window) {
+            eprintln!("failed to center LiveAgent window on startup: {error}");
+        }
     }
     window
         .show()

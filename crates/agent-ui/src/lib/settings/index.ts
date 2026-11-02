@@ -22,6 +22,10 @@ import {
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
 import {
+  providerSupportsNativeWebSearch,
+  resolveProviderApi,
+} from "@liveagent/ui/lib/providers/providerCapabilities";
+import {
   normalizeApiKey,
   normalizeBaseUrl,
   normalizeModels,
@@ -121,6 +125,7 @@ import {
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
+  MODEL_IMAGE_ADAPTERS,
   MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
@@ -526,7 +531,7 @@ export function getKnownModelThinkingLevels(
 
 /**
  * 纯读路径:按 (供应商类型, 模型) 解析出当前应展示/下发的档位,只推导
- * `reasoning` 展示值,**绝不回写任何桶**。旧实现在这里把钳制结果写回
+ * `reasoning` 展示值和可用的联网搜索状态,**绝不回写任何桶**。旧实现在这里把钳制结果写回
  * reasoningByProvider 再被 update 持久化——narrow 表模型一碰任何控件就把
  * wide 表模型选的表外档抹掉,是「切会话/另一栏档位被重置」的元凶之一。
  * 桶的迁移与写入只发生在 updateChatRuntimeControlsForProvider。
@@ -546,7 +551,17 @@ export function normalizeChatRuntimeControlsForProvider(
     resolveChatRuntimeReasoning(controls, key, params.modelId),
     levels,
   );
-  return { ...controls, reasoning };
+  return {
+    ...controls,
+    reasoning,
+    nativeWebSearchEnabled:
+      controls.nativeWebSearchEnabled &&
+      (!params.providerId ||
+        providerSupportsNativeWebSearch(
+          params.providerId,
+          resolveProviderApi(params.providerId, params.requestFormat),
+        )),
+  };
 }
 
 /**
@@ -694,6 +709,11 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     enabled: obj.enabled === true,
+    managedLocal: obj.managedLocal === true,
+    localGatewayPort: normalizeIntegerInRange(obj.localGatewayPort, 1, 65_535, 50052),
+    localGatewayToken: normalizeApiKey(
+      typeof obj.localGatewayToken === "string" ? obj.localGatewayToken : "",
+    ),
     gatewayUrl: normalizeBaseUrl(typeof obj.gatewayUrl === "string" ? obj.gatewayUrl : ""),
     gatewayPort: normalizeIntegerInRange(obj.gatewayPort, 1, 65_535, 443),
     token: normalizeApiKey(typeof obj.token === "string" ? obj.token : ""),
@@ -970,6 +990,7 @@ export function normalizeProviderModelConfig(
   const promptCacheHintMode =
     providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   const inputModalities = normalizeInputModalities(obj.inputModalities);
+  const imageAdapter = MODEL_IMAGE_ADAPTERS.find((value) => value === obj.imageAdapter);
   return {
     id,
     ...(typeof obj.displayName === "string"
@@ -988,6 +1009,8 @@ export function normalizeProviderModelConfig(
     // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
     // 重排顺序），合法覆盖永不被自动删除。
     ...(inputModalities ? { inputModalities } : {}),
+    ...(imageAdapter ? { imageAdapter } : {}),
+    ...(typeof obj.imageModel === "boolean" ? { imageModel: obj.imageModel } : {}),
   };
 }
 
@@ -1026,6 +1049,41 @@ export function normalizeProviderModelConfigs(
   }
 
   return out;
+}
+
+/**
+ * 运行期模型目录生效后，按生效目录重解析 catalog/fallback 来源的模型限额，结果与
+ * 重新加载设置时 normalizeProviderModelConfig 的重解析一致；user/provider 来源
+ * 原样保留。没有任何变化时返回同一个对象，调用方据此跳过 setState 与写入。
+ */
+export function refreshCatalogDerivedModelLimits(settings: AppSettings): AppSettings {
+  let changed = false;
+  const customProviders = settings.customProviders.map((provider) => {
+    let providerChanged = false;
+    const models = provider.models.map((model) => {
+      if (model.limitsSource !== "catalog" && model.limitsSource !== "fallback") return model;
+      const next = normalizeProviderModelConfig(model, provider.type);
+      if (
+        !next ||
+        (next.contextWindow === model.contextWindow &&
+          next.maxOutputToken === model.maxOutputToken &&
+          next.limitsSource === model.limitsSource)
+      ) {
+        return model;
+      }
+      providerChanged = true;
+      return {
+        ...model,
+        contextWindow: next.contextWindow,
+        maxOutputToken: next.maxOutputToken,
+        limitsSource: next.limitsSource,
+      };
+    });
+    if (!providerChanged) return provider;
+    changed = true;
+    return { ...provider, models };
+  });
+  return changed ? { ...settings, customProviders } : settings;
 }
 
 export function findProviderModelConfig(
@@ -1466,19 +1524,20 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
 /**
  * 命令安全模式归一。
  *
- * - 缺失 / null / 空串:沿用默认 `auto`(全新配置与旧快照的正常形态)。
+ * - 缺失 / null / 空串:默认 `always`(全新配置与旧快照的正常形态)。
+ * - 旧值 `auto`(已下线的"完全访问")迁移为 `always`(始终允许)。
  * - **存在但无法识别:收敛到最严格的 `ask`**(P2#6)。该设置全部意义在于约束,
  *   未来新增的模式值、回退到旧版本、手改配置的笔误若静默降级成最宽松的非 ask 值,
  *   等于悄悄放宽用户的约束选择;Rust 侧 normalize_command_safety_mode_value 同语义。
  */
 export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
-  if (input === undefined || input === null) return "auto";
+  if (input === undefined || input === null) return "always";
   if (typeof input !== "string") {
     console.warn(`[settings] non-string commandSafetyMode; failing closed to "ask"`, input);
     return "ask";
   }
   const mode = input.trim();
-  if (mode === "") return "auto";
+  if (mode === "" || mode === "auto") return "always";
   if ((COMMAND_SAFETY_MODES as readonly string[]).includes(mode)) {
     return mode as CommandSafetyMode;
   }
@@ -1487,14 +1546,17 @@ export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
 }
 
 /**
- * 严格度序:`auto` < `sandbox` < `sandboxOffline` < `ask`(逐次人工放行最严)。
+ * 远端选择只能收紧本地模式；旧沙箱约束优先于新增自动审批模式。
  * 供“取更严格者”的钳制使用,不参与持久化。
  */
 const COMMAND_SAFETY_MODE_STRICTNESS: Record<CommandSafetyMode, number> = {
+  always: -1,
   auto: 0,
-  sandbox: 1,
-  sandboxOffline: 2,
-  ask: 3,
+  autoEdit: 1,
+  autoReview: 2,
+  sandbox: 3,
+  sandboxOffline: 4,
+  ask: 5,
 };
 
 /**
@@ -1506,6 +1568,10 @@ export function strictestCommandSafetyMode(
   a: CommandSafetyMode,
   b: CommandSafetyMode,
 ): CommandSafetyMode {
+  // 自动编辑与自动审查的授权范围不包含彼此，合并时保留人工确认。
+  if ((a === "autoEdit" && b === "autoReview") || (a === "autoReview" && b === "autoEdit")) {
+    return "ask";
+  }
   return COMMAND_SAFETY_MODE_STRICTNESS[a] >= COMMAND_SAFETY_MODE_STRICTNESS[b] ? a : b;
 }
 
@@ -1811,7 +1877,7 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
-      commandSafetyMode: "auto",
+      commandSafetyMode: "always",
       browserAutomationMode: "auto",
       defaultTimeZone: "",
       workspaceProjects: [],
@@ -1837,6 +1903,9 @@ export function getDefaultSettings(): AppSettings {
     },
     remote: {
       enabled: false,
+      managedLocal: false,
+      localGatewayPort: 50052,
+      localGatewayToken: "",
       gatewayUrl: "",
       gatewayPort: 443,
       token: "",

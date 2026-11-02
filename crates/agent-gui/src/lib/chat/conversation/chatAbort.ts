@@ -6,7 +6,7 @@ import type {
   ToolCall,
   ToolResultMessage,
   Usage,
-} from "@earendil-works/pi-ai";
+} from "@liveagent/app/lib/agentTypes";
 
 import type { ExecutionMode } from "../../settings";
 import { isSubagentCardToolCall } from "../../subagents/card";

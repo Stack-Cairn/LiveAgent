@@ -40,6 +40,7 @@ type StoreSkillCardProps = {
   onOpenPreview: (skill: ClawHubSkillCard) => void;
   onSelectCategory: (category: ClawHubCategorySlug) => void;
   onInstall: (skill: ClawHubSkillCard) => void;
+  installDisabled?: boolean;
 };
 
 export function StoreSkillCard({
@@ -50,6 +51,7 @@ export function StoreSkillCard({
   onOpenPreview,
   onSelectCategory,
   onInstall,
+  installDisabled = false,
 }: StoreSkillCardProps) {
   const { t } = useLocale();
   const { done, installing, pending, job, progress } = installState;
@@ -205,7 +207,7 @@ export function StoreSkillCard({
             "gap-1.5 rounded-lg bg-background text-foreground hover:bg-settings-active",
             done && "bg-transparent text-muted-foreground disabled:opacity-100",
           )}
-          disabled={done || installing}
+          disabled={installDisabled || done || installing}
           aria-busy={installing}
           onClick={(event) => {
             event.stopPropagation();

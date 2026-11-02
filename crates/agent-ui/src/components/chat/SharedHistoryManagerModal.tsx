@@ -58,6 +58,7 @@ type SharedHistoryManagerModalProps<Conversation extends SharedHistorySummary> =
   errors: Readonly<Record<string, string | undefined>>;
   listError?: string | null;
   shareOrigin?: string;
+  shareBackendUrl?: string;
   shareOriginPort?: number;
   shareOriginLoading?: boolean;
   onRefresh: () => void;
@@ -204,6 +205,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
   errors,
   listError,
   shareOrigin,
+  shareBackendUrl,
   shareOriginPort,
   shareOriginLoading = false,
   onRefresh,
@@ -219,7 +221,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
     showCopied,
     resetCopied,
   } = useCopyFeedback<string | null>(null, COPY_FEEDBACK_DURATION.default);
-  const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort);
+  const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort, shareBackendUrl);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredConversations = useMemo(
     () =>

@@ -1,5 +1,7 @@
 import type { RightDockProjectState } from "@liveagent/app/lib/settings";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hostAwareErrorMessage } from "../../lib/shared/hostErrors";
 import type {
   TerminalClient,
   TerminalSession,
@@ -61,6 +63,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
     projectState,
     terminalReady,
   } = options;
+  const { t } = useLocale();
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [internalSessionsLoaded, setInternalSessionsLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -165,12 +168,12 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
       .then((nextSessions) => {
         commitSessions(nextSessions, !isControlled);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err) => setError(hostAwareErrorMessage(err, t("projectTools.runtimeUnsupported"))))
       .finally(() => {
         setLoading(false);
         setInternalSessionsLoaded(true);
       });
-  }, [client, commitSessions, isControlled, terminalReady]);
+  }, [client, commitSessions, isControlled, t, terminalReady]);
 
   useEffect(() => {
     if (!isOpen || isControlled) return;
@@ -326,7 +329,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
           rememberTerminalSnapshot(snapshot);
           activateTerminalSession(snapshot.session);
         })
-        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+        .catch((err) => setError(hostAwareErrorMessage(err, t("projectTools.runtimeUnsupported"))))
         .finally(() => setCreating(false));
     },
     [
@@ -337,6 +340,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
       localSessions,
       projectPathKey,
       rememberTerminalSnapshot,
+      t,
       terminalReady,
     ],
   );
@@ -380,7 +384,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
             finalizeClose();
             return;
           }
-          setError(err instanceof Error ? err.message : String(err));
+          setError(hostAwareErrorMessage(err, t("projectTools.runtimeUnsupported")));
         })
         .finally(() =>
           setClosingSessionIds((current) => {
@@ -391,7 +395,7 @@ export function useRightDockSessions(options: UseRightDockSessionsOptions) {
           }),
         );
     },
-    [client, closingSessionIds, forgetTerminalSession, onProjectStateChange],
+    [client, closingSessionIds, forgetTerminalSession, onProjectStateChange, t],
   );
 
   const handleCloseRequest = useCallback(

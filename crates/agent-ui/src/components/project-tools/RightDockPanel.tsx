@@ -966,6 +966,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
               terminalReady={terminalReady}
               terminalDisabledMessage={terminalDisabledMessage}
               disabledMessage={disabledMessage}
+              tunnelDisabledMessage={tunnelDisabledMessage}
               projectReady={projectReady}
               tunnelAvailable={tunnelAvailable}
               creating={creating}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -406,7 +407,8 @@ func TestDBFilePermissionsAndNoPlaintext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat db: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+	// Windows has no Unix mode bits; the plaintext scan below still runs everywhere.
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o600 {
 		t.Fatalf("db file perm = %o, want 0600", perm)
 	}
 	// 明文绝不落库：直接扫库文件字节。

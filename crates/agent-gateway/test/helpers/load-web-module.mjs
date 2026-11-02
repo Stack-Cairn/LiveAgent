@@ -7,32 +7,8 @@ import { transpileTypeScriptModule } from "../../../../scripts/typescript-source
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".css"];
 
-// pi-ai ships an import-only exports map, so the loader's CJS require() path
-// cannot reach it. Import the real model catalog by file URL (bypassing the
-// exports map) so settings code sees the exact runtime data.
-const piAiModels = await import(
-  new URL(
-    "../../web/node_modules/@earendil-works/pi-ai/dist/models.js",
-    import.meta.url,
-  ).href
-);
-const piAiProvidersAll = await import(
-  new URL(
-    "../../web/node_modules/@earendil-works/pi-ai/dist/providers/all.js",
-    import.meta.url,
-  ).href
-);
-
 function createDefaultMocks() {
   return {
-    "@earendil-works/pi-ai": {
-      getSupportedThinkingLevels: piAiModels.getSupportedThinkingLevels,
-      clampThinkingLevel: piAiModels.clampThinkingLevel,
-    },
-    "@earendil-works/pi-ai/providers/all": {
-      getBuiltinModels: piAiProvidersAll.getBuiltinModels,
-      getBuiltinModel: piAiProvidersAll.getBuiltinModel,
-    },
     "@sinclair/typebox": {
       Type: {
         Object(properties = {}) {

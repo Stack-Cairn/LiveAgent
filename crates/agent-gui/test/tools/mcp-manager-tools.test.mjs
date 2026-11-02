@@ -89,38 +89,42 @@ async function callMcpManager(bundle, arguments_, signal) {
   );
 }
 
-test("McpManager is always registered as a builtin tool", async () => {
-  const loader = createTsModuleLoader();
+async function buildRegistryFor(loader, overrides = {}) {
   const registryModule = loader.loadModule("src/lib/tools/builtinRegistry.ts");
   const fileToolState = loader.loadModule("src/lib/tools/fileToolState.ts");
-
-  const registry = await registryModule.buildBuiltinToolRegistry({
+  return registryModule.buildBuiltinToolRegistry({
     workdir: "/workspace",
     providerId: "codex",
     fileState: fileToolState.createFileToolState(),
     skillsEnabled: false,
     runtimeScope: "chat",
     getMcpSettings: () => ({ servers: [], selected: [] }),
+    ...overrides,
   });
+}
 
+test("McpManager registry is fail-closed in K-brain production and real on native host", async () => {
+  await assert.rejects(
+    () => buildRegistryFor(createTsModuleLoader()),
+    /Frontend tools are unavailable in K-brain mode/,
+  );
+
+  const registry = await buildRegistryFor(
+    createTsModuleLoader({ mocks: { "@tauri-apps/api/core": {} } }),
+  );
   assert.equal(registry.hasTool("McpManager"), true);
   assert.equal(registry.metadataByName.get("McpManager").kind, "manage_mcp");
 });
 
-test("builtin registry resolves tool names with casing drift before execution", async () => {
-  const loader = createTsModuleLoader();
-  const registryModule = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const fileToolState = loader.loadModule("src/lib/tools/fileToolState.ts");
+test("native builtin registry resolves MCP tool names with casing drift while K-brain stays fail-closed", async () => {
+  await assert.rejects(
+    () => buildRegistryFor(createTsModuleLoader()),
+    /Frontend tools are unavailable in K-brain mode/,
+  );
 
-  const registry = await registryModule.buildBuiltinToolRegistry({
-    workdir: "/workspace",
-    providerId: "codex",
-    fileState: fileToolState.createFileToolState(),
-    skillsEnabled: false,
-    runtimeScope: "chat",
-    getMcpSettings: () => ({ servers: [], selected: [] }),
-  });
-
+  const registry = await buildRegistryFor(
+    createTsModuleLoader({ mocks: { "@tauri-apps/api/core": {} } }),
+  );
   assert.equal(registry.hasTool("mcpmanager"), true);
 
   const result = await registry.executeToolCall({
@@ -135,26 +139,16 @@ test("builtin registry resolves tool names with casing drift before execution", 
   assert.equal(result.details.kind, "manage_mcp");
 });
 
-test("ManagedProcess is registered only for chat runtime", async () => {
-  const loader = createTsModuleLoader();
-  const registryModule = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const fileToolState = loader.loadModule("src/lib/tools/fileToolState.ts");
+test("native registry keeps ManagedProcess chat-only while K-brain production fails closed", async () => {
+  await assert.rejects(
+    () => buildRegistryFor(createTsModuleLoader()),
+    /Frontend tools are unavailable in K-brain mode/,
+  );
 
-  const baseParams = {
-    workdir: "/workspace",
-    providerId: "codex",
-    fileState: fileToolState.createFileToolState(),
-    skillsEnabled: false,
-    getMcpSettings: () => ({ servers: [], selected: [] }),
-  };
-
-  const chatRegistry = await registryModule.buildBuiltinToolRegistry({
-    ...baseParams,
-    runtimeScope: "chat",
-  });
-  const cronRegistry = await registryModule.buildBuiltinToolRegistry({
-    ...baseParams,
-    fileState: fileToolState.createFileToolState(),
+  const nativeLoader = createTsModuleLoader({ mocks: { "@tauri-apps/api/core": {} } });
+  const chatRegistry = await buildRegistryFor(nativeLoader, { runtimeScope: "chat" });
+  const cronRegistry = await buildRegistryFor(nativeLoader, {
+    fileState: nativeLoader.loadModule("src/lib/tools/fileToolState.ts").createFileToolState(),
     runtimeScope: "cron_auto_prompt",
   });
 

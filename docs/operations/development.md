@@ -35,6 +35,42 @@
 | Gateway | `crates/agent-gateway/go.mod` | Go Gateway 依赖。 |
 | Gateway WebUI | `crates/agent-gateway/web/package.json` | 浏览器 WebUI 依赖与构建脚本。 |
 
+桌面开发和打包也需要 Go：Tauri 启动前会从当前工作区源码构建 Gateway sidecar，并嵌入对应
+WebUI。先使用根 `mise.toml` 对齐 Go、Node、pnpm、Rust 等工具链，再在仓库根安装全部 workspace
+依赖，确保桌面和 Gateway WebUI 均可构建：
+
+```bash
+mise install
+pnpm install --frozen-lockfile
+pnpm --dir crates/agent-gui tauri dev
+```
+
+`tauri dev` 和 `tauri build` 的前置 hook 自动执行 `scripts/prepare-gateway.mjs`，先完成 WebUI
+typecheck/Vite build，再构建 `crates/agent-gui/src-tauri/binaries/liveagent-gateway-<target-triple>`
+（Windows 带 `.exe`）。目标架构来自 Tauri 的构建目标；直接准备其他目标时可传
+`--target <rust-triple>`。生成的 sidecar 属于本地构建产物，不提交到 Git。正式安装包和 Windows
+portable 包携带 Gateway 与嵌入的 WebUI，运行时无需 Go、Node 或 pnpm。
+
+直接调用 Cargo 不执行 Tauri hook。首次在干净工作区运行 Rust check/test/build 前，先准备本机
+sidecar；Go Gateway 或 WebUI 源码变更后也应重新准备：
+
+```bash
+node scripts/prepare-gateway.mjs
+cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests
+```
+
+## 桌面本机托管
+
+全新桌面配置默认开启远程访问并启用「在此电脑托管 Gateway」。单独运行 `tauri dev` 或正式客户端
+即可后台启动本机 Gateway，健康检查确认本次启动的服务就绪后，桌面自动连接。进入设置的远程访问
+页面查看 WebUI 地址，复制自动生成的访问令牌登录。本机服务只监听 loopback；修改端口会重启本机
+服务，关闭窗口到托盘时继续运行，真正退出或桌面进程结束时回收。
+
+已有配置会保留远程访问开关、外部 Gateway 地址和令牌；升级不会擅自接管已有外部服务。原本明确
+关闭的远程访问保持关闭。需要迁移到本机托管时，在远程访问页面开启对应选项；需要连接已有服务时
+关闭「在此电脑托管 Gateway」并配置外部地址和令牌。本机端口已被占用时会显示启动失败，应选择空闲
+端口或切换到外部连接后重试。
+
 ## 常用检查命令
 
 | 场景 | 命令 |
@@ -78,6 +114,12 @@ Gateway token 为 `dev-token`。脚本遇到已由外部进程占用且健康的
 终止该外部进程。进程检测、HTTP 健康检查、日志和状态文件均由 Node 实现；Windows 停止托管进程
 时调用系统自带的 `taskkill`，macOS/Linux 使用进程组信号。
 
+`dev-stack` 单独启动的 Gateway 由该脚本管理。要让桌面连接这个开发服务，在桌面远程访问设置中
+开启远程访问、关闭「在此电脑托管 Gateway」，填写 `http://127.0.0.1:50052` 和 `dev-token`；
+如果通过环境变量修改了开发端口或令牌，填写相应值。浏览器访问 `http://localhost:5173` 使用独立
+Vite WebUI。桌面本机托管模式不会自动接管或复用 `dev-stack` 的 Gateway，已有桌面连接配置也不会
+被脚本替换。
+
 ## 统一编译与检查
 
 跨平台主入口为 `scripts/check.mjs`，macOS、Linux 和 Windows 推荐通过 pnpm 调用：
@@ -92,7 +134,7 @@ pnpm check:strict
 
 | 级别 | 检查范围 |
 |---|---|
-| `fast` | diff、脚本测试、Shared UI 边界/typecheck、GUI/WebUI build、三端完整 lint 诊断、Rust check、golangci-lint、Go tests。 |
+| `fast` | diff、脚本测试、Shared UI 边界/typecheck、GUI build、嵌入 WebUI 的 Gateway sidecar build、三端完整 lint 诊断、Rust check、golangci-lint、Go tests。 |
 | `all` | `fast` + 自动发现的 GUI/WebUI/release 测试、Rust all-target/doc tests、Proto lint/breaking。 |
 | `strict` | `all` + rustfmt、Clippy、三端完整 Biome 诊断，并将相对基线变更文件中的 Biome warning 视为错误。 |
 

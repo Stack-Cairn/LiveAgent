@@ -41,7 +41,6 @@ export function createConversationSurfaceController(
   let unsubscribeQueue: (() => void) | null = null;
   let unsubscribeApprovals: (() => void) | null = null;
   let unsubscribeHydration: (() => void) | null = null;
-  let disposed = false;
   let snapshot: ConversationSurfaceSnapshot = readSnapshot();
 
   function readSnapshot(): ConversationSurfaceSnapshot {
@@ -82,7 +81,7 @@ export function createConversationSurfaceController(
   }
 
   function connect() {
-    if (unsubscribeRuntime || disposed) return;
+    if (unsubscribeRuntime) return;
     unsubscribeRuntime = params.registry.subscribe(conversationId, () => refresh(true));
     unsubscribeDraft = params.registry.drafts.subscribe(conversationId, () => refresh(true));
     unsubscribeUploads = params.registry.uploads.subscribe(conversationId, () => refresh(true));
@@ -114,7 +113,6 @@ export function createConversationSurfaceController(
       return snapshot;
     },
     subscribe(listener) {
-      if (disposed) return () => undefined;
       connect();
       listeners.add(listener);
       return () => {
@@ -123,7 +121,6 @@ export function createConversationSurfaceController(
       };
     },
     retainView() {
-      if (disposed) return () => undefined;
       return params.registry.retainView(conversationId);
     },
     setDraft(draft) {
@@ -151,9 +148,10 @@ export function createConversationSurfaceController(
     retry() {
       return params.actions.retry({ conversationId });
     },
+    // Releases subscriptions only. React.StrictMode replays the owner's effect cleanup while
+    // the page keeps rendering this same useMemo instance, so a later subscribe() or
+    // retainView() must reconnect instead of silently doing nothing.
     dispose() {
-      if (disposed) return;
-      disposed = true;
       disconnect();
       listeners.clear();
     },

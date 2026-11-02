@@ -1,3 +1,5 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { revealItemInDir } from "@liveagent/app/shims/tauriOpener";
 import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { sidebarScopeKey } from "@liveagent/ui/lib/sidebar/scope";
@@ -14,8 +16,6 @@ import {
   getDefaultWorkspaceProjectPath,
   mergeWorkspaceProjectsWithHistory,
 } from "@liveagent/ui/lib/workspaceProjects";
-import { invoke } from "@tauri-apps/api/core";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   type Dispatch,
   type MutableRefObject,
@@ -25,6 +25,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { getProviderRuntimeBackend } from "../../../lib/providers/runtime/providerRuntimeConfig";
 import {
   type AppSettings,
   DEFAULT_WORKSPACE_PROJECT_ID,
@@ -126,18 +127,23 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     }
   }, [activeWorkspaceProject?.id, activeWorkspaceProjectId, setActiveWorkspaceProjectId]);
   const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
+  const kBrainBackendEnabled = getProviderRuntimeBackend() === "kbrain";
   const sidebarScope = useMemo<SidebarScope>(
     () =>
-      searchCwd !== undefined
+      kBrainBackendEnabled
         ? searchCwd
           ? { kind: "workdir", cwd: searchCwd }
-          : { kind: "unscoped" }
-        : isAgentMode
-          ? activeWorkspaceProjectPath
-            ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
-            : { kind: "none" }
-          : { kind: "unscoped" },
-    [activeWorkspaceProjectPath, isAgentMode, searchCwd],
+          : { kind: "all" }
+        : searchCwd !== undefined
+          ? searchCwd
+            ? { kind: "workdir", cwd: searchCwd }
+            : { kind: "unscoped" }
+          : isAgentMode
+            ? activeWorkspaceProjectPath
+              ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
+              : { kind: "none" }
+            : { kind: "unscoped" },
+    [activeWorkspaceProjectPath, isAgentMode, kBrainBackendEnabled, searchCwd],
   );
   useEffect(() => {
     sidebarStore.setScope(sidebarScope);

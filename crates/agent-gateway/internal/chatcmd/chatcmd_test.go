@@ -3,6 +3,7 @@ package chatcmd
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,81 @@ func TestConversationReferencesSurviveGatewayCommandRoundTrip(t *testing.T) {
 	}
 	if forwarded[1].GetId() != "conversation-b" || forwarded[2].GetId() != "conversation-c" {
 		t.Fatalf("forwarded reference ids = %q, %q", forwarded[1].GetId(), forwarded[2].GetId())
+	}
+}
+
+func TestComposerCommandSurvivesGatewayCommandRoundTrip(t *testing.T) {
+	cases := []struct {
+		name    string
+		request *gatewayv2.ChatRequest
+		action  string
+		text    string
+		prompt  bool
+		plan    bool
+	}{
+		{
+			name:    "goal set",
+			request: &gatewayv2.ChatRequest{GoalAction: " set ", GoalText: "  ship it  "},
+			action:  "set", text: "ship it",
+		},
+		{
+			name:    "goal resume drops text",
+			request: &gatewayv2.ChatRequest{GoalAction: "resume", GoalText: ""},
+			action:  "resume",
+		},
+		{
+			name:    "prompt command",
+			request: &gatewayv2.ChatRequest{PromptCommand: true},
+			prompt:  true,
+		},
+		{
+			name:    "plan command",
+			request: &gatewayv2.ChatRequest{PlanCommand: true},
+			plan:    true,
+		},
+	}
+	for _, tc := range cases {
+		tc.request.ConversationId = "conversation-1"
+		tc.request.ClientRequestId = "client-" + tc.name
+		tc.request.Message = "/cmd args"
+		body := RequestBodyFromProto(tc.request)
+		if err := NormalizeRequestBody(&body); err != nil {
+			t.Fatalf("%s: NormalizeRequestBody() error = %v", tc.name, err)
+		}
+		if !HasComposerCommand(body) {
+			t.Fatalf("%s: HasComposerCommand() = false", tc.name)
+		}
+		forwarded := buildCommandEnvelope("run-1", "chat.submit", body, nil).GetChatCommand().GetRequest()
+		if forwarded.GetGoalAction() != tc.action ||
+			forwarded.GetGoalText() != tc.text ||
+			forwarded.GetPromptCommand() != tc.prompt || forwarded.GetPlanCommand() != tc.plan {
+			t.Fatalf("%s: forwarded = action %q text %q prompt %v", tc.name,
+				forwarded.GetGoalAction(), forwarded.GetGoalText(), forwarded.GetPromptCommand())
+		}
+	}
+}
+
+func TestNormalizeRequestBodyRejectsInvalidComposerCommands(t *testing.T) {
+	for name, body := range map[string]handler.ChatRequestBody{
+		"unknown goal action":      {GoalAction: "clear"},
+		"goal set without text":    {GoalAction: "set", GoalText: "  "},
+		"goal text too long":       {GoalAction: "set", GoalText: strings.Repeat("g", MaxGoalTextLen+1)},
+		"goal text without action": {GoalText: "ship it"},
+		"goal with prompt command": {GoalAction: "resume", PromptCommand: true},
+		"plan with goal":           {PlanCommand: true, GoalAction: "resume"},
+		"plan with prompt":         {PlanCommand: true, PromptCommand: true},
+		"plan with goal text":      {PlanCommand: true, GoalText: "task"},
+	} {
+		body.ConversationID = "conversation-1"
+		body.ClientRequestID = "client-1"
+		body.Message = "/goal x"
+		if err := NormalizeRequestBody(&body); err == nil {
+			t.Fatalf("%s: NormalizeRequestBody() error = nil, want rejection", name)
+		}
+	}
+	plain := handler.ChatRequestBody{ConversationID: "c", ClientRequestID: "r", Message: "hello"}
+	if err := NormalizeRequestBody(&plain); err != nil || HasComposerCommand(plain) {
+		t.Fatalf("plain message: err = %v, composer = %v", err, HasComposerCommand(plain))
 	}
 }
 

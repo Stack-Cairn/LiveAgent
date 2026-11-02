@@ -801,7 +801,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     ),
     {
       thinkingEnabled: true,
-      nativeWebSearchEnabled: true,
+      nativeWebSearchEnabled: false,
       planModeEnabled: false,
       // 目录未命中（聚合命名）走标准四档兜底：存量 xhigh 只在展示值上钳回
       // 默认 high,reasoningByProvider 原样透传。
@@ -2759,20 +2759,20 @@ test("mcp auth config keeps oauth with trimmed fields and drops none/invalid sha
 
 test("font scale settings normalize invalid values to 1 and clamp out-of-range values", () => {
   const defaults = settings.normalizeFontScaleSettings(undefined);
-  assert.deepEqual(defaults, { sidebar: 1, chat: 1, rightDock: 1 });
+  assert.deepEqual(defaults, { sidebar: 1, chat: 1, rightDock: 1, settings: 1 });
 
   const normalized = settings.normalizeFontScaleSettings({
     sidebar: "big",
     chat: 2.5,
     rightDock: 0.5,
   });
-  assert.deepEqual(normalized, { sidebar: 1, chat: 1.4, rightDock: 0.8 });
+  assert.deepEqual(normalized, { sidebar: 1, chat: 1.4, rightDock: 0.8, settings: 1 });
 
   const kept = settings.normalizeFontScaleSettings({ sidebar: 0.9, chat: 1.1, rightDock: 1.2 });
-  assert.deepEqual(kept, { sidebar: 0.9, chat: 1.1, rightDock: 1.2 });
+  assert.deepEqual(kept, { sidebar: 0.9, chat: 1.1, rightDock: 1.2, settings: 1 });
 
   const custom = settings.normalizeCustomSettings({ fontScale: { chat: 1.2 } }, []);
-  assert.deepEqual(custom.fontScale, { sidebar: 1, chat: 1.2, rightDock: 1 });
+  assert.deepEqual(custom.fontScale, { sidebar: 1, chat: 1.2, rightDock: 1, settings: 1 });
 });
 
 test("chat transcript width defaults, clamps, and updates locally", () => {
@@ -3162,6 +3162,21 @@ test("provider-declared limits from a fresh /v1/models response are always tagge
   );
   assert.equal(declared.contextWindow, 300_000);
   assert.equal(declared.maxOutputToken, 50_000);
+  assert.equal(declared.limitsSource, "provider");
+});
+
+test("K-brain model discovery limits accept camelCase response fields", () => {
+  const declared = settings.normalizeProviderModelConfig(
+    {
+      id: "kbrain-model",
+      contextWindow: 200_000,
+      maxOutputTokens: 64_000,
+      maxOutputToken: 32_000,
+    },
+    "codex",
+  );
+  assert.equal(declared.contextWindow, 200_000);
+  assert.equal(declared.maxOutputToken, 64_000);
   assert.equal(declared.limitsSource, "provider");
 });
 
@@ -3697,11 +3712,11 @@ test("workspace resource overflow uses locale-independent Unicode code-point ord
 test("sidebar shortcut migration tolerates partial and malformed preferences", () => {
   for (const input of [null, [], "hidden", {}]) {
     assert.deepEqual(settings.normalizeCustomSettings({ sidebarShortcuts: input }, []).sidebarShortcuts,
-      { skills: true, mcp: true, cron: true, memory: true, planning: true });
+      { skills: true, mcp: true, cron: true, memory: true, planning: true, "image-studio": true });
   }
   assert.deepEqual(settings.normalizeCustomSettings({ sidebarShortcuts: {
     skills: false, mcp: "false", cron: null, memory: true,
-  } }, []).sidebarShortcuts, { skills: false, mcp: true, cron: true, memory: true, planning: true });
+  } }, []).sidebarShortcuts, { skills: false, mcp: true, cron: true, memory: true, planning: true, "image-studio": true });
 });
 
 test("desktop snapshots synchronize sidebar shortcuts to WebUI", () => {
@@ -3718,7 +3733,7 @@ test("desktop snapshots synchronize sidebar shortcuts to WebUI", () => {
   assert.equal(sync.buildGatewaySettingsSyncUpdatePayload(desktop, hydrated).customSettings, undefined);
 });
 
-for (const resource of ["skills", "mcp", "cron", "memory", "planning"]) {
+for (const resource of ["skills", "mcp", "cron", "memory", "planning", "image-studio"]) {
   test(`WebUI ${resource} shortcut edits synchronize in both directions without changing resources`, () => {
     let desktop = settings.normalizeSettings({});
     let web = sync.applyGatewaySettingsSyncPayload(

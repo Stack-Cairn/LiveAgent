@@ -8,6 +8,9 @@
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "prepare:kbrain": "node ../../scripts/release/prepare-kbrain.mjs",
+    "prepare:kbrain:release": "node ../../scripts/release/prepare-kbrain.mjs --release",
+    "gateway:prepare": "node ../../scripts/prepare-gateway.mjs",
     "test": "node ../../scripts/run-node-tests.mjs test",
     "test:frontend": "node ../../scripts/run-node-tests.mjs --exclude-dir backend test",
     "test:backend": "node ../../scripts/run-node-tests.mjs test/backend",
@@ -20,8 +23,6 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
-    "@earendil-works/pi-agent-core": "^0.84.2",
-    "@earendil-works/pi-ai": "^0.84.2",
     "@git-diff-view/file": "^0.1.3",
     "@git-diff-view/react": "^0.1.3",
     "@iconify-json/gravity-ui": "^1.2.12",

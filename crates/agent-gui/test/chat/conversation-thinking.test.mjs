@@ -63,6 +63,7 @@ test("desktop saves thinking and model per conversation and keeps thinking acros
       react: {
         useCallback: (fn) => fn,
         useMemo: (fn) => fn(),
+        useRef: (value) => ({ current: value }),
         useEffect: (fn) => effects.push(fn),
         useSyncExternalStore: (_subscribe, get) => get(),
       },

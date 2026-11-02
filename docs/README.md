@@ -4,7 +4,7 @@
 
 ## 项目一句话
 
-LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负责用户体验与本地工具执行，Tauri/Rust 负责系统能力与持久化，Go Gateway 负责远程连接与协议中继，WebUI 通过 Gateway 操作同一个本地 Agent 会话。
+LiveAgent 是 K-brain 的桌面和 Web 交互端：模型请求、Agent、工具、审批、会话和后端资源由 K-brain 执行与持久化；Tauri/Rust 提供原生窗口、文件选择、终端、SSH 等宿主能力，Go Gateway 负责认证、连接和类型化协议中继。当前边界以 [架构总览](architecture/overview.md) 为准，功能迁移范围以 [2026-10-24 验收记录](testing/2026-10-24-full-capability-audit.md) 为准。
 
 ## 文档目录
 
@@ -38,8 +38,8 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 | 顺序 | 目标 | 文档 |
 |---:|---|---|
 | 1 | 先建立整体进程和边界模型 | [architecture/overview.md](architecture/overview.md) |
-| 2 | 理解桌面端为什么是执行真相源 | [architecture/gui.md](architecture/gui.md) |
-| 3 | 理解远程访问如何转发到桌面端 | [architecture/gateway.md](architecture/gateway.md)、[architecture/protocols.md](architecture/protocols.md) |
+| 2 | 理解原生宿主和 K-brain 客户端的边界 | [architecture/gui.md](architecture/gui.md) |
+| 3 | 区分 Gateway 直连 K-brain 与桌面附件转发 | [architecture/gateway.md](architecture/gateway.md)、[architecture/protocols.md](architecture/protocols.md) |
 | 4 | 理解 WebUI 的状态机与限制 | [architecture/webui.md](architecture/webui.md) |
 | 5 | 按功能域深入 Chat、Tools、Memory、Skills/MCP、History/Compaction、配置备份同步 | `features/` |
 | 6 | 需要动手时查运行命令和源码索引 | [operations/development.md](operations/development.md)、[reference/source-map.md](reference/source-map.md) |
@@ -48,11 +48,11 @@ LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负�
 
 | 边界 | 当前结论 |
 |---|---|
-| Agent 执行位置 | 桌面 GUI/Tauri 本地执行模型请求、工具调用、文件系统、Shell、MCP、Skills、Memory、Cron prompt。 |
-| Gateway 职责 | 认证、连接保持、请求路由、事件广播、有界 Chat relay window、WebUI 静态资源与公网分享页承载。 |
-| WebUI 职责 | 浏览器端操作台。它不直接执行工具，也不持有本地文件系统权限，所有高权限能力都经 Gateway 回到桌面端。 |
-| 设置同步 | GUI 是真实设置来源；WebUI 存脱敏快照，敏感 key 只允许用户显式输入新值后单向传回 GUI。 |
-| 历史同步 | GUI 写 SQLite 历史，Gateway 只转发 history request 与 sync event；WebUI 维护本地可见缓存。 |
+| Agent 执行位置 | K-brain 执行模型与工具循环、审批和子代理；GUI 不回退到前端模型 SDK。 |
+| Gateway 职责 | 认证、连接保持、请求路由、事件广播、WebUI 静态资源与分享页；直连 K-brain 使用明确的资源路由，桌面附件模式保留宿主转发。 |
+| WebUI 职责 | 交互与展示；经 Gateway 操作后端资源。原生文件、SSH、隧道等外围能力仍需单独验证宿主可用性与权限。 |
+| 设置同步 | K-brain 管理模型、凭据、MCP 和 Skills 等后端资源；主题等界面偏好与宿主配置独立。并非所有旧设置域都已迁入 KB。 |
+| 历史同步 | 当前聊天与事件以 K-brain 持久化为准；保留旧 SQLite 迁移兼容层，前端维护可见窗口缓存。 |
 | 文档来源 | 本文档基于当前 checkout 的源码路径、入口文件、协议定义与运行脚本整理。 |
 
 ## 与 `doc/` 的关系

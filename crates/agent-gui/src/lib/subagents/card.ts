@@ -1,4 +1,4 @@
-import type { ToolCall } from "@earendil-works/pi-ai";
+import type { ToolCall } from "@liveagent/app/lib/agentTypes";
 
 import {
   isSubagentCardArguments,

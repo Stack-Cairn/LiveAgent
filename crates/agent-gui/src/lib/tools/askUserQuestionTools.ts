@@ -1,4 +1,4 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import {
   ASK_USER_QUESTION_MAX_OPTIONS,
   ASK_USER_QUESTION_MAX_QUESTIONS,
@@ -164,6 +164,39 @@ export function answerAskUserQuestion(
   }
   pending.settle({ kind: "answered", answers });
   return { ok: true };
+}
+
+export function requestBackendQuestion(params: {
+  toolCallId: string;
+  conversationId: string;
+  questions: AskUserQuestionItem[];
+  deadlineAt: number;
+  signal?: AbortSignal;
+}): Promise<AskUserQuestionAnswer[]> {
+  if (params.signal?.aborted) return Promise.reject(new Error("Question cancelled"));
+  if (pendingByToolCallId.has(params.toolCallId))
+    return Promise.reject(new Error("Question is already pending"));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (value: AskUserQuestionSettlement) => {
+      if (settled) return;
+      settled = true;
+      pendingByToolCallId.delete(params.toolCallId);
+      params.signal?.removeEventListener("abort", abort);
+      emitChange(params.conversationId);
+      if (value.kind === "answered") resolve(value.answers);
+      else reject(new Error("Question cancelled"));
+    };
+    const abort = () => settle({ kind: "cancelled" });
+    pendingByToolCallId.set(params.toolCallId, {
+      conversationId: params.conversationId,
+      questions: params.questions,
+      deadlineAt: params.deadlineAt,
+      settle,
+    });
+    params.signal?.addEventListener("abort", abort, { once: true });
+    emitChange(params.conversationId);
+  });
 }
 
 export function hasPendingAskUserQuestion(toolCallId: string) {

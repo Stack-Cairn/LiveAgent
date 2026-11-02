@@ -4,9 +4,8 @@ import { t as translate } from "@liveagent/ui/i18n/index";
 import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import {
-  readToolApprovalDeadlineAt,
-  readToolApprovalPending,
-  readToolApprovalSummary,
+  pendingToolApprovalFromToolCall,
+  type RemoteToolApprovalItem,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { buildFloorEntries } from "@liveagent/ui/lib/chat-floor-nav/floorModel";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
@@ -180,25 +179,15 @@ export function useGatewayChatPresentation({
     };
   }, [displayedConversationId, transcriptStoreRegistry]);
   const pendingToolApprovals = useMemo(() => {
-    const result: {
-      toolCallId: string;
-      toolName: string;
-      summary?: string;
-      deadlineAt?: number;
-    }[] = [];
+    const result: RemoteToolApprovalItem[] = [];
     for (const row of transcriptRows) {
       if (row.kind !== "assistant") continue;
       for (const round of row.rounds) {
         for (const block of round.blocks) {
           if (block.kind !== "tool") continue;
           const { toolCall, toolResult } = block.item;
-          if (toolResult || !readToolApprovalPending(toolCall.arguments)) continue;
-          result.push({
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
-            summary: readToolApprovalSummary(toolCall.arguments),
-            deadlineAt: readToolApprovalDeadlineAt(toolCall.arguments) ?? undefined,
-          });
+          const pending = toolResult ? null : pendingToolApprovalFromToolCall(toolCall);
+          if (pending) result.push(pending);
         }
       }
     }
@@ -215,7 +204,9 @@ export function useGatewayChatPresentation({
     pendingToolApprovals.length > 0 ? (
       <ToolApprovalBar
         pending={pendingToolApprovals}
-        onDecide={(toolCallId, decision) => submitToolApprovalDecision(toolCallId, decision)}
+        onDecide={(toolCallId, decision, options) =>
+          submitToolApprovalDecision(toolCallId, decision, undefined, options)
+        }
         onDecideAll={async (decision) => {
           for (const item of pendingToolApprovals) {
             await submitToolApprovalDecision(item.toolCallId, decision);

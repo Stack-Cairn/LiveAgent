@@ -112,6 +112,9 @@ export function getToolMeta(name: string): {
   accent: string;
   category: string;
 } {
+  if (name === "computer_exec") {
+    return { Icon: Hand, accent: "var(--tool-bash-accent)", category: "cua" };
+  }
   if (isTaskToolName(name)) {
     return { Icon: ListChecks, accent: "var(--tool-list-accent)", category: "system" };
   }
@@ -663,6 +666,7 @@ export function parseDynamicMcpToolName(name: string): { serverId: string; tool:
  * 别处关系到审批缺省，口径不该有两套。
  */
 export function isCuaDriverToolName(name: string) {
+  if (name === "computer_exec") return true;
   const parsed = parseDynamicMcpToolName(name);
   return parsed ? isCuaDriverServerId(parsed.serverId) : false;
 }

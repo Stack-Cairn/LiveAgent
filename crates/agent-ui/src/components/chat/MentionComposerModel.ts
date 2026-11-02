@@ -1,3 +1,4 @@
+import type { ComposerCommand, ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
 import type { ConversationReferenceInsertResult } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import type {
   CodeMentionReference,
@@ -95,11 +96,16 @@ export type MentionComposerGitFileMention = {
 export type MentionSuggestion =
   | { type: "file"; entry: MentionFileEntry }
   | { type: "skill"; skill: MentionComposerSkill }
+  | { type: "command"; command: ComposerCommand }
   | { type: "app"; app: MentionComposerApp }
   | { type: "conversation"; conversation: MentionComposerConversation }
-  | { type: "category"; category: "apps" | "files" | "conversations" };
+  | {
+      type: "category";
+      category: "apps" | "files" | "conversations" | "commands" | "skills";
+    };
 
-export type MentionMenuMode = "root" | "apps" | "files" | "conversations";
+/** "@" 用 apps/files/conversations 子菜单，"/" 用 commands/skills 子菜单。 */
+export type MentionMenuMode = "root" | "apps" | "files" | "conversations" | "commands" | "skills";
 
 export type ComposerContextMenuState = {
   x: number;
@@ -108,9 +114,13 @@ export type ComposerContextMenuState = {
   hasContent: boolean;
 };
 
-/** Where the @ or / trigger lives inside a text node */
+/**
+ * Where the @ or / trigger lives inside a text node. "command" is a "/" at the
+ * very start of the draft when the host registered commands; "/" elsewhere
+ * stays a skill-only trigger.
+ */
 export interface MentionContext {
-  trigger: "file" | "skill";
+  trigger: "file" | "skill" | "command";
   query: string;
   textNode: Text;
   triggerOffset: number; // char offset of the trigger inside textNode
@@ -130,6 +140,11 @@ export interface MentionComposerHandle {
     conversation: MentionComposerConversationMention,
   ) => ConversationReferenceInsertResult;
   insertCodeMention: (reference: CodeMentionReference) => void;
+  /**
+   * Runs the draft as a registered action/prompt command instead of sending.
+   * Returns false (send normally) when the draft is not a registered command.
+   */
+  runCommandDraft: () => boolean;
   clear: () => void;
   focus: () => void;
   beginTransientText: () => boolean;
@@ -211,6 +226,18 @@ export interface MentionComposerProps {
    * cua-driver 时非空；缺省/空数组时 @ 行为与从前完全一致。
    */
   mentionApps?: MentionComposerApp[];
+  /**
+   * Slash-command host. When provided, a "/" at the start of the draft opens
+   * the merged command + prompt + skill list and drafts starting with a
+   * registered command run instead of sending; omitted keeps the skill-only
+   * popup.
+   */
+  commandHost?: ComposerCommandHost;
+  /**
+   * Shift+Tab with no completion popup open. When omitted Shift+Tab keeps its
+   * browser meaning (focus the previous control).
+   */
+  onCycleMode?: () => void;
   className?: string;
 }
 

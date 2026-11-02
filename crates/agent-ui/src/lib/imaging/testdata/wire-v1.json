@@ -1,0 +1,188 @@
+{
+  "version": "kbrain.image.v1",
+  "settings": {
+    "revision": 1,
+    "connections": [
+      {
+        "id": "ic_fixture",
+        "name": "Example independent connection",
+        "vendor": "openai",
+        "enabled": true,
+        "binding": {
+          "kind": "independent",
+          "baseUrl": "https://example.invalid",
+          "authKind": "bearer",
+          "secretRefs": { "bearer": "opaque_fixture_ref" },
+          "useSystemProxy": true
+        },
+        "credentialConfigured": true,
+        "maxConcurrent": 2
+      },
+      {
+        "id": "ic_provider",
+        "name": "Existing provider reference",
+        "vendor": "runninghub",
+        "enabled": false,
+        "binding": { "kind": "provider_ref", "providerId": "provider_fixture" },
+        "credentialConfigured": false,
+        "maxConcurrent": 2
+      }
+    ],
+    "targets": [
+      {
+        "id": "it_model",
+        "name": "Example model",
+        "connectionId": "ic_fixture",
+        "adapter": "openai-images",
+        "adapterVersion": "1",
+        "kind": "model",
+        "remoteId": "fixture-model",
+        "revision": 1,
+        "enabled": false,
+        "disabledReason": "Awaiting authorized live verification",
+        "capabilities": {
+          "operations": ["generate"],
+          "supportsCancel": false,
+          "supportsReconcile": false,
+          "supportsContinuation": false,
+          "supportsPreview": false,
+          "maxInputs": 0,
+          "maxCount": 4,
+          "outputFormats": ["png"]
+        },
+        "parameters": [
+          {
+            "key": "quality",
+            "label": "Quality",
+            "type": "string",
+            "required": false,
+            "enum": ["high", "low"],
+            "default": "high"
+          }
+        ]
+      },
+      {
+        "id": "it_workflow",
+        "name": "Example workflow",
+        "connectionId": "ic_provider",
+        "adapter": "runninghub-workflow",
+        "adapterVersion": "1",
+        "kind": "workflow",
+        "remoteId": "fixture-workflow",
+        "revision": 1,
+        "enabled": false,
+        "disabledReason": "Awaiting authorized live verification",
+        "capabilities": {
+          "operations": ["generate"],
+          "supportsCancel": false,
+          "supportsReconcile": false,
+          "supportsContinuation": false,
+          "supportsPreview": false,
+          "maxInputs": 0,
+          "maxCount": 1,
+          "outputFormats": ["png", "jpeg", "webp"]
+        },
+        "parameters": [
+          {
+            "key": "steps",
+            "label": "Steps",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "unit": "steps"
+          }
+        ],
+        "workflowMapping": {
+          "revision": 1,
+          "inputs": [{ "parameterKey": "steps", "nodeId": "1", "inputName": "steps" }],
+          "outputs": [{ "nodeId": "2", "outputName": "image" }]
+        }
+      }
+    ]
+  },
+  "job": {
+    "id": "ij_fixture",
+    "projectId": "ip_fixture",
+    "request": {
+      "projectId": "ip_fixture",
+      "targetId": "it_model",
+      "operation": "generate",
+      "prompt": "Example poster",
+      "inputs": [],
+      "parameters": { "quality": "high" },
+      "count": 2
+    },
+    "targetSnapshot": {
+      "id": "it_model",
+      "name": "Example model",
+      "connectionId": "ic_fixture",
+      "adapter": "openai-images",
+      "adapterVersion": "1",
+      "kind": "model",
+      "remoteId": "fixture-model",
+      "revision": 1,
+      "capabilities": {
+        "operations": ["generate"],
+        "supportsCancel": false,
+        "supportsReconcile": false,
+        "supportsContinuation": false,
+        "supportsPreview": false,
+        "maxInputs": 0,
+        "maxCount": 4,
+        "outputFormats": ["png"]
+      },
+      "parameters": [
+        {
+          "key": "quality",
+          "label": "Quality",
+          "type": "string",
+          "required": false,
+          "enum": ["high", "low"],
+          "default": "high"
+        }
+      ]
+    },
+    "status": "partial_succeeded",
+    "revision": 3,
+    "assetIds": ["ia_fixture"],
+    "items": [
+      {
+        "id": "ii_first",
+        "status": "succeeded",
+        "attemptCount": 1,
+        "outputAssetIds": ["ia_fixture"]
+      },
+      {
+        "id": "ii_second",
+        "status": "failed",
+        "attemptCount": 1,
+        "outputAssetIds": [],
+        "error": {
+          "code": "IMAGE_NO_IMAGE_OUTPUT",
+          "message": "Provider returned no image output",
+          "requestId": "fixture-request",
+          "retryable": false
+        }
+      }
+    ],
+    "usage": null,
+    "createdAt": "2026-10-11T00:00:00Z",
+    "updatedAt": "2026-10-11T00:00:10Z"
+  },
+  "event": {
+    "jobId": "ij_fixture",
+    "seq": 5,
+    "revision": 3,
+    "type": "job.finished",
+    "timestamp": "2026-10-11T00:00:10Z",
+    "data": { "status": "partial_succeeded" }
+  },
+  "error": {
+    "code": "IMAGE_REVISION_CONFLICT",
+    "message": "Image configuration revision changed",
+    "requestId": "fixture-request",
+    "retryable": false
+  }
+}

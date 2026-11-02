@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n/index";
-import {
-  compactionProgressDetail,
-  normalizeLiveToolStatus,
-  VIBING_STATUS,
-} from "../../lib/chat/assistantStatus";
+import { normalizeLiveToolStatus, VIBING_STATUS } from "../../lib/chat/assistantStatus";
+import { parseRunProgress } from "../../lib/chat/runProgress";
 import { cn } from "../../lib/shared/utils";
+import { Loader2 } from "../IconSet";
 import { CompactionBand } from "./CompactionBand";
 import { LiveSparkle } from "./LiveSparkle";
+import { RunProgressStatus } from "./RunProgressStatus";
 
 export { VIBING_STATUS } from "../../lib/chat/assistantStatus";
 
@@ -19,20 +18,10 @@ export function VibingText({ className }: { className?: string }) {
  * The live "compressing context" status. Wears the same violet band as the
  * settled compaction seam so the two moments of one event look alike, and
  * so the fold stands out from ordinary grey tool/reasoning rows while
- * scanning history. `progress` is the raw compaction tool status; its
- * locale-neutral progress (output tokens, retries, stage, elapsed) shows as a
- * muted suffix, hidden from the live region so the ticking clock is not
- * re-announced.
+ * scanning history.
  */
-export function CompactingText({
-  className,
-  progress,
-}: {
-  className?: string;
-  progress?: string | null;
-}) {
+export function CompactingText({ className }: { className?: string }) {
   const { t } = useLocale();
-  const detail = compactionProgressDetail(progress);
   return (
     <span
       role="status"
@@ -40,20 +29,7 @@ export function CompactingText({
       className={cn("flex min-w-0 max-w-full items-center", className)}
       data-compacting-status=""
     >
-      <CompactionBand
-        active
-        label={t("chat.compactingContext")}
-        meta={
-          detail ? (
-            <span
-              aria-hidden="true"
-              className="truncate text-tiny tabular-nums text-violet-700/60 dark:text-violet-300/60"
-            >
-              {detail}
-            </span>
-          ) : undefined
-        }
-      />
+      <CompactionBand active label={t("chat.compactingContext")} />
     </span>
   );
 }
@@ -65,7 +41,8 @@ export function LiveAssistantStatus(props: {
 }) {
   const { status, isCompaction = false, className } = props;
   const normalizedStatus = normalizeLiveToolStatus(status);
-  if (isCompaction) return <CompactingText className={className} progress={status} />;
+  if (isCompaction) return <CompactingText className={className} />;
+  if (parseRunProgress(status)) return <RunProgressStatus status={status} />;
   if (!normalizedStatus || normalizedStatus === VIBING_STATUS) {
     // No concrete activity to report — show the liveness sparkle instead of a
     // filler phrase, matching the turn-level indicator under live replies.
@@ -77,11 +54,11 @@ export function LiveAssistantStatus(props: {
 export function AssistantStatus({
   children,
   className,
+  iconClassName,
   textClassName,
 }: {
   children: ReactNode;
   className?: string;
-  /** Kept for caller compatibility; text-only statuses intentionally render no loader icon. */
   iconClassName?: string;
   textClassName?: string;
 }) {
@@ -89,10 +66,14 @@ export function AssistantStatus({
     <span
       role="status"
       className={cn(
-        "inline-flex min-h-5 min-w-0 max-w-full items-center text-sm font-normal text-muted-foreground",
+        "inline-flex min-h-5 min-w-0 max-w-full items-center gap-1.5 text-sm font-normal text-muted-foreground",
         className,
       )}
     >
+      <Loader2
+        aria-hidden="true"
+        className={cn("size-3.5 shrink-0 animate-spin motion-reduce:animate-none", iconClassName)}
+      />
       <span className={cn("shimmer min-w-0 truncate whitespace-nowrap", textClassName)}>
         {children}
       </span>

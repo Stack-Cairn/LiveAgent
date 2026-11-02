@@ -9,6 +9,8 @@
   --animate-file-drop-overlay-card: fileDropCardIn var(--ui-duration-220ms) var(--ease-ui-enter);
   --animate-git-review-generate-progress: gitReviewGenerateSweep var(--ui-duration-1100ms)
     ease-in-out infinite;
+  --animate-chat-work-pixel: chatWorkPixel var(--ui-duration-650ms) ease-in-out
+    var(--chat-work-delay, 0ms) infinite;
   @keyframes tw-shimmer {
     from {
       background-position: 100% 0;
@@ -20,6 +22,39 @@
   }
 }
 @layer components {
+  /* 统计条仅滚动变化的数字；标签、单位和分隔符不参与动画。 */
+  .stat-number {
+    display: inline-flex;
+    vertical-align: bottom;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-digit-window {
+    display: inline-block;
+    width: 1ch;
+    height: 1em;
+    overflow: hidden;
+    line-height: 1;
+  }
+  .stat-digit-strip,
+  .stat-digit-cell {
+    display: block;
+    line-height: 1;
+  }
+  .stat-digit-cell {
+    height: 1em;
+  }
+  .stat-digit-cell::before {
+    content: attr(data-digit);
+  }
+  .stat-digit-ready {
+    transition: transform var(--ui-duration-160ms) var(--ease-ui-enter);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stat-digit-ready {
+      transition: none;
+    }
+  }
+
   /* Compaction band — shared chrome for the live "compressing context"
      status and the settled in-reply seam. */
   @keyframes compactionBandSweep {
@@ -28,6 +63,20 @@
     }
     100% {
       transform: translateX(300%);
+    }
+  }
+
+  /* "Working" pixel grid in the live work-trace header: a diagonal wave. */
+  @keyframes chatWorkPixel {
+    0%,
+    55%,
+    100% {
+      opacity: 0.15;
+      transform: scale(0.8);
+    }
+    25% {
+      opacity: 1;
+      transform: scale(1);
     }
   }
 

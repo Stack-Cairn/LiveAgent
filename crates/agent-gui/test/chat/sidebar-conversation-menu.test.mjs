@@ -23,7 +23,7 @@ function mountRow(overrides = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  const calls = { selected: [], moved: [], deleted: [], renamed: [] };
+  const calls = { selected: [], bulkSelected: [], moved: [], deleted: [], renamed: [] };
   function Harness() {
     const [menuOpen, setMenuOpen] = React.useState(false);
     const [isSelectionMode, setSelectionMode] = React.useState(false);
@@ -40,6 +40,7 @@ function mountRow(overrides = {}) {
       onMenuOpenChange: (_id, open) => setMenuOpen(open),
       onSetPendingDelete: setPendingDelete,
       onSelectConversation: (id) => calls.selected.push(id),
+      onSelectForBulk: (id, modifiers) => calls.bulkSelected.push({ id, modifiers }),
       onMoveToWorkspace: (id, cwd) => calls.moved.push([id, cwd]),
       onDeleteConversation: (id) => calls.deleted.push(id),
       isRenaming, renameDraft,
@@ -72,6 +73,31 @@ function menuItem(label) {
   return [...document.querySelectorAll('[role="menuitem"]')]
     .find((element) => element.textContent === label);
 }
+
+test("mobile selection-mode taps toggle bulk selection once without pointerup double-toggle", async () => {
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  const row = mountRow({ isMobileMenuLayout: true, isSelectionMode: true });
+  try {
+    const title = row.container.querySelector('button[title="Conversation"]');
+    assert.ok(title);
+    // Some mobile WebViews synthesize click without delivering pointerup.
+    await act(async () => title.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 })));
+    assert.deepEqual(row.calls.bulkSelected, [{ id: "one", modifiers: { shiftKey: false, toggleKey: false } }]);
+
+    row.calls.bulkSelected.length = 0;
+    await act(async () => title.dispatchEvent(new window.PointerEvent("pointerdown", {
+      bubbles: true, pointerId: 1, pointerType: "touch", clientX: 10, clientY: 10,
+    })));
+    await act(async () => title.dispatchEvent(new window.PointerEvent("pointerup", {
+      bubbles: true, pointerId: 1, pointerType: "touch", clientX: 10, clientY: 10,
+    })));
+    await act(async () => title.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 })));
+    assert.deepEqual(row.calls.bulkSelected, [{ id: "one", modifiers: { shiftKey: false, toggleKey: false } }]);
+    assert.deepEqual(row.calls.selected, []);
+  } finally {
+    await row.cleanup();
+  }
+});
 
 test("desktop more menu reaches workspace transfer and confirmed deletion", async () => {
   const row = mountRow();

@@ -124,7 +124,7 @@ export function useGatewayWorkspaceProjects({
         : settings.system.executionMode !== "text"
           ? activeWorkspaceProjectPath
             ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
-            : { kind: "none" }
+            : { kind: "all" }
           : { kind: "unscoped" },
     );
   }, [activeWorkspaceProjectPath, settings.system.executionMode, sidebarStore, searchCwd]);

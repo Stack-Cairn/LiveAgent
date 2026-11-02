@@ -64,6 +64,17 @@ test("resolveShareOrigin ignores invalid ports", () => {
   assert.equal(resolveShareOrigin("http://localhost", Number.NaN), "http://localhost");
 });
 
+test("backend URL override keeps its port and path independently of the legacy gateway", () => {
+  assert.equal(
+    resolveShareOrigin("https://legacy.invalid", 9443, " http://127.0.0.1:47321/proxy/// "),
+    "http://127.0.0.1:47321/proxy",
+  );
+  assert.equal(resolveShareOrigin(undefined, 9443, "https://kbrain.test/"), "https://kbrain.test");
+  for (const invalid of ["", "not a URL", "javascript:alert(1)", "ftp://kbrain.test"]) {
+    assert.equal(resolveShareOrigin("https://legacy.invalid", 9443, invalid), "");
+  }
+});
+
 test("buildShareUrl joins origin token and share path", () => {
   assert.equal(
     buildShareUrl("token-1", "http://localhost:8080"),

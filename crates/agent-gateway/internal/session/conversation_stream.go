@@ -168,6 +168,8 @@ type conversationStream struct {
 }
 
 type chatRunRecord struct {
+	composerCommand bool
+	started         bool
 	agentID         string
 	conversationID  string
 	clientRequestID string
@@ -242,6 +244,7 @@ type chatCommandUpdateRecord struct {
 }
 
 type pendingChatRun struct {
+	composerCommand bool
 	runID           string
 	agentID         string
 	clientRequestID string
@@ -627,6 +630,7 @@ func (s *conversationStreamStore) runStartedLocked(
 	if runID == "" || stream.runFinishedRecently(runID) {
 		return
 	}
+	s.runRecordLocked(stream.agentID, runID, stream.conversationID).started = true
 	if stream.activity != nil && stream.activity.RunID == runID {
 		switch stream.activity.State {
 		case RunActivityQueued:
@@ -994,6 +998,7 @@ func (m *Manager) StartChatCommand(
 	workdir string,
 	clientRequestID string,
 	seededPayloads []map[string]any,
+	composerCommand ...bool,
 ) ChatCommandStart {
 	s := m.convStreams
 	agentID = strings.TrimSpace(agentID)
@@ -1003,6 +1008,7 @@ func (m *Manager) StartChatCommand(
 	workdir = strings.TrimSpace(workdir)
 	clientRequestID = strings.TrimSpace(clientRequestID)
 	now := time.Now()
+	isComposerCommand := len(composerCommand) > 0 && composerCommand[0]
 
 	if agentID == "" || runID == "" {
 		return ChatCommandStart{}
@@ -1018,6 +1024,7 @@ func (m *Manager) StartChatCommand(
 
 	if conversationID == "" {
 		s.pendingRuns[key] = &pendingChatRun{
+			composerCommand: isComposerCommand,
 			runID:           runID,
 			agentID:         agentID,
 			clientRequestID: clientRequestID,
@@ -1037,14 +1044,11 @@ func (m *Manager) StartChatCommand(
 	}
 	record := s.runRecordLocked(agentID, runID, conversationID)
 	record.clientRequestID = clientRequestID
+	record.composerCommand = isComposerCommand
 
-	if stream.activity != nil {
-		// A run is already active: this command is almost certainly headed
-		// for the desktop prompt queue. Seeding the user_message into the log
-		// now would flash a bubble on every viewer until the queued_in_gui
-		// compensation removes it — defer the seeds until the run actually
-		// starts (or fails); if it parks in the GUI queue they are dropped
-		// and the agent's own echo becomes authoritative.
+	if stream.activity != nil || isComposerCommand {
+		// Defer seeds until execution: busy turns may queue, while composer
+		// commands may be rejected without ever entering conversation history.
 		record.deferredSeeds = seededPayloads
 		start := ChatCommandStart{
 			AgentID:        agentID,
@@ -1185,10 +1189,35 @@ func (m *Manager) FailChatCommand(agentID string, runID string, errorCode string
 	if stream == nil {
 		return
 	}
+	if record.composerCommand && !record.started {
+		s.rejectComposerCommandLocked(stream, runID, record, errorCode, message, now)
+		return
+	}
 	// Seeds deferred at accept time surface now so the failure has its user
 	// message for context; runFinishedLocked follows with the error.
 	s.flushDeferredSeedsLocked(stream, runID, record, now)
 	s.runFinishedLocked(stream, runID, "failed", errorCode, message, nil, now)
+}
+
+func (s *conversationStreamStore) rejectComposerCommandLocked(stream *conversationStream, runID string, record *chatRunRecord, errorCode, message string, now time.Time) {
+	if stream.runFinishedRecently(runID) {
+		return
+	}
+	record.deferredSeeds = nil
+	s.fireCommandUpdateLocked(ChatCommandUpdate{
+		AgentID: stream.agentID, RunID: runID, ClientRequestID: record.clientRequestID,
+		ConversationID: record.conversationID, Phase: "failed", ErrorCode: errorCode, Message: message,
+	})
+	stream.finishedRuns = append(stream.finishedRuns, runID)
+	if len(stream.finishedRuns) > conversationFinishedRunMemory {
+		evicted := stream.finishedRuns[0]
+		stream.finishedRuns = stream.finishedRuns[1:]
+		delete(s.runs, agentScopedKey(stream.agentID, evicted))
+	}
+	if stream.activity != nil && stream.activity.RunID == runID {
+		stream.activity = nil
+		s.publishActivityLocked(stream, now)
+	}
 }
 
 // ChatCommandSettled reports whether a command reached a state the startup

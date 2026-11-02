@@ -3,6 +3,10 @@ fn default_remote_gateway_port() -> u16 {
     443
 }
 
+fn default_local_gateway_port() -> u16 {
+    50052
+}
+
 fn default_remote_auto_reconnect() -> bool {
     true
 }
@@ -29,6 +33,9 @@ impl Default for RemoteSettingsPayload {
     fn default() -> Self {
         Self {
             enabled: false,
+            managed_local: false,
+            local_gateway_port: default_local_gateway_port(),
+            local_gateway_token: String::new(),
             gateway_url: String::new(),
             gateway_port: default_remote_gateway_port(),
             token: String::new(),
@@ -43,11 +50,31 @@ impl Default for RemoteSettingsPayload {
     }
 }
 
+impl RemoteSettingsPayload {
+    /// Resolve the active connection without overwriting the user's external configuration.
+    pub(crate) fn effective_gateway_settings(&self) -> Self {
+        let mut settings = self.clone();
+        if self.managed_local {
+            settings.gateway_url = "http://127.0.0.1".to_string();
+            settings.gateway_port = self.local_gateway_port;
+            settings.token = self.local_gateway_token.clone();
+        }
+        settings
+    }
+}
+
 pub(crate) fn normalize_remote_settings_payload(
     payload: RemoteSettingsPayload,
 ) -> RemoteSettingsPayload {
     RemoteSettingsPayload {
         enabled: payload.enabled,
+        managed_local: payload.managed_local,
+        local_gateway_port: if payload.local_gateway_port == 0 {
+            default_local_gateway_port()
+        } else {
+            payload.local_gateway_port
+        },
+        local_gateway_token: payload.local_gateway_token.trim().to_string(),
         gateway_url: normalize_base_url_text(&payload.gateway_url),
         gateway_port: if payload.gateway_port == 0 {
             default_remote_gateway_port()
@@ -139,20 +166,39 @@ fn persist_remote_settings(
     Ok(())
 }
 
-// ensure_remote_agent_id 只在首次安装或旧的 hostname/手填 ID 尚未替换时写库；
-// 生成和复查位于同一个 IMMEDIATE 事务中，并发打开配置库也只会保留一个身份。
+// Initialize installation identity and the local Gateway credential atomically. Only a
+// database without a remote record opts into local hosting; existing records retain
+// their external settings and explicit enabled=false, including generated identities.
 pub(crate) fn ensure_remote_agent_id(conn: &mut Connection) -> Result<String, String> {
     let current = load_remote_settings(conn)?;
-    if is_generated_agent_id(&current.agent_id) {
+    if is_generated_agent_id(&current.agent_id) && !current.local_gateway_token.is_empty() {
         return Ok(current.agent_id);
     }
 
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|e| format!("开启 Agent ID 初始化事务失败：{e}"))?;
-    let mut settings = load_remote_settings(&tx)?;
+    let mut settings = match load_remote(&tx)? {
+        Some(value) => parse_remote_settings_payload(value)?,
+        None => RemoteSettingsPayload {
+            enabled: true,
+            managed_local: true,
+            ..RemoteSettingsPayload::default()
+        },
+    };
+    let mut changed = false;
     if !is_generated_agent_id(&settings.agent_id) {
         settings.agent_id = generate_agent_id();
+        changed = true;
+    }
+    if settings.local_gateway_token.is_empty() {
+        // UUID v4 uses the OS random source. Two UUIDs provide 244 random bits;
+        // this per-installation credential is independent of external credentials.
+        settings.local_gateway_token =
+            format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        changed = true;
+    }
+    if changed {
         persist_remote_settings(&tx, &settings)?;
     }
     let agent_id = settings.agent_id.clone();
@@ -197,6 +243,9 @@ fn save_remote(conn: &mut Connection, payload: Value) -> Result<RemoteSettingsPa
     }
     // Agent ID 是安装身份，不接受设置页面或 IPC 载荷覆盖。
     normalized.agent_id = persisted.agent_id;
+    // The local Gateway credential belongs to this installation. In particular,
+    // legacy clients saving unrelated settings must not clear or replace it.
+    normalized.local_gateway_token = persisted.local_gateway_token;
     persist_remote_settings(&tx, &normalized)?;
     tx.commit()
         .map_err(|e| format!("提交 {REMOTE_SETTINGS_TABLE} 事务失败：{e}"))?;

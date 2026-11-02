@@ -1,3 +1,4 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import { CheckCircle2, Download, Key, Loader2, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Button, RefreshButton } from "@liveagent/ui/components/ui/button";
 import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
@@ -11,24 +12,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
-
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { CustomHeader } from "@liveagent/ui/lib/providers/customHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { ProviderModelDiscoveryInput } from "@liveagent/ui/pages/settings/providerSettingsAdapter";
 import {
   createDraftModelConfig,
-  fetchModelsFromApi,
   mergeFetchedModels,
 } from "@liveagent/ui/pages/settings/providerUtils";
-import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
 import ccswitchLogoUrl from "../../src-tauri/icons/custom/ccswitch.png";
 import cherryStudioLogoUrl from "../../src-tauri/icons/custom/cherrystudio.png";
+import { createKBrainClient } from "../lib/kbrain/client";
 import type { ProviderModelConfig } from "../lib/settings";
 import {
   type AppSettings,
   type CodexRequestFormat,
   type CustomProvider,
   getDefaultUsageQueryConfig,
+  normalizeProviderModelConfigs,
   type ProviderId,
   updateCustomProviders,
 } from "../lib/settings";
@@ -38,6 +40,30 @@ import {
   CherryStudioImportModal,
 } from "../pages/settings/CherryStudioImportModal";
 import type { SetSettingsFn } from "../pages/settings/types";
+
+export async function discoverProviderModels(
+  input: ProviderModelDiscoveryInput,
+): Promise<ProviderModelConfig[]> {
+  const response = await createKBrainClient().discoverProviderModels(input.providerId, input);
+  const models = Array.isArray(response)
+    ? response
+    : response && typeof response === "object"
+      ? (response as { models?: unknown }).models
+      : undefined;
+  if (!Array.isArray(models)) throw new Error("Malformed provider model discovery response");
+  return normalizeProviderModelConfigs(models, input.type);
+}
+
+export const providerCredentialsRedacted = true;
+
+/**
+ * Reads the stored provider API key back from the local K-brain backend. Only called on an
+ * explicit user action (the eye button); returns null when nothing is stored.
+ */
+export async function revealStoredProviderApiKey(providerId: string): Promise<string | null> {
+  const secrets = await createKBrainClient().revealProviderSecrets(providerId);
+  return secrets.apiKey?.trim() ? secrets.apiKey : null;
+}
 
 type CcsProviderImportItem = {
   sourceId: string;
@@ -50,6 +76,7 @@ type CcsProviderImportItem = {
   apiKey: string;
   requestFormat: CodexRequestFormat;
   models?: string[];
+  customHeaders?: CustomHeader[];
 };
 
 type CcsProvidersResponse = {
@@ -130,6 +157,7 @@ export function providerFromCcs(
     apiKeyConfigured: item.apiKey.trim().length > 0,
     models,
     activeModels: models.map((model) => model.id),
+    customHeaders: item.customHeaders?.map((header) => ({ ...header })) ?? [],
     requestFormat:
       item.providerType === "xai"
         ? "openai-responses"
@@ -168,7 +196,7 @@ function cherryProviderName(item: CherryProviderImportItem, allItems: CherryProv
 }
 
 function cherryEffectiveApiKey(item: CherryProviderImportItem, existing?: CustomProvider) {
-  return existing?.apiKey?.trim() ? existing.apiKey : item.apiKey;
+  return existing?.apiKey?.trim() || existing?.apiKeyConfigured ? existing.apiKey : item.apiKey;
 }
 
 export function providerFromCherry(
@@ -186,9 +214,13 @@ export function providerFromCherry(
     isFullUrl: existing?.isFullUrl ?? false,
     ...(existing?.modelsUrl ? { modelsUrl: existing.modelsUrl } : {}),
     apiKey,
-    apiKeyConfigured: apiKey.trim().length > 0,
+    apiKeyConfigured: apiKey.trim().length > 0 || existing?.apiKeyConfigured === true,
     models: existing?.models ?? [],
     activeModels: existing?.activeModels ?? [],
+    customHeaders:
+      existing?.customHeaders?.map((header) => ({ ...header })) ??
+      item.customHeaders?.map((header) => ({ ...header })) ??
+      [],
     requestFormat:
       item.providerType === "xai"
         ? "openai-responses"
@@ -418,17 +450,17 @@ export function ProviderSettingsExtension(props: {
     const results = await Promise.all(
       providers.map(async (provider) => {
         try {
-          const models = await fetchModelsFromApi(
-            provider.type,
-            provider.baseUrl,
-            provider.apiKey,
-            {
-              useSystemProxy: provider.useSystemProxy,
-              isFullUrl: provider.isFullUrl,
-              modelsUrl: provider.modelsUrl,
-              customHeaders: provider.customHeaders,
-            },
-          );
+          const models = await discoverProviderModels({
+            type: provider.type,
+            requestFormat: provider.requestFormat,
+            baseUrl: provider.baseUrl,
+            apiKey: provider.apiKey,
+            useSystemProxy: provider.useSystemProxy,
+            isFullUrl: provider.isFullUrl,
+            modelsUrl: provider.modelsUrl,
+            providerId: provider.id,
+            customHeaders: provider.customHeaders,
+          });
           return { id: provider.id, models, ok: true };
         } catch {
           return {
@@ -453,16 +485,19 @@ export function ProviderSettingsExtension(props: {
           return {
             ...provider,
             models,
-            activeModels: models.map((model) => model.id),
+            activeModels: [
+              ...provider.activeModels,
+              ...models
+                .filter((model) => !provider.models.some((existing) => existing.id === model.id))
+                .map((model) => model.id),
+            ],
           };
         }),
       ),
     );
     const failed = results.filter((result) => !result.ok).length;
     setMessage(
-      failed > 0
-        ? `已导入配置，${failed} 个供应商模型获取失败`
-        : "已导入配置并激活获取到的全部模型",
+      failed > 0 ? `已导入配置，${failed} 个供应商模型获取失败` : "已导入配置并激活新获取的模型",
     );
   }
 
@@ -516,8 +551,26 @@ export function ProviderSettingsExtension(props: {
       importable.map(async (item) => {
         const id = cherryProviderId(item);
         try {
+          const provider = providerFromCherry(
+            item,
+            allItems,
+            settings.customProviders.find((provider) => provider.id === id),
+          );
+          // K-brain redacts a saved key on reload. Use the imported key only for
+          // this discovery request; keep the persisted provider key untouched.
+          const discoveryApiKey = provider.apiKey.trim() || item.apiKey.trim();
           const models = (
-            await fetchModelsFromApi(item.providerType, item.baseUrl, item.apiKey)
+            await discoverProviderModels({
+              type: provider.type,
+              requestFormat: provider.requestFormat,
+              providerId: provider.id,
+              baseUrl: provider.baseUrl,
+              apiKey: discoveryApiKey,
+              modelsUrl: provider.modelsUrl,
+              isFullUrl: provider.isFullUrl,
+              useSystemProxy: provider.useSystemProxy,
+              customHeaders: provider.customHeaders,
+            })
           ).filter((model) => isLikelyCherryChatModel(model.id));
           return { id, models, ok: true };
         } catch {
@@ -541,7 +594,12 @@ export function ProviderSettingsExtension(props: {
           return {
             ...provider,
             models,
-            activeModels: models.map((model) => model.id),
+            activeModels: [
+              ...provider.activeModels,
+              ...models
+                .filter((model) => !provider.models.some((existing) => existing.id === model.id))
+                .map((model) => model.id),
+            ],
           };
         }),
       ),
@@ -550,7 +608,7 @@ export function ProviderSettingsExtension(props: {
     setMessage(
       failed > 0
         ? `已同步 ${importable.length} 个 Cherry Studio 供应商，${failed} 个模型列表获取失败`
-        : `已同步 ${importable.length} 个 Cherry Studio 供应商并激活全部模型`,
+        : `已同步 ${importable.length} 个 Cherry Studio 供应商并激活新获取的模型`,
     );
     setCherryModalOpen(false);
     setImporting(false);

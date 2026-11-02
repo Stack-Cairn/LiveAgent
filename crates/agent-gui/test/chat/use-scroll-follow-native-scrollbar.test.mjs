@@ -61,6 +61,20 @@ function pointer(type, target, init) {
   return event;
 }
 
+function extractFunctionBody(source, functionName) {
+  const start = source.indexOf(`function ${functionName}`);
+  assert.notEqual(start, -1, `${functionName} not found in source`);
+  const open = source.indexOf("{", start);
+  assert.notEqual(open, -1, `${functionName} body not found in source`);
+  let depth = 0;
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    else if (source[index] === "}") depth -= 1;
+    if (depth === 0) return source.slice(open + 1, index);
+  }
+  assert.fail(`${functionName} body is unterminated`);
+}
+
 function mount() {
   const container = env.dom.window.document.createElement("div");
   env.dom.window.document.body.appendChild(container);
@@ -106,8 +120,7 @@ function nativeDragTo(viewport, ...tops) {
 
 test("conversation-switch cleanup preserves the outgoing viewport before it is saved", () => {
   const source = readFileSync(new URL("../../src/pages/ChatPage.tsx", import.meta.url), "utf8");
-  const body = source.match(/function resetVisibleTransientState\([^\n]*\) \{([\s\S]*?)\n  \}/)?.[1];
-  assert.ok(body);
+  const body = extractFunctionBody(source, "resetVisibleTransientState");
   const { root, captured } = mount();
   const calls = [];
   const reset = new Function("targetConversationId", "currentConversationIdRef", "composerRef",

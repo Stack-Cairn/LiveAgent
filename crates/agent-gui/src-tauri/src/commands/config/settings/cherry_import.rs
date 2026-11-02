@@ -15,6 +15,8 @@ pub struct CherryProviderImportItem {
     pub reason: String,
     pub warning: String,
     pub excluded_model_count: usize,
+    #[serde(default)]
+    pub custom_headers: Vec<ImportedProviderHeader>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -420,13 +422,8 @@ fn cherry_append_v1_provider(
         });
     }
 
-    let warning = if provider
-        .get("extra_headers")
-        .and_then(Value::as_object)
-        .is_some_and(|headers| !headers.is_empty())
-    {
-        "Cherry Studio 的自定义请求头不会同步".to_string()
-    } else if api_keys.len() > 1 {
+    let custom_headers = imported_headers_from_values(&[provider]);
+    let warning = if api_keys.len() > 1 {
         format!("检测到 {} 个 API Key，将使用第一个", api_keys.len())
     } else {
         String::new()
@@ -460,6 +457,7 @@ fn cherry_append_v1_provider(
             reason,
             warning: warning.clone(),
             excluded_model_count,
+            custom_headers: custom_headers.clone(),
         });
     }
 }
@@ -596,13 +594,8 @@ fn cherry_read_v2(
         }
 
         let settings = cherry_parse_optional_json(provider_settings_text.as_deref());
-        let warning = if settings
-            .get("extraHeaders")
-            .and_then(Value::as_object)
-            .is_some_and(|headers| !headers.is_empty())
-        {
-            "Cherry Studio 的自定义请求头不会同步".to_string()
-        } else if api_keys.len() > 1 {
+        let custom_headers = imported_headers_from_values(&[&settings]);
+        let warning = if api_keys.len() > 1 {
             format!("检测到 {} 个启用 API Key，将使用第一个", api_keys.len())
         } else {
             String::new()
@@ -636,6 +629,7 @@ fn cherry_read_v2(
                 reason,
                 warning: warning.clone(),
                 excluded_model_count,
+                custom_headers: custom_headers.clone(),
             });
         }
     }

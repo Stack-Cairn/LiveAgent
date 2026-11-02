@@ -168,12 +168,7 @@ impl BrowserManager {
         }
         if guard.is_none() {
             let started = start_browser(&self.bridge, requested_mode).await?;
-            self.record_child_pid(
-                started
-                    .launched
-                    .as_ref()
-                    .map(LaunchedBrowser::child_pid),
-            );
+            self.record_child_pid(started.launched.as_ref().map(LaunchedBrowser::child_pid));
             *guard = Some(started);
         }
         let active = guard.as_mut().expect("browser session just ensured");

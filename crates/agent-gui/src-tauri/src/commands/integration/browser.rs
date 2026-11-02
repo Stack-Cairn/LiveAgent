@@ -18,9 +18,7 @@ pub async fn browser_action(
     let mut args = args;
     // 浏览器接入模式以持久化设置为唯一权威（同 load_runtime_command_safety_mode
     // 范式）：不信任渲染进程/网关透传，改设置后下一次动作即生效。
-    args.browser_mode = Some(
-        crate::commands::settings::load_runtime_browser_automation_mode(),
-    );
+    args.browser_mode = Some(crate::commands::settings::load_runtime_browser_automation_mode());
     manager.execute(args).await
 }
 
@@ -53,7 +51,7 @@ pub struct BrowserExtensionInstallInfo {
 /// 或 .app 移动后即失效；固定到 .liveagent 下路径终身稳定，内容由每次启动
 /// 的同步保持最新。
 fn liveagent_extension_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".liveagent").join("extension"))
+    crate::runtime::data_home::home_dir().map(|home| home.join(".liveagent").join("extension"))
 }
 
 /// 同步数据源：打包产物为 bundle resources 下的 browser-extension/

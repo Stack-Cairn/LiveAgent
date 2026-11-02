@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateToolArguments } from "@earendil-works/pi-ai";
 import * as typebox from "typebox";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+const validateToolArguments = (tool, toolCall) =>
+  createTsModuleLoader({ mocks: { typebox } }).validateToolArguments(tool, toolCall);
 
 function toolCall(name, argumentsValue = {}, id = `call-${name}`) {
   return { type: "toolCall", id, name, arguments: argumentsValue };

@@ -49,12 +49,16 @@ test("collapsing the live work trace re-homes the active block below the header"
   );
 });
 
-test("one persistent sparkle marks the live turn; textual fillers are gone", () => {
+test("live turns show verified progress with a paused sparkle fallback for user decisions", () => {
   assert.match(
     roundContentSource,
-    /\{running \? <LiveSparkle paused=\{attentionRequired\} \/> : null\}/,
+    /!attentionRequired && parseRunProgress\(normalizedToolStatus\)/,
   );
-  assert.match(activityRowSource, /\{row\.live \? <LiveSparkle/);
+  assert.match(roundContentSource, /<LiveAssistantStatus status=\{normalizedToolStatus\} \/>/);
+  assert.match(roundContentSource, /<LiveSparkle paused=\{attentionRequired\} \/>/);
+  assert.match(activityRowSource, /!awaitingDecision && parseRunProgress\(toolStatus\)/);
+  assert.match(activityRowSource, /<LiveAssistantStatus status=\{toolStatus\} \/>/);
+  assert.match(activityRowSource, /<LiveSparkle className="pt-1" paused=\{awaitingDecision\} \/>/);
   // The latest tool batch no longer fakes a "思考中" phase while idle — a real
   // reasoning segment shows its own row and the sparkle covers gaps.
   assert.doesNotMatch(toolTraceSource, /t\("chat\.thinking"\)/);

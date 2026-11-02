@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -8,7 +9,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // Node 的 ESM 解析不认其无扩展名的相对 import。和 floor-nav-scroll 一样：经 TS loader
 // 预加载 core，再让 react-virtual 也走 loader（这样它对 core 的 import 才能命中 mock）。
 const virtualCore = createTsModuleLoader().loadModule(
-  new URL("../../../virtual-core/src/index.ts", import.meta.url).pathname,
+  fileURLToPath(new URL("../../../virtual-core/src/index.ts", import.meta.url)),
 );
 let realUseVirtualizer;
 const locale = { locale: "en-US", t: (key) => key };

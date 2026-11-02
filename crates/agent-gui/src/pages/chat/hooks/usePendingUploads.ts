@@ -1,3 +1,4 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import type { ToastTone } from "@liveagent/ui/components/ui/toast-manager";
 import {
@@ -5,7 +6,6 @@ import {
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
-import { invoke } from "@tauri-apps/api/core";
 import {
   type MutableRefObject,
   useCallback,

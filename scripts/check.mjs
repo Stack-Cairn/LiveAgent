@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { delimiter, dirname, join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const gatewayDir = join(repoRoot, "crates/agent-gateway");
@@ -18,8 +18,29 @@ const runId = `${new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "
 const runDir = join(logRoot, runId);
 const logPath = join(runDir, "check.log");
 const reportPath = resolve(process.env.LIVEAGENT_CHECK_REPORT_PATH ?? join(runDir, "report.json"));
+const cargoCheckTargetDir = join(repoRoot, "target", "check");
+
+// golangci-lint runs the `go` it finds on PATH. On Windows a system Go (e.g. C:\Program Files\Go)
+// can sit ahead of the mise toolchain, so the linter mixes the mise GOROOT with a newer go tool
+// and fails with "compile: version ... does not match go tool version". Put mise's Go first.
+function pathWithMiseGo() {
+  const result = spawnSync("mise", ["where", "go"], {
+    cwd: gatewayDir,
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+  const goRoot = result.status === 0 ? result.stdout.trim() : "";
+  const current =
+    Object.entries(process.env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
+  return goRoot ? `${join(goRoot, "bin")}${delimiter}${current}` : current;
+}
+
+// Keep the platform's own key spelling ("Path" on Windows): tools such as mise only update the
+// key they find, and a second "PATH" key made them resolve a different Go than they configured.
+const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
 const commandEnvironment = {
   ...process.env,
+  [pathKey]: pathWithMiseGo(),
   GOCACHE: process.env.GOCACHE ?? join(runDir, "go-cache"),
   GOLANGCI_LINT_CACHE: process.env.GOLANGCI_LINT_CACHE ?? join(runDir, "golangci-cache"),
 };
@@ -45,6 +66,17 @@ function commandStep(name, command, args, cwd = repoRoot) {
 
 function miseStep(name, tool, args, cwd = repoRoot) {
   return commandStep(name, "mise", ["exec", "--", tool, ...args], cwd);
+}
+
+// On Windows, `mise exec -- go` resolves `go` through the search path of the mise process itself,
+// so a system Go (C:\Program Files\Go) can win over the pinned toolchain while mise still exports
+// the pinned GOROOT, producing "compile: version ... does not match go tool version". Run Go tools
+// by the absolute path mise reports instead; PATH already puts the pinned Go first for golangci-lint.
+function goToolStep(name, tool, args, cwd) {
+  if (process.platform !== "win32") return miseStep(name, tool, args, cwd);
+  const result = spawnSync("mise", ["which", tool], { cwd, encoding: "utf8", shell: true });
+  const executable = result.status === 0 ? result.stdout.trim() : "";
+  return executable ? commandStep(name, executable, args, cwd) : miseStep(name, tool, args, cwd);
 }
 
 function biomeStep(name, workspace, strict = false) {
@@ -76,7 +108,16 @@ function buildSteps() {
     miseStep("Virtual core tests", "pnpm", ["test:virtual-core"]),
     miseStep("GUI TypeScript and Vite build", "pnpm", ["build:gui"]),
     miseStep("WebUI TypeScript and Vite build", "pnpm", ["build:webui"]),
-    miseStep("Tauri Rust check", "cargo", ["check", "--workspace", "--tests"]),
+    miseStep("Gateway sidecar with embedded WebUI build", "node", ["scripts/prepare-gateway.mjs"]),
+    // Separate target dir: on Windows a running debug client locks target\debug\k-brain.exe and
+    // the tauri build script cannot replace the sidecar, failing the check for an unrelated reason.
+    miseStep("Tauri Rust check", "cargo", [
+      "check",
+      "--workspace",
+      "--tests",
+      "--target-dir",
+      cargoCheckTargetDir,
+    ]),
   ];
 
   if (strict) {
@@ -97,8 +138,8 @@ function buildSteps() {
   }
 
   steps.push(
-    miseStep("Gateway golangci-lint", "golangci-lint", ["run", "./..."], gatewayDir),
-    miseStep("Gateway Go tests", "go", ["test", "./..."], gatewayDir),
+    goToolStep("Gateway golangci-lint", "golangci-lint", ["run", "./..."], gatewayDir),
+    goToolStep("Gateway Go tests", "go", ["test", "./..."], gatewayDir),
   );
 
   if (profile === "all" || strict) {
@@ -106,8 +147,8 @@ function buildSteps() {
       miseStep("GUI frontend tests", "pnpm", ["test:gui"]),
       miseStep("WebUI tests", "pnpm", ["test:webui"]),
       miseStep("Release script tests", "pnpm", ["--dir", "crates/agent-gui", "test:release"]),
-      miseStep("Tauri Rust all-target tests", "cargo", ["test", "--workspace", "--all-targets"]),
-      miseStep("Tauri Rust doc tests", "cargo", ["test", "--workspace", "--doc"]),
+      miseStep("Tauri Rust all-target tests", "cargo", ["test", "--workspace", "--all-targets", "--target-dir", cargoCheckTargetDir]),
+      miseStep("Tauri Rust doc tests", "cargo", ["test", "--workspace", "--doc", "--target-dir", cargoCheckTargetDir]),
       miseStep("Proto lint", "buf", ["lint"], gatewayDir),
       miseStep(
         "Proto breaking check",
@@ -129,6 +170,8 @@ function buildSteps() {
         "clippy",
         "--workspace",
         "--all-targets",
+        "--target-dir",
+        cargoCheckTargetDir,
         "--",
         "-D",
         "warnings",

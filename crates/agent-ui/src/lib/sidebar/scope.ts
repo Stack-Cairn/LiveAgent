@@ -11,6 +11,8 @@ export function sidebarScopeKey(scope: SidebarScope): string {
     }
     case "unscoped":
       return "cwd-empty";
+    case "all":
+      return "all";
     case "none":
       return "none";
   }
@@ -27,6 +29,8 @@ export function conversationMatchesScope(
     }
     case "unscoped":
       return !conversation.cwd?.trim();
+    case "all":
+      return true;
     case "none":
       return false;
   }

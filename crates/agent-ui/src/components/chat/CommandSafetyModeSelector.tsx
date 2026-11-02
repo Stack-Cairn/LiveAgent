@@ -1,6 +1,17 @@
+import { loadAIApprovalState } from "@liveagent/adapters/aiApprovalReadiness";
 import { useSandboxCapability } from "@liveagent/adapters/sandboxCapability";
 import type { CommandSafetyMode } from "@liveagent/app/lib/settings";
-import { Check, Hand, Shield, ShieldOff, Zap } from "@liveagent/ui/components/IconSet";
+import {
+  Check,
+  Hand,
+  Settings,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
+  SquarePen,
+  Zap,
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -10,12 +21,16 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { COMPOSER_CONTROL_TRIGGER_CLASS } from "@liveagent/ui/lib/chat/composerControlStyles";
+import { useAIApprovalReviewerConfigured } from "@liveagent/ui/lib/settings/aiApprovalReadiness";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
 
 const MODE_I18N_KEYS: Record<CommandSafetyMode, string> = {
   ask: "chat.safety.ask",
   auto: "chat.safety.auto",
+  autoEdit: "chat.safety.autoEdit",
+  always: "chat.safety.always",
+  autoReview: "chat.safety.autoReview",
   sandbox: "chat.safety.sandbox",
   sandboxOffline: "chat.safety.sandboxOffline",
 };
@@ -23,11 +38,16 @@ const MODE_I18N_KEYS: Record<CommandSafetyMode, string> = {
 const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
   ask: "chat.safety.askDesc",
   auto: "chat.safety.autoDesc",
+  autoEdit: "chat.safety.autoEditDesc",
+  always: "chat.safety.alwaysDesc",
+  autoReview: "chat.safety.autoReviewDesc",
   sandbox: "chat.safety.sandboxDesc",
   sandboxOffline: "chat.safety.sandboxOfflineDesc",
 };
 
-const SAFETY_MODES = ["ask", "auto", "sandbox", "sandboxOffline"] as const;
+// "Full access" (auto) is retired: auto review takes its place in the list and
+// saved "auto" values are migrated to "always" by settings normalization.
+const SAFETY_MODES = ["ask", "autoEdit", "autoReview", "always"] as const;
 
 /**
  * 读掩蔽是平台/后端相关的能力,不能作为跨平台的肯定承诺(P2#7)。
@@ -42,17 +62,32 @@ const SAFETY_MODES = ["ask", "auto", "sandbox", "sandboxOffline"] as const;
 const MECHANISMS_WITHOUT_READ_MASKING: ReadonlySet<string> = new Set(["restricted-token"]);
 
 function isCommandSafetyMode(value: unknown): value is CommandSafetyMode {
-  return value === "ask" || value === "auto" || value === "sandbox" || value === "sandboxOffline";
+  return (
+    value === "ask" ||
+    value === "auto" ||
+    value === "autoEdit" ||
+    value === "always" ||
+    value === "autoReview" ||
+    value === "sandbox" ||
+    value === "sandboxOffline"
+  );
 }
 
+// One icon per mode, so neighbouring entries in the menu are distinguishable.
 function modeIcon(mode: CommandSafetyMode, className: string) {
   if (mode === "ask") return <Hand className={className} />;
+  if (mode === "autoEdit") return <SquarePen className={className} />;
+  if (mode === "autoReview") return <ShieldCheck className={className} />;
   if (mode === "auto") return <Zap className={className} />;
+  if (mode === "always") return <ShieldAlert className={className} />;
   if (mode === "sandboxOffline") return <ShieldOff className={className} />;
   return <Shield className={className} />;
 }
 
-function triggerIconClass(mode: CommandSafetyMode) {
+function triggerIconClass(mode: CommandSafetyMode, reviewerMissing: boolean) {
+  if (mode === "autoReview" && reviewerMissing) {
+    return "size-4 shrink-0 text-amber-600 dark:text-amber-400";
+  }
   if (mode === "sandbox" || mode === "sandboxOffline") {
     return "size-4 shrink-0 text-emerald-600 dark:text-emerald-400";
   }
@@ -64,10 +99,22 @@ export function CommandSafetyModeSelector(props: {
   value: CommandSafetyMode;
   disabled?: boolean;
   onChange: (mode: CommandSafetyMode) => void;
+  /** Opens the settings page that holds the AI approval reviewer model. */
+  onConfigureAutoReview?: () => void;
+  /** Keyboard shortcut that cycles the mode, shown in the trigger's tooltip. */
+  shortcutHint?: string;
 }) {
-  const { value, disabled, onChange } = props;
+  // Plan mode has its own switch in the composer's plus menu; this menu only
+  // picks the permission mode, and choosing one leaves plan mode as it is.
+  const { value, disabled, onChange, onConfigureAutoReview, shortcutHint } = props;
   const { t } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Counts openings only, so the reviewer check re-reads on open and not on close.
+  const [menuOpenings, setMenuOpenings] = useState(0);
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open);
+    if (open) setMenuOpenings((count) => count + 1);
+  };
   const capability = useSandboxCapability();
   // 写围栏(sandbox):平台不支持时禁用。桌面端探测返回前(null)乐观启用,由执行层
   // fail-closed 兜底;WebUI 执行端平台未知,同样交由 fail-closed。
@@ -91,11 +138,27 @@ export function CommandSafetyModeSelector(props: {
       : MODE_DESC_I18N_KEYS[mode];
   // 当前值本身不可用(如设置同步自 macOS,本机是 Windows)时仍显示,但标红提示
   // 由执行层报错兜底;这里不做静默改写,避免设置回写抖动。
-  const selected = isCommandSafetyMode(value) ? value : "auto";
-  const selectedLabel = t(MODE_I18N_KEYS[selected]);
+  const selected = isCommandSafetyMode(value) && value !== "auto" ? value : "always";
+  // Auto review needs a reviewer model; without one K-brain asks for every
+  // action and withholds tool output. Only a confirmed missing reviewer warns.
+  const reviewerConfigured = useAIApprovalReviewerConfigured(
+    loadAIApprovalState,
+    menuOpen || selected === "autoReview",
+    menuOpenings,
+  );
+  const reviewerMissing = reviewerConfigured === false;
+  const selectedLabel =
+    t(MODE_I18N_KEYS[selected]) +
+    (selected === "autoReview" && reviewerMissing
+      ? ` · ${t("chat.safety.autoReviewNeedsModel")}`
+      : "");
+  const modes: readonly CommandSafetyMode[] =
+    selected === "sandbox" || selected === "sandboxOffline"
+      ? [...SAFETY_MODES, selected]
+      : SAFETY_MODES;
 
   return (
-    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+    <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
       <DropdownMenuTrigger
         render={
           <Button
@@ -108,10 +171,10 @@ export function CommandSafetyModeSelector(props: {
             )}
           />
         }
-        title={selectedLabel}
+        title={shortcutHint ? `${selectedLabel} (${shortcutHint})` : selectedLabel}
         aria-label={`${t("chat.safety.label")}: ${selectedLabel}`}
       >
-        {modeIcon(selected, triggerIconClass(selected))}
+        {modeIcon(selected, triggerIconClass(selected, reviewerMissing))}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         variant="soft"
@@ -119,7 +182,7 @@ export function CommandSafetyModeSelector(props: {
         side="top"
         align="start"
       >
-        {SAFETY_MODES.map((mode) => {
+        {modes.map((mode) => {
           const entryDisabled =
             mode === "sandbox"
               ? sandboxUnavailable
@@ -127,7 +190,8 @@ export function CommandSafetyModeSelector(props: {
                 ? offlineUnavailable
                 : false;
           const isSelected = mode === selected;
-          return (
+          const needsReviewer = mode === "autoReview" && reviewerMissing;
+          const item = (
             <DropdownMenuItem
               key={mode}
               disabled={entryDisabled}
@@ -140,8 +204,17 @@ export function CommandSafetyModeSelector(props: {
               {modeIcon(mode, "mt-0.5 size-3.5 shrink-0 text-muted-foreground")}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-medium leading-4">{t(MODE_I18N_KEYS[mode])}</span>
-                <span className="text-tiny font-normal leading-4 text-muted-foreground">
-                  {entryDisabled ? disabledHint : t(modeDescKey(mode))}
+                <span
+                  className={cn(
+                    "text-tiny font-normal leading-4 text-muted-foreground",
+                    needsReviewer && "text-amber-700 dark:text-amber-400",
+                  )}
+                >
+                  {entryDisabled
+                    ? disabledHint
+                    : needsReviewer
+                      ? t("chat.safety.autoReviewNeedsModel")
+                      : t(modeDescKey(mode))}
                 </span>
               </span>
               {isSelected ? (
@@ -151,6 +224,18 @@ export function CommandSafetyModeSelector(props: {
               )}
             </DropdownMenuItem>
           );
+          if (!needsReviewer || !onConfigureAutoReview) return item;
+          return [
+            item,
+            <DropdownMenuItem
+              key="configure-reviewer"
+              onSelect={onConfigureAutoReview}
+              className="h-auto items-center gap-2.5 py-1.5 pl-8 text-xs"
+            >
+              <Settings className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="font-medium">{t("chat.safety.configureReviewer")}</span>
+            </DropdownMenuItem>,
+          ];
         })}
       </DropdownMenuContent>
     </DropdownMenu>

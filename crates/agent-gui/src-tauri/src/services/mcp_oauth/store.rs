@@ -92,6 +92,9 @@ pub fn storage_label() -> &'static str {
 // ---- keyring 后端 ----
 
 fn keyring_entry(server_id: &str) -> Result<keyring::Entry, String> {
+    if crate::runtime::data_home::isolation_requested() {
+        return Err("isolated development uses only its private file store".into());
+    }
     keyring::Entry::new(KEYRING_SERVICE, server_id)
         .map_err(|e| format!("创建 keyring 条目失败：{e}"))
 }
@@ -113,7 +116,7 @@ fn keyring_load(server_id: &str) -> Result<Option<TokenRecord>, String> {
 // ---- 文件降级后端 ----
 
 fn file_store_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
+    let home = crate::runtime::data_home::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
     fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败：{e}"))?;
     Ok(dir.join(FILE_STORE_NAME))

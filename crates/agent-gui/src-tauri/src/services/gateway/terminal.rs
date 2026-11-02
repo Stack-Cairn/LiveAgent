@@ -246,6 +246,15 @@ impl GatewayController {
         request: proto::TerminalRequest,
     ) -> Result<proto::TerminalResponse, String> {
         let action = request.action.trim().to_ascii_lowercase();
+        if !request.conversation_id.is_empty() || !request.run_id.is_empty() {
+            // Backend-owned sessions have no native terminal-registry entry; gate them by action.
+            self.ensure_kbrain_terminal_request_allowed(&action)?;
+            return crate::services::gateway_bridge::handle_kbrain_terminal_request(
+                self.app_handle.clone(),
+                request,
+            )
+            .await;
+        }
         self.ensure_terminal_request_allowed(&action, &request)?;
         match action.as_str() {
             "shell_options" => {
@@ -555,6 +564,36 @@ impl GatewayController {
             return Err("terminal session is outside the requested project".to_string());
         }
         Ok(())
+    }
+
+    pub(crate) fn ensure_kbrain_terminal_request_allowed(
+        &self,
+        action: &str,
+    ) -> Result<(), String> {
+        let config = self.config_tx.borrow().clone();
+        match action {
+            "create_ssh"
+            | "answer_ssh_prompt"
+            | "cancel_ssh_prompt"
+            | "ssh_tabs_list"
+            | "ssh_tab_open"
+            | "ssh_tab_close"
+            | "ssh_local_forward_start"
+            | "ssh_local_forward_list"
+            | "ssh_local_forward_stop"
+            | "ssh_local_forward_check_port" => {
+                Err("canonical K-brain terminal does not support SSH actions".to_string())
+            }
+            "list" | "close_project" => {
+                if config.enable_web_terminal || config.enable_web_ssh_terminal {
+                    Ok(())
+                } else {
+                    Err("web terminal is disabled in desktop Remote settings".to_string())
+                }
+            }
+            _ if config.enable_web_terminal => Ok(()),
+            _ => Err("web terminal is disabled in desktop Remote settings".to_string()),
+        }
     }
 
     pub(crate) fn ensure_terminal_request_allowed(

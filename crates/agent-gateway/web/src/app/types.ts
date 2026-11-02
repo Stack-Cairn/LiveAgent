@@ -16,6 +16,12 @@ export type SendChatOptions = {
   // false for queue-destined sends: no transcript echo, the queue panel owns
   // the prompt until it actually runs.
   optimisticEcho?: boolean;
+  /** 输入框“/”指令：经 K-brain 的 goal 接口开始本轮，或本条是提示词指令。 */
+  goalAction?: "set" | "resume";
+  goalText?: string;
+  promptCommand?: boolean;
+  planCommand?: boolean;
+  waitForStart?: boolean;
 };
 
 export type SendChatFn = (

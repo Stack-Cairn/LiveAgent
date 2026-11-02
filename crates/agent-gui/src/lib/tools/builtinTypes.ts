@@ -1,6 +1,4 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-
-import type { SubagentScheduler } from "../subagents/scheduler";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 
 export * from "@liveagent/ui/contracts/builtinTools";
 export type {
@@ -14,7 +12,6 @@ import type { BuiltinToolBundleShape } from "@liveagent/ui/contracts/builtinTool
 
 export type BuiltinToolExecutionContext = {
   parentToolCall: ToolCall;
-  subagentScheduler?: SubagentScheduler;
   emitToolCall?: (toolCall: ToolCall) => void;
   emitToolExecutionStart?: (toolCall: ToolCall) => void;
   emitToolResult?: (toolCall: ToolCall, toolResult: ToolResultMessage) => void;

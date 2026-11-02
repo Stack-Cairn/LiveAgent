@@ -1,4 +1,4 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { Message } from "@liveagent/app/lib/agentTypes";
 import type { StoredSummaryMessage } from "../conversation/conversationState";
 
 export type SerializedHistorySegment<TPayload> = {

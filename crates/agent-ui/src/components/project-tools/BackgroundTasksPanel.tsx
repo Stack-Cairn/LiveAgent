@@ -12,6 +12,7 @@ import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/c
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import {
   memo,
@@ -104,9 +105,9 @@ function BackgroundTaskLogDialog(props: {
     setError(null);
     readManagedProcessLog(process.id)
       .then(setLog)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err) => setError(hostAwareErrorMessage(err, t("projectTools.runtimeUnsupported"))))
       .finally(() => setLoading(false));
-  }, [process.id]);
+  }, [process.id, t]);
 
   const lines = useMemo(() => {
     if (!log?.content.trim()) return [];
@@ -289,14 +290,17 @@ function BackgroundTaskRow(props: {
     return () => window.clearTimeout(timer);
   }, [pendingStop]);
 
-  const runAction = useCallback(async (action: () => Promise<void>) => {
-    setError(null);
-    try {
-      await action();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
+  const runAction = useCallback(
+    async (action: () => Promise<void>) => {
+      setError(null);
+      try {
+        await action();
+      } catch (err) {
+        setError(hostAwareErrorMessage(err, t("projectTools.runtimeUnsupported")));
+      }
+    },
+    [t],
+  );
 
   const handleStop = useCallback(() => {
     if (!pendingStop) {

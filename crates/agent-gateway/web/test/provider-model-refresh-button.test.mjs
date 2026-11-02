@@ -42,7 +42,7 @@ test("provider model refresh accepts a saved WebUI key without exposing it", () 
   assert.match(handlerSource, /!trimUrl && !modelsUrl\.trim\(\)/);
   assert.match(handlerSource, /!trimKey && !canReuseStoredApiKey/);
   assert.match(handlerSource, /setFetchError\(t\("settings\.noBaseUrlApiKey"\)\)/);
-  assert.match(providersSectionSource, /canReuseStoredApiKey\s*=\s*isGatewayWebui\s*&&\s*apiKeyIsRedactedDisplay/);
+  assert.match(providersSectionSource, /canReuseStoredApiKey\s*=\s*providerCredentialsRedacted\s*&&\s*apiKeyIsStoredValue/);
   const reuseGuardStart = providersSectionSource.indexOf("const canReuseStoredApiKey");
   const reuseGuardEnd = providersSectionSource.indexOf("const persistedUsageQueryProviderId", reuseGuardStart);
   assert.notEqual(reuseGuardStart, -1);

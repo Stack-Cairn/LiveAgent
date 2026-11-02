@@ -241,6 +241,119 @@ export function matchesUploadedFileInstructionLine(line: string, file: PendingUp
   return line === `- ${absolutePath} (${file.kind})`;
 }
 
+/** 空正文时填充的占位句，反解时按它还原成空正文。 */
+const EMPTY_TEXT_ATTACHMENT_PLACEHOLDER = "Please inspect the selected files first.";
+
+/**
+ * 附件行的反解正则。路径用非贪婪匹配，体积组可选（旧格式没有体积），
+ * 这样带括号的路径（`C:\a (1)\b.png`）也能靠回溯正确切分。
+ */
+const UPLOADED_FILE_INSTRUCTION_LINE_RE =
+  /^- (.+?) \(([a-z]+)(?:, (\d+(?:\.\d+)?) (B|KB|MB|GB))?\)$/;
+
+const SIZE_UNIT_MULTIPLIERS: Record<string, number> = {
+  B: 1,
+  KB: 1024,
+  MB: 1024 * 1024,
+  GB: 1024 * 1024 * 1024,
+};
+
+function parseInstructionLineSize(value: string | undefined, unit: string | undefined) {
+  if (value === undefined || unit === undefined) return 0;
+  const numeric = Number(value);
+  const multiplier = SIZE_UNIT_MULTIPLIERS[unit];
+  if (!Number.isFinite(numeric) || multiplier === undefined) return 0;
+  return Math.round(numeric * multiplier);
+}
+
+function toForwardSlashes(value: string) {
+  return value.replace(/\\/g, "/");
+}
+
+function stripTrailingSeparators(value: string) {
+  return value.replace(/[/\\]+$/, "");
+}
+
+/**
+ * 由绝对路径还原 relativePath，与 Rust `build_readable_file_entry` 的规则对齐：
+ * 工作区内用相对 cwd 的正斜杠路径（粘贴引用会拿它当 key），暂存区文件用
+ * `uploads/<batch>/<name>`（没有 cwd 时也能还原，工作区外的路径没有 uploads
+ * 段就退回绝对路径）。
+ */
+function uploadedFileRelativePath(absolutePath: string, cwd?: string) {
+  const forwardAbsolute = toForwardSlashes(absolutePath);
+  const normalizedCwd = cwd?.trim() ? stripTrailingSeparators(toForwardSlashes(cwd.trim())) : "";
+  if (normalizedCwd) {
+    const lowerAbsolute = forwardAbsolute.toLowerCase();
+    const lowerCwd = normalizedCwd.toLowerCase();
+    if (lowerAbsolute.startsWith(`${lowerCwd}/`)) {
+      return forwardAbsolute.slice(normalizedCwd.length + 1);
+    }
+  }
+  const uploadsMarker = forwardAbsolute.lastIndexOf("/uploads/");
+  if (uploadsMarker >= 0) {
+    return forwardAbsolute.slice(uploadsMarker + 1);
+  }
+  return forwardAbsolute;
+}
+
+function uploadedFileInstructionLineToPendingFile(
+  line: string,
+  cwd?: string,
+): PendingUploadedFile | null {
+  const match = UPLOADED_FILE_INSTRUCTION_LINE_RE.exec(line);
+  if (!match) return null;
+  const absolutePath = (match[1] ?? "").trim();
+  const kind = match[2] ?? "";
+  if (!absolutePath || !UPLOADED_READABLE_FILE_KINDS.has(kind)) return null;
+  const normalizedAbsolutePath = absolutePath.replace(/[/\\]+$/, "");
+  const fileName = normalizedAbsolutePath.split(/[/\\]/).pop() ?? "";
+  if (!fileName) return null;
+  return {
+    relativePath: uploadedFileRelativePath(normalizedAbsolutePath, cwd),
+    absolutePath: normalizedAbsolutePath,
+    fileName,
+    kind: kind as UploadedReadableFileKind,
+    sizeBytes: parseInstructionLineSize(match[3], match[4]),
+  };
+}
+
+/**
+ * 从落库/回读的消息正文反解附件指令，还原界面上要显示的正文与附件列表。
+ * K-brain 只存文本，重开旧会话时 user 消息没有 `liveAgentDisplayContent` 与
+ * `liveAgentAttachments`，界面就会直接把整段指令当正文显示；这里按
+ * `buildUserMessageContentWithUploads` 的拼装规则还原。
+ *
+ * 只要有附件行解析不出来就整体放弃（`parsed: false`），调用方保持消息原样，
+ * 避免把用户自己写的、形似指令的正文误判成附件。
+ */
+export function parseUserMessageContentWithUploads(
+  text: string,
+  cwd?: string,
+): { displayText: string; attachments: PendingUploadedFile[]; parsed: boolean } {
+  const unchanged = { displayText: text, attachments: [], parsed: false };
+  const normalized = normalizeLogicalLineEndings(text);
+  const lines = normalized.split("\n");
+  const header = locateUploadedFilesInstructionHeader(lines);
+  if (!header) return unchanged;
+
+  const attachments: PendingUploadedFile[] = [];
+  for (const line of lines.slice(header.index + header.length)) {
+    if (!line.trim()) continue;
+    const file = uploadedFileInstructionLineToPendingFile(line, cwd);
+    if (!file) return unchanged;
+    attachments.push(file);
+  }
+  if (attachments.length === 0) return unchanged;
+
+  const displayText = lines.slice(0, header.index).join("\n").replace(/\s+$/, "");
+  return {
+    displayText: displayText.trim() === EMPTY_TEXT_ATTACHMENT_PLACEHOLDER ? "" : displayText,
+    attachments,
+    parsed: true,
+  };
+}
+
 export function buildUploadedFilesInstruction(files: PendingUploadedFile[]) {
   // 模型读取路径只认导入时返回的绝对路径（工作区内原地引用、工作区外落
   // 暂存区）。旧版本仅持久化相对路径的附件不再列出——新方案下无法定位。
@@ -256,7 +369,7 @@ export function buildUserMessageContentWithUploads(userText: string, files: Pend
   const instruction = buildUploadedFilesInstruction(files);
   if (!instruction) return normalizedText;
   if (!normalizedText.trim()) {
-    return `Please inspect the selected files first.\n\n${instruction}`;
+    return `${EMPTY_TEXT_ATTACHMENT_PLACEHOLDER}\n\n${instruction}`;
   }
   return `${normalizedText}\n\n${instruction}`;
 }

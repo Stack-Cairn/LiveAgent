@@ -14,7 +14,21 @@ function isValidGatewayPort(port: unknown): port is number {
   return typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65_535;
 }
 
-export function resolveShareOrigin(explicitOrigin?: string, gatewayPort?: number) {
+export function resolveShareOrigin(
+  explicitOrigin?: string,
+  gatewayPort?: number,
+  backendUrl?: string,
+) {
+  // Backend share URLs retain their own port and reverse-proxy path prefix.
+  if (backendUrl !== undefined) {
+    try {
+      const url = new URL(backendUrl.trim());
+      if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+    } catch {
+      return "";
+    }
+  }
   const hasExplicitOrigin = explicitOrigin !== undefined;
   const rawOrigin = hasExplicitOrigin ? explicitOrigin : getBrowserOrigin();
   const trimmed = rawOrigin.trim();

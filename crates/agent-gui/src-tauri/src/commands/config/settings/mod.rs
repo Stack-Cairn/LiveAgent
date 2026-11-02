@@ -37,7 +37,7 @@ const SYSTEM_WORKDIR_KEY: &str = "workdir";
 // 工具审批策略(按工具名/`group:`/`server:` 键 → allow/ask/deny)。此前未纳入
 // 保存白名单,导致重启后设置丢失;补入本键持久化。
 const SYSTEM_TOOL_POLICIES_KEY: &str = "toolPolicies";
-// 命令执行方式("ask"/"auto"/"sandbox"/"sandboxOffline"),与前端
+// 命令执行方式与前端
 // SystemSettings.commandSafetyMode 对齐;sandbox* 由执行层映射为 OS 沙箱参数。
 const SYSTEM_COMMAND_SAFETY_MODE_KEY: &str = "commandSafetyMode";
 // 浏览器接入模式("auto"/"userProfile"/"isolated"),与前端

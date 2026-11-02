@@ -30,6 +30,11 @@ export type SidebarBackend = {
   // transition triggers an authoritative refresh. Omitted on ends whose
   // backend is always reachable (GUI local sqlite).
   subscribeConnection?(listener: (connected: boolean) => void): () => void;
+  // Event-sourced backends may disable reconcile (null) or choose a bounded
+  // safety interval. A health change reconfigures the timer without restarting.
+  getReconcileIntervalMs?(): number | null;
+  subscribeSyncState?(listener: () => void): () => void;
+  getSyncError?(): string | undefined;
   // Ids an authoritative reconcile must never drop even when the server list
   // omits them (e.g. web command-pipeline pending conversations).
   getProtectedConversationIds?(): Iterable<string>;

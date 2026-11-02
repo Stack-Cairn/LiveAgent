@@ -17,6 +17,26 @@ import type {
   OrganizerScope,
 } from "./schema";
 
+export type BackendMemoryOrganizerRun = {
+  runId: string;
+  status: string;
+  phase: string;
+  scanned: number;
+  applied: number;
+  risk: string;
+  pending?: { op: string; slug: string; scope?: string; reason?: string }[];
+  warnings?: string[];
+  createdAt: string | number;
+};
+
+export function memoryOrganizerRequest<T>(args: {
+  action: "run" | "apply" | "history";
+  workdir?: string;
+  runId?: string;
+}): Promise<T> {
+  return invoke<T>("memory_organizer", args);
+}
+
 export type MemoryHistoryTimeMode = "message" | "updated" | "conversation";
 
 export type MemoryMeta = {

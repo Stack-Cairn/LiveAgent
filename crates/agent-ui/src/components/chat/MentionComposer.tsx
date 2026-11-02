@@ -22,6 +22,21 @@ import {
   sortAppsByMentionRecency,
 } from "@liveagent/ui/lib/chat/appMentionRecency";
 import {
+  clearCommandRecovery,
+  getCommandRecovery,
+  saveCommandRecovery,
+  subscribeCommandRecovery,
+} from "@liveagent/ui/lib/chat/composerCommandRecovery";
+import {
+  buildComposerCommands,
+  type ComposerCatalogCommand,
+  type ComposerCommandPanelState,
+  filterComposerCommands,
+  type ParsedComposerCommand,
+  parseComposerCommandDraft,
+  runComposerCommand,
+} from "@liveagent/ui/lib/chat/composerCommands";
+import {
   insertPlainTextWithUndo,
   normalizeLogicalLineEndings,
 } from "@liveagent/ui/lib/chat/composerText";
@@ -50,8 +65,10 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { readSendShortcut, shouldSendOnEnter } from "../../lib/chat/sendShortcut";
+import { ComposerCommandPanel } from "./ComposerCommandPanel";
 import {
   COMMIT_MENTION_SHA_ATTR,
   CONVERSATION_MENTION_ID_ATTR,
@@ -131,6 +148,7 @@ import {
   readComposerClipboardSegments,
   rebuildClipboardSegmentsForPaste,
   removeStaleCaretAnchorsAroundSelection,
+  replaceMentionQueryText,
   resolveComposerSelection,
   resolveComposerSelectionText,
   sanitizeAppMentionSegments,
@@ -192,6 +210,8 @@ export const MentionComposer = memo(
       conversationMentionsEnabled = true,
       currentConversationId,
       mentionApps = [],
+      commandHost,
+      onCycleMode,
       className,
     }: MentionComposerProps,
     ref,
@@ -199,6 +219,21 @@ export const MentionComposer = memo(
     const { locale, t } = useLocale();
     const editorRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const commandOwnerRef = useRef(currentConversationId);
+    const commandPanelOwnerRef = useRef(currentConversationId);
+    commandOwnerRef.current = currentConversationId;
+    const commandMountedRef = useRef(true);
+    useEffect(() => {
+      commandMountedRef.current = true;
+      return () => {
+        commandMountedRef.current = false;
+      };
+    }, []);
+    const commandRecovery = useSyncExternalStore(
+      subscribeCommandRecovery,
+      () => getCommandRecovery(currentConversationId ?? ""),
+      () => undefined,
+    );
 
     const composerContextMenuRangeRef = useRef<Range | null>(null);
     const commitTooltipCloseTimerRef = useRef<number | null>(null);
@@ -313,6 +348,42 @@ export const MentionComposer = memo(
     const [conversationSearchError, setConversationSearchError] = useState<string | null>(null);
     const conversationSearchRequestSeqRef = useRef(0);
 
+    // ---- Slash commands ----
+    const [commandCatalog, setCommandCatalog] = useState<readonly ComposerCatalogCommand[]>([]);
+    const [commandPanel, setCommandPanel] = useState<ComposerCommandPanelState | null>(null);
+    const commandCatalogSeqRef = useRef(0);
+    const commandsEnabled = Boolean(commandHost);
+    const commands = useMemo(
+      () =>
+        buildComposerCommands({
+          host: commandHost,
+          catalog: commandCatalog,
+          skills: enabledSkills,
+          t,
+        }),
+      [commandHost, commandCatalog, enabledSkills, t],
+    );
+    const refreshCommandCatalog = useCallback(() => {
+      const seq = ++commandCatalogSeqRef.current;
+      if (!commandHost?.listCommands) {
+        setCommandCatalog([]);
+        return;
+      }
+      void Promise.resolve()
+        .then(() => commandHost.listCommands?.() ?? [])
+        .then((catalog) => {
+          if (seq === commandCatalogSeqRef.current) setCommandCatalog(catalog);
+        })
+        .catch(() => {
+          // A failed listing only hides commands; skills stay.
+          if (seq === commandCatalogSeqRef.current) setCommandCatalog([]);
+        });
+    }, [commandHost]);
+    // Prefetch: send interception is synchronous and only knows loaded command names.
+    useEffect(() => {
+      refreshCommandCatalog();
+    }, [refreshCommandCatalog]);
+
     const setMentionMenuMode = useCallback((mode: MentionMenuMode) => {
       mentionMenuModeRef.current = mode;
       setMentionMenuModeState(mode);
@@ -366,6 +437,10 @@ export const MentionComposer = memo(
         setMentionSessionLoading(isFileFetch);
         setMentionSessionError(null);
 
+        if (ctx.trigger === "command") {
+          refreshCommandCatalog();
+          return;
+        }
         if (ctx.trigger === "skill") {
           return;
         }
@@ -398,7 +473,7 @@ export const MentionComposer = memo(
             setMentionSessionLoading(false);
           });
       },
-      [cancelMentionRefetch, normalizedWorkdir],
+      [cancelMentionRefetch, normalizedWorkdir, refreshCommandCatalog],
     );
 
     const scheduleMentionRefetch = useCallback(
@@ -505,6 +580,28 @@ export const MentionComposer = memo(
         return [];
       }
 
+      if (mentionCtx.trigger === "command") {
+        // 与 "@" 一致的两级菜单：空查询的根级只列"指令 / 技能"两类；输入文字后在
+        // 根级跨两类直接搜索，/goal 这类常用指令仍可一步选中；进入某一类后只在该类里筛。
+        const hasActions = commands.some((command) => command.kind !== "skill");
+        const hasSkills = commands.some((command) => command.kind === "skill");
+        if (mentionMenuMode === "root" && !normalizedMentionQuery && hasActions && hasSkills) {
+          return [
+            { type: "category", category: "commands" },
+            { type: "category", category: "skills" },
+          ];
+        }
+        const pool =
+          mentionMenuMode === "commands"
+            ? commands.filter((command) => command.kind !== "skill")
+            : mentionMenuMode === "skills"
+              ? commands.filter((command) => command.kind === "skill")
+              : commands;
+        return filterComposerCommands(pool, normalizedMentionQuery, MAX_SUGGESTIONS).map(
+          (command) => ({ type: "command", command }),
+        );
+      }
+
       if (mentionCtx.trigger === "skill") {
         const next: MentionSuggestion[] = [];
         for (const skill of enabledSkills) {
@@ -601,6 +698,7 @@ export const MentionComposer = memo(
       }
       return next;
     }, [
+      commands,
       conversations,
       conversationMentionLimitReached,
       conversationMentionsEnabled,
@@ -634,17 +732,19 @@ export const MentionComposer = memo(
             ? conversationSearchError
             : null;
     const popupEmptyLabel =
-      mentionCtx?.trigger === "skill"
-        ? t("chat.composer.noMatchingEnabledSkills")
-        : mentionMenuMode === "apps"
-          ? t("chat.composer.noMatchingApps")
-          : mentionMenuMode === "conversations"
-            ? conversationMentionLimitReached
-              ? t("chat.composer.conversationLimitReached")
-              : t("chat.composer.noMatchingConversations")
-            : mentionMenuMode === "root"
-              ? t("chat.composer.noMatchingReferenceTypes")
-              : t("chat.composer.noMatchingFiles");
+      mentionCtx?.trigger === "command"
+        ? t("chat.commands.noMatching")
+        : mentionCtx?.trigger === "skill"
+          ? t("chat.composer.noMatchingEnabledSkills")
+          : mentionMenuMode === "apps"
+            ? t("chat.composer.noMatchingApps")
+            : mentionMenuMode === "conversations"
+              ? conversationMentionLimitReached
+                ? t("chat.composer.conversationLimitReached")
+                : t("chat.composer.noMatchingConversations")
+              : mentionMenuMode === "root"
+                ? t("chat.composer.noMatchingReferenceTypes")
+                : t("chat.composer.noMatchingFiles");
     const showEmpty =
       mentionCtx !== null && !popupLoading && !popupError && suggestions.length === 0;
     const popupVisible =
@@ -860,19 +960,180 @@ export const MentionComposer = memo(
         }
       };
 
-      applyContext(detectMention(el, enabledSkills.length > 0));
+      applyContext(detectMention(el, enabledSkills.length > 0, commandsEnabled));
       window.requestAnimationFrame(() => {
         const nextEl = editorRef.current;
         if (!nextEl || document.activeElement !== nextEl) return;
-        applyContext(detectMention(nextEl, enabledSkills.length > 0));
+        applyContext(detectMention(nextEl, enabledSkills.length > 0, commandsEnabled));
       });
     }, [
       cancelMentionRefetch,
       closeMentionSession,
+      commandsEnabled,
       enabledSkills.length,
       scheduleMentionRefetch,
       startMentionSession,
     ]);
+
+    const setEditorText = useCallback(
+      (text: string) => {
+        const el = editorRef.current;
+        if (!el) return;
+        resetPromptHistoryRecall();
+        el.innerHTML = "";
+        largePastesRef.current.clear();
+        closeCommitTooltip();
+        closeComposerContextMenu();
+        const normalizedText = normalizeLogicalLineEndings(text);
+        if (isLargePasteText(normalizedText)) {
+          insertLargePaste(normalizedText);
+        } else {
+          el.textContent = normalizedText;
+          closeMentionSession();
+          refreshEmptyState();
+        }
+        placeCaretAtEditorEnd();
+        scheduleComposerSelectionScroll(el);
+      },
+      [
+        closeCommitTooltip,
+        closeComposerContextMenu,
+        closeMentionSession,
+        insertLargePaste,
+        placeCaretAtEditorEnd,
+        refreshEmptyState,
+        resetPromptHistoryRecall,
+      ],
+    );
+
+    const applyDraft = useCallback(
+      (draft: MentionComposerDraft) => {
+        const el = editorRef.current;
+        if (!el) return;
+        resetPromptHistoryRecall();
+        el.innerHTML = "";
+        largePastesRef.current.clear();
+        closeCommitTooltip();
+        closeComposerContextMenu();
+
+        const sanitizedSegments = sanitizeAppMentionSegments(
+          el,
+          sanitizeConversationMentionSegments(el, draft.segments, {
+            currentConversationId,
+            conversationMentionsEnabled,
+            includeExistingChips: false,
+          }),
+          { includeExistingChips: false },
+        );
+        for (const segment of sanitizedSegments) {
+          if (segment.type === "largePaste") {
+            largePastesRef.current.set(segment.paste.id, segment.paste);
+            el.appendChild(createLargePasteChip(segment.paste));
+          } else if (segment.type === "fileMention") {
+            const chip = createFileMentionChip(segment.reference.path, segment.reference.kind);
+            if (chip) el.appendChild(chip);
+          } else if (segment.type === "skillMention") {
+            el.appendChild(createSkillMentionChip(segment.skill));
+          } else if (segment.type === "appMention") {
+            el.appendChild(createAppMentionChip(segment.app));
+          } else if (segment.type === "commitMention") {
+            el.appendChild(createCommitMentionChip(segment.commit));
+          } else if (segment.type === "gitFileMention") {
+            el.appendChild(createGitFileMentionChip(segment.file));
+          } else if (segment.type === "conversationMention") {
+            const chip = createConversationMentionChip(segment.conversation);
+            if (chip) el.appendChild(chip);
+          } else if (segment.type === "codeMention") {
+            const chip = createCodeMentionChip(segment.reference);
+            if (chip) el.appendChild(chip);
+          } else if (segment.text) {
+            el.appendChild(document.createTextNode(normalizeLogicalLineEndings(segment.text)));
+          }
+        }
+        largePasteCounterRef.current = Math.max(
+          largePasteCounterRef.current,
+          largePastesRef.current.size,
+        );
+
+        ensureTrailingCaretAnchor(el);
+        closeMentionSession();
+        refreshEmptyState();
+        placeCaretAtEditorEnd();
+        scheduleComposerSelectionScroll(el);
+      },
+      [
+        closeCommitTooltip,
+        closeComposerContextMenu,
+        closeMentionSession,
+        conversationMentionsEnabled,
+        currentConversationId,
+        placeCaretAtEditorEnd,
+        refreshEmptyState,
+        resetPromptHistoryRecall,
+      ],
+    );
+
+    const executeCommand = useCallback(
+      (parsed: ParsedComposerCommand, draft: MentionComposerDraft) => {
+        if (!commandHost) return;
+        setCommandPanel(null);
+        const owner = currentConversationId ?? "";
+        clearCommandRecovery(owner);
+        let restore = false;
+        void runComposerCommand(parsed, {
+          host: commandHost,
+          t,
+          draft,
+          consumeDraft: () => setEditorText(""),
+          restoreDraft: () => {
+            restore = true;
+          },
+          showPanel: (panel) => {
+            if (restore) {
+              saveCommandRecovery(owner, { draft, panel });
+            } else if (commandMountedRef.current && (commandOwnerRef.current ?? "") === owner) {
+              setCommandPanel(panel);
+            }
+          },
+        });
+      },
+      [commandHost, currentConversationId, setEditorText, t],
+    );
+
+    useEffect(() => {
+      if (commandPanelOwnerRef.current === currentConversationId) return;
+      commandPanelOwnerRef.current = currentConversationId;
+      setCommandPanel(null);
+    }, [currentConversationId]);
+
+    useEffect(() => {
+      if (!commandRecovery) return;
+      setCommandPanel(commandRecovery.panel);
+      const el = editorRef.current;
+      if (isDomEmpty && el && editorTextIsEmpty(el)) {
+        applyDraft(commandRecovery.draft);
+        clearCommandRecovery(currentConversationId ?? "");
+      }
+    }, [commandRecovery, currentConversationId, isDomEmpty, applyDraft]);
+
+    const runCommandDraft = useCallback(() => {
+      const el = editorRef.current;
+      if (!el || !commandHost || commandHost.isDraftReserved?.()) return false;
+      const draft = buildDraft();
+      // 只有草稿以纯文本“/名称”开头才是指令；开头是 Skill 等标签时照常发送。
+      const lead = draft.segments.find(
+        (segment) => segment.type !== "text" || segment.text.trim() !== "",
+      );
+      if (lead?.type !== "text" || !lead.text.trimStart().startsWith("/")) return false;
+      const parsed = parseComposerCommandDraft(
+        normalizeSerializedText(serializeChildren(el, largePastesRef.current)),
+        commands,
+      );
+      if (!parsed) return false;
+      closeMentionSession();
+      executeCommand(parsed, draft);
+      return true;
+    }, [buildDraft, closeMentionSession, commandHost, commands, executeCommand]);
 
     useImperativeHandle(
       ref,
@@ -887,79 +1148,9 @@ export const MentionComposer = memo(
           const el = editorRef.current;
           return el != null && !editorTextIsEmpty(el);
         },
-        setText: (text: string) => {
-          const el = editorRef.current;
-          if (!el) return;
-          resetPromptHistoryRecall();
-          el.innerHTML = "";
-          largePastesRef.current.clear();
-          closeCommitTooltip();
-          closeComposerContextMenu();
-          const normalizedText = normalizeLogicalLineEndings(text);
-          if (isLargePasteText(normalizedText)) {
-            insertLargePaste(normalizedText);
-          } else {
-            el.textContent = normalizedText;
-            closeMentionSession();
-            refreshEmptyState();
-          }
-          placeCaretAtEditorEnd();
-          scheduleComposerSelectionScroll(el);
-        },
-        setDraft: (draft: MentionComposerDraft) => {
-          const el = editorRef.current;
-          if (!el) return;
-          resetPromptHistoryRecall();
-          el.innerHTML = "";
-          largePastesRef.current.clear();
-          closeCommitTooltip();
-          closeComposerContextMenu();
-
-          const sanitizedSegments = sanitizeAppMentionSegments(
-            el,
-            sanitizeConversationMentionSegments(el, draft.segments, {
-              currentConversationId,
-              conversationMentionsEnabled,
-              includeExistingChips: false,
-            }),
-            { includeExistingChips: false },
-          );
-          for (const segment of sanitizedSegments) {
-            if (segment.type === "largePaste") {
-              largePastesRef.current.set(segment.paste.id, segment.paste);
-              el.appendChild(createLargePasteChip(segment.paste));
-            } else if (segment.type === "fileMention") {
-              const chip = createFileMentionChip(segment.reference.path, segment.reference.kind);
-              if (chip) el.appendChild(chip);
-            } else if (segment.type === "skillMention") {
-              el.appendChild(createSkillMentionChip(segment.skill));
-            } else if (segment.type === "appMention") {
-              el.appendChild(createAppMentionChip(segment.app));
-            } else if (segment.type === "commitMention") {
-              el.appendChild(createCommitMentionChip(segment.commit));
-            } else if (segment.type === "gitFileMention") {
-              el.appendChild(createGitFileMentionChip(segment.file));
-            } else if (segment.type === "conversationMention") {
-              const chip = createConversationMentionChip(segment.conversation);
-              if (chip) el.appendChild(chip);
-            } else if (segment.type === "codeMention") {
-              const chip = createCodeMentionChip(segment.reference);
-              if (chip) el.appendChild(chip);
-            } else if (segment.text) {
-              el.appendChild(document.createTextNode(normalizeLogicalLineEndings(segment.text)));
-            }
-          }
-          largePasteCounterRef.current = Math.max(
-            largePasteCounterRef.current,
-            largePastesRef.current.size,
-          );
-
-          ensureTrailingCaretAnchor(el);
-          closeMentionSession();
-          refreshEmptyState();
-          placeCaretAtEditorEnd();
-          scheduleComposerSelectionScroll(el);
-        },
+        setText: setEditorText,
+        runCommandDraft,
+        setDraft: applyDraft,
         insertFileMention: (path: string, kind: "file" | "dir") => {
           const el = editorRef.current;
           if (!el) return;
@@ -1109,18 +1300,17 @@ export const MentionComposer = memo(
         focus: () => editorRef.current?.focus(),
       }),
       [
+        applyDraft,
         buildDraft,
         clearTransientText,
         closeCommitTooltip,
         closeComposerContextMenu,
         closeMentionSession,
         focusEditorAtSavedSelection,
-        insertLargePaste,
-        placeCaretAtEditorEnd,
         refreshEmptyState,
         resetPromptHistoryRecall,
-        conversationMentionsEnabled,
-        currentConversationId,
+        runCommandDraft,
+        setEditorText,
         disabled,
       ],
     );
@@ -1138,7 +1328,8 @@ export const MentionComposer = memo(
     );
 
     const returnToMentionRoot = useCallback(() => {
-      if (!mentionCtx || mentionCtx.trigger === "skill") return;
+      if (!mentionCtx || (mentionCtx.trigger !== "file" && mentionCtx.trigger !== "command"))
+        return;
       setMentionMenuMode("root");
       setHighlightIdx(0);
       startMentionSession(mentionCtx, { mode: "root" });
@@ -1154,6 +1345,32 @@ export const MentionComposer = memo(
         }
         if (suggestion.type === "category") {
           openMentionMenuMode(suggestion.category);
+          return;
+        }
+        if (suggestion.type === "command") {
+          const { command } = suggestion;
+          if (command.kind === "skill") {
+            insertSkillMentionChip(mentionCtx, command.skill);
+          } else if (
+            command.kind === "action" &&
+            command.id === "model" &&
+            commandHost?.openModelPicker
+          ) {
+            // 模型选择是本地界面操作，选中候选即可打开列表，无需再发送一次。
+            replaceMentionQueryText(mentionCtx, "");
+            resetPromptHistoryRecall();
+            closeMentionSession();
+            refreshEmptyState();
+            commandHost.openModelPicker();
+            return;
+          } else {
+            // Selecting only drafts "/name "; the command runs when the draft is sent.
+            replaceMentionQueryText(mentionCtx, `/${command.name} `);
+          }
+          resetPromptHistoryRecall();
+          closeMentionSession();
+          refreshEmptyState();
+          editorRef.current?.focus();
           return;
         }
         if (suggestion.type === "skill") {
@@ -1194,6 +1411,7 @@ export const MentionComposer = memo(
       },
       [
         closeMentionSession,
+        commandHost,
         mentionCtx,
         openMentionMenuMode,
         refreshEmptyState,
@@ -1669,11 +1887,35 @@ export const MentionComposer = memo(
         }
         if (popupVisible && e.key === "Escape") {
           e.preventDefault();
-          if (mentionCtx?.trigger === "file" && mentionMenuMode !== "root") {
+          e.stopPropagation();
+          if (
+            (mentionCtx?.trigger === "file" || mentionCtx?.trigger === "command") &&
+            mentionMenuMode !== "root"
+          ) {
             returnToMentionRoot();
           } else {
             closeMentionSession();
           }
+          return;
+        }
+        if (commandPanel && e.key === "Escape") {
+          clearCommandRecovery(currentConversationId ?? "");
+          e.preventDefault();
+          setCommandPanel(null);
+          return;
+        }
+        // Any open popup, even one still loading or empty, keeps Tab for itself.
+        if (
+          onCycleMode &&
+          !popupVisible &&
+          e.key === "Tab" &&
+          e.shiftKey &&
+          !e.ctrlKey &&
+          !e.altKey &&
+          !e.metaKey
+        ) {
+          e.preventDefault();
+          onCycleMode();
           return;
         }
 
@@ -1766,7 +2008,7 @@ export const MentionComposer = memo(
           compositionEnterKeyRef.current = false;
           lastCompositionEndAtRef.current = 0;
           e.preventDefault();
-          if (!e.repeat) onSend();
+          if (!e.repeat && !runCommandDraft()) onSend();
           return;
         }
 
@@ -1793,6 +2035,9 @@ export const MentionComposer = memo(
         mentionCtx?.trigger,
         mentionMenuMode,
         onSend,
+        runCommandDraft,
+        commandPanel,
+        currentConversationId,
         refreshEmptyState,
         refreshMention,
         loadHistoryPrompts,
@@ -1800,6 +2045,7 @@ export const MentionComposer = memo(
         restorePromptHistoryStash,
         resetPromptHistoryRecall,
         returnToMentionRoot,
+        onCycleMode,
       ],
     );
 
@@ -1989,6 +2235,15 @@ export const MentionComposer = memo(
 
     return (
       <div ref={wrapperRef} className="relative w-full min-w-0 max-w-full flex-1">
+        {commandPanel ? (
+          <ComposerCommandPanel
+            panel={commandPanel}
+            onClose={() => {
+              clearCommandRecovery(currentConversationId ?? "");
+              setCommandPanel(null);
+            }}
+          />
+        ) : null}
         <AnimatePresence initial={false}>
           {popupVisible ? (
             <Popup

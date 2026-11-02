@@ -1,9 +1,9 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import type {
   SttConnectionTestResponse,
   SttSecretField,
   SttSettingsService,
 } from "@liveagent/ui/lib/stt/types";
-import { invoke } from "@tauri-apps/api/core";
 import { type AppSettings, normalizeSttSettings } from "../../lib/settings";
 
 export const desktopSttSettingsService: SttSettingsService = {

@@ -11,6 +11,10 @@ const packageJson = JSON.parse(
 const env = process.env as Record<string, string | undefined>;
 const appVersion = env.LIVEAGENT_APP_VERSION?.trim() || packageJson.version || "0.0.0";
 const host = env.TAURI_DEV_HOST;
+const desktopDevPort = Number(env.LIVEAGENT_DEV_DESKTOP_PORT || 1420);
+if (!Number.isInteger(desktopDevPort) || desktopDevPort < 1 || desktopDevPort > 65534) {
+  throw new Error("LIVEAGENT_DEV_DESKTOP_PORT must be an integer between 1 and 65534");
+}
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -62,14 +66,14 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1420,
+    port: desktopDevPort,
     strictPort: true,
     host: host || false,
     hmr: host
       ? {
           protocol: "ws",
           host,
-          port: 1421,
+          port: desktopDevPort + 1,
         }
       : undefined,
     watch: {

@@ -58,6 +58,8 @@ import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/
 import { SwitchIndicator } from "@liveagent/ui/components/ui/switch";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { requestCheckpointRewindLatest } from "@liveagent/ui/lib/chat/checkpointRewind";
+import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
 import { measureComposerOverlay } from "@liveagent/ui/lib/chat/composerOverlayMetrics";
 import {
   type ConversationReferenceInsertResult,
@@ -67,6 +69,7 @@ import {
   registerConversationReferenceDropZone,
 } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
+import { nextComposerPermissionMode } from "@liveagent/ui/lib/chat/permissionModes";
 import {
   clearActiveWorkspacePathDrag,
   getActiveWorkspacePathDrag,
@@ -94,6 +97,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -206,6 +210,7 @@ export type ChatQueueTurnPreview = {
 const COMPOSER_EXPAND_ANIMATION_MS = 280;
 const COMPOSER_EXPAND_EASING = "--ease-ui-curve-4";
 const CONVERSATION_DROP_NOTICE_MS = 800;
+const MODE_CYCLE_NOTICE_MS = 1500;
 
 // 宿主未注入澄清执行器时的占位：clarifyEnabled=false 已把入口全部藏起，
 // 该函数永远不会被真正调用；仅用于满足 useClarifySession 的非空签名。
@@ -297,6 +302,8 @@ export type ChatComposerBarProps = {
   searchMentionableConversations?: (query: string) => Promise<MentionComposerConversation[]>;
   /** @ 弹层的应用候选（computer use 目标）；由宿主门控，缺省不显示。 */
   mentionApps?: MentionComposerApp[];
+  /** “/”指令宿主；缺省时输入框只有 Skill 弹层，没有指令。 */
+  commandHost?: ComposerCommandHost;
   executionMode: ExecutionMode;
   hasModels: boolean;
   currentModelLabel: string;
@@ -306,6 +313,12 @@ export type ChatComposerBarProps = {
   /** 命令执行方式(ask/auto/sandbox/sandboxOffline);缺省不渲染选择器。 */
   commandSafetyMode?: CommandSafetyMode;
   onCommandSafetyModeChange?: (mode: CommandSafetyMode) => void;
+  /**
+   * Runs a Shift+Tab mode step. Background panes pass a guard that focuses the
+   * pane instead, like their other controls; the step only runs through
+   * `apply`, so its two settings change together or not at all.
+   */
+  guardModeCycle?: (apply: () => void) => void;
   reasoningOptions: ReasoningLevel[];
   thinkingAlwaysOn: boolean;
   gitClient?: GitClient | null;
@@ -334,7 +347,7 @@ export type ChatComposerBarProps = {
   onComposerBusyChange: (isBusy: boolean) => void;
   onSelectModel: (selection: SelectedModel) => void;
   onSelectExecutionMode: (mode: "text" | "tools") => void;
-  onOpenSettings: (section?: "providers" | "stt", providerId?: string) => void;
+  onOpenSettings: (section?: "providers" | "stt" | "systemTools", providerId?: string) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
   /** Select a folder to mount as a read-only project root. */
@@ -345,7 +358,12 @@ export type ChatComposerBarProps = {
   loadHistoryPrompts?: () => readonly string[];
   pendingUploadedFiles: PendingUploadedFile[];
   onRemovePendingUpload: (relativePath: string) => void;
+  /** 输入框上方的目标栏（/goal）；与指令队列上下排列。 */
+  goalBar?: ReactNode;
   queuedTurns: ChatQueueTurnPreview[];
+  queuePaused?: boolean;
+  queueControlPending?: boolean;
+  onQueuePausedChange?: (paused: boolean) => void;
   onRunQueuedTurnNow: (id: string) => void;
   onMoveQueuedTurnUp: (id: string) => void;
   onEditQueuedTurn: (id: string) => void;
@@ -409,6 +427,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     mentionableConversations = [],
     searchMentionableConversations,
     mentionApps,
+    commandHost,
     executionMode,
     hasModels,
     currentModelLabel,
@@ -417,6 +436,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     chatRuntimeControls,
     commandSafetyMode,
     onCommandSafetyModeChange,
+    guardModeCycle,
     reasoningOptions,
     thinkingAlwaysOn,
     gitClient,
@@ -445,7 +465,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     loadHistoryPrompts,
     pendingUploadedFiles,
     onRemovePendingUpload,
+    goalBar,
     queuedTurns,
+    queuePaused,
+    queueControlPending,
+    onQueuePausedChange,
     onRunQueuedTurnNow,
     onMoveQueuedTurnUp,
     onEditQueuedTurn,
@@ -512,6 +536,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     result: Exclude<ConversationReferenceInsertResult, "inserted">;
     key: number;
   } | null>(null);
+  const modeCycleNoticeCounterRef = useRef(0);
+  const [modeCycleNotice, setModeCycleNotice] = useState<{ text: string; key: number } | null>(
+    null,
+  );
   const attachmentListRef = useRef<HTMLDivElement | null>(null);
   const previousPendingUploadCountRef = useRef(0);
   /** 切换瞬间记录的卡片旧高度，供 FLIP 动画用；消费后立即置空。 */
@@ -535,6 +563,57 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const uploadDisabled =
     isInputDisabled || stt.active || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled || stt.active;
+  // /model 无参数时打开模型弹层：弹层开关在这里受控，宿主没提供
+  // openModelPicker 时由本组件补上。
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const pendingUploadCountRef = useRef(pendingUploadedFiles.length);
+  pendingUploadCountRef.current = pendingUploadedFiles.length;
+  const modelPickerAvailable = hasModels && !controlsDisabled;
+  // 宿主没给的 /model 选择弹层与 /rewind 由这里按本输入框的会话补上。
+  const effectiveCommandHost = useMemo(() => {
+    if (!commandHost) return commandHost;
+    const host: ComposerCommandHost = { ...commandHost };
+    const sendTurn = commandHost.sendTurn;
+    if (sendTurn && !commandHost.carriesComposerContext) {
+      // 宿主发送时不带附件：有待上传文件就报错并保留草稿，不让附件被静默丢下。
+      host.sendTurn = (text, command, options) => {
+        if (pendingUploadCountRef.current > 0) {
+          throw new Error(t("chat.commands.contextUnsupported"));
+        }
+        return sendTurn(text, command, options);
+      };
+    } else if (sendTurn) {
+      // /goal 的轮次由后端按目标正文发起，不收附件。
+      host.sendTurn = (text, command, options) => {
+        if (command?.kind === "goal" && pendingUploadCountRef.current > 0) {
+          throw new Error(t("chat.commands.contextUnsupported"));
+        }
+        return sendTurn(text, command, options);
+      };
+    }
+    if (!host.openModelPicker && modelPickerAvailable) {
+      host.openModelPicker = () => setModelPickerOpen(true);
+    }
+    if (!host.enablePlanMode && isAgentMode && !controlsDisabled) {
+      host.enablePlanMode = () => onChatRuntimeControlsChange({ planModeEnabled: true });
+    }
+    if (!host.rewindLastTurn && isAgentMode && conversationId) {
+      host.rewindLastTurn = () => {
+        const outcome = requestCheckpointRewindLatest(conversationId);
+        if (outcome === "none") throw new Error(t("chat.commands.rewindNone"));
+        if (outcome === "busy") throw new Error(t("chat.commands.rewindBusy"));
+      };
+    }
+    return host;
+  }, [
+    commandHost,
+    conversationId,
+    controlsDisabled,
+    isAgentMode,
+    modelPickerAvailable,
+    onChatRuntimeControlsChange,
+    t,
+  ]);
   const canDropConversationReference = isAgentMode && !controlsDisabled && !hidden;
   // "+"菜单不只有上传:plan 开关不依赖 workdir/上传状态,菜单触发键只按
   // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
@@ -715,6 +794,61 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     return () => window.clearTimeout(timeout);
   }, [conversationDropNotice]);
 
+  useEffect(() => {
+    if (!modeCycleNotice) return;
+    const timeout = window.setTimeout(() => setModeCycleNotice(null), MODE_CYCLE_NOTICE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [modeCycleNotice]);
+
+  // Shift+Tab in the editor. The mode is sent when a run starts, so a change
+  // made while a turn runs applies from the next one.
+  const canCycleMode =
+    isAgentMode && !controlsDisabled && Boolean(commandSafetyMode && onCommandSafetyModeChange);
+  // Queued turns keep the mode they were queued with (strictest wins when they
+  // run), so with a queue the change only reaches new messages.
+  const queueHoldsTurns = queuedTurns.length > 0;
+  const handleCycleMode = useCallback(() => {
+    if (!onCommandSafetyModeChange) return;
+    const apply = () => {
+      const planModeEnabled = Boolean(chatRuntimeControls.planModeEnabled);
+      const next = nextComposerPermissionMode({ commandSafetyMode, planModeEnabled });
+      if (next.commandSafetyMode !== commandSafetyMode) {
+        onCommandSafetyModeChange(next.commandSafetyMode);
+      }
+      if (next.planModeEnabled !== planModeEnabled) {
+        onChatRuntimeControlsChange({ planModeEnabled: next.planModeEnabled });
+      }
+      const label = t(
+        next.shown === "plan"
+          ? "chat.runtime.planMode"
+          : next.shown === "autoEdit"
+            ? "chat.safety.autoEdit"
+            : "chat.safety.ask",
+      );
+      const when = queueHoldsTurns
+        ? t("chat.safety.cycleNewMessages")
+        : isSending
+          ? t("chat.safety.cycleNextTurn")
+          : null;
+      modeCycleNoticeCounterRef.current += 1;
+      setModeCycleNotice({
+        text: when ? `${label} · ${when}` : label,
+        key: modeCycleNoticeCounterRef.current,
+      });
+    };
+    if (guardModeCycle) guardModeCycle(apply);
+    else apply();
+  }, [
+    chatRuntimeControls.planModeEnabled,
+    commandSafetyMode,
+    guardModeCycle,
+    isSending,
+    onChatRuntimeControlsChange,
+    onCommandSafetyModeChange,
+    queueHoldsTurns,
+    t,
+  ]);
+
   const conversationDropNoticeText = conversationDropNotice
     ? conversationDropNotice.result === "self"
       ? t("chat.conversationReference.self")
@@ -883,6 +1017,52 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
 
   useEffect(() => () => expandAnimationRef.current?.cancel(), []);
 
+  // The approval bar replaces the composer while a tool waits. Once it is answered and
+  // goes away, give the caret back (as Claude Code does) so the user can say what to do
+  // next — only when the caret was on the bar: a bar that goes away while the user works
+  // elsewhere (another pane, the settings over this page) must not pull it here.
+  const showsApprovalBar = approvalBar != null;
+  const showedApprovalBar = useRef(showsApprovalBar);
+  const approvalSlotRef = useRef<HTMLDivElement | null>(null);
+  const caretOnApproval = useRef(false);
+  useEffect(() => {
+    const slot = approvalSlotRef.current;
+    if (!showsApprovalBar || !slot) return;
+    // The bar focuses itself in its own mount effect, which runs before this one, so
+    // start from where the caret is now; then follow it with native listeners (a focus
+    // moved from inside an effect does not reach React's onFocus). A focused element
+    // that is removed reports no next target, so only a move elsewhere clears the flag,
+    // and a click elsewhere counts even when it lands on nothing focusable.
+    caretOnApproval.current = slot.contains(document.activeElement);
+    const onFocusIn = () => {
+      caretOnApproval.current = true;
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      const next = event.relatedTarget as Node | null;
+      if (next && !slot.contains(next)) caretOnApproval.current = false;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!slot.contains(event.target as Node | null)) caretOnApproval.current = false;
+    };
+    slot.addEventListener("focusin", onFocusIn);
+    slot.addEventListener("focusout", onFocusOut);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      slot.removeEventListener("focusin", onFocusIn);
+      slot.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [showsApprovalBar]);
+  useEffect(() => {
+    const wasShowing = showedApprovalBar.current;
+    showedApprovalBar.current = showsApprovalBar;
+    if (!wasShowing || showsApprovalBar) return;
+    const hadCaret = caretOnApproval.current;
+    caretOnApproval.current = false;
+    const active = document.activeElement;
+    if (hadCaret && (!active || active === document.body)) composerRef.current?.focus();
+  }, [composerRef, showsApprovalBar]);
+
   const toggleComposerExpanded = useCallback(() => {
     setComposerExpanded(!isComposerExpandedRef.current);
     composerRef.current?.focus();
@@ -949,9 +1129,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const handleComposerSend = useCallback(() => {
     // 澄清进行中禁发：避免把半成品草稿发出去（设计文档「交互」）。
     if (clarifyOpen) return;
+    // 以已注册指令开头的草稿改走指令执行（发送按钮路径；Enter 在输入框内已拦截）。
+    if (composerRef.current?.runCommandDraft()) return;
     setComposerExpanded(false);
     onSend();
-  }, [clarifyOpen, onSend, setComposerExpanded]);
+  }, [clarifyOpen, composerRef, onSend, setComposerExpanded]);
 
   useEffect(() => {
     const editor = glassCardRef.current?.querySelector<HTMLElement>(".mention-composer");
@@ -1159,158 +1341,192 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             {taskProgressBar}
           </div>
         ) : null}
-        {queuedTurns.length > 0 ? (
-          <div ref={queuePanelRef} className="relative z-30 mx-auto mb-minus-1px w-inset-1p5rem">
-            <div
-              className={cn(
-                "rounded-t-lg border border-b-0 border-black/[0.055] bg-white/70",
-                "px-1.5 pb-1 pt-1",
-                "shadow-ui-clarifypanel-22 backdrop-blur-2xl backdrop-saturate-[165%]",
-                "dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-clarifypanel-23",
-              )}
-            >
-              <button
-                type="button"
-                onClick={toggleQueueCollapsed}
-                title={toggleQueueTooltip}
-                aria-label={toggleQueueTooltip}
-                aria-expanded={!queueCollapsed}
-                className={cn(
-                  "flex h-6 w-full items-center gap-1.5 rounded-md px-2",
-                  "text-tiny font-medium text-muted-foreground transition-colors",
-                  "hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06]",
-                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                )}
-              >
-                <Clock3 className="size-3 shrink-0" />
-                <span className="min-w-0 truncate">
-                  {t("chat.queue.title").replace("{count}", String(queuedTurns.length))}
-                </span>
-                <ChevronUp
-                  className={cn(
-                    "ml-auto size-3 shrink-0 transition-transform duration-200 ease-out",
-                    queueCollapsed && "rotate-180",
-                  )}
-                />
-              </button>
+        {goalBar || queuedTurns.length > 0 || queuePaused ? (
+          <div
+            ref={queuePanelRef}
+            className="relative z-30 mx-auto mb-minus-1px flex w-inset-1p5rem flex-col empty:hidden [&>[data-composer-goal-bar]+*]:rounded-t-none"
+          >
+            {/* 目标栏与指令队列同在一个纵向容器里：上下排列，不互相覆盖，并一起计入输入区高度。
+                goalBar 宿主没有目标时渲染为空，只有真正渲染出的目标栏才让下方队列去掉上圆角。 */}
+            {goalBar}
+            {queuedTurns.length > 0 || queuePaused ? (
               <div
-                aria-hidden={queueCollapsed}
                 className={cn(
-                  "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
-                  queueCollapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
+                  // 与目标栏同宽：每侧距输入框边缘 30px，底边落在 26px 圆角之外的平直段。
+                  "mx-auto w-inset-2p25rem rounded-t-lg border border-b-0 border-black/[0.055] bg-white/70",
+                  "px-1.5 pb-1 pt-1",
+                  "shadow-ui-clarifypanel-22 backdrop-blur-2xl backdrop-saturate-[165%]",
+                  "dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-clarifypanel-23",
                 )}
               >
-                <div className="min-h-0 overflow-hidden">
-                  <div className="relative min-h-0 pt-0.5">
-                    <ul
-                      ref={queueListRef}
+                <div className="flex min-w-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={toggleQueueCollapsed}
+                    title={toggleQueueTooltip}
+                    aria-label={toggleQueueTooltip}
+                    aria-expanded={!queueCollapsed}
+                    className={cn(
+                      "flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2",
+                      "text-tiny font-medium text-muted-foreground transition-colors",
+                      "hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06]",
+                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    )}
+                  >
+                    <Clock3 className="size-3 shrink-0" />
+                    {/* 标题很短，窄面板里优先保住条数；"已暂停"先截断（旁边的继续按钮已表明暂停）。 */}
+                    <span className="shrink-0 whitespace-nowrap">
+                      {t("chat.queue.title").replace("{count}", String(queuedTurns.length))}
+                    </span>
+                    {queuePaused ? (
+                      <span className="min-w-0 truncate text-muted-foreground" role="status">
+                        {t("chat.queue.paused")}
+                      </span>
+                    ) : null}
+                    <ChevronUp
                       className={cn(
-                        "chat-queue-scroll flex min-w-0 flex-col gap-0.5 overflow-x-hidden overscroll-contain",
-                        "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0",
-                        queuedTurns.length > 3
-                          ? "h-88px overflow-y-scroll"
-                          : "max-h-88px overflow-y-hidden",
+                        "ml-auto size-3 shrink-0 transition-transform duration-200 ease-out",
+                        queueCollapsed && "rotate-180",
                       )}
+                    />
+                  </button>
+                  {typeof queuePaused === "boolean" && onQueuePausedChange ? (
+                    <button
+                      type="button"
+                      data-workbench-preserve-focus=""
+                      disabled={queueControlPending}
+                      onClick={() => onQueuePausedChange(!queuePaused)}
+                      aria-label={t(queuePaused ? "chat.queue.resume" : "chat.queue.pause")}
+                      title={t("chat.queue.pauseHint")}
+                      className="h-6 shrink-0 rounded-md px-2 text-tiny font-medium text-muted-foreground hover:bg-black/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 dark:hover:bg-white/[0.06]"
                     >
-                      {queuedTurns.map((item, index) => (
-                        <li
-                          key={item.id}
-                          className={cn(
-                            "relative grid h-7 min-h-7 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5",
-                            "rounded-md pl-2 pr-1 text-xs transition-colors",
-                            "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
-                          )}
-                        >
-                          <span className="w-3 shrink-0 text-center text-tiny tabular-nums text-muted-foreground/60">
-                            {index + 1}
-                          </span>
-                          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                            <span
-                              className={cn(
-                                "block min-w-0 flex-1 overflow-hidden",
-                                "text-ellipsis whitespace-nowrap text-xs leading-4 text-foreground/88",
-                              )}
-                            >
-                              {item.previewText || t("chat.queue.emptyMessage")}
+                      {t(queuePaused ? "chat.queue.resume" : "chat.queue.pause")}
+                    </button>
+                  ) : null}
+                </div>
+                <div
+                  aria-hidden={queueCollapsed}
+                  className={cn(
+                    "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
+                    queueCollapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
+                  )}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="relative min-h-0 pt-0.5">
+                      <ul
+                        ref={queueListRef}
+                        className={cn(
+                          "chat-queue-scroll flex min-w-0 flex-col gap-0.5 overflow-x-hidden overscroll-contain",
+                          "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:size-0",
+                          queuedTurns.length > 3
+                            ? "h-88px overflow-y-scroll"
+                            : "max-h-88px overflow-y-hidden",
+                        )}
+                      >
+                        {queuedTurns.map((item, index) => (
+                          <li
+                            key={item.id}
+                            className={cn(
+                              "relative grid h-7 min-h-7 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5",
+                              "rounded-md pl-2 pr-1 text-xs transition-colors",
+                              "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+                            )}
+                          >
+                            <span className="w-3 shrink-0 text-center text-tiny tabular-nums text-muted-foreground/60">
+                              {index + 1}
                             </span>
-                            {item.fileCount > 0 ? (
-                              <span className="max-w-18 shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-tiny leading-4 text-muted-foreground">
-                                {t("chat.queue.fileCount").replace(
-                                  "{count}",
-                                  String(item.fileCount),
+                            <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                              <span
+                                className={cn(
+                                  "block min-w-6 flex-1 overflow-hidden",
+                                  "text-ellipsis whitespace-nowrap text-xs leading-4 text-foreground/88",
                                 )}
+                              >
+                                {item.previewText || t("chat.queue.emptyMessage")}
                               </span>
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-0.5">
-                            <RuntimeControlTooltip label={t("chat.queue.moveUp")}>
-                              <button
-                                type="button"
-                                disabled={queueCollapsed || index === 0}
-                                onClick={() => onMoveQueuedTurnUp(item.id)}
-                                aria-label={t("chat.queue.moveUp")}
-                                className={cn(
-                                  "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
-                                  "hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-25",
-                                )}
-                              >
-                                <ArrowUp className="size-3" />
-                              </button>
-                            </RuntimeControlTooltip>
-                            <RuntimeControlTooltip label={t("chat.queue.edit")}>
-                              <button
-                                type="button"
-                                disabled={queueCollapsed}
-                                onClick={() => onEditQueuedTurn(item.id)}
-                                aria-label={t("chat.queue.edit")}
-                                className={cn(
-                                  "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
-                                  "hover:bg-background/80 hover:text-foreground",
-                                )}
-                              >
-                                <SquarePen className="size-3" />
-                              </button>
-                            </RuntimeControlTooltip>
-                            <RuntimeControlTooltip label={t("chat.queue.runNow")}>
-                              <button
-                                type="button"
-                                disabled={queueCollapsed}
-                                onClick={() => onRunQueuedTurnNow(item.id)}
-                                aria-label={t("chat.queue.runNow")}
-                                className={cn(
-                                  "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
-                                  "hover:bg-background/80 hover:text-foreground",
-                                )}
-                              >
-                                <Play className="size-3" />
-                              </button>
-                            </RuntimeControlTooltip>
-                            <RuntimeControlTooltip label={t("chat.queue.delete")}>
-                              <button
-                                type="button"
-                                disabled={queueCollapsed}
-                                onClick={() => onRemoveQueuedTurn(item.id)}
-                                aria-label={t("chat.queue.delete")}
-                                className={cn(
-                                  "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
-                                  "hover:bg-destructive/10 hover:text-destructive",
-                                )}
-                              >
-                                <Trash2 className="size-3" />
-                              </button>
-                            </RuntimeControlTooltip>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                              {/* 附件数最多占一半：宽屏显示全文，窄 Pane 里和预览对半让位。 */}
+                              {item.fileCount > 0 ? (
+                                <span className="min-w-0 max-w-[50%] overflow-hidden text-ellipsis whitespace-nowrap text-tiny leading-4 text-muted-foreground">
+                                  {t("chat.queue.fileCount").replace(
+                                    "{count}",
+                                    String(item.fileCount),
+                                  )}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-0.5">
+                              <RuntimeControlTooltip label={t("chat.queue.moveUp")}>
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed || index === 0}
+                                  onClick={() => onMoveQueuedTurnUp(item.id)}
+                                  aria-label={t("chat.queue.moveUp")}
+                                  className={cn(
+                                    "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                    "hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-25",
+                                  )}
+                                >
+                                  <ArrowUp className="size-3" />
+                                </button>
+                              </RuntimeControlTooltip>
+                              <RuntimeControlTooltip label={t("chat.queue.edit")}>
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed}
+                                  onClick={() => onEditQueuedTurn(item.id)}
+                                  aria-label={t("chat.queue.edit")}
+                                  className={cn(
+                                    "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                    "hover:bg-background/80 hover:text-foreground",
+                                  )}
+                                >
+                                  <SquarePen className="size-3" />
+                                </button>
+                              </RuntimeControlTooltip>
+                              <RuntimeControlTooltip label={t("chat.queue.runNow")}>
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed}
+                                  onClick={() => onRunQueuedTurnNow(item.id)}
+                                  aria-label={t("chat.queue.runNow")}
+                                  className={cn(
+                                    "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                    "hover:bg-background/80 hover:text-foreground",
+                                  )}
+                                >
+                                  <Play className="size-3" />
+                                </button>
+                              </RuntimeControlTooltip>
+                              <RuntimeControlTooltip label={t("chat.queue.delete")}>
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed}
+                                  onClick={() => onRemoveQueuedTurn(item.id)}
+                                  aria-label={t("chat.queue.delete")}
+                                  className={cn(
+                                    "inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                                    "hover:bg-destructive/10 hover:text-destructive",
+                                  )}
+                                >
+                                  <Trash2 className="size-3" />
+                                </button>
+                              </RuntimeControlTooltip>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ) : null}
           </div>
         ) : null}
 
-        {approvalBar}
+        {/* Holds the approval bar so the effect above can tell whether the caret is on it. */}
+        <div ref={approvalSlotRef} className="contents">
+          {approvalBar}
+        </div>
         {/* 澄清面板浮在输入卡片正上方（原先是卡片内嵌段）：与队列面板同级，
             直接顶在卡片上缘。审批面板接管输入区时同样让位。 */}
         {clarifyOpen && runClarifyTurn && approvalBar == null ? (
@@ -1329,6 +1545,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
         <div
           hidden={approvalBar != null}
+          data-composer-draft={composerIsEmpty ? undefined : ""}
           ref={glassCardRef}
           data-file-upload-drop-zone=""
           data-file-upload-conversation-id={conversationId}
@@ -1506,6 +1723,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 }
                 currentConversationId={conversationId}
                 mentionApps={mentionApps}
+                commandHost={effectiveCommandHost}
+                onCycleMode={canCycleMode ? handleCycleMode : undefined}
                 className={cn(
                   // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
                   // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。
@@ -1752,13 +1971,30 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-              {commandSafetyMode && onCommandSafetyModeChange ? (
-                <CommandSafetyModeSelector
-                  value={commandSafetyMode}
-                  disabled={controlsDisabled || !isAgentMode}
-                  onChange={onCommandSafetyModeChange}
-                />
-              ) : null}
+              {/* The mode notice floats over the controls beside the picker
+                  instead of pushing them out of a narrow deck. */}
+              <span className="relative flex shrink-0 items-center">
+                {commandSafetyMode && onCommandSafetyModeChange ? (
+                  <CommandSafetyModeSelector
+                    value={commandSafetyMode}
+                    disabled={controlsDisabled || !isAgentMode}
+                    onChange={onCommandSafetyModeChange}
+                    onConfigureAutoReview={() => onOpenSettings("systemTools")}
+                    shortcutHint={canCycleMode ? t("chat.safety.cycleShortcut") : undefined}
+                  />
+                ) : null}
+                <span role="status" aria-live="polite">
+                  {modeCycleNotice ? (
+                    <span
+                      key={modeCycleNotice.key}
+                      data-mode-cycle-notice=""
+                      className="pointer-events-none absolute top-1/2 left-full z-10 ml-1 -translate-y-1/2 whitespace-nowrap rounded-full border border-border bg-popover px-2 py-0.5 text-xs font-medium text-popover-foreground shadow-sm"
+                    >
+                      {modeCycleNotice.text}
+                    </span>
+                  ) : null}
+                </span>
+              </span>
 
               <ComposerModelControls
                 executionMode={executionMode}
@@ -1774,6 +2010,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 onSelectExecutionMode={onSelectExecutionMode}
                 onOpenSettings={onOpenSettings}
                 onChatRuntimeControlsChange={onChatRuntimeControlsChange}
+                open={modelPickerOpen}
+                onOpenChange={setModelPickerOpen}
               />
 
               <GitBranchSelector

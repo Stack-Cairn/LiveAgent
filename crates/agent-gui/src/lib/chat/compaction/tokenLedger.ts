@@ -1,4 +1,4 @@
-import type { AssistantMessage, Context, Message } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Context, Message } from "@liveagent/app/lib/agentTypes";
 
 import {
   assistantAnchorTokens,
@@ -266,6 +266,15 @@ export class TokenLedger {
     // 劫持。估算只在完全没有 usage 锚点时兜底。
     if (!this.hasObservedUsage) return this.estimatedTotalTokens;
     return this.observedTokens + this.trailingTokens;
+  }
+
+  /**
+   * pendingTokenUnits 是流式增量的分数 token 估算（调用方按 delta 用
+   * estimateTextTokenUnits 累加），避免每次判定重扫全文。
+   */
+  totalWithPendingTokens(pendingTokenUnits: number): number {
+    if (!Number.isFinite(pendingTokenUnits) || pendingTokenUnits <= 0) return this.total();
+    return this.total() + Math.ceil(pendingTokenUnits);
   }
 
   snapshot(): TokenLedgerSnapshot {

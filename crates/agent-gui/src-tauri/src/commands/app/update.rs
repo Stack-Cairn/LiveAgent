@@ -5,7 +5,7 @@ use quick_xml::Reader;
 use reqwest::header::{ACCEPT, RANGE, USER_AGENT};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Url};
+use tauri::{AppHandle, Manager, Url};
 use tauri_plugin_updater::UpdaterExt;
 
 const DEFAULT_UPDATE_REPOSITORY: &str = "Stack-Cairn/LiveAgent";
@@ -718,6 +718,11 @@ pub async fn app_update_install(
     let version = update.version.clone();
     let date = update.date.map(|date| date.to_string());
     let body = update.body.clone();
+    if let Some(backend) =
+        app.try_state::<std::sync::Arc<crate::services::kbrain_backend::KBrainBackendState>>()
+    {
+        backend.shutdown();
+    }
     update
         .download_and_install(|_, _| {}, || {})
         .await
@@ -739,7 +744,11 @@ pub fn app_restart(app: AppHandle) -> Result<(), String> {
     // restart() tears the process down without firing ExitRequested/Exit
     // (sync command, main thread), so the exit-path cleanup must run here or
     // non-isolated managed processes leak across every update restart.
-    use tauri::Manager;
+    if let Some(backend) =
+        app.try_state::<std::sync::Arc<crate::services::kbrain_backend::KBrainBackendState>>()
+    {
+        backend.shutdown();
+    }
     use tauri_plugin_window_state::AppHandleExt;
     if let Some(registry) =
         app.try_state::<std::sync::Arc<crate::runtime::managed_process::ManagedProcessRegistry>>()

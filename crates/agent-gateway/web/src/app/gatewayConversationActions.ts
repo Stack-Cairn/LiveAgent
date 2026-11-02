@@ -35,6 +35,7 @@ type CreateGatewayConversationActionsOptions = {
   branchInFlightRef: MutableRefObject<boolean>;
   cacheVisibleComposerDraft: (conversationId?: string) => void;
   clearCachedComposerDraft: (conversationId?: string) => void;
+  clearPersistedConversationSelection: () => void;
   composerDraftCacheRef: MutableRefObject<Map<string, MentionComposerDraft>>;
   composerDraftOwnerRef: MutableRefObject<string>;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
@@ -79,6 +80,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
     workdir?: string;
     preserveCurrentComposerDraft?: boolean;
   }) => {
+    options.clearPersistedConversationSelection();
     const currentConversationId = options.getVisibleComposerConversationId().trim();
     if (currentConversationId) {
       options.transcriptStoreRegistry.peek(currentConversationId)?.foldSettledTurns();
@@ -153,6 +155,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
     }
     options.pendingDisplayedConversationAutoBottomRef.current = targetConversationId;
     if (options.isLocalDraftConversationId(targetConversationId)) {
+      options.clearPersistedConversationSelection();
       options.openController.cancel();
       options.invalidateHistoryLoad();
       options.markVisibleConversationRevision();

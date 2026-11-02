@@ -19,6 +19,7 @@ import {
   type PersistedConversationSearchResult,
   searchPersistedConversations,
 } from "@liveagent/ui/lib/chat/conversationSearch";
+import { setSearchJumpTarget } from "@liveagent/ui/lib/chat/searchJumpTarget";
 import { cachedDateTimeFormat } from "@liveagent/ui/lib/shared/intlFormatters";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -201,8 +202,14 @@ export function ConversationSearchDialog({
 
   const selectableItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
-  const selectConversation = (id: string) => {
+  const selectConversation = (item: PersistedConversationSearchResult) => {
+    const { id } = item;
     onOpenChange(false);
+    setSearchJumpTarget(
+      normalizedQuery
+        ? { conversationId: id, messageId: item.messageId, messageIndex: item.messageIndex }
+        : null,
+    );
     const isLocalDraft =
       !normalizedQuery && conversations.some((item) => item.id === id && item.isPending);
     onSelectConversation(id, isLocalDraft ? undefined : { source: "search" });
@@ -304,7 +311,7 @@ export function ConversationSearchDialog({
                           <CommandItem
                             key={item.id}
                             value={item}
-                            onClick={() => selectConversation(item.id)}
+                            onClick={() => selectConversation(item)}
                           >
                             <div className="w-full truncate font-medium leading-5">
                               {item.title}

@@ -1,3 +1,8 @@
+import {
+  discoverProviderModels,
+  providerCredentialsRedacted,
+  revealStoredProviderApiKey,
+} from "@liveagent/adapters/providerSettings";
 import { testProviderUsage, type UsageData } from "@liveagent/app/lib/providers/usageQuery";
 import {
   type CodexRequestFormat,
@@ -32,7 +37,9 @@ import {
   createModelOrderSnapshot,
   findNewModelIds,
 } from "@liveagent/ui/lib/providers/modelVendor";
+import { isGatewayWebuiRuntime } from "@liveagent/ui/lib/runtimeEnv";
 import {
+  applyModelImageMode,
   applyModelInputModalitiesMode,
   applyModelsActiveState,
   applyProviderModelDraft,
@@ -42,10 +49,10 @@ import {
   createDraftModelConfig,
   createUsageQueryDraft,
   detectCodingPlanProvider,
-  fetchModelsFromApi,
+  getModelImageMode,
   getModelInputModalitiesMode,
   getPersistedUsageQueryProviderId,
-  isGatewayWebuiRuntime,
+  type ModelImageMode,
   type ModelInputModalitiesMode,
   matchBalanceProviders,
   mergeFetchedModels,
@@ -120,6 +127,27 @@ function reconcileModelOrder(
   return next;
 }
 
+/**
+ * Mirrors K-brain's provider URL rule (HTTP(S), no user credentials, no fragment). An empty
+ * value is allowed: K-brain falls back to the provider type's default endpoint.
+ */
+export function isAcceptedProviderBaseUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return false;
+  }
+  return (
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    !url.username &&
+    !url.password &&
+    !trimmed.includes("#")
+  );
+}
+
 function useProviderModalController({
   providerType: defaultProviderType,
   initialData,
@@ -133,9 +161,18 @@ function useProviderModalController({
   const isGatewayWebui = isGatewayWebuiRuntime();
   const initialApiKey = initialData?.apiKey ?? "";
   const initialUsesRedactedApiKey =
-    isGatewayWebui && initialApiKey.trim() === "" && initialData?.apiKeyConfigured === true;
+    providerCredentialsRedacted &&
+    initialApiKey.trim() === "" &&
+    initialData?.apiKeyConfigured === true;
   const [name, setName] = useState(initialData?.name ?? "");
-  const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? "");
+  const [baseUrl, setBaseUrlState] = useState(initialData?.baseUrl ?? "");
+  // Only flag the URL after a save attempt, so typing "https://" is not shown as an error.
+  const [baseUrlValidationSubmitted, setBaseUrlValidationSubmitted] = useState(false);
+  const setBaseUrl = (value: string) => {
+    setBaseUrlState(value);
+    setBaseUrlValidationSubmitted(false);
+  };
+  const baseUrlInvalid = baseUrlValidationSubmitted && !isAcceptedProviderBaseUrl(baseUrl);
   const [isFullUrl, setIsFullUrl] = useState(initialData?.isFullUrl ?? false);
   const [modelsUrl, setModelsUrl] = useState(
     providerType === "gemini" ? "" : (initialData?.modelsUrl ?? ""),
@@ -209,7 +246,7 @@ function useProviderModalController({
   const [usageQuery, setUsageQuery] = useState(() => {
     const draft = createUsageQueryDraft(
       initialData?.usageQuery ?? getDefaultUsageQueryConfig(),
-      isGatewayWebui,
+      providerCredentialsRedacted,
     );
     // general/newapi 是可编辑脚本预设:脚本为空的存量配置打开时即在编辑器填充预设。
     return applyUsageQueryModePreset(draft, draft.mode);
@@ -224,6 +261,12 @@ function useProviderModalController({
   const [modelSearch, setModelSearch] = useState("");
   const [editingModel, setEditingModel] = useState<ModelEditDraft | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  // Plaintext read back from the backend on demand. While the field still holds exactly this
+  // value it counts as unchanged, so saving never replaces a stored reference such as
+  // ${OPENAI_API_KEY} with its resolved value.
+  const [revealedApiKey, setRevealedApiKey] = useState<string | null>(null);
+  const [revealingApiKey, setRevealingApiKey] = useState(false);
+  const [revealApiKeyError, setRevealApiKeyError] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<ProviderDialogPanel>("general");
   const [headerValidationSubmitted, setHeaderValidationSubmitted] = useState(false);
 
@@ -247,15 +290,52 @@ function useProviderModalController({
   modelOrderRef.current = modelOrder;
   activeModelsRef.current = activeModels;
   const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
-  const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
+  const apiKeyIsStoredValue =
+    apiKeyIsRedactedDisplay || (revealedApiKey !== null && apiKey === revealedApiKey);
+  const apiKeyForRequest = apiKeyIsStoredValue ? "" : apiKey.trim();
+  // K-brain uses the stored key by provider ID, also for an edited address (as
+  // saving does). A K-brain from before that change drops it for a new address;
+  // that refusal is answered with a prompt to type the key again.
   const canReuseStoredApiKey =
-    isGatewayWebui &&
-    apiKeyIsRedactedDisplay &&
+    providerCredentialsRedacted &&
+    apiKeyIsStoredValue &&
     Boolean(initialData?.id) &&
-    initialData?.apiKeyConfigured === true &&
-    baseUrl.trim() === (initialData.baseUrl ?? "").trim() &&
-    modelsUrl.trim() === (providerType === "gemini" ? "" : (initialData.modelsUrl ?? "").trim()) &&
-    useSystemProxy === (initialData.useSystemProxy ?? false);
+    initialData?.apiKeyConfigured === true;
+  const storedAddressChangedRef = useRef(false);
+  storedAddressChangedRef.current =
+    canReuseStoredApiKey &&
+    !(
+      baseUrl.trim() === (initialData?.baseUrl ?? "").trim() &&
+      modelsUrl.trim() ===
+        (providerType === "gemini" ? "" : (initialData?.modelsUrl ?? "").trim()) &&
+      useSystemProxy === (initialData?.useSystemProxy ?? false)
+    );
+  const modelsNeedApiKeyMessageRef = useRef("");
+  modelsNeedApiKeyMessageRef.current = t("settings.providerModelsNeedApiKey");
+  const toggleShowApiKey = useCallback(async () => {
+    if (showApiKey) {
+      setShowApiKey(false);
+      return;
+    }
+    setRevealApiKeyError(null);
+    if (!apiKeyIsRedactedDisplay || !initialData?.id || isGatewayWebui) {
+      setShowApiKey(true);
+      return;
+    }
+    setRevealingApiKey(true);
+    try {
+      const stored = await revealStoredProviderApiKey(initialData.id);
+      if (stored !== null) {
+        setRevealedApiKey(stored);
+        setApiKey(stored);
+      }
+      setShowApiKey(true);
+    } catch (err) {
+      setRevealApiKeyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRevealingApiKey(false);
+    }
+  }, [apiKeyIsRedactedDisplay, initialData?.id, isGatewayWebui, showApiKey]);
   const persistedUsageQueryProviderId = getPersistedUsageQueryProviderId(initialData);
   const { confirm: requestConfirm, dialog: confirmDialog } = useConfirmDialog();
   const [usageQueryTest, setUsageQueryTest] = useState<{
@@ -316,7 +396,11 @@ function useProviderModalController({
       setFetchingModels(true);
       setFetchError(null);
       try {
-        const list = await fetchModelsFromApi(providerType, url, key, {
+        const list = await discoverProviderModels({
+          type: providerType,
+          requestFormat,
+          baseUrl: url,
+          apiKey: key,
           useSystemProxy,
           isFullUrl,
           modelsUrl: providerType === "gemini" ? "" : modelsUrl,
@@ -328,13 +412,26 @@ function useProviderModalController({
         commitModelsWithNewRowsRef.current(mergedModels);
       } catch (err) {
         if (generation === modelFetchGeneration.current) {
-          setFetchError(err instanceof Error ? err.message : String(err));
+          const message = err instanceof Error ? err.message : String(err);
+          const storedKeyRefused =
+            !key &&
+            storedAddressChangedRef.current &&
+            /credentials or endpoint are not configured/i.test(message);
+          setFetchError(storedKeyRefused ? modelsNeedApiKeyMessageRef.current : message);
         }
       } finally {
         if (generation === modelFetchGeneration.current) setFetchingModels(false);
       }
     },
-    [effectiveCustomHeaders, initialData?.id, isFullUrl, modelsUrl, providerType, useSystemProxy],
+    [
+      effectiveCustomHeaders,
+      initialData?.id,
+      isFullUrl,
+      modelsUrl,
+      providerType,
+      requestFormat,
+      useSystemProxy,
+    ],
   );
 
   useEffect(() => {
@@ -344,18 +441,19 @@ function useProviderModalController({
     const trimUrl = baseUrl.trim();
     const trimModelsUrl = providerType === "gemini" ? "" : modelsUrl.trim();
     const trimKey = apiKeyForRequest;
+    // Without a typed key, K-brain reuses the stored one by provider ID.
+    if ((!trimUrl && !trimModelsUrl) || (!trimKey && !canReuseStoredApiKey)) return;
     const key =
       providerType +
       ":" +
       buildProviderModelsFetchKey(
         trimUrl,
-        trimKey,
+        trimKey || `stored:${initialData?.id ?? ""}`,
         useSystemProxy,
         isFullUrl,
         trimModelsUrl,
         effectiveCustomHeaders,
       );
-    if ((!trimUrl && !trimModelsUrl) || !trimKey) return;
     if (key === prevFetchKey.current) return;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -372,9 +470,11 @@ function useProviderModalController({
   }, [
     apiKeyForRequest,
     baseUrl,
+    canReuseStoredApiKey,
     providerType,
     doFetch,
     effectiveCustomHeaders,
+    initialData?.id,
     isFullUrl,
     modelsUrl,
     useSystemProxy,
@@ -570,8 +670,17 @@ function useProviderModalController({
   const editingModelInputModalitiesMode = editingModel
     ? getModelInputModalitiesMode(editingModel.model)
     : "auto";
+  // 旧版 K-brain 不回传 imageModel，也不认识这个开关，此时不显示。
+  const canToggleEditingModelImage = editingModel?.model.imageModel !== undefined;
+  const editingModelImageMode = editingModel ? getModelImageMode(editingModel.model) : "auto";
   const canSaveEditingModel =
     editingModelContextWindow !== null && editingModelMaxOutputToken !== null;
+
+  function setEditingModelImageMode(mode: ModelImageMode) {
+    setEditingModel((prev) =>
+      prev ? { ...prev, model: applyModelImageMode(prev.model, mode) } : prev,
+    );
+  }
 
   function setEditingModelInputModalitiesMode(mode: ModelInputModalitiesMode) {
     setEditingModel((prev) =>
@@ -684,6 +793,13 @@ function useProviderModalController({
   }
   async function handleSave() {
     if (!name.trim()) return;
+    if (!isAcceptedProviderBaseUrl(baseUrl)) {
+      // K-brain would reject the whole save; keep the dialog open with the reason instead.
+      setBaseUrlValidationSubmitted(true);
+      setActivePanel("general");
+      requestAnimationFrame(() => document.getElementById("modal-baseurl")?.focus());
+      return;
+    }
     const nextModels = modelsWithEditingDraft();
     if (!nextModels) return;
     const invalidHeaderIndex = customHeaders.findIndex(
@@ -713,7 +829,7 @@ function useProviderModalController({
       if (!confirmed) return;
       setCustomUsageQueryConfirmed(true);
     }
-    const nextApiKey = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
+    const nextApiKey = apiKeyIsStoredValue ? "" : apiKey.trim();
     onSave({
       name: name.trim(),
       type: providerType,
@@ -721,10 +837,7 @@ function useProviderModalController({
       isFullUrl,
       modelsUrl: providerType === "gemini" ? undefined : modelsUrl.trim() || undefined,
       apiKey: nextApiKey,
-      apiKeyConfigured:
-        nextApiKey.length > 0 ||
-        apiKeyIsRedactedDisplay ||
-        (isGatewayWebui && initialData?.apiKeyConfigured === true),
+      apiKeyConfigured: nextApiKey.length > 0 || apiKeyIsStoredValue,
       customHeaders,
       models: nextModels,
       modelOrder,
@@ -753,7 +866,7 @@ function useProviderModalController({
       nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
       useSystemProxy,
       retryPolicy: serializeStreamRetryPolicy(),
-      usageQuery: serializeUsageQueryDraft(usageQuery, isGatewayWebui),
+      usageQuery: serializeUsageQueryDraft(usageQuery, providerCredentialsRedacted),
     });
     requestClose();
   }
@@ -765,7 +878,7 @@ function useProviderModalController({
     try {
       // 测试永远以编辑器里的草稿为准(忽略启用开关,不落库、不进缓存);
       // 秘密占位符经 serialize 还原为空串,由桌面端按 *Configured 沿用已存密钥。
-      const draft = serializeUsageQueryDraft(usageQuery, isGatewayWebui);
+      const draft = serializeUsageQueryDraft(usageQuery, providerCredentialsRedacted);
       const result = await testProviderUsage(persistedUsageQueryProviderId, draft);
       if (usageQueryTestSeqRef.current !== seq) return;
       if (result?.error) {
@@ -898,12 +1011,14 @@ function useProviderModalController({
     baseUrl,
     canSaveEditingModel,
     canOverrideModelInputModalities,
+    canToggleEditingModelImage,
     cancelCustomHeaderImport,
     clearVisibleModels,
     commitUsageTimeoutInput,
     customHeaders,
     editingModel,
     editingModelContextWindow,
+    editingModelImageMode,
     editingModelInputModalitiesMode,
     editingModelMaxOutputToken,
     fetchError,
@@ -925,6 +1040,7 @@ function useProviderModalController({
     headerKeyRefs,
     headerValidationSubmitted,
     headerValueRefs,
+    baseUrlInvalid,
     dialogOpen,
     isEditing,
     isFullUrl,
@@ -955,6 +1071,7 @@ function useProviderModalController({
     setApiKey,
     setBaseUrl,
     setEditingModel,
+    setEditingModelImageMode,
     setEditingModelInputModalitiesMode,
     setHeaderImportError,
     setHeaderImportOpen,
@@ -970,6 +1087,9 @@ function useProviderModalController({
     setPromptCachingEnabled,
     setRequestFormat,
     setShowApiKey,
+    toggleShowApiKey,
+    revealingApiKey,
+    revealApiKeyError,
     setShowUsageVariableApiKey,
     setStreamRetryCountInput,
     setStreamRetryMode,

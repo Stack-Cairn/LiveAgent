@@ -11,16 +11,10 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde_json::Value;
 use std::net::Ipv6Addr;
 use std::sync::{OnceLock, RwLock};
-use std::time::Duration;
 
 const SYSTEM_PROXY_TYPE_HTTP: &str = "http";
 pub const SYSTEM_PROXY_TYPE_SOCKS5: &str = "socks5";
 const NO_PROXY_DEFAULT: &str = "localhost,127.0.0.1,::1";
-const TRANSPORT_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
-const TRANSPORT_TCP_KEEPALIVE: Duration = Duration::from_secs(30);
-const TRANSPORT_TCP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
-const TRANSPORT_TCP_KEEPALIVE_RETRIES: u32 = 3;
-const TRANSPORT_READ_TIMEOUT: Duration = Duration::from_secs(1800);
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -225,7 +219,7 @@ pub fn shell_proxy_envs() -> Result<Vec<(String, String)>, String> {
     shell_proxy_envs_for_mode(&current_snapshot().mode)
 }
 
-fn build_proxy(config: &SystemProxyConfig) -> Result<reqwest::Proxy, String> {
+pub(crate) fn build_proxy(config: &SystemProxyConfig) -> Result<reqwest::Proxy, String> {
     reqwest::Proxy::all(config.proxy_url())
         // 环回地址豁免须与 shell env 注入的 NO_PROXY 一致，
         // 否则本地上游（如 127.0.0.1 的 MCP server）会被错误送进代理。
@@ -233,27 +227,8 @@ fn build_proxy(config: &SystemProxyConfig) -> Result<reqwest::Proxy, String> {
         .map_err(|_| format!("应用代理地址无效：{}", config.display_target()))
 }
 
-/// async 出网 client 的传输层默认值：本地反代上游直连 client（`proxy.rs`）与
-/// 本模块产出的全部 async builder（含承载 LLM 代理流量的 `cached_client()`）共用；
-/// 调用方之后显式设置的同名选项（如 `connect_timeout`）会覆盖这里。
-/// - TCP keepalive 约 60s 判定死对端（macOS/Linux；Windows 不支持设置重试次数，
-///   固定 10 次探测，约 130s），但只探测第一跳：走应用代理时探测的是到本地回环
-///   代理（Clash/V2Ray 等）的连接，代理到上游那段断了它感知不到。
-/// - `read_timeout` 是单次读的空闲超时（读到数据即重置），作为死流兜底；
-///   reqwest 0.13 在收到响应头之前也按它计时。必须长于 LLM 流任何合法的
-///   静默阶段（首 token 前的长推理、上游排队、中转缓冲整段输出的 pro 档模型等），
-///   否则会切断正常回复并让重试重付整段推理，所以取 30 分钟。
-pub(crate) fn with_transport_defaults(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
-    builder
-        .connect_timeout(TRANSPORT_CONNECT_TIMEOUT)
-        .tcp_keepalive(TRANSPORT_TCP_KEEPALIVE)
-        .tcp_keepalive_interval(TRANSPORT_TCP_KEEPALIVE_INTERVAL)
-        .tcp_keepalive_retries(TRANSPORT_TCP_KEEPALIVE_RETRIES)
-        .read_timeout(TRANSPORT_READ_TIMEOUT)
-}
-
 fn async_client_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::ClientBuilder, String> {
-    let builder = with_transport_defaults(reqwest::Client::builder().no_proxy());
+    let builder = reqwest::Client::builder().no_proxy();
     match mode {
         ProxyMode::Disabled => Ok(builder),
         ProxyMode::Invalid(error) => Err(error.clone()),
@@ -306,7 +281,7 @@ fn os_proxy_fallback_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::Clien
     match mode {
         // 不调 no_proxy()：保留 reqwest 默认代理探测（OS 代理环境变量与
         // macOS/Windows 系统代理设置，system-proxy 默认特性），无系统代理即直连。
-        ProxyMode::Disabled => Ok(with_transport_defaults(reqwest::Client::builder())),
+        ProxyMode::Disabled => Ok(reqwest::Client::builder()),
         mode => async_client_builder_for_mode(mode),
     }
 }
@@ -353,6 +328,17 @@ pub fn current_proxy_url() -> Result<Option<reqwest::Url>, String> {
         ProxyMode::Enabled(config) => reqwest::Url::parse(&config.proxy_url())
             .map(Some)
             .map_err(|_| format!("应用代理地址无效：{}", config.display_target())),
+    }
+}
+
+/// 传给 K-brain 的代理取值（启动 env `LIVEAGENT_KBRAIN_PROXY` 与
+/// `PUT /v1/network/proxy` 共用）：未启用 → `direct`，已启用但配置无效 →
+/// `invalid`（K-brain 侧走代理的请求 fail fast），否则为代理 URL（socks5 为 `socks5h://`）。
+pub fn kbrain_proxy_value() -> String {
+    match current_snapshot().mode {
+        ProxyMode::Disabled => "direct".to_string(),
+        ProxyMode::Invalid(_) => "invalid".to_string(),
+        ProxyMode::Enabled(config) => config.proxy_url(),
     }
 }
 
@@ -440,31 +426,6 @@ mod tests {
     }
 
     #[test]
-    fn transport_defaults_build_for_every_usable_mode() {
-        let modes = [
-            ProxyMode::Disabled,
-            parse_proxy_mode(Some(&json!({
-                "enabled": true, "type": "http", "host": "proxy.local", "port": 8080
-            }))),
-            parse_proxy_mode(Some(&json!({
-                "enabled": true, "type": "socks5", "host": "127.0.0.2", "port": 1080
-            }))),
-        ];
-        for mode in &modes {
-            assert!(matches!(mode, ProxyMode::Disabled | ProxyMode::Enabled(_)));
-            // 传输层默认值不得让任何可用模式（含更新链路回退 builder）建 client 失败；
-            // read_timeout 是 Debug 里唯一可观测的字段，借它确认默认值已挂上。
-            for builder in [
-                async_client_builder_for_mode(mode).expect("async builder"),
-                os_proxy_fallback_builder_for_mode(mode).expect("fallback builder"),
-            ] {
-                let client = builder.build().expect("client with transport defaults");
-                assert!(format!("{client:?}").contains("read_timeout"));
-            }
-        }
-    }
-
-    #[test]
     fn proxy_mode_equality_drives_set_config_dedupe() {
         let config = json!({
             "enabled": true, "type": "http", "host": "proxy.local", "port": 8080
@@ -534,6 +495,29 @@ mod tests {
             "enabled": true, "type": "http", "host": "bad host/@", "port": 8080
         })));
         assert!(current_proxy_url().is_err());
+
+        set_config(None);
+        // K-brain 取值与上面共用同一全局状态，放在同一个测试里避免并行测试互相覆盖。
+        assert_eq!(kbrain_proxy_value(), "direct");
+
+        set_config(Some(&json!({
+            "enabled": false, "type": "http", "host": "proxy.local", "port": 8080
+        })));
+        assert_eq!(kbrain_proxy_value(), "direct");
+
+        set_config(Some(&json!({
+            "enabled": true, "type": "socks5", "host": "proxy.local", "port": 1080,
+            "username": "u@x", "password": "p:w"
+        })));
+        assert_eq!(
+            kbrain_proxy_value(),
+            "socks5h://u%40x:p%3Aw@proxy.local:1080"
+        );
+
+        set_config(Some(&json!({
+            "enabled": true, "type": "http", "host": "bad host/@", "port": 8080
+        })));
+        assert_eq!(kbrain_proxy_value(), "invalid");
 
         // reset so other tests in this module observe the default disabled state
         set_config(None);

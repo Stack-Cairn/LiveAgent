@@ -565,7 +565,8 @@ export function StatusDashboardPage() {
   const [tunnelState, setTunnelState] = useState<TunnelStateSnapshot | null>(null);
   const [terminals, setTerminals] = useState<TerminalSession[]>([]);
   const [providers, setProviders] = useState<GatewayProviderSummary[]>([]);
-  const [settingsSnapshot, setSettingsSnapshot] = useState<GatewaySettingsSyncPayload | null>(null);
+  const [settingsSnapshot, setSettingsSnapshot] =
+    useState<Partial<GatewaySettingsSyncPayload> | null>(null);
   const [recentEvents, setRecentEvents] = useState<DashboardEvent[]>([]);
   const [liveCounters, setLiveCounters] = useState<LiveCounters>(() => initialCounters());
   const [snapshot, setSnapshot] = useState<SnapshotState>({
@@ -758,16 +759,16 @@ export function StatusDashboardPage() {
     (sum, item) => sum + item.activeConnections,
     0,
   );
-  const activeWorkspaceProjects = settingsSnapshot?.system.workspaceProjects ?? [];
+  const activeWorkspaceProjects = settingsSnapshot?.system?.workspaceProjects ?? [];
   const activeWorkspaceProject =
     activeWorkspaceProjects.find(
-      (project) => project.id === settingsSnapshot?.system.activeWorkspaceProjectId,
+      (project) => project.id === settingsSnapshot?.system?.activeWorkspaceProjectId,
     ) ?? activeWorkspaceProjects[0];
   const automation = useAutomation();
   const selectedModel = settingsSnapshot?.selectedModel ?? null;
   const selectedProvider = selectedModel
     ? (providers.find((provider) => provider.id === selectedModel.customProviderId) ??
-      settingsSnapshot?.customProviders.find(
+      settingsSnapshot?.customProviders?.find(
         (provider) => provider.id === selectedModel.customProviderId,
       ))
     : undefined;
@@ -780,10 +781,10 @@ export function StatusDashboardPage() {
   const enabledCronCount = automation.cron.tasks.filter((task) => task.enabled).length;
   const enabledHookCount = automation.hooks.hooks.filter((hook) => hook.enabled).length;
   const enabledMcpCount =
-    settingsSnapshot?.mcp.servers.filter((server) => server.enabled).length ?? 0;
+    settingsSnapshot?.mcp?.servers.filter((server) => server.enabled).length ?? 0;
   const configuredProviderCount =
-    settingsSnapshot?.customProviders.filter((provider) => provider.apiKeyConfigured).length ?? 0;
-  const selectedSkillCount = settingsSnapshot?.skills.enabled
+    settingsSnapshot?.customProviders?.filter((provider) => provider.apiKeyConfigured).length ?? 0;
+  const selectedSkillCount = settingsSnapshot?.skills?.enabled
     ? settingsSnapshot.skills.selected.length
     : 0;
   const remoteFeatureCount = settingsSnapshot?.remote
@@ -812,7 +813,7 @@ export function StatusDashboardPage() {
     Number(activeTunnels.length > 0) +
     Number(enabledMcpCount > 0) +
     Number(enabledCronCount > 0) +
-    Number(settingsSnapshot?.skills.enabled === true);
+    Number(settingsSnapshot?.skills?.enabled === true);
   const integrityScore = Math.min(
     100,
     (status?.online ? 34 : 0) +
@@ -924,17 +925,19 @@ export function StatusDashboardPage() {
     },
     {
       label: "Reasoning Mode",
-      value: settingsSnapshot?.chatRuntimeControls.reasoning ?? "--",
-      note: `thinking=${formatBooleanFlag(settingsSnapshot?.chatRuntimeControls.thinkingEnabled)} · web_search=${formatBooleanFlag(settingsSnapshot?.chatRuntimeControls.nativeWebSearchEnabled)}`,
+      value: settingsSnapshot?.chatRuntimeControls?.reasoning ?? "--",
+      note: `thinking=${formatBooleanFlag(settingsSnapshot?.chatRuntimeControls?.thinkingEnabled)} · web_search=${formatBooleanFlag(settingsSnapshot?.chatRuntimeControls?.nativeWebSearchEnabled)}`,
     },
   ];
 
   const fabricFacts: FactItem[] = [
     {
       label: "MCP Servers",
-      value: settingsSnapshot ? `${enabledMcpCount}/${settingsSnapshot.mcp.servers.length}` : "--",
+      value: settingsSnapshot?.mcp
+        ? `${enabledMcpCount}/${settingsSnapshot.mcp.servers.length}`
+        : "--",
       unit: "enabled/total",
-      note: `selected ${settingsSnapshot?.mcp.selected.length ?? "--"}`,
+      note: `selected ${settingsSnapshot?.mcp?.selected.length ?? "--"}`,
       tone: enabledMcpCount > 0 ? "cyan" : "slate",
     },
     {
@@ -950,9 +953,9 @@ export function StatusDashboardPage() {
     },
     {
       label: "Skills",
-      value: settingsSnapshot?.skills.enabled ? String(selectedSkillCount) : "OFF",
-      unit: settingsSnapshot?.skills.enabled ? "selected" : undefined,
-      note: `skills.enabled=${formatBooleanFlag(settingsSnapshot?.skills.enabled)}`,
+      value: settingsSnapshot?.skills?.enabled ? String(selectedSkillCount) : "OFF",
+      unit: settingsSnapshot?.skills?.enabled ? "selected" : undefined,
+      note: `skills.enabled=${formatBooleanFlag(settingsSnapshot?.skills?.enabled)}`,
     },
   ];
 

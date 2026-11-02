@@ -1,0 +1,58 @@
+{
+  "ccs": {
+    "id": "acceptance-cc",
+    "appType": "codex",
+    "name": "CC 验收（ccswitch）",
+    "settingsConfig": {
+      "config": "model = \"cc-first\"\nmodel_provider = \"fixture\"\n[model_providers.fixture]\nbase_url = \"http://127.0.0.1:47399/cc/v1/chat/completions\"\nwire_api = \"chat\"\n",
+      "auth": { "OPENAI_API_KEY": "cc-acceptance-secret" },
+      "meta": { "isFullUrl": true, "modelsUrl": "http://127.0.0.1:47399/cc/catalog" },
+      "extra_headers": [["X-Import-Source", "cc"], ["X-Api-Key", "cc-header-secret"], ["X-Unsafe", "bad\nvalue"]]
+    },
+    "meta": { "customHeaders": [{ "key": "x-import-source", "value": "ignored" }] },
+    "expected": {
+      "sourceId": "acceptance-cc",
+      "appType": "codex",
+      "providerType": "codex",
+      "name": "CC 验收",
+      "baseUrl": "http://127.0.0.1:47399/cc/v1/chat/completions",
+      "isFullUrl": true,
+      "modelsUrl": "http://127.0.0.1:47399/cc/catalog",
+      "apiKey": "cc-acceptance-secret",
+      "requestFormat": "openai-completions",
+      "models": ["cc-first"],
+      "customHeaders": [{ "key": "X-Import-Source", "value": "cc" }, { "key": "X-Api-Key", "value": "cc-header-secret" }]
+    }
+  },
+  "cherry": {
+    "id": "acceptance-cherry",
+    "name": "Cherry 验收",
+    "endpointConfigs": { "openai-chat-completions": { "baseUrl": "http://127.0.0.1:47399/cherry/v1" } },
+    "defaultChatEndpoint": "openai-chat-completions",
+    "apiKeys": [{ "key": "disabled-secret", "isEnabled": false }, { "key": "cherry-acceptance-secret", "isEnabled": true }],
+    "authConfig": { "type": "api-key" },
+    "providerSettings": { "extraHeaders": [["X-Import-Source", "cherry"], ["X-Api-Key", "cherry-header-secret"], ["x-import-source", "ignored"], ["X-Unsafe", "bad\rvalue"]] },
+    "models": [
+      { "id": "cherry-first", "endpointTypes": ["openai-chat-completions"], "capabilities": {}, "outputModalities": ["text"], "enabled": true, "hidden": false },
+      { "id": "text-embedding-3-small", "endpointTypes": ["openai-chat-completions"], "capabilities": {}, "outputModalities": ["text"], "enabled": true, "hidden": false },
+      { "id": "hidden-model", "endpointTypes": ["openai-chat-completions"], "capabilities": {}, "outputModalities": ["text"], "enabled": true, "hidden": true }
+    ],
+    "expected": {
+      "sourceId": "acceptance-cherry::openai-chat",
+      "sourceVersion": "2.x",
+      "sourceProviderType": "openai-chat-completions",
+      "providerType": "codex",
+      "name": "Cherry 验收",
+      "baseUrl": "http://127.0.0.1:47399/cherry/v1",
+      "apiKey": "cherry-acceptance-secret",
+      "apiKeyCount": 1,
+      "requestFormat": "openai-completions",
+      "enabled": true,
+      "importable": true,
+      "reason": "",
+      "warning": "",
+      "excludedModelCount": 1,
+      "customHeaders": [{ "key": "X-Import-Source", "value": "cherry" }, { "key": "X-Api-Key", "value": "cherry-header-secret" }]
+    }
+  }
+}

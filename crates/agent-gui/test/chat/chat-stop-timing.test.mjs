@@ -250,6 +250,9 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
         },
       },
       "../gateway/gatewayBridgeTypes": {
+        gatewayComposerTurnCommand() {
+          return undefined;
+        },
         normalizeGatewayCommandSafetyMode(value) {
           return value === "sandboxOffline" ? value : undefined;
         },
@@ -310,6 +313,7 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
       consumeConversationStop(conversationId) {
         return stopRequests.delete(conversationId);
       },
+      hasConversationStopHandler: () => false,
       requestActiveConversationStop(_conversationId, options) {
         activeStopOptions.push(options);
         return true;
@@ -415,7 +419,7 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   hookHarness.cleanup();
 });
 
-test("gateway tool_answer forwards validated JSON with conversation isolation", async () => {
+test("K-brain native queue subscribes to Gateway queue answers", async () => {
   const hookHarness = createHookHarness();
   const listeners = new Map();
   const responses = [];
@@ -423,6 +427,17 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
   const loader = createTsModuleLoader({
     mocks: {
       react: hookHarness.react,
+      [new URL("../../src/lib/host.ts", import.meta.url).pathname]: {
+        isKBrainBackendEnabled() {
+          return true;
+        },
+        isTauriHost() {
+          return true;
+        },
+        isKBrainBrowserHost() {
+          return false;
+        },
+      },
       "@tauri-apps/api/core": {
         async invoke(command, args) {
           if (command === "gateway_chat_queue_respond") {
@@ -463,6 +478,9 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
         },
       },
       "../gateway/gatewayBridgeTypes": {
+        gatewayComposerTurnCommand() {
+          return undefined;
+        },
         normalizeGatewayExecutionMode(value) {
           return value;
         },
@@ -509,6 +527,7 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
       consumeConversationStop() {
         return false;
       },
+      hasConversationStopHandler: () => false,
       requestActiveConversationStop() {
         return false;
       },
@@ -524,61 +543,10 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
     }),
   );
 
-  const listener = listeners.get("gateway:chat-queue-request");
-  assert.ok(listener);
-  const answers = [{ questionId: "choice", selectedLabel: "Second" }];
-
-  listener({
-    payload: {
-      requestId: "request-accepted",
-      action: "tool_answer",
-      conversationId: "conversation-owner",
-      itemId: "call-ask-remote",
-      requestJson: JSON.stringify(answers),
-    },
-  });
   await flushPromises();
-  assert.deepEqual(answerCalls[0], {
-    toolCallId: "call-ask-remote",
-    answers,
-    options: { conversationId: "conversation-owner" },
-  });
-  assert.equal(
-    responses.find((response) => response.input.requestId === "request-accepted").input.accepted,
-    true,
-  );
-
-  listener({
-    payload: {
-      requestId: "request-mismatch",
-      action: "tool_answer",
-      conversationId: "conversation-other",
-      itemId: "call-ask-remote",
-      requestJson: JSON.stringify(answers),
-    },
-  });
-  await flushPromises();
-  const mismatch = responses.find((response) => response.input.requestId === "request-mismatch");
-  assert.equal(mismatch.input.accepted, false);
-  assert.equal(mismatch.input.errorCode, "not_found");
-  assert.match(mismatch.input.message, /different conversation/);
-
-  listener({
-    payload: {
-      requestId: "request-invalid-json",
-      action: "tool_answer",
-      conversationId: "conversation-owner",
-      itemId: "call-ask-remote",
-      requestJson: "{broken",
-    },
-  });
-  await flushPromises();
-  const invalid = responses.find(
-    (response) => response.input.requestId === "request-invalid-json",
-  );
-  assert.equal(invalid.input.accepted, false);
-  assert.equal(invalid.input.errorCode, "invalid_payload");
-  assert.equal(answerCalls.length, 2);
+  assert.equal(listeners.has("gateway:chat-queue-request"), true);
+  assert.deepEqual(responses, []);
+  assert.deepEqual(answerCalls, []);
 
   hookHarness.cleanup();
 });
@@ -784,4 +752,109 @@ test("terminal history persistence exhausts retries then marks failure", async (
   );
   assert.equal(tries, 3);
   assert.equal(failures, 1);
+});
+
+function loadQueueForSettleTest(hookHarness) {
+  const loader = createTsModuleLoader({
+    mocks: {
+      react: hookHarness.react,
+      "@tauri-apps/api/core": { async invoke() {} },
+      "@tauri-apps/api/event": { async listen() { return () => undefined; } },
+      "../../../lib/settings": {
+        isAgentExecutionMode: () => false,
+        normalizeChatRuntimeControls: (value) => value ?? {},
+        normalizeSystemToolSelection: (value) => (Array.isArray(value) ? value : []),
+      },
+      "../../../lib/tools/askUserQuestionTools": {
+        answerAskUserQuestion: () => ({ ok: false, message: "not pending" }),
+      },
+      "../composer/composerDraftText": {
+        createTextComposerDraft: (text) => ({ text, isEmpty: !text.trim(), segments: [{ type: "text", text }] }),
+      },
+      "../gateway/gatewayBridgeTypes": {
+        gatewayComposerTurnCommand: () => undefined,
+        normalizeGatewayCommandSafetyMode: (value) => value,
+        normalizeGatewayExecutionMode: (value) => value,
+        normalizeGatewayWorkdir: (value) => value,
+      },
+    },
+  });
+  return loader.loadModule("src/pages/chat/queue/useChatTurnQueue.ts").useChatTurnQueue;
+}
+
+function renderSettleQueue(hookHarness, state) {
+  const useChatTurnQueue = loadQueueForSettleTest(hookHarness);
+  return hookHarness.render(() =>
+    useChatTurnQueue({
+      settings: { system: { executionMode: "chat", workdir: "", commandSafetyMode: "sandboxOffline" }, chatRuntimeControls: {} },
+      currentConversationId: "conversation-1",
+      currentConversationIdRef: { current: "conversation-1" },
+      conversationRuntimeCacheRef: { current: new Map() },
+      buildRuntimeEntryFromVisibleState: () => ({ workdir: "" }),
+      isConversationRunning: () => state.running,
+      runningConversationIds: new Set(),
+      getConversationAbortController: () => null,
+      setConversationAbortController() {},
+      setConversationSendingState() {},
+      requestConversationStop: () => false,
+      getConversationStopRequestVersion: () => 0,
+      isConversationStopRequested: () => state.stopRequested,
+      consumeConversationStop: () => true,
+      hasConversationStopHandler: () => state.previousRunAlive,
+      requestActiveConversationStop: () => true,
+      getConversationLiveTranscriptStore: createLiveTranscriptStoreStub(),
+      captureAbortSnapshot() {},
+      updateToolStatus() {},
+      composerRef: {
+        current: {
+          getDraft: () => ({ text: "queued", isEmpty: false, segments: [{ type: "text", text: "queued" }] }),
+          clear() {},
+          focus() {},
+        },
+      },
+      pendingUploadedFiles: [],
+      setPendingUploadsForConversation() {},
+      clearCachedComposerDraft() {},
+      displayedConversationWorkdir: "",
+      sendActionRef: {
+        current: async (overrides) => {
+          state.sends.push(overrides);
+          return true;
+        },
+      },
+    }),
+  );
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("a queued turn waits for a force-stopped run to finish settling before it sends", async () => {
+  const hookHarness = createHookHarness();
+  const state = { running: false, stopRequested: false, previousRunAlive: true, sends: [] };
+  const queue = renderSettleQueue(hookHarness, state);
+  assert.equal(queue.enqueueCurrentComposerTurn("end"), true);
+  queue.requestQueuedChatTurnProcessing("conversation-1");
+  await sleep(350);
+  assert.equal(state.sends.length, 0, "the interrupted run still owns the live transcript");
+  assert.equal(queue.queuedChatTurnsRef.current.length, 1, "the turn stays at the head of the queue");
+  state.previousRunAlive = false;
+  await sleep(250);
+  assert.equal(state.sends.length, 1);
+  assert.equal(queue.queuedChatTurnsRef.current.length, 0);
+  hookHarness.cleanup();
+});
+
+test("stopping again while the previous run settles keeps the queued turn", async () => {
+  const hookHarness = createHookHarness();
+  const state = { running: false, stopRequested: false, previousRunAlive: true, sends: [] };
+  const queue = renderSettleQueue(hookHarness, state);
+  assert.equal(queue.enqueueCurrentComposerTurn("end"), true);
+  queue.requestQueuedChatTurnProcessing("conversation-1");
+  await sleep(150);
+  queue.stopConversation("conversation-1");
+  state.previousRunAlive = false;
+  await sleep(250);
+  assert.equal(state.sends.length, 0);
+  assert.equal(queue.queuedChatTurnsRef.current.length, 1);
+  hookHarness.cleanup();
 });

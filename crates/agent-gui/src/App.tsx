@@ -1,20 +1,35 @@
-import type { Context } from "@earendil-works/pi-ai";
+import type { Context } from "@liveagent/app/lib/agentTypes";
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
+import {
+  CATALOG_LIVE_DEFAULT_URL,
+  configureCatalogLiveSources,
+  getCatalogLiveVersion,
+  loadCatalogLiveSupplement,
+  startCatalogLiveRefresh,
+} from "@liveagent/ui/lib/models/catalogLive";
 import { loadThinkingLiveSupplement } from "@liveagent/ui/lib/models/thinkingLive";
+import { useCatalogLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
+import {
+  configureResourceHostCapabilities,
+  kbrainResourceHostCapabilities,
+  type ResourceHostCapabilities,
+} from "@liveagent/ui/lib/resourceHost";
 import {
   applyGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncPayload,
+  type GatewaySettingsSyncAck,
   type GatewaySettingsSyncPayload,
+  readGatewaySettingsSyncClient,
 } from "@liveagent/ui/lib/settings/sync";
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import {
   lazy,
   type ReactNode,
@@ -25,12 +40,20 @@ import {
   useRef,
   useState,
 } from "react";
+import { useDesktopImageStudioHost } from "./agent-ui-adapters/imageStudio";
+import { settingsHostAdapter } from "./agent-ui-adapters/kbrainSettings";
+import { kbrainSkillsAdapter } from "./agent-ui-adapters/kbrainSkills";
 import { AppBootShell } from "./components/app/AppBootShell";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { useMacOsAppHeaderHeight } from "./components/MacOsTitleBarSpacer";
 import { ReleaseAnnouncementDialog } from "./components/ReleaseAnnouncementDialog";
+import { WindowsSettingsHeader } from "./components/WindowsSettingsHeader";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
+import { isKBrainBrowserHost } from "./lib/host";
+import { HistoryMigrationNoticeBanner } from "./lib/kbrain/HistoryMigrationNoticeBanner";
+import { requestPlanning } from "./lib/planning/kbrain";
+import { TimeZoneNoticeBanner } from "./lib/planning/TimeZoneNoticeBanner";
 import { setRetryErrorExtension } from "./lib/providers/runtime/streamRetry";
 import { useReleaseAnnouncementController } from "./lib/releaseAnnouncement";
 import {
@@ -38,6 +61,7 @@ import {
   getDefaultSettings,
   getNextTheme,
   normalizeSettings,
+  refreshCatalogDerivedModelLimits,
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
   type SttProviderId,
@@ -45,15 +69,29 @@ import {
   THEME_OPTIONS,
   type Theme,
 } from "./lib/settings";
+import { mergeBackendOwnedSettings } from "./lib/settings/backendOwnedMerge";
 import { getSettingsErrorMessage, SettingsStorageError } from "./lib/settings/errors";
+import {
+  clearRejectedLegacyProviders,
+  dismissRejectedLegacyProviders,
+  rejectedLegacyProviders,
+  subscribeRejectedLegacyProviders,
+} from "./lib/settings/legacyProviderImport";
 import {
   loadPersistedSettingsWithDefaults,
   persistSettings,
   publishGatewaySettingsSync,
+  reconcileKBrainCatalogMetadata,
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import { desktopSttSettingsService } from "./lib/stt/desktopSttSettingsService";
 import type { SectionId } from "./pages/settings/types";
+
+const guiResourceHostCapabilities: ResourceHostCapabilities = {
+  ...kbrainResourceHostCapabilities,
+  skillsAdapter: kbrainSkillsAdapter,
+};
+configureResourceHostCapabilities(guiResourceHostCapabilities);
 
 let chatPageModule: Promise<typeof import("./pages/ChatPage")> | null = null;
 
@@ -66,15 +104,8 @@ const ChatPage = lazy(async () => ({ default: (await loadChatPage()).ChatPage })
 const SettingsPage = lazy(async () => ({
   default: (await import("@liveagent/ui/pages/settings/SettingsPage")).SettingsPage,
 }));
-const PlanningSubscriptionRunner = lazy(async () => ({
-  default: (await import("./components/planning/PlanningSubscriptionRunner"))
-    .PlanningSubscriptionRunner,
-}));
 const CronPromptRunner = lazy(async () => ({
   default: (await import("./components/cron/CronPromptRunner")).CronPromptRunner,
-}));
-const MemoryOrganizerHost = lazy(async () => ({
-  default: (await import("./components/memory/useMemoryOrganizer")).MemoryOrganizerHost,
 }));
 
 function getDefaultContext(): Context {
@@ -101,7 +132,7 @@ function interpolateMessage(template: string, values: Record<string, string>) {
 
 const GATEWAY_SETTINGS_SYNC_EVENT = "gateway:settings-sync";
 
-function AppChrome(props: { children: ReactNode }) {
+function AppChrome(props: { children: ReactNode; notice?: ReactNode }) {
   // Plain inputs get a shared cut/copy/paste menu; everything else keeps the
   // suppressed native menu (surfaces with their own menus opt out upstream).
   const { onRootContextMenu, onRootMouseDownCapture, menu } = useNativeInputContextMenu();
@@ -112,9 +143,10 @@ function AppChrome(props: { children: ReactNode }) {
       onContextMenu={onRootContextMenu}
       onMouseDownCapture={onRootMouseDownCapture}
     >
-      {/* No conditional title bar here: adding or removing a 32px sibling when the
+      {/* No conditional title bar here: adding or removing a sibling when the
           settings overlay opens would resize the chat subtree underneath it and make
           the whole page jump. The overlay carries its own title bar instead. */}
+      {props.notice}
       <div className="relative min-h-0 flex-1 overflow-hidden bg-background">{props.children}</div>
       {menu}
     </div>
@@ -239,6 +271,8 @@ export default function App() {
   const [settingsReady, setSettingsReady] = useState(false);
   const [backgroundHostsReady, setBackgroundHostsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getBootAlignedDefaultSettings());
+  const [imageStudioWorkspace, setImageStudioWorkspace] = useState(settings.system.workdir);
+  const imageStudioHost = useDesktopImageStudioHost(imageStudioWorkspace);
   const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>({
     status: "idle",
@@ -249,6 +283,7 @@ export default function App() {
 
   const saveSequenceRef = useRef(0);
   const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const gatewaySyncChainRef = useRef<Promise<void>>(Promise.resolve());
   const defaultWorkdirRef = useRef("");
   // Mirrors `settings` so setSettings/queueSettingsSave can read the latest value
   // synchronously without passing a (side-effecting) function into setSettingsState —
@@ -257,10 +292,41 @@ export default function App() {
   // crypto.randomUUID() inside caller updaters) twice per call.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
   useEffect(() => {
     setSttProviderOverride(null);
   }, [settings.stt.provider]);
+
+  // 运行期模型目录（model-catalog.v1.json）：磁盘缓存在本 effect 内同步生效，早于
+  // 下方的设置加载，让加载时的限额重解析直接用上；网络结果随后到达时由下一个
+  // effect 跟进。失败静默，维持「快照 + 兜底」的现状。
+  // VITE_LIVEAGENT_MODEL_CATALOG_URL（构建期注入，默认不设）用于镜像与调试，排在默认地址之前。
+  useEffect(() => {
+    configureCatalogLiveSources([
+      import.meta.env.VITE_LIVEAGENT_MODEL_CATALOG_URL ?? "",
+      CATALOG_LIVE_DEFAULT_URL,
+    ]);
+    void loadCatalogLiveSupplement();
+    return startCatalogLiveRefresh();
+  }, []);
+  // 设置加载所依据的目录版本。之后到达的新目录：内存设置重解析 catalog/fallback
+  // 限额，并把差异补推给 K-brain（加载时已对账过的版本不重复推）。补推排进设置保存
+  // 队列：它是一次 GET→PUT，与用户保存交错会用旧快照覆盖刚保存的供应商配置。
+  const catalogVersionAtSettingsLoadRef = useRef(0);
+  const catalogLiveVersion = useCatalogLiveVersion();
+  useEffect(() => {
+    if (!settingsReady || catalogLiveVersion === catalogVersionAtSettingsLoadRef.current) return;
+    catalogVersionAtSettingsLoadRef.current = catalogLiveVersion;
+    const refreshed = refreshCatalogDerivedModelLimits(settingsRef.current);
+    if (refreshed !== settingsRef.current) {
+      settingsRef.current = refreshed;
+      setSettingsState(refreshed);
+    }
+    saveChainRef.current = saveChainRef.current
+      .catch(() => undefined)
+      .then(() => reconcileKBrainCatalogMetadata());
+  }, [catalogLiveVersion, settingsReady]);
 
   // 思考档位运行期补充（models.dev）：启动后台拉一次，TTL 内幂等；失败静默，
   // 档位解析维持在「快照 + 兜底」的现状。
@@ -304,7 +370,7 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (!settingsReady) return;
+    if (isKBrainBrowserHost() || !settingsReady) return;
     void invoke("app_set_close_window_behavior", {
       behavior: settings.closeWindowBehavior,
     }).catch(() => {
@@ -367,10 +433,13 @@ export default function App() {
     let cancelled = false;
 
     async function hydrateSettings() {
+      // 在发起加载前取版本：加载途中到达的新目录不会被误记为已处理。
+      catalogVersionAtSettingsLoadRef.current = getCatalogLiveVersion();
       try {
         const persistedSettingsPromise = loadPersistedSettingsWithDefaults();
         void loadChatPage();
         const { settings: loaded, defaultWorkdir } = await persistedSettingsPromise;
+        loaded.skills = (await kbrainSkillsAdapter.list()).settings;
         if (!cancelled) {
           defaultWorkdirRef.current = defaultWorkdir;
           const loadedWithDefaults = applyRuntimeSystemDefaults(loaded, defaultWorkdir);
@@ -433,37 +502,85 @@ export default function App() {
     });
   }, [settings.retryErrorSettings]);
 
+  // A WebUI update's seq is acknowledged by the snapshot published from the same
+  // ordered chains, so an ack never overtakes an earlier update's snapshot: once the
+  // WebUI sees seq N it treats every later snapshot as at least that new.
+  const queueSettingsSyncAck = useCallback((acks: GatewaySettingsSyncAck[]) => {
+    saveChainRef.current = saveChainRef.current
+      .catch(() => undefined)
+      .then(() => {
+        gatewaySyncChainRef.current = gatewaySyncChainRef.current
+          .catch(() => undefined)
+          .then(() => publishGatewaySettingsSync(settingsRef.current, acks))
+          .catch((error) => {
+            console.error("publish gateway settings sync ack failed", error);
+          });
+      });
+  }, []);
+
   const queueSettingsSave = useCallback(
-    (prev: AppSettings, next: AppSettings, fallback: string, publishSync: boolean) => {
+    (
+      prev: AppSettings,
+      next: AppSettings,
+      fallback: string,
+      publishSync: boolean,
+      syncAcks: GatewaySettingsSyncAck[] = [],
+    ) => {
       const saveSequence = ++saveSequenceRef.current;
       setSettingsSaveState({ status: "saving" });
 
       saveChainRef.current = saveChainRef.current
         .catch(() => undefined)
-        .then(() => persistSettings(prev, next))
+        .then(async () => {
+          if (JSON.stringify(prev.skills) !== JSON.stringify(next.skills)) {
+            await kbrainSkillsAdapter.settings(next.skills);
+          }
+          return persistSettings(prev, next);
+        })
         .then(async (persistResult) => {
           const publishTarget = normalizeSettings({
             ...next,
+            ...(persistResult.customProviders
+              ? { customProviders: persistResult.customProviders }
+              : {}),
             ...(persistResult.ssh ? { ssh: persistResult.ssh } : {}),
             ...(persistResult.stt ? { stt: persistResult.stt } : {}),
           });
-          if (
-            (persistResult.ssh || persistResult.stt) &&
-            saveSequenceRef.current === saveSequence
-          ) {
-            const merged = normalizeSettings({
-              ...settingsRef.current,
-              ...(persistResult.ssh ? { ssh: persistResult.ssh } : {}),
-              ...(persistResult.stt ? { stt: persistResult.stt } : {}),
-            });
-            settingsRef.current = merged;
-            setSettingsState(merged);
+          if (saveSequenceRef.current === saveSequence) {
+            // K-brain rebuilds customProviders on every PATCH (a model pick included).
+            // Only content changes reach React state, so an unchanged write-back keeps
+            // the existing references and does not re-run catalog/model memos.
+            const merged = mergeBackendOwnedSettings(
+              settingsRef.current,
+              persistResult,
+              normalizeSettings,
+            );
+            if (merged) {
+              settingsRef.current = merged;
+              setSettingsState(merged);
+            }
           }
           if (persistResult.conflict) {
             throw new SettingsStorageError(persistResult.conflict);
           }
-          if (publishSync) {
-            await publishGatewaySettingsSync(publishTarget);
+          if (persistResult.providerError) {
+            throw persistResult.providerError;
+          }
+          if (publishSync || syncAcks.length > 0) {
+            // Gateway synchronization is a secondary broadcast. Keep it ordered, but do not
+            // hold the local config write queue on a slow or temporarily unavailable Gateway.
+            gatewaySyncChainRef.current = gatewaySyncChainRef.current
+              .catch(() => undefined)
+              .then(() => publishGatewaySettingsSync(publishTarget, syncAcks))
+              .catch((error) => {
+                if (saveSequenceRef.current === saveSequence) {
+                  console.error("publish gateway settings sync failed", error);
+                  setSettingsSaveState({
+                    status: "error",
+                    message: getSettingsErrorMessage(error, fallback, next.locale, translate),
+                  });
+                }
+              });
           }
         })
         .then(() => {
@@ -472,6 +589,19 @@ export default function App() {
           }
         })
         .catch((error) => {
+          if (syncAcks.length > 0) {
+            // Still inside this save's step, so later saves have not reached the
+            // gateway chain yet: publishing here keeps the error ack ahead of their
+            // higher seqs (the desktop keeps only the highest seq per tab).
+            const message = getSettingsErrorMessage(error, fallback, next.locale, translate);
+            const failed = syncAcks.map((ack) => ({ ...ack, error: message }));
+            gatewaySyncChainRef.current = gatewaySyncChainRef.current
+              .catch(() => undefined)
+              .then(() => publishGatewaySettingsSync(settingsRef.current, failed))
+              .catch((publishError) => {
+                console.error("publish gateway settings sync ack failed", publishError);
+              });
+          }
           if (saveSequenceRef.current === saveSequence) {
             console.error("persist settings failed", error);
             setSettingsSaveState({
@@ -505,6 +635,26 @@ export default function App() {
     [queueSettingsSave],
   );
 
+  // 旧供应商导入失败的记录（K-brain 拒绝的），在供应商设置里可见；失败不阻塞设置加载。
+  const [rejectedLegacyProviderEntries, setRejectedLegacyProviderEntries] = useState(() =>
+    rejectedLegacyProviders(),
+  );
+  useEffect(() => subscribeRejectedLegacyProviders(setRejectedLegacyProviderEntries), []);
+
+  const retryRejectedLegacyProviderImport = useCallback(async () => {
+    clearRejectedLegacyProviders();
+    try {
+      const { settings: reloaded } = await loadPersistedSettingsWithDefaults();
+      setSettings(() => reloaded);
+    } catch (error) {
+      console.error("retry legacy provider import failed", error);
+    }
+  }, [setSettings]);
+
+  const dismissRejectedLegacyProviderNotice = useCallback(() => {
+    dismissRejectedLegacyProviders(rejectedLegacyProviders());
+  }, []);
+
   // Authoritative live read for tool write paths: settingsRef is updated
   // synchronously by setSettings, so read-modify-write sequences that stay in
   // one synchronous segment can never observe a stale snapshot.
@@ -514,6 +664,7 @@ export default function App() {
   const reloadPersistedSettings = useCallback(async () => {
     await saveChainRef.current.catch(() => undefined);
     const { settings: loaded, defaultWorkdir } = await loadPersistedSettingsWithDefaults();
+    loaded.skills = (await kbrainSkillsAdapter.list()).settings;
     defaultWorkdirRef.current = defaultWorkdir;
     const loadedWithDefaults = applyRuntimeSystemDefaults(loaded, defaultWorkdir);
     settingsRef.current = loadedWithDefaults;
@@ -536,8 +687,16 @@ export default function App() {
     [setSettings],
   );
 
+  const settingsLeaveGuard = useRef<(() => boolean) | undefined>(undefined);
+  const registerSettingsLeaveGuard = useCallback((guard: () => boolean) => {
+    settingsLeaveGuard.current = guard;
+    return () => {
+      if (settingsLeaveGuard.current === guard) settingsLeaveGuard.current = undefined;
+    };
+  }, []);
   const openSettings = useCallback(
     (section: SectionId = "system", providerId?: string) => {
+      if (settingsLeaveGuard.current && !settingsLeaveGuard.current()) return;
       setSettingsSection(section);
       setSettingsProviderId(section === "providers" ? providerId : undefined);
       openSettingsOverlay();
@@ -557,7 +716,22 @@ export default function App() {
     [openSettingsOverlay, reloadPersistedSettings],
   );
 
-  const closeSettings = closeSettingsOverlay;
+  // Read the calendar time zone once per launch so the banner can flag a mismatch; it is
+  // not tracked afterwards (a system change applies after restart). Failures stay silent.
+  const timeZoneChecked = useRef(false);
+  useEffect(() => {
+    if (!settingsReady || !backgroundHostsReady || timeZoneChecked.current) return;
+    const timer = setTimeout(() => {
+      timeZoneChecked.current = true;
+      void requestPlanning("timezone.get").catch(() => {});
+    }, 1_500);
+    return () => clearTimeout(timer);
+  }, [settingsReady, backgroundHostsReady]);
+
+  const closeSettings = useCallback(() => {
+    if (settingsLeaveGuard.current?.() === false) return;
+    closeSettingsOverlay();
+  }, [closeSettingsOverlay]);
 
   // 动作总线（Rust `app:action`）中 App 拥有的动作：主题/打开设置/网关开关/
   // 检查更新，以及「新建对话」时先收起设置覆盖层（会话侧由 ChatPage 处理）。
@@ -711,8 +885,12 @@ export default function App() {
           applyGatewaySettingsSyncPayload(prev, event.payload),
           defaultWorkdirRef.current,
         );
+        const syncClient = readGatewaySettingsSyncClient(event.payload);
+        const syncAcks = syncClient ? [syncClient] : [];
         const publicChanged = hasSettingsSyncChanged(prev, next);
         if (!publicChanged && !hasSensitiveSettingsUpdatesPayload(event.payload)) {
+          // The WebUI still waits for this seq even when nothing changed here.
+          if (syncAcks.length > 0) queueSettingsSyncAck(syncAcks);
           return;
         }
         settingsRef.current = next;
@@ -722,6 +900,7 @@ export default function App() {
           next,
           translate("app.gatewaySettingsSyncFailed", next.locale),
           publicChanged,
+          syncAcks,
         );
       },
     );
@@ -730,7 +909,7 @@ export default function App() {
       cancelled = true;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [queueSettingsSave, settingsReady]);
+  }, [queueSettingsSave, queueSettingsSyncAck, settingsReady]);
 
   if (!settingsReady) {
     return (
@@ -749,12 +928,17 @@ export default function App() {
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <Toaster />
-      <AppChrome>
+      <AppChrome
+        notice={
+          <>
+            <HistoryMigrationNoticeBanner onOpenSettings={() => openSettings("system")} />
+            <TimeZoneNoticeBanner onOpenSettings={() => openSettings("system")} />
+          </>
+        }
+      >
         {backgroundHostsReady ? (
           <Suspense fallback={null}>
             <CronPromptRunner settings={settings} />
-            <PlanningSubscriptionRunner />
-            <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
           </Suspense>
         ) : null}
         <AppErrorBoundary fallbackHeader={<WindowsTitleBar />}>
@@ -764,6 +948,9 @@ export default function App() {
             <ChatPage
               settings={settings}
               setSettings={setSettings}
+              resourceHost={guiResourceHostCapabilities}
+              imageStudioHost={imageStudioHost}
+              onImageStudioWorkspaceChange={setImageStudioWorkspace}
               sttProviderOverride={sttProviderOverride}
               getMcpSettings={getMcpSettings}
               getToolPolicies={getToolPolicies}
@@ -786,7 +973,7 @@ export default function App() {
           >
             {/* The overlay owns its title bar so the chat subtree below keeps a
                 constant height across open/close. */}
-            <WindowsTitleBar />
+            <WindowsSettingsHeader />
             <div className="relative min-h-0 flex-1 overflow-hidden">
               <AppErrorBoundary>
                 <Suspense
@@ -798,6 +985,9 @@ export default function App() {
                 >
                   <SettingsPage
                     settings={settings}
+                    settingsHost={settingsHostAdapter}
+                    imageClient={imageStudioHost?.client}
+                    registerLeaveGuard={registerSettingsLeaveGuard}
                     setSettings={setSettings}
                     saveState={settingsSaveState}
                     onBack={closeSettings}
@@ -808,6 +998,9 @@ export default function App() {
                     sttSettingsService={desktopSttSettingsService}
                     onSttProviderChange={setSttProviderOverride}
                     reloadSettings={reloadPersistedSettings}
+                    rejectedLegacyProviders={rejectedLegacyProviderEntries}
+                    onRetryRejectedLegacyProviders={retryRejectedLegacyProviderImport}
+                    onDismissRejectedLegacyProviders={dismissRejectedLegacyProviderNotice}
                   />
                 </Suspense>
               </AppErrorBoundary>

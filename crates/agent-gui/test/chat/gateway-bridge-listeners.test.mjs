@@ -174,7 +174,11 @@ test("gateway bridge listener keeps one worker across renders and handles native
       invokeCalls.some((call) => call.command === "gateway_chat_claim_next"),
       "the inbox must drain before async listen registration resolves",
     );
-    assert.equal(registrations.length, 5);
+    assert.equal(registrations.length, 6);
+    assert.ok(
+      registrations.some((entry) => entry.name === "gateway:composer-action-requested"),
+      "the composer action listener must be registered",
+    );
     assert.ok(registrations.some((entry) => entry.name === "gateway:chat-runtime-wake"));
     assert.ok(
       registrations.some((entry) => entry.name === "gateway:clarify-turn-requested"),
@@ -209,7 +213,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
       }),
     );
 
-    assert.equal(registrations.length, 5, "callback identity changes must not remount listeners");
+    assert.equal(registrations.length, 6, "callback identity changes must not remount listeners");
     assert.ok(registrations.every((entry) => entry.disposed === false));
 
     const claimsBeforeWake = invokeCalls.filter(
@@ -421,6 +425,7 @@ test("gateway bridge forwards sandboxOffline on a directly claimed agent turn", 
       "sandboxOffline",
     );
     assert.equal(overrides.executionModeOverride, "tools");
+    assert.equal(overrides.gatewayBridgeRequestOverride.clientRequestId, "client-sandbox-direct");
     assert.equal(overrides.workdirOverride, "/workspace/project");
     assert.deepEqual(overrides.composerDraftOverride.conversationMentions, [
       {
@@ -442,4 +447,193 @@ test("gateway bridge forwards sandboxOffline on a directly claimed agent turn", 
     if (previousDocument === undefined) delete globalThis.document;
     else globalThis.document = previousDocument;
   }
+});
+
+async function runGatewayListenerScenario({ claims, onListen, kbrainMocks = {} }) {
+  const hookHarness = createHookHarness();
+  const invokeCalls = [];
+  const sendCalls = [];
+  const listeners = new Map();
+  const windowEvents = createEventTarget();
+  const documentEvents = createEventTarget();
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  globalThis.window = {
+    ...windowEvents,
+    setInterval() {
+      return 1;
+    },
+    clearInterval() {},
+    setTimeout,
+    clearTimeout,
+  };
+  globalThis.document = { ...documentEvents, visibilityState: "visible" };
+  const registry = globalThis.__LIVEAGENT_GATEWAY_BRIDGE_REQUESTS__;
+  registry?.activeRequests?.clear();
+  registry?.pendingRequestIds?.clear();
+  registry?.pendingClientRequestIds?.clear();
+  registry?.pendingConversationIds?.clear();
+  try {
+    const loader = createTsModuleLoader({
+      mocks: {
+        react: hookHarness.react,
+        "@tauri-apps/api/core": {
+          async invoke(command, payload) {
+            invokeCalls.push({ command, payload });
+            if (command === "gateway_chat_claim_next") return claims.shift() ?? null;
+            return undefined;
+          },
+        },
+        "@tauri-apps/api/event": {
+          async listen(name, handler) {
+            listeners.set(name, handler);
+            return () => undefined;
+          },
+        },
+        "../../../lib/settings": {
+          normalizeChatRuntimeControls(value) {
+            return value;
+          },
+        },
+        ...kbrainMocks,
+      },
+    });
+    const { useGatewayBridgeListeners } = loader.loadModule(
+      "src/pages/chat/gateway/useGatewayBridgeListeners.ts",
+    );
+    hookHarness.render(() =>
+      useGatewayBridgeListeners({
+        currentConversationIdRef: { current: "conversation-1" },
+        conversationRuntimeCacheRef: { current: new Map() },
+        ensureGatewayBridgeConversationReadyRef: { current: async (id) => id },
+        sendActionRef: {
+          current: async (overrides) => {
+            sendCalls.push(overrides);
+            return true;
+          },
+        },
+        queueGatewayBridgeEventForRequest() {},
+        shouldQueueGatewayChatRequest: () => false,
+        enqueueGatewayChatRequest: async () => false,
+        isConversationRunning: () => false,
+        getConversationAbortController: () => null,
+        requestConversationStop: () => false,
+        requestActiveConversationStop: () => false,
+        consumeConversationStop: () => false,
+      }),
+    );
+    for (let attempt = 0; attempt < 8; attempt += 1) await flushPromises();
+    await onListen?.(listeners);
+    for (let attempt = 0; attempt < 4; attempt += 1) await flushPromises();
+    hookHarness.cleanup();
+    return { invokeCalls, sendCalls };
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+}
+
+function claimedChat(id, request) {
+  return {
+    requestId: id,
+    clientRequestId: `client-${id}`,
+    conversationId: "conversation-1",
+    state: "claimed",
+    attempt: 1,
+    leaseMs: 15_000,
+    request: {
+      requestId: id,
+      clientRequestId: `client-${id}`,
+      conversationId: "conversation-1",
+      queuePolicy: "auto",
+      ...request,
+    },
+  };
+}
+
+test("gateway bridge forwards WebUI goal and prompt commands to sendChat", async () => {
+  const { sendCalls, invokeCalls } = await runGatewayListenerScenario({
+    claims: [
+      claimedChat("goal-set", { message: "/goal ship it", goalAction: "set", goalText: "ship it" }),
+    ],
+  });
+  assert.equal(sendCalls.length, 1);
+  assert.deepEqual(sendCalls[0].composerCommand, { kind: "goal", action: "set", goal: "ship it" });
+  assert.equal(sendCalls[0].textOverride, "/goal ship it");
+  assert.ok(invokeCalls.some((call) => call.command === "gateway_chat_complete"));
+
+  const prompt = await runGatewayListenerScenario({
+    claims: [claimedChat("prompt", { message: "/review main", promptCommand: true })],
+  });
+  assert.deepEqual(prompt.sendCalls[0].composerCommand, { kind: "prompt" });
+
+  const plain = await runGatewayListenerScenario({
+    claims: [claimedChat("plain", { message: "hello" })],
+  });
+  assert.equal(plain.sendCalls[0].composerCommand, undefined);
+});
+
+test("gateway bridge rejects contradictory composer commands instead of sending raw text", async () => {
+  const { sendCalls, invokeCalls } = await runGatewayListenerScenario({
+    claims: [claimedChat("goal-bad", { message: "/goal", goalAction: "set", goalText: "  " })],
+  });
+  assert.equal(sendCalls.length, 0);
+  const failed = invokeCalls.find((call) => call.command === "gateway_chat_fail");
+  assert.equal(failed?.payload.error_code, "invalid_chat_command");
+});
+
+test("gateway composer action listener runs /loop create and responds once", async () => {
+  const kbrainCalls = [];
+  const { invokeCalls } = await runGatewayListenerScenario({
+    claims: [],
+    kbrainMocks: {
+      "../../../lib/host": {
+        isKBrainBackendEnabled: () => true,
+        isTauriHost: () => true,
+      },
+      "../../../lib/kbrain/client": {
+        createKBrainClient: () => ({
+          async createLoop(sessionId, input) {
+            kbrainCalls.push({ sessionId, input });
+            return { id: "loop-1", ...input, enabled: true };
+          },
+        }),
+      },
+      "../../../lib/kbrain/mapping": {
+        getKBrainSessionId: (conversationId) =>
+          conversationId === "conversation-1" ? "kb-session-1" : undefined,
+      },
+      "../../../lib/kbrain/goalStore": { publishGoalState() {} },
+    },
+    async onListen(listeners) {
+      const handler = listeners.get("gateway:composer-action-requested");
+      assert.ok(handler, "composer action listener registered");
+      await handler({
+        payload: {
+          requestId: "action-1",
+          kind: "loop",
+          conversationId: "conversation-1",
+          action: "create",
+          cron: "0 */10 * * * *",
+          interval: "10m",
+          prompt: "check the build",
+          reasoning: "",
+          loopId: "",
+        },
+      });
+    },
+  });
+  assert.deepEqual(kbrainCalls, [
+    {
+      sessionId: "kb-session-1",
+      input: { cron: "0 */10 * * * *", interval: "10m", prompt: "check the build" },
+    },
+  ]);
+  const responds = invokeCalls.filter((call) => call.command === "gateway_composer_action_respond");
+  assert.equal(responds.length, 1);
+  assert.equal(responds[0].payload.input.requestId, "action-1");
+  assert.equal(responds[0].payload.input.errorMessage, undefined);
+  assert.equal(responds[0].payload.input.result.loops[0].id, "loop-1");
 });

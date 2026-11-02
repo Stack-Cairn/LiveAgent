@@ -1,4 +1,4 @@
-import { CompactingText } from "@liveagent/ui/components/chat/AssistantStatus";
+import { CompactingText, LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { AssistantWorkTrace } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearchGroupView";
 import { LiveSparkle } from "@liveagent/ui/components/chat/LiveSparkle";
@@ -7,6 +7,8 @@ import { Markdown } from "@liveagent/ui/components/Markdown";
 import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import { parseRunProgress } from "@liveagent/ui/lib/chat/runProgress";
+import { useStreamingReveal } from "@liveagent/ui/lib/chat/streamingReveal";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode, useMemo } from "react";
 import {
@@ -26,6 +28,13 @@ import { ToolTraceGroup } from "./ToolTraceGroup";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
 
+function RevealedStreamingMarkdown(
+  props: { reveal: boolean } & Parameters<typeof StreamingSplitMarkdown>[0],
+) {
+  const { reveal, content, ...rest } = props;
+  return <StreamingSplitMarkdown content={useStreamingReveal(content, reveal)} {...rest} />;
+}
+
 export const RoundBlockContent = memo(function RoundBlockContent(props: {
   block: GroupedRoundBlock;
   isLive: boolean;
@@ -36,6 +45,8 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
   /** Transcript-stable entry key; block ids alone repeat across rounds. */
   traceKey?: string;
   showTurnStatus?: boolean;
+  /** The turn is still streaming: type newly arrived reply text out character by character. */
+  revealText?: boolean;
   readOnly?: boolean;
   redactToolContent?: boolean;
   workdir?: string;
@@ -45,6 +56,7 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
     block,
     isLive,
     renderMode,
+    revealText = false,
     runningToolCallIds,
     thinkingOpen,
     isLatestThinking,
@@ -124,8 +136,9 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
     // 切分状态不再变化，成本为零。
     content =
       renderMode === "streaming" ? (
-        <StreamingSplitMarkdown
+        <RevealedStreamingMarkdown
           content={block.text}
+          reveal={revealText}
           className="font-chat"
           readOnly={readOnly}
           workdir={workdir}
@@ -259,6 +272,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
       isLatestThinking={entry.key === activeThinkingKey}
       traceKey={entry.key}
       showTurnStatus={insideWorkTrace && running && entry.key === latestToolGroupKey}
+      revealText={running}
       readOnly={readOnly}
       redactToolContent={redactToolContent}
       workdir={workdir}
@@ -282,7 +296,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
           {layout.work.map((entry) => renderEntry(entry, true))}
           {showDetailedStatus ? (
             <div className="py-1.5">
-              <CompactingText progress={normalizedToolStatus} />
+              <CompactingText />
             </div>
           ) : null}
         </AssistantWorkTrace>
@@ -290,7 +304,13 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
 
       {layout.interaction.map((entry) => renderEntry(entry, false, true))}
       {layout.answer.map((entry) => renderEntry(entry, false))}
-      {running ? <LiveSparkle paused={attentionRequired} /> : null}
+      {running ? (
+        !attentionRequired && parseRunProgress(normalizedToolStatus) ? (
+          <LiveAssistantStatus status={normalizedToolStatus} />
+        ) : (
+          <LiveSparkle paused={attentionRequired} />
+        )
+      ) : null}
     </div>
   );
 });

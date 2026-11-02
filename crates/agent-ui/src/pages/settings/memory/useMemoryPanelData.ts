@@ -1,38 +1,26 @@
 // Data hooks for the memory settings panel: list/read/mutate/wipe for the
-// panel itself and organize-run list/read for the history modal. Organize-run
-// status polling runs ONLY while some run is pending/running — idle panels
-// never poll.
+// panel itself.
 //
-// Shared implementation owned by @liveagent/ui. Platform-specific capabilities
-// remain in their host adapter modules.
+// Shared implementation owned by @liveagent/ui.
 
 import { useEffect, useState } from "react";
 import {
   formatMemoryError,
   type MemoryMeta,
-  type MemoryOrganizeRun,
-  type MemoryOrganizeRunStatus,
   type MemoryPathsInfo,
   type MemoryReadResponse,
   memoryAccept,
   memoryDelete,
   memoryList,
-  memoryOrganizeRunList,
-  memoryOrganizeRunRead,
   memoryPathsInfo,
   memoryRead,
   memoryUpdate,
   memoryWipeAll,
   memoryWrite,
 } from "../../../lib/memory/api";
-import { PANEL_RUN_POLL_INTERVAL_MS } from "../../../lib/memory/config";
 import type { MemoryType } from "../../../lib/memory/schema";
-import {
-  entryKey,
-  isOrganizerRunActive,
-  type MemoryQuota,
-  selectedEntryWorkdir,
-} from "./panelModel";
+import { isUnsupportedResourceError } from "../../../lib/resourceHost";
+import { entryKey, type MemoryQuota, selectedEntryWorkdir } from "./panelModel";
 
 export type MemoryCreateDraft = {
   slug: string;
@@ -48,8 +36,12 @@ export type MemoryEditDraft = {
   appendBody: string;
 };
 
-export function useMemoryPanelData(input: { workdir?: string; t: (key: string) => string }) {
-  const { workdir, t } = input;
+export function useMemoryPanelData(input: {
+  workdir?: string;
+  t: (key: string) => string;
+  backendManaged?: boolean;
+}) {
+  const { workdir, t, backendManaged: hostBackendManaged = false } = input;
   const [entries, setEntries] = useState<MemoryMeta[]>([]);
   const [quota, setQuota] = useState<MemoryQuota | null>(null);
   const [selected, setSelected] = useState<MemoryReadResponse | null>(null);
@@ -58,7 +50,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [organizerWatchRunId, setOrganizerWatchRunId] = useState<string | null>(null);
+  const [backendManaged, setBackendManaged] = useState(hostBackendManaged);
   const [editDraft, setEditDraft] = useState<MemoryEditDraft>({
     description: "",
     body: "",
@@ -66,6 +58,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
   });
 
   async function reload(keepEntry?: string | null) {
+    if (backendManaged) return false;
     setLoading(true);
     setError(null);
     try {
@@ -83,7 +76,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
           list.entries.find((entry) => entryKey(entry) === keepKey) ??
           list.entries.find((entry) => entry.slug === keepKey);
         if (found) {
-          await openEntry(found);
+          return await openEntry(found);
         } else {
           setSelected(null);
           setSelectedEntry(null);
@@ -91,6 +84,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
       }
       return true;
     } catch (err) {
+      if (isUnsupportedResourceError(err)) setBackendManaged(true);
       setError(formatMemoryError(err));
       return false;
     } finally {
@@ -99,6 +93,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
   }
 
   async function openEntry(entry: MemoryMeta) {
+    if (backendManaged) return false;
     setError(null);
     try {
       const read = await memoryRead({
@@ -114,13 +109,17 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
         body: read.body,
         appendBody: "",
       });
+      return true;
     } catch (err) {
+      if (isUnsupportedResourceError(err)) setBackendManaged(true);
       setError(formatMemoryError(err));
+      return false;
     }
   }
 
   /** Returns true when the entry was created (so the caller can reset its form). */
   async function createEntry(draft: MemoryCreateDraft) {
+    if (backendManaged) return false;
     setSaving(true);
     setError(null);
     try {
@@ -136,9 +135,9 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
         body: draft.body,
         actor: "user",
       });
-      await reload(result.slug);
-      return true;
+      return await reload(result.slug);
     } catch (err) {
+      if (isUnsupportedResourceError(err)) setBackendManaged(true);
       setError(formatMemoryError(err));
       return false;
     } finally {
@@ -147,7 +146,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
   }
 
   async function saveSelected() {
-    if (!selected) return;
+    if (backendManaged || !selected) return;
     setSaving(true);
     setError(null);
     try {
@@ -165,6 +164,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
       setEditDraft((prev) => ({ ...prev, appendBody: "" }));
       await reload(selectedEntry ? entryKey(selectedEntry) : result.slug);
     } catch (err) {
+      if (isUnsupportedResourceError(err)) setBackendManaged(true);
       setError(formatMemoryError(err));
     } finally {
       setSaving(false);
@@ -172,7 +172,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
   }
 
   async function acceptSelected() {
-    if (!selected) return;
+    if (backendManaged || !selected) return;
     setSaving(true);
     setError(null);
     try {
@@ -184,6 +184,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
       });
       await reload(selectedEntry ? entryKey(selectedEntry) : selected.slug);
     } catch (err) {
+      if (isUnsupportedResourceError(err)) setBackendManaged(true);
       setError(formatMemoryError(err));
     } finally {
       setSaving(false);
@@ -191,7 +192,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
   }
 
   async function deleteSelected() {
-    if (!selected) return;
+    if (backendManaged || !selected) return;
     setSaving(true);
     setError(null);
     try {
@@ -206,6 +207,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
       setSelectedEntry(null);
       await reload();
     } catch (err) {
+      if (isUnsupportedResourceError(err)) setBackendManaged(true);
       setError(formatMemoryError(err));
     } finally {
       setSaving(false);
@@ -213,7 +215,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
   }
 
   async function wipeAll() {
-    if (saving) return;
+    if (backendManaged || saving) return;
     setSaving(true);
     setError(null);
     try {
@@ -232,47 +234,23 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
       setSelected(null);
       setSelectedEntry(null);
     } catch (err) {
+      if (isUnsupportedResourceError(err)) setBackendManaged(true);
       setError(formatMemoryError(err));
     } finally {
       setSaving(false);
     }
   }
 
-  // Watch a queued organizer run: poll while it is pending/running, then do a
-  // single reload once it settles. No run being watched ⇒ no polling at all.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload identity changes every render; the watched run id is the trigger
-  useEffect(() => {
-    if (!organizerWatchRunId) return;
-    const watchedRunId = organizerWatchRunId;
-    let cancelled = false;
-
-    async function pollRun() {
-      try {
-        const run = await memoryOrganizeRunRead({ runId: watchedRunId });
-        if (cancelled || (run && isOrganizerRunActive(run))) return;
-        setOrganizerWatchRunId(null);
-        await reload();
-      } catch (err) {
-        if (cancelled) return;
-        setOrganizerWatchRunId(null);
-        setError(formatMemoryError(err));
-      }
-    }
-
-    const interval = window.setInterval(() => void pollRun(), PANEL_RUN_POLL_INTERVAL_MS);
-    void pollRun();
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [organizerWatchRunId]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload identity changes every render; workdir is the trigger
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload identity changes every render; workdir and host capability are the triggers
   useEffect(() => {
     setSelected(null);
     setSelectedEntry(null);
+    if (backendManaged) {
+      setLoading(false);
+      return;
+    }
     void reload(null);
-  }, [workdir]);
+  }, [backendManaged, workdir]);
 
   return {
     entries,
@@ -283,6 +261,7 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
     loading,
     error,
     saving,
+    backendManaged,
     editDraft,
     setEditDraft,
     reload,
@@ -292,72 +271,5 @@ export function useMemoryPanelData(input: { workdir?: string; t: (key: string) =
     acceptSelected,
     deleteSelected,
     wipeAll,
-    watchOrganizerRun: setOrganizerWatchRunId,
-  };
-}
-
-export function useOrganizeRunHistory(input: { statusFilter: "all" | MemoryOrganizeRunStatus }) {
-  const { statusFilter } = input;
-  const [runs, setRuns] = useState<MemoryOrganizeRun[]>([]);
-  const [selectedRun, setSelectedRun] = useState<MemoryOrganizeRun | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function reload(
-    selectRunId?: string,
-    options?: { quiet?: boolean; keepSelection?: boolean },
-  ) {
-    const quiet = options?.quiet === true;
-    if (!quiet) {
-      setLoading(true);
-      setError(null);
-    }
-    try {
-      const response = await memoryOrganizeRunList({
-        status: statusFilter === "all" ? undefined : statusFilter,
-        limit: 80,
-      });
-      setRuns(response.runs);
-      const nextId =
-        selectRunId ||
-        (options?.keepSelection === false ? undefined : selectedRun?.runId) ||
-        response.runs[0]?.runId;
-      const next = nextId ? await memoryOrganizeRunRead({ runId: nextId }) : null;
-      setSelectedRun(next ?? response.runs[0] ?? null);
-    } catch (err) {
-      setError(formatMemoryError(err));
-    } finally {
-      if (!quiet) {
-        setLoading(false);
-      }
-    }
-  }
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload identity changes every render; statusFilter is the trigger
-  useEffect(() => {
-    void reload();
-  }, [statusFilter]);
-
-  const hasActiveRun = runs.some(isOrganizerRunActive) || isOrganizerRunActive(selectedRun);
-
-  // Poll ONLY while a run is pending/running; a fully settled history never
-  // schedules an interval.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload identity changes every render; the poll keys are the triggers
-  useEffect(() => {
-    if (!hasActiveRun) return;
-    const interval = window.setInterval(() => {
-      void reload(selectedRun?.runId, { quiet: true });
-    }, PANEL_RUN_POLL_INTERVAL_MS);
-    return () => window.clearInterval(interval);
-  }, [hasActiveRun, selectedRun?.runId, statusFilter]);
-
-  return {
-    runs,
-    selectedRun,
-    setSelectedRun,
-    loading,
-    error,
-    setError,
-    reload,
   };
 }

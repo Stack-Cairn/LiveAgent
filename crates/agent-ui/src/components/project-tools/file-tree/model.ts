@@ -3,6 +3,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific capabilities are
 // resolved at runtime through the shared contracts (see FILE_TREE_HAS_OS_INTEGRATION).
 
+import { isHostCommandUnavailable } from "../../../lib/shared/hostErrors";
 import type { WorkspaceActivityEventPayload } from "../../../lib/workspace-activity/types";
 
 export type FileTreeKind = "file" | "dir";
@@ -230,6 +231,9 @@ export function sameStringArray(left: readonly string[], right: readonly string[
 }
 
 export function toFileTreeErrorMessage(error: unknown, fallback: string) {
+  // 浏览器宿主没有 `fs_*` 桌面命令：内部诊断顶在目录行里看起来像磁盘坏了，
+  // 这里退回调用方已有的本地化文案。
+  if (isHostCommandUnavailable(error)) return fallback;
   if (error instanceof Error && error.message.trim()) return error.message;
   const text = String(error ?? "").trim();
   return text || fallback;

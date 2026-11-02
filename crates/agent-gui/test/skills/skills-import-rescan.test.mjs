@@ -49,17 +49,21 @@ test("unchanged external scan results preserve the current list reference", () =
 
 test("manual rescans retain stale content and only mark the scan button busy", () => {
   assert.match(hubSource, /reconcileExternalToolScans\(previous, scans\)/);
-  assert.match(hubSource, /setExternalScans\(\(previous\) => previous \?\? \[\]\)/);
-  assert.match(hubSource, /initializing=\{externalScans === null\}/);
-  assert.match(hubSource, /disabled=\{externalScans === null \|\| externalLoading\}/);
+  assert.match(hubSource, /setExternalScans\(\(previous\) => reconcileExternalToolScans\(previous, scans\)\)/);
+  assert.match(
+    hubSource,
+    /initializing=\{\s*externalLoading &&\s*externalScans === null &&\s*!externalBackendManaged &&\s*!backendManaged\s*\}/,
+  );
+  assert.match(hubSource, /disabled=\{externalLoading \|\| backendManaged \|\| externalBackendManaged\}/);
   assert.match(hubSource, /externalLoading \? \(\s*<Loader2[^>]*animate-spin/);
   assert.match(hubSource, /onClick=\{\(\) => void rescanExternalSkills\(\)\}/);
-  assert.match(importViewSource, /\{initializing \? \(/);
+  assert.match(importViewSource, /\{backendManaged \? \(/);
+  assert.match(importViewSource, /\) : initializing \? \(/);
   assert.doesNotMatch(importViewSource, /\{loading \? \(\s*<GlassPanel/);
 });
 
 test("the local import shell and card padding stay stable during the initial scan", () => {
-  assert.match(importViewSource, /<SkillsImportSourceTabs[\s\S]*disabled=\{initializing\}/);
+  assert.match(importViewSource, /<SkillsImportSourceTabs[\s\S]*disabled=\{initializing \|\| backendManaged\}/);
   assert.match(importViewSource, /overflow-y-auto px-0\.5 pb-4 pr-1/);
   assert.match(importViewSource, /className=\{SKILL_CARD_SHELL_CLASS\}/);
   assert.match(importViewSource, /cn\(\s*SKILL_CARD_SHELL_CLASS,/);
@@ -76,6 +80,14 @@ test("the local import bulk bar reuses the installed bulk bar shell", () => {
   assert.match(importViewSource, sharedBulkBarShell);
   assert.match(importViewSource, /absolute inset-x-0 bottom-4 z-20 flex justify-center px-3/);
   assert.match(importViewSource, /max-sm:bottom-safe-bottom-offset/);
-  assert.match(importViewSource, /const showBulkBar = importableSelectedCount > 0 \|\| importing/);
+  assert.match(
+    importViewSource,
+    /const showBulkBar = !backendManaged && \(importableSelectedCount > 0 \|\| importing\)/,
+  );
   assert.match(importViewSource, /skillsImportButton/);
+});
+
+test("failed initial external scans stop and wait for an explicit retry", () => {
+  assert.match(hubSource, /if \(externalScans !== null \|\| externalLoading \|\| externalError\) return/);
+  assert.match(hubSource, /finally \{\s*await waitForMinimumScanDuration\(startedAt\);\s*setExternalLoading\(false\)/);
 });

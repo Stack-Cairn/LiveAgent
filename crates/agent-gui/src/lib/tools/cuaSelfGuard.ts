@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 
 /**
  * 把 LiveAgent 自己从 cua-driver 的视野与可操作范围里摘掉。

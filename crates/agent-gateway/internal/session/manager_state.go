@@ -160,9 +160,12 @@ type syncHub struct {
 	nextPlanningSubID   int
 	planningSubscribers map[int]chan Tagged[*gatewayv2.PlanningChanged]
 
-	historyMu          sync.Mutex
-	nextHistorySubID   int
-	historySubscribers map[int]chan Tagged[*gatewayv2.HistorySyncEvent]
+	historyMu            sync.Mutex
+	nextHistorySubID     int
+	historySubscribers   map[int]chan Tagged[*gatewayv2.HistorySyncEvent]
+	historyStatusSubs    map[int]chan Tagged[*gatewayv2.HistorySyncStatus]
+	historyResyncPending map[int]map[string]historyPendingCut
+	historyStates        map[string]*historySyncState
 
 	settingsMu          sync.Mutex
 	nextSettingsSubID   int
@@ -189,6 +192,9 @@ func newSyncHub() *syncHub {
 	return &syncHub{
 		planningSubscribers:       make(map[int]chan Tagged[*gatewayv2.PlanningChanged]),
 		historySubscribers:        make(map[int]chan Tagged[*gatewayv2.HistorySyncEvent]),
+		historyStatusSubs:         make(map[int]chan Tagged[*gatewayv2.HistorySyncStatus]),
+		historyResyncPending:      make(map[int]map[string]historyPendingCut),
+		historyStates:             make(map[string]*historySyncState),
 		settingsSubscribers:       make(map[int]chan Tagged[*gatewayv2.SettingsSyncEvent]),
 		terminalSubscribers:       make(map[int]chan Tagged[*gatewayv2.TerminalEvent]),
 		terminalStreamSubscribers: make(map[int]chan Tagged[*gatewayv2.TerminalStreamFrame]),

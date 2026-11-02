@@ -30,6 +30,7 @@ import {
 } from "@liveagent/ui/components/settings/SettingsToggleGroup";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -654,6 +655,7 @@ function SshImportModal(props: {
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 导入面板打开时按现有主机扫描一次；t 只用于失败文案，语言切换无需重新扫描。
   useEffect(() => {
     let cancelled = false;
     setResult(null);
@@ -668,7 +670,7 @@ function SshImportModal(props: {
       })
       .catch((scanError) => {
         if (cancelled) return;
-        setError(scanError instanceof Error ? scanError.message : String(scanError));
+        setError(hostAwareErrorMessage(scanError, t("settings.sshImportDesktopHostRequired")));
       });
     return () => {
       cancelled = true;

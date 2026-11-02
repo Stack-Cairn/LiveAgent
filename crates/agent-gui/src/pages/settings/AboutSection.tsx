@@ -1,3 +1,4 @@
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { Download, ExternalLink, Loader2, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import {
@@ -18,25 +19,22 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useId } from "react";
+import { getKBrainHealth } from "../../agent-ui-adapters/kbrainSettings";
 import type { AppUpdateController } from "../../lib/appUpdates";
 import type { ReleaseAnnouncementController } from "../../lib/releaseAnnouncement";
 import { releaseNotesBody, releaseTitle } from "../../lib/releaseNotes";
 import { updateUpdateSettings } from "../../lib/settings";
 import { formatReleaseDate } from "./aboutDate";
+import { KBrainBackendRow } from "./KBrainBackendRow";
 import type { SettingsSectionProps } from "./types";
 
 type AboutSectionProps = SettingsSectionProps & {
   appUpdate: AppUpdateController;
   releaseAnnouncement: ReleaseAnnouncementController;
 };
-
-function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.message.trim();
-  return String(error ?? "").trim();
-}
 
 export function AboutSection(props: AboutSectionProps) {
   const { settings, setSettings, appUpdate, releaseAnnouncement } = props;
@@ -48,7 +46,7 @@ export function AboutSection(props: AboutSectionProps) {
   useEffect(() => () => toast.dismiss(`${toastScope}-update`), [toastScope]);
 
   function showUpdateError(title: string, error: unknown) {
-    const description = errorMessage(error);
+    const description = hostAwareErrorMessage(error, t("settings.aboutDesktopHostRequired"));
     toast.error(title, {
       id: `${toastScope}-update`,
       appearance: "notice",
@@ -112,7 +110,7 @@ export function AboutSection(props: AboutSectionProps) {
         });
       }
     } catch (error) {
-      const description = errorMessage(error);
+      const description = hostAwareErrorMessage(error, t("settings.aboutDesktopHostRequired"));
       toast.error(t("settings.aboutAnnouncementLoadFailed"), {
         id: `${toastScope}-announcement`,
         appearance: "notice",
@@ -132,7 +130,7 @@ export function AboutSection(props: AboutSectionProps) {
         });
       }
     } catch (error) {
-      const description = errorMessage(error);
+      const description = hostAwareErrorMessage(error, t("settings.aboutDesktopHostRequired"));
       toast.error(t("settings.aboutAnnouncementLoadFailed"), {
         id: `${toastScope}-announcement-preview`,
         appearance: "notice",
@@ -222,6 +220,8 @@ export function AboutSection(props: AboutSectionProps) {
               </div>
             }
           />
+
+          <KBrainBackendRow loadHealth={getKBrainHealth} />
 
           <SettingsRow
             title={t("settings.aboutSoftwareUpdate")}

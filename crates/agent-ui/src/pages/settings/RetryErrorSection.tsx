@@ -3,15 +3,15 @@
 //
 // Background: relay/proxy stations (Cloudflare-fronted) intermittently return
 // 520/521/525 and similar transient 5xx. Before #608 these were not retried, so
-// the request failed outright. pi-ai's isRetryableAssistantError covers the
+// the request failed outright. The built-in transient-error classifier covers
 // common codes 429/500/502/503/504/524, but not the Cloudflare 5xx relays emit.
 //
 // This section exposes the "retry-error extension" LiveAgent layers on top of
-// pi-ai for the user to configure:
+// that classifier for the user to configure:
 //   1. Preset status code toggles (Cloudflare 520-527) — all on by default, so
 //      #608 is fixed out of the box;
 //   2. Custom error keywords (case-insensitive substrings) — covers relay/gateway
-//      wording pi-ai doesn't recognize, e.g. "SSL handshake failed".
+//      wording the classifier doesn't recognize, e.g. "SSL handshake failed".
 // The runtime layers both onto streamRetry's and providerFailover's retryable
 // classification. Local UI preference only (localStorage), not gateway-synced.
 

@@ -11,7 +11,10 @@ use crate::services::mcp_oauth::{self, OauthStatusInfo};
 use tauri_plugin_opener::OpenerExt;
 
 fn oauth_server_of(server: &McpServerConfig) -> Result<mcp_oauth::OauthServer, String> {
-    if !matches!(server.transport.as_deref().unwrap_or("stdio").trim(), "http" | "sse") {
+    if !matches!(
+        server.transport.as_deref().unwrap_or("stdio").trim(),
+        "http" | "sse"
+    ) {
         return Err("仅 http/sse transport 支持 OAuth".to_string());
     }
     server

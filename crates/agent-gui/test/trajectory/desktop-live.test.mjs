@@ -83,7 +83,6 @@ test("the recorder registry exclusively owns desktop live trajectory writes", ()
   const publisherSources = [
     "../../src/pages/chat/runtime/useSendChatTurn.ts",
     "../../src/pages/chat/runtime/useManualCompaction.ts",
-    "../../src/pages/chat/runtime/compactionBinding.ts",
   ].map((relativePath) => readFileSync(new URL(relativePath, import.meta.url), "utf8"));
 
   assert.match(registrySource, /appendDesktopLiveTrajectory\(conversationId, events\)/);

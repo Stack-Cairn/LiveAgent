@@ -12,7 +12,7 @@ type TauriRuntimeWindow = Window & {
 
 type AppWindow = ReturnType<typeof getCurrentWindow>;
 
-function isWindowsTauriRuntime() {
+export function isWindowsTauriRuntime() {
   if (typeof window === "undefined") {
     return false;
   }

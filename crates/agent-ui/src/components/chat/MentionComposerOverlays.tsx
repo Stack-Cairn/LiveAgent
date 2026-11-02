@@ -7,10 +7,11 @@ import {
   ChevronRight,
   MessageSquareText,
   Paperclip,
+  Terminal,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type RefObject, useEffect, useRef } from "react";
+import { Fragment, type RefObject, useEffect, useRef } from "react";
 import { Popover, PopoverContent } from "../ui/popover";
 import { PreviewCard, PreviewCardContent } from "../ui/preview-card";
 import {
@@ -119,7 +120,7 @@ export function Popup({
         }}
       >
         <div className="mb-0.5 shrink-0">
-          {trigger === "skill" || mode === "root" ? (
+          {(trigger !== "file" && trigger !== "command") || mode === "root" ? (
             <div
               className={cn(
                 "flex h-6 items-center gap-1.5 px-2",
@@ -127,7 +128,11 @@ export function Popup({
               )}
             >
               <span className="min-w-0 truncate">
-                {trigger === "skill" ? "Skills" : t("chat.composer.add")}
+                {trigger === "command"
+                  ? t("chat.commands.title")
+                  : trigger === "skill"
+                    ? t("chat.composer.skillsTitle")
+                    : t("chat.composer.add")}
               </span>
             </div>
           ) : (
@@ -150,7 +155,11 @@ export function Popup({
                   ? t("chat.composer.mentionGroupApps")
                   : mode === "files"
                     ? t("chat.composer.filesAndFolders")
-                    : t("chat.composer.conversations")}
+                    : mode === "commands"
+                      ? t("chat.commands.groupCommands")
+                      : mode === "skills"
+                        ? t("chat.composer.skillsTitle")
+                        : t("chat.composer.conversations")}
               </span>
             </button>
           )}
@@ -159,15 +168,17 @@ export function Popup({
           ref={listRef}
           role="listbox"
           aria-label={
-            trigger === "skill"
-              ? "Skills"
-              : mode === "root"
-                ? t("chat.composer.add")
-                : mode === "apps"
-                  ? t("chat.composer.mentionGroupApps")
-                  : mode === "files"
-                    ? t("chat.composer.filesAndFolders")
-                    : t("chat.composer.conversations")
+            trigger === "command"
+              ? t("chat.commands.title")
+              : trigger === "skill"
+                ? t("chat.composer.skillsTitle")
+                : mode === "root"
+                  ? t("chat.composer.add")
+                  : mode === "apps"
+                    ? t("chat.composer.mentionGroupApps")
+                    : mode === "files"
+                      ? t("chat.composer.filesAndFolders")
+                      : t("chat.composer.conversations")
           }
           className={cn(
             "relative flex min-h-0 max-h-60 flex-col gap-0.5 overflow-y-auto overscroll-contain",
@@ -185,6 +196,70 @@ export function Popup({
             <div className="flex h-8 items-center px-2 text-xs text-destructive">{error}</div>
           )}
           {suggestions.map((suggestion, i) => {
+            if (suggestion.type === "command") {
+              const { command } = suggestion;
+              const previous = suggestions[i - 1];
+              const showGroupHeader =
+                previous?.type !== "command" || previous.command.group !== command.group;
+              const CommandIcon = command.kind === "skill" ? Blend : Terminal;
+              return (
+                <Fragment key={`command:${command.kind}:${command.name}`}>
+                  {showGroupHeader ? (
+                    <div
+                      role="presentation"
+                      data-command-group={command.group}
+                      className="flex h-5 shrink-0 items-center px-2 pt-1 text-tiny text-muted-foreground/70"
+                    >
+                      {command.group === "commands"
+                        ? t("chat.commands.groupCommands")
+                        : command.group === "prompts"
+                          ? t("chat.commands.groupPrompts")
+                          : t("chat.composer.skillsTitle")}
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={i === highlightIndex}
+                    data-command-name={command.name}
+                    ref={i === highlightIndex ? hlRef : undefined}
+                    className={cn(
+                      "group flex h-8 shrink-0 cursor-pointer items-center gap-2",
+                      "rounded-md px-2 text-left text-xs leading-5 transition-colors",
+                      i === highlightIndex
+                        ? "bg-foreground/[0.07] text-foreground"
+                        : "text-foreground/85 dark:text-foreground/90",
+                    )}
+                    onMouseMove={() => {
+                      if (i === highlightIndex) return;
+                      skipScrollRef.current = true;
+                      onHighlight(i);
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onSelect(suggestion);
+                    }}
+                  >
+                    <span className="flex size-4 shrink-0 items-center justify-center text-foreground/85">
+                      <CommandIcon className="size-4" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="shrink-0 truncate font-normal text-foreground/95">
+                        {command.kind === "skill" ? command.name : `/${command.name}`}
+                        {command.kind !== "skill" && command.argumentHint ? (
+                          <span className="text-muted-foreground/75"> {command.argumentHint}</span>
+                        ) : null}
+                      </span>
+                      {command.description ? (
+                        <span className="min-w-0 flex-1 truncate text-tiny text-muted-foreground/75">
+                          {command.description}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                </Fragment>
+              );
+            }
             const isCategory = suggestion.type === "category";
             const isSkill = suggestion.type === "skill";
             const conversation =
@@ -207,7 +282,11 @@ export function Popup({
                   ? t("chat.composer.filesAndFolders")
                   : category === "conversations"
                     ? t("chat.composer.conversations")
-                    : (conversation?.title ?? skill?.name ?? fileName));
+                    : category === "commands"
+                      ? t("chat.commands.groupCommands")
+                      : category === "skills"
+                        ? t("chat.composer.skillsTitle")
+                        : (conversation?.title ?? skill?.name ?? fileName));
             const updatedAtLabel = conversationUpdatedAtLabel(conversation?.updatedAt, locale);
             const subtitle =
               category === "apps"
@@ -216,9 +295,13 @@ export function Popup({
                   ? t("chat.composer.filesAndFoldersHint")
                   : category === "conversations"
                     ? t("chat.composer.conversationsHint")
-                    : conversation
-                      ? conversation.searchPreview || (conversation.cwd ?? "")
-                      : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
+                    : category === "commands"
+                      ? t("chat.commands.categoryCommandsHint")
+                      : category === "skills"
+                        ? t("chat.commands.categorySkillsHint")
+                        : conversation
+                          ? conversation.searchPreview || (conversation.cwd ?? "")
+                          : (app?.bundleId ?? skill?.description ?? (dirPath ? `${dirPath}/` : ""));
             const RowIcon =
               category === "apps"
                 ? AppWindow
@@ -226,7 +309,11 @@ export function Popup({
                   ? Paperclip
                   : category === "conversations" || conversation
                     ? MessageSquareText
-                    : Icon;
+                    : category === "commands"
+                      ? Terminal
+                      : category === "skills"
+                        ? Blend
+                        : Icon;
             return (
               <button
                 type="button"

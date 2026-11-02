@@ -12,7 +12,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const skills = loader.loadModule("@liveagent/ui/lib/skills/index.ts");
-const { skillMentionInjection } = loader.loadModule("src/lib/chat/skills/mentionInjection.ts");
+const { skillMentionInjection, attachSkillMentionUpdates } = loader.loadModule("src/lib/chat/skills/mentionInjection.ts");
 const { capturePrefixShape, comparePrefixShape } = loader.loadModule(
   "src/lib/debug/prefixCacheShape.ts",
 );
@@ -22,7 +22,6 @@ const { buildPreparedContext } = loader.loadModule(
 const { normalizeConversationState } = loader.loadModule(
   "src/lib/chat/conversation/conversationState.ts",
 );
-const { attachMemoryTurnUpdates } = loader.loadModule("src/lib/memory/prompts/turnInjection.ts");
 
 const BASE_SYSTEM_PROMPT = "base system prompt";
 const TOOLS = [{ name: "SkillsManager", description: "skills", parameters: { type: "object" } }];
@@ -184,9 +183,9 @@ test("没有显式提及时不产生任何额外内容：不建状态、数组�
 
   // 没挂东西时必须原样返回同一个数组引用：调用方的引用相等短路依赖这一点。
   const raw = [userTurn(1, "plain"), assistantTurn(1)];
-  assert.equal(attachMemoryTurnUpdates(raw, undefined), raw);
-  assert.equal(attachMemoryTurnUpdates(raw, new Map()), raw);
-  assert.equal(attachMemoryTurnUpdates(raw, new Map([["missing", "BLOCK"]])), raw);
+  assert.equal(attachSkillMentionUpdates(raw, undefined), raw);
+  assert.equal(attachSkillMentionUpdates(raw, new Map()), raw);
+  assert.equal(attachSkillMentionUpdates(raw, new Map([["missing", "BLOCK"]])), raw);
 });
 
 test("缺少会话 id 或消息 id 时丢掉这次提及，不挂到对不上的消息上", (t) => {

@@ -1,10 +1,16 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { mentionChipClassName } from "@liveagent/ui/components/chat/mentionChipStyles";
-import { AppWindow, MessageSquareText, SkillIcon } from "@liveagent/ui/components/IconSet";
+import {
+  AppWindow,
+  MessageSquareText,
+  SkillIcon,
+  Terminal,
+} from "@liveagent/ui/components/IconSet";
 import { floatingSurfaceClassName } from "@liveagent/ui/components/ui/menu-surface";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useAppMentionIcon } from "@liveagent/ui/lib/chat/appMentionIcons";
+import { COMPOSER_ACTION_COMMAND_NAMES } from "@liveagent/ui/lib/chat/composerCommands";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type CodeMentionReference,
@@ -84,6 +90,7 @@ export type UserMessageSegment =
   | { type: "text"; value: string }
   | { type: "mention"; reference: FileMentionReference }
   | { type: "skill"; name: string }
+  | { type: "command"; name: string }
   | { type: "app"; app: AppDisplayReference }
   | { type: "commit"; commit: CommitDisplayReference }
   | { type: "gitFile"; file: GitFileDisplayReference }
@@ -839,6 +846,7 @@ function userMessageSegmentKey(part: UserMessageSegment, index: number) {
     return `mention:${index}:${part.reference.kind}:${part.reference.path}`;
   }
   if (part.type === "skill") return `skill:${index}:${part.name}`;
+  if (part.type === "command") return `command:${index}:${part.name}`;
   if (part.type === "app") {
     return `app:${index}:${part.app.bundleId ?? part.app.path ?? part.app.name}`;
   }
@@ -884,6 +892,49 @@ function GitFileMentionChip({ file }: { file: GitFileDisplayReference }) {
       <Icon className="size-3 shrink-0 self-center" />
       <span>{fileName}</span>
       <span className="max-w-32 truncate text-tiny opacity-70">@{refLabel}</span>
+    </span>
+  );
+}
+
+/**
+ * 用户消息开头的输入框动作指令（/goal、/loop、/plan 等）。只认消息开头，和发送时
+ * 的识别一致；句中的 /name 仍按 Skill 引用处理。
+ */
+function leadingCommandName(text: string): string | null {
+  const match = /^\/([A-Za-z0-9_-]+)(?=\s|$)/.exec(text);
+  if (!match) return null;
+  const name = match[1].toLowerCase();
+  return COMPOSER_ACTION_COMMAND_NAMES.includes(name) ? name : null;
+}
+
+/** 把消息开头的动作指令段从 Skill 标签（或纯文本）改成指令标签。 */
+function withLeadingCommand(parts: UserMessageSegment[]): UserMessageSegment[] {
+  const first = parts[0];
+  if (first?.type === "skill") {
+    const name = leadingCommandName(`/${first.name}`);
+    return name ? [{ type: "command", name }, ...parts.slice(1)] : parts;
+  }
+  if (first?.type === "text") {
+    const name = leadingCommandName(first.value);
+    if (!name) return parts;
+    const rest = first.value.slice(name.length + 1);
+    return [
+      { type: "command", name },
+      ...(rest ? [{ type: "text" as const, value: rest }] : []),
+      ...parts.slice(1),
+    ];
+  }
+  return parts;
+}
+
+function CommandChip({ name }: { name: string }) {
+  const { t } = useLocale();
+  return (
+    <span
+      title={`${t("chat.mention.command")}: /${name}`}
+      className={mentionChipClassName("command")}
+    >
+      <Terminal className="size-3 shrink-0 self-center" />/{name}
     </span>
   );
 }
@@ -1056,13 +1107,17 @@ export const UserMessageContent = memo(function UserMessageContent({
 }) {
   const normalizedText = useMemo(() => normalizeLogicalLineEndings(text), [text]);
   const parts = useMemo(
-    () => tokenizeUserMessage(normalizedText, pastedTextFiles, { legacyInlineFileMentions }),
+    () =>
+      withLeadingCommand(
+        tokenizeUserMessage(normalizedText, pastedTextFiles, { legacyInlineFileMentions }),
+      ),
     [legacyInlineFileMentions, normalizedText, pastedTextFiles],
   );
   const hasChip = parts.some(
     (part) =>
       part.type === "mention" ||
       part.type === "skill" ||
+      part.type === "command" ||
       part.type === "app" ||
       part.type === "commit" ||
       part.type === "gitFile" ||
@@ -1071,7 +1126,7 @@ export const UserMessageContent = memo(function UserMessageContent({
       part.type === "pastedText",
   );
   const trailingNewlineAnchor = normalizedText.endsWith("\n") ? (
-    <span aria-hidden="true" className="before:content-['\\200b']" />
+    <span aria-hidden="true" className={String.raw`before:content-['\200b']`} />
   ) : null;
   if (!hasChip) {
     return (
@@ -1088,6 +1143,9 @@ export const UserMessageContent = memo(function UserMessageContent({
         const key = userMessageSegmentKey(part, idx);
         if (part.type === "mention") {
           return <MentionChip key={key} reference={part.reference} />;
+        }
+        if (part.type === "command") {
+          return <CommandChip key={key} name={part.name} />;
         }
         if (part.type === "skill") {
           return <SkillMentionChip key={key} name={part.name} />;

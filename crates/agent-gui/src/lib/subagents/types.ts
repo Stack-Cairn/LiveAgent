@@ -1,4 +1,4 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 
 export const AGENT_TOOL_NAME = "Agent";
 export const SEND_MESSAGE_TOOL_NAME = "SendMessage";

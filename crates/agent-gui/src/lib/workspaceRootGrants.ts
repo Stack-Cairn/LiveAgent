@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { WorkspaceProject } from "./settings";
 
 export type WorkspaceRootAccess = "read" | "write";

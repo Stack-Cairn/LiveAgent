@@ -81,7 +81,7 @@ export function AskUserQuestionCard({
   /** 已落定的应答（工具结果）；提供后卡片只读展示选择结果。 */
   answers?: AskUserQuestionAnswer[];
   cancelled?: boolean;
-  /** 应答窗口超时、按推荐项自动落定。 */
+  /** 应答窗口已超时；旧版结果可能仍包含自动选择的答案。 */
   timedOut?: boolean;
   /** 工具执行中且当前端可应答时为 true。 */
   interactive: boolean;
@@ -112,8 +112,9 @@ export function AskUserQuestionCard({
   }, [answers]);
 
   const isSettled = (answers?.length ?? 0) > 0;
-  const selections = isSettled ? settledSelections : draftSelections;
-  const countdownActive = interactive && !isSettled && !cancelled;
+  const showFinal = isSettled || cancelled || timedOut;
+  const selections = showFinal ? settledSelections : draftSelections;
+  const countdownActive = interactive && !isSettled && !cancelled && !timedOut;
   const remainingMs = useAnswerCountdown(countdownActive, deadlineAt);
   const countdownExpired = countdownActive && remainingMs <= 0;
   const canInteract = countdownActive && remainingMs > 0 && !submitting;
@@ -121,7 +122,7 @@ export function AskUserQuestionCard({
 
   // 该题是否已作答：普通选项已选，或“其他”选中且文本非空。
   const isQuestionAnswered = (questionId: string) => {
-    if (isSettled) return Boolean(settledSelections[questionId]);
+    if (showFinal) return Boolean(settledSelections[questionId]);
     if (customSelected[questionId]) return Boolean(customTexts[questionId]?.trim());
     return Boolean(draftSelections[questionId]);
   };
@@ -212,10 +213,10 @@ export function AskUserQuestionCard({
             {questions.map((question, questionIndex) => {
               const active = questionIndex === safeActiveIndex;
               if (!active) return null;
-              const questionCustomSelected = isSettled
+              const questionCustomSelected = showFinal
                 ? Boolean(settledCustom[question.id])
                 : Boolean(customSelected[question.id]);
-              const questionCustomText = isSettled
+              const questionCustomText = showFinal
                 ? (settledSelections[question.id] ?? "")
                 : (customTexts[question.id] ?? "");
               return (
@@ -306,7 +307,7 @@ export function AskUserQuestionCard({
                         占据标签位置。切换到本项只由「真正输入」或点单选圆触发，
                         不能用 onFocus：输入框常驻且排在选项之后，键盘 Tab 路过
                         它就会清掉已选选项，使该题变回未作答、提交按钮禁用。 */}
-                    {interactive && !isSettled && !cancelled ? (
+                    {interactive && !showFinal ? (
                       <div
                         className={cn(
                           "group/option flex w-full items-center gap-2 rounded-lg p-2",
@@ -432,7 +433,7 @@ export function AskUserQuestionCard({
                 </button>
               </>
             ) : null}
-            {interactive && !isSettled && !cancelled ? (
+            {interactive && !showFinal ? (
               <span role="timer" className="truncate text-xs tabular-nums text-muted-foreground/60">
                 {questions.length > 1 ? "· " : null}
                 {formatCountdown(remainingMs)} {t("chat.askUser.timeoutHint")}
@@ -444,8 +445,15 @@ export function AskUserQuestionCard({
             <span className="text-right text-xs leading-1p35 text-muted-foreground/70">
               {t("chat.askUser.cancelled")}
             </span>
+          ) : timedOut && !isSettled ? (
+            // K-brain no longer picks an option on timeout, so a timed-out card can carry no
+            // answers; it is finished all the same and must say nothing was chosen.
+            <span className="text-right text-xs leading-1p35 text-amber-600 dark:text-amber-400">
+              {t("chat.askUser.timedOutNoSelection")}
+            </span>
           ) : isSettled ? (
             timedOut ? (
+              // Older backends and the local tool still auto-select on timeout.
               <span className="text-right text-xs leading-1p35 text-amber-600 dark:text-amber-400">
                 {t("chat.askUser.timedOut")}
               </span>

@@ -54,7 +54,7 @@ jobs:
             target: x86_64-apple-darwin
             suffix: x64
           - name: Apple Silicon
-            runner: macos-14
+            runner: macos-15
             target: aarch64-apple-darwin
             suffix: aarch64
     steps:
@@ -85,9 +85,20 @@ jobs:
           workspaces: crates/agent-gui/src-tauri
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile --filter liveagent...
+        run: pnpm install --frozen-lockfile --filter liveagent... --filter @liveagent/gateway-webui...
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: crates/agent-gateway/go.mod
+          cache-dependency-path: crates/agent-gateway/go.sum
+
+      - name: Prepare locked K-brain external binaries
+        env:
+          TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}
+        run: pnpm --dir crates/agent-gui prepare:kbrain:release
 
       - name: Import Apple signing certificate
+        if: env.LIVEAGENT_IS_PRERELEASE != 'true'
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -109,6 +120,7 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
       - name: Store notarization profile
+        if: env.LIVEAGENT_IS_PRERELEASE != 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -133,7 +145,11 @@ jobs:
             "dmgbuild==1.6.5"
           echo "$RUNNER_TEMP/dmgbuild-venv/bin" >> "$GITHUB_PATH"
 
+      - name: Verify staged K-brain binaries and Tauri packaging contract
+        run: node scripts/release/verify-kbrain-packaging.mjs --target "${{ matrix.target }}" --binary-dir crates/agent-gui/src-tauri/binaries
+
       - name: Build signed and notarized DMG
+        if: env.LIVEAGENT_IS_PRERELEASE != 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           DESKTOP_MACOS_TARGET: ${{ matrix.target }}
@@ -143,18 +159,32 @@ jobs:
           LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
         run: make desktop-build-macos-release
 
+      - name: Build unsigned preview macOS app
+        if: env.LIVEAGENT_IS_PRERELEASE == 'true'
+        working-directory: crates/agent-gui
+        run: pnpm tauri build --config src-tauri/tauri.macos.release.conf.json --config src-tauri/tauri.macos.preview.conf.json --config "$LIVEAGENT_TAURI_VERSION_CONFIG" --target "${{ matrix.target }}" --bundles app
+
+      - name: Verify macOS package contains backend and computer helper
+        run: node scripts/release/verify-kbrain-packaging.mjs --target "${{ matrix.target }}" --binary-dir crates/agent-gui/src-tauri/binaries --bundle-dir "target/${{ matrix.target }}/release/bundle/macos/LiveAgent.app" --no-receipt-hash
+
       - name: Stage macOS artifact
         run: |
           set -euo pipefail
           mkdir -p dist
-          dmg_path="$(find "target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'LiveAgent_*.dmg' -print -quit)"
-          updater_path="$(find "target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
-          test -n "$dmg_path"
-          test -n "$updater_path"
-          test -f "$updater_path.sig"
-          cp "$dmg_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.dmg"
-          cp "$updater_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz"
-          cp "$updater_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz.sig"
+          if [ "$LIVEAGENT_IS_PRERELEASE" = true ]; then
+            app_path="target/${{ matrix.target }}/release/bundle/macos/LiveAgent.app"
+            test -d "$app_path"
+            ditto -c -k --sequesterRsrc --keepParent "$app_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.zip"
+          else
+            dmg_path="$(find "target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'LiveAgent_*.dmg' -print -quit)"
+            updater_path="$(find "target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
+            test -n "$dmg_path"
+            test -n "$updater_path"
+            test -f "$updater_path.sig"
+            cp "$dmg_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.dmg"
+            cp "$updater_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz"
+            cp "$updater_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz.sig"
+          fi
 
       - uses: actions/upload-artifact@v7
         with:
@@ -199,7 +229,20 @@ jobs:
           workspaces: crates/agent-gui/src-tauri
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile --filter liveagent...
+        run: pnpm install --frozen-lockfile --filter liveagent... --filter @liveagent/gateway-webui...
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: crates/agent-gateway/go.mod
+          cache-dependency-path: crates/agent-gateway/go.sum
+
+      - name: Prepare locked K-brain external binaries
+        env:
+          TAURI_ENV_TARGET_TRIPLE: x86_64-pc-windows-msvc
+        run: pnpm --dir crates/agent-gui prepare:kbrain:release
+
+      - name: Verify staged K-brain binaries and Tauri packaging contract
+        run: node scripts/release/verify-kbrain-packaging.mjs --target x86_64-pc-windows-msvc --binary-dir crates/agent-gui/src-tauri/binaries
 
       - name: Build Windows bundles
         working-directory: crates/agent-gui
@@ -218,10 +261,12 @@ jobs:
           mkdir -p dist
           msi_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.msi' -path '*bundle*' -print -quit 2>/dev/null || true)"
           exe_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.exe' -path '*bundle*' -print -quit 2>/dev/null || true)"
-          portable_exe_path="$(find target crates/agent-gui/src-tauri/target -type f -name 'liveagent.exe' -path '*/release/*' ! -path '*bundle*' -print -quit 2>/dev/null || true)"
+          portable_exe_path="target/x86_64-pc-windows-msvc/release/liveagent.exe"
+          gateway_exe_path="crates/agent-gui/src-tauri/binaries/liveagent-gateway-x86_64-pc-windows-msvc.exe"
           test -n "$msi_path"
           test -n "$exe_path"
           test -n "$portable_exe_path"
+          test -s "$gateway_exe_path"
           test -f "$msi_path.sig"
           test -f "$exe_path.sig"
           cp "$msi_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi"
@@ -230,8 +275,19 @@ jobs:
           cp "$exe_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe.sig"
           mkdir -p dist/portable/LiveAgent
           cp "$portable_exe_path" dist/portable/LiveAgent/LiveAgent.exe
+          binary_dir="crates/agent-gui/src-tauri/binaries"
+          backend_path="$binary_dir/k-brain-x86_64-pc-windows-msvc.exe"
+          computer_path="$binary_dir/k-brain-computer-x86_64-pc-windows-msvc.exe"
+          test -f "$backend_path"
+          test -f "$computer_path"
+          cp "$backend_path" dist/portable/LiveAgent/k-brain.exe
+          cp "$computer_path" dist/portable/LiveAgent/k-brain-computer.exe
+          cp "$gateway_exe_path" dist/portable/LiveAgent/liveagent-gateway.exe
           portable_zip="dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64-portable.zip"
           powershell -NoProfile -Command "Compress-Archive -Path 'dist/portable/LiveAgent/*' -DestinationPath '$portable_zip' -Force"
+          rm -rf "$RUNNER_TEMP/liveagent-portable"
+          powershell -NoProfile -Command "Expand-Archive -Path '$portable_zip' -DestinationPath '$RUNNER_TEMP/liveagent-portable' -Force"
+          node scripts/release/verify-kbrain-packaging.mjs --target x86_64-pc-windows-msvc --binary-dir crates/agent-gui/src-tauri/binaries --bundle-dir "$RUNNER_TEMP/liveagent-portable" --layout portable
           rm -rf dist/portable
           test "$(find dist -type f | wc -l)" -gt 0
 
@@ -284,6 +340,7 @@ jobs:
             libxdo-dev \
             patchelf \
             rpm \
+            squashfs-tools \
             unzip \
             wget
 
@@ -307,7 +364,20 @@ jobs:
           workspaces: crates/agent-gui/src-tauri
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile --filter liveagent...
+        run: pnpm install --frozen-lockfile --filter liveagent... --filter @liveagent/gateway-webui...
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: crates/agent-gateway/go.mod
+          cache-dependency-path: crates/agent-gateway/go.sum
+
+      - name: Prepare locked K-brain external binaries
+        env:
+          TAURI_ENV_TARGET_TRIPLE: x86_64-unknown-linux-gnu
+        run: pnpm --dir crates/agent-gui prepare:kbrain:release
+
+      - name: Verify staged K-brain binaries and Tauri packaging contract
+        run: node scripts/release/verify-kbrain-packaging.mjs --target x86_64-unknown-linux-gnu --binary-dir crates/agent-gui/src-tauri/binaries
 
       - name: Build Linux bundles
         working-directory: crates/agent-gui
@@ -322,6 +392,7 @@ jobs:
         run: bash scripts/release/verify-linux-glibc-baseline.sh
 
       - name: Strip bundled Wayland libraries and re-sign AppImage
+        if: env.LIVEAGENT_IS_PRERELEASE != 'true'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -334,6 +405,19 @@ jobs:
           test ! -e "$appimage_path.sig"
           pnpm --dir crates/agent-gui tauri signer sign "$appimage_path"
           test -s "$appimage_path.sig"
+
+      - name: Verify Linux AppImage contains backend and computer helper
+        run: |
+          set -euo pipefail
+          appimage_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          test -n "$appimage_path"
+          rm -rf "$RUNNER_TEMP/liveagent-appimage"
+          mkdir -p "$RUNNER_TEMP/liveagent-appimage"
+          (
+            cd "$RUNNER_TEMP/liveagent-appimage"
+            "$GITHUB_WORKSPACE/$appimage_path" --appimage-extract >/dev/null
+          )
+          node scripts/release/verify-kbrain-packaging.mjs --target x86_64-unknown-linux-gnu --binary-dir crates/agent-gui/src-tauri/binaries --bundle-dir "$RUNNER_TEMP/liveagent-appimage/squashfs-root" --no-receipt-hash
 
       - name: Stage Linux artifacts
         run: |
@@ -380,6 +464,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
+          pattern: liveagent-*
           path: release-artifacts
           merge-multiple: true
 
@@ -389,8 +474,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.release-metadata.outputs.release_tag }}
           PACKYCODE_API_KEY: ${{ secrets.PACKYCODE_API_KEY }}
-          AI_RELEASE_NOTES_API_KEY: ${{ secrets.AI_RELEASE_NOTES_API_KEY }}
-          AI_RELEASE_NOTES_BASE_URL: ${{ vars.AI_RELEASE_NOTES_BASE_URL }}
+          KBRAIN_TOKEN: ${{ secrets.KBRAIN_TOKEN }}
+          KBRAIN_URL: ${{ vars.KBRAIN_URL }}
+          AI_RELEASE_NOTES_PROVIDER: ${{ vars.AI_RELEASE_NOTES_PROVIDER }}
           AI_RELEASE_NOTES_MODEL: ${{ vars.AI_RELEASE_NOTES_MODEL }}
         run: |
           set -euo pipefail
@@ -445,5 +531,9 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" "${public_assets[@]}" --clobber
 
+          # 预发布也必须上传 latest.json：客户端更新检测按 feed 逐个探测
+          # releases/download/<tag>/latest.json，缺清单的 release 会被静默跳过，
+          # 导致预发布通道完全失效。macOS preview 包无签名更新产物，清单里
+          # 不含 darwin 平台键即可，客户端会降级为手动下载提示。
           node scripts/release/create-tauri-updater-manifest.mjs release-artifacts release-artifacts/latest.json "$notes_path"
           gh release upload "$RELEASE_TAG" release-artifacts/latest.json --clobber

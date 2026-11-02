@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
+import type { CustomHeader } from "@liveagent/ui/lib/providers/customHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
 import type { CodexRequestFormat, ProviderId } from "../../lib/settings";
@@ -42,6 +43,7 @@ export type CherryProviderImportItem = {
   reason: string;
   warning: string;
   excludedModelCount: number;
+  customHeaders?: CustomHeader[];
 };
 
 export type CherryProvidersResponse = {

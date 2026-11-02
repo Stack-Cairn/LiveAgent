@@ -24,11 +24,13 @@ test("WebUI transcript renders reasoning as expandable disclosures", () => {
   assert.match(roundContentSource, /redactToolContent \? null : \(\s*<ThinkingDisclosure/);
 });
 
-test("the live reply carries one persistent sparkle beacon", () => {
+test("the live reply shows verified progress with a paused sparkle fallback", () => {
   assert.match(
     roundContentSource,
-    /\{running \? <LiveSparkle paused=\{attentionRequired\} \/> : null\}/,
+    /!attentionRequired && parseRunProgress\(normalizedToolStatus\)/,
   );
+  assert.match(roundContentSource, /<LiveAssistantStatus status=\{normalizedToolStatus\} \/>/);
+  assert.match(roundContentSource, /<LiveSparkle paused=\{attentionRequired\} \/>/);
   assert.match(sparkleSource, /data-live-sparkle/);
   // The cluster twinkles via SMIL animations baked into the SVG itself.
   assert.match(sparkleSource, /<animate/);

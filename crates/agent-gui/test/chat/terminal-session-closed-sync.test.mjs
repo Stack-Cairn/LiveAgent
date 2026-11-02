@@ -241,7 +241,7 @@ test("dock close treats an already-gone session as closed instead of erroring fo
       ".catch(() => true)",
       "if (!alive) {",
       "finalizeClose();",
-      "setError(err instanceof Error ? err.message : String(err));",
+      'setError(hostAwareErrorMessage(err, t("projectTools.runtimeUnsupported")));',
     ],
     "ghost-tolerant close",
   );

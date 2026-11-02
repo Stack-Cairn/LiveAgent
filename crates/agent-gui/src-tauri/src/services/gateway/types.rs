@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayStatusSnapshot {
     pub online: bool,
@@ -84,6 +84,12 @@ pub struct GatewayChatRequestEvent {
     pub uploaded_files: Vec<GatewayUploadedFileEvent>,
     pub referenced_conversations: Vec<GatewayConversationReferenceEvent>,
     pub queue_policy: String,
+    /// WebUI 输入框“/”指令：goal 动作（set/resume）、目标正文，以及本条
+    /// message 是否为提示词指令（由 K-brain 展开，历史保留原文）。
+    pub goal_action: String,
+    pub goal_text: String,
+    pub prompt_command: bool,
+    pub plan_command: bool,
 }
 
 pub(crate) fn is_complete_user_chat_message_ref(ref_value: &proto::ChatMessageRef) -> bool {
@@ -158,7 +164,7 @@ pub struct GatewayChatClaimedRequest {
 pub const CHAT_HISTORY_SYNC_EVENT: &str = "chat-history:changed";
 pub const GATEWAY_SETTINGS_SYNC_EVENT: &str = "gateway:settings-sync";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayHistorySyncConversation {
     pub id: String,
@@ -182,4 +188,43 @@ pub struct GatewayHistorySyncEvent {
     pub kind: String,
     pub conversation_id: String,
     pub conversation: Option<GatewayHistorySyncConversation>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayHistorySyncWorkdir {
+    pub path: String,
+    pub conversation_count: i32,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayHistorySyncEventInput {
+    pub kind: String,
+    pub conversation_id: String,
+    pub conversation: Option<GatewayHistorySyncConversation>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayHistorySyncPublishInput {
+    pub kind: String,
+    pub source_id: String,
+    pub generation: String,
+    pub delivery_seq: u64,
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub conversations: Vec<GatewayHistorySyncConversation>,
+    #[serde(default)]
+    pub workdirs: Vec<GatewayHistorySyncWorkdir>,
+    pub event: Option<GatewayHistorySyncEventInput>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayHistorySyncPublishResult {
+    pub accepted: bool,
+    pub needs_resync: bool,
 }

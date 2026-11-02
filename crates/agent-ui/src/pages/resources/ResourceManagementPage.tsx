@@ -2,14 +2,22 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { HubHeader } from "@liveagent/ui/components/hub/HubChrome";
 import { useLocale } from "@liveagent/ui/i18n";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { ResourceHostCapabilities } from "../../lib/resourceHost";
 import { CronSection } from "../settings/CronSection";
+import type { KBrainSettingsAdapter } from "../settings/kbrainSettingsAdapter";
 import { MemoryPanel } from "../settings/memory/MemoryPanel";
 
 export function ResourceManagementPage({
   resource,
   settings,
   setSettings,
-}: SettingsSectionProps & { resource: "memory" | "cron" }) {
+  resourceHost,
+  kbrainSettings,
+}: SettingsSectionProps & {
+  resource: "memory" | "cron";
+  resourceHost?: ResourceHostCapabilities;
+  kbrainSettings?: KBrainSettingsAdapter;
+}) {
   const { t } = useLocale();
   const memory = resource === "memory";
   return (
@@ -34,6 +42,8 @@ export function ResourceManagementPage({
               workdir={settings.system.workdir}
               settings={settings}
               setSettings={setSettings}
+              resourceHost={resourceHost}
+              kbrain={kbrainSettings}
             />
           ) : (
             <CronSection settings={settings} setSettings={setSettings} />

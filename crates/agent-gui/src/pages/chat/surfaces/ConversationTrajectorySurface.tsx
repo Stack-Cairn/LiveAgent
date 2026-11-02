@@ -7,6 +7,7 @@ import {
 import { useMemo, useSyncExternalStore } from "react";
 import type { RenderTimelineItem } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import { isKBrainBackendEnabled } from "../../../lib/host";
 import {
   desktopLiveTrajectoryEvents,
   desktopTrajectoryReloadVersion,
@@ -22,6 +23,12 @@ export function ConversationTrajectorySurface(props: {
   hasMoreMessages: boolean;
   loadEarlierMessages: () => void | Promise<void>;
 }) {
+  return <DesktopConversationTrajectorySurface {...props} />;
+}
+
+function DesktopConversationTrajectorySurface(
+  props: Parameters<typeof ConversationTrajectorySurface>[0],
+) {
   const persistedMessages = useMemo(
     () => toTrajectoryMessages(props.transcriptItems),
     [props.transcriptItems],
@@ -61,7 +68,7 @@ export function ConversationTrajectorySurface(props: {
       hasMoreMessages={props.hasMoreMessages}
       loadEarlierMessages={props.loadEarlierMessages}
       liveEvents={liveEvents}
-      liveOwnership="authoritative"
+      liveOwnership={isKBrainBackendEnabled() ? "observed" : "authoritative"}
       authoritativeRevision={authoritativeRevision}
     />
   );

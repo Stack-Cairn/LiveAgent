@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateToolArguments } from "@earendil-works/pi-ai";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+const validateToolArguments = (tool, toolCall) =>
+  createTsModuleLoader().validateToolArguments(tool, toolCall);
 
 const loader = createTsModuleLoader();
 const pathUtils = loader.loadModule("src/lib/tools/pathUtils.ts");

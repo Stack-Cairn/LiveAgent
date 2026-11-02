@@ -151,7 +151,7 @@ fn sanitize_conversation_id(id: &str) -> Option<String> {
 
 fn checkpoints_root() -> Result<PathBuf, String> {
     let home =
-        dirs::home_dir().ok_or_else(|| "Failed to locate the user home directory".to_string())?;
+        crate::runtime::data_home::home_dir().ok_or_else(|| "Failed to locate the user home directory".to_string())?;
     Ok(home.join(".liveagent").join("checkpoints"))
 }
 
@@ -790,7 +790,7 @@ fn canonical_authorized_roots(roots: &[String]) -> Vec<PathBuf> {
 /// 被 `git init` 过。无界地走上去会把整个主目录(乃至整块盘)变成可写的回退
 /// 目标,等于把授权根开成通配符,所以这两类候选一律不采信。
 fn enclosing_repo_root(start: &Path) -> Option<PathBuf> {
-    let home = dirs::home_dir().and_then(|h| fs::canonicalize(h).ok());
+    let home = crate::runtime::data_home::home_dir().and_then(|h| fs::canonicalize(h).ok());
     let mut cursor = Some(start);
     while let Some(dir) = cursor {
         // 没有 parent 说明已经到文件系统/盘符根,不能当仓库根。

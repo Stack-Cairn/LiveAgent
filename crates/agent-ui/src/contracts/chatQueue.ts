@@ -10,6 +10,8 @@ export type ChatQueueItemSummary = {
 export type ChatQueueSnapshot = {
   conversationId: string;
   revision: number;
+  /** Omitted by legacy executors without backend-owned pause/resume. */
+  paused?: boolean;
   items: ChatQueueItemSummary[];
 };
 

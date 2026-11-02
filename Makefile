@@ -35,7 +35,7 @@ DEV_SESSION_WORKBENCH ?= 1
 GATEWAY_DOCKER_IMAGE ?= liveagent-gateway:local
 RELEASE_TAG ?=
 
-.PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
+.PHONY: all dev build prepare-kbrain prepare-kbrain-release desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
 .PHONY: dev-gateway dev-webui ensure-webui-embed-stub dev-stack dev-stack-stop dev-stack-restart dev-stack-status dev-stack-logs
 .PHONY: proto proto-check webui gateway-build gateway-docker-build gateway-docker-run gateway-docker-smoke build-linux build-linux-amd build-linux-arm
 .PHONY: clean check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
@@ -44,20 +44,28 @@ RELEASE_TAG ?=
 all: build gateway-build
 
 ## Desktop app
-dev:
+prepare-kbrain:
+	pnpm --dir $(AGENT_GUI_DIR) prepare:kbrain
+
+prepare-kbrain-release:
+	pnpm --dir $(AGENT_GUI_DIR) prepare:kbrain:release
+
+dev: prepare-kbrain
 	VITE_LIVEAGENT_SESSION_WORKBENCH=$(DEV_SESSION_WORKBENCH) pnpm --dir $(AGENT_GUI_DIR) tauri dev
 
-build:
+build: prepare-kbrain
 	pnpm --dir $(AGENT_GUI_DIR) tauri build
 
-desktop-build-macos: check-rust-target-$(DESKTOP_MACOS_TARGET)
+desktop-build-macos: export TAURI_ENV_TARGET_TRIPLE=$(DESKTOP_MACOS_TARGET)
+desktop-build-macos: prepare-kbrain-release check-rust-target-$(DESKTOP_MACOS_TARGET)
 	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_MACOS_TAURI_CONFIG) --target $(DESKTOP_MACOS_TARGET)
 
 # tauri-bundler skips the Finder AppleScript that writes the DMG .DS_Store whenever
 # CI=true, so the bundler's own DMG is only used to locate the output path. The
 # release DMG is rebuilt from the signed .app with dmgbuild, which writes the Finder
 # layout (background, window size, icon positions) directly and deterministically.
-desktop-build-macos-release: check-rust-target-$(DESKTOP_MACOS_TARGET) check-macos-signing-identity check-macos-notary-profile
+desktop-build-macos-release: export TAURI_ENV_TARGET_TRIPLE=$(DESKTOP_MACOS_TARGET)
+desktop-build-macos-release: prepare-kbrain-release check-rust-target-$(DESKTOP_MACOS_TARGET) check-macos-signing-identity check-macos-notary-profile
 	env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_ISSUER -u APPLE_API_KEY -u APPLE_API_KEY_PATH APPLE_SIGNING_IDENTITY="$(APPLE_SIGNING_IDENTITY)" pnpm --dir $(AGENT_GUI_DIR) tauri build $(DESKTOP_RELEASE_TAURI_CONFIG_FLAGS) --target $(DESKTOP_MACOS_TARGET)
 	@set -e; \
 	app_path="target/$(DESKTOP_MACOS_TARGET)/release/bundle/macos/$(DESKTOP_MACOS_APP_NAME).app"; \
@@ -85,16 +93,20 @@ desktop-build-macos-release: check-rust-target-$(DESKTOP_MACOS_TARGET) check-mac
 	spctl --assess --type open --context context:primary-signature --verbose=4 "$$dmg_path"; \
 	echo "macOS release dmg is ready: $$dmg_path"
 
-desktop-build-macos-intel: check-rust-target-$(DESKTOP_MACOS_INTEL_TARGET)
+desktop-build-macos-intel: export TAURI_ENV_TARGET_TRIPLE=$(DESKTOP_MACOS_INTEL_TARGET)
+desktop-build-macos-intel: prepare-kbrain-release check-rust-target-$(DESKTOP_MACOS_INTEL_TARGET)
 	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_MACOS_TAURI_CONFIG) --target $(DESKTOP_MACOS_INTEL_TARGET)
 
-desktop-build-macos-m: check-rust-target-$(DESKTOP_MACOS_M_TARGET)
+desktop-build-macos-m: export TAURI_ENV_TARGET_TRIPLE=$(DESKTOP_MACOS_M_TARGET)
+desktop-build-macos-m: prepare-kbrain-release check-rust-target-$(DESKTOP_MACOS_M_TARGET)
 	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_MACOS_TAURI_CONFIG) --target $(DESKTOP_MACOS_M_TARGET)
 
-desktop-build-windows: check-rust-target-$(DESKTOP_WINDOWS_TARGET)
+desktop-build-windows: export TAURI_ENV_TARGET_TRIPLE=$(DESKTOP_WINDOWS_TARGET)
+desktop-build-windows: prepare-kbrain-release check-rust-target-$(DESKTOP_WINDOWS_TARGET)
 	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_WINDOWS_TAURI_CONFIG) --target $(DESKTOP_WINDOWS_TARGET)
 
-desktop-build-linux: check-rust-target-$(DESKTOP_LINUX_TARGET)
+desktop-build-linux: export TAURI_ENV_TARGET_TRIPLE=$(DESKTOP_LINUX_TARGET)
+desktop-build-linux: prepare-kbrain-release check-rust-target-$(DESKTOP_LINUX_TARGET)
 	pnpm --dir $(AGENT_GUI_DIR) tauri build --target $(DESKTOP_LINUX_TARGET) --bundles $(DESKTOP_LINUX_BUNDLES)
 
 github-release-main: check-github-release-tag
@@ -117,8 +129,9 @@ github-release-main: check-github-release-tag
 		echo "Release tag already exists on origin: $(RELEASE_TAG)"; \
 		exit 1; \
 	fi
-	pnpm install --frozen-lockfile --filter liveagent...
+	pnpm install --frozen-lockfile --filter liveagent... --filter @liveagent/gateway-webui...
 	pnpm --dir $(AGENT_GUI_DIR) test:release
+	node scripts/prepare-gateway.mjs
 	cargo check --manifest-path $(AGENT_GUI_DIR)/src-tauri/Cargo.toml --tests
 	node scripts/release/prepare-app-version-from-tag.mjs "$(RELEASE_TAG)" --json
 	git tag -a "$(RELEASE_TAG)" -m "LiveAgent $(RELEASE_TAG)"
@@ -276,7 +289,9 @@ desktop-verify-macos:
 
 help:
 	@printf "\n%s\n" "Desktop"
-	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境（Session Workbench 已默认启用）"
+	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境并准备 K-brain（Session Workbench 已默认启用）"
+	@printf "  %-34s %s\n" "make prepare-kbrain" "下载并校验锁定的 K-brain，或使用 LIVEAGENT_KBRAIN_BINARY 覆盖"
+	@printf "  %-34s %s\n" "make prepare-kbrain-release" "release 模式准备同一固定 CI K-brain artifact"
 	@printf "  %-34s %s\n" "make dev DEV_SESSION_WORKBENCH=0" "回退旧单会话布局启动 Tauri（逃生开关）"
 	@printf "  %-34s %s\n" "make dev-stack" "后台启动 Gateway、WebUI、桌面 LiveAgent 三端"
 	@printf "  %-34s %s\n" "make dev-stack-status" "检查三端与 MCP Bridge 状态"

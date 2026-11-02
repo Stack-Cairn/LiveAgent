@@ -6,7 +6,7 @@ use std::{
 
 use axum::{
     body::{to_bytes, Body},
-    extract::{OriginalUri, Path, Query, State},
+    extract::{OriginalUri, Query, State},
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::Response,
     routing::{any, get},
@@ -24,6 +24,9 @@ const ACCESS_CONTROL_REQUEST_METHOD: &str = "access-control-request-method";
 const ACCESS_CONTROL_PREFIX: &str = "access-control-";
 const CONTENT_LENGTH: &str = "content-length";
 const CONTENT_TYPE: &str = "content-type";
+const CACHE_CONTROL: &str = "cache-control";
+const PRAGMA: &str = "pragma";
+const EXPIRES: &str = "expires";
 const CONNECTION: &str = "connection";
 const HOST: &str = "host";
 const KEEP_ALIVE: &str = "keep-alive";
@@ -45,10 +48,8 @@ const UPSTREAM_HEADERS_MAX_BYTES: usize = 8 * 1024;
 const USE_SYSTEM_PROXY_HEADER: &str = "x-liveagent-use-system-proxy";
 const DEFAULT_ALLOW_HEADERS: &str = "authorization,content-type,x-api-key,x-goog-api-key,anthropic-version,x-liveagent-upstream-origin,x-liveagent-upstream-url,x-liveagent-upstream-headers,x-liveagent-proxy-token,x-liveagent-use-system-proxy";
 const ALLOW_METHODS_VALUE: &str = "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD";
-/// 本地反代自己写入的 Vary：CORS 预检相关三项，加上决定实际上游的 upstream-origin。
-/// 同类型供应商经反代的 URL 完全相同（/proxy/<type>/v1/models），上游只由
-/// x-liveagent-upstream-origin 区分；不把它写进 Vary，WebView 缓存会按 URL
-/// 把 A 家的响应当成 B 家的返回（#885）。
+// The upstream origin is carried in a request header because providers sharing
+// a proxy path can have different hosts. Keep it in the cache key.
 const VARY_VALUE: &str = "Origin, Access-Control-Request-Method, Access-Control-Request-Headers, x-liveagent-upstream-origin";
 const VARY: &str = "vary";
 const IMAGE_PROXY_MAX_BYTES: usize = 25 * 1024 * 1024;
@@ -67,13 +68,6 @@ pub struct ProxyServerInfo {
 pub struct ProxyServerState {
     info: ProxyServerInfo,
     client: reqwest::Client,
-}
-
-#[derive(Deserialize)]
-struct ProxyRoutePath {
-    provider: String,
-    #[serde(rename = "rest")]
-    _rest: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -101,18 +95,16 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
             base_url: format!("http://{addr}"),
             token: Uuid::new_v4().to_string(),
         },
-        // 未勾选 use-system-proxy 时的 LLM 上游直连 client，与 cached_client() 共用传输层默认值。
-        client: crate::services::system_proxy::with_transport_defaults(
-            reqwest::Client::builder().no_proxy(),
-        )
-        .build()
-        .map_err(|err| format!("创建本地代理 HTTP 客户端失败：{err}"))?,
+        client: reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .map_err(|err| format!("创建本地代理 HTTP 客户端失败：{err}"))?,
     });
 
     let app = Router::new()
         .route("/image-proxy", get(handle_image_proxy))
-        .route("/proxy/{provider}", any(handle_proxy))
-        .route("/proxy/{provider}/{*rest}", any(handle_proxy))
+        .route("/proxy/hub", any(handle_proxy))
+        .route("/proxy/hub/{*rest}", any(handle_proxy))
         .with_state(state.clone());
 
     tauri::async_runtime::spawn(async move {
@@ -331,12 +323,12 @@ fn resolve_image_proxy_mime(
 
 async fn handle_proxy(
     State(state): State<Arc<ProxyServerState>>,
-    Path(ProxyRoutePath { provider, .. }): Path<ProxyRoutePath>,
     method: Method,
     headers: HeaderMap,
     OriginalUri(original_uri): OriginalUri,
     body: Body,
 ) -> Response {
+    let provider = "hub";
     if method == Method::OPTIONS {
         return preflight_response(&headers);
     }
@@ -351,6 +343,14 @@ async fn handle_proxy(
         Ok(value) => value,
         Err(response) => return response,
     };
+
+    if !is_allowed_proxy_provider(&provider) {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "Provider model proxying is owned by K-brain",
+            &headers,
+        );
+    }
 
     let original_path_and_query = original_uri
         .path_and_query()
@@ -455,6 +455,10 @@ async fn handle_proxy(
     }
     apply_cors_headers(response.headers_mut(), &headers);
     response
+}
+
+fn is_allowed_proxy_provider(provider: &str) -> bool {
+    provider == "hub"
 }
 
 fn build_target_url(
@@ -614,11 +618,12 @@ fn apply_cors_headers(headers: &mut HeaderMap, request_headers: &HeaderMap) {
     headers.insert(HeaderName::from_static(VARY), vary);
 }
 
-/// 本地反代的 Vary 项在前，再并入响应里已有的 Vary（上游转发过来的），大小写
-/// 不敏感去重。上游声明的缓存维度（如 Accept-Encoding）原样保留，不能被反代吞掉；
-/// 上游给了 `*`（响应不可复用）就只留 `*`，那是更严格的语义。
 fn build_vary_value(headers: &HeaderMap) -> HeaderValue {
-    let mut items: Vec<&str> = VARY_VALUE.split(',').map(str::trim).collect();
+    let mut items: Vec<String> = VARY_VALUE
+        .split(',')
+        .map(|item| item.trim().to_ascii_lowercase())
+        .collect();
+    let mut upstream_values = Vec::new();
     for value in headers.get_all(VARY) {
         let Ok(value) = value.to_str() else {
             continue;
@@ -631,12 +636,15 @@ fn build_vary_value(headers: &HeaderMap) -> HeaderValue {
             if item == "*" {
                 return HeaderValue::from_static("*");
             }
-            if !items
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(item))
-            {
-                items.push(item);
-            }
+            upstream_values.push(item);
+        }
+    }
+    for item in upstream_values {
+        if !items
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(item))
+        {
+            items.push(item.to_ascii_lowercase());
         }
     }
     HeaderValue::from_str(&items.join(", "))
@@ -760,12 +768,14 @@ fn build_upstream_request_headers(headers: &HeaderMap) -> Result<HeaderMap, Stri
     Ok(upstream_headers)
 }
 
-/// 上游的 Vary 会被转发进来，再由 apply_cors_headers 与反代自己的 Vary 项合并。
 fn should_forward_response_header(name: &HeaderName) -> bool {
     let lowered = name.as_str();
     !matches!(
         lowered,
         CONTENT_LENGTH
+            | CACHE_CONTROL
+            | PRAGMA
+            | EXPIRES
             | CONNECTION
             | KEEP_ALIVE
             | PROXY_CONNECTION
@@ -781,6 +791,60 @@ fn should_forward_response_header(name: &HeaderName) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn does_not_forward_cache_headers_from_upstream() {
+        for name in [CACHE_CONTROL, PRAGMA, EXPIRES] {
+            assert!(!should_forward_response_header(&HeaderName::from_static(
+                name
+            )));
+        }
+        for name in [CONTENT_TYPE, VARY, "etag", "x-request-id"] {
+            assert!(should_forward_response_header(&HeaderName::from_static(
+                name
+            )));
+        }
+    }
+
+    #[test]
+    fn vary_merges_cors_upstream_origin_and_upstream_values() {
+        let mut headers = HeaderMap::new();
+        headers.append(
+            HeaderName::from_static(VARY),
+            HeaderValue::from_static("Accept-Encoding, origin"),
+        );
+        headers.append(
+            HeaderName::from_static(VARY),
+            HeaderValue::from_static("Authorization"),
+        );
+        apply_cors_headers(&mut headers, &HeaderMap::new());
+        assert_eq!(headers.get_all(VARY).iter().count(), 1);
+        assert_eq!(
+            header_str(&headers, VARY),
+            Some("origin, access-control-request-method, access-control-request-headers, x-liveagent-upstream-origin, accept-encoding, authorization")
+        );
+    }
+
+    #[test]
+    fn vary_includes_upstream_origin_without_upstream_vary() {
+        let mut headers = HeaderMap::new();
+        apply_cors_headers(&mut headers, &HeaderMap::new());
+        assert_eq!(
+            header_str(&headers, VARY),
+            Some("origin, access-control-request-method, access-control-request-headers, x-liveagent-upstream-origin")
+        );
+    }
+
+    #[test]
+    fn vary_star_is_preserved() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static(VARY),
+            HeaderValue::from_static("Accept-Encoding, *"),
+        );
+        apply_cors_headers(&mut headers, &HeaderMap::new());
+        assert_eq!(header_str(&headers, VARY), Some("*"));
+    }
 
     #[test]
     fn builds_target_url_for_openai_v1_responses() {
@@ -1093,94 +1157,6 @@ mod tests {
         // 超限
         let oversized = "A".repeat(UPSTREAM_HEADERS_MAX_BYTES + 4);
         assert!(decode_upstream_header_overrides(&oversized).is_err());
-    }
-
-    #[test]
-    fn vary_merges_cors_items_upstream_origin_and_upstream_values() {
-        // 模拟 handle_proxy：先按 should_forward_response_header 拷上游头，再写 CORS。
-        let mut upstream = HeaderMap::new();
-        upstream.append(
-            HeaderName::from_static(VARY),
-            HeaderValue::from_static("Accept-Encoding, origin"),
-        );
-        upstream.append(
-            HeaderName::from_static(VARY),
-            HeaderValue::from_static("Authorization"),
-        );
-        upstream.insert(
-            HeaderName::from_static("cache-control"),
-            HeaderValue::from_static("public, max-age=14400"),
-        );
-        let mut response_headers = HeaderMap::new();
-        for (name, value) in &upstream {
-            if should_forward_response_header(name) {
-                response_headers.append(name, value.clone());
-            }
-        }
-
-        apply_cors_headers(&mut response_headers, &HeaderMap::new());
-
-        let vary: Vec<&str> = response_headers
-            .get_all(VARY)
-            .iter()
-            .map(|value| value.to_str().expect("vary is ascii"))
-            .collect();
-        assert_eq!(
-            vary.len(),
-            1,
-            "vary must be collapsed into one header: {vary:?}"
-        );
-        let items = vary_items(vary[0]);
-        assert_eq!(
-            items,
-            vec![
-                "origin",
-                "access-control-request-method",
-                "access-control-request-headers",
-                UPSTREAM_ORIGIN_HEADER,
-                "accept-encoding",
-                "authorization",
-            ]
-        );
-    }
-
-    #[test]
-    fn vary_includes_upstream_origin_without_upstream_vary() {
-        let mut headers = HeaderMap::new();
-        apply_cors_headers(&mut headers, &HeaderMap::new());
-
-        let items = vary_items(header_str(&headers, VARY).expect("vary is set"));
-        for expected in [
-            "origin",
-            "access-control-request-method",
-            "access-control-request-headers",
-            UPSTREAM_ORIGIN_HEADER,
-        ] {
-            assert!(
-                items.contains(&expected.to_string()),
-                "missing {expected}: {items:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn vary_star_from_upstream_is_kept_as_is() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            HeaderName::from_static(VARY),
-            HeaderValue::from_static("Accept-Encoding, *"),
-        );
-        apply_cors_headers(&mut headers, &HeaderMap::new());
-
-        assert_eq!(header_str(&headers, VARY), Some("*"));
-    }
-
-    fn vary_items(value: &str) -> Vec<String> {
-        value
-            .split(',')
-            .map(|item| item.trim().to_ascii_lowercase())
-            .filter(|item| !item.is_empty())
-            .collect()
     }
 
     fn encoded_overrides(value: serde_json::Value) -> HeaderValue {

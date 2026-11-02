@@ -1,5 +1,5 @@
-import type { Context } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
+import type { Context } from "@liveagent/app/lib/agentTypes";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 
 import type { CodexRequestFormat, ExecutionMode, ProviderId, ReasoningLevel } from "../settings";
 import type { PrefixCacheDiagnostics } from "./prefixCacheShape";

@@ -149,6 +149,7 @@ export type FontScaleSettings = {
   sidebar: number;
   chat: number;
   rightDock: number;
+  settings: number;
 };
 
 export type ChatTranscriptSettings = {
@@ -250,21 +251,10 @@ export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
   };
 }
 
-/**
- * Cloudflare 5xx status codes that relays surface when their origin
- * errors. pi-ai's `isRetryableAssistantError` already retries 524; these are
- * the rest of Cloudflare's transient 5xx family (#608). Offered as toggleable
- * presets in the settings UI; the runtime retries any error message that
- * contains the code as a standalone number.
- */
+/** Cloudflare transient-error presets exposed by the retry settings UI. */
 export const RETRYABLE_PRESET_HTTP_STATUS_CODES = [520, 521, 522, 523, 525, 526, 527] as const;
 
-/**
- * User-defined retry-error classification, layered on top of pi-ai's
- * `isRetryableAssistantError`. Lets users decide which errors the stream-retry
- * loop should treat as transient (#608) — preset Cloudflare 5xx toggles plus
- * free-text substrings for relay/gateway wording pi-ai doesn't recognize.
- */
+/** User-configured status codes and text patterns for transient errors. */
 export type RetryErrorSettings = {
   /**
    * HTTP status codes (from `RETRYABLE_PRESET_HTTP_STATUS_CODES`) the user has
@@ -308,11 +298,21 @@ export type ToolPolicy = "allow" | "ask" | "deny";
 //   工作区+临时目录;offline 变体额外断网。Windows 免管理员双后端:sandbox=受限
 //   令牌(只围栏写,读放行);sandboxOffline=AppContainer(WFP 内核级全断网含
 //   loopback,默认拒读 ⇒ 系统目录/工作区可读、用户主目录等敏感目录读掩蔽)。
-export type CommandSafetyMode = "ask" | "auto" | "sandbox" | "sandboxOffline";
+export type CommandSafetyMode =
+  | "ask"
+  | "auto"
+  | "autoEdit"
+  | "always"
+  | "autoReview"
+  | "sandbox"
+  | "sandboxOffline";
 
 export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [
   "ask",
   "auto",
+  "autoEdit",
+  "always",
+  "autoReview",
   "sandbox",
   "sandboxOffline",
 ];
@@ -473,7 +473,23 @@ export type ProviderModelConfig = {
    * 读取前须经 normalizeInputModalities 归一化。
    */
   inputModalities?: ModelInputModalitiesOverride;
+  /**
+   * 生图开关的用户选择，原样写给 K-brain：缺失 = 自动识别，"enabled" = 是，
+   * "disabled" = 否；也保留 K-brain 认识的具体协议名。空串只出现在发给 K-brain
+   * 的请求里，表示清除选择。
+   */
+  imageAdapter?: ModelImageAdapter | "";
+  /** K-brain 回传的生效结果（只读）。旧版 K-brain 不回传，界面据此隐藏生图开关。 */
+  imageModel?: boolean;
 };
+
+export const MODEL_IMAGE_ADAPTERS = [
+  "enabled",
+  "disabled",
+  "openai-images",
+  "google-generate-content-image",
+] as const;
+export type ModelImageAdapter = (typeof MODEL_IMAGE_ADAPTERS)[number];
 
 export type ChatRuntimeControls = {
   thinkingEnabled: boolean;
@@ -684,6 +700,9 @@ export const CLOSE_WINDOW_BEHAVIOR_OPTIONS = [
 
 export type RemoteSettings = {
   enabled: boolean;
+  managedLocal: boolean;
+  localGatewayPort: number;
+  localGatewayToken: string;
   gatewayUrl: string;
   gatewayPort: number;
   token: string;

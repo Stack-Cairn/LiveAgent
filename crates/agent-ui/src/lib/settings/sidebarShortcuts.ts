@@ -4,6 +4,7 @@ export const SIDEBAR_SHORTCUTS = [
   { id: "mcp", labelKey: "settings.navMcp" },
   { id: "cron", labelKey: "settings.navCron" },
   { id: "planning", labelKey: "settings.navPlanning" },
+  { id: "image-studio", labelKey: "settings.navImageStudio" },
   { id: "memory", labelKey: "settings.navMemory" },
 ] as const;
 
@@ -17,6 +18,7 @@ export function normalizeSidebarShortcuts(input: unknown): SidebarShortcuts {
     mcp: value.mcp !== false,
     cron: value.cron !== false,
     planning: value.planning !== false,
+    "image-studio": value["image-studio"] !== false,
     memory: value.memory !== false,
   };
 }

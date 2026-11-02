@@ -421,12 +421,12 @@ fn sensitive_home_subdirs() -> [&'static str; 4] {
 }
 
 fn app_config_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(format!(".{}", env!("CARGO_PKG_NAME"))))
+    crate::runtime::data_home::home_dir().map(|home| home.join(format!(".{}", env!("CARGO_PKG_NAME"))))
 }
 
 fn sensitive_dirs() -> Vec<PathBuf> {
     let mut dirs_out = Vec::new();
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::runtime::data_home::home_dir() {
         for sub in sensitive_home_subdirs() {
             dirs_out.push(home.join(sub));
         }
@@ -556,7 +556,7 @@ pub(crate) fn temp_write_root_is_safe(path: &Path) -> bool {
             return false;
         }
     }
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::runtime::data_home::home_dir() {
         if path_encloses(&root, &canonical_or_self(&home)) {
             return false;
         }
@@ -1053,7 +1053,7 @@ mod tests {
     // P1#2:工作区若包含/等于敏感目录,写围栏 re-allow 会重新暴露之 → 拒绝。
     #[test]
     fn validate_workspace_rejects_ancestor_of_sensitive_dir() {
-        let Some(home) = dirs::home_dir() else {
+        let Some(home) = crate::runtime::data_home::home_dir() else {
             return;
         };
         // home 本身包含 ~/.ssh 等敏感目录。
@@ -1063,7 +1063,7 @@ mod tests {
     // P1#2:凭据目录内部的工作区一律拒绝。
     #[test]
     fn validate_workspace_rejects_inside_credential_dir() {
-        let Some(home) = dirs::home_dir() else {
+        let Some(home) = crate::runtime::data_home::home_dir() else {
             return;
         };
         let inside_ssh = home.join(".ssh").join("ws");
@@ -1428,7 +1428,7 @@ mod tests {
     #[test]
     fn temp_write_root_rejects_filesystem_root_and_home() {
         assert!(!temp_write_root_is_safe(Path::new("/")));
-        if let Some(home) = dirs::home_dir() {
+        if let Some(home) = crate::runtime::data_home::home_dir() {
             assert!(!temp_write_root_is_safe(&home));
         }
         assert!(temp_write_root_is_safe(Path::new("/tmp")));

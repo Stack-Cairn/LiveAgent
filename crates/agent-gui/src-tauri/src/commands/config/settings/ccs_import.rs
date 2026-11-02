@@ -1,3 +1,10 @@
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedProviderHeader {
+    pub key: String,
+    pub value: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CcsProviderImportItem {
@@ -11,6 +18,91 @@ pub struct CcsProviderImportItem {
     pub api_key: String,
     pub request_format: String,
     pub models: Vec<String>,
+    #[serde(default)]
+    pub custom_headers: Vec<ImportedProviderHeader>,
+}
+
+fn imported_headers_from_values(values: &[&Value]) -> Vec<ImportedProviderHeader> {
+    let mut headers = Vec::new();
+    for value in values {
+        append_imported_headers_from_tree(&mut headers, value);
+    }
+    headers
+}
+
+fn append_imported_headers_from_tree(
+    headers: &mut Vec<ImportedProviderHeader>,
+    value: &Value,
+) {
+    match value {
+        Value::Object(entries) => {
+            for (key, child) in entries {
+                if matches!(
+                    key.as_str(),
+                    "customHeaders" | "custom_headers" | "extraHeaders" | "extra_headers"
+                ) {
+                    append_imported_headers(headers, child);
+                }
+                append_imported_headers_from_tree(headers, child);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                append_imported_headers_from_tree(headers, item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn append_imported_headers(headers: &mut Vec<ImportedProviderHeader>, value: &Value) {
+    match value {
+        Value::Object(entries) => {
+            if let (Some(key), Some(header_value)) = (
+                entries.get("key").and_then(Value::as_str),
+                entries.get("value").and_then(Value::as_str),
+            ) {
+                push_imported_header(headers, key, header_value);
+                return;
+            }
+            for (key, header_value) in entries {
+                if let Some(header_value) = header_value.as_str() {
+                    push_imported_header(headers, key, header_value);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                if let Some(pair) = item.as_array() {
+                    if let (Some(key), Some(header_value)) = (
+                        pair.first().and_then(Value::as_str),
+                        pair.get(1).and_then(Value::as_str),
+                    ) {
+                        push_imported_header(headers, key, header_value);
+                    }
+                } else {
+                    append_imported_headers(headers, item);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn push_imported_header(headers: &mut Vec<ImportedProviderHeader>, key: &str, value: &str) {
+    let key = key.trim();
+    let value = value.trim();
+    if key.is_empty()
+        || value.contains(['\r', '\n'])
+        || key.contains(['\r', '\n'])
+        || headers.iter().any(|header| header.key.eq_ignore_ascii_case(key))
+    {
+        return;
+    }
+    headers.push(ImportedProviderHeader {
+        key: key.to_string(),
+        value: value.to_string(),
+    });
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -240,6 +332,7 @@ fn ccs_provider_from_value(
     };
     let base_url = ccs_extract_base_url(provider_type, config).unwrap_or_default();
     let api_key = ccs_extract_api_key(provider_type, config).unwrap_or_default();
+    let custom_headers = imported_headers_from_values(&[config, meta]);
 
     let mut models = ccs_extract_models(provider_type, config);
     if is_claude_desktop {
@@ -283,6 +376,7 @@ fn ccs_provider_from_value(
             "openai-responses".to_string()
         },
         models,
+        custom_headers,
     })
 }
 

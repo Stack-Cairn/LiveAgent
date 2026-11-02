@@ -1,4 +1,4 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { Message } from "@liveagent/app/lib/agentTypes";
 
 /**
  * 机器维护的“已触碰文件”账本。压缩会把旧消息折叠成 LLM 摘要，摘要里的
@@ -133,7 +133,7 @@ function normalizeFileOps(ops: FileOp[]): FileLedger {
 }
 
 // 按发生顺序收集消息里的 fs 文件操作。只看 assistant 的 toolCall block（不看 toolResult
-// 正文——仅读其 isError 以剔除失败调用）。
+// 正文——仅读其 isError 以剔除失败调用；与 prune 改写 toolResult 正文正交）。
 function collectFileOpsFromMessages(messages: Message[]): FileOp[] {
   const failedCallIds = new Set<string>();
   for (const message of messages) {

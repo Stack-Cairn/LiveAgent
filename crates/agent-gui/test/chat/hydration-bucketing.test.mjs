@@ -174,7 +174,7 @@ test("restored panes hydrate automatically without taking global focus", () => {
   assert.match(hostSource, /void controller\.hydrate\(\)\.catch/);
   assert.match(
     hostSource,
-    /snapshot\.runtime \|\| snapshot\.lifecycle\.hydrating \|\| snapshot\.lifecycle\.hydrationFailed/,
+    /snapshot\.runtime\s*\|\|\s*snapshot\.lifecycle\.hydrating\s*\|\|\s*snapshot\.lifecycle\.hydrationFailed/,
   );
   assert.match(historySource, /function hydrateInBackground\(conversationId: string\)/);
   const backgroundBlock = historySource.slice(

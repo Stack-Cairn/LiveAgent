@@ -1,12 +1,13 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { normalizeConversationMentionReferences } from "@liveagent/ui/lib/chat/mentionReferences";
+import { parseToolApprovalRequestJson } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import {
   type MutableRefObject,
   useCallback,
@@ -16,6 +17,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import { isKBrainBackendEnabled, isTauriHost } from "../../../lib/host";
 import {
   type AppSettings,
   type ChatRuntimeControls,
@@ -35,6 +37,7 @@ import {
 import type { ActiveGatewayBridgeRequest, SendChatAction } from "../gateway/gatewayBridgeTypes";
 import {
   type GatewayChatClaimedRequest,
+  gatewayComposerTurnCommand,
   normalizeGatewayCommandSafetyMode,
   normalizeGatewayExecutionMode,
   normalizeGatewayWorkdir,
@@ -50,6 +53,7 @@ import {
   type ChatQueueItemDetail,
   type ChatQueueSnapshot,
   createQueuedChatTurn,
+  gatewayRequestAfterQueuedEdit,
   getQueuedConversationIds,
   insertQueuedChatTurnAtSlot,
   moveQueuedChatTurn,
@@ -61,6 +65,10 @@ import {
   resolveQueuedChatTurnSlotIndex,
   takeNextQueuedChatTurn,
 } from "./chatTurnQueue";
+
+// 比发送侧等待后端终止事件的上限（10 秒）稍长。
+const PREVIOUS_RUN_SETTLE_WAIT_MS = 15_000;
+const PREVIOUS_RUN_SETTLE_POLL_MS = 100;
 
 type UseChatTurnQueueParams = {
   settings: AppSettings;
@@ -81,6 +89,8 @@ type UseChatTurnQueueParams = {
   getConversationStopRequestVersion: (conversationId: string) => number;
   isConversationStopRequested: (conversationId: string) => boolean;
   consumeConversationStop: (conversationId: string, expectedVersion?: number) => boolean;
+  /** 这一轮是否还在收尾：强制停止释放界面后，被停的一轮仍持有停止处理器直到结束。 */
+  hasConversationStopHandler: (conversationId: string) => boolean;
   requestActiveConversationStop: (conversationId: string, options: { force: boolean }) => boolean;
   getConversationLiveTranscriptStore: (conversationId: string) => LiveTranscriptStore;
   captureAbortSnapshot: (store: LiveTranscriptStore) => void;
@@ -124,6 +134,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     getConversationStopRequestVersion,
     isConversationStopRequested,
     consumeConversationStop,
+    hasConversationStopHandler,
     requestActiveConversationStop,
     getConversationLiveTranscriptStore,
     captureAbortSnapshot,
@@ -185,6 +196,8 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         commandSafetyMode: CommandSafetyMode;
         runtimeControls: ChatRuntimeControls;
         gatewayRequest?: QueuedChatTurn["gatewayRequest"];
+        /** 进入编辑时的正文；保存时据此判断 WebUI 指令语义是否还成立。 */
+        originalText: string;
       })
     | null
   >(null);
@@ -279,6 +292,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     conversationId: string,
     queue: readonly QueuedChatTurn[] = queuedChatTurnsRef.current,
   ) {
+    if (isKBrainBackendEnabled() && !isTauriHost()) return;
     const targetConversationId = rememberChatQueueConversationId(conversationId);
     if (!targetConversationId) {
       return;
@@ -454,7 +468,13 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       commandSafetyMode,
       runtimeControls: editSlot?.runtimeControls ?? settings.chatRuntimeControls,
       createdAt: editSlot?.createdAt,
-      gatewayRequest: editSlot?.gatewayRequest,
+      gatewayRequest: editSlot
+        ? gatewayRequestAfterQueuedEdit(
+            editSlot.gatewayRequest,
+            editSlot.originalText,
+            draft?.text ?? "",
+          )
+        : undefined,
     });
 
     setQueuedChatTurnsState((current) => {
@@ -528,6 +548,20 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     return resolveQueuedChatTurnSlotIndex(queue, slot) <= firstQueuedIndex;
   }
 
+  /**
+   * 强制停止会先释放界面，被停的那一轮仍在收尾（等后端终止事件、回写历史），
+   * 它和下一轮共用同一份实时转写。等它真正结束再发下一条；用户再次停止或已有
+   * 新一轮开始时放弃，返回 false。超时后照常发送，后端仍忙时由发送侧重试。
+   */
+  async function waitForPreviousRunToFinish(conversationId: string, stopped: () => boolean) {
+    const deadline = Date.now() + PREVIOUS_RUN_SETTLE_WAIT_MS;
+    while (hasConversationStopHandler(conversationId) && Date.now() < deadline) {
+      if (stopped() || isConversationRunning(conversationId)) return false;
+      await new Promise((resolve) => setTimeout(resolve, PREVIOUS_RUN_SETTLE_POLL_MS));
+    }
+    return !stopped() && !isConversationRunning(conversationId);
+  }
+
   function requestQueuedChatTurnProcessing(conversationId: string) {
     const targetConversationId = conversationId.trim();
     if (!targetConversationId) return;
@@ -566,6 +600,12 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       .then(async () => {
         if (isConversationStopRequested(targetConversationId)) return false;
         if (isConversationRunning(targetConversationId)) return;
+        if (!(await waitForPreviousRunToFinish(targetConversationId, wasStoppedDuringProcessing))) {
+          return false;
+        }
+        if (isConversationStopRequested(targetConversationId)) return false;
+        // 等待期间用户可能打开了队首的编辑；和进入处理时一样挡住，提交编辑时会重新触发。
+        if (isQueuedChatTurnEditBlockingProcessing(targetConversationId)) return false;
         const taken = takeNextQueuedChatTurn(queuedChatTurnsRef.current, targetConversationId);
         if (!taken.item) return false;
         const queuedTurn = taken.item;
@@ -608,6 +648,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           workdirOverride: queuedTurn.workdir,
           commandSafetyModeOverride: queuedTurn.commandSafetyMode,
           runtimeControlsOverride: queuedTurn.runtimeControls,
+          ...(gatewayRequest?.composerCommand
+            ? { composerCommand: gatewayRequest.composerCommand }
+            : {}),
           gatewayBridgeRequestOverride: gatewayBridgeRequest,
           preserveComposerOnStart: true,
           beforeRuntimeStart: markGatewayStarted,
@@ -770,6 +813,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       commandSafetyMode: queuedTurn.commandSafetyMode,
       runtimeControls: { ...queuedTurn.runtimeControls },
       gatewayRequest: queuedTurn.gatewayRequest ? { ...queuedTurn.gatewayRequest } : undefined,
+      originalText: queuedTurn.draft.text,
     };
     setQueuedChatTurnsState((current) => removeQueuedChatTurn(current, key));
     composerRef.current?.setDraft(queuedTurn.draft);
@@ -824,6 +868,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const runtimeControls = payload.runtimeControls
       ? normalizeChatRuntimeControls(payload.runtimeControls)
       : settings.chatRuntimeControls;
+    // 排队的 WebUI 轮次同样要带上“/”指令语义（goal set/resume、提示词指令）。
+    const composerCommand = gatewayComposerTurnCommand(payload);
+    if (composerCommand === null) return false;
     const queuedTurn = createQueuedChatTurn({
       id: `gateway-${requestId}`,
       conversationId: targetConversationId,
@@ -850,6 +897,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
             : "auto",
         selectedModel: payload.selectedModel,
         runtimeControls: payload.runtimeControls,
+        ...(composerCommand ? { composerCommand } : {}),
       },
     });
 
@@ -882,6 +930,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: This native listener is registered once and dispatches through latest-action and mutable state refs to avoid stale closures without re-subscribing.
   useEffect(() => {
+    if (isKBrainBackendEnabled() && !isTauriHost()) return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
     type GatewayChatQueueRequestEvent = {
@@ -980,28 +1029,23 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       }
 
       // WebUI 对工具审批卡片的决定:itemId 即 toolCallId,request_json 携带
-      // {"decision":"approve"|"deny"|"approve_session"},落到桌面审批挂起表。
+      // {"decision":"approve"|"deny"|"approve_session","scope"?,"reason"?},落到桌面
+      // 审批挂起表;scope 是"允许并记住"的作用域,reason 是拒绝时交给模型的说明。
       if (action === "tool_approval") {
         if (!itemId) {
           fail("tool_approval requires item_id", "invalid_request");
           return;
         }
-        let decision: unknown;
-        try {
-          decision = JSON.parse(request.requestJson || "{}");
-        } catch {
-          fail("invalid tool approval payload", "invalid_payload");
-          return;
-        }
-        const raw =
-          decision && typeof decision === "object"
-            ? (decision as { decision?: unknown }).decision
-            : decision;
-        if (raw !== "approve" && raw !== "deny" && raw !== "approve_session") {
+        const parsed = parseToolApprovalRequestJson(request.requestJson);
+        if (!parsed) {
           fail("invalid tool approval decision", "invalid_payload");
           return;
         }
-        const outcome = answerToolApproval(itemId, raw, { conversationId });
+        const outcome = answerToolApproval(itemId, parsed.decision, {
+          conversationId,
+          scope: parsed.scope,
+          reason: parsed.reason,
+        });
         if (!outcome.ok) {
           fail(outcome.message || "approval not pending", "not_found");
           return;
@@ -1249,6 +1293,11 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           uploadedFiles: Array.isArray(uploadedFiles) ? uploadedFiles : [],
           id: session.item.id,
           createdAt: session.item.createdAt,
+          gatewayRequest: gatewayRequestAfterQueuedEdit(
+            session.item.gatewayRequest,
+            session.item.draft.text,
+            typeof draft?.text === "string" ? draft.text : "",
+          ),
         });
         remoteQueuedChatTurnEditSlotsRef.current.delete(itemId);
         setQueuedChatTurnsState((current) =>

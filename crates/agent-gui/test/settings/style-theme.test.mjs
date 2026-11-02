@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { cn } from "../../../agent-ui/src/lib/shared/utils.ts";
 import { resolveStyleValues } from "../../../agent-ui/test-support/style-values.mjs";
 
@@ -15,7 +16,7 @@ test("theme utilities use standard typography and preserve explicit line heights
      @import "../../agent-ui/src/styles/tokens.css";
      @reference "../../agent-ui/src/styles/semantic-colors.css";
      @source inline("py-2 py-1px h-18px text-sm text-xs text-tiny text-sm/5 text-[0.92em] leading-scaled-22px pb-safe-bottom-10rem ring-3px status-compact:grid-cols-3");`,
-    { from: new URL("../../src/style-theme-test.css", import.meta.url).pathname },
+    { from: fileURLToPath(new URL("../../src/style-theme-test.css", import.meta.url)) },
   );
   const root = postcss.parse(result.css);
   const properties = (selector) => {

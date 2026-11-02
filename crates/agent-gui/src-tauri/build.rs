@@ -1,4 +1,8 @@
 fn main() {
+    println!(
+        "cargo:rustc-env=LIVEAGENT_TARGET_TRIPLE={}",
+        std::env::var("TARGET").expect("TARGET")
+    );
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let package_json = std::path::Path::new(&manifest_dir)
         .join("..")

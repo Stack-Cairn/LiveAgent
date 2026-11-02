@@ -1,4 +1,4 @@
-import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Context } from "@liveagent/app/lib/agentTypes";
 import type {
   ClarifyMessage,
   RunClarifyTurn,
@@ -20,7 +20,7 @@ function createZeroUsage() {
 }
 
 /**
- * 澄清历史里的 assistant 消息 → pi-ai AssistantMessage。协议只关心文本；api/
+ * 澄清历史里的 assistant 消息 → 项目 AssistantMessage 投影。协议只关心文本；api/
  * usage 等字段是类型要求的占位（compaction summarizer 同款拼法），provider
  * 载荷装配只读取其中的 text 块。
  */
@@ -42,7 +42,7 @@ function toAssistantContextMessage(
 }
 
 /**
- * 澄清消息 → pi-ai Context。pi-ai 的 Message 联合类型（user/assistant/
+ * 澄清消息 → 项目 Context。Message 联合类型（user/assistant/
  * toolResult）没有 system 角色，直接塞进 messages 既过不了类型检查也会被各
  * provider 载荷装配丢弃；因此把 system 消息并入 systemPrompt，其余消息原样
  * 映射（text-only 后缀由 buildTextOnlyCallContext 统一追加）。

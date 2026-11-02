@@ -1,0 +1,35 @@
+{
+  "provider": "RunningHub",
+  "balanceReportedByUser": 119,
+  "reviewedMaximumCNY": 0.22,
+  "estimatedPriceCNY": 0.22,
+  "submittedGenerations": 1,
+  "confirmedImages": 0,
+  "accountObservation": {
+    "operation": "account_status_only",
+    "httpStatus": 200,
+    "apiType": "SHARED",
+    "remainMoney": "119.000",
+    "currency": "CNY",
+    "currentTaskCounts": "0",
+    "actualChargeConfirmed": false,
+    "generationSubmittedByObservation": false
+  },
+  "requests": [
+    {
+      "key": "runninghub-authorized-single-lite-20261014",
+      "model": "rhart-image-n-g31-flash-lite-official",
+      "operation": "generate",
+      "requestedImages": 1,
+      "state": "unknown",
+      "startedAt": "2026-10-13T18:33:49.920Z",
+      "receiptId": "iv_996d6ac5238d5563b1aba42c9ac3672f0b239d5415d72f1b79dc8864613a0666",
+      "jobId": "ij_88dc83e4-d611-4658-ba74-bf1311916714",
+      "jobStatus": "result_unknown",
+      "errorCode": "IMAGE_RESULT_UNKNOWN",
+      "assetCount": 0,
+      "assets": [],
+      "finishedAt": "2026-10-13T18:33:51.980Z"
+    }
+  ]
+}

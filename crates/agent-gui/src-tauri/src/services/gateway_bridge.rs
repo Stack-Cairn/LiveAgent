@@ -2,6 +2,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tauri::{AppHandle, Manager};
 
 use crate::commands::{
     chat_file_links::open_chat_file_link_for_conversation,
@@ -18,7 +19,6 @@ use crate::commands::{
         workspace_root_grants_apply, workspace_root_grants_list, workspace_root_grants_revoke,
         WorkspaceRootAccess, WorkspaceRootGrant, WorkspaceRootGrantDraft,
     },
-    settings::{load_providers, open_db},
     system::{
         system_create_project_folder_sync, system_import_directory_abort_sync,
         system_import_directory_chunk_sync, system_import_directory_commit_sync,
@@ -33,12 +33,7 @@ use crate::services::automation::{
     validate_cron_expression, AutomationApplyInput, AutomationStore,
 };
 use crate::services::gateway::proto;
-use crate::services::memory::{
-    MemoryAcceptArgs, MemoryBatchArgs, MemoryDeleteArgs, MemoryDeleteProjectArgs, MemoryListArgs,
-    MemoryOrganizeDueClaimArgs, MemoryOrganizeRunCreateArgs, MemoryOrganizeRunListArgs,
-    MemoryOrganizeRunReadArgs, MemoryOrganizeRunUpdateArgs, MemoryQuotaSummaryArgs, MemoryReadArgs,
-    MemoryRecentRejectionsArgs, MemorySearchArgs, MemoryStore, MemoryUpdateArgs, MemoryWriteArgs,
-};
+use crate::services::kbrain_backend::{KBrainBackendConnection, KBrainBackendState};
 use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
 use crate::services::skills::system_manage_skill_sync;
 
@@ -125,6 +120,7 @@ struct HistorySharedListArgs {
 /// versioned apply protocol as the desktop webview and the LLM tool; the
 /// legacy per-task create/update/delete actions no longer exist.
 pub async fn handle_cron_manage(
+    app: AppHandle,
     store: Arc<AutomationStore>,
     request: proto::CronManageRequest,
 ) -> Result<proto::CronManageResponse, String> {
@@ -182,11 +178,8 @@ pub async fn handle_cron_manage(
         }
         "occurrences" => {
             let query = parse_occurrence_query(&request.task_json)?;
-            let store = Arc::clone(&store);
             let response =
-                tauri::async_runtime::spawn_blocking(move || store.cron_occurrences(query))
-                    .await
-                    .map_err(|e| format!("gateway cron occurrences join failed: {e}"))??;
+                crate::services::automation::kbrain_occurrences::query(app, query).await?;
             serialize_cron_manage_result(&response)?
         }
         "validate" => {
@@ -501,13 +494,31 @@ pub async fn handle_history_delete(
     Ok(proto::HistoryDeleteResponse {})
 }
 
-pub async fn handle_provider_list() -> Result<proto::ProviderListResponse, String> {
-    let providers = tauri::async_runtime::spawn_blocking(move || {
-        let conn = open_db()?;
-        load_providers(&conn)
+pub(crate) async fn kbrain_gateway_settings(app: AppHandle) -> Result<Value, String> {
+    kbrain_gateway_resource(app, "/v1/settings").await
+}
+
+pub(crate) async fn kbrain_gateway_mcp_settings(app: AppHandle) -> Result<Value, String> {
+    kbrain_gateway_resource(app, "/v1/mcp").await
+}
+
+async fn kbrain_gateway_resource(app: AppHandle, path: &str) -> Result<Value, String> {
+    let backend = app
+        .try_state::<Arc<KBrainBackendState>>()
+        .ok_or_else(|| "K-brain backend state is unavailable".to_string())?;
+    let connection = tauri::async_runtime::spawn_blocking({
+        let backend = Arc::clone(backend.inner());
+        let app = app.clone();
+        move || backend.ensure_started(&app)
     })
     .await
-    .map_err(|e| format!("gateway provider list join failed: {e}"))??;
+    .map_err(|error| format!("K-brain backend startup task failed: {error}"))??;
+    kbrain_prompt_request(&connection, reqwest::Method::GET, path, None).await
+}
+
+pub async fn handle_provider_list(app: AppHandle) -> Result<proto::ProviderListResponse, String> {
+    let settings = kbrain_gateway_settings(app).await?;
+    let providers = settings.get("providers").cloned();
 
     let providers_json = serde_json::to_string(&sanitize_provider_summaries(providers)?)
         .map_err(|e| format!("serialize gateway provider list failed: {e}"))?;
@@ -516,59 +527,61 @@ pub async fn handle_provider_list() -> Result<proto::ProviderListResponse, Strin
 }
 
 pub async fn handle_provider_models(
+    app: AppHandle,
     request: proto::ProviderModelsRequest,
 ) -> Result<proto::ProviderModelsResponse, String> {
-    let provider_type = request.provider_type.trim().to_string();
-    let request_api_key = request.api_key.trim().to_string();
-    // message 字段带存在性：未设置=草稿没带头，沿用落库配置；设置了（哪怕是空
-    // 列表）=草稿的头就是权威值。
-    let request_custom_headers = request.custom_headers.as_ref().map(|headers| {
-        headers
-            .headers
-            .iter()
-            .map(|header| (header.name.clone(), header.value.clone()))
-            .collect::<Vec<_>>()
-    });
-    let config = if request_api_key.is_empty() {
-        let provider_id = request.provider_id.trim().to_string();
-        let expected_provider_type = provider_type.clone();
-        let is_full_url = request.is_full_url;
-        let custom_headers = request_custom_headers.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            let conn = open_db()?;
-            resolve_stored_provider_models_config(
-                &provider_id,
-                &expected_provider_type,
-                is_full_url,
-                custom_headers,
-                load_providers(&conn)?,
-            )
-        })
-        .await
-        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
-    } else {
-        ProviderModelsRequestConfig {
-            provider_type,
-            base_url: request.base_url.trim().to_string(),
-            api_key: request_api_key,
-            use_system_proxy: request.use_system_proxy,
-            models_url: Some(request.models_url.trim().to_string())
-                .filter(|value| !value.is_empty()),
-            is_full_url: request.is_full_url.unwrap_or(false),
-            custom_headers: request_custom_headers.unwrap_or_default(),
-        }
+    let backend = app
+        .try_state::<Arc<KBrainBackendState>>()
+        .ok_or_else(|| "K-brain backend state is unavailable".to_string())?;
+    let connection = tauri::async_runtime::spawn_blocking({
+        let backend = Arc::clone(backend.inner());
+        let app = app.clone();
+        move || backend.ensure_started(&app)
+    })
+    .await
+    .map_err(|error| format!("K-brain backend startup task failed: {error}"))??;
+    let provider_id = request.provider_id.trim().to_string();
+    let config = provider_models_request_config(&request)?;
+    let api = match config.provider_type.as_str() {
+        "gemini" => "google-generative-ai",
+        "claude_code" => "anthropic-messages",
+        "codex" => match request.request_format.trim() {
+            "openai-completions" => "openai-completions",
+            _ => "openai-responses",
+        },
+        "xai" => "openai-responses",
+        "deepseek" => "openai-completions",
+        other => return Err(format!("unsupported provider type: {other}")),
     };
-    let models_json = crate::services::provider_models::fetch_provider_models(
-        &config.provider_type,
-        &config.base_url,
-        &config.api_key,
-        config.use_system_proxy,
-        config.models_url.as_deref(),
-        config.is_full_url,
-        &config.custom_headers,
-    )
-    .await?;
-    Ok(proto::ProviderModelsResponse { models_json })
+    let mut body = serde_json::json!({
+        "type": config.provider_type,
+        "api": api,
+        "baseUrl": config.base_url,
+        "apiKey": config.api_key,
+        "modelsUrl": config.models_url,
+        "useSystemProxy": config.use_system_proxy,
+        "requestFormat": request.request_format.trim(),
+    });
+    if !provider_id.is_empty() {
+        body["providerId"] = Value::String(provider_id);
+    }
+    if let Some(is_full_url) = config.is_full_url {
+        body["isFullUrl"] = Value::Bool(is_full_url);
+    }
+    if let Some(headers) = &config.custom_headers {
+        body["customHeaders"] = serde_json::to_value(
+            headers
+                .iter()
+                .map(|(key, value)| json!({ "key": key, "value": value }))
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|error| format!("serialize provider headers failed: {error}"))?;
+    }
+    let models = kbrain_provider_models(&connection, body).await?;
+    Ok(proto::ProviderModelsResponse {
+        models_json: serde_json::to_string(&models)
+            .map_err(|error| format!("serialize K-brain model response failed: {error}"))?,
+    })
 }
 
 #[derive(Debug, PartialEq)]
@@ -577,88 +590,407 @@ struct ProviderModelsRequestConfig {
     base_url: String,
     api_key: String,
     use_system_proxy: bool,
-    models_url: Option<String>,
-    is_full_url: bool,
-    custom_headers: Vec<(String, String)>,
-}
-
-fn resolve_stored_provider_models_config(
-    provider_id: &str,
-    expected_provider_type: &str,
+    models_url: String,
+    /// None keeps the stored value (proto: "未提供时沿用已保存配置").
     is_full_url: Option<bool>,
     custom_headers: Option<Vec<(String, String)>>,
-    providers: Option<Value>,
+}
+
+/// The discovery draft exactly as the WebUI edited it. An empty key asks K-brain to
+/// use the stored one by provider ID, the same as the desktop and Gateway direct
+/// paths: K-brain owns provider credentials, the legacy provider table is stale.
+fn provider_models_request_config(
+    request: &proto::ProviderModelsRequest,
 ) -> Result<ProviderModelsRequestConfig, String> {
-    let provider_id = provider_id.trim();
-    if provider_id.is_empty() {
+    let api_key = request.api_key.trim().to_string();
+    if api_key.is_empty() && request.provider_id.trim().is_empty() {
         return Err("请先填写 API Key".to_string());
     }
-    let providers = providers
-        .and_then(|value| value.as_array().cloned())
-        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
-    let provider = providers
-        .into_iter()
-        .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
-        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
-    let stored_provider_type = provider
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
-    if stored_provider_type != expected_provider_type.trim() {
-        return Err("供应商类型与已保存配置不匹配".to_string());
-    }
-    let api_key = provider
-        .get("apiKey")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())?;
-    let base_url = provider
-        .get("baseUrl")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let models_url = provider
-        .get("modelsUrl")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
     Ok(ProviderModelsRequestConfig {
-        provider_type: stored_provider_type.to_string(),
-        base_url,
+        provider_type: request.provider_type.trim().to_string(),
+        base_url: request.base_url.trim().to_string(),
         api_key,
-        use_system_proxy: provider
-            .get("useSystemProxy")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        models_url,
-        is_full_url: is_full_url.unwrap_or_else(|| {
-            provider
-                .get("isFullUrl")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        }),
-        custom_headers: custom_headers.unwrap_or_else(|| {
-            provider
-                .get("customHeaders")
-                .and_then(Value::as_array)
-                .map(|headers| {
-                    headers
-                        .iter()
-                        .filter_map(|header| {
-                            let key = header.get("key").and_then(Value::as_str)?.trim();
-                            let value = header.get("value").and_then(Value::as_str)?;
-                            (!key.is_empty()).then(|| (key.to_string(), value.to_string()))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
+        use_system_proxy: request.use_system_proxy,
+        models_url: request.models_url.trim().to_string(),
+        is_full_url: request.is_full_url,
+        custom_headers: request.custom_headers.as_ref().map(|headers| {
+            headers
+                .headers
+                .iter()
+                .map(|header| (header.name.clone(), header.value.clone()))
+                .collect()
         }),
     })
+}
+
+pub async fn handle_kbrain_terminal_request(
+    app: AppHandle,
+    request: proto::TerminalRequest,
+) -> Result<proto::TerminalResponse, String> {
+    let backend = app
+        .try_state::<Arc<KBrainBackendState>>()
+        .ok_or_else(|| "K-brain backend state is unavailable".to_string())?;
+    let connection = tauri::async_runtime::spawn_blocking({
+        let backend = Arc::clone(backend.inner());
+        let app = app.clone();
+        move || backend.ensure_started(&app)
+    })
+    .await
+    .map_err(|error| format!("K-brain backend startup task failed: {error}"))??;
+    kbrain_terminal_request(&connection, &request).await
+}
+
+async fn kbrain_terminal_request(
+    connection: &KBrainBackendConnection,
+    request: &proto::TerminalRequest,
+) -> Result<proto::TerminalResponse, String> {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .map_err(|error| format!("create K-brain HTTP client failed: {error}"))?;
+    let action = request.action.trim().to_ascii_lowercase();
+    if request.conversation_id.trim().is_empty() || request.run_id.trim().is_empty() {
+        return Err("canonical terminal request requires conversation_id and run_id".to_string());
+    }
+    let path = "/v1/terminal";
+    let body = json!({
+        "action": action,
+        "conversation_id": request.conversation_id.trim(),
+        "run_id": request.run_id.trim(),
+        "data": request.data,
+        "cwd": request.cwd,
+        "session_id": request.session_id,
+        "max_bytes": request.max_bytes,
+        "project_path_key": request.project_path_key,
+        "shell": request.shell,
+        "title": request.title,
+        "cols": request.cols,
+        "rows": request.rows,
+    });
+    let response = client
+        .post(format!(
+            "{}{}",
+            connection.base_url.trim_end_matches('/'),
+            path
+        ))
+        .bearer_auth(&connection.token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| format!("K-brain terminal request failed: {error}"))?;
+    let status = response.status();
+    let payload = response
+        .json::<Value>()
+        .await
+        .map_err(|error| format!("K-brain terminal response was invalid JSON: {error}"))?;
+    if !status.is_success() {
+        return Err(format!("K-brain terminal request failed (HTTP {status})"));
+    }
+    if payload.get("conversation_id").and_then(Value::as_str)
+        != Some(request.conversation_id.trim())
+        || payload.get("run_id").and_then(Value::as_str) != Some(request.run_id.trim())
+    {
+        return Err("K-brain terminal response identity mismatch".to_string());
+    }
+    decode_kbrain_terminal_response(payload)
+}
+
+fn decode_kbrain_terminal_response(payload: Value) -> Result<proto::TerminalResponse, String> {
+    use base64::Engine;
+    fn record(value: &Value) -> Result<proto::TerminalSession, String> {
+        let id = value
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or("terminal response has no session id")?;
+        let text = |key: &str| {
+            value
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let number = |key: &str| value.get(key).and_then(Value::as_u64).unwrap_or_default();
+        Ok(proto::TerminalSession {
+            id: id.to_string(),
+            project_path_key: text("project_path_key"),
+            cwd: text("cwd"),
+            shell: text("shell"),
+            title: text("title"),
+            pid: number("pid") as u32,
+            cols: number("cols") as u32,
+            rows: number("rows") as u32,
+            created_at: number("created_at"),
+            updated_at: number("updated_at"),
+            finished_at: number("finished_at"),
+            exit_code: value
+                .get("exit_code")
+                .and_then(Value::as_i64)
+                .unwrap_or_default() as i32,
+            running: value
+                .get("running")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            kind: text("kind"),
+            ..Default::default()
+        })
+    }
+    let output = base64::engine::general_purpose::STANDARD
+        .decode(
+            payload
+                .get("output")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        )
+        .map_err(|error| format!("invalid terminal output encoding: {error}"))?;
+    let sessions = payload
+        .get("sessions")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().map(record).collect::<Result<Vec<_>, _>>())
+        .transpose()?
+        .unwrap_or_default();
+    let shell_options = payload
+        .get("shell_options")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| proto::TerminalShellOption {
+                    id: item
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    label: item
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    command: item
+                        .get("command")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(proto::TerminalResponse {
+        action: payload
+            .get("action")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        session: payload.get("session").map(record).transpose()?,
+        sessions,
+        output,
+        truncated: payload
+            .get("truncated")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        output_start_offset: payload
+            .get("output_start_offset")
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
+        output_end_offset: payload
+            .get("output_end_offset")
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
+        default_shell: payload
+            .get("default_shell")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        shell_options,
+        ..Default::default()
+    })
+}
+
+async fn kbrain_provider_models(
+    connection: &KBrainBackendConnection,
+    body: Value,
+) -> Result<Value, String> {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .map_err(|error| format!("create K-brain HTTP client failed: {error}"))?;
+    let provider_id = body
+        .get("providerId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("draft");
+    let response = client
+        .post(format!(
+            "{}/v1/settings/providers/{}/models",
+            connection.base_url.trim_end_matches('/'),
+            urlencoding::encode(provider_id),
+        ))
+        .bearer_auth(&connection.token)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| format!("K-brain provider discovery request failed: {error}"))?;
+    let status = response.status();
+    let payload = response.json::<Value>().await.map_err(|error| {
+        format!("K-brain provider discovery response was invalid JSON: {error}")
+    })?;
+    if !status.is_success() {
+        let message = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("message").and_then(Value::as_str))
+            .unwrap_or("K-brain provider discovery failed");
+        return Err(format!("{message} (HTTP {status})"));
+    }
+    Ok(payload
+        .get("models")
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new())))
+}
+
+async fn ensure_kbrain_connection(app: &AppHandle) -> Result<KBrainBackendConnection, String> {
+    let backend = app
+        .try_state::<Arc<KBrainBackendState>>()
+        .ok_or_else(|| "K-brain backend state is unavailable".to_string())?;
+    tauri::async_runtime::spawn_blocking({
+        let backend = Arc::clone(backend.inner());
+        let app = app.clone();
+        move || backend.ensure_started(&app)
+    })
+    .await
+    .map_err(|error| format!("K-brain backend startup task failed: {error}"))?
+}
+
+fn prompt_workdir_query(workdir: &str) -> String {
+    let workdir = workdir.trim();
+    if workdir.is_empty() {
+        String::new()
+    } else {
+        format!("?workdir={}", urlencoding::encode(workdir))
+    }
+}
+
+/// 指令目录请求的上限：WebUI 打开“/”弹层时同步等待，K-brain 卡住时要尽快失败。
+const KBRAIN_COMMANDS_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// 记忆命令的上限，与 Gateway 直连 K-brain 时的请求超时（2 分钟）一致：
+/// 手动整理在 K-brain 里同步执行，提前断开会把整理一起取消。
+const KBRAIN_MEMORY_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// 调 K-brain 的指令接口并解析 JSON；非 2xx 时取 error/message 字段作为错误。
+async fn kbrain_prompt_request(
+    connection: &KBrainBackendConnection,
+    method: reqwest::Method,
+    path_and_query: &str,
+    body: Option<Value>,
+) -> Result<Value, String> {
+    kbrain_json_request(
+        connection,
+        method,
+        path_and_query,
+        body,
+        KBRAIN_COMMANDS_REQUEST_TIMEOUT,
+    )
+    .await
+}
+
+async fn kbrain_json_request(
+    connection: &KBrainBackendConnection,
+    method: reqwest::Method,
+    path_and_query: &str,
+    body: Option<Value>,
+    timeout: std::time::Duration,
+) -> Result<Value, String> {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(timeout)
+        .build()
+        .map_err(|error| format!("create K-brain HTTP client failed: {error}"))?;
+    let mut request = client
+        .request(
+            method,
+            format!(
+                "{}{}",
+                connection.base_url.trim_end_matches('/'),
+                path_and_query
+            ),
+        )
+        .bearer_auth(&connection.token);
+    if let Some(body) = body {
+        request = request
+            .header("content-type", "application/json")
+            .json(&body);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("K-brain prompt request failed: {error}"))?;
+    let status = response.status();
+    let payload = response
+        .json::<Value>()
+        .await
+        .map_err(|error| format!("K-brain prompt response was invalid JSON: {error}"))?;
+    if !status.is_success() {
+        let message = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("message").and_then(Value::as_str))
+            .unwrap_or("K-brain prompt request failed");
+        return Err(format!("{message} (HTTP {status})"));
+    }
+    Ok(payload)
+}
+
+async fn kbrain_slash_commands(
+    connection: &KBrainBackendConnection,
+    workdir: &str,
+) -> Result<proto::SlashCommandListResponse, String> {
+    let payload = kbrain_prompt_request(
+        connection,
+        reqwest::Method::GET,
+        &format!("/v1/commands{}", prompt_workdir_query(workdir)),
+        None,
+    )
+    .await?;
+    let commands = payload
+        .get("commands")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let name = item.get("name").and_then(Value::as_str)?.trim().to_string();
+                    if name.is_empty() {
+                        return None;
+                    }
+                    let text = |key: &str| {
+                        item.get(key)
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string()
+                    };
+                    Some(proto::SlashCommandSummary {
+                        name,
+                        description: text("description"),
+                        argument_hint: text("argument_hint"),
+                        kind: text("kind"),
+                        source: text("source"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(proto::SlashCommandListResponse { commands })
+}
+
+/// WebUI 输入框“/”指令目录：桌面端内置动作 + K-brain 的提示词模板。
+pub async fn handle_slash_command_list(
+    app: AppHandle,
+    request: proto::SlashCommandListRequest,
+) -> Result<proto::SlashCommandListResponse, String> {
+    let connection = ensure_kbrain_connection(&app).await?;
+    kbrain_slash_commands(&connection, &request.workdir).await
 }
 
 pub async fn handle_skill_files_list() -> Result<proto::SkillFilesListResponse, String> {
@@ -759,6 +1091,30 @@ pub async fn handle_cua_driver(
     Ok(proto::CuaDriverResponse {
         action,
         result_json: result,
+    })
+}
+
+/// 应用代理设置的代理服务检测：与桌面 `system_proxy_detect` / `system_proxy_test`
+/// 同一实现，结果按同一份 camelCase JSON 回给 WebUI。
+pub async fn handle_proxy_detect(
+    request: proto::ProxyDetectRequest,
+) -> Result<proto::ProxyDetectResponse, String> {
+    let action = request.action.trim().to_string();
+    let result_json = match action.as_str() {
+        "detect" => serde_json::to_string(&crate::services::proxy_detect::detect().await)
+            .map_err(|e| format!("proxy detect encode: {e}"))?,
+        "test" => {
+            let input: crate::services::proxy_detect::ProxyTestInput =
+                serde_json::from_str(&request.input_json)
+                    .map_err(|e| format!("proxy test input invalid: {e}"))?;
+            let result = crate::services::proxy_detect::test(input).await?;
+            serde_json::to_string(&result).map_err(|e| format!("proxy test encode: {e}"))?
+        }
+        other => return Err(format!("unsupported proxy detect action: {other}")),
+    };
+    Ok(proto::ProxyDetectResponse {
+        action,
+        result_json,
     })
 }
 
@@ -1217,41 +1573,196 @@ pub async fn handle_uploaded_image_preview(
     })
 }
 
+/// 桌面端在 K-brain 模式下把这些记忆命令交给 K-brain（`agent-gui/src/lib/kbrain/memory.ts`）。
+/// WebUI 经网关转来的同名命令必须走同一条路，否则读写的是不再更新的本地记忆索引。
+const KBRAIN_MEMORY_COMMANDS: &[&str] = &[
+    "memory_organizer",
+    "memory_list",
+    "memory_read",
+    "memory_search",
+    "memory_write",
+    "memory_update",
+    "memory_delete",
+    "memory_delete_project",
+    "memory_accept",
+    "memory_apply_batch",
+    "memory_overview",
+    "memory_quota_summary",
+    "memory_recent_rejections",
+    "memory_organize_run_create",
+    "memory_organize_run_update",
+    "memory_organize_run_list",
+    "memory_organize_run_read",
+    "memory_organize_run_clear_history",
+    "memory_organize_due_claim",
+    "memory_organize_due_complete",
+    "memory_index_overview",
+    "memory_paths_info",
+    "memory_today_local_date",
+    "memory_today_daily",
+    "memory_wipe_all",
+];
+
+fn is_kbrain_memory_command(command: &str) -> bool {
+    KBRAIN_MEMORY_COMMANDS.contains(&command.trim())
+}
+
 pub async fn handle_memory_manage(
-    memory_store: Arc<MemoryStore>,
+    app: AppHandle,
     request: proto::MemoryManageRequest,
 ) -> Result<proto::MemoryManageResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || handle_memory_manage_sync(memory_store, request))
+    let command = request.command.trim().to_string();
+    if is_kbrain_memory_command(&command) {
+        let connection = ensure_kbrain_connection(&app).await?;
+        return kbrain_memory_manage(&connection, &command, &request.args_json).await;
+    }
+    tauri::async_runtime::spawn_blocking(move || handle_history_manage_sync(request))
         .await
         .map_err(|e| format!("gateway memory manage join failed: {e}"))?
 }
 
-fn handle_memory_manage_sync(
-    memory_store: Arc<MemoryStore>,
+/// 把一条记忆命令原样交给 K-brain 的 `/v1/memory/manage`，结果 JSON 原样返回。
+async fn kbrain_memory_manage(
+    connection: &KBrainBackendConnection,
+    command: &str,
+    args_json: &str,
+) -> Result<proto::MemoryManageResponse, String> {
+    let args = parse_memory_value(args_json, command)?;
+    let result = kbrain_json_request(
+        connection,
+        reqwest::Method::POST,
+        "/v1/memory/manage",
+        Some(json!({ "command": command, "args": args })),
+        KBRAIN_MEMORY_REQUEST_TIMEOUT,
+    )
+    .await?;
+    let result_json = serde_json::to_string(&result)
+        .map_err(|e| format!("serialize {command} result JSON failed: {e}"))?;
+    Ok(proto::MemoryManageResponse { result_json })
+}
+
+/// 设置 → 权限（WebUI 经网关）：查看、添加、删除 K-brain 记住的权限规则。
+pub async fn handle_permission_rules(
+    app: AppHandle,
+    request: proto::PermissionRulesRequest,
+) -> Result<proto::PermissionRulesResponse, String> {
+    let connection = ensure_kbrain_connection(&app).await?;
+    kbrain_permission_rules(&connection, request).await
+}
+
+fn invalid_permission_rules(reason: &str) -> String {
+    format!("invalid permission rules request: {reason}")
+}
+
+/// 设置页只会发 workspace/rule/effect/scope/id；其余字段（session_id 等）不转发，
+/// 会话规则不经这里。K-brain 的应答 JSON 原样返回。
+async fn kbrain_permission_rules(
+    connection: &KBrainBackendConnection,
+    request: proto::PermissionRulesRequest,
+) -> Result<proto::PermissionRulesResponse, String> {
+    let raw = request.input_json.trim();
+    let input = if raw.is_empty() {
+        serde_json::Map::new()
+    } else {
+        match serde_json::from_str::<Value>(raw) {
+            Ok(Value::Object(object)) => object,
+            _ => return Err(invalid_permission_rules("input must be a JSON object")),
+        }
+    };
+    let field = |key: &str| {
+        input
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    };
+    let workspace = field("workspace");
+    let scope = field("scope");
+    let check_scope = || match scope.as_str() {
+        "user" => Ok(()),
+        "project" if !workspace.is_empty() => Ok(()),
+        "project" => Err(invalid_permission_rules("project scope needs a workspace")),
+        _ => Err(invalid_permission_rules("scope must be project or user")),
+    };
+    let (method, path, body) = match request.action.trim() {
+        "list" => {
+            let query = if workspace.is_empty() {
+                String::new()
+            } else {
+                format!("?workspace={}", urlencoding::encode(&workspace))
+            };
+            (
+                reqwest::Method::GET,
+                format!("/v1/permissions/rules{query}"),
+                None,
+            )
+        }
+        "add" => {
+            let rule = field("rule");
+            if rule.is_empty() {
+                return Err(invalid_permission_rules("rule is required"));
+            }
+            let effect = field("effect");
+            if effect != "allow" && effect != "deny" {
+                return Err(invalid_permission_rules("effect must be allow or deny"));
+            }
+            check_scope()?;
+            let mut create = json!({ "rule": rule, "effect": effect, "scope": scope });
+            if scope == "project" {
+                create["workspace"] = json!(workspace);
+            }
+            (
+                reqwest::Method::POST,
+                "/v1/permissions/rules".to_string(),
+                Some(create),
+            )
+        }
+        "delete" => {
+            let id = field("id");
+            if id.is_empty() {
+                return Err(invalid_permission_rules("id is required"));
+            }
+            check_scope()?;
+            let mut query = format!("?scope={}", urlencoding::encode(&scope));
+            if scope == "project" {
+                query.push_str(&format!("&workspace={}", urlencoding::encode(&workspace)));
+            }
+            (
+                reqwest::Method::DELETE,
+                format!("/v1/permissions/rules/{}{query}", urlencoding::encode(&id)),
+                None,
+            )
+        }
+        _ => {
+            return Err(invalid_permission_rules(
+                "action must be list, add or delete",
+            ))
+        }
+    };
+    let result = kbrain_json_request(
+        connection,
+        method,
+        &path,
+        body,
+        KBRAIN_COMMANDS_REQUEST_TIMEOUT,
+    )
+    .await?;
+    let result_json = serde_json::to_string(&result)
+        .map_err(|e| format!("serialize permission rules result failed: {e}"))?;
+    Ok(proto::PermissionRulesResponse { result_json })
+}
+
+/// `memory.manage` 里与记忆库无关的会话历史命令，仍由桌面端本地处理。
+fn handle_history_manage_sync(
     request: proto::MemoryManageRequest,
 ) -> Result<proto::MemoryManageResponse, String> {
     let command = request.command.trim();
     let result = match command {
-        "memory_list" => {
-            let args = parse_memory_args::<MemoryListArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.list(args)?)
-        }
         "history_shared_list" => {
             let args = parse_memory_args::<HistorySharedListArgs>(&request.args_json, command)?;
             let page = chat_history::list_shared_chat_history_page_sync(args.page, args.page_size)?;
             serde_json::to_value(history_list_json(page))
-        }
-        "memory_read" => {
-            let args = parse_memory_args::<MemoryReadArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.read(args)?)
-        }
-        "memory_search" => {
-            let args = parse_memory_args::<MemorySearchArgs>(&request.args_json, command)?;
-            let history_args = args.clone();
-            let mut response = memory_store.search(args)?;
-            response.history_matches =
-                chat_history::search_chat_history_for_memory_sync(&history_args)?;
-            serde_json::to_value(response)
         }
         "chat_history_search" => {
             let args = parse_memory_args::<chat_history::ChatHistorySearchArgs>(
@@ -1260,109 +1771,6 @@ fn handle_memory_manage_sync(
             )?;
             serde_json::to_value(chat_history::search_chat_history_sync(args)?)
         }
-        "memory_write" => {
-            let args = parse_memory_args::<MemoryWriteArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.write(args)?)
-        }
-        "memory_update" => {
-            let args = parse_memory_args::<MemoryUpdateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.update(args)?)
-        }
-        "memory_delete" => {
-            let args = parse_memory_args::<MemoryDeleteArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.delete(args)?)
-        }
-        "memory_delete_project" => {
-            let args = parse_memory_args::<MemoryDeleteProjectArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.delete_project(args)?)
-        }
-        "memory_accept" => {
-            let args = parse_memory_args::<MemoryAcceptArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.accept(args)?)
-        }
-        "memory_apply_batch" => {
-            let args = parse_memory_args::<MemoryBatchArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.apply_batch(args)?)
-        }
-        "memory_organize_run_create" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeRunCreateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_run_create(args)?)
-        }
-        "memory_organize_run_update" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeRunUpdateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_run_update(args)?)
-        }
-        "memory_organize_run_list" => {
-            let args = if request.args_json.trim().is_empty() {
-                MemoryOrganizeRunListArgs::default()
-            } else {
-                parse_memory_args::<MemoryOrganizeRunListArgs>(&request.args_json, command)?
-            };
-            serde_json::to_value(memory_store.organize_run_list(args)?)
-        }
-        "memory_organize_run_read" => {
-            let args = parse_memory_args::<MemoryOrganizeRunReadArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_run_read(args)?)
-        }
-        "memory_organize_run_clear_history" => {
-            serde_json::to_value(memory_store.organize_run_clear_history()?)
-        }
-        "memory_organize_due_claim" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeDueClaimArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_due_claim(args)?)
-        }
-        "memory_organize_due_complete" => {
-            let args =
-                parse_memory_args::<MemoryOrganizeRunUpdateArgs>(&request.args_json, command)?;
-            serde_json::to_value(memory_store.organize_due_complete(args)?)
-        }
-        "memory_index_overview" => {
-            let args = parse_memory_value(&request.args_json, command)?;
-            let workdir = args
-                .get("workdir")
-                .and_then(Value::as_str)
-                .map(str::to_string);
-            serde_json::to_value(memory_store.overview(workdir)?)
-        }
-        "memory_paths_info" => serde_json::to_value(memory_store.paths_info()?),
-        "memory_recent_rejections" => {
-            let args = if request.args_json.trim().is_empty() {
-                MemoryRecentRejectionsArgs::default()
-            } else {
-                parse_memory_args::<MemoryRecentRejectionsArgs>(&request.args_json, command)?
-            };
-            serde_json::to_value(memory_store.recent_rejections(args)?)
-        }
-        "memory_today_local_date" => {
-            let args = parse_memory_value(&request.args_json, command)?;
-            let rollover_hour = args
-                .get("rolloverHour")
-                .or_else(|| args.get("rollover_hour"))
-                .and_then(Value::as_u64)
-                .and_then(|value| u32::try_from(value).ok());
-            serde_json::to_value(memory_store.today_local_date(rollover_hour))
-        }
-        "memory_today_daily" => {
-            let args = parse_memory_value(&request.args_json, command)?;
-            let rollover_hour = args
-                .get("rolloverHour")
-                .or_else(|| args.get("rollover_hour"))
-                .and_then(Value::as_u64)
-                .and_then(|value| u32::try_from(value).ok());
-            serde_json::to_value(memory_store.today_daily(rollover_hour)?)
-        }
-        "memory_quota_summary" => {
-            let args = if request.args_json.trim().is_empty() {
-                MemoryQuotaSummaryArgs::default()
-            } else {
-                parse_memory_args::<MemoryQuotaSummaryArgs>(&request.args_json, command)?
-            };
-            serde_json::to_value(memory_store.quota_summary(args)?)
-        }
-        "memory_wipe_all" => serde_json::to_value(memory_store.wipe_all()?),
         _ => return Err(format!("unsupported memory command: {command}")),
     }
     .map_err(|e| format!("serialize {command} result failed: {e}"))?;
@@ -1883,12 +2291,16 @@ fn sanitize_provider_summary(provider: &Value) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use serde_json::{json, Value};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use super::{
-        flatten_history_messages_json, flatten_history_messages_json_window,
-        is_builtin_share_tool_name, parse_occurrence_query, parse_runs_limit,
-        redact_builtin_tool_content_json, resolve_stored_provider_models_config,
-        sanitize_provider_summaries,
+        decode_kbrain_terminal_response, flatten_history_messages_json,
+        flatten_history_messages_json_window, is_builtin_share_tool_name, is_kbrain_memory_command,
+        kbrain_memory_manage, kbrain_permission_rules, kbrain_provider_models,
+        kbrain_slash_commands, kbrain_terminal_request, parse_occurrence_query, parse_runs_limit,
+        prompt_workdir_query, proto, provider_models_request_config,
+        redact_builtin_tool_content_json, sanitize_provider_summaries, KBrainBackendConnection,
+        KBRAIN_MEMORY_COMMANDS,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -1915,6 +2327,366 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn gateway_memory_routing_matches_desktop_kbrain_commands() {
+        // 桌面端 K-brain 模式下交给 K-brain 的记忆命令清单；网关转来的同名命令必须走同一条路。
+        let source = include_str!("../../../src/lib/kbrain/memory.ts");
+        let start = source.find("new Set([").expect("memoryCommands set");
+        let end = start + source[start..].find("]);").expect("memoryCommands end");
+        let mut desktop: Vec<&str> = source[start..end].split('"').skip(1).step_by(2).collect();
+        desktop.sort_unstable();
+        let mut gateway = KBRAIN_MEMORY_COMMANDS.to_vec();
+        gateway.sort_unstable();
+        assert_eq!(gateway, desktop);
+        for command in &desktop {
+            assert!(is_kbrain_memory_command(command), "{command}");
+        }
+        assert!(is_kbrain_memory_command("  memory_list  "));
+        for command in [
+            "history_shared_list",
+            "chat_history_search",
+            "",
+            "memory_unknown",
+        ] {
+            assert!(!is_kbrain_memory_command(command), "{command}");
+        }
+    }
+
+    #[tokio::test]
+    async fn kbrain_memory_manage_forwards_command_and_surfaces_errors() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(
+            listener,
+            "200 OK",
+            r#"{"entries":[{"slug":"fresh","scope":"global","unreviewed":true}],"truncated":false}"#,
+        ));
+        let response = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_list",
+            r#"{"includeAllProjects":true,"includeDaily":true,"limit":1000}"#,
+        )
+        .await
+        .expect("memory list");
+        let (headers, body) = server.await.expect("fixture task");
+        assert!(headers.starts_with("POST /v1/memory/manage "));
+        assert!(
+            headers.contains("authorization: Bearer fixture-token")
+                || headers.contains("Authorization: Bearer fixture-token")
+        );
+        assert_eq!(
+            body,
+            Some(json!({
+                "command": "memory_list",
+                "args": {"includeAllProjects": true, "includeDaily": true, "limit": 1000}
+            }))
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&response.result_json).expect("result JSON"),
+            json!({"entries":[{"slug":"fresh","scope":"global","unreviewed":true}],"truncated":false})
+        );
+
+        // 空参数按空对象发送；K-brain 的 null 结果（今天没有日记）原样回给 WebUI。
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(listener, "200 OK", "null"));
+        let response = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_today_daily",
+            "  ",
+        )
+        .await
+        .expect("today daily");
+        let (_, body) = server.await.expect("fixture task");
+        assert_eq!(
+            body,
+            Some(json!({"command": "memory_today_daily", "args": {}}))
+        );
+        assert_eq!(response.result_json, "null");
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(
+            listener,
+            "404 Not Found",
+            r#"{"version":"v1","error":"memory entry not found"}"#,
+        ));
+        let error = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_read",
+            r#"{"slug":"missing","scope":"global"}"#,
+        )
+        .await
+        .expect_err("missing entry");
+        server.await.expect("fixture task");
+        assert!(error.contains("memory entry not found"), "{error}");
+
+        let error = kbrain_memory_manage(
+            &prompt_fixture_connection(address),
+            "memory_read",
+            "{not json",
+        )
+        .await
+        .expect_err("invalid args");
+        assert!(error.contains("invalid memory_read args JSON"), "{error}");
+    }
+
+    /// 设置 → 权限（WebUI 经网关）：list/add/delete 映射到 K-brain 规则接口，只带设置页
+    /// 需要的字段；会话规则与格式不对的请求不发给 K-brain。
+    #[tokio::test]
+    async fn kbrain_permission_rules_maps_actions_and_rejects_bad_input() {
+        async fn one(
+            status: &'static str,
+            answer: &'static str,
+            action: &str,
+            input: &str,
+        ) -> (
+            String,
+            Option<Value>,
+            Result<proto::PermissionRulesResponse, String>,
+        ) {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind local K-brain fixture");
+            let address = listener.local_addr().expect("fixture address");
+            let server = tokio::spawn(serve_one_prompt_request(listener, status, answer));
+            let result = kbrain_permission_rules(
+                &prompt_fixture_connection(address),
+                proto::PermissionRulesRequest {
+                    action: action.to_string(),
+                    input_json: input.to_string(),
+                },
+            )
+            .await;
+            let (headers, body) = server.await.expect("fixture task");
+            (headers, body, result)
+        }
+
+        let (headers, body, result) = one(
+            "200 OK",
+            r#"{"project_root":"D:\\w","rules":[]}"#,
+            "list",
+            r#"{"workspace":"D:\\w","session_id":"s1"}"#,
+        )
+        .await;
+        assert!(
+            headers.starts_with("GET /v1/permissions/rules?workspace=D%3A%5Cw "),
+            "{headers}"
+        );
+        assert_eq!(body, None);
+        assert_eq!(
+            serde_json::from_str::<Value>(&result.expect("list").result_json).expect("JSON"),
+            json!({"project_root": "D:\\w", "rules": []})
+        );
+
+        let (headers, body, result) = one(
+            "201 Created",
+            r#"{"id":"r_9","rule":"Bash(rm:*)","effect":"deny","scope":"project"}"#,
+            "add",
+            r#"{"rule":"Bash(rm:*)","effect":"deny","scope":"project","workspace":"/w","extra":1}"#,
+        )
+        .await;
+        assert!(
+            headers.starts_with("POST /v1/permissions/rules "),
+            "{headers}"
+        );
+        assert_eq!(
+            body,
+            Some(
+                json!({"rule": "Bash(rm:*)", "effect": "deny", "scope": "project", "workspace": "/w"})
+            )
+        );
+        assert!(result.expect("add").result_json.contains("r_9"));
+
+        let (headers, _, result) = one(
+            "200 OK",
+            r#"{"ok":true}"#,
+            "delete",
+            r#"{"id":"r 1/x","scope":"user"}"#,
+        )
+        .await;
+        assert!(
+            headers.starts_with("DELETE /v1/permissions/rules/r%201%2Fx?scope=user "),
+            "{headers}"
+        );
+        result.expect("delete");
+
+        let (_, _, result) = one(
+            "400 Bad Request",
+            r#"{"error":"permission rule \"Bash(\": missing closing parenthesis"}"#,
+            "add",
+            r#"{"rule":"Bash(","effect":"deny","scope":"user"}"#,
+        )
+        .await;
+        let error = result.expect_err("refused rule");
+        assert!(error.contains("missing closing parenthesis"), "{error}");
+
+        // 本地拒绝：不连 K-brain（地址是关着的端口，连了就会报连接错误而不是校验错误）。
+        let closed = prompt_fixture_connection("127.0.0.1:9".parse().expect("addr"));
+        for (action, input) in [
+            (
+                "add",
+                r#"{"rule":"Bash(rm:*)","effect":"deny","scope":"session"}"#,
+            ),
+            (
+                "add",
+                r#"{"rule":"Bash(rm:*)","effect":"ask","scope":"user"}"#,
+            ),
+            ("add", r#"{"rule":"  ","effect":"deny","scope":"user"}"#),
+            (
+                "add",
+                r#"{"rule":"Bash(rm:*)","effect":"deny","scope":"project"}"#,
+            ),
+            ("delete", r#"{"scope":"user"}"#),
+            ("delete", r#"{"id":"r_1","scope":"session"}"#),
+            ("rename", "{}"),
+            ("add", "[1]"),
+        ] {
+            let error = kbrain_permission_rules(
+                &closed,
+                proto::PermissionRulesRequest {
+                    action: action.to_string(),
+                    input_json: input.to_string(),
+                },
+            )
+            .await
+            .expect_err("rejected locally");
+            assert!(
+                error.starts_with("invalid permission rules request"),
+                "{action} {input}: {error}"
+            );
+        }
+    }
+
+    fn prompt_fixture_connection(address: std::net::SocketAddr) -> KBrainBackendConnection {
+        KBrainBackendConnection {
+            base_url: format!("http://{address}"),
+            token: "fixture-token".to_string(),
+            protocol_version: "kbrain.agent.v1".to_string(),
+            storage_id: "test-storage".into(),
+        }
+    }
+
+    /// 单次请求的本地 K-brain 替身：返回请求头与 JSON 正文，并回写给定响应。
+    async fn serve_one_prompt_request(
+        listener: tokio::net::TcpListener,
+        status: &'static str,
+        payload: &'static str,
+    ) -> (String, Option<Value>) {
+        let (mut socket, _) = listener.accept().await.expect("accept prompt request");
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 4096];
+        let header_end = loop {
+            let count = socket.read(&mut buffer).await.expect("read request");
+            assert!(count > 0, "fixture request ended before headers");
+            request.extend_from_slice(&buffer[..count]);
+            if let Some(index) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                break index + 4;
+            }
+        };
+        let headers = String::from_utf8_lossy(&request[..header_end]).into_owned();
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("Content-Length:")
+                    .or_else(|| line.strip_prefix("content-length:"))
+            })
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        while request.len() < header_end + content_length {
+            let count = socket.read(&mut buffer).await.expect("read request body");
+            assert!(count > 0, "fixture request ended before body");
+            request.extend_from_slice(&buffer[..count]);
+        }
+        let body = (content_length > 0).then(|| {
+            serde_json::from_slice(&request[header_end..header_end + content_length])
+                .expect("prompt request JSON")
+        });
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            payload.len(),
+            payload
+        );
+        socket
+            .write_all(response.as_bytes())
+            .await
+            .expect("write fixture response");
+        (headers, body)
+    }
+
+    #[test]
+    fn prompt_workdir_query_is_omitted_when_blank_and_encoded_otherwise() {
+        assert_eq!(prompt_workdir_query("   "), "");
+        assert_eq!(
+            prompt_workdir_query(" C:\\work dir "),
+            "?workdir=C%3A%5Cwork%20dir"
+        );
+    }
+
+    #[tokio::test]
+    async fn slash_command_list_maps_catalog_and_surfaces_errors() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(
+            listener,
+            "200 OK",
+            r#"{"version":"v1","commands":[{"name":"goal","description":"Keep working","argument_hint":"<goal>","kind":"action","source":"builtin"},{"name":"  "},{"name":"fix","kind":"prompt","source":"project"}]}"#,
+        ));
+        let response = kbrain_slash_commands(&prompt_fixture_connection(address), "/repo")
+            .await
+            .expect("slash commands");
+        let (headers, body) = server.await.expect("fixture task");
+        assert!(headers.starts_with("GET /v1/commands?workdir=%2Frepo "));
+        assert!(
+            headers.contains("authorization: Bearer fixture-token")
+                || headers.contains("Authorization: Bearer fixture-token")
+        );
+        assert!(body.is_none());
+        let names: Vec<_> = response
+            .commands
+            .iter()
+            .map(|command| {
+                (
+                    command.name.as_str(),
+                    command.argument_hint.as_str(),
+                    command.kind.as_str(),
+                    command.source.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                ("goal", "<goal>", "action", "builtin"),
+                ("fix", "", "prompt", "project")
+            ]
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(serve_one_prompt_request(
+            listener,
+            "400 Bad Request",
+            r#"{"error":"workdir is invalid"}"#,
+        ));
+        let error = kbrain_slash_commands(&prompt_fixture_connection(address), "")
+            .await
+            .expect_err("bad workdir");
+        let (headers, _) = server.await.expect("fixture task");
+        assert!(headers.starts_with("GET /v1/commands "));
+        assert!(error.starts_with("workdir is invalid (HTTP 400"));
     }
 
     #[test]
@@ -1969,128 +2741,280 @@ mod tests {
     }
 
     #[test]
-    fn provider_models_resolves_redacted_webui_config_from_matching_provider() {
-        let providers = json!([{
-            "id": "provider-a",
-            "type": "codex",
-            "baseUrl": "https://stored.example.com/v1/responses",
-            "apiKey": "stored-secret",
-            "isFullUrl": true,
-            "modelsUrl": "https://stored.example.com/models",
-            "useSystemProxy": true
-        }]);
-        assert_eq!(
-            resolve_stored_provider_models_config(
-                "provider-a",
-                "codex",
-                None,
-                None,
-                Some(providers),
-            )
-            .expect("stored provider config"),
-            super::ProviderModelsRequestConfig {
-                provider_type: "codex".to_string(),
-                base_url: "https://stored.example.com/v1/responses".to_string(),
-                api_key: "stored-secret".to_string(),
-                use_system_proxy: true,
-                models_url: Some("https://stored.example.com/models".to_string()),
-                is_full_url: true,
-                custom_headers: Vec::new(),
+    fn stored_key_discovery_forwards_the_draft_for_kbrain_to_resolve_by_id() {
+        let request = proto::ProviderModelsRequest {
+            provider_type: "codex".into(),
+            base_url: " https://relay.example.test/v2 ".into(),
+            provider_id: "saved/provider".into(),
+            models_url: "https://catalog.example.test/models".into(),
+            use_system_proxy: true,
+            ..Default::default()
+        };
+        let config = provider_models_request_config(&request).expect("draft config");
+        // The key stays in K-brain; the edited address is passed through unchanged.
+        assert_eq!(config.api_key, "");
+        assert_eq!(config.base_url, "https://relay.example.test/v2");
+        assert_eq!(config.models_url, "https://catalog.example.test/models");
+        assert!(config.use_system_proxy);
+        // Not provided: K-brain keeps the stored full-URL flag and headers.
+        assert_eq!(config.is_full_url, None);
+        assert_eq!(config.custom_headers, None);
+    }
+
+    #[test]
+    fn discovery_without_a_key_needs_a_provider_to_resolve_it() {
+        let error = provider_models_request_config(&proto::ProviderModelsRequest {
+            provider_type: "codex".into(),
+            base_url: "https://relay.example.test/v1".into(),
+            ..Default::default()
+        })
+        .expect_err("a new provider without a key cannot be discovered");
+        assert!(error.contains("API Key"));
+
+        let typed = provider_models_request_config(&proto::ProviderModelsRequest {
+            provider_type: "codex".into(),
+            base_url: "https://relay.example.test/v1".into(),
+            api_key: " sk-typed ".into(),
+            is_full_url: Some(true),
+            ..Default::default()
+        })
+        .expect("a typed key needs no stored provider");
+        assert_eq!(typed.api_key, "sk-typed");
+        assert_eq!(typed.is_full_url, Some(true));
+    }
+
+    #[tokio::test]
+    async fn kbrain_mcp_snapshot_reads_authenticated_backend() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            loop {
+                let count = socket.read(&mut buffer).await.unwrap();
+                assert!(count > 0);
+                request.extend_from_slice(&buffer[..count]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
             }
-        );
+            let headers = String::from_utf8_lossy(&request).to_lowercase();
+            assert!(headers.starts_with("get /v1/mcp "));
+            assert!(headers.contains("authorization: bearer fixture-token"));
+            let payload = r#"{"settings":{"servers":[{"id":"backend-docs","enabled":true,"transport":"stdio","command":"server"}]},"statuses":[]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(), payload
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        let connection = KBrainBackendConnection {
+            base_url: format!("http://{address}"),
+            token: "fixture-token".into(),
+            protocol_version: "kbrain.agent.v1".into(),
+            storage_id: "test-storage".into(),
+        };
+        let result =
+            super::kbrain_prompt_request(&connection, reqwest::Method::GET, "/v1/mcp", None)
+                .await
+                .unwrap();
+        let mut snapshot = json!({"mcp": {"servers": [], "selected": ["stale"]}});
+        crate::services::gateway::apply_kbrain_mcp_settings(&mut snapshot, &result).unwrap();
+        assert_eq!(snapshot["mcp"]["servers"][0]["id"], "backend-docs");
+        assert_eq!(snapshot["mcp"]["selected"], json!([]));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn kbrain_terminal_posts_identity_and_decodes_binary_snapshot() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept discovery request");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            let header_end = loop {
+                let count = socket.read(&mut buffer).await.expect("read request");
+                assert!(count > 0, "fixture request ended before headers");
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(index) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                    break index + 4;
+                }
+            };
+            let headers = String::from_utf8_lossy(&request[..header_end]).into_owned();
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("Content-Length:")
+                        .or_else(|| line.strip_prefix("content-length:"))
+                })
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .expect("content length");
+            while request.len() < header_end + content_length {
+                let count = socket.read(&mut buffer).await.expect("read request body");
+                assert!(count > 0, "fixture request ended before body");
+                request.extend_from_slice(&buffer[..count]);
+            }
+            let body: Value =
+                serde_json::from_slice(&request[header_end..header_end + content_length])
+                    .expect("discovery request JSON");
+            assert!(
+                headers.contains("authorization: Bearer fixture-token")
+                    || headers.contains("Authorization: Bearer fixture-token")
+            );
+            assert!(headers.starts_with("POST /v1/terminal "));
+            assert_eq!(body["conversation_id"], "conversation");
+            assert_eq!(body["run_id"], "run");
+            assert_eq!(body["session_id"], "term-1");
+            assert_eq!(body["action"], "read");
+            assert!(body.get("command").is_none());
+            let payload = r#"{"conversation_id":"conversation","run_id":"run","action":"read","session":{"id":"term-1","pid":42,"running":true,"kind":"local"},"output":"AP9B","output_start_offset":7,"output_end_offset":10,"truncated":true}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(),
+                payload
+            );
+            socket
+                .write_all(response.as_bytes())
+                .await
+                .expect("write fixture response");
+        });
+
+        let result = kbrain_terminal_request(
+            &KBrainBackendConnection {
+                base_url: format!("http://{address}"),
+                token: "fixture-token".to_string(),
+                protocol_version: "kbrain.agent.v1".to_string(),
+                storage_id: "test-storage".into(),
+            },
+            &proto::TerminalRequest {
+                action: "read".to_string(),
+                conversation_id: "conversation".to_string(),
+                run_id: "run".to_string(),
+                session_id: "term-1".to_string(),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("terminal snapshot");
+        assert_eq!(result.output, vec![0, 255, 65]);
+        assert_eq!(result.output_start_offset, 7);
+        assert_eq!(result.output_end_offset, 10);
+        assert!(result.truncated);
+        assert_eq!(result.session.unwrap().pid, 42);
+        server.await.expect("fixture server");
+    }
+
+    #[tokio::test]
+    async fn kbrain_terminal_requires_complete_identity() {
+        let error = kbrain_terminal_request(
+            &KBrainBackendConnection {
+                base_url: "http://127.0.0.1:1".to_string(),
+                token: "token".to_string(),
+                protocol_version: "kbrain.agent.v1".to_string(),
+                storage_id: "test-storage".into(),
+            },
+            &proto::TerminalRequest {
+                action: "read".to_string(),
+                run_id: "run".to_string(),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect_err("missing identity");
+        assert!(error.contains("conversation_id and run_id"));
     }
 
     #[test]
-    fn provider_models_custom_headers_fall_back_to_stored_only_when_draft_omits_them() {
-        let providers = json!([{
-            "id": "provider-a",
-            "type": "codex",
-            "baseUrl": "https://stored.example.com",
-            "apiKey": "stored-secret",
-            "customHeaders": [{ "key": "User-Agent", "value": "stored-cli/1.0" }]
-        }]);
-
-        // 草稿没带请求头（proto 的 custom_headers 缺省）→ 沿用落库配置。
-        let inherited = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            None,
-            Some(providers.clone()),
-        )
-        .expect("stored provider config");
-        assert_eq!(
-            inherited.custom_headers,
-            vec![("User-Agent".to_string(), "stored-cli/1.0".to_string())]
-        );
-
-        // 草稿把请求头清空了 → 按空集发，绝不回落到落库配置（否则用户删不掉伪装头）。
-        let cleared = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            Some(Vec::new()),
-            Some(providers.clone()),
-        )
-        .expect("stored provider config");
-        assert!(cleared.custom_headers.is_empty());
-
-        // 草稿显式给了头 → 覆盖落库配置。
-        let overridden = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            None,
-            Some(vec![("User-Agent".to_string(), "draft-cli/2.0".to_string())]),
-            Some(providers),
-        )
-        .expect("stored provider config");
-        assert_eq!(
-            overridden.custom_headers,
-            vec![("User-Agent".to_string(), "draft-cli/2.0".to_string())]
-        );
+    fn kbrain_terminal_rejects_invalid_buffer_and_missing_session_id() {
+        assert!(decode_kbrain_terminal_response(json!({"output":"%%%"})).is_err());
+        assert!(decode_kbrain_terminal_response(json!({"session":{}})).is_err());
     }
 
-    #[test]
-    fn provider_models_applies_webui_full_url_mode_to_stored_endpoint() {
-        let providers = json!([{
-            "id": "provider-a",
-            "type": "codex",
-            "baseUrl": "https://stored.example.com/v1/responses",
-            "apiKey": "stored-secret",
-            "isFullUrl": false
-        }]);
-        let config = resolve_stored_provider_models_config(
-            "provider-a",
-            "codex",
-            Some(true),
-            None,
-            Some(providers),
+    #[tokio::test]
+    async fn kbrain_provider_models_posts_normalized_discovery_request_and_reads_models() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local K-brain fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept discovery request");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            let header_end = loop {
+                let count = socket.read(&mut buffer).await.expect("read request");
+                assert!(count > 0, "fixture request ended before headers");
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(index) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                    break index + 4;
+                }
+            };
+            let headers = String::from_utf8_lossy(&request[..header_end]).into_owned();
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("Content-Length:")
+                        .or_else(|| line.strip_prefix("content-length:"))
+                })
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .expect("content length");
+            while request.len() < header_end + content_length {
+                let count = socket.read(&mut buffer).await.expect("read request body");
+                assert!(count > 0, "fixture request ended before body");
+                request.extend_from_slice(&buffer[..count]);
+            }
+            let body: Value =
+                serde_json::from_slice(&request[header_end..header_end + content_length])
+                    .expect("discovery request JSON");
+            assert!(
+                headers.contains("authorization: Bearer fixture-token")
+                    || headers.contains("Authorization: Bearer fixture-token")
+            );
+            assert!(headers.contains("/saved%2Fprovider/models"));
+            assert_eq!(body["providerId"], "saved/provider");
+            assert_eq!(body["api"], "openai-completions");
+            assert_eq!(body["requestFormat"], "openai-completions");
+            assert_eq!(body["apiKey"], "saved-secret");
+            assert_eq!(body["customHeaders"][0]["key"], "X-Client");
+            let payload = r#"{"models":[{"id":"fixture-model","displayName":"Fixture Model"}]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(),
+                payload
+            );
+            socket
+                .write_all(response.as_bytes())
+                .await
+                .expect("write fixture response");
+        });
+
+        let result = kbrain_provider_models(
+            &KBrainBackendConnection {
+                base_url: format!("http://{address}"),
+                token: "fixture-token".to_string(),
+                protocol_version: "kbrain.agent.v1".to_string(),
+                storage_id: "test-storage".into(),
+            },
+            json!({
+                "providerId": "saved/provider",
+                "type": "codex",
+                "api": "openai-completions",
+                "requestFormat": "openai-completions",
+                "apiKey": "saved-secret",
+                "baseUrl": "https://relay.example.test/v1",
+                "modelsUrl": "https://catalog.example.test/models",
+                "isFullUrl": true,
+                "useSystemProxy": true,
+                "customHeaders": [{ "key": "X-Client", "value": "fixture" }]
+            }),
         )
-        .expect("stored provider config with draft full URL mode");
-
-        assert_eq!(config.base_url, "https://stored.example.com/v1/responses");
-        assert_eq!(config.api_key, "stored-secret");
-        assert!(config.is_full_url);
-    }
-
-    #[test]
-    fn provider_models_rejects_mismatched_stored_provider_type() {
-        let providers = json!([{
-            "id": "provider-a",
-            "type": "claude_code",
-            "apiKey": "stored-secret"
-        }]);
-        assert_eq!(
-            resolve_stored_provider_models_config(
-                "provider-a",
-                "codex",
-                None,
-                None,
-                Some(providers),
-            )
-            .expect_err("provider type mismatch"),
-            "供应商类型与已保存配置不匹配"
-        );
+        .await
+        .expect("K-brain discovery response");
+        assert_eq!(result[0]["id"], "fixture-model");
+        server.await.expect("fixture server");
     }
 
     #[test]
@@ -2386,5 +3310,59 @@ mod tests {
             );
         }
         assert!(count > 0, "catalog parser found no tools");
+    }
+
+    #[tokio::test]
+    async fn proxy_detect_rejects_unknown_actions_and_bad_test_input() {
+        use crate::services::gateway::proto;
+
+        let unknown = super::handle_proxy_detect(proto::ProxyDetectRequest {
+            action: "apply".to_string(),
+            input_json: String::new(),
+        })
+        .await
+        .unwrap_err();
+        assert!(unknown.contains("unsupported"), "{unknown}");
+
+        let malformed = super::handle_proxy_detect(proto::ProxyDetectRequest {
+            action: "test".to_string(),
+            input_json: r#"{"type":"ftp","host":"127.0.0.1","port":21}"#.to_string(),
+        })
+        .await
+        .unwrap_err();
+        assert!(malformed.contains("input invalid"), "{malformed}");
+
+        // 没被检测到过的地址：桥接层原样带回服务层的拒绝。
+        let undetected = super::handle_proxy_detect(proto::ProxyDetectRequest {
+            action: " test ".to_string(),
+            input_json: r#"{"type":"http","host":"203.0.113.7","port":3128}"#.to_string(),
+        })
+        .await
+        .unwrap_err();
+        assert!(undetected.contains("检测到"), "{undetected}");
+    }
+    /// 分发循环是单任务串行的（connection.rs 的 dispatcher_task）。MemoryManage 要等
+    /// K-brain（手动整理可达 2 分钟），在循环里直接 await 会让同一连接的 Ping、chat、
+    /// 审批全部排队。桌面 Wry AppHandle 无法在单测里构造，这里核对分发臂已 spawn。
+    #[test]
+    fn memory_manage_envelope_is_spawned_off_the_dispatch_loop() {
+        let source = include_str!("gateway/envelope_handler.rs");
+        let start = source
+            .find("Payload::MemoryManage(request)) =>")
+            .expect("MemoryManage arm");
+        let rest = &source[start + 1..];
+        let end = rest
+            .find("Some(proto::gateway_envelope::Payload::")
+            .expect("next arm");
+        let arm = &rest[..end];
+        assert!(
+            arm.contains("async_runtime::spawn("),
+            "MemoryManage arm awaits K-brain inline on the dispatch loop:\n{arm}"
+        );
+        // 对照：同样等 K-brain 的 SlashCommandList 已经 spawn。
+        let slash = source
+            .find("Payload::SlashCommandList(request)) =>")
+            .expect("SlashCommandList arm");
+        assert!(source[slash..slash + 200].contains("async_runtime::spawn("));
     }
 }

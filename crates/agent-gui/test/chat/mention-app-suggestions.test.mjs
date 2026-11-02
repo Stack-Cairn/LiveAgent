@@ -276,7 +276,10 @@ test("both hosts gate apps by the cua-driver identity ruling via the shared hook
   assert.match(hook, /from "@liveagent\/app\/shims\/tauriCore"/);
   assert.doesNotMatch(hook, /@tauri-apps/);
   const chatPage = source(guiRoot, "pages/ChatPage.tsx");
-  assert.match(chatPage, /useMentionApps\(activeWorkspaceResources\.mcpServers, isAgentMode\)/);
+  assert.match(
+    chatPage,
+    /useMentionApps\(\s*activeWorkspaceResources\.mcpServers,\s*isAgentMode && !kBrainBackendEnabled,?\s*\)/,
+  );
   // WebUI 接线：门控入参同源（agent 模式 + 工作区 mcpServers），列表
   // 传入 composer；列出的是已连接桌面宿主的应用（cua 工具操作桌面）。
   const gatewayApp = readFileSync(

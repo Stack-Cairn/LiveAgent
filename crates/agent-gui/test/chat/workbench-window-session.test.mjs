@@ -150,10 +150,6 @@ test("startup paints theme and shell before progressively hydrating pane content
     new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
     "utf8",
   );
-  const extractionControllerSource = readFileSync(
-    new URL("../../src/lib/chat/memory/extractionController.ts", import.meta.url),
-    "utf8",
-  );
   const conversationPaneHostSource = readFileSync(
     new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
     "utf8",
@@ -233,13 +229,7 @@ test("startup paints theme and shell before progressively hydrating pane content
     chatRuntimeHostSource,
     /import \{[\s\S]{0,100}runAgentConversationTurn[\s\S]{0,100}\} from/,
   );
-  assert.match(sendChatTurnSource, /import\("\.\.\/\.\.\/\.\.\/lib\/memory\/prompts\/injection"\)/);
-  assert.match(
-    sendChatTurnSource,
-    /import\("\.\.\/\.\.\/\.\.\/lib\/chat\/memory\/injectionController"\)/,
-  );
-  assert.match(extractionControllerSource, /import\("\.\/extractionEngine"\)/);
-  assert.doesNotMatch(extractionControllerSource, /runMemoryExtraction,\s*\} from/);
+  assert.doesNotMatch(sendChatTurnSource, /import\(".*(?:extractionEngine|memory\/injectionController)"\)/);
   assert.doesNotMatch(appSource, /import \{ ChatPage \} from "\.\/pages\/ChatPage"/);
   assert.match(appSource, /if \(!settingsReady\)[\s\S]{0,220}<AppBootShell/);
   assert.ok(chatSource.indexOf("useWorkspaceProjects({") < chatSource.indexOf("sidebarStore.start()"));

@@ -1,4 +1,4 @@
-import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import { localizePlanningError } from "@liveagent/ui/lib/planning/i18n";
 import { taskDescendants } from "@liveagent/ui/lib/planning/taskLists";
 import { zonedParts } from "@liveagent/ui/lib/planning/time";

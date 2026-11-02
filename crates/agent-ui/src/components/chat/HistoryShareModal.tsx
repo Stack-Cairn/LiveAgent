@@ -44,6 +44,7 @@ type HistoryShareModalProps = {
   isUpdating: boolean;
   errorMessage: string | null;
   shareOrigin?: string;
+  shareBackendUrl?: string;
   shareOriginPort?: number;
   shareOriginLoading?: boolean;
   onToggle: (enabled: boolean, options?: { redactToolContent?: boolean }) => void;
@@ -127,6 +128,7 @@ export function HistoryShareModal({
   isUpdating,
   errorMessage,
   shareOrigin,
+  shareBackendUrl,
   shareOriginPort,
   shareOriginLoading = false,
   onToggle,
@@ -138,7 +140,7 @@ export function HistoryShareModal({
     COPY_FEEDBACK_DURATION.default,
   );
   const [redactToolContent, setRedactToolContent] = useState(false);
-  const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort);
+  const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort, shareBackendUrl);
   const token = share?.enabled === true ? (share.token?.trim() ?? "") : "";
   const shareUrl = useMemo(() => buildShareUrl(token, publicOrigin), [publicOrigin, token]);
   const isEnabled = share?.enabled === true;

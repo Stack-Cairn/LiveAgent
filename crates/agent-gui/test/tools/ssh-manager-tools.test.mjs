@@ -58,7 +58,7 @@ function createSshSession(overrides = {}) {
 }
 
 async function buildRegistry(params = {}) {
-  const loader = createTsModuleLoader();
+  const loader = createTsModuleLoader({ mocks: { "@tauri-apps/api/core": {} } });
   const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
   const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
   return buildBuiltinToolRegistry({

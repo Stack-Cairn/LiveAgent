@@ -35,11 +35,12 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
     settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
   );
 
-  assert.equal(runtime.baseUrl, "https://relay.example/v1");
-  assert.equal(runtime.isFullUrl, true);
-  assert.equal(runtime.apiKey, "test-key");
-  // 用户自定义头原样透传，工厂不再注入任何内置身份头。
-  assert.deepEqual(runtime.customHeaders, [{ key: "X-Trace-Id", value: "abc" }]);
+  assert.equal(runtime.backend, "kbrain");
+  assert.equal(runtime.backendModelProvider, "provider-1");
+  assert.equal(runtime.baseUrl, "");
+  assert.equal(runtime.isFullUrl, false);
+  assert.equal(runtime.apiKey, "");
+  assert.equal(runtime.customHeaders, undefined);
   assert.equal(runtime.promptCachingEnabled, true);
   assert.equal(runtime.promptCacheRetention, "long");
   assert.equal(runtime.useSystemProxy, true);
@@ -82,3 +83,25 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
   );
   assert.equal(unsupported.reasoning, undefined);
 });
+
+for (const [type, requestFormat, supported] of [
+  ["codex", "openai-completions", false],
+  ["codex", "openai-responses", true],
+  ["codex", undefined, true],
+  ["gemini", undefined, true],
+  ["claude_code", undefined, true],
+  ["xai", undefined, true],
+  ["deepseek", undefined, false],
+]) {
+  test(`runtime search gates ${type}/${requestFormat} without rewriting preferences`, () => {
+    const provider = Object.freeze(settings.normalizeCustomProvider(createProvider({ type, requestFormat })));
+    assert.equal(provider.nativeWebSearchEnabled, true);
+    for (const enabled of [true, false]) {
+      const controls = Object.freeze({ ...settings.DEFAULT_CHAT_RUNTIME_CONTROLS, nativeWebSearchEnabled: enabled });
+      const runtime = createProviderRuntimeConfig(provider, "model", controls);
+      assert.equal(runtime.nativeWebSearchEnabled, enabled && supported);
+      assert.equal(controls.nativeWebSearchEnabled, enabled);
+      assert.equal(provider.nativeWebSearchEnabled, true);
+    }
+  });
+}

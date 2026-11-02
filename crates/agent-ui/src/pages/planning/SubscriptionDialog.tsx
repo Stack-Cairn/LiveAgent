@@ -101,6 +101,9 @@ export function SubscriptionDialog({ onClose }: { onClose(): void }) {
           <DialogDescription>{t("planner.subscription.description")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <p className="mb-4 text-sm text-muted-foreground">
+            {t("planner.subscription.providerHelp")}
+          </p>
           <form
             className="space-y-4"
             onSubmit={(e) => {

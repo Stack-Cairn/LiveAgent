@@ -136,6 +136,35 @@ function findFrame(codec, socket, frameCase) {
   return frames(codec, socket).find((frame) => frame.case === frameCase);
 }
 
+test("Gateway queue pause/resume keeps explicit revisions and the backend paused state", async () => {
+  installBrowser();
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+  try {
+    const client = getGatewayWebSocketClient("token");
+    const first = client.chatQueueSetPaused("conversation", true, 0);
+    const socket = await connectAndAuth(codec);
+    await waitFor(() => findAgentRequest(codec, socket, "chat_queue"), "pause request");
+    const pause = findAgentRequest(codec, socket, "chat_queue");
+    assert.equal(pause.json.agent_request.chat_queue.action, "pause");
+    assert.equal(Number(pause.json.agent_request.chat_queue.revision || 0), 0);
+    socket.receiveBinary(codec.encodeServerFrame({ request_id: pause.requestId, agent_response: {chat_queue_resp: {
+      accepted:true, revision:1, snapshot_json:JSON.stringify({conversationId:"conversation",revision:1,paused:true,items:[]}),
+    }}}));
+    assert.equal((await first).snapshot.paused,true);
+    const next = client.chatQueueSetPaused("conversation", false, 1);
+    await waitFor(() => frames(codec,socket).filter(f=>f.json.agent_request?.chat_queue).length===2,"resume request");
+    const resume=frames(codec,socket).filter(f=>f.json.agent_request?.chat_queue)[1];
+    assert.equal(resume.json.agent_request.chat_queue.action,"resume");
+    assert.equal(Number(resume.json.agent_request.chat_queue.revision),1);
+    socket.receiveBinary(codec.encodeServerFrame({request_id:resume.requestId,agent_response:{chat_queue_resp:{accepted:true,revision:2,snapshot_json:JSON.stringify({conversationId:"conversation",revision:2,paused:false,items:[]})}}}));
+    assert.equal((await next).snapshot.paused,false);
+    const shared = createWebModuleLoader().loadModule("src/lib/gatewaySocketShared.ts");
+    assert.equal(shared.normalizeChatQueueSnapshot({conversationId:"c",revision:3,paused:true,items:[]}).paused,true);
+    assert.equal(Object.hasOwn(shared.normalizeChatQueueSnapshot({conversationId:"c",revision:3,items:[]}),"paused"),false);
+  } finally { resetGatewayWebSocketClient(); }
+});
+
 async function connectAndAuth(codec, index = 0) {
   await waitFor(() => FakeWebSocket.instances.length > index, "websocket construction");
   const socket = FakeWebSocket.instances[index];

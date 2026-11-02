@@ -6,6 +6,11 @@ import {
   getAskUserQuestionDeadlineAt,
 } from "../lib/tools/askUserQuestionTools";
 import {
+  getPermissionAutoResolved,
+  getPermissionAutoResolvedVersion,
+  subscribePermissionAutoResolved,
+} from "../lib/tools/permissionAutoResolved";
+import {
   answerPlanDecision,
   getPlanDecisionVersion,
   isPlanApprovalToolCall,
@@ -27,6 +32,18 @@ export function usePendingToolApproval(
 ) {
   useSyncExternalStore(subscribeToolApprovals, getToolApprovalVersion, getToolApprovalVersion);
   return Boolean(getPendingToolApproval(toolCallId));
+}
+
+export function usePermissionAutoResolved(
+  toolCallId: string,
+  _toolArguments: Record<string, unknown>,
+) {
+  useSyncExternalStore(
+    subscribePermissionAutoResolved,
+    getPermissionAutoResolvedVersion,
+    getPermissionAutoResolvedVersion,
+  );
+  return getPermissionAutoResolved(toolCallId);
 }
 
 export function readAskUserQuestionDeadline(

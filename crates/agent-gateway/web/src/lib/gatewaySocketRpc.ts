@@ -79,11 +79,13 @@ import {
   type GatewayWorkspaceRootGrant,
   type GatewayWorkspaceRootGrantDraft,
   type GatewayWorkspaceRootGrantsResponse,
+  type GoalManageResponse,
   type HistoryGetOptions,
   type InstalledAppsListResponse,
   isConnectionSetupTimeoutError,
   isRecoverableGatewayTransportError,
   isRequestTimeoutError,
+  type LoopManageResponse,
   type ManagedProcessLogPayload,
   type ManagedProcessStatePayload,
   type MentionListResponse,
@@ -101,6 +103,7 @@ import {
   type SkillManagePayload,
   type SkillMetadataResponse,
   type SkillTextResponse,
+  type SlashCommandListResponse,
   type SshKnownHostResetResult,
   sftpPathPayload,
   shouldRecoverMemoryManageRequest,
@@ -159,6 +162,19 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       await this.requestWithRecovery<RawChatQueueResponse>("chat_queue.get", {
         conversation_id: conversationId,
       }),
+    );
+  }
+
+  async chatQueueSetPaused(
+    conversationId: string,
+    paused: boolean,
+    revision: number,
+  ): Promise<ChatQueueResponse> {
+    return normalizeChatQueueResponse(
+      await this.requestWithRecovery<RawChatQueueResponse>(
+        paused ? "chat_queue.pause" : "chat_queue.resume",
+        { conversation_id: conversationId, revision },
+      ),
     );
   }
 
@@ -719,18 +735,32 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     );
   }
 
-  async listTerminals(projectPathKey?: string): Promise<TerminalSession[]> {
-    const projectKey = projectPathKey?.trim() ?? "";
-    const response = await this.requestWithRecovery<RawTerminalResponse>(
-      "terminal.list",
-      projectKey ? { project_path_key: projectKey } : {},
-    );
+  async listTerminals(
+    params?:
+      | string
+      | {
+          projectPathKey?: string;
+          conversationId?: string;
+          runId?: string;
+        },
+  ): Promise<TerminalSession[]> {
+    const options = typeof params === "string" ? { projectPathKey: params } : params;
+    const projectKey = options?.projectPathKey?.trim() ?? "";
+    const conversationId = options?.conversationId?.trim() ?? "";
+    const runId = options?.runId?.trim() ?? "";
+    const response = await this.requestWithRecovery<RawTerminalResponse>("terminal.list", {
+      ...(projectKey ? { project_path_key: projectKey } : {}),
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(runId ? { run_id: runId } : {}),
+    });
     return (response.sessions ?? []).map(normalizeTerminalSession);
   }
 
   async createTerminal(params: {
     cwd: string;
     projectPathKey: string;
+    conversationId?: string;
+    runId?: string;
     shell?: string;
     title?: string;
     cols?: number;
@@ -1155,6 +1185,54 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     });
   }
 
+  /** 桌面端“/”指令目录。列表不是状态变更，可安全重试。 */
+  async listCommands(workdir?: string): Promise<SlashCommandListResponse> {
+    return this.requestWithRecovery<SlashCommandListResponse>("commands.list", {
+      workdir: workdir ?? "",
+    });
+  }
+
+  /** /goal clear：清除会话目标（set/resume 会开始一轮运行，走聊天请求）。改状态的请求不自动重发。 */
+  async clearGoal(conversationId: string): Promise<GoalManageResponse> {
+    return this.request<GoalManageResponse>("goal.manage", {
+      conversationId,
+      action: "clear",
+    });
+  }
+
+  async listLoops(conversationId: string): Promise<LoopManageResponse> {
+    return this.requestWithRecovery<LoopManageResponse>("loops.manage", {
+      conversationId,
+      action: "list",
+    });
+  }
+
+  /** 创建 /loop。断线后不自动重发：桌面端可能已经建好，重发会多出一条重复的定时任务。 */
+  async createLoop(input: {
+    conversationId: string;
+    cron?: string;
+    interval: string;
+    prompt: string;
+    reasoning?: string;
+  }): Promise<LoopManageResponse> {
+    return this.request<LoopManageResponse>("loops.manage", {
+      conversationId: input.conversationId,
+      action: "create",
+      cron: input.cron ?? "",
+      interval: input.interval,
+      prompt: input.prompt,
+      reasoning: input.reasoning ?? "",
+    });
+  }
+
+  async cancelLoop(conversationId: string, loopId: string): Promise<LoopManageResponse> {
+    return this.request<LoopManageResponse>("loops.manage", {
+      conversationId,
+      action: "cancel",
+      loopId,
+    });
+  }
+
   /** 桌面宿主的已安装应用（@ 应用提及）；返回条目数组，与 GUI 端
    *  Tauri 命令 `cua_driver_list_installed_apps` 的载荷一致。 */
   async listInstalledApps(): Promise<InstalledAppsListResponse["apps"]> {
@@ -1172,6 +1250,28 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
    */
   async cuaDriverStatus<T>(action: "probe" | "permissions_status"): Promise<T> {
     return this.requestWithRecovery<T>(`cua.driver.${action}`, {});
+  }
+
+  /** 应用代理设置的代理服务检测与测速，在桌面宿主上执行；返回值与 GUI 端
+   *  Tauri 命令 `system_proxy_detect` / `system_proxy_test` 的载荷一致。 */
+  async detectProxies<T>(): Promise<T> {
+    return this.requestWithRecovery<T>("proxy.detect", {});
+  }
+
+  async testProxy<T>(input: { type: string; host: string; port: number }): Promise<T> {
+    return this.request<T>("proxy.test", input);
+  }
+
+  /** 设置 → 权限：K-brain 记住的权限规则。返回 K-brain 的应答 JSON（snake_case）。
+   *  只有读取会在重连后重发；添加和删除不重放。 */
+  async permissionRules<T>(
+    action: "list" | "add" | "delete",
+    input: Record<string, unknown>,
+  ): Promise<T> {
+    const type = `permission.rules.${action}`;
+    return action === "list"
+      ? this.requestWithRecovery<T>(type, input)
+      : this.request<T>(type, input);
   }
 
   async listFsRoots(): Promise<FsRootsResponse> {
@@ -1387,6 +1487,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     providerId = "",
     isFullUrl?: boolean,
     customHeaders?: readonly { key: string; value: string }[],
+    requestFormat?: string,
   ): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
@@ -1397,6 +1498,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       provider_id: providerId,
       is_full_url: isFullUrl,
       custom_headers: customHeaders,
+      request_format: requestFormat,
     });
   }
 

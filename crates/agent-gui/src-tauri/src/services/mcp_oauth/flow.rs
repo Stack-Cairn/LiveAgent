@@ -34,7 +34,10 @@ pub fn new_pkce() -> Result<Pkce, String> {
     // RFC 7636：32 字节熵 → base64url 43 字符 verifier；challenge = S256(verifier)。
     let verifier = random_b64url(32)?;
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    Ok(Pkce { verifier, challenge })
+    Ok(Pkce {
+        verifier,
+        challenge,
+    })
 }
 
 pub fn build_authorize_url(
@@ -305,7 +308,10 @@ fn token_request(
                 .error_description
                 .map(|d| format!("：{d}"))
                 .unwrap_or_default();
-            return Err(format!("token 端点返回 {}（{}{detail}）", status, err.error));
+            return Err(format!(
+                "token 端点返回 {}（{}{detail}）",
+                status, err.error
+            ));
         }
         return Err(format!("token 端点返回 {status}"));
     }
@@ -317,7 +323,9 @@ fn token_request(
     }
     if let Some(token_type) = parsed.token_type.as_deref() {
         if !token_type.eq_ignore_ascii_case("bearer") {
-            return Err(format!("不支持的 token_type：{token_type}（仅支持 Bearer）"));
+            return Err(format!(
+                "不支持的 token_type：{token_type}（仅支持 Bearer）"
+            ));
         }
     }
     Ok(parsed)
@@ -373,7 +381,10 @@ mod tests {
     #[test]
     fn pkce_challenge_matches_rfc7636_s256() {
         let pkce = new_pkce().expect("pkce");
-        assert!(pkce.verifier.len() >= 43, "32 字节熵应产出 ≥43 字符 verifier");
+        assert!(
+            pkce.verifier.len() >= 43,
+            "32 字节熵应产出 ≥43 字符 verifier"
+        );
         let expected = URL_SAFE_NO_PAD.encode(Sha256::digest(pkce.verifier.as_bytes()));
         assert_eq!(pkce.challenge, expected);
         // 不重复（熵源有效）。
@@ -401,7 +412,10 @@ mod tests {
             pairs.get("redirect_uri").map(String::as_str),
             Some("http://127.0.0.1:23456/callback")
         );
-        assert_eq!(pairs.get("code_challenge_method").map(String::as_str), Some("S256"));
+        assert_eq!(
+            pairs.get("code_challenge_method").map(String::as_str),
+            Some("S256")
+        );
         assert_eq!(
             pairs.get("resource").map(String::as_str),
             Some("https://mcp.example.com/mcp")

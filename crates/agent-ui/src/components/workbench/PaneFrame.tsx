@@ -36,7 +36,14 @@ export function PaneFrame(props: PaneFrameProps) {
       data-workbench-pane={paneId}
       data-workbench-pane-focused={isFocused ? "true" : undefined}
       aria-label={regionLabel}
-      onPointerDownCapture={onFocusRequest}
+      onPointerDownCapture={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("[data-workbench-preserve-focus]")
+        )
+          return;
+        onFocusRequest?.();
+      }}
       className={cn(
         "group/workbench-pane absolute flex min-h-0 min-w-0 flex-col overflow-hidden",
         !chromeless && "bg-background",

@@ -1,12 +1,15 @@
 use super::{
-    attach_stt_secret_sync, build_gateway_runtime_status_envelope,
-    build_local_settings_update_event_payload, effective_agent_id,
-    gateway_connection_needs_restart, gateway_connection_stale_after, gateway_reconnect_backoff,
-    history_share_resolve_error_code, is_chat_runtime_wake_request_id,
-    merge_settings_sync_snapshot, merge_settings_update_into_snapshot, proto,
-    removed_workspace_project_ids, required_terminal_project_path_key, set_disconnected_status,
+    attach_settings_sync_stamp, attach_stt_secret_sync, build_chat_queue_event_envelope,
+    build_gateway_runtime_status_envelope, build_local_settings_update_event_payload,
+    effective_agent_id, gateway_connection_needs_restart, gateway_connection_stale_after,
+    gateway_reconnect_backoff, history_share_resolve_error_code, ignore_gateway_outbound_offline,
+    is_chat_runtime_wake_request_id, merge_settings_sync_snapshot,
+    merge_settings_update_into_snapshot, proto, removed_workspace_project_ids,
+    required_terminal_project_path_key, set_disconnected_status, take_settings_sync_client,
+    with_settings_sync_client, AppliedClientSeqs, GatewayChatQueueEventInput,
     GatewayChatRequestEvent, GatewayController, GatewayStatusSnapshot, RemoteChatInboxRecord,
-    GATEWAY_CHAT_LEASE_MS, GATEWAY_CHAT_RUNNING_LEASE_MS, GATEWAY_RECONNECT_MAX,
+    SettingsSnapshotCache, SettingsSyncAck, SettingsSyncStamp, GATEWAY_CHAT_LEASE_MS,
+    GATEWAY_CHAT_RUNNING_LEASE_MS, GATEWAY_OUTBOUND_OFFLINE_ERROR, GATEWAY_RECONNECT_MAX,
     GATEWAY_RECONNECT_MIN, GATEWAY_RECONNECT_STABLE_AFTER,
     GATEWAY_RUNTIME_STATUS_REPUBLISH_MAX_AGE, GATEWAY_WEBVIEW_REPORT_FRESH_WINDOW,
 };
@@ -15,6 +18,54 @@ use crate::services::gateway_bridge;
 use crate::services::provider_usage::{ProviderUsageResult, UsageData};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
+
+#[test]
+fn remote_chat_failure_preserves_actionable_error_for_webui() {
+    let envelope = super::build_gateway_chat_control_event_envelope(
+        "request-1".into(), "conversation-1".into(), "failed",
+        "desktop_runtime_rejected".into(), "Backend request failed".into(),
+    );
+    let Some(proto::agent_envelope::Payload::ChatControl(event)) = envelope.payload else {
+        panic!("missing chat control event");
+    };
+    assert_eq!(event.state, "failed");
+    assert_eq!(event.request_id, "request-1");
+    assert_eq!(event.error_code, "desktop_runtime_rejected");
+    assert_eq!(event.message, "Backend request failed");
+}
+
+#[test]
+fn gateway_mcp_snapshot_uses_backend_instead_of_legacy_sqlite() {
+    let mut snapshot = json!({"mcp": {"servers": [{"id": "legacy"}], "selected": ["legacy"]}});
+    super::apply_kbrain_mcp_settings(&mut snapshot, &json!({
+        "settings": {"servers": [{"id": "backend", "enabled": true, "transport": "stdio", "command": "server"}], "selected": ["backend"]},
+        "statuses": []
+    })).unwrap();
+    assert_eq!(snapshot["mcp"]["servers"][0]["id"], "backend");
+    assert_eq!(snapshot["mcp"]["selected"], json!(["backend"]));
+    super::apply_kbrain_mcp_settings(&mut snapshot, &json!({"settings": {"servers": []}})).unwrap();
+    assert_eq!(snapshot["mcp"], json!({"servers": [], "selected": []}));
+    assert!(super::apply_kbrain_mcp_settings(&mut snapshot, &json!({"settings": {}})).is_err());
+}
+
+#[test]
+fn gateway_model_snapshot_uses_backend_instead_of_legacy_providers() {
+    let mut snapshot = json!({
+        "customProviders": [{"id": "legacy", "activeModels": ["old-model"]}],
+        "selectedModel": {"customProviderId": "legacy", "model": "old-model"},
+        "system": {"workdir": "C:\\Users\\Tester\\workspace"}
+    });
+    super::apply_kbrain_model_settings(&mut snapshot, &json!({
+        "providers": [{"id": "backend", "activeModels": ["new-model"]}],
+        "defaultProvider": "backend", "defaultModel": "new-model"
+    })).unwrap();
+    assert_eq!(snapshot["customProviders"][0]["id"], "backend");
+    assert_eq!(snapshot["selectedModel"]["model"], "new-model");
+    assert_eq!(snapshot["system"]["workdir"], "C:\\Users\\Tester\\workspace");
+    super::apply_kbrain_model_settings(&mut snapshot, &json!({"providers": []})).unwrap();
+    assert_eq!(snapshot["selectedModel"], Value::Null);
+    assert!(super::apply_kbrain_model_settings(&mut snapshot, &json!({})).is_err());
+}
 
 #[test]
 fn provider_usage_response_serializes_only_result_json() {
@@ -84,6 +135,10 @@ fn gateway_chat_request(
         uploaded_files: Vec::new(),
         referenced_conversations: Vec::new(),
         queue_policy: String::new(),
+        goal_action: String::new(),
+        goal_text: String::new(),
+        prompt_command: false,
+        plan_command: false,
     }
 }
 
@@ -115,6 +170,9 @@ fn gateway_chat_command_mapping_preserves_rebase_signal() {
         execution_mode: "tools".to_string(),
         workdir: "/workspace".to_string(),
         command_safety_mode: "sandbox".to_string(),
+        goal_action: String::new(),
+        goal_text: String::new(),
+        prompt_command: false,
         referenced_conversations: vec![proto::ChatConversationReference {
             id: "conversation-source".to_string(),
             title: "Earlier investigation".to_string(),
@@ -648,6 +706,7 @@ fn set_disconnected_status_resets_runtime_fields_for_new_config() {
         enable_web_ssh_terminal: false,
         enable_web_git: false,
         enable_web_tunnels: false,
+        ..RemoteSettingsPayload::default()
     };
     let mut status = GatewayStatusSnapshot {
         online: true,
@@ -716,6 +775,7 @@ fn gateway_connection_nudge_detects_offline_and_stale_sessions() {
         enable_web_ssh_terminal: false,
         enable_web_git: false,
         enable_web_tunnels: false,
+        ..RemoteSettingsPayload::default()
     };
     assert_eq!(
         gateway_connection_stale_after(&config),
@@ -902,5 +962,279 @@ fn stalled_webview_status_refreshes_running_ledger_only_inside_grace_window() {
             Some(&idle_record),
             now + GATEWAY_WEBVIEW_REPORT_FRESH_WINDOW + Duration::from_secs(1),
         )
+    );
+}
+
+#[test]
+fn gateway_offline_is_ignored_for_best_effort_publishes() {
+    assert_eq!(
+        ignore_gateway_outbound_offline(Err(GATEWAY_OUTBOUND_OFFLINE_ERROR.to_string())),
+        Ok(())
+    );
+    assert_eq!(ignore_gateway_outbound_offline(Ok(())), Ok(()));
+}
+
+#[test]
+fn gateway_publish_keeps_real_send_failures() {
+    for error in [
+        "gateway outbound sender lock poisoned",
+        "gateway outbound control lane is offline",
+        "gateway outbound lane closed",
+    ] {
+        assert_eq!(
+            ignore_gateway_outbound_offline(Err(error.to_string())),
+            Err(error.to_string())
+        );
+    }
+}
+
+#[test]
+fn chat_queue_event_envelope_carries_snapshot() {
+    let envelope = build_chat_queue_event_envelope(GatewayChatQueueEventInput {
+        conversation_id: "conversation-1".to_string(),
+        snapshot_json: r#"{"items":[]}"#.to_string(),
+        revision: 7,
+    });
+
+    assert!(envelope.request_id.starts_with("chat-queue-event-"));
+    match envelope.payload {
+        Some(proto::agent_envelope::Payload::ChatQueueEvent(event)) => {
+            assert_eq!(event.conversation_id, "conversation-1");
+            assert_eq!(event.snapshot_json, r#"{"items":[]}"#);
+            assert_eq!(event.revision, 7);
+        }
+        other => panic!("unexpected payload: {other:?}"),
+    }
+}
+
+// Fourth review (2aa05c4e): the desktop agent's K-brain memory switch bridge, driven
+// through the real write_switch against a one-shot local HTTP stand-in. settings.get takes the
+// switch from the snapshot's own K-brain settings read, so there is no second read to test.
+mod review4_kbrain_memory {
+    use super::super::kbrain_memory::write_switch;
+    use crate::services::kbrain_backend::KBrainBackendConnection;
+    use std::io::{Read, Write};
+    use std::time::Duration;
+
+    const TOKEN: &str = "review4-secret-token";
+
+    /// One request: waits `delay`, answers `status` with `body`, returns the raw request.
+    fn kbrain_stub(
+        status: &'static str,
+        body: &'static str,
+        delay: Duration,
+    ) -> (KBrainBackendConnection, std::thread::JoinHandle<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind stub");
+        let base_url = format!("http://{}", listener.local_addr().expect("stub addr"));
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            stream
+                .set_read_timeout(Some(Duration::from_millis(500)))
+                .expect("read timeout");
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            loop {
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => request.extend_from_slice(&chunk[..read]),
+                }
+                let text = String::from_utf8_lossy(&request);
+                if let Some((head, rest)) = text.split_once("\r\n\r\n") {
+                    let length = head
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().ok())?
+                        })
+                        .unwrap_or(0);
+                    if rest.len() >= length {
+                        break;
+                    }
+                }
+            }
+            std::thread::sleep(delay);
+            let response = format!(
+                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            String::from_utf8_lossy(&request).into_owned()
+        });
+        let connection = KBrainBackendConnection {
+            base_url,
+            token: TOKEN.into(),
+            protocol_version: "review4".into(),
+            storage_id: "review4".into(),
+        };
+        (connection, handle)
+    }
+
+    #[test]
+    fn review4_switch_errors_name_the_status_without_token_or_url() {
+        for status in ["401 Unauthorized", "500 Internal Server Error"] {
+            let (connection, handle) = kbrain_stub(status, r#"{"error":"x"}"#, Duration::ZERO);
+            let base_url = connection.base_url.clone();
+            let error = write_switch(&connection, true).expect_err("non-2xx write must fail");
+            handle.join().expect("stub thread");
+            assert!(error.contains(&status[..3]), "{error}");
+            assert!(
+                !error.contains(TOKEN) && !error.contains(&base_url),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn review4_switch_write_puts_only_the_memory_switch() {
+        let (connection, handle) = kbrain_stub("200 OK", "{}", Duration::ZERO);
+        write_switch(&connection, false).expect("write accepted");
+        let request = handle.join().expect("stub thread");
+        assert!(
+            request.starts_with("PUT /v1/settings HTTP/1.1\r\n"),
+            "{request}"
+        );
+        assert!(
+            request.ends_with(r#"{"memory":{"enabled":false}}"#),
+            "{request}"
+        );
+    }
+}
+
+fn sync_ack(id: &str, seq: u64, error: Option<&str>) -> SettingsSyncAck {
+    SettingsSyncAck {
+        id: id.to_string(),
+        seq,
+        error: error.map(str::to_string),
+    }
+}
+
+#[test]
+fn settings_sync_client_marker_is_taken_out_of_the_update() {
+    let mut update = json!({
+        "theme": "dark",
+        "syncClient": { "id": "tab-a", "seq": 3 },
+        "appliedClientSeqs": { "tab-a": { "seq": 99 } },
+        "settingsSyncVersion": { "epoch": "e", "generation": 9 },
+    });
+    let client = take_settings_sync_client(&mut update)
+        .expect("valid marker")
+        .expect("marker present");
+    assert_eq!((client.id.as_str(), client.seq), ("tab-a", 3));
+    assert_eq!(
+        update,
+        json!({ "theme": "dark" }),
+        "neither key may reach the snapshot"
+    );
+
+    let mut legacy = json!({ "theme": "light" });
+    assert_eq!(
+        take_settings_sync_client(&mut legacy).expect("no marker"),
+        None
+    );
+
+    for bad in [
+        json!({ "id": "", "seq": 1 }),
+        json!({ "id": "tab", "seq": 0 }),
+        json!({ "id": "tab", "seq": -1 }),
+        json!({ "id": "x".repeat(129), "seq": 1 }),
+        json!("tab"),
+    ] {
+        let mut update = json!({ "syncClient": bad });
+        assert!(take_settings_sync_client(&mut update).is_err(), "{update}");
+    }
+}
+
+#[test]
+fn settings_sync_client_marker_rides_along_to_the_frontend_event() {
+    let mut update = json!({ "syncClient": { "id": "tab-a", "seq": 7 } });
+    let client = take_settings_sync_client(&mut update).unwrap();
+    let event = with_settings_sync_client(json!({ "theme": "dark" }), client.as_ref());
+    assert_eq!(event["syncClient"], json!({ "id": "tab-a", "seq": 7 }));
+    assert_eq!(
+        with_settings_sync_client(json!({ "theme": "dark" }), None),
+        json!({ "theme": "dark" })
+    );
+}
+
+#[test]
+fn applied_client_seqs_track_each_tab_independently_and_never_go_backwards() {
+    let mut table = AppliedClientSeqs::default();
+    assert_eq!(
+        table.to_value(),
+        json!({}),
+        "an empty table still marks ack support"
+    );
+    table.record(&sync_ack("tab-a", 2, None));
+    table.record(&sync_ack("tab-b", 9, None));
+    table.record(&sync_ack("tab-a", 1, Some("late"))); // out of order: ignored
+    table.record(&sync_ack("tab-a", 3, Some("  disk full  ")));
+    assert_eq!(
+        table.to_value(),
+        json!({
+            "tab-b": { "seq": 9 },
+            "tab-a": { "seq": 3, "error": "disk full" },
+        })
+    );
+    table.record(&sync_ack("tab-a", 4, Some("   ")));
+    assert_eq!(
+        table.to_value()["tab-a"],
+        json!({ "seq": 4 }),
+        "a later success clears the error"
+    );
+    table.record(&sync_ack("", 5, None));
+    table.record(&sync_ack("tab-c", 0, None));
+    assert_eq!(table.to_value().as_object().unwrap().len(), 2);
+}
+
+#[test]
+fn applied_client_seqs_evict_the_least_recently_acknowledged_tab() {
+    let mut table = AppliedClientSeqs::default();
+    for index in 0..64 {
+        table.record(&sync_ack(&format!("tab-{index}"), 1, None));
+    }
+    table.record(&sync_ack("tab-0", 2, None)); // refreshes tab-0
+    table.record(&sync_ack("tab-new", 1, None));
+    let value = table.to_value();
+    let acks = value.as_object().unwrap();
+    assert_eq!(acks.len(), 64);
+    assert!(acks.contains_key("tab-0"));
+    assert!(acks.contains_key("tab-new"));
+    assert!(
+        !acks.contains_key("tab-1"),
+        "oldest untouched tab is evicted"
+    );
+}
+
+#[test]
+fn a_slow_settings_read_never_overwrites_a_snapshot_stored_meanwhile() {
+    let mut cache = SettingsSnapshotCache::default();
+    assert!(cache.store(json!({ "theme": "light" }), None));
+    let read_at = 1; // a reconcile reads the cache here, then awaits DB and K-brain
+    assert!(cache.store(json!({ "theme": "dark" }), None)); // frontend publish lands
+    assert!(!cache.store(json!({ "theme": "light" }), Some(read_at)));
+    assert_eq!(cache.value(), Some(&json!({ "theme": "dark" })));
+    assert!(
+        cache.store(json!({ "theme": "system" }), Some(2)),
+        "an up-to-date read stores"
+    );
+    assert_eq!(cache.value(), Some(&json!({ "theme": "system" })));
+}
+
+#[test]
+fn outbound_snapshots_carry_acks_and_their_cache_version() {
+    let stamp = SettingsSyncStamp {
+        acks: json!({ "tab-a": { "seq": 2 } }),
+        epoch: "desktop-1".to_string(),
+        generation: 7,
+    };
+    let snapshot = attach_settings_sync_stamp(json!({ "theme": "dark" }), &stamp);
+    assert_eq!(
+        snapshot,
+        json!({
+            "theme": "dark",
+            "appliedClientSeqs": { "tab-a": { "seq": 2 } },
+            "settingsSyncVersion": { "epoch": "desktop-1", "generation": 7 },
+        })
     );
 }

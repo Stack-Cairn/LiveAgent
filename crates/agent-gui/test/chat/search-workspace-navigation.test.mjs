@@ -284,7 +284,7 @@ test("desktop empty authoritative cwd clears stale scope and project highlight",
   await h.complete("text", undefined);
   assert.equal(h.id, "text");
   assert.equal(h.api.activeWorkspaceProject, undefined);
-  assert.equal(h.store.getSnapshot().scopeKey, "cwd-empty");
+  assert.equal(h.store.getSnapshot().scopeKey, "all");
   assert.ok(h.store.getSnapshot().conversations.some((item) => item.id === "text"));
   assert.equal(h.store.peek("text").cwd, undefined);
   assert.equal(h.writes, 0);
@@ -365,11 +365,11 @@ for (const gesture of ["click", "Enter"]) {
   });
 }
 
-test("desktop text mode supports unscoped history and cross-workspace navigation", async (t) => {
+test("K-brain text mode supports global history and cross-workspace navigation", async (t) => {
   const h = await harness(t, { mode: "text" });
   await h.select("text");
   await h.complete("text", undefined);
-  assert.equal(h.store.getSnapshot().scopeKey, "cwd-empty");
+  assert.equal(h.store.getSnapshot().scopeKey, "all");
   await h.select("b");
   await h.complete("b", "/repo/b");
   assert.equal(h.store.getSnapshot().scopeKey, "cwd:/repo/b");
@@ -423,12 +423,12 @@ test("desktop workspace selection and mode changes release the search-only scope
   await h.complete("b", "/repo/b");
   await act(async () => h.api.setActiveWorkspaceProjectId("c"));
   assert.equal(h.api.activeWorkspaceProjectPath, "/repo/c");
-  assert.equal(h.store.getSnapshot().scopeKey, "cwd:/repo/c");
+  assert.equal(h.store.getSnapshot().scopeKey, "all");
   await h.select("text");
   await h.complete("text", undefined);
   await h.setMode("text");
   await h.setMode("tools");
-  assert.equal(h.store.getSnapshot().scopeKey, "cwd:/repo/c");
+  assert.equal(h.store.getSnapshot().scopeKey, "all");
 });
 
 test("desktop retry after failure uses the newest result and repeated selection avoids settings writes", async (t) => {
@@ -449,5 +449,5 @@ test("desktop search scope can be cleared before creating a text-mode draft", as
   await h.select("b");
   await h.complete("b", "/repo/b");
   await act(async () => h.api.clearSearchConversationWorkspace());
-  assert.equal(h.store.getSnapshot().scopeKey, "cwd-empty");
+  assert.equal(h.store.getSnapshot().scopeKey, "all");
 });

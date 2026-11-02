@@ -192,6 +192,10 @@ export function createOpenConversationInitial(options: OpenConversationInitialOp
         conversationId,
         planned === undefined ? undefined : { maxMessages: planned },
       );
+      const detailConversationId = detail.conversation_id.trim();
+      if (detailConversationId !== conversationId) {
+        throw new Error("History response is missing the requested conversation.");
+      }
       if (isStale()) return "painted";
       const counts = readHistoryWindowCounts(detail);
       if (counts) {

@@ -236,7 +236,8 @@ export {
 for (const [facadePath, expectedSource] of sharedFacades) {
   const absolutePath = join(repoRoot, facadePath);
   if (!existsSync(absolutePath)) continue;
-  if (readFileSync(absolutePath, "utf8") === expectedSource) continue;
+  // Windows checkouts with core.autocrlf=true use CRLF; the facade contract is about content.
+  if (readFileSync(absolutePath, "utf8").replaceAll("\r\n", "\n") === expectedSource) continue;
   failures += 1;
   console.error(`${facadePath}: 共享兼容入口只能重导出 agent-ui 真源`);
 }

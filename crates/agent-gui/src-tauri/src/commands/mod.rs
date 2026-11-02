@@ -8,6 +8,7 @@ pub mod config_commands;
 pub mod history_commands;
 #[path = "integration/mod.rs"]
 pub mod integration_commands;
+pub mod image_export;
 pub mod planning;
 #[path = "runtime/mod.rs"]
 pub mod runtime_commands;
@@ -16,6 +17,7 @@ pub mod workspace_commands;
 
 pub use app_commands::app;
 pub use app_commands::fonts;
+pub use app_commands::proxy_detect;
 pub use app_commands::system;
 pub use app_commands::tray;
 pub use app_commands::update;

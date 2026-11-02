@@ -110,6 +110,12 @@ test("native input copy and asynchronous paste act on the captured selection", a
   }
   const cleanup = await mount(Harness);
   const input = document.querySelector("input");
+  const originalRAF = globalThis.requestAnimationFrame;
+  const deferredFrames = [];
+  globalThis.requestAnimationFrame = (callback) => {
+    deferredFrames.push(callback);
+    return deferredFrames.length;
+  };
   const open = async () => {
     await act(async () => {
       input.focus(); input.setSelectionRange(6, 11);
@@ -128,10 +134,18 @@ test("native input copy and asynchronous paste act on the captured selection", a
     await act(async () => item("inputContextMenu.paste").click());
     // Menu dismissal must not invalidate the async action's target or range.
     await act(async () => resolveRead("there"));
+    await act(async () => {
+      const pending = deferredFrames.splice(0);
+      for (const callback of pending) callback(performance.now());
+    });
     assert.equal(input.value, "hello there");
     assert.equal(input.selectionStart, 11);
+    assert.equal(input.selectionEnd, 11);
     assert.equal(document.querySelector('[role="menu"]'), null);
-  } finally { await cleanup(); }
+  } finally {
+    globalThis.requestAnimationFrame = originalRAF;
+    await cleanup();
+  }
 });
 
 test("composer menu survives focus transfer from the editor and Escape restores editor focus", async () => {

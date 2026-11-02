@@ -48,6 +48,10 @@ type browserConn struct {
 
 	workspaceSubsMu sync.Mutex
 	workspaceSubs   map[string]*workspaceSubscription
+
+	historyRecoveryMu sync.Mutex
+	historyRecovery   map[string]historyRecoveryLatch
+	historySyncAck    func(agentID, generation string, appliedSeq uint64)
 }
 
 // BrowserHandler 返回 /ws/v2 的 HTTP 处理器。
@@ -210,7 +214,6 @@ func (c *browserConn) handshake() bool {
 	// 握手前的读超时刻意未刷新；成功后立即续期。
 	c.core.TouchInboundActivity()
 	c.core.StartWriteLoop()
-	c.startEventForwarders()
 	c.core.StartHeartbeat(c.buildHeartbeatPing)
 
 	// hello 应答走数据队列（FrameResponse）：与快照回放同队 FIFO，保证客户端先收 hello
@@ -224,6 +227,9 @@ func (c *browserConn) handshake() bool {
 		c.core.Close()
 		return false
 	}
+	// Subscribe only after the hello response is queued. Recovery/status uses
+	// the control lane and must never overtake authentication.
+	c.startEventForwarders()
 	c.replaySnapshots()
 	return true
 }
@@ -279,6 +285,16 @@ func (c *browserConn) dispatch(frame *gatewayv2.WebClientFrame) {
 		c.handleWorkspaceUnsubscribe(requestID, agentID, payload.WorkspaceUnsubscribe)
 	case *gatewayv2.WebClientFrame_AgentList:
 		c.handleAgentList(requestID)
+	case *gatewayv2.WebClientFrame_HistoryResync:
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleHistoryResync(requestID, agentID, payload.HistoryResync)
+	case *gatewayv2.WebClientFrame_HistoryResyncAck:
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleHistoryResyncAck(requestID, agentID, payload.HistoryResyncAck)
 	default:
 		_ = c.sendLocalError(requestID, "unsupported frame payload")
 	}

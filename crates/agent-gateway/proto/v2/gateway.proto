@@ -70,6 +70,14 @@ message GatewayEnvelope {
     ClarifyTurnRequest clarify_turn = 101;
     CuaDriverRequest cua_driver = 102;
     PlanningRequest planning = 103;
+    PromptTemplateListRequest prompt_template_list = 104;
+    PromptTemplateExpandRequest prompt_template_expand = 105;
+    SlashCommandListRequest slash_command_list = 106;
+    GoalManageRequest goal_manage = 107;
+    LoopManageRequest loop_manage = 108;
+    ProxyDetectRequest proxy_detect = 109;
+    HistoryResyncRequest history_resync = 110;
+    PermissionRulesRequest permission_rules = 111;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -155,6 +163,15 @@ message AgentEnvelope {
     ClarifyTurnDelta clarify_turn_delta = 108;
     PlanningResponse planning_resp = 109;
     PlanningChanged planning_changed = 110;
+    PromptTemplateListResponse prompt_template_list_resp = 111;
+    PromptTemplateExpandResponse prompt_template_expand_resp = 112;
+    SlashCommandListResponse slash_command_list_resp = 113;
+    GoalManageResponse goal_manage_resp = 114;
+    LoopManageResponse loop_manage_resp = 115;
+    ProxyDetectResponse proxy_detect_resp = 116;
+    HistorySyncStatus history_sync_status = 117;
+    HistorySyncSnapshot history_sync_snapshot = 118;
+    PermissionRulesResponse permission_rules_resp = 119;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -465,6 +482,9 @@ message MemoryManageResponse {
 
 message TerminalRequest {
   string action = 1;
+  // Canonical K-brain run identity for run-owned terminal operations.
+  string conversation_id = 22;
+  string run_id = 23;
   string session_id = 2;
   string project_path_key = 3;
   string cwd = 4;
@@ -723,6 +743,14 @@ message ChatRequest {
   // The desktop runtime binds ReadConversation authorization to this list;
   // a markdown conversation token is display-only and cannot grant access.
   repeated ChatConversationReference referenced_conversations = 12;
+  // WebUI 输入框“/”指令带来的单轮语义。goal_action 非空表示经 K-brain 的 goal
+  // 接口开始这一轮（set/resume）；prompt_command 表示 message 是提示词指令，
+  // 由 K-brain 展开后交给模型，历史与界面保留原文。
+  string goal_action = 13;
+  string goal_text = 14;
+  bool prompt_command = 15;
+  // A single /plan task, distinct from ordinary chat with plan mode enabled.
+  bool plan_command = 16;
 }
 
 message ChatMessageRef {
@@ -1040,6 +1068,41 @@ message HistorySyncEvent {
   string kind = 1;
   ConversationSummary conversation = 2;
   string conversation_id = 3;
+  string source_id = 4;
+  string generation = 5;
+  uint64 delivery_seq = 6;
+}
+
+// HistorySyncStatus is a producer heartbeat and recovery barrier. A source
+// generation is only healthy after a complete snapshot for that generation
+// has been accepted by the Gateway.
+message HistorySyncStatus {
+  string source_id = 1;
+  string generation = 2;
+  uint64 latest_delivery_seq = 3;
+  bool available = 4;
+  bool needs_resync = 5;
+  string resync_token = 6;
+}
+
+// HistorySyncSnapshot is an immutable LA-id projection captured at
+// cut_delivery_seq. Incremental events after the cut can be replayed safely.
+message HistorySyncSnapshot {
+  string source_id = 1;
+  string generation = 2;
+  uint64 cut_delivery_seq = 3;
+  string resync_token = 4;
+  repeated ConversationSummary conversations = 5;
+  repeated HistoryWorkdirSummary workdirs = 6;
+  uint32 offset = 7;
+  uint32 next_offset = 8;
+  uint32 total_count = 9;
+}
+
+message HistoryResyncRequest {
+  string resync_token = 1;
+  uint32 offset = 2;
+  uint32 limit = 3;
 }
 
 message ProviderListRequest {}
@@ -1082,6 +1145,94 @@ message SkillFilesListResponse {
   string root_dir = 1;
   repeated string paths = 2;
   bool truncated = 3;
+}
+
+// Markdown 提示词模板（输入框“/”指令）：桌面端转调 K-brain 的
+// GET /v1/prompts?workdir= 与 POST /v1/prompts/templates/{name}/expand。
+// 项目级模板是否生效由 K-brain 按项目信任状态决定。
+message PromptTemplateListRequest {
+  string workdir = 1;
+}
+
+message PromptTemplateSummary {
+  string name = 1;
+  string description = 2;
+  string argument_hint = 3;
+}
+
+message PromptTemplateListResponse {
+  repeated PromptTemplateSummary templates = 1;
+}
+
+message PromptTemplateExpandRequest {
+  string name = 1;
+  // 指令名之后的原始参数文本，由 K-brain 按命令行规则切分。
+  string text = 2;
+  string workdir = 3;
+}
+
+message PromptTemplateExpandResponse {
+  string name = 1;
+  string text = 2;
+}
+
+// 会话目标的非运行动作（目前只有 clear）。set/resume 会开始一轮运行，走
+// ChatRequest 的 goal_action，复用聊天的流式与镜像链路。
+message GoalManageRequest {
+  string conversation_id = 1;
+  string action = 2;
+}
+
+message GoalManageResponse {
+  string conversation_id = 1;
+  string goal = 2;
+  // none、active、continuing、met、paused 或 cleared。
+  string status = 3;
+  int32 round = 4;
+  int32 max_rounds = 5;
+  string reason = 6;
+}
+
+// 桌面端“/”指令目录：动作由客户端按名称处理，prompt 由 K-brain 展开。
+message SlashCommandListRequest {
+  string workdir = 1;
+}
+
+message SlashCommandSummary {
+  string name = 1;
+  string description = 2;
+  string argument_hint = 3;
+  // action 或 prompt。
+  string kind = 4;
+  string source = 5;
+}
+
+message SlashCommandListResponse {
+  repeated SlashCommandSummary commands = 1;
+}
+
+// 会话内按间隔重复的提示词，落在 K-brain 的 cron 上。
+message LoopManageRequest {
+  string conversation_id = 1;
+  // create、list 或 cancel。
+  string action = 2;
+  string cron = 3;
+  string interval = 4;
+  string prompt = 5;
+  string reasoning = 6;
+  string loop_id = 7;
+}
+
+message LoopSummary {
+  string id = 1;
+  string interval = 2;
+  string cron = 3;
+  string prompt = 4;
+  bool enabled = 5;
+}
+
+message LoopManageResponse {
+  repeated LoopSummary loops = 1;
 }
 
 message SkillMetadataReadRequest {
@@ -1166,6 +1317,39 @@ message CuaDriverResponse {
   // CuaDriverPermissions（camelCase）。走 JSON 而不是在 proto 里再刻一份
   // 结构化镜像，是为了让两端拿到的就是同一个对象，不会各自漂移。
   string result_json = 2;
+}
+
+// 应用代理设置里的「检测到的代理服务」：检测与测速都在桌面宿主上执行，
+// 检测的是运行 LiveAgent 的那台电脑，不是浏览器所在的设备。Gateway 只按
+// action 白名单直通转发。
+message ProxyDetectRequest {
+  // "detect" | "test"。
+  string action = 1;
+  // test 的参数 {"type":"http"|"socks5","host":...,"port":...}；detect 为空。
+  // 桌面端只接受本进程检测到过的代理，不会替请求方连任意地址。
+  string input_json = 2;
+}
+
+message ProxyDetectResponse {
+  string action = 1;
+  // 与桌面 invoke 同一份序列化：services/proxy_detect 的 ProxyDetectResult /
+  // ProxyTestResult（camelCase），不含任何凭据。
+  string result_json = 2;
+}
+
+// 设置 → 权限：查看、添加、删除 K-brain 记住的权限规则（/v1/permissions/rules）。
+// 桌面端或直连 K-brain 的网关只转发设置页需要的字段，会话规则不经这里。
+message PermissionRulesRequest {
+  // "list" | "add" | "delete"。
+  string action = 1;
+  // list: {"workspace"?}；add: {"rule","effect":"allow"|"deny","scope":"project"|"user","workspace"?}；
+  // delete: {"id","scope":"project"|"user","workspace"?}。project 作用域必须带 workspace。
+  string input_json = 2;
+}
+
+message PermissionRulesResponse {
+  // K-brain 的应答 JSON 原样返回：list 为 {project_root?, rules[]}，add 为新规则，delete 为 {ok}。
+  string result_json = 1;
 }
 
 message FsRoot {
@@ -1372,6 +1556,8 @@ message ProviderModelsRequest {
   // 用户在供应商设置里显式配置的自定义请求头；未提供时沿用已保存配置。
   // 鉴权头与 host/content-length 等仍由落地侧的保留头名单兜底，不可被覆盖。
   ProviderCustomHeaders custom_headers = 8;
+  // 供应商请求格式由 K-brain 统一执行；保存 codex/custom provider 时保留该选择。
+  string request_format = 9;
 }
 
 message ProviderModelsResponse {

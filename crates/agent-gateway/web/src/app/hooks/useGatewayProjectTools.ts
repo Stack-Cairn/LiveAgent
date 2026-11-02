@@ -20,6 +20,7 @@ import {
 import { createGatewayWorkspaceActivityClient } from "@/lib/workspace-activity/gatewayWorkspaceActivityClient";
 
 import { asErrorMessage } from "../chatEventUtils";
+import { isMobileSidebarLayout } from "../historyUtils";
 import type { useGatewayChatConfiguration } from "./useGatewayChatConfiguration";
 import type { useGatewayClients } from "./useGatewayClients";
 import { useProjectToolsRuntime } from "./useProjectToolsRuntime";
@@ -32,6 +33,7 @@ type UseGatewayProjectToolsOptions = {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   displayedConversationId: string;
   displayedConversationWorkdir: string;
+  terminalIdentity?: { conversationId?: string; runId?: string } | null;
   isAgentMode: boolean;
   resetProjectToolsRuntimeRef: MutableRefObject<() => void>;
   setRightDockOpen: Dispatch<SetStateAction<boolean>>;
@@ -50,6 +52,7 @@ export function useGatewayProjectTools({
   composerRef,
   displayedConversationId,
   displayedConversationWorkdir,
+  terminalIdentity,
   isAgentMode,
   resetProjectToolsRuntimeRef,
   setRightDockOpen,
@@ -80,16 +83,16 @@ export function useGatewayProjectTools({
     "sshTunnel",
   );
   const projectToolsDisabledMessage = !settingsSyncReady
-    ? "Syncing desktop settings..."
+    ? translate("projectTools.settingsSyncing", settings.locale)
     : !isAgentMode
-      ? "Project tools require Agent project mode."
+      ? translate("projectTools.agentModeRequired", settings.locale)
       : !terminalProjectPath
-        ? "Select a project to use project tools."
+        ? translate("projectTools.projectRequired", settings.locale)
         : undefined;
   const terminalDisabledMessage =
     projectToolsDisabledMessage ??
     (!settings.remote.enableWebTerminal
-      ? "Enable WebUI Terminal in desktop Remote settings."
+      ? translate("projectTools.webTerminalDisabled", settings.locale)
       : undefined);
   const webTerminalSessionsEnabled =
     settings.remote.enableWebTerminal || settings.remote.enableWebSshTerminal;
@@ -102,13 +105,21 @@ export function useGatewayProjectTools({
     statusSessionId: status?.session_id,
     terminalProjectPath,
     terminalProjectPathKey,
+    terminalIdentity,
     rightDockFileTreeOpen,
     rightDockSshTunnelOpen,
   });
   resetProjectToolsRuntimeRef.current = runtime.resetTerminalSessions;
+  const handleOpenWorkspaceFile = useCallback(
+    (...args: Parameters<typeof runtime.handleOpenWorkspaceFile>) => {
+      runtime.handleOpenWorkspaceFile(...args);
+      if (isMobileSidebarLayout()) setRightDockOpen(false);
+    },
+    [runtime.handleOpenWorkspaceFile, setRightDockOpen],
+  );
 
   const gitDisabledMessage = !settings.remote.enableWebGit
-    ? "WebUI Git is disabled in desktop Remote settings."
+    ? translate("projectTools.webGitDisabled", settings.locale)
     : undefined;
   const tunnelEnabled = settingsSyncReady && settings.remote.enableWebTunnels === true;
   const tunnelDisabledMessage = !settingsSyncReady
@@ -129,7 +140,7 @@ export function useGatewayProjectTools({
     terminalProjectPathKey,
     setRightDockOpen,
     setSettings,
-    onOpenFile: runtime.handleOpenWorkspaceFile,
+    onOpenFile: handleOpenWorkspaceFile,
   });
   const notifyChatFileLinkError = useCallback(
     (message: string) => addNotify("error", message),
@@ -161,6 +172,7 @@ export function useGatewayProjectTools({
 
   return {
     ...runtime,
+    handleOpenWorkspaceFile,
     ...composerActions,
     associatedSshHostIds,
     changedFilesActions,

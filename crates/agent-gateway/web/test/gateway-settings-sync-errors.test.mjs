@@ -10,6 +10,45 @@ const loader = createWebModuleLoader({
 const rpc = loader.loadModule("src/lib/gatewaySocketRpc.ts");
 const i18n = loader.loadModule("src/i18n/config.ts");
 const settingsSync = loader.loadModule("src/app/hooks/useGatewaySettingsSync.ts");
+const settingsModule = loader.loadModule("src/lib/settings");
+const syncModule = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
+
+test("project prompts round-trip without swallowing unrelated system changes", () => {
+  const prev = settingsModule.normalizeSettings({});
+  const next = settingsModule.normalizeSettings({
+    ...prev,
+    system: {
+      ...prev.system,
+      workspaceResourceSettings: {
+        "/project": { projectPrompt: "project instruction", projectPromptStrategy: "replace" },
+      },
+    },
+  });
+  const update = { system: next.system };
+  settingsSync.projectPromptSettingsUpdate(update, prev, next);
+  assert.equal(update.system, undefined);
+  assert.deepEqual(update.projectPrompts, {
+    "/project": { prompt: "project instruction", strategy: "replace" },
+  });
+  const hydrated = syncModule.applyGatewaySettingsSyncPayload(prev, update);
+  assert.equal(hydrated.system.workspaceResourceSettings["/project"].projectPrompt, "project instruction");
+  assert.equal(hydrated.system.workspaceResourceSettings["/project"].projectPromptStrategy, "replace");
+  const cleared = syncModule.applyGatewaySettingsSyncPayload(hydrated, { projectPrompts: {} });
+  assert.equal(cleared.system.workspaceResourceSettings["/project"].projectPrompt, "");
+  const mixed = structuredClone(next);
+  mixed.system.executionMode = "unrecognized-test-mode";
+  const mixedUpdate = { system: mixed.system };
+  settingsSync.projectPromptSettingsUpdate(mixedUpdate, prev, mixed);
+  assert.ok(mixedUpdate.system, "unsupported system changes must reach backend validation");
+  const resourceChange = structuredClone(next);
+  resourceChange.system.workspaceResourceSettings["/project"].mode = "off";
+  const resourceUpdate = { system: resourceChange.system };
+  settingsSync.projectPromptSettingsUpdate(resourceUpdate, prev, resourceChange);
+  assert.ok(resourceUpdate.system, "unsupported project resource selection must be validated");
+  const clear = { system: prev.system };
+  settingsSync.projectPromptSettingsUpdate(clear, next, prev);
+  assert.deepEqual(clear.projectPrompts, { "/project": { prompt: "", strategy: "append" } });
+});
 
 function clientWithSettingsUpdateResponse(response) {
   const client = Object.create(rpc.GatewayWebSocketRpcClient.prototype);

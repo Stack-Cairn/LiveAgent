@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "source": "Adversarial review of S1/L0. Bodies are raw response text so number tokens (1.0, 1e0, -0, >2^53) reach each host unchanged. Canonical rule used for `expect`: an integer field accepts any JSON number whose value is an integer in [0, 2^53-1] (the only rule the TS host can implement after JSON.parse), build.version must be non-blank, and the body must be exactly one JSON value. The defect being proven is that the three hosts disagree; whichever canonical rule the author picks, all three must produce the same verdict for every row.",
+  "bodies": [
+    {
+      "name": "protocol.major written as 1.0",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"protocol\":{\"name\":\"kbrain.agent\",\"major\":1.0,\"minor\":1}}",
+      "expect": "accept",
+      "minor": 1
+    },
+    {
+      "name": "protocol.minor written as 1e0",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"protocol\":{\"name\":\"kbrain.agent\",\"major\":1,\"minor\":1e0}}",
+      "expect": "accept",
+      "minor": 1
+    },
+    {
+      "name": "startupContract written as 1.0",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"protocol\":{\"name\":\"kbrain.agent\",\"major\":1,\"minor\":1},\"startupContract\":1.0}",
+      "expect": "accept",
+      "minor": 1
+    },
+    {
+      "name": "capabilityRevision negative zero",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"protocol\":{\"name\":\"kbrain.agent\",\"major\":1,\"minor\":1},\"capabilityRevision\":-0}",
+      "expect": "accept",
+      "minor": 1
+    },
+    {
+      "name": "protocol.minor above 2^53 (9007199254740993)",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"protocol\":{\"name\":\"kbrain.agent\",\"major\":1,\"minor\":9007199254740993}}",
+      "expect": "reject"
+    },
+    {
+      "name": "capabilityRevision 2^63 (9223372036854775808)",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"protocol\":{\"name\":\"kbrain.agent\",\"major\":1,\"minor\":1},\"capabilityRevision\":9223372036854775808}",
+      "expect": "reject"
+    },
+    {
+      "name": "build.version is whitespace only",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"protocol\":{\"name\":\"kbrain.agent\",\"major\":1,\"minor\":1},\"build\":{\"version\":\"   \",\"channel\":\"dev\"}}",
+      "expect": "reject"
+    },
+    {
+      "name": "second JSON value after the health object",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\"} {\"status\":\"starting\"}",
+      "expect": "reject",
+      "transport": true
+    }
+  ],
+  "capabilities": [
+    {
+      "name": "session_changes written as 2.0",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"capabilities\":{\"session_changes\":2.0}}",
+      "atLeast": { "session_changes": 2 },
+      "expect": true
+    },
+    {
+      "name": "session_queue written as 1.0",
+      "raw": "{\"status\":\"ok\",\"version\":\"kbrain.agent.v1\",\"capabilities\":{\"session_queue\":1.0}}",
+      "frozen": "session_queue",
+      "expect": true
+    }
+  ]
+}

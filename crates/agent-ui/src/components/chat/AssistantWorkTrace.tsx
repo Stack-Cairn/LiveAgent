@@ -1,8 +1,9 @@
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { chatTimestamp, workDuration } from "@liveagent/ui/lib/chat/workTiming";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
 import { useAttentionDisclosure } from "./useAttentionDisclosure";
 
@@ -18,6 +19,15 @@ const PIXEL_KEYS = [
   "bottom-end",
 ] as const;
 
+// Diagonal wave from the left column outward: 90ms per step away from the middle row.
+const PIXEL_DELAYS = PIXEL_KEYS.map((_, index) => {
+  const row = Math.floor(index / 3);
+  const column = index % 3;
+  return (column + Math.abs(row - 1)) * 90;
+});
+
+type WorkPixelStyle = CSSProperties & { "--chat-work-delay": `${number}ms` };
+
 function WorkPixelGrid({ active }: { active: boolean }) {
   return (
     // 3×4px + 2×1.5px = 15px，比下方活动行的 12px 图标列宽：居中溢出到图标列
@@ -28,11 +38,16 @@ function WorkPixelGrid({ active }: { active: boolean }) {
       data-chat-work-grid=""
     >
       <span className="grid shrink-0 grid-cols-activity-dots gap-1p5px">
-        {PIXEL_KEYS.map((key) => (
+        {PIXEL_KEYS.map((key, index) => (
           <span
             key={key}
-            className={cn("size-1 bg-foreground opacity-15", "data-paused:opacity-45")}
+            // Frozen while the turn waits on the user: still legible, visibly not cycling.
+            className={cn(
+              "size-1 bg-foreground opacity-15 animate-chat-work-pixel motion-reduce:animate-none",
+              "data-paused:animate-none data-paused:opacity-45",
+            )}
             data-paused={active ? undefined : ""}
+            style={{ "--chat-work-delay": `${PIXEL_DELAYS[index] ?? 0}ms` } as WorkPixelStyle}
           />
         ))}
       </span>
@@ -41,6 +56,7 @@ function WorkPixelGrid({ active }: { active: boolean }) {
 }
 
 export function formatElapsedTime(elapsedMs: number) {
+  if (workDuration(elapsedMs) === undefined) return "";
   const totalSeconds = Math.floor(elapsedMs / 1_000);
   if (totalSeconds < 1) return "";
   const hours = Math.floor(totalSeconds / 3_600);
@@ -90,7 +106,14 @@ export function AssistantWorkTrace({
   collapseAfterAnswer?: boolean;
 }) {
   const { t } = useLocale();
-  const [expanded, setExpanded] = useAttentionDisclosure(attentionRequired, running);
+  const validStartedAt = chatTimestamp(startedAtMs);
+  const validDuration = workDuration(durationMs);
+  // 没有总结文案的回合（被打断、失败、只有过程）挂载时展开：折叠后只剩标题，
+  // 用户看不到已经执行过的步骤。有文案的历史回合仍折叠，只露出回答。
+  const [expanded, setExpanded] = useAttentionDisclosure(
+    attentionRequired,
+    running || !collapseAfterAnswer,
+  );
 
   // 有总结文案时，回合完成（running 变 false）后自动折叠「处理中」区块一次；
   // 之后 disclosure 所有权交还给用户，手动展开/折叠不再被强制收回，
@@ -100,22 +123,22 @@ export function AssistantWorkTrace({
   }, [running, attentionRequired, collapseAfterAnswer, setExpanded]);
   const [elapsedMs, setElapsedMs] = useState(
     () =>
-      durationMs ??
-      (running && startedAtMs !== undefined ? Math.max(0, Date.now() - startedAtMs) : 0),
+      validDuration ??
+      (running && validStartedAt !== undefined ? Math.max(0, Date.now() - validStartedAt) : 0),
   );
-  const startedAtRef = useRef<number | null>(running ? (startedAtMs ?? Date.now()) : null);
+  const startedAtRef = useRef<number | null>(running ? (validStartedAt ?? Date.now()) : null);
 
   useEffect(() => {
     if (!running) {
-      if (durationMs !== undefined) {
-        setElapsedMs(Math.max(0, durationMs));
+      if (validDuration !== undefined) {
+        setElapsedMs(validDuration);
       } else if (startedAtRef.current !== null) {
         setElapsedMs(Math.max(0, Date.now() - startedAtRef.current));
       }
       return;
     }
 
-    if (startedAtMs !== undefined) startedAtRef.current = startedAtMs;
+    if (validStartedAt !== undefined) startedAtRef.current = validStartedAt;
     else if (startedAtRef.current === null) startedAtRef.current = Date.now();
     const updateElapsed = () => {
       const startedAt = startedAtRef.current;
@@ -129,7 +152,7 @@ export function AssistantWorkTrace({
       updateElapsed();
     }, 1_000);
     return () => window.clearInterval(timer);
-  }, [durationMs, running, startedAtMs]);
+  }, [validDuration, running, validStartedAt]);
 
   const elapsedLabel = formatElapsedTime(elapsedMs);
   const label = `${running ? t("chat.work.running") : t("chat.work.activity")}${

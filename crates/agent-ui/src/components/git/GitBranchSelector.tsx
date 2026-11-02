@@ -37,6 +37,7 @@ import {
   COMPOSER_CONTROL_TRIGGER_CLASS,
 } from "@liveagent/ui/lib/chat/composerControlStyles";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { isHostCommandUnavailable } from "@liveagent/ui/lib/shared/hostErrors";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
@@ -155,6 +156,8 @@ export function GitBranchSelector(props: {
   const [loading, setLoading] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState("");
+  // 当前运行面没有桌面 Git 能力（K-brain 浏览器宿主 / WebUI 未连桌面端）。
+  const [hostUnsupported, setHostUnsupported] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draftBranch, setDraftBranch] = useState("");
   const [filter, setFilter] = useState("");
@@ -214,22 +217,31 @@ export function GitBranchSelector(props: {
       try {
         const response = await gitClient.branches(workdir);
         if (refreshRequestIdRef.current !== requestId) return;
+        setHostUnsupported(false);
         setState(response.state);
         setBranches(response.branches);
         setWorktrees(response.worktrees);
         onStateChange?.(response.state);
       } catch (err) {
         if (refreshRequestIdRef.current !== requestId) return;
-        setError(err instanceof Error ? err.message : String(err));
+        // 浏览器宿主 / 未连桌面端的 WebUI 没有桌面 Git 命令，这不是仓库出错：
+        // 记下运行面限制，页面上用本地化提示替代宿主抛出的英文内部文案。
+        if (isHostCommandUnavailable(err)) {
+          setHostUnsupported(true);
+          setError("");
+        } else {
+          setError(err instanceof Error ? err.message : String(err));
+        }
         const next = emptyGitRepositoryState(workdir);
         setState(next);
         onStateChange?.(next);
       } finally {
         if (refreshRequestIdRef.current === requestId) {
           refreshInFlightRef.current = false;
-          if (!options.silent) {
-            setLoading(false);
-          }
+          // The latest request settling means nothing is loading any more. A
+          // forced silent refresh (git watcher after a branch switch) can
+          // overtake the interactive one, whose own finally then skips this.
+          setLoading(false);
         }
       }
     },
@@ -928,7 +940,9 @@ export function GitBranchSelector(props: {
 
   const noRepo = state.status !== "ready";
   const stateError = state.status === "error" ? state.error?.trim() || "" : "";
-  const visibleError = error || stateError;
+  // 运行面没有桌面 Git 能力时，用本地化文案替代内部英文错误，并给出可读的 tooltip。
+  const visibleError =
+    error || stateError || (hostUnsupported ? t("git.branchSelector.runtimeUnsupported") : "");
   const label = noRepo
     ? t("git.branchSelector.noRepoShort")
     : state.head || t("git.branchSelector.detached");

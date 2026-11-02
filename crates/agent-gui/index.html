@@ -64,7 +64,9 @@
       }
       .app-boot-content {
         display: flex;
-        width: 160px;
+        width: min(480px, calc(100vw - 48px));
+        text-align: center;
+        color: hsl(var(--foreground));
         flex-direction: column;
         align-items: center;
         gap: 24px;
@@ -105,6 +107,15 @@
           opacity: 0.55;
         }
       }
+      .app-boot-title { margin: 0; font-size: 18px; font-weight: 600; }
+      .app-boot-detail, .app-boot-counts, .app-boot-source, .app-boot-time, .app-boot-waiting { margin: 0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+      .app-boot-detail { min-height: 42px; opacity: .7; }
+      .app-boot-statistics { width: 100%; min-height: 96px; display: grid; gap: 4px; }
+      .app-boot-source, .app-boot-time { opacity: .6; }
+      .app-boot-time { font-variant-numeric: tabular-nums; }
+      .app-boot-waiting { min-height: 42px; opacity: .75; }
+      .app-boot-retry { font: inherit; color: inherit; background: transparent; border: 1px solid hsl(var(--foreground) / .25); border-radius: 8px; padding: 8px 24px; cursor: pointer; }
+      [data-boot-failed] .app-boot-progress > span { animation: none; opacity: .35; }
     </style>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>LiveAgent</title>
@@ -112,15 +123,34 @@
 
   <body>
     <div id="root">
-      <div class="app-boot-screen" data-static-boot-shell="" role="status" aria-label="正在加载 LiveAgent" aria-busy="true">
-        <div class="app-boot-content" aria-hidden="true">
+      <div class="app-boot-screen" data-static-boot-shell="" aria-label="正在加载 LiveAgent" aria-busy="true">
+        <div class="app-boot-content">
           <img class="app-boot-icon" src="/src-tauri/icons/icon-simple.png" alt="" />
-          <div class="app-boot-progress"><span></span></div>
+          <div class="app-boot-progress" aria-hidden="true"><span></span></div>
+          <h1 class="app-boot-title" data-boot-title="" aria-live="polite">正在启动 LiveAgent</h1>
+          <p class="app-boot-detail" data-boot-detail="">正在准备启动环境…</p>
+          <div class="app-boot-statistics">
+            <p class="app-boot-counts" data-boot-counts=""></p>
+            <p class="app-boot-source" data-boot-legacy=""></p>
+            <p class="app-boot-source" data-boot-pi=""></p>
+          </div>
+          <p class="app-boot-time" data-boot-elapsed="" aria-live="off"></p>
+          <p class="app-boot-waiting" data-boot-waiting="" aria-live="polite"></p>
+          <button class="app-boot-retry" data-boot-retry="" type="button" hidden>重试</button>
         </div>
       </div>
     </div>
     <script>
       (() => {
+        try {
+          const locale = JSON.parse(localStorage.getItem("liveagent.ui-settings.v1") || "null")?.locale;
+          if (locale === "en" || locale === "en-US") {
+            document.documentElement.lang = "en";
+            document.querySelector("[data-boot-title]").textContent = "Starting LiveAgent";
+            document.querySelector("[data-boot-detail]").textContent = "Preparing your startup environment…";
+            document.querySelector("[data-static-boot-shell]").setAttribute("aria-label", "LiveAgent startup progress");
+          }
+        } catch {}
         performance.mark?.("liveagent:static-shell-ready");
         const reveal = (attempt = 0) => {
           const invoke = window.__TAURI_INTERNALS__?.invoke;

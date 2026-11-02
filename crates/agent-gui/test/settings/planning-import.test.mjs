@@ -7,6 +7,20 @@ const { isoWeek, lunarDate, zoneOffset, activeEvent, calendarLayer } = loader.lo
 const range = {from: "2026-09-01", to: "2026-09-30", zone: "Asia/Shanghai"};
 const ics = (...events) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${events.join("\r\n")}\r\nEND:VCALENDAR`;
 const event = (lines) => `BEGIN:VEVENT\r\n${lines.join("\r\n")}\r\nEND:VEVENT`;
+test("manual ICS imports RDATE, DURATION and embedded custom daylight transitions", () => {
+ const zone = `BEGIN:VTIMEZONE\r\nTZID:Custom/Eastern\r\nBEGIN:DAYLIGHT\r\nDTSTART:20250309T020000\r\nTZOFFSETFROM:-0500\r\nTZOFFSETTO:-0400\r\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\r\nEND:DAYLIGHT\r\nBEGIN:STANDARD\r\nDTSTART:20251102T020000\r\nTZOFFSETFROM:-0400\r\nTZOFFSETTO:-0500\r\nRRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\r\nEND:STANDARD\r\nEND:VTIMEZONE`;
+ const result=parseCalendar(ics(zone,event(["UID:custom","DTSTART;TZID=Custom/Eastern:20260307T120000","DURATION:PT2H","RDATE;TZID=Custom/Eastern:20260308T120000"])),{from:"2026-03-01",to:"2026-03-31",zone:"UTC"});
+ assert.deepEqual(result.warnings,[]);assert.equal(result.entries.length,2);
+ assert.equal(result.entries[0].time.startAt,Date.parse("2026-03-07T17:00Z"));
+ assert.equal(result.entries[1].time.startAt,Date.parse("2026-03-08T16:00Z"));
+ assert.equal(result.entries[1].time.endAt-result.entries[1].time.startAt,7200000);
+});
+test("RDATE-only DTSTART honors an EXDATE expressed in UTC", () => {
+ const result = parseCalendar(ics(event(["UID:excluded", "DTSTART;TZID=Asia/Shanghai:20260927T090000", "DURATION:PT1H", "RDATE;TZID=Asia/Shanghai:20260928T090000", "EXDATE:20260927T010000Z"])), range);
+ assert.deepEqual(result.warnings, []);
+ assert.equal(result.entries.length, 1);
+ assert.equal(result.entries[0].time.startAt, Date.parse("2026-09-28T01:00Z"));
+});
 test("ICS imports UTC, IANA floating-zone and exclusive all-day dates", () => {
  const result = parseCalendar(ics(event(["UID:utc", "SUMMARY:UTC", "DTSTART:20260927T010000Z", "DTEND:20260927T020000Z"]),event(["UID:local", "SUMMARY:Local", "DTSTART;TZID=Asia/Shanghai:20260927T090000", "DTEND;TZID=Asia/Shanghai:20260927T100000"]),event(["UID:day", "DTSTART;VALUE=DATE:20260927", "DTEND;VALUE=DATE:20260929"])),range);
  assert.equal(result.warnings.length,0); assert.equal(result.entries.length,3);

@@ -277,7 +277,7 @@ impl GatewayController {
     }
 
     fn chat_ingress_identity(&self) -> Result<String, String> {
-        let config = self.config_tx.borrow().clone();
+        let config = self.config_tx.borrow().effective_gateway_settings();
         let agent_id = effective_agent_id(&config)?;
         if config.gateway_url.trim().is_empty() || config.token.trim().is_empty() {
             return Err("gateway chat ingress requires a configured gateway identity".to_string());

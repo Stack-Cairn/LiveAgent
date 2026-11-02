@@ -162,6 +162,8 @@ message WebClientFrame {
     PongFrame pong = 12;
     // Agent 目录查询：全部已登记 Agent（含离线）的状态列表。
     AgentListRequest agent_list = 14;
+    HistoryResyncRequest history_resync = 15;
+    HistoryResyncAck history_resync_ack = 16;
   }
 }
 
@@ -204,6 +206,8 @@ message WebServerFrame {
     ManagedProcessSnapshot process_state = 26;
     WorkspaceActivityEvent workspace_activity = 27;
     PlanningChanged planning_changed = 28;
+    HistorySyncStatus history_sync_status = 29;
+    HistorySyncSnapshot history_sync_snapshot = 30;
   }
 }
 
@@ -214,6 +218,13 @@ message AgentListRequest {}
 // 复用 StatusEvent 归一化器，按 agent_id 排序。
 message AgentListResult {
   repeated StatusEvent agents = 1;
+}
+
+message HistoryResyncAck {
+  string source_id = 1;
+  string generation = 2;
+  string resync_token = 3;
+  uint64 applied_delivery_seq = 4;
 }
 
 // ---------------------------------------------------------------------------

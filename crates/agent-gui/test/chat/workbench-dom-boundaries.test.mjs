@@ -111,7 +111,7 @@ test("conversation view switcher stays in the main header region on the shared t
     chatPageSource,
     /const hasConversationReply = useHasConversationReply\(\s*transcriptItems,\s*liveTranscriptStore,\s*isDraftConversation,/,
   );
-  assert.match(chatPageSource, /activeView === "chat" && hasConversationReply/);
+  assert.match(chatPageSource, /activeView\s*===\s*"chat"\s*&&\s*hasConversationReply/);
   assert.match(
     chatPageSource,
     /useConversationViewState\(currentConversationId\)/,
@@ -150,7 +150,7 @@ test("multi-pane conversation panes reveal trajectory and close controls togethe
   // Multi-pane hides the chrome-level tabs; the pane dot owns the switch.
   assert.match(
     chatPageSource,
-    /activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes/,
+    /activeView\s*===\s*"chat"\s*&&\s*hasConversationReply\s*&&\s*!workbenchHasMultiplePanes/,
   );
   assert.match(
     chatPageSource,
@@ -169,7 +169,7 @@ test("closing a conversation pane resets its trajectory projection", () => {
   );
   assert.match(
     chatPageSource,
-    /if \(!item && conversationPersistenceCursorRef\.current\.has\(conversationId\)\) \{\s*handleWorkbenchClosePane\(pane\.paneId\);/,
+    /if\s*\(\s*!item\s*&&\s*conversationPersistenceCursorRef\.current\.has\(conversationId\)\s*\)\s*\{\s*handleWorkbenchClosePane\(pane\.paneId\);/,
   );
 });
 

@@ -1,78 +1,61 @@
 # LiveAgent 总体架构
 
-## 系统分层
+## 核心进程
 
-| 层级 | 主要路径 | 技术栈 | 核心职责 |
-|---|---|---|---|
-| 共享应用 UI | `crates/agent-ui/src` | React、TypeScript、Tailwind | GUI/WebUI 共用的 Settings、Skills Hub、MCP Hub、聊天侧边栏、输入栏、项目工具和领域逻辑。 |
-| 桌面 GUI | `crates/agent-gui/src` | React、TypeScript、Vite、Tailwind | 桌面启动入口、Chat 数据控制器、Tauri 能力适配器、上传与流式运行态。 |
-| 桌面后端 | `crates/agent-gui/src-tauri/src` | Tauri 2、Rust、SQLite、tokio | 系统命令、文件/Shell/进程、MCP runtime、MemoryStore、CronManager、GatewayController、代理服务。 |
-| Agent 运行时 | `crates/agent-gui/src/lib/chat`、`crates/agent-gui/src/pages/chat`、`crates/agent-gui/src/lib/tools` | TypeScript、`@earendil-works/pi-ai` | 构造上下文、请求模型、执行工具、压缩上下文、持久化历史、发布 Gateway 事件。 |
-| Gateway | `crates/agent-gateway` | Go、net/http、WebSocket+Protobuf（v2） | 桌面 Agent 与浏览器 WebUI 的远程中继、认证、会话管理、恢复缓冲、静态 WebUI 和分享页。 |
-| WebUI | `crates/agent-gateway/web` | React、TypeScript、Vite、WebSocket | 浏览器启动入口、Gateway 数据控制器和远程能力适配器，通过 Gateway 操作本地 Agent。 |
-| 资料与策略 | `docs/` | Markdown | 当前架构、功能说明、设计规格与历史 worklog。 |
+```text
+LiveAgent 安装包
+  ├─ Tauri 桌面宿主
+  │    ├─ 启动和停止配套 K-brain 二进制
+  │    ├─ 提供本地连接信息
+  │    └─ 窗口、文件选择及其他原生界面能力
+  ├─ React 前端
+  │    ├─ 输入、消息展示、工具状态、审批和历史操作
+  │    └─ K-brain HTTP JSON / SSE 客户端
+  └─ K-brain 二进制
+       ├─ 供应商协议适配和统一消息
+       ├─ Agent / 工具 / 审批 / 子代理执行
+       ├─ 会话与事件持久化及恢复
+       └─ 模型配置、凭据与辅助文本生成
+```
 
-## 进程边界
+K-brain 是模型和 Agent 的唯一执行后端。LiveAgent 的 TypeScript 层维护展示状态与协议客户端，消息展示类型由项目自身定义。供应商 SDK、请求格式转换和模型密钥属于 K-brain。
 
-| 进程/运行环境 | 入口 | 和谁通信 | 权限边界 |
-|---|---|---|---|
-| Tauri WebView | `crates/agent-gui/src/main.tsx`、`src/App.tsx` | Tauri invoke、Gateway bridge、模型 API | 用户可见桌面界面，触发本地能力但不直接访问 Rust 内部状态。 |
-| Tauri Rust 进程 | `src-tauri/src/main.rs`、`src-tauri/src/lib.rs` | 前端 invoke、SQLite、OS、Gateway WebSocket v2、MCP server | 本地高权限真相源，负责系统能力、持久化与远程桥接。 |
-| Gateway Go 进程 | `crates/agent-gateway/cmd/gateway/main.go` | Desktop/Browser WebSocket v2（Protobuf 帧）、HTTP | 网络中继层，不直接执行本地工具。 |
-| Browser WebUI | `crates/agent-gateway/web/src/main.tsx`、`web/src/App.tsx`、`web/src/app/GatewayApp.tsx` | Gateway `/ws/v2`、`/api/*` | 远程 UI，仅持有 token、脱敏设置和本地浏览器缓存。 |
+## 连接生命周期
+
+1. 桌面启动时，前端通过 `kbrain_backend_connection` 请求宿主准备后端。
+2. 宿主从安装包定位 K-brain，监听动态本机回环端口，并生成仅本次进程使用的访问令牌。
+3. 宿主校验 `/v1/health` 的状态和 `kbrain.agent.v1` 协议版本，再返回连接信息。
+4. 前端在连接就绪后加载应用。设置、模型目录、历史、聊天、SSE 和辅助生成共用同一连接。
+5. 后端启动失败时展示错误与重试入口。应用退出或更新时停止后端；父进程管道关闭时后端主动退出。
+
+访问令牌保存在进程内存中。桌面后端与 CLI 共用 `~/.liveagent`（优先 `LIVEAGENT_HOME`，兼容 `K_BRAIN_HOME`）。首次使用默认目录时，先从旧应用数据目录的 `kbrain` 子目录，再从 `~/.k-brain` 导入缺失文件；新文件优先，旧目录保留，错误显式返回。动态端口变化后，受管理后端仍使用稳定的会话映射作用域；显式远程后端继续按地址隔离。
 
 ## 核心数据流
 
-| 数据流 | 步骤 | 关键路径 |
+| 操作 | 前端职责 | K-brain 职责 |
 |---|---|---|
-| 本地桌面对话 | 共享 composer 提交消息，GUI `ChatPage` 构造上下文，按 execution mode 进入 text 或 agent turn，模型流式返回，必要时执行 builtin tools，最后写入历史 SQLite。 | `crates/agent-ui/src/pages/chat/ChatComposerBar.tsx`、`src/pages/ChatPage.tsx`、`src/pages/chat/turns/*`、`src/lib/providers/llm.ts`、`src/lib/tools/builtinRegistry.ts` |
-| WebUI 远程对话 | WebUI optimistic echo 后先经 `/ws/v2` 发 `chat_prepare`，Gateway 通过关联原生 Ping/Pong 验证桌面端信封流并唤醒桌面 Chat Runtime；随后 `chat_command`（`chat.submit`/`chat.edit_resend`）accepted 并经 `/ws/v2/agent` 信封流下发。桌面端本地运行并持续回传 `ChatEvent`/`ChatControlEvent`，Gateway 按 seq 经会话订阅（`chat.subscribe`/`chat.event`）推送给 WebUI。 | `web/src/lib/gatewaySocket.ts`、`internal/protocol/pbws/browser_local.go`、`internal/chatcmd/chatcmd.go`、`proto/v2/gateway.proto`、`src-tauri/src/services/gateway/*` |
-| 设置同步 | GUI load/save 设置到本地 SQLite，同时发布脱敏 settings snapshot 到 Gateway；WebUI 读取/更新 settings 时走 Gateway，普通 sync 不带真实 provider API key。 | `src/lib/settings/*`、`src-tauri/src/commands/config/settings/*`、`crates/agent-ui/src/lib/settings/sync.ts`、`web/src/lib/settings/*` |
-| 历史同步 | GUI 持久化 `chatHistory` 和 `chatHistorySegment`，操作后发布 history sync；Gateway 转发给 WebUI，WebUI 刷新列表或详情缓存。 | `src-tauri/src/commands/history/chat_history/*`、`src-tauri/src/services/gateway/*`、`web/src/lib/sidebar/webSidebarBackend.ts`、`web/src/lib/historyParser.ts` |
-| 上传文件 | GUI 直接通过 Tauri 导入；WebUI 走 Gateway HTTP multipart，Gateway 将 bytes 转成 `UploadReadableFilesRequest` 信封。桌面端统一把文件写入 `~/.liveagent/uploads` 暂存区（工作区外）后返回文件引用。 | `src-tauri/src/commands/app/system.rs`、`internal/handler/upload.go`、`web/src/lib/uploadReadableFiles.ts` |
-| 记忆召回 | 每轮 Chat 可调用 Rust `MemoryStore` 生成 overview 注入 system prompt；工具层暴露 `MemoryManager` 读写；共享 Settings Memory 展示和管理同一套 store。 | `src-tauri/src/services/memory/*`、`src/lib/chat/memory/*`、`src/lib/tools/memoryTools.ts`、`crates/agent-ui/src/pages/settings/memory/*` |
+| 发送消息 | 提交 session/run 请求、消费有序 SSE | 构造模型上下文、执行模型与工具循环、写入消息与事件 |
+| 切换模型 | 提交模型的 provider/model 标识 | 转换规范历史到供应商请求，保留工具调用关联 |
+| 工具审批 | 展示请求并提交允许/拒绝 | 控制对应工具实际执行，记录结果 |
+| Computer Use | 仅展示普通工具结果与审批，无专用设置、安装或探测入口 | 管理 Cua 配置、进程、权限检查和桌面操作 |
+| 子代理 | 展示状态和报告 | 创建、执行并持久化父子会话及任务 |
+| 历史操作 | 展示列表和分页、提交修改 | 持久化重命名、置顶、删除、分支、编辑续跑与分享 |
+| 模型设置 | 编辑脱敏配置和只写密钥 | 校验配置、原子保存、刷新模型路由 |
+| 辅助生成 | 提交规范文本上下文 | 通过 `/v1/text/generate` 调用模型 |
 
-## 当前主要持久化
+## 代码入口
 
-| 数据 | 位置 | 所有者 | 说明 |
-|---|---|---|---|
-| 应用设置 | `~/.liveagent/config.sqlite` | Tauri Rust | provider/system/mcp/agents/hooks/cron/remote/memory settings。 |
-| Chat 历史 | `~/.liveagent/chat-history.sqlite3` | Tauri Rust | 对话 header、segment、share、FTS 索引。 |
-| Memory 文件 | `~/.liveagent/memory/...` | Tauri Rust | Markdown 是记忆事实源，按 global/project/daily 等目录组织。 |
-| Memory 索引 | `~/.liveagent/memory/memory-index.sqlite3` | Tauri Rust | `memory_meta`、`memory_fts`、`memory_fts_tri`、audit log。 |
-| Skills root | `~/.liveagent/skills` | Tauri Rust + GUI | 用户可安装/创建/打包的 Skills runtime root。 |
-| WebUI 本地缓存 | Browser localStorage | WebUI | token、脱敏 settings snapshot、UI 偏好与运行态辅助缓存。 |
+- `crates/agent-gui/src/main.tsx`：连接初始化和启动失败界面。
+- `crates/agent-gui/src/lib/kbrain`：运行时连接、HTTP/SSE、会话映射、历史和模型目录。
+- `crates/agent-gui/src/pages/chat/turns/runKBrainConversationTurn.ts`：将后端事件投影到聊天界面。
+- `crates/agent-gui/src-tauri/src/services/kbrain_backend.rs`：配套后端进程管理。
+- `crates/agent-ui/src`：共享 React 界面和展示类型。
+- `scripts/release`、`.github/workflows/desktop-release.yml`：固定后端版本、准备平台二进制并随应用打包。
 
-Gateway 的 Chat relay state 不属于持久化数据：conversation event window 默认保留最近 10 分钟并受 4096 条/约 8 MiB 硬上限约束，`client_request_id` 幂等记录在当前进程保留 24 小时。Gateway 重启后由桌面历史 snapshot、run ledger 与 RuntimeStatus 重新对账。
+## 保留的外围系统
 
-## 设计原则
+仓库仍包含 Gateway、远程 WebUI 和原生文件、终端、SSH 等能力。它们的存在不代表模型执行可以回退到前端供应商 SDK。外围管理功能的 HTTP 迁移与完整桌面产品功能对齐需要单独验收；当前统一后端协议的范围是会话、模型、工具审批、子代理和恢复。
 
-| 原则 | 在当前代码中的体现 |
-|---|---|
-| 桌面端是真相源 | 工具执行、历史、设置、记忆、Cron prompt、MCP runtime 都在 Tauri/GUI 侧落地。 |
-| Gateway 不越权 | Gateway 不直接访问用户文件系统，不保存真实 provider key；只维护会话、中继和有界的进程内 Chat 事件窗口。 |
-| GUI/WebUI 可用性对齐 | 两端从 `crates/agent-ui` 复用组件与领域逻辑，通过 `@liveagent/adapters` 提供 Tauri 或 Gateway 适配器；应用独有能力由扩展注册表选择性启用。 |
-| 长对话可恢复 | 历史使用桌面端 segment + summary checkpoint；短时断线由 Gateway 内存 seq window 和 `chat.subscribe.after_seq` 补齐，窗口 reset 或 Gateway 重启时回到桌面历史 snapshot。 |
-| 功能域清晰 | Chat runtime、Tools、Memory、Skills、MCP、Cron、Hooks、History 都有独立源码区域与后端命令。 |
+K-brain 随 LiveAgent 整包更新。发布构建应验证平台、固定源码版本及二进制校验和；本地后端启动无需联网下载组件。
 
-## 高层模块图
-
-```text
-Browser WebUI
-  ├─ React entry / Gateway controllers / GatewayTranscript
-  ├─ Shared UI: Settings / Hubs / sidebar / composer / project tools
-  ├─ GatewayWebSocketClient (chat command/subscribe + sync)
-  └─ HTTP upload / public share
-        │
-        ▼
-Go Gateway
-  ├─ HTTP/WS: /ws/v2, /ws/v2/agent, /ws/v2/terminal, /api/status, /api/files/import, /api/public/history-shares/{token}
-  └─ session.Manager: agent session, streams, settings/history subscribers, bounded chat relay window
-        │
-        ▼
-Desktop LiveAgent
-  ├─ React GUI: App, ChatPage, desktop adapters
-  ├─ Shared UI: Settings / Hubs / sidebar / composer / project tools
-  ├─ Agent runtime: model streaming, tools loop, compaction, memory extraction
-  └─ Tauri Rust: commands, services, SQLite, MCP, MemoryStore, Cron, Gateway bridge
-```
+K-brain 的发布流程校验固定版本的 Cua 平台归档并内嵌到后端二进制，首次调用时由后端解包和启动。LiveAgent 仍只下载固定版本、校验和匹配的后端，不在前端安装 Cua，也不在 LiveAgent CI 编译后端。系统权限仍需用户在运行 K-brain 的主机上授予；移除设置入口不改变已有会话的工具结果或审批展示。已发布的旧后端不会自动获得该归档，需要后续更新配套后端版本。

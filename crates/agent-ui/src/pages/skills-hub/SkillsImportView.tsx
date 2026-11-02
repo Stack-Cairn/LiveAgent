@@ -18,6 +18,7 @@ export function SkillsImportView(props: {
   scans: ExternalToolScan[];
   initializing: boolean;
   error: string | null;
+  backendManaged?: boolean;
   query: string;
   selected: ReadonlySet<string>;
   installedNames: ReadonlySet<string>;
@@ -32,6 +33,7 @@ export function SkillsImportView(props: {
     scans,
     initializing,
     error,
+    backendManaged = false,
     query,
     selected,
     installedNames,
@@ -99,7 +101,7 @@ export function SkillsImportView(props: {
   const allVisibleSelected =
     selectableVisibleBaseDirs.length > 0 &&
     selectedSelectableVisibleCount === selectableVisibleBaseDirs.length;
-  const showBulkBar = importableSelectedCount > 0 || importing;
+  const showBulkBar = !backendManaged && (importableSelectedCount > 0 || importing);
   return (
     <div className="relative h-full min-h-0">
       <div
@@ -109,7 +111,7 @@ export function SkillsImportView(props: {
         )}
       >
         <div className="flex flex-col gap-3">
-          {error ? (
+          {error && !backendManaged ? (
             <GlassPanel tone="error">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 shrink-0 text-destructive" />
@@ -129,7 +131,7 @@ export function SkillsImportView(props: {
             <SkillsImportSourceTabs
               scans={filteredScans}
               value={activeTool}
-              disabled={initializing}
+              disabled={initializing || backendManaged}
               onChange={(nextTool) => {
                 userChoseToolRef.current = true;
                 setActiveTool(nextTool);
@@ -137,7 +139,13 @@ export function SkillsImportView(props: {
             />
           </div>
 
-          {initializing ? (
+          {backendManaged ? (
+            <GlassPanel tone="muted">
+              <p className="py-2 text-center text-xs text-muted-foreground">
+                {t("settings.skillsBackendManaged")}
+              </p>
+            </GlassPanel>
+          ) : initializing ? (
             <div
               className={SKILL_LIST_GRID_CLASS}
               role="status"
@@ -176,7 +184,7 @@ export function SkillsImportView(props: {
                   {activeScan.skills.map((skill) => {
                     const alreadyInstalled = installedNames.has(skill.name);
                     const checked = !alreadyInstalled && selected.has(skill.baseDir);
-                    const locked = alreadyInstalled || importing;
+                    const locked = alreadyInstalled || importing || backendManaged;
                     const installing = importing && skill.baseDir === importingExternalBaseDir;
                     return (
                       // biome-ignore lint/a11y/useSemanticElements: The card contains a separate import control.
@@ -184,7 +192,7 @@ export function SkillsImportView(props: {
                         key={skill.baseDir}
                         role="button"
                         tabIndex={locked ? -1 : 0}
-                        aria-disabled={locked}
+                        aria-disabled={locked || backendManaged}
                         aria-pressed={checked}
                         onMouseDown={(event) => {
                           if (bulkMode && event.shiftKey) event.preventDefault();

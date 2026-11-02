@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 function read(relativePath) {
-  return readFileSync(new URL(relativePath, import.meta.url), "utf8");
+  return readFileSync(new URL(relativePath, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 }
 
 const UI = "../../../agent-ui/src/components/ui/";
@@ -15,7 +15,7 @@ test("dialogs publish their font-scale zone and portaled popups pick it up", () 
   // 写回内联变量，.layer-popover 负责按该变量重声明字号变量。
   for (const file of ["dialog.tsx", "alert-dialog.tsx"]) {
     const source = read(UI + file);
-    assert.match(source, /resolveZoneFontScale\(style, (ALERT_)?DIALOG_FONT_SCALE\)/, file);
+    assert.match(source, /resolveZoneFontScale\(\s*style,\s*inheritedFontScale \?\? (ALERT_)?DIALOG_FONT_SCALE,?\s*\)/, file);
     assert.match(source, /<ZoneFontScaleContext\.Provider value=\{zoneFontScale\}>/, file);
   }
   for (const file of ["select.tsx", "dropdown-menu.tsx", "popover.tsx", "tooltip.tsx"]) {

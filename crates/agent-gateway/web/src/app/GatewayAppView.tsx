@@ -23,6 +23,7 @@ import {
   WorkspaceToolsPanel,
 } from "@liveagent/ui/components/project-tools/WorkspacePanels";
 import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
+import { Button } from "@liveagent/ui/components/ui/button";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { Toaster } from "@liveagent/ui/components/ui/toaster";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
@@ -42,8 +43,11 @@ import {
   type CheckpointRewoundInfo,
   formatCheckpointRewoundNotification,
 } from "@liveagent/ui/lib/chat/checkpointRewind";
+import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { kbrainResourceHostCapabilities } from "@liveagent/ui/lib/resourceHost";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import {
@@ -81,9 +85,14 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import {
+  type TrustedGatewayImageIdentity,
+  useWebImageStudioHost,
+} from "@/agent-ui-adapters/imageStudio";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
+import { useSingleUserImageIdentity } from "@/lib/imageIdentity";
 import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
@@ -114,6 +123,7 @@ import {
 } from "@/lib/webStyleClasses";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { openUrl } from "@/shims/tauriOpener";
+import { settingsHostAdapter } from "../agent-ui-adapters/settingsExtension";
 import { AgentSelector } from "./AgentSelector";
 import { ConversationStatsBarHost } from "./ConversationStatsBarHost";
 import { asErrorMessage } from "./chatEventUtils";
@@ -122,8 +132,10 @@ import type { GatewayAppViewModel } from "./GatewayApp";
 import { isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { HistorySwitchLoadingOverlay } from "./HistorySwitchLoadingOverlay";
 import { useWindowFileDropGuard } from "./hooks/useWindowFileDropGuard";
+import { sendComposerCommandTurn } from "./sendComposerCommandTurn";
 import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
 import { UserMenu } from "./UserMenu";
+import { createWebComposerCommandHost } from "./webComposerCommandHost";
 import {
   GatewayConversationPaneHost,
   type GatewayConversationPaneHostContext,
@@ -132,7 +144,23 @@ import {
 import { GatewayTerminalPaneHost } from "./workbench/GatewayTerminalPaneHost";
 import { sessionWorkbench } from "./workbench/sessionWorkbench";
 
-export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }) {
+export function GatewayAppView({
+  viewModel,
+  imageStudioIdentity,
+}: {
+  viewModel: GatewayAppViewModel;
+  imageStudioIdentity?: TrustedGatewayImageIdentity;
+}) {
+  const verifiedImageIdentity = useSingleUserImageIdentity(
+    viewModel.imageStudioToken,
+    imageStudioIdentity,
+  );
+  const imageStudio = useWebImageStudioHost(
+    viewModel.imageStudioToken,
+    verifiedImageIdentity,
+    viewModel.activeWorkspaceProjectPath,
+    (key) => translate(key, viewModel.settings.locale),
+  );
   const chatFrameRef = useRef<HTMLDivElement | null>(null);
   useWindowFileDropGuard();
   const {
@@ -160,6 +188,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     chatRuntimeThinkingAlwaysOn,
     closeSettings,
     codeReviewSkill,
+    cancelQueuedChatEdit,
     commitQueuedChatEdit,
     composerCompactionBlocked,
     composerInputDisabled,
@@ -306,6 +335,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     projectToolsDisabledMessage,
     queuedChatEditSessionRef,
     queuedChatTurnsForDisplayedConversation,
+    queuePaused,
+    queueControlPending,
+    handleQueuePausedChange,
     removeQueuedTurn,
     requestWorkspaceFilePreviewClose,
     projectSettingsProject,
@@ -556,6 +588,24 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     sessionWorkbench.enabled && Object.keys(workbenchController.workbench.layout.panes).length >= 2;
   const primarySendInFlightConversationRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    const handleQueueEditEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || !(event.target instanceof Element))
+        return;
+      const composer = event.target.closest("[data-file-upload-conversation-id]");
+      const session = queuedChatEditSessionRef.current;
+      if (
+        !session ||
+        composer?.getAttribute("data-file-upload-conversation-id") !== session.conversationId
+      )
+        return;
+      event.preventDefault();
+      void cancelQueuedChatEdit();
+    };
+    document.addEventListener("keydown", handleQueueEditEscape);
+    return () => document.removeEventListener("keydown", handleQueueEditEscape);
+  }, [cancelQueuedChatEdit, queuedChatEditSessionRef]);
+
   const handlePrimaryComposerSend = useCallback(() => {
     const sendConversationId = getDisplayedConversationId();
     if (primarySendInFlightConversationRef.current === sendConversationId) return;
@@ -566,7 +616,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       (!uploadingConversationId || uploadingConversationId === sendConversationId);
     if (uploadBlocksSend || isImportingPastedTextRef.current) return;
     if (composerInputDisabled) return;
-    if (queuedChatEditSessionRef.current) {
+    if (queuedChatEditSessionRef.current?.conversationId === getDisplayedConversationId()) {
       primarySendInFlightConversationRef.current = sendConversationId;
       void (async () => {
         try {
@@ -663,7 +713,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
   const handlePrimaryComposerStop = useCallback(() => {
     const nextQueuedTurn = queuedChatTurnsForDisplayedConversation[0];
-    if (nextQueuedTurn) {
+    if (nextQueuedTurn && !queuePaused) {
       runQueuedTurnNow(nextQueuedTurn.id);
       return;
     }
@@ -672,6 +722,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     cancelChat,
     displayedConversationId,
     queuedChatTurnsForDisplayedConversation,
+    queuePaused,
     runQueuedTurnNow,
   ]);
 
@@ -791,6 +842,67 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     [handleFileDrop],
   );
 
+  // 输入框“/”指令宿主：引用只随 api、工作目录和语言变化（输入框按宿主引用重新拉
+  // 指令目录），动作与状态读数经 ref 取最新值——sendChat 等每次渲染都是新函数。
+  const composerCommandLatestRef = useRef({
+    handleManualCompact,
+    handleSelectModel,
+    isConversationBusy,
+    modelOptions,
+    runtimeControls: chatRuntimeControlsForCurrentProvider,
+    sendChat,
+  });
+  composerCommandLatestRef.current = {
+    handleManualCompact,
+    handleSelectModel,
+    isConversationBusy,
+    modelOptions,
+    runtimeControls: chatRuntimeControlsForCurrentProvider,
+    sendChat,
+  };
+  const composerCommandHost = useMemo<ComposerCommandHost>(
+    () => ({
+      ...createWebComposerCommandHost({
+        t: (key) => translate(key, settings.locale),
+        client: api ?? undefined,
+        getConversationId: () => {
+          const id = getDisplayedConversationId();
+          return isLocalDraftConversationId(id) ? undefined : id;
+        },
+        getWorkdir: () => displayedConversationWorkdir || undefined,
+        getRuntimeControls: () => composerCommandLatestRef.current.runtimeControls,
+        sendTurn: (text, command, runtimeControls) =>
+          sendComposerCommandTurn(
+            composerCommandLatestRef.current.sendChat,
+            (key) => translate(key, settings.locale),
+            text,
+            command,
+            {
+              runtimeControls,
+              isBusy: () =>
+                composerCommandLatestRef.current.isConversationBusy(getDisplayedConversationId()),
+            },
+          ),
+        compact: () => composerCommandLatestRef.current.handleManualCompact(),
+        getModelOptions: () => composerCommandLatestRef.current.modelOptions,
+        selectModel: (value) => {
+          const selection = parseModelValue(value);
+          if (selection) composerCommandLatestRef.current.handleSelectModel(selection);
+        },
+      }),
+      // 正在编辑排队消息时，发送是保存编辑，不按指令执行。
+      isDraftReserved: () =>
+        queuedChatEditSessionRef.current?.conversationId === getDisplayedConversationId(),
+    }),
+    [
+      api,
+      displayedConversationWorkdir,
+      getDisplayedConversationId,
+      queuedChatEditSessionRef,
+      settings.locale,
+    ],
+  );
+
   const primaryConversationSurface: GatewayConversationPrimarySurface = {
     isSending: composerIsSending,
     // 上传态只归属目标会话:背景 Pane 的导入不在主 Pane 显示"上传中"。
@@ -823,12 +935,14 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       );
     },
     queuedTurns: queuedChatTurnsForDisplayedConversation,
+    queuePaused,
     onRunQueuedTurnNow: runQueuedTurnNow,
     onMoveQueuedTurnUp: moveQueuedTurnUp,
     onEditQueuedTurn: editQueuedTurn,
     onRemoveQueuedTurn: removeQueuedTurn,
     onManualCompactConfirm: handleManualCompact,
     manualCompactBlocked: manualCompactPending || composerCompactionBlocked,
+    commandHost: composerCommandHost,
     approvalBar,
     taskProgressBar: (
       <TaskProgressBar
@@ -1479,15 +1593,42 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                   <main className={GATEWAY_MAIN_SHELL_CLASS}>
                     <div className={GATEWAY_MAIN_BACKDROP_CLASS} />
 
+                    {activeView === "image-studio-hub" && !imageStudio.host && (
+                      <section className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+                        <h1 className="text-lg font-semibold">
+                          {translate("imageStudio.name", viewModel.settings.locale)}
+                        </h1>
+                        <p role="status" className="max-w-lg text-sm text-muted-foreground">
+                          {imageStudio.unavailable}
+                        </p>
+                        {imageStudioIdentity && (
+                          <Button variant="outline" onClick={imageStudio.retry}>
+                            {translate("imageStudio.retryConnect", viewModel.settings.locale)}
+                          </Button>
+                        )}
+                      </section>
+                    )}
                     <ApplicationView
                       activeView={activeView}
+                      imageStudioHost={
+                        imageStudio.host && {
+                          ...imageStudio.host,
+                          onOpenSettings: () => openSettings("image-studio"),
+                        }
+                      }
                       settings={settings}
                       setSettings={setSettings}
+                      resourceHost={kbrainResourceHostCapabilities}
+                      kbrainSettings={settingsHostAdapter.kbrain}
                       isAgentMode={isAgentMode}
                       initialSkills={availableSkills}
                       initialSkillsRootDir={skillsRootDir}
                       onOpenView={setActiveView}
-                      className="contents"
+                      className={
+                        activeView === "image-studio-hub" && !imageStudio.host
+                          ? "hidden"
+                          : "contents"
+                      }
                       chat={{
                         containerRef: chatFrameRef,
                         containerProps: {
@@ -1721,6 +1862,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   mentionableConversations={mentionableConversations}
                                   searchMentionableConversations={searchMentionableConversations}
                                   mentionApps={mentionApps}
+                                  commandHost={composerCommandHost}
                                   executionMode={settings.system.executionMode}
                                   hasModels={modelOptions.length > 0}
                                   currentModelLabel={currentModelLabel}
@@ -1764,7 +1906,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                     ) {
                                       return;
                                     }
-                                    if (queuedChatEditSessionRef.current) {
+                                    if (
+                                      queuedChatEditSessionRef.current?.conversationId ===
+                                      getDisplayedConversationId()
+                                    ) {
                                       submitInFlightRef.current = true;
                                       void (async () => {
                                         try {
@@ -1853,7 +1998,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   onStop={() => {
                                     const nextQueuedTurn =
                                       queuedChatTurnsForDisplayedConversation[0];
-                                    if (nextQueuedTurn) {
+                                    if (nextQueuedTurn && !queuePaused) {
                                       // Keep WebUI's stop button aligned with the desktop
                                       // composer: stop the active run, then drain the queue.
                                       runQueuedTurnNow(nextQueuedTurn.id);
@@ -1889,6 +2034,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                     );
                                   }}
                                   queuedTurns={queuedChatTurnsForDisplayedConversation}
+                                  queuePaused={queuePaused}
+                                  queueControlPending={queueControlPending}
+                                  onQueuePausedChange={handleQueuePausedChange}
                                   onRunQueuedTurnNow={runQueuedTurnNow}
                                   onMoveQueuedTurnUp={moveQueuedTurnUp}
                                   onEditQueuedTurn={editQueuedTurn}
@@ -2092,14 +2240,21 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
             <div
               className={cn(
                 GATEWAY_SETTINGS_OVERLAY_CLASS,
-                // Keep the settled transform at none: a transformed settings scroller
-                // can leave blank rasterized regions on Android Chrome.
-                overlay === "open" ? "opacity-100! transform-none!" : "",
+                // Keep the settled translate at none: a transformed settings scroller
+                // can leave blank rasterized regions on Android Chrome. Tailwind v4
+                // puts translate-y-* on `translate`, which transform-none! does not reset.
+                overlay === "open" ? "opacity-100! translate-none!" : "",
               )}
               onTransitionEnd={handleSettingsTransitionEnd}
             >
               <SettingsPage
-                settings={settings}
+                imageClient={imageStudio.host?.client}
+                registerLeaveGuard={viewModel.registerSettingsLeaveGuard}
+                settings={{
+                  ...settings,
+                  system: { ...settings.system, workspaceProjects },
+                }}
+                settingsHost={settingsHostAdapter}
                 setSettings={setSettings}
                 saveState={settingsSaveState}
                 onBack={closeSettings}

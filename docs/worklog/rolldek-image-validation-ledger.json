@@ -1,0 +1,164 @@
+{
+  "provider": "RollDek",
+  "limitImages": 50,
+  "reservedImages": 9,
+  "confirmedImages": 3,
+  "requests": [
+    {
+      "key": "rolldek-authorized-20261014-first",
+      "model": "gpt-image-2",
+      "requestedImages": 1,
+      "state": "unknown",
+      "startedAt": "2026-10-13T16:22:01.687Z",
+      "receiptId": "iv_0a82acabab515ced106809e8cbb69f18d7f85397f9d5b919b5958ccf8c08efe0",
+      "jobId": "ij_43583ffa-a704-4773-a36c-89a398a308f8",
+      "jobStatus": "result_unknown",
+      "errorCode": "IMAGE_RESULT_UNKNOWN",
+      "assetCount": 0,
+      "finishedAt": "2026-10-13T16:22:48.280Z"
+    },
+    {
+      "key": "rolldek-authorized-20261014-base64-second",
+      "model": "gpt-image-2",
+      "requestedImages": 1,
+      "state": "failed",
+      "startedAt": "2026-10-13T16:53:29.832Z",
+      "receiptId": "iv_cf64bbf213466aea0571db44f96575fa1d647cb27c4b76d569f21a01f671a1f3",
+      "jobId": "ij_62b8e615-163a-4bcb-8402-46c3cad2c5b4",
+      "jobStatus": "failed",
+      "errorCode": "IMAGE_INVALID_INPUT",
+      "assetCount": 0,
+      "finishedAt": "2026-10-13T16:53:33.897Z"
+    },
+    {
+      "key": "rolldek-diagnostic-third",
+      "model": "gpt-image-2",
+      "requestedImages": 1,
+      "state": "unknown",
+      "startedAt": "2026-10-13T16:54:44.888Z",
+      "reason": "execution_observation_timeout",
+      "finishedAt": "2026-10-13T16:56:41.987Z"
+    },
+    {
+      "key": "rolldek-authorized-20261014-http25-fourth",
+      "model": "gpt-image-2.5",
+      "requestedImages": 1,
+      "state": "unknown",
+      "startedAt": "2026-10-13T17:11:57.541Z",
+      "receiptId": "iv_eb0ea5e3e2b746cc0c52267ff729b124dc58e22b86dc43f77801b0fc73b9eb35",
+      "jobId": "ij_fcd17f72-5dbd-4435-89a3-8ca191886def",
+      "jobStatus": "result_unknown",
+      "errorCode": "IMAGE_RESULT_UNKNOWN",
+      "assetCount": 0,
+      "finishedAt": "2026-10-13T17:12:01.610Z"
+    },
+    {
+      "key": "rolldek-http25-diagnostic-fifth",
+      "model": "gpt-image-2.5",
+      "requestedImages": 1,
+      "state": "http_rejected",
+      "startedAt": "2026-10-13T17:12:45.443Z",
+      "httpStatus": 301,
+      "contentType": "text/html",
+      "redirect": true,
+      "responseBytes": 166,
+      "topLevelFields": [],
+      "outputCount": 0,
+      "outputKinds": [],
+      "reasonFlags": {
+        "model": false,
+        "parameter": false,
+        "quota": false,
+        "upstream": false
+      },
+      "finishedAt": "2026-10-13T17:12:45.765Z"
+    },
+    {
+      "key": "rolldek-authorized-20261014-https25-sixth",
+      "model": "gpt-image-2.5",
+      "requestedImages": 1,
+      "state": "unknown",
+      "startedAt": "2026-10-13T17:17:32.884Z",
+      "receiptId": "iv_532f0da0243d74579ae3c8d901de0212ab5c17304ab306f145bf361ef9b43119",
+      "jobId": "ij_7e5f159c-34bb-413e-924a-13eb94e37410",
+      "jobStatus": "result_unknown",
+      "errorCode": "IMAGE_RESULT_UNKNOWN",
+      "assetCount": 0,
+      "finishedAt": "2026-10-13T17:20:08.717Z"
+    },
+    {
+      "key": "rolldek-https25-diagnostic-seventh",
+      "model": "gpt-image-2.5",
+      "requestedImages": 1,
+      "state": "response_received",
+      "startedAt": "2026-10-13T17:21:48.641Z",
+      "httpStatus": 200,
+      "contentType": "application/json",
+      "redirect": false,
+      "responseBytes": 435,
+      "topLevelFields": [
+        "created",
+        "data",
+        "usage"
+      ],
+      "reasonFlags": {
+        "model": false,
+        "parameter": false,
+        "quota": false,
+        "upstream": false,
+        "timeout": false
+      },
+      "outputCount": 1,
+      "outputKinds": [
+        {
+          "fields": [
+            "url",
+            "revised_prompt"
+          ],
+          "base64": false,
+          "url": true,
+          "base64Length": 0
+        }
+      ],
+      "savedOutputs": [],
+      "finishedAt": "2026-10-13T17:22:21.116Z"
+    },
+    {
+      "key": "rolldek-authorized-20261014-url25-eighth",
+      "model": "gpt-image-2.5",
+      "requestedImages": 1,
+      "state": "verified",
+      "startedAt": "2026-10-13T17:25:03.612Z",
+      "receiptId": "iv_3cc036ba0d0f267f4093a953a906ba569c65cdbade9f3d3e48e10c68c71ad1e2",
+      "jobId": "ij_f42dcd0d-d5c1-4048-9ea8-fb940051eb5a",
+      "jobStatus": "succeeded",
+      "assetCount": 1,
+      "finishedAt": "2026-10-13T17:25:27.911Z",
+      "assets": [
+        {
+          "id": "ia_ca16f3526a38c972a88a012e522f2bea",
+          "bytes": 1011516,
+          "mime": "image/png",
+          "sha256": "1b0d8d517c104b734551e858c24dddef3623113c0300d49dca6630e384489ffc"
+        }
+      ]
+    },
+    {
+      "key": "rolldek-native-acceptance-ninth",
+      "model": "gpt-image-2.5",
+      "requestedImages": 1,
+      "state": "verified",
+      "startedAt": "2026-10-13T23:27:12.617Z",
+      "surface": "Tauri-managed K-Brain",
+      "receiptId": "iv_5aeed503e009d9a1f96596952db5dad23e8c9f557c36da0ff85ec78c5503457e",
+      "jobId": "ij_5086ff07-9bd9-4fab-ad1d-4f109ea4edfc",
+      "projectId": "ip_b92e83e4-b32d-4d7a-bfb8-dc39963a4bbe",
+      "jobStatus": "succeeded",
+      "assetCount": 1,
+      "assetIds": [
+        "ia_080a778b383fcf6bf76848b532217aab"
+      ],
+      "finishedAt": "2026-10-13T23:27:36.957Z"
+    }
+  ]
+}

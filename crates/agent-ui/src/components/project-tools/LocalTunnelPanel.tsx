@@ -19,6 +19,7 @@ import {
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../lib/shared/utils";
@@ -167,8 +168,8 @@ function HealthBadge({
   );
 }
 
-function asErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+function asErrorMessage(error: unknown, unavailableMessage = "") {
+  return hostAwareErrorMessage(error, unavailableMessage);
 }
 
 function formatRemaining(seconds: number) {
@@ -764,7 +765,7 @@ export function LocalTunnelPanel({
     void client
       .createTunnel(input)
       .then(() => setName(""))
-      .catch((err) => setCreateError(asErrorMessage(err)))
+      .catch((err) => setCreateError(asErrorMessage(err, t("projectTools.runtimeUnsupported"))))
       .finally(() => setCreating(false));
   }, [
     client,
@@ -815,7 +816,9 @@ export function LocalTunnelPanel({
       void client
         .updateTunnel(input)
         .then(() => cancelEdit())
-        .catch((err) => setRowError(tunnel.id, asErrorMessage(err)))
+        .catch((err) =>
+          setRowError(tunnel.id, asErrorMessage(err, t("projectTools.runtimeUnsupported"))),
+        )
         .finally(() => endRowAction(tunnel.id));
     },
     [
@@ -839,10 +842,10 @@ export function LocalTunnelPanel({
       beginRowAction(id, "close");
       void client
         .closeTunnel(id)
-        .catch((err) => setRowError(id, asErrorMessage(err)))
+        .catch((err) => setRowError(id, asErrorMessage(err, t("projectTools.runtimeUnsupported"))))
         .finally(() => endRowAction(id));
     },
-    [beginRowAction, client, endRowAction, mutationsEnabled, pendingActions, setRowError],
+    [beginRowAction, client, endRowAction, mutationsEnabled, pendingActions, setRowError, t],
   );
 
   const checkTunnel = useCallback(
@@ -851,10 +854,10 @@ export function LocalTunnelPanel({
       beginRowAction(id, "check");
       void client
         .checkTunnel(id)
-        .catch((err) => setRowError(id, asErrorMessage(err)))
+        .catch((err) => setRowError(id, asErrorMessage(err, t("projectTools.runtimeUnsupported"))))
         .finally(() => endRowAction(id));
     },
-    [beginRowAction, client, endRowAction, mutationsEnabled, pendingActions, setRowError],
+    [beginRowAction, client, endRowAction, mutationsEnabled, pendingActions, setRowError, t],
   );
 
   const checkAllTunnels = useCallback(() => {
@@ -863,9 +866,9 @@ export function LocalTunnelPanel({
     setListError(null);
     void client
       .checkTunnel()
-      .catch((err) => setListError(asErrorMessage(err)))
+      .catch((err) => setListError(asErrorMessage(err, t("projectTools.runtimeUnsupported"))))
       .finally(() => setCheckingAll(false));
-  }, [checkingAll, client, mutationsEnabled]);
+  }, [checkingAll, client, mutationsEnabled, t]);
 
   const publicUrlFor = useCallback(
     (tunnel: TunnelStatus) => composePublicUrl(publicBaseUrl, tunnel.publicPath),

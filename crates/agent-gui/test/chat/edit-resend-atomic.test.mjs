@@ -83,6 +83,41 @@ test("edit-resend delegates the replacement anchor to the send preflight", async
   assert.deepEqual(calls[0].composerDraftOverride.conversationMentions, [referencedConversation]);
 });
 
+test("edit-resend forwards the prepared child conversation and anchor", async () => {
+  const calls = [];
+  const prepareCalls = [];
+  const prepareConversationIds = [];
+  const useEditResend = loadUseEditResend();
+  const { handleResendFromEdit } = useEditResend({
+    isSending: false,
+    isConversationHydrating: false,
+    isConversationHydrationFailed: false,
+    currentConversationIdRef: { current: "source-conversation" },
+    onError: assert.fail,
+    prepareEditResend: async (conversationId, ref) => {
+      prepareConversationIds.push(conversationId);
+      prepareCalls.push(ref);
+      return {
+        conversationId: "child-conversation",
+        messageRef: { ...ref, messageId: "child-user", segmentId: "kbrain:child" },
+      };
+    },
+    sendActionRef: {
+      current: async (input) => {
+        calls.push(input);
+        return true;
+      },
+    },
+  });
+
+  await handleResendFromEdit(messageRef, "edited prompt", [], []);
+
+  assert.deepEqual(prepareConversationIds, ["source-conversation"]);
+  assert.deepEqual(prepareCalls, [messageRef]);
+  assert.equal(calls[0].conversationIdOverride, "child-conversation");
+  assert.equal(calls[0].editResendBaseMessageRef.messageId, "child-user");
+});
+
 test("edit-resend does not authorize a handwritten conversation token", async () => {
   const calls = [];
   const useEditResend = loadUseEditResend();

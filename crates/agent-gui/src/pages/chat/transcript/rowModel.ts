@@ -10,6 +10,7 @@ import {
   rekeyContinuationRounds,
   stitchCompactedReplies,
 } from "@liveagent/ui/lib/chat/replyContinuity";
+import { chatDuration } from "@liveagent/ui/lib/chat/workTiming";
 import {
   CHECKPOINT_ROW_ESTIMATE_PX,
   estimateAssistantRowHeight,
@@ -70,14 +71,14 @@ function assembleHistoryReply(items: readonly RenderTimelineItem[]) {
  */
 function findLiveReplyLeader(
   historyItems: readonly RenderTimelineItem[],
-  historyLenAtStart: number,
+  turnStartIndex: number,
   liveHasContent: boolean,
 ): number {
   const last = historyItems[historyItems.length - 1];
-  if (!last || last.kind !== "summary" || historyItems.length - 1 < historyLenAtStart) return -1;
+  if (!last || last.kind !== "summary" || historyItems.length - 1 < turnStartIndex) return -1;
   let leader = -1;
   let firstAssistant = -1;
-  for (let index = historyItems.length - 1; index >= historyLenAtStart; index -= 1) {
+  for (let index = historyItems.length - 1; index >= turnStartIndex; index -= 1) {
     const item = historyItems[index];
     if (!item || item.kind === "user") break;
     leader = index;
@@ -102,6 +103,23 @@ function findLiveTurnStartedAt(
     if (item.kind === "user") return item.timestamp;
   }
   return undefined;
+}
+
+/**
+ * 回合起点在当前历史窗口里的下标：回合开始时已存在、且仍留在窗口里的最后一项之后。
+ * 历史窗口只保留最新 N 条消息，长会话里回复落库的同时最旧的项会滑出窗口，列表
+ * 长度可能不增反减，所以不能拿开始时的长度当下标。起点前的项全部滑出时，窗口里
+ * 每一项都比起点新，返回 0。
+ */
+function resolveTurnStartIndex(
+  historyItems: readonly RenderTimelineItem[],
+  keysAtStart: ReadonlySet<string>,
+): number {
+  for (let index = historyItems.length - 1; index >= 0; index -= 1) {
+    const item = historyItems[index];
+    if (item && keysAtStart.has(item.key)) return index + 1;
+  }
+  return 0;
 }
 
 /**
@@ -496,12 +514,14 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
       kind: "assistant-unit",
       key: `${replyKey}:work-trace`,
       replyKey,
-      estimate: live
-        ? Math.min(
-            480,
-            42 + workMeasurements.reduce((total, measurement) => total + measurement.estimate, 0),
-          )
-        : 42,
+      // 没有总结文案的回合落定后仍展开（见 AssistantWorkTrace），估算要算上展开的条目。
+      estimate:
+        live || layout.answer.length === 0
+          ? Math.min(
+              480,
+              42 + workMeasurements.reduce((total, measurement) => total + measurement.estimate, 0),
+            )
+          : 42,
       renderCost: Math.min(
         16,
         Math.max(
@@ -517,10 +537,7 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
       compacted,
       unit: {
         kind: "work-trace",
-        durationMs:
-          !live && timestamp !== undefined && retryTarget?.timestamp !== undefined
-            ? Math.max(0, timestamp - retryTarget.timestamp)
-            : undefined,
+        durationMs: !live ? chatDuration(retryTarget?.timestamp, timestamp) : undefined,
         startedAtMs: live ? liveStartedAtMs : undefined,
         entries: layout.work,
         latestToolGroupKey,
@@ -639,14 +656,14 @@ export function createTranscriptRowModel(): TranscriptRowModel {
   let turnSeq = 0;
   let activeTurn: {
     replyKey: string;
-    historyLenAtStart: number;
+    keysAtStart: ReadonlySet<string>;
     liveUnitCache: Map<string, AssistantUnitRow>;
     lastLiveUnits: AssistantUnitRow[];
     settlingUnits: AssistantUnitRow[] | null;
     lastActivityRow: AssistantActivityRow | null;
   } | null = null;
-  let pendingSettle: { replyKey: string; historyLenAtStart: number } | null = null;
-  let deferredSettles: { replyKey: string; historyLenAtStart: number }[] = [];
+  let pendingSettle: { replyKey: string; keysAtStart: ReadonlySet<string> } | null = null;
+  let deferredSettles: { replyKey: string; keysAtStart: ReadonlySet<string> }[] = [];
   let draftRoundCache: { text: string; round: LiveRound } | null = null;
 
   const reset = () => {
@@ -698,12 +715,13 @@ export function createTranscriptRowModel(): TranscriptRowModel {
 
   const adoptSettledTwin = (
     historyItems: RenderTimelineItem[],
-    turn: { replyKey: string; historyLenAtStart: number },
+    turn: { replyKey: string; keysAtStart: ReadonlySet<string> },
   ) => {
-    for (let index = historyItems.length - 1; index >= turn.historyLenAtStart; index -= 1) {
+    const turnStartIndex = resolveTurnStartIndex(historyItems, turn.keysAtStart);
+    for (let index = historyItems.length - 1; index >= turnStartIndex; index -= 1) {
       const item = historyItems[index];
       if (item?.kind !== "assistant") continue;
-      const leader = historyItems[findReplyLeader(historyItems, index, turn.historyLenAtStart)];
+      const leader = historyItems[findReplyLeader(historyItems, index, turnStartIndex)];
       if (!leader || leader.kind !== "assistant") return false;
       if (streamOrigins.has(leader.key)) return false;
       streamOrigins.set(leader.key, turn.replyKey);
@@ -815,7 +833,7 @@ export function createTranscriptRowModel(): TranscriptRowModel {
       pendingSettle = null;
       activeTurn = {
         replyKey: `live-turn-${++turnSeq}`,
-        historyLenAtStart: historyItems.length,
+        keysAtStart: new Set(historyItems.map((item) => item.key)),
         liveUnitCache: new Map(),
         lastLiveUnits: [],
         settlingUnits: null,
@@ -825,21 +843,21 @@ export function createTranscriptRowModel(): TranscriptRowModel {
       pendingSettle = null;
       activeTurn = {
         replyKey: `live-turn-${++turnSeq}`,
-        historyLenAtStart: historyItems.length,
+        keysAtStart: new Set(historyItems.map((item) => item.key)),
         liveUnitCache: new Map(),
         lastLiveUnits: [],
         settlingUnits: null,
         lastActivityRow: null,
       };
     } else if (!liveTailVisible && activeTurn) {
-      // 落定交接：丢弃 activeTurn 的判据是「历史自 historyLenAtStart 起有没有
+      // 落定交接：丢弃 activeTurn 的判据是「历史自回合起点起有没有
       // 新增的、尚未被认领的 assistant 孪生项」——adoptSettledTwin 的返回值正是
       // 这个判据（认领成功 ⇔ 窗口内有可领养孪生项）。不能改用「live 单元里有没有
       // 可见 block」：存在零可见 block 却有真实孪生行的 turn——被取消的 run 会
       // 持久化中止提示 assistant 项；仅输出 Task 工具的 run 其块被
       // isVisibleGroupedBlock 全部过滤。这类 turn 若被误判丢弃，孪生行永不被领养
       // → 以全新 key 重挂载（违反零 remount），persist 滞后时更会漏进下一个 run 的
-      // historyLenAtStart 窗口被错位认领。
+      // 回合起点之后被错位认领。
       const adopted = adoptSettledTwin(historyItems, activeTurn);
       if (adopted) {
         activeTurn = null;
@@ -854,7 +872,7 @@ export function createTranscriptRowModel(): TranscriptRowModel {
         // 登记 pendingSettle，待其落库后按同一 replyKey 认领（零 remount）。
         pendingSettle = {
           replyKey: activeTurn.replyKey,
-          historyLenAtStart: activeTurn.historyLenAtStart,
+          keysAtStart: activeTurn.keysAtStart,
         };
       } else {
         // 既没产出内容、历史也没有可领养孪生项（空闲手动压缩落定成检查点卡片、
@@ -895,7 +913,11 @@ export function createTranscriptRowModel(): TranscriptRowModel {
       // 缝合回复（首段 assistant 项为 leader），单元 key 逐一对上、零 remount。
       const liveHasContent = live.liveRounds.length > 0 || Boolean(live.draftAssistantText);
       const absorbedLeaderIndex = liveTailVisible
-        ? findLiveReplyLeader(historyItems, activeTurn.historyLenAtStart, liveHasContent)
+        ? findLiveReplyLeader(
+            historyItems,
+            resolveTurnStartIndex(historyItems, activeTurn.keysAtStart),
+            liveHasContent,
+          )
         : -1;
       const absorbed = absorbedLeaderIndex === -1 ? [] : historyItems.slice(absorbedLeaderIndex);
       const visibleHistoryRows =

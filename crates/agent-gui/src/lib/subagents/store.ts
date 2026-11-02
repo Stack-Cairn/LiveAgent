@@ -1,4 +1,4 @@
-import type { Tool } from "@earendil-works/pi-ai";
+import type { Tool } from "@liveagent/app/lib/agentTypes";
 
 import {
   type ConversationViewState,

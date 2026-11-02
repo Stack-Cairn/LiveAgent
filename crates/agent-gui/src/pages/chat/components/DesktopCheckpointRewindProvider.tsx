@@ -1,10 +1,12 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type CheckpointRewindClient,
   CheckpointRewindProvider,
   type CheckpointRewoundInfo,
 } from "@liveagent/ui/lib/chat/checkpointRewind";
-import { invoke } from "@tauri-apps/api/core";
 import { type ReactNode, useCallback } from "react";
+import { liveAgentRuntimeCapabilities } from "../../../lib/host";
 import type { WorkspaceProject } from "../../../lib/settings";
 import { listWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";
 
@@ -39,6 +41,8 @@ export function DesktopCheckpointRewindProvider(props: {
   onRewound?: (info: CheckpointRewoundInfo) => void;
 }) {
   const { children, conversationId, workspaceRoot, project, disabled, onRewound } = props;
+  const { locale } = useLocale();
+  const capabilities = liveAgentRuntimeCapabilities();
 
   // 回退授权的唯一来源：当前会话工作区根 + 仍处于 active 且可写的额外授权根。
   // 后端只认这个集合里的 root，记录里存的绝对路径本身不构成授权。
@@ -70,7 +74,14 @@ export function DesktopCheckpointRewindProvider(props: {
     <CheckpointRewindProvider
       client={desktopCheckpointRewindClient}
       conversationId={conversationId}
-      disabled={disabled}
+      disabled={disabled || !capabilities.checkpoints}
+      disabledReason={
+        capabilities.checkpoints
+          ? undefined
+          : locale === "zh-CN"
+            ? "K-brain 模式尚不支持文件检查点回退；文件修改由后端工具执行。"
+            : "File checkpoint rewind is not supported in K-brain mode; file changes are executed by backend tools."
+      }
       resolveAuthorizedRoots={resolveAuthorizedRoots}
       onRewound={onRewound}
     >

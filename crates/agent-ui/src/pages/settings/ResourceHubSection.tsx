@@ -1,4 +1,5 @@
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import { getResourceHostCapabilities } from "../../lib/resourceHost";
 import { McpHubPage } from "../mcp-hub/McpHubPage";
 import { SkillsHubPage } from "../skills-hub/SkillsHubPage";
 
@@ -7,13 +8,19 @@ export function ResourceHubSection({
   settings,
   setSettings,
 }: SettingsSectionProps & { resource: "skills" | "mcp" }) {
-  const Hub = resource === "skills" ? SkillsHubPage : McpHubPage;
+  const isAgentMode = settings.system.executionMode !== "text";
+  if (resource === "skills") {
+    return (
+      <SkillsHubPage
+        settings={settings}
+        setSettings={setSettings}
+        isAgentMode={isAgentMode}
+        resourceHost={getResourceHostCapabilities()}
+        embedded
+      />
+    );
+  }
   return (
-    <Hub
-      settings={settings}
-      setSettings={setSettings}
-      isAgentMode={settings.system.executionMode !== "text"}
-      embedded
-    />
+    <McpHubPage settings={settings} setSettings={setSettings} isAgentMode={isAgentMode} embedded />
   );
 }

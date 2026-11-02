@@ -1,7 +1,7 @@
-export const TASK_TOOL_NAMES = ["TaskCreate", "TaskUpdate", "TaskList"] as const;
+export const TASK_TOOL_NAMES = ["TaskCreate", "TaskUpdate", "TaskList", "todowrite"] as const;
 
 export type TaskToolName = (typeof TASK_TOOL_NAMES)[number];
-export type TaskStatus = "pending" | "in_progress" | "completed";
+export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
 
 export type TaskItem = {
   id: string;

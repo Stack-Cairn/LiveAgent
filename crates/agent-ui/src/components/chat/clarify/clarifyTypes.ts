@@ -1,5 +1,5 @@
 // crates/agent-ui/src/components/chat/clarify/clarifyTypes.ts
-/** 澄清小对话的消息。与 pi-ai Context 的 messages 同构，但独立于会话运行时。 */
+/** 澄清小对话的消息。与运行时 Context 的 messages 同构，但独立于会话运行时。 */
 export type ClarifyMessage = {
   role: "user" | "assistant" | "system";
   content: string;

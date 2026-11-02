@@ -75,6 +75,18 @@ export const backend = {
     return cronManage<CronRunNowResponse>("run_now", taskId);
   },
 
+  async cancelRun(taskId: string, executionId?: string): Promise<void> {
+    await cronManage<{ ok?: boolean }>(
+      "cancel_run",
+      taskId,
+      executionId ? { executionId } : undefined,
+    );
+  },
+
+  canCancelRun(): boolean {
+    return true;
+  },
+
   async validateCronExpression(expression: string): Promise<void> {
     await cronManage("validate", undefined, { expression });
   },

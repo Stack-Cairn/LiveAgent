@@ -1,3 +1,4 @@
+import { isTauri } from "@liveagent/app/shims/tauriCore";
 import {
   absoluteWorkspacePath,
   clearActiveWorkspacePathDrag,
@@ -6,7 +7,6 @@ import {
   dispatchActiveWorkspacePathNativeHover,
   getActiveWorkspacePathDrag,
 } from "@liveagent/ui/lib/chat/workspacePathDrag";
-import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
 import {

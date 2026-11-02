@@ -44,6 +44,15 @@ const { createTurn, applyEventToTurn, rebuildTurnFromSnapshot } = loader.loadMod
 );
 const { buildRowsFromEntries } = loader.loadModule("src/lib/chat/transcript/rows.ts");
 
+test("tool details without JSON values have stable safe hashes", () => {
+  const { safeStringify, hashValue, hashText } = loader.loadModule("src/lib/chatUi.ts");
+  for (const value of [undefined, Symbol("detail"), () => {}]) {
+    assert.equal(typeof safeStringify(value), "string");
+    assert.equal(hashValue(value), hashText(String(value)));
+  }
+  assert.equal(safeStringify({ text: "ok" }), JSON.stringify({ text: "ok" }, null, 2));
+});
+
 function newTurn() {
   return createTurn({ key: "req:test", runId: "run-test" });
 }

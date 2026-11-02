@@ -1,3 +1,4 @@
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -43,8 +44,8 @@ import { LabelTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { hostAwareErrorMessage } from "@liveagent/ui/lib/shared/hostErrors";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useId, useState } from "react";
 import {
   applyBackupImport,
@@ -80,10 +81,9 @@ type Status = { kind: "ok" | "error"; text: string } | null;
 
 type SyncBusy = "load" | "save" | "upload" | "download" | null;
 
-/** 后端返回的错误已是可直接展示的中文文案。 */
-function errorText(error: unknown): string {
-  if (error instanceof Error) return error.message.trim();
-  return String(error ?? "").trim();
+/** 后端返回的错误已是可直接展示的中文文案；宿主能力缺失时换成桌面端提示。 */
+function errorText(error: unknown, unavailableMessage: string): string {
+  return hostAwareErrorMessage(error, unavailableMessage);
 }
 
 /** manifest.createdAt 是 RFC3339 UTC，按本地时区展示。 */
@@ -297,6 +297,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     await reloadSettings?.();
   }, [reloadSettings]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 挂载时只读取一次同步配置；t 仅用于失败文案，语言切换不需要重新拉取。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -307,7 +308,11 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         setForm(formFromView(view));
         setPreset(detectPreset(view.url));
       } catch (error) {
-        if (!cancelled) setSyncStatus({ kind: "error", text: errorText(error) });
+        if (!cancelled)
+          setSyncStatus({
+            kind: "error",
+            text: errorText(error, t("settings.backupSyncDesktopHostRequired")),
+          });
       } finally {
         if (!cancelled) setSyncBusy(null);
       }
@@ -420,13 +425,15 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         // 保存本身是成功的，连接失败只是提醒 —— 不能让用户以为配置没存上。
         setSyncStatus({
           kind: "error",
-          text: `${t("settings.backupSyncSaveAndTestFailed")}${errorText(error)}`,
+          text: `${t("settings.backupSyncSaveAndTestFailed")}${errorText(error, t("settings.backupSyncDesktopHostRequired"))}`,
         });
       }
     } catch (error) {
       setSyncStatus({
         kind: "error",
-        text: errorText(error) || t("settings.backupSyncSaveFailed"),
+        text:
+          errorText(error, t("settings.backupSyncDesktopHostRequired")) ||
+          t("settings.backupSyncSaveFailed"),
       });
     } finally {
       setSyncBusy(null);
@@ -456,7 +463,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     } catch (error) {
       setSyncStatus({
         kind: "error",
-        text: errorText(error) || t("settings.backupSyncUploadFailed"),
+        text:
+          errorText(error, t("settings.backupSyncDesktopHostRequired")) ||
+          t("settings.backupSyncUploadFailed"),
       });
     } finally {
       setSyncBusy(null);
@@ -492,7 +501,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     } catch (error) {
       setSyncStatus({
         kind: "error",
-        text: errorText(error) || t("settings.backupSyncDownloadFailed"),
+        text:
+          errorText(error, t("settings.backupSyncDesktopHostRequired")) ||
+          t("settings.backupSyncDownloadFailed"),
       });
     } finally {
       setSyncBusy(null);
@@ -509,7 +520,12 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         setStatus({ kind: "ok", text: `${t("settings.backupExportDone")}${path}` });
       }
     } catch (error) {
-      setStatus({ kind: "error", text: errorText(error) || t("settings.backupExportFailed") });
+      setStatus({
+        kind: "error",
+        text:
+          errorText(error, t("settings.backupSyncDesktopHostRequired")) ||
+          t("settings.backupExportFailed"),
+      });
     } finally {
       setBusy(null);
     }
@@ -540,7 +556,12 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         text: `${t("settings.backupImportDone")}${summarizeDomains(outcome.applied, t)}`,
       });
     } catch (error) {
-      setStatus({ kind: "error", text: errorText(error) || t("settings.backupImportFailed") });
+      setStatus({
+        kind: "error",
+        text:
+          errorText(error, t("settings.backupSyncDesktopHostRequired")) ||
+          t("settings.backupImportFailed"),
+      });
     } finally {
       setBusy(null);
     }

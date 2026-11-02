@@ -1,3 +1,4 @@
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { PanelRightClose, PanelRightOpen } from "../IconSet";
 import { Button } from "../ui/button";
@@ -10,6 +11,7 @@ export function ProjectToolsPanelToggle(props: {
   onToggle: () => void;
 }) {
   const { isOpen, sessionCount, disabledMessage, className = "", onToggle } = props;
+  const { t } = useLocale();
   return (
     <Button
       variant="ghost"
@@ -18,7 +20,9 @@ export function ProjectToolsPanelToggle(props: {
       disabled={Boolean(disabledMessage) && !isOpen}
       aria-expanded={isOpen}
       title={
-        isOpen ? "Collapse project tools panel" : (disabledMessage ?? "Expand project tools panel")
+        isOpen
+          ? t("projectTools.collapsePanel")
+          : (disabledMessage ?? t("projectTools.expandPanel"))
       }
       className={cn(
         className,

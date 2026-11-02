@@ -34,6 +34,7 @@ import {
   finishWorkspacePathDrag,
   writeWorkspacePathDragPayload,
 } from "../../../lib/chat/workspacePathDrag";
+import { hostAwareErrorMessage } from "../../../lib/shared/hostErrors";
 import { cn } from "../../../lib/shared/utils";
 import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
@@ -340,13 +341,13 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
         if (!FILE_TREE_HAS_OS_INTEGRATION) return;
         setActionError(null);
         void openWorkspacePath(path, "open").catch((error: unknown) => {
-          setActionError(error instanceof Error ? error.message : String(error));
+          setActionError(hostAwareErrorMessage(error, t("projectTools.runtimeUnsupported")));
         });
         return;
       }
       onOpenFileRef.current?.(path, getSiblingImagePaths(path));
     },
-    [getSiblingImagePaths, isExternalPath, openWorkspacePath],
+    [getSiblingImagePaths, isExternalPath, openWorkspacePath, t],
   );
 
   const onInsertFileMentionRef = useRef(onInsertFileMention);
@@ -451,7 +452,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
       setPendingTargetPath(null);
       setDraftName("");
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error));
+      setActionError(hostAwareErrorMessage(error, t("projectTools.runtimeUnsupported")));
     } finally {
       setBusyAction(false);
     }
@@ -506,7 +507,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
         setExpanded(removeExpandedSubtree(expandedRef.current, targetPath));
         selectPath(dirname(targetPath));
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : String(error));
+        setActionError(hostAwareErrorMessage(error, t("projectTools.runtimeUnsupported")));
       } finally {
         setBusyAction(false);
       }
@@ -518,20 +519,20 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
     (path: string) => {
       setActionError(null);
       void openWorkspacePath(path, "open").catch((error: unknown) => {
-        setActionError(error instanceof Error ? error.message : String(error));
+        setActionError(hostAwareErrorMessage(error, t("projectTools.runtimeUnsupported")));
       });
     },
-    [openWorkspacePath],
+    [openWorkspacePath, t],
   );
 
   const handleOpenContainingDirectory = useCallback(
     (path: string) => {
       setActionError(null);
       void openWorkspacePath(path, "reveal").catch((error: unknown) => {
-        setActionError(error instanceof Error ? error.message : String(error));
+        setActionError(hostAwareErrorMessage(error, t("projectTools.runtimeUnsupported")));
       });
     },
-    [openWorkspacePath],
+    [openWorkspacePath, t],
   );
 
   const handleMenuRefresh = useCallback(

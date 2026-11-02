@@ -5,7 +5,7 @@ plugins:
   - local: protoc-gen-go
     out: .
     opt: module=github.com/liveagent/agent-gateway
-  - local: web/node_modules/.bin/protoc-gen-es
+  - local: [pnpm, --dir, web, exec, protoc-gen-es]
     out: web/src/lib/proto/gen
     opt: target=ts
 inputs:

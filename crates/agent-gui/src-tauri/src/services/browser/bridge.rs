@@ -9,8 +9,8 @@
 //! 扩展侧只暴露自己创建的自动化标签页，攻击面限于"驱动一个新标签页"）。
 //! 同一时刻只保留最新连接：扩展重连即替换。
 
-use std::sync::Mutex as StdMutex;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
 use tokio::net::TcpListener;

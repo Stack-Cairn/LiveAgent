@@ -19,7 +19,10 @@ import {
   updateCustomSettings,
   updateModelFailover,
 } from "@liveagent/app/lib/settings";
-import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import type {
+  SettingsRejectedLegacyProvider,
+  SettingsSectionProps,
+} from "@liveagent/app/pages/settings/types";
 import {
   Activity,
   ChevronDown,
@@ -39,6 +42,7 @@ import {
   SettingsToggleGroupItem,
 } from "@liveagent/ui/components/settings/SettingsToggleGroup";
 import { Button, RefreshButton } from "@liveagent/ui/components/ui/button";
+import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogBody,
@@ -62,6 +66,7 @@ import { VerticalReorderList } from "@liveagent/ui/components/ui/VerticalReorder
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { useCatalogLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
@@ -429,7 +434,10 @@ function ProviderSettingsDialog(
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const [selectedProtocol, setSelectedProtocol] = useState(providerType);
-  const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
+  // 运行期模型目录只改模态/档位时设置对象不变，版本号让选择器的视觉/推理标记跟进。
+  const catalogLiveVersion = useCatalogLiveVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: catalogLiveVersion 是刻意的失效信号，运行期目录到达后重建选项。
+  const modelOptions = useMemo(() => buildModelOptions(settings), [settings, catalogLiveVersion]);
   // 上下文占用展示三档的动态描述：只解释当前选中档，取代原先罗列三档的长段落。
   const contextDisplayModeDesc = {
     statsBar: t("settings.composerContextDisplayStatsBarDesc"),
@@ -1001,10 +1009,35 @@ export function ProvidersSection(
   props: SettingsSectionProps & {
     initialProviderId?: string;
     onInitialProviderHandled?: () => void;
+    rejectedLegacyProviders?: SettingsRejectedLegacyProvider[];
+    onRetryRejectedLegacyProviders?: () => void | Promise<void>;
+    onDismissRejectedLegacyProviders?: () => void;
   },
 ) {
   const { t } = useLocale();
-  const { settings, setSettings, initialProviderId, onInitialProviderHandled } = props;
+  const {
+    settings,
+    setSettings,
+    initialProviderId,
+    onInitialProviderHandled,
+    rejectedLegacyProviders,
+    onRetryRejectedLegacyProviders,
+    onDismissRejectedLegacyProviders,
+  } = props;
+  const { confirm: requestLegacyImportConfirm, dialog: legacyImportConfirmDialog } =
+    useConfirmDialog();
+
+  async function dismissLegacyImportNotice() {
+    if (!onDismissRejectedLegacyProviders) return;
+    const confirmed = await requestLegacyImportConfirm({
+      title: t("settings.legacyProviderImportDismissTitle"),
+      description: t("settings.legacyProviderImportDismissDescription"),
+      confirmLabel: t("settings.legacyProviderImportDismissConfirm"),
+      cancelLabel: t("settings.cancel"),
+      preferCancel: true,
+    });
+    if (confirmed) onDismissRejectedLegacyProviders();
+  }
 
   const [activeTab, setActiveTab] = useState<ProviderId>("claude_code");
   const [modalOpen, setModalOpen] = useState(false);
@@ -1100,6 +1133,48 @@ export function ProvidersSection(
         }}
         className="flex min-h-0 flex-1 flex-col gap-4"
       >
+        {rejectedLegacyProviders && rejectedLegacyProviders.length > 0 ? (
+          <SettingsNotice
+            variant="warning"
+            className="relative flex flex-col gap-1.5 pr-8"
+            role="status"
+          >
+            {onDismissRejectedLegacyProviders ? (
+              <button
+                type="button"
+                className="absolute top-1.5 right-1.5 rounded p-1 opacity-70 has-hover:hover:bg-amber-500/10 has-hover:hover:opacity-100"
+                aria-label={t("settings.legacyProviderImportDismiss")}
+                title={t("settings.legacyProviderImportDismiss")}
+                onClick={() => void dismissLegacyImportNotice()}
+              >
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+            <span>
+              {t("settings.legacyProviderImportFailed").replace(
+                "{count}",
+                String(rejectedLegacyProviders.length),
+              )}
+            </span>
+            <span className="opacity-80">
+              {rejectedLegacyProviders
+                .map((provider) => `${provider.name}（${provider.id.slice(0, 8)}）`)
+                .join("、")}
+            </span>
+            <span className="opacity-80">{t("settings.legacyProviderImportFailedHint")}</span>
+            {onRetryRejectedLegacyProviders ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="self-start"
+                onClick={() => void onRetryRejectedLegacyProviders()}
+              >
+                {t("settings.legacyProviderImportRetry")}
+              </Button>
+            ) : null}
+          </SettingsNotice>
+        ) : null}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div className="max-w-full overflow-x-auto pb-1">
             <TabsList variant="segmented" aria-label={t("settings.providerServices")}>
@@ -1140,6 +1215,8 @@ export function ProvidersSection(
           </TabsContent>
         ))}
       </Tabs>
+
+      {legacyImportConfirmDialog}
 
       {servicePickerOpen && (
         <Dialog

@@ -127,6 +127,7 @@ export type CheckpointRewindAction = {
   available: boolean;
   pending: boolean;
   disabled: boolean;
+  disabledReason?: string;
   onRewind?: () => void;
 };
 
@@ -134,11 +135,28 @@ type CheckpointRewindContextValue = {
   turns: Map<string, CheckpointTurnSummary>;
   loading: boolean;
   disabled: boolean;
+  disabledReason?: string;
   busyTurn: number | null;
   rewind: (turn: CheckpointTurnSummary) => void;
 };
 
 const CheckpointRewindContext = createContext<CheckpointRewindContextValue | null>(null);
+
+/**
+ * 输入框“/rewind”的结果：started 表示已进入与行内按钮相同的预览确认流程；
+ * none 表示本会话没有可回退的检查点；busy 表示发送中、列表加载中或已有回退在跑。
+ */
+export type CheckpointRewindLatestOutcome = "started" | "none" | "busy";
+
+// 输入框与转录区不在同一棵 Provider 子树里，按会话 id 登记“回退最近一轮”。
+const latestRewinders = new Map<string, () => CheckpointRewindLatestOutcome>();
+
+/** 回退指定会话最近一轮的文件改动；该会话没有挂载中的 Provider 时返回 none。 */
+export function requestCheckpointRewindLatest(
+  conversationId: string,
+): CheckpointRewindLatestOutcome {
+  return latestRewinders.get(conversationId)?.() ?? "none";
+}
 
 // 仅覆盖 Write/Edit/Delete 三个文件工具的改动;Bash 等 shell 写入不在检查点内。
 // 回退点 = 用户消息:turnId 就是用户消息 ID,行内按钮经 useCheckpointRewindAction
@@ -148,6 +166,7 @@ export function CheckpointRewindProvider(props: {
   conversationId?: string;
   /** 发送/流式中为 true:行内按钮全体禁用,且暂停列表刷新。 */
   disabled?: boolean;
+  disabledReason?: string;
   client: CheckpointRewindClient;
   /**
    * 回退授权的唯一来源:当前会话工作区根 + 仍处于 active 且可写的额外授权根。
@@ -160,6 +179,7 @@ export function CheckpointRewindProvider(props: {
   const {
     children,
     conversationId,
+    disabledReason,
     disabled = false,
     client,
     resolveAuthorizedRoots,
@@ -176,11 +196,12 @@ export function CheckpointRewindProvider(props: {
   // context value 会随宿主每帧重建,流式期间放大成全部用户行重渲染。
   const resolveRootsRef = useRef(resolveAuthorizedRoots);
   const onRewoundRef = useRef(onRewound);
-  const disabledRef = useRef(disabled);
+  const unavailable = disabled || Boolean(disabledReason);
+  const disabledRef = useRef(unavailable);
   useEffect(() => {
     resolveRootsRef.current = resolveAuthorizedRoots;
     onRewoundRef.current = onRewound;
-    disabledRef.current = disabled;
+    disabledRef.current = unavailable;
   });
 
   // 列表加载代际:慢响应(切会话前发出的)一律丢弃,防乱序覆盖。
@@ -212,8 +233,8 @@ export function CheckpointRewindProvider(props: {
 
   // 空闲(挂载/切会话/轮次结束)时刷新;发送中不拉取,半截时间线没有展示价值。
   useEffect(() => {
-    if (!disabled) void loadTurns();
-  }, [disabled, loadTurns]);
+    if (!unavailable) void loadTurns();
+  }, [unavailable, loadTurns]);
 
   // busy 守卫走 ref:rewind 不依赖 busyTurn state,身份保持稳定。
   const busyTurnRef = useRef<number | null>(null);
@@ -367,15 +388,40 @@ export function CheckpointRewindProvider(props: {
     [client, confirm, conversationId, loadTurns, zh],
   );
 
+  const latestRef = useRef({ turns, loading });
+  latestRef.current = { turns, loading };
+  useEffect(() => {
+    if (!conversationId) return;
+    const rewindLatest = (): CheckpointRewindLatestOutcome => {
+      const latest = latestRef.current;
+      if (disabledRef.current || latest.loading || busyTurnRef.current !== null) return "busy";
+      const turn = latest.turns.reduce<CheckpointTurnSummary | undefined>(
+        (best, item) => (!best || item.turnSeq > best.turnSeq ? item : best),
+        undefined,
+      );
+      if (!turn) return "none";
+      void rewind(turn);
+      return "started";
+    };
+    latestRewinders.set(conversationId, rewindLatest);
+    return () => {
+      // 同一会话可能被另一 Pane 的 Provider 接管，只清理自己登记的那一项。
+      if (latestRewinders.get(conversationId) === rewindLatest) {
+        latestRewinders.delete(conversationId);
+      }
+    };
+  }, [conversationId, rewind]);
+
   const value = useMemo<CheckpointRewindContextValue>(
     () => ({
       turns: new Map(turns.map((turn) => [turn.turnId, turn])),
       loading,
-      disabled,
+      disabled: unavailable,
+      disabledReason,
       busyTurn,
       rewind: (turn) => void rewind(turn),
     }),
-    [busyTurn, disabled, loading, rewind, turns],
+    [busyTurn, disabledReason, loading, rewind, turns, unavailable],
   );
 
   return (
@@ -398,6 +444,7 @@ export function useCheckpointRewindAction(turnId?: string): CheckpointRewindActi
     available: !!turn,
     pending: !!turn && context.busyTurn === turn.turnSeq,
     disabled: context.disabled || context.loading || context.busyTurn !== null || !turn,
+    disabledReason: context.disabledReason,
     onRewind: turn ? () => context.rewind(turn) : undefined,
   };
 }

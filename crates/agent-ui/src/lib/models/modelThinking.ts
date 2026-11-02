@@ -167,9 +167,9 @@ export function resolveModelThinking(
 }
 
 // ---------------------------------------------------------------------------
-// pi-ai ThinkingLevelMap 派生（GUI 请求路径消费；与 pi-ai 类型结构兼容）
+// ThinkingLevelMap 派生（GUI 请求路径消费；与项目思考档位结构兼容）
 // ---------------------------------------------------------------------------
-// pi-ai getSupportedThinkingLevels 语义：null = 不支持；xhigh/max 必须显式声明
+// 思考档位能力映射约定：null = 不支持；xhigh/max 必须显式声明
 // 才存在；minimal..high 缺省即支持（值透传）。本函数保证
 // getSupportedThinkingLevels(带此 map 的模型) ≡ capability.levels（+off）。
 
@@ -179,9 +179,9 @@ const BASE_LEVELS: readonly ThinkingLevel[] = ["minimal", "low", "medium", "high
 const OPT_IN_LEVELS: readonly ThinkingLevel[] = ["xhigh", "max"];
 
 /**
- * @param wireValues 档位 → 请求值的改写表（如 xai 的 minimal→low、pi-ai 目录
+ * @param wireValues 档位 → 请求值的改写表（如 xai 的 minimal→low、目录
  * 自带的 off→"none"、low→"LOW"），只对 capability 中存在的档位生效——wire 表
- * 不得复活目录裁掉的档，null（pi-ai 的"不支持"标记）一律忽略，可用性只听
+ * 不得复活目录裁掉的档，null（目录的"不支持"标记）一律忽略，可用性只听
  * capability 的。
  */
 export function toThinkingLevelMap(
@@ -215,8 +215,8 @@ export function toThinkingLevelMap(
 }
 
 /**
- * 把（历史设置里的）档位钳到列表内最近档：先向上找、再向下找——与 pi-ai
- * clampThinkingLevel 同算法，供 UI 归一化已保存档位使用。
+ * 把（历史设置里的）档位钳到列表内最近档：先向上找、再向下找，供 UI
+ * 归一化已保存档位使用。
  */
 export function clampThinkingLevelToList(
   level: ThinkingLevel,

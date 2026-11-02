@@ -11,7 +11,7 @@ use crate::runtime::process::{
 /// 浏览器自动化专用 profile，与用户日常浏览器 profile 隔离（防登录态/凭据暴露）。
 /// 见 docs/design/browser-automation.md。
 pub(crate) fn automation_profile_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户主目录".to_string())?;
+    let home = crate::runtime::data_home::home_dir().ok_or_else(|| "无法定位用户主目录".to_string())?;
     Ok(home.join(".liveagent").join("browser-profile"))
 }
 

@@ -12,6 +12,7 @@ import {
   getChatHistoryWindow,
 } from "../../../lib/chat/history/chatHistory";
 import { createConversationIdentity } from "../../../lib/chat/page/chatPageHelpers";
+import { getKBrainConversationId } from "../../../lib/kbrain/mapping";
 import {
   type AppSettings,
   normalizeSelectedModelForProviders,
@@ -94,7 +95,8 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     targetConversationId: string,
     options?: EnsureGatewayBridgeConversationReadyOptions,
   ) {
-    const id = targetConversationId.trim();
+    const target = targetConversationId.trim();
+    const id = getKBrainConversationId(target) ?? target;
     if (!id) {
       const nextIdentity = createConversationIdentity();
       setConversationRuntimeCacheEntry(

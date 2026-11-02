@@ -265,7 +265,7 @@ location / {
 │                   Tauri 2 · React 19 · Rust                  │
 ├──────────┬───────────┬───────────┬───────────┬───────────────┤
 │ 模型协议  │ Agent运行时 │  工具执行   │  Skills   │  Memory/Cron  │
-│ pi-ai    │ 多轮循环   │ FS/Bash/  │  渐进披露  │  SQLite+MD    │
+│ K-brain  │ 多轮循环   │ FS/Bash/  │  渐进披露  │  SQLite+MD    │
 │ + Codex  │ + SubAgent │ MCP桥接   │  + Hub    │  FTS索引      │
 └──────────┴───────────┴───────────┴───────────┴───────────────┘
 ```
@@ -279,7 +279,7 @@ location / {
 | **Agent GUI** · 样式 | Tailwind CSS 4 + Radix UI |
 | **Agent GUI** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
 | **Agent GUI** · 后端 | Rust + Tokio + SQLite (rusqlite) + WebSocket (tokio-tungstenite) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
+| **Agent GUI** · LLM / Agent | 配套 K-brain 二进制 · 统一 HTTP / SSE 协议 |
 | **Gateway** · 语言 | Go 1.25 |
 | **Gateway** · 协议 | WebSocket + Protobuf + HTTP |
 | **Gateway** · Web UI | React + Vite + Tailwind CSS(嵌入式) |

@@ -38,6 +38,7 @@ export function normalizeFontScaleSettings(input: unknown): FontScaleSettings {
     sidebar: normalizeFontScale(obj.sidebar),
     chat: normalizeFontScale(obj.chat),
     rightDock: normalizeFontScale(obj.rightDock),
+    settings: normalizeFontScale(obj.settings),
   };
 }
 

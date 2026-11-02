@@ -250,7 +250,8 @@ export function createGatewayBridgeEventController(
     },
     close() {
       streamClosed = true;
-      closePromise ??= params.flushEvents?.(params.requestId) ?? Promise.resolve();
+      closePromise ??=
+        (params.enabled ? params.flushEvents?.(params.requestId) : undefined) ?? Promise.resolve();
       return closePromise;
     },
     hasForwardedText() {

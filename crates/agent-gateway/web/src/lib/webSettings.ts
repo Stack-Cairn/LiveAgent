@@ -48,7 +48,7 @@ export function loadWebSettings(token: string): AppSettings {
         },
       }),
     );
-    window.localStorage.setItem(WEB_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
+    persistWebSettings(normalized);
     return normalized;
   } catch {
     return fallback;
@@ -56,8 +56,14 @@ export function loadWebSettings(token: string): AppSettings {
 }
 
 export function persistWebSettings(settings: AppSettings): void {
+  const redacted = redactSettingsForWebStorage(settings);
   window.localStorage.setItem(
     WEB_SETTINGS_STORAGE_KEY,
-    JSON.stringify(redactSettingsForWebStorage(settings)),
+    JSON.stringify({
+      ...redacted,
+      // Keep the active login token in memory; it is supplied by the current
+      // Gateway session again when loading these preferences.
+      remote: { ...redacted.remote, token: "" },
+    }),
   );
 }

@@ -3813,8 +3813,8 @@ pub(crate) fn fs_list_dirs_sync(
     let mut dirs: Vec<FsDirEntry> = Vec::new();
 
     for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let file_type = entry.file_type().map_err(|e| e.to_string())?;
+        let Ok(entry) = entry else { continue };
+        let Ok(file_type) = entry.file_type() else { continue };
 
         let mut is_dir = file_type.is_dir();
         if !is_dir && file_type.is_symlink() {

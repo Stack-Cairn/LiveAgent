@@ -3,11 +3,11 @@
 // conversation run owns a cancellable scope: aborting the run drops its
 // queued hooks and kills its in-flight script via the Rust scope registry.
 
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { HookDef, HookEvent, HookType } from "@liveagent/ui/lib/automation/types";
-
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
-import { invoke } from "@tauri-apps/api/core";
+import { isKBrainBackendEnabled } from "../host";
 
 export type HookRunWarning = {
   hookName: string;
@@ -97,12 +97,15 @@ export function createHookRunScope(params: {
 
   let accepting = true;
   let cancelled = false;
+  const backendOwned = isKBrainBackendEnabled();
   let queuedDispatches = 0;
   let overflowWarned = false;
 
   const dispatch = (event: HookEvent) => {
     if (!accepting) return;
     const hooks = hooksByEvent.get(event);
+    // The backend snapshots stored hooks and dispatches from the real Agent lifecycle.
+    if (backendOwned) return;
     if (!hooks || hooks.length === 0) return;
 
     if (queuedDispatches >= MAX_QUEUED_DISPATCHES) {
@@ -149,6 +152,7 @@ export function createHookRunScope(params: {
       if (cancelled) return;
       accepting = false;
       cancelled = true;
+      if (backendOwned) return;
       void invoke("hook_cancel_scope", { scope_id: scopeId }).catch(() => undefined);
     },
   };

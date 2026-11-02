@@ -1,4 +1,5 @@
-import type { ProviderHeaders } from "@earendil-works/pi-ai";
+type ProviderHeaders = Record<string, string | null>;
+
 import {
   type HostedSearchBlock,
   type HostedSearchSource,

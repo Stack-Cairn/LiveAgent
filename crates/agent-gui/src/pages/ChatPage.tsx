@@ -1,6 +1,8 @@
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
-import { AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
+import { AppHeaderFrame, AppWorkbenchChrome } from "@liveagent/ui/application/AppWorkbenchChrome";
 import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
 import { ConversationViewTabs } from "@liveagent/ui/components/chat/ConversationViewTabs";
 import type { RunClarifyTurn } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
@@ -9,6 +11,7 @@ import type { MentionComposerDraft } from "@liveagent/ui/components/chat/Mention
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
+import { PanelLeft, PanelLeftClose } from "@liveagent/ui/components/IconSet";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import {
@@ -16,8 +19,10 @@ import {
   WorkspacePanelGroup,
   WorkspaceToolsPanel,
 } from "@liveagent/ui/components/project-tools/WorkspacePanels";
+import { ThemeToggleButton } from "@liveagent/ui/components/ThemeToggleButton";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { SidebarProvider, useSidebar } from "@liveagent/ui/components/ui/sidebar";
+import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import {
   type ProjectToolPaneEnvironment,
@@ -35,6 +40,10 @@ import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-edito
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
+import type {
+  ComposerCommandHost,
+  ComposerTurnCommand,
+} from "@liveagent/ui/lib/chat/composerCommands";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
@@ -48,6 +57,7 @@ import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
+import type { ChatRuntimeControls } from "@liveagent/ui/lib/settings/types";
 import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
@@ -66,7 +76,6 @@ import {
 import { createSidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
-import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import {
   mergeTerminalSession,
@@ -102,8 +111,6 @@ import {
   surfaceIdentityKey,
   surfaceProjectRef,
 } from "@liveagent/ui/lib/workbench/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import {
   type CSSProperties,
   lazy,
@@ -116,11 +123,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
+import { kbrainSettingsAdapter } from "../agent-ui-adapters/kbrainSettings";
 import { createTauriTrajectoryHost } from "../agent-ui-adapters/trajectory";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
 import { PaneLoadingSkeleton } from "../components/app/PaneLoadingSkeleton";
-import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
+import { isMacOsTauri, MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import { WindowsTitleBar } from "../components/WindowsTitleBar";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
@@ -129,9 +137,12 @@ import {
   createConversationStateFromContext,
   type RenderTimelineItem,
 } from "../lib/chat/conversation/conversationState";
-import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
-import { memoryExtraction } from "../lib/chat/memory/extractionController";
-import { memoryTurnInjection } from "../lib/chat/memory/injectionController";
+import {
+  buildConversationStateFromWindow,
+  CHAT_HISTORY_WINDOW_MESSAGES,
+  type ChatHistorySummary,
+  getChatHistoryWindow,
+} from "../lib/chat/history/chatHistory";
 import {
   buildFallbackConversationTitle,
   createConversationIdentity,
@@ -140,7 +151,13 @@ import {
 } from "../lib/chat/page/chatPageHelpers";
 import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
-import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
+import { isKBrainBackendEnabled, isKBrainBrowserHost } from "../lib/host";
+import { useKBrainCatalogSettings } from "../lib/kbrain/catalog";
+import { createKBrainClient } from "../lib/kbrain/client";
+import { publishGoalState } from "../lib/kbrain/goalStore";
+import { subscribeHistoryImported } from "../lib/kbrain/manualHistoryImport";
+import { getKBrainSessionId } from "../lib/kbrain/mapping";
+import { watchKBrainHistory } from "../lib/kbrain/watchHistory";
 import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
 import {
   applyConversationThinking,
@@ -154,9 +171,9 @@ import {
   normalizeChatRuntimeControlsForProvider,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
-  resolveEffectivePromptSettings,
   resolveEffectiveTheme,
   resolveWorkspaceResources,
+  type SelectedModel,
   updateExecutionModeFromChatSelection,
   updateRightDockFileTreeState,
   updateSshProjectHostIds,
@@ -186,7 +203,9 @@ import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
 import type { ChatPageProps } from "./chat/chatPageTypes";
 import { asErrorMessage } from "./chat/chatPageUtils";
+import { createGuiComposerCommandHost } from "./chat/composer/guiComposerCommandHost";
 import { useComposerHistoryPrompts } from "./chat/composer/useComposerHistoryPrompts";
+import { useKBrainComposerSkills } from "./chat/composer/useKBrainComposerSkills";
 import type {
   ConversationControllerActions,
   ConversationSurfaceController,
@@ -197,6 +216,7 @@ import { useConversationPaneHostBridge } from "./chat/conversations/useConversat
 import { useConversationRuntimeEntrySnapshot } from "./chat/conversations/useConversationRuntimeEntrySnapshot";
 import type {
   EnsureGatewayBridgeConversationReadyOptions,
+  PrepareEditResend,
   SendChatAction,
 } from "./chat/gateway/gatewayBridgeTypes";
 import { useGatewayBridgeListeners } from "./chat/gateway/useGatewayBridgeListeners";
@@ -204,7 +224,10 @@ import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadin
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
-import { useConversationHistoryActions } from "./chat/history/useConversationHistoryActions";
+import {
+  branchConversationWithReload,
+  useConversationHistoryActions,
+} from "./chat/history/useConversationHistoryActions";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
 import { useChatPageRuntimeStore } from "./chat/hooks/useChatPageRuntimeStore";
 import {
@@ -226,6 +249,7 @@ import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
 import { createChatRuntimeHost } from "./chat/runtime/ChatRuntimeHost";
 import {
   pruneIdleConversationRuntimeCaches,
+  setConversationRuntimeCacheEntry,
   syncMovedConversationRuntimeWorkdir,
 } from "./chat/runtime/chatPageRuntime";
 import { createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
@@ -236,6 +260,7 @@ import {
 import { resolvePromptClarifyModelSelection } from "./chat/runtime/providerRuntimeConfig";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
+  cancelManualCompaction,
   type ManualCompactionRequest,
   type ManualCompactionResult,
   useManualCompaction,
@@ -290,8 +315,11 @@ export function ChatPage(props: ChatPageProps) {
 }
 function ChatPageContent(props: ChatPageProps) {
   const {
-    settings,
+    settings: directSettings,
     setSettings,
+    resourceHost,
+    imageStudioHost,
+    onImageStudioWorkspaceChange,
     sttProviderOverride,
     getMcpSettings,
     getToolPolicies,
@@ -302,6 +330,7 @@ function ChatPageContent(props: ChatPageProps) {
     appUpdate,
     onRunningConversationCountChange,
   } = props;
+  const { settings, error: modelCatalogError } = useKBrainCatalogSettings(directSettings);
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
@@ -319,7 +348,9 @@ function ChatPageContent(props: ChatPageProps) {
   const [conversationState, setConversationState] = useState<ConversationViewState>(
     () => initialConversationStateRef.current,
   );
-  const [compactionStatus, setCompactionStatus] = useState<CompactionStatus>({ phase: "idle" });
+  const [compactionStatus, setCompactionStatus] = useState<CompactionStatus>({
+    phase: "idle",
+  });
   const [isSending, setIsSending] = useState(false);
   const [isImportingPastedText, setIsImportingPastedText] = useState(false);
   const isImportingPastedTextRef = useRef(false);
@@ -343,15 +374,21 @@ function ChatPageContent(props: ChatPageProps) {
   const { confirm: requestConfirmDialog, dialog: confirmDialog } = useConfirmDialog();
 
   const isAgentMode = isAgentExecutionMode(settings.system.executionMode);
+  const kBrainBackendEnabled = isKBrainBackendEnabled();
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
   const workdir = settings.system.workdir.trim();
-  const activeAgentPrompt = useMemo(() => {
-    return resolveEffectivePromptSettings(settings, "").globalPrompt;
-  }, [settings]);
   // The sidebar store owns all sidebar domain state (conversation list,
   // workdirs, running set); ChatPage only issues imperative calls and keeps a
   // few narrow selector subscriptions.
   const sidebarStore = useMemo(() => createSidebarStore(createGuiSidebarBackend()), []);
+  useEffect(
+    () =>
+      subscribeHistoryImported(() => {
+        void sidebarStore.refresh();
+        void sidebarStore.refreshWorkdirs("fallback");
+      }),
+    [sidebarStore],
+  );
   const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => string>(
     () => "",
   );
@@ -416,6 +453,9 @@ function ChatPageContent(props: ChatPageProps) {
     startNewConversationActionRef,
     prepareComposerForConversationChangeActionRef,
   });
+  useEffect(() => {
+    onImageStudioWorkspaceChange?.(activeWorkspaceProject?.path.trim() ?? workdir);
+  }, [activeWorkspaceProject?.path, workdir, onImageStudioWorkspaceChange]);
   const [workspaceRootRevision, setWorkspaceRootRevision] = useState(0);
   const handleWorkspaceDirectoriesMounted = useCallback(() => {
     setWorkspaceRootRevision((revision) => revision + 1);
@@ -454,6 +494,7 @@ function ChatPageContent(props: ChatPageProps) {
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (s) => s.byId);
   const {
     canShareHistory,
+    shareBackendUrl,
     shareConversation,
     shareStatus,
     shareLoading,
@@ -488,7 +529,7 @@ function ChatPageContent(props: ChatPageProps) {
   });
 
   const { availableSkills, skillsRootDir, refreshSkills } = useChatSkills({
-    skillsEnabled: settings.skills.enabled && isAgentMode,
+    skillsEnabled: !kBrainBackendEnabled && settings.skills.enabled && isAgentMode,
     selectedSkillNames: settings.skills.selected,
     setSettings,
   });
@@ -614,9 +655,9 @@ function ChatPageContent(props: ChatPageProps) {
     getConversationStopRequestVersion,
     isConversationStopRequested,
     consumeConversationStop,
-    setConversationRunningState,
     setConversationStopHandler,
     clearConversationStopHandler,
+    hasConversationStopHandler,
     requestActiveConversationStop,
     setConversationSendingState,
   } = useChatPageRuntimeStore({
@@ -724,17 +765,27 @@ function ChatPageContent(props: ChatPageProps) {
     () => resolveWorkspaceResources(settings, displayedConversationWorkdir),
     [displayedConversationWorkdir, settings],
   );
-  const skillsEnabled = activeWorkspaceResources.skillsEnabled && isAgentMode;
+  const skillsEnabled =
+    !kBrainBackendEnabled && activeWorkspaceResources.skillsEnabled && isAgentMode;
   const selectedSkillNames = useMemo(
     () => (skillsEnabled ? activeWorkspaceResources.skillNames : []),
     [activeWorkspaceResources.skillNames, skillsEnabled],
   );
-  const { enabledComposerSkills, codeReviewSkill } = useComposerSkillSelection(
+  const { enabledComposerSkills: localComposerSkills, codeReviewSkill } = useComposerSkillSelection(
     availableSkills,
     selectedSkillNames,
     skillsEnabled,
   );
-  const mentionApps = useMentionApps(activeWorkspaceResources.mcpServers, isAgentMode);
+  // K-brain 模式关掉了前端的本地技能发现；输入框改从 K-brain 读取已启用的技能。
+  const kBrainComposerSkills = useKBrainComposerSkills(
+    kBrainBackendEnabled && isAgentMode,
+    displayedConversationWorkdir,
+  );
+  const enabledComposerSkills = kBrainBackendEnabled ? kBrainComposerSkills : localComposerSkills;
+  const mentionApps = useMentionApps(
+    activeWorkspaceResources.mcpServers,
+    isAgentMode && !kBrainBackendEnabled,
+  );
   const terminalProjectPath = isAgentMode ? activeWorkspaceProjectPath.trim() : "";
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
@@ -788,15 +839,31 @@ function ChatPageContent(props: ChatPageProps) {
     handleRightDockFileTreeStateChange,
     handleSshProjectHostIdsChange,
   } = useRightDockSettings({ settings, setSettings, terminalProjectPathKey });
-  const terminalDisabledMessage = !isAgentMode
-    ? "Project tools require Agent project mode."
+  // 项目工具区（终端 / 文件树 / Git 审查 / SSH 隧道 / 内网穿透）全部依赖桌面
+  // 宿主命令（`terminal_*`、`fs_*`、`git_*`、`gateway_tunnel_*`），K-brain 后端
+  // 没有对应路由。浏览器宿主里整区标记为不可用并给出本地化原因，避免每个入口
+  // 各自把内部诊断顶到面板上。
+  const projectToolsUserDisabledMessage = !isAgentMode
+    ? t("projectTools.agentModeRequired")
     : !terminalProjectPath
-      ? "Select a project to use project tools."
+      ? t("projectTools.projectRequired")
       : undefined;
-  const tunnelEnabled = settings.remote.enableWebTunnels === true;
-  const tunnelDisabledMessage = !settings.remote.enableWebTunnels
-    ? t("projectTools.tunnelWebDisabled")
-    : undefined;
+  const projectToolsDisabledMessage =
+    projectToolsUserDisabledMessage ??
+    (isKBrainBrowserHost() ? t("projectTools.desktopHostRequired") : undefined);
+  // 头部按钮只在"用户自己可以解决"的状态下禁用；浏览器宿主的桌面能力缺失保持
+  // 可点开，面板里逐项显示本地化原因，避免按钮像坏掉了。
+  // 终端比其余项目工具更严格：桌面宿主里它也只在 Agent 项目模式下可用，
+  // 因此直接沿用整区判定（浏览器宿主已在上面返回桌面端提示）。
+  const terminalDisabledMessage = projectToolsDisabledMessage;
+  // 内网穿透由桌面端网关执行（`gateway_tunnel_*`），浏览器宿主没有这条通路。
+  const tunnelEnabled = !isKBrainBrowserHost() && settings.remote.enableWebTunnels === true;
+  const projectToolTunnelClient = isAgentMode && !isKBrainBrowserHost() ? tauriTunnelClient : null;
+  const tunnelDisabledMessage = isKBrainBrowserHost()
+    ? t("projectTools.desktopHostRequired")
+    : !settings.remote.enableWebTunnels
+      ? t("projectTools.tunnelWebDisabled")
+      : undefined;
   const {
     handleRightDockInsertFileMention,
     handleRightDockInsertCommitMention,
@@ -855,7 +922,7 @@ function ChatPageContent(props: ChatPageProps) {
   }, [conversationRuntimeCacheRef, runningConversationIds, sidebarStore]);
 
   const { addNotify } = useNotifyToasts({
-    errorMessage,
+    errorMessage: errorMessage ?? modelCatalogError,
     hookWarning,
     compactionStatus,
   });
@@ -974,6 +1041,7 @@ function ChatPageContent(props: ChatPageProps) {
     getConversationStopRequestVersion,
     isConversationStopRequested,
     consumeConversationStop,
+    hasConversationStopHandler,
     requestActiveConversationStop,
     getConversationLiveTranscriptStore,
     captureAbortSnapshot,
@@ -1009,7 +1077,10 @@ function ChatPageContent(props: ChatPageProps) {
           prev.chatRuntimeControls.planModeEnabled
             ? {
                 ...prev,
-                chatRuntimeControls: { ...prev.chatRuntimeControls, planModeEnabled: false },
+                chatRuntimeControls: {
+                  ...prev.chatRuntimeControls,
+                  planModeEnabled: false,
+                },
               }
             : prev,
         );
@@ -1115,8 +1186,6 @@ function ChatPageContent(props: ChatPageProps) {
       locallySyncedHistoryUpdatedAtRef.current.delete(key);
       gatewayBridgeHistorySummaryRef.current.delete(key);
       setPendingUploadsForConversation(key, []);
-      memoryExtraction.dispose(key);
-      memoryTurnInjection.dispose(key);
       skillMentionInjection.dispose(key);
       deleteConversationArtifacts(key);
       setQueuedChatTurnsState((current) => removeQueuedChatTurnsForConversation(current, key));
@@ -1209,6 +1278,7 @@ function ChatPageContent(props: ChatPageProps) {
     replaceConversationAtMessage,
     cleanupDeletedConversation,
     persistConversation,
+    reloadConversation,
   } = useConversationHistoryActions({
     conversationState,
     currentConversationIdRef,
@@ -1329,6 +1399,7 @@ function ChatPageContent(props: ChatPageProps) {
   );
 
   useEffect(() => {
+    if (kBrainBackendEnabled) return;
     const previous = previousSubagentRuntimeConversationRef.current;
     if (previous && previous !== currentConversationId) {
       subagentStoresRef.current.dispose(previous);
@@ -1347,7 +1418,7 @@ function ChatPageContent(props: ChatPageProps) {
     if (subagentWarmupSignatureRef.current === warmupSignature) return;
     subagentWarmupSignatureRef.current = warmupSignature;
     subagentStoresRef.current.warmup(currentConversationId);
-  }, [currentConversationId, historyItems, settings.agents]);
+  }, [currentConversationId, historyItems, settings.agents, kBrainBackendEnabled]);
 
   useEffect(
     () => () => {
@@ -1508,38 +1579,69 @@ function ChatPageContent(props: ChatPageProps) {
     setContext(currentRequestContext);
   }, [currentRequestContext, setContext]);
 
-  useGatewayBridgeListeners({
-    currentConversationIdRef,
-    conversationRuntimeCacheRef,
-    ensureGatewayBridgeConversationReadyRef,
-    sendActionRef,
-    queueGatewayBridgeEventForRequest,
-    shouldQueueGatewayChatRequest,
-    enqueueGatewayChatRequest,
-    isConversationRunning,
-    getConversationAbortController,
-    requestConversationStop,
-    requestActiveConversationStop,
-    consumeConversationStop,
-    runGatewayClarifyTurn: async (messages, selection, runtimeControls, onTextDelta) => {
-      const provider = settings.customProviders.find((p) => p.id === selection.providerId);
-      if (!provider) {
-        throw new Error(`clarify provider not found: ${selection.providerId}`);
-      }
-      // 与本地澄清共用 createGuiClarifyRunner：调用参数（cacheRetention/
-      // nativeWebSearch/context 拼装）单一来源，桥接路径不再手写一份。
-      const guiSelection = {
-        selectedModel: { customProviderId: provider.id, model: selection.model },
-        provider,
-        providerId: provider.type,
-        model: selection.model,
+  const prepareEditResend = useCallback<PrepareEditResend>(
+    async (requestedConversationId, messageRef, options) => {
+      const sourceConversationId =
+        requestedConversationId.trim() || currentConversationIdRef.current.trim();
+      if (!sourceConversationId) throw new Error("当前会话不存在，无法编辑重发");
+      if (!kBrainBackendEnabled) return { conversationId: sourceConversationId, messageRef };
+      const summary = await branchConversationWithReload(
+        sourceConversationId,
+        messageRef,
+        reloadConversation,
+      );
+      sidebarStore.upsertLocal({ ...summary, isPending: undefined });
+      const childWindow = await getChatHistoryWindow({
+        id: summary.id,
+        maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+        includeActiveSegment: true,
+      });
+      if (!childWindow.activeSegment) throw new Error("编辑重发分支缺少活跃历史");
+      const childState = buildConversationStateFromWindow(childWindow);
+      const childRef = childState.transcript.items
+        .filter((item): item is Extract<typeof item, { kind: "user" }> => item.kind === "user")
+        .find((item) => item.messageRef?.messageId === messageRef.messageId)?.messageRef;
+      if (!childRef) throw new Error("编辑重发分支缺少稳定消息标识");
+      const sourceEntry = conversationRuntimeCacheRef.current.get(sourceConversationId);
+      if (!sourceEntry) throw new Error("当前会话运行状态不存在，无法编辑重发");
+      const childEntry = {
+        ...sourceEntry,
+        state: childState,
+        sessionId: childWindow.conversation.sessionId ?? childWindow.conversation.id,
+        createdAt: childWindow.conversation.createdAt,
+        workdir: childWindow.conversation.cwd,
+        isSending: false,
+        errorMessage: null,
       };
-      return createGuiClarifyRunner(
-        () => guiSelection,
-        () => createProviderRuntimeConfig(provider, selection.model, runtimeControls),
-      )(messages, new AbortController().signal, onTextDelta);
+      setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, summary.id, childEntry);
+      conversationPersistenceCursorRef.current.set(summary.id, {
+        activeSegmentIndex: childWindow.activeSegment?.segmentIndex ?? 0,
+        activeSegmentId: childWindow.activeSegment?.segmentId ?? `kbrain:${summary.sessionId}`,
+      });
+      if (options?.activate !== false) {
+        // Activate the child before its run starts. The source session remains
+        // available in the sidebar and is never edited.
+        await openInitialActionRef.current(summary.id);
+        toast.success(t("chat.editResendBranched"), {
+          id: `edit-resend-branch:${summary.id}`,
+          action: {
+            label: t("chat.editResendOpenSource"),
+            onClick: () => void openInitialActionRef.current(sourceConversationId),
+          },
+        });
+      }
+      return { conversationId: summary.id, messageRef: childRef };
     },
-  });
+    [
+      conversationPersistenceCursorRef,
+      conversationRuntimeCacheRef,
+      currentConversationIdRef,
+      kBrainBackendEnabled,
+      reloadConversation,
+      sidebarStore,
+      t,
+    ],
+  );
 
   const { send } = useSendChatTurn({
     settings,
@@ -1576,7 +1678,6 @@ function ChatPageContent(props: ChatPageProps) {
     getPendingUploadsForConversation,
     setPendingUploadsForConversation,
     getConversationLiveTranscriptStore,
-    getCompactionController,
     clearAbortSnapshot,
     getAbortSnapshot,
     resetLiveTranscript,
@@ -1604,70 +1705,47 @@ function ChatPageContent(props: ChatPageProps) {
   sendActionRef.current = send;
   stopSendingActionRef.current = stopSending;
 
-  // 手动压缩的同源提示词构建：当前会话据其工作区解析 skills/memory 提示词，
-  // 与发送链路的 buildPreparedContext 同源（activeAgentPrompt 单独直传）。手动
-  // 压缩无触发消息，skills 的 explicit 提及为空。跨会话中继的后台会话在此层拿
-  // 不到工作区上下文，返回空提示词（当前会话必须同源，后台保持现状）。
-  const resolveManualCompactionPromptInputs = useCallback(
-    async (input: { isCurrentConversation: boolean; workdir?: string }) => {
-      if (!input.isCurrentConversation) {
-        return { activeAgentPrompt, skillsPrompt: "", memoryPrompt: "" };
+  useGatewayBridgeListeners({
+    currentConversationIdRef,
+    conversationRuntimeCacheRef,
+    ensureGatewayBridgeConversationReadyRef,
+    prepareEditResend,
+    sendActionRef,
+    queueGatewayBridgeEventForRequest,
+    shouldQueueGatewayChatRequest,
+    enqueueGatewayChatRequest,
+    isConversationRunning,
+    isQueuedTurnEditOpen: (conversationId) =>
+      queuedChatTurnEditSlotRef.current?.conversationId === conversationId.trim(),
+    getConversationAbortController,
+    requestConversationStop,
+    requestActiveConversationStop,
+    consumeConversationStop,
+    runGatewayClarifyTurn: async (messages, selection, runtimeControls, onTextDelta) => {
+      const provider = settings.customProviders.find((p) => p.id === selection.providerId);
+      if (!provider) {
+        throw new Error(`clarify provider not found: ${selection.providerId}`);
       }
-      const promptWorkdir = input.workdir?.trim() ?? "";
-      const effectivePrompt = resolveEffectivePromptSettings(settings, promptWorkdir).prompt;
-      const resources = resolveWorkspaceResources(settings, promptWorkdir);
-      let skillsPrompt = "";
-      if (resources.skillsEnabled && isAgentMode && resources.skillNames.length > 0) {
-        const byName = new Map(availableSkills.map((skill) => [skill.name, skill]));
-        const selectedSkills = resources.skillNames
-          .map((name) => byName.get(name))
-          .filter((skill): skill is SkillSummary => Boolean(skill));
-        if (selectedSkills.length > 0) {
-          skillsPrompt = buildSkillsSystemPrompt({
-            rootDir: skillsRootDir,
-            selected: selectedSkills,
-          });
-        }
-      }
-      let memoryPrompt = "";
-      if (promptWorkdir) {
-        try {
-          memoryPrompt = await buildMemoryOverviewSection(promptWorkdir);
-        } catch (error) {
-          console.warn("Failed to build manual compaction memory prompt", error);
-          memoryPrompt = "";
-        }
-      }
-      return { activeAgentPrompt: effectivePrompt, skillsPrompt, memoryPrompt };
+      const guiSelection = {
+        selectedModel: {
+          customProviderId: provider.id,
+          model: selection.model,
+        },
+        provider,
+        providerId: provider.type,
+        model: selection.model,
+      };
+      return createGuiClarifyRunner(
+        () => guiSelection,
+        () => createProviderRuntimeConfig(provider, selection.model, runtimeControls),
+      )(messages, new AbortController().signal, onTextDelta);
     },
-    [activeAgentPrompt, availableSkills, isAgentMode, settings, skillsRootDir],
-  );
+  });
 
   const handleManualCompact = useManualCompaction({
-    settings,
-    t,
-    currentConversationIdRef,
-    isConversationRunning,
-    setConversationRunningState,
-    setConversationAbortController,
-    setConversationStopHandler,
-    clearConversationStopHandler,
-    consumeConversationStop,
-    buildRuntimeEntryFromVisibleState,
-    conversationRuntimeCacheRef,
-    ensureConversationReady: ensureGatewayBridgeConversationReady,
-    getCompactionController,
-    getConversationLiveTranscriptStore,
-    updateConversationRuntimeEntry,
-    resetLiveTranscript,
-    updateToolStatus,
-    queueGatewayBridgeEventForRequest,
-    flushGatewayBridgeEventsForRequest,
-    registerGatewayRunMirror,
-    finishGatewayRunMirror,
-    persistConversation,
-    setErrorMessage,
-    resolveManualCompactionPromptInputs,
+    onCompleted: async (conversationId) => {
+      await hydrateConversationActionRef.current(conversationId);
+    },
   });
   manualCompactActionRef.current = handleManualCompact;
   const conversationSurfaceProject = useMemo(
@@ -1768,6 +1846,88 @@ function ChatPageContent(props: ChatPageProps) {
   // （handleSelectConversation 定义之后）；这里先备好 ref 镜像。
   const handleNewConversationRef = useRef(handleNewConversation);
   handleNewConversationRef.current = handleNewConversation;
+
+  // ---- 输入框“/”指令宿主 ----
+  // 目录、目标和 /loop 都由 K-brain 提供；这里只把“发送一轮”接到 send。宿主引用
+  // 只随会话与工作目录变化（输入框按引用重新拉指令目录），读数经 ref 取最新值。
+  // reloadConversation 每次渲染都是新引用；宿主经 ref 调用，保持宿主引用稳定。
+  const reloadConversationLatestRef = useRef(reloadConversation);
+  reloadConversationLatestRef.current = reloadConversation;
+  // 会话忙时普通消息会入队，指令轮次不入队：发送前据此报错，输入框保留草稿。
+  const isComposerConversationBusy = (conversationId: string) =>
+    Boolean(conversationId) &&
+    (isConversationRunning(conversationId) ||
+      conversationRuntimeCacheRef.current.get(conversationId)?.isSending === true);
+  const isComposerDraftReserved = (conversationId: string) =>
+    queuedChatTurnEditSlotRef.current?.conversationId === conversationId;
+  const composerCommandLatestRef = useRef({
+    handleSelectModel,
+    isBusy: isComposerConversationBusy,
+    isDraftReserved: isComposerDraftReserved,
+    getCurrentConversationId: () => currentConversationIdRef.current.trim(),
+    modelOptions,
+    runtimeControls: settings.chatRuntimeControls,
+  });
+  composerCommandLatestRef.current = {
+    handleSelectModel,
+    isBusy: isComposerConversationBusy,
+    isDraftReserved: isComposerDraftReserved,
+    getCurrentConversationId: () => currentConversationIdRef.current.trim(),
+    modelOptions,
+    runtimeControls: settings.chatRuntimeControls,
+  };
+  const kBrainClient = useMemo(
+    () => (kBrainBackendEnabled ? createKBrainClient() : undefined),
+    [kBrainBackendEnabled],
+  );
+  const watchedKBrainSessionId = kBrainBackendEnabled
+    ? getKBrainSessionId(currentConversationId)
+    : undefined;
+  useEffect(() => {
+    if (!kBrainClient || !watchedKBrainSessionId) return;
+    return watchKBrainHistory(
+      kBrainClient,
+      watchedKBrainSessionId,
+      () => void sidebarStore.refresh(),
+    );
+  }, [watchedKBrainSessionId, kBrainClient, sidebarStore]);
+  const composerCommandHost = useMemo<ComposerCommandHost>(
+    () =>
+      createGuiComposerCommandHost({
+        t,
+        client: kBrainClient,
+        getKBrainSessionId: () => getKBrainSessionId(currentConversationId),
+        onGoalState: (state) => publishGoalState(currentConversationId, state),
+        reloadConversation: () => reloadConversationLatestRef.current(currentConversationId),
+        getWorkdir: () => displayedConversationWorkdir,
+        getRuntimeControls: () => composerCommandLatestRef.current.runtimeControls,
+        isDraftReserved: () => {
+          const latest = composerCommandLatestRef.current;
+          return latest.isDraftReserved(latest.getCurrentConversationId());
+        },
+        sendTurn: async (text, command, options) => {
+          const latest = composerCommandLatestRef.current;
+          if (latest.isBusy(latest.getCurrentConversationId())) {
+            throw new Error(t("chat.commands.busy"));
+          }
+          const accepted = await sendActionRef.current({
+            // 带上草稿时按普通草稿发送：会话引用、大段粘贴导入与附件都照常处理。
+            ...(options?.draft ? { composerDraftOverride: options.draft } : { textOverride: text }),
+            composerCommand: command,
+            ...(options?.runtimeControls
+              ? { runtimeControlsOverride: options.runtimeControls }
+              : {}),
+          });
+          // false（开始前被拒）由宿主转成错误，草稿放回输入框。
+          return accepted;
+        },
+        compact: () => manualCompactActionRef.current({ conversationId: currentConversationId }),
+        getModelOptions: () => composerCommandLatestRef.current.modelOptions,
+        selectModel: (selection) => composerCommandLatestRef.current.handleSelectModel(selection),
+      }),
+    [currentConversationId, displayedConversationWorkdir, kBrainClient, t],
+  );
+
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
   const isDraftConversationRef = useRef(isDraftConversation);
@@ -1862,6 +2022,7 @@ function ChatPageContent(props: ChatPageProps) {
     // abort + force 清理）。未停到任何东西且会话未运行时必须消费掉 stop
     // intent，否则该会话下一次 send 会被静默吞掉（同 gateway:chat-cancel 守卫）。
     const stopConversationRun = (conversationId: string) => {
+      cancelManualCompaction(conversationId);
       const params = appActionParamsRef.current;
       const stopped = params.stopConversation(conversationId);
       if (!stopped && !params.isConversationRunning(conversationId)) {
@@ -1876,31 +2037,34 @@ function ChatPageContent(props: ChatPageProps) {
     // Rust 直连动作的结果反馈（目前只有托盘的 cron 启用开关）：toast 呈现，
     // 任务名从 automation store 现查（可能已被删除，回退显示 id）。
     // 勾选态本身经 automation:cron-changed → store → 托盘同步 effect 刷新。
-    listen<{ action: string; id?: string; ok: boolean; error?: string; value?: string }>(
-      "app:action-feedback",
-      (event) => {
-        const params = appActionParamsRef.current;
-        if (event.payload.action !== "toggle-cron-task") {
-          return;
-        }
-        const taskId = event.payload.id ?? "";
-        const task = getAutomationState().cron.tasks.find((entry) => entry.id === taskId);
-        const name = task?.name.trim() || taskId;
-        if (event.payload.ok) {
-          const messageKey =
-            event.payload.value === "enabled" ? "tray.cronEnabled" : "tray.cronDisabled";
-          params.addNotify("success", params.t(messageKey).replace("{name}", name));
-        } else {
-          params.addNotify(
-            "error",
-            params
-              .t("tray.cronToggleFailed")
-              .replace("{name}", name)
-              .replace("{error}", event.payload.error ?? ""),
-          );
-        }
-      },
-    )
+    listen<{
+      action: string;
+      id?: string;
+      ok: boolean;
+      error?: string;
+      value?: string;
+    }>("app:action-feedback", (event) => {
+      const params = appActionParamsRef.current;
+      if (event.payload.action !== "toggle-cron-task") {
+        return;
+      }
+      const taskId = event.payload.id ?? "";
+      const task = getAutomationState().cron.tasks.find((entry) => entry.id === taskId);
+      const name = task?.name.trim() || taskId;
+      if (event.payload.ok) {
+        const messageKey =
+          event.payload.value === "enabled" ? "tray.cronEnabled" : "tray.cronDisabled";
+        params.addNotify("success", params.t(messageKey).replace("{name}", name));
+      } else {
+        params.addNotify(
+          "error",
+          params
+            .t("tray.cronToggleFailed")
+            .replace("{name}", name)
+            .replace("{error}", event.payload.error ?? ""),
+        );
+      }
+    })
       .then((nextUnlisten) => {
         if (cancelled) {
           nextUnlisten();
@@ -2209,6 +2373,7 @@ function ChatPageContent(props: ChatPageProps) {
     isConversationHydrationFailed,
     currentConversationIdRef,
     onError: handleEditResendError,
+    prepareEditResend,
     sendActionRef,
   });
 
@@ -2219,6 +2384,7 @@ function ChatPageContent(props: ChatPageProps) {
     isConversationHydrationFailed,
     sidebarStore,
     handleSelectConversation,
+    reloadConversation,
     setErrorMessage,
     t,
   });
@@ -2393,9 +2559,11 @@ function ChatPageContent(props: ChatPageProps) {
         onMoveQueuedTurnUp: moveQueuedTurnUp,
         onEditQueuedTurn: editQueuedTurn,
         onRemoveQueuedTurn: removeQueuedTurn,
+        commandHost: composerCommandHost,
       },
     }),
     [
+      composerCommandHost,
       currentConversationWorkspaceRoot,
       currentModelContextWindow,
       currentModelLabel,
@@ -2943,7 +3111,12 @@ function ChatPageContent(props: ChatPageProps) {
       const project = dockToolProjectRef();
       if (!project) return;
       beginWorkbenchDrag(
-        { kind: "projectTool", tool, project, title: t(projectToolSurfaceTitleKey(tool)) },
+        {
+          kind: "projectTool",
+          tool,
+          project,
+          title: t(projectToolSurfaceTitleKey(tool)),
+        },
         event,
       );
     },
@@ -3020,7 +3193,11 @@ function ChatPageContent(props: ChatPageProps) {
     const edges = preferVertical ? (["bottom", "right"] as const) : (["right", "bottom"] as const);
     for (const edge of edges) {
       if (canSplitRectAtEdge(focusedRect, edge)) {
-        return { kind: "pane-edge", paneId: layout.focusedPaneId, edge } as const;
+        return {
+          kind: "pane-edge",
+          paneId: layout.focusedPaneId,
+          edge,
+        } as const;
       }
     }
     return null;
@@ -3340,6 +3517,25 @@ function ChatPageContent(props: ChatPageProps) {
     },
     [conversationControllerActions, conversationRuntimeRegistry],
   );
+  type BackgroundComposerCommandEntry = {
+    host: ComposerCommandHost;
+    latest: {
+      modelLabel: string;
+      contextWindow: number | undefined;
+      contextUsageTokensSource: ReturnType<typeof createContextUsageTokensSource>;
+      workdir: string | undefined;
+      selectModel: (selection: SelectedModel) => void;
+      /** 背景 Pane 的“/”指令发送，按该 Pane 的会话路由。 */
+      sendTurn: (
+        text: string,
+        command?: ComposerTurnCommand,
+        options?: { runtimeControls?: ChatRuntimeControls; draft?: MentionComposerDraft },
+      ) => unknown;
+    };
+  };
+  const backgroundComposerCommandHostsRef = useRef(
+    new Map<string, BackgroundComposerCommandEntry>(),
+  );
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
     const keep = new Set(
@@ -3352,6 +3548,10 @@ function ChatPageContent(props: ChatPageProps) {
         controller.dispose();
         backgroundControllersRef.current.delete(conversationId);
       }
+    }
+    for (const conversationId of backgroundComposerCommandHostsRef.current.keys()) {
+      if (!keep.has(conversationId))
+        backgroundComposerCommandHostsRef.current.delete(conversationId);
     }
   }, [workbench.layout]);
   // 布局对账:终端 drop 事务在宿主挂载前同步占约,Pane 若在宿主接手
@@ -3374,6 +3574,39 @@ function ChatPageContent(props: ChatPageProps) {
   // Attach/send/stop/chip-remove route by this pane's conversationId. Other
   // interactions that still go through page-level current-conversation
   // machinery focus the pane first.
+  // 背景 Pane 的 binding 每次渲染重建；“/”指令宿主按会话缓存，保持引用稳定，
+  // 随渲染变化的读数放进 latest，由宿主的 getter 读取。
+  const resolveBackgroundComposerCommandHost = (
+    conversationId: string,
+    latest: BackgroundComposerCommandEntry["latest"],
+  ): ComposerCommandHost => {
+    const cache = backgroundComposerCommandHostsRef.current;
+    const cached = cache.get(conversationId);
+    if (cached) {
+      cached.latest = latest;
+      return cached.host;
+    }
+    const entry: BackgroundComposerCommandEntry = {
+      latest,
+      host: createGuiComposerCommandHost({
+        t,
+        client: kBrainClient,
+        getKBrainSessionId: () => getKBrainSessionId(conversationId),
+        onGoalState: (state) => publishGoalState(conversationId, state),
+        reloadConversation: () => reloadConversationLatestRef.current(conversationId),
+        getWorkdir: () => entry.latest.workdir,
+        getRuntimeControls: () => composerCommandLatestRef.current.runtimeControls,
+        isDraftReserved: () => composerCommandLatestRef.current.isDraftReserved(conversationId),
+        sendTurn: (text, command, options) => entry.latest.sendTurn(text, command, options),
+        compact: () => manualCompactActionRef.current({ conversationId }),
+        getModelOptions: () => composerCommandLatestRef.current.modelOptions,
+        selectModel: (selection) => entry.latest.selectModel(selection),
+      }),
+    };
+    cache.set(conversationId, entry);
+    return entry.host;
+  };
+
   const buildBackgroundPaneBinding = (
     surface: ConversationWorkbenchSurface,
   ): ConversationPaneBinding => {
@@ -3571,6 +3804,7 @@ function ChatPageContent(props: ChatPageProps) {
         onSelectExecutionMode: handleSelectExecutionMode,
         onOpenSettings,
         onChatRuntimeControlsChange: focusGuard(handleChatRuntimeControlsChange),
+        guardModeCycle: (apply) => focusGuard(apply)(),
         onPickReadableFiles: focusGuard(pickReadableFiles),
         onPickWorkspaceFolder: focusGuard(() => {
           void pickWorkspaceFolder(conversationId, workspaceRoot ?? "");
@@ -3599,6 +3833,35 @@ function ChatPageContent(props: ChatPageProps) {
         onMoveQueuedTurnUp: moveQueuedTurnUp,
         onEditQueuedTurn: focusGuard(editQueuedTurn),
         onRemoveQueuedTurn: removeQueuedTurn,
+        commandHost: resolveBackgroundComposerCommandHost(conversationId, {
+          modelLabel: paneModelLabel,
+          contextWindow: paneContextWindow,
+          contextUsageTokensSource: paneContextUsageTokensSource,
+          workdir: workspaceRoot,
+          selectModel: focusGuard(handleSelectModel),
+          sendTurn: async (text, command, options) => {
+            const runtime = conversationRuntimeRegistry.getSnapshot(conversationId);
+            if (isConversationRunning(conversationId) || runtime?.isSending) {
+              throw new Error(t("chat.commands.busy"));
+            }
+            // 附件取本 Pane 会话自己的待上传文件，与 paneSendDraft 一致。
+            const uploads = conversationRuntimeRegistry.uploads.getSnapshot(conversationId).slice();
+            const accepted = await sendActionRef.current({
+              conversationIdOverride: conversationId,
+              ...(options?.draft
+                ? { composerDraftOverride: options.draft }
+                : { textOverride: text }),
+              uploadedFilesOverride: uploads,
+              composerCommand: command,
+              ...(options?.runtimeControls
+                ? { runtimeControlsOverride: options.runtimeControls }
+                : {}),
+            });
+            if (accepted) conversationRuntimeRegistry.uploads.set(conversationId, []);
+            // false（开始前被拒）由宿主转成错误，草稿放回输入框。
+            return accepted;
+          },
+        }),
       },
       sendDraft: paneSendDraft,
     };
@@ -3728,7 +3991,12 @@ function ChatPageContent(props: ChatPageProps) {
         }
         onDragHandlePointerDown={(event) => {
           beginWorkbenchDrag(
-            { kind: "pane", paneId: pane.paneId, surfaceKey: surfaceIdentityKey(surface), title },
+            {
+              kind: "pane",
+              paneId: pane.paneId,
+              surfaceKey: surfaceIdentityKey(surface),
+              title,
+            },
             {
               pointerId: event.pointerId,
               clientX: event.clientX,
@@ -3753,11 +4021,12 @@ function ChatPageContent(props: ChatPageProps) {
         terminal: tauriTerminalClient,
         git: tauriGitClient,
         textGeneration: projectToolTextGenerationClient,
-        tunnel: isAgentMode ? tauriTunnelClient : null,
+        // 浏览器宿主没有 `gateway_tunnel_*`：不注入 client，内网穿透入口直接置灰。
+        tunnel: projectToolTunnelClient,
         workspaceActivity: tauriWorkspaceActivityClient,
       },
       capabilities: {
-        disabledMessage: terminalDisabledMessage,
+        disabledMessage: projectToolsDisabledMessage,
         terminalDisabledMessage,
         gitWriteEnabled: true,
         tunnelEnabled,
@@ -3823,7 +4092,6 @@ function ChatPageContent(props: ChatPageProps) {
       handleRightDockInsertCommitMention,
       handleRightDockInsertFileMention,
       handleRightDockInsertGitFileMention,
-      isAgentMode,
       openWorkspaceEditorFile,
       openWorkspaceFilePreview,
       projectToolTextGenerationClient,
@@ -3833,7 +4101,8 @@ function ChatPageContent(props: ChatPageProps) {
       settings.remote.gatewayPort,
       settings.remote.gatewayUrl,
       settings.ssh,
-      tauriTunnelClient,
+      projectToolTunnelClient,
+      projectToolsDisabledMessage,
       terminalDisabledMessage,
       terminalProjectPathKey,
       terminalSessions,
@@ -3957,7 +4226,10 @@ function ChatPageContent(props: ChatPageProps) {
         onGeometryChange={handleWorkbenchGeometryChange}
         dropPreview={
           workbenchDragState?.previewRect
-            ? { rect: workbenchDragState.previewRect, label: workbenchDragState.payload.title }
+            ? {
+                rect: workbenchDragState.previewRect,
+                label: workbenchDragState.payload.title,
+              }
             : null
         }
         emptyState={
@@ -4002,38 +4274,70 @@ function ChatPageContent(props: ChatPageProps) {
       data-app-frame="three-column"
       className="relative flex size-full min-h-0 flex-col overflow-hidden"
     >
-      <AppWorkbenchChrome
-        windowControls={<WindowsTitleBar controlsOnly />}
-        navigationActions={
-          <MacOsTitleBarToggle
-            sidebarOpen={sidebarOpen}
-            onToggle={handleToggleSidebar}
-            onOpenSettings={() => onOpenSettings()}
-            appUpdate={appUpdate}
-          />
-        }
-        settings={settings}
-        sidebarOpen={sidebarOpen}
-        onOpenSettings={onOpenSettings}
-        onToggleTheme={onToggleTheme}
-        onOpenSidebar={handleToggleSidebar}
-        leadingActions={
-          activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
-            <ConversationViewTabs
-              active={renderedConversationView}
-              onChange={setActiveConversationView}
+      {activeView === "image-studio-hub" ? (
+        <AppHeaderFrame sidebarOpen={sidebarOpen}>
+          <div className="relative flex h-full items-center gap-3 pl-4" data-tauri-drag-region>
+            {!isMacOsTauri() && (
+              <button
+                type="button"
+                onClick={handleToggleSidebar}
+                aria-expanded={sidebarOpen}
+                aria-label={t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar")}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
+              >
+                {sidebarOpen ? (
+                  <PanelLeftClose className="size-4" />
+                ) : (
+                  <PanelLeft className="size-4" />
+                )}
+              </button>
+            )}
+            <MacOsTitleBarToggle
+              sidebarOpen={sidebarOpen}
+              onToggle={handleToggleSidebar}
+              onOpenSettings={() => onOpenSettings()}
+              appUpdate={appUpdate}
             />
-          ) : null
-        }
-        trailingActions={
-          <ProjectToolsPanelToggle
-            isOpen={rightDockOpen}
-            sessionCount={projectTerminalSessions.length}
-            disabledMessage={terminalDisabledMessage}
-            onToggle={() => setRightDockOpen((open) => !open)}
-          />
-        }
-      />
+            <span className="pointer-events-none flex-1 text-sm font-medium">
+              {t("settings.navImageStudio")}
+            </span>
+            <WindowsTitleBar controlsOnly />
+          </div>
+        </AppHeaderFrame>
+      ) : (
+        <AppWorkbenchChrome
+          windowControls={<WindowsTitleBar controlsOnly />}
+          navigationActions={
+            <MacOsTitleBarToggle
+              sidebarOpen={sidebarOpen}
+              onToggle={handleToggleSidebar}
+              onOpenSettings={() => onOpenSettings()}
+              appUpdate={appUpdate}
+            />
+          }
+          settings={settings}
+          sidebarOpen={sidebarOpen}
+          onOpenSettings={onOpenSettings}
+          onToggleTheme={onToggleTheme}
+          onOpenSidebar={handleToggleSidebar}
+          leadingActions={
+            activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
+              <ConversationViewTabs
+                active={renderedConversationView}
+                onChange={setActiveConversationView}
+              />
+            ) : null
+          }
+          trailingActions={
+            <ProjectToolsPanelToggle
+              isOpen={rightDockOpen}
+              sessionCount={projectTerminalSessions.length}
+              disabledMessage={projectToolsUserDisabledMessage}
+              onToggle={() => setRightDockOpen((open) => !open)}
+            />
+          }
+        />
+      )}
       <div
         data-app-workbench-body=""
         className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
@@ -4157,6 +4461,7 @@ function ChatPageContent(props: ChatPageProps) {
                   isUpdating={shareUpdating}
                   errorMessage={shareError}
                   shareOrigin={sharedManagerShareOrigin}
+                  shareBackendUrl={shareBackendUrl}
                   shareOriginPort={sharedManagerShareOriginPort}
                   shareOriginLoading={sharedManagerGatewayUrlLoading}
                   onToggle={handleToggleHistoryShare}
@@ -4173,6 +4478,7 @@ function ChatPageContent(props: ChatPageProps) {
                   updatingIds={sharedManagerUpdatingIds}
                   errors={sharedManagerErrors}
                   shareOrigin={sharedManagerShareOrigin}
+                  shareBackendUrl={shareBackendUrl}
                   shareOriginPort={sharedManagerShareOriginPort}
                   shareOriginLoading={sharedManagerGatewayUrlLoading}
                   onRefresh={handleRefreshSharedHistoryStatuses}
@@ -4192,6 +4498,20 @@ function ChatPageContent(props: ChatPageProps) {
                 activeView={activeView}
                 settings={settings}
                 setSettings={setSettings}
+                resourceHost={resourceHost}
+                kbrainSettings={kbrainSettingsAdapter}
+                imageStudioHost={
+                  imageStudioHost
+                    ? {
+                        ...imageStudioHost,
+                        onOpenSettings: () => onOpenSettings("image-studio"),
+                        // Desktop hub views have no app header, so the page carries the toggle.
+                        headerActions: (
+                          <ThemeToggleButton theme={settings.theme} onToggle={onToggleTheme} />
+                        ),
+                      }
+                    : undefined
+                }
                 isAgentMode={isAgentMode}
                 initialSkills={availableSkills}
                 initialSkillsRootDir={skillsRootDir}
@@ -4267,7 +4587,8 @@ function ChatPageContent(props: ChatPageProps) {
               leasedSessionIds={leasedDockSessionIds}
               leasedTools={leasedDockTools}
               theme={effectiveTheme}
-              disabledMessage={terminalDisabledMessage}
+              disabledMessage={projectToolsDisabledMessage}
+              terminalDisabledMessage={terminalDisabledMessage}
               projectState={rightDockProjectState}
               fileTreeState={rightDockFileTreeState}
               sshHosts={settings.ssh.hosts}
@@ -4276,7 +4597,7 @@ function ChatPageContent(props: ChatPageProps) {
               gitClient={tauriGitClient}
               gitWriteEnabled
               textGenerationClient={projectToolTextGenerationClient}
-              tunnelClient={isAgentMode ? tauriTunnelClient : null}
+              tunnelClient={projectToolTunnelClient}
               tunnelEnabled={tunnelEnabled}
               tunnelDisabledMessage={tunnelDisabledMessage}
               tunnelPublicBaseUrl={buildGatewayPublicBaseUrl(
