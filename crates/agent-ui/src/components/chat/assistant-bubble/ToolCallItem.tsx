@@ -29,6 +29,10 @@ import {
   type ToolTraceItem,
   toolResultMessageToText,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
+import {
+  showChatFileLinkContextMenu,
+  withChatFileLinkMenuIntent,
+} from "@liveagent/ui/lib/chat/chatFileLinkContextMenuStore";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import {
   EXIT_PLAN_MODE_TOOL_NAME,
@@ -98,7 +102,8 @@ function FileOperationTarget({
       )}
       title={operation.path}
       aria-label={`${actionLabel} ${operation.path}`}
-      onClick={() => onOpenFileLink(fileLink)}
+      onClick={() => onOpenFileLink(withChatFileLinkMenuIntent(fileLink))}
+      onContextMenu={(event) => showChatFileLinkContextMenu(event, fileLink)}
     >
       {operation.fileName}
     </button>

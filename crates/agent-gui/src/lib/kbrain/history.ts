@@ -38,6 +38,7 @@ import {
 import { questionResultDetails } from "./questions";
 import { getConfiguredKBrainConnection } from "./runtimeConnection";
 import { confirmKBrainMutation, hasKBrainMutationSync } from "./sessionSyncState";
+import { displayImageResultDetails, kbrainToolImages } from "./toolImages";
 import { contextToKBrainMessages } from "./turn";
 import type {
   KBrainHistoryResponse,
@@ -164,8 +165,16 @@ function toMessage(
   }
   if (message.role === "tool") {
     const converted = userContent(message);
-    const content =
-      typeof converted === "string" ? [{ type: "text" as const, text: converted }] : converted;
+    const textAndFiles = (
+      typeof converted === "string" ? [{ type: "text" as const, text: converted }] : converted
+    ).filter((part) => part.type !== "image");
+    const output = textAndFiles
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("");
+    const isError = message.stop_reason === "error" || message.stop_reason === "cancelled";
+    const images = kbrainToolImages(message.content, output);
+    const content = [...textAndFiles, ...images.content];
     return {
       role: "toolResult",
       toolCallId: message.tool_call_id || `kbrain-tool-${index}`,
@@ -191,8 +200,9 @@ function toMessage(
           },
           taskRunId ?? "history",
           index,
-        ),
-      isError: message.stop_reason === "error" || message.stop_reason === "cancelled",
+        ) ??
+        displayImageResultDetails(message.name, images.images, isError),
+      isError,
       timestamp,
     };
   }

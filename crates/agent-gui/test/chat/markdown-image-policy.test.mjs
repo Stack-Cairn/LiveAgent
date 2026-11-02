@@ -270,6 +270,57 @@ test("the reported ps1 link renders as one accessible click target and never exe
   ]);
 });
 
+test("file links keep the browser menu when no transcript hosts the link menu", () => {
+  const fileNode = {
+    type: "element",
+    tagName: "a",
+    properties: { href: "C:/Users/AlphaCat/AppData/Local/Temp/report.png" },
+    children: [],
+  };
+  markdownModule.rewriteChatFileLinks()({ type: "root", children: [fileNode] });
+  const button = markdownModule.MarkdownFileLink({
+    children: "report.png",
+    href: fileNode.properties.href,
+    node: fileNode,
+    onOpenFileLink() {},
+  });
+  let prevented = false;
+  button.props.onContextMenu({
+    clientX: 4,
+    clientY: 8,
+    preventDefault() {
+      prevented = true;
+    },
+    stopPropagation() {},
+  });
+  assert.equal(prevented, false);
+});
+
+test("both transcripts host the file link menu and its reveal never enters the link codec", () => {
+  for (const relativePath of [
+    "../../src/pages/chat/transcript/ChatTranscript.tsx",
+    "../../../agent-gateway/web/src/components/GatewayTranscript.tsx",
+  ]) {
+    const source = fs.readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
+    assert.match(source, /<ChatFileLinkContextMenuHost\b/, relativePath);
+  }
+  const menu = fs.readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../../agent-ui/src/lib/chat/chatFileLinkContextMenuStore.ts",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  assert.match(menu, /openInFileManager: true/);
+  const codec = fs.readFileSync(
+    fileURLToPath(new URL("../../../agent-ui/src/lib/chat/chatFileLinks.ts", import.meta.url)),
+    "utf8",
+  );
+  assert.doesNotMatch(codec, /params\.set\("openInFileManager"/);
+});
+
 test("historical and streaming assistant rows share the explicit file-open prop chain", () => {
   const files = [
     "../../src/pages/chat/transcript/ChatTranscript.tsx",

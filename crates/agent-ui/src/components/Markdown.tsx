@@ -1,6 +1,11 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { ChevronDown, ChevronUp, Copy, ExternalLink } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  showChatFileLinkContextMenu,
+  showChatUrlContextMenu,
+  withChatFileLinkMenuIntent,
+} from "@liveagent/ui/lib/chat/chatFileLinkContextMenuStore";
 import { math } from "@streamdown/math";
 import {
   type ComponentProps,
@@ -345,7 +350,8 @@ export function MarkdownFileLink(props: MarkdownFileLinkProps) {
       )}
       data-liveagent-file-link="true"
       title={label}
-      onClick={() => onOpenFileLink(parsed)}
+      onClick={() => onOpenFileLink(withChatFileLinkMenuIntent(parsed))}
+      onContextMenu={(event) => showChatFileLinkContextMenu(event, parsed)}
     >
       {children}
     </button>
@@ -418,6 +424,9 @@ function MarkdownExternalLink(props: MarkdownAnchorFallbackProps) {
         data-incomplete={incomplete}
         data-streamdown="link"
         title={title}
+        onContextMenu={(event) => {
+          if (!incomplete) showChatUrlContextMenu(event, href);
+        }}
         onClick={() => {
           if (incomplete) return;
           if (shouldSkipExternalLinkConfirmation()) {

@@ -30,7 +30,41 @@ fn summary(value: &Value) -> proto::ConversationSummary {
     }
 }
 
+fn summary_cwd(value: &Value) -> Option<String> {
+    value["conversation"]["cwd"]
+        .as_str()
+        .map(str::trim)
+        .filter(|cwd| !cwd.is_empty())
+        .map(str::to_string)
+}
+
 impl GatewayController {
+    /// Working directory of a conversation as the desktop frontend's history
+    /// (K-brain sessions or the local database) records it; `None` when the
+    /// frontend cannot find it.
+    pub(crate) async fn kbrain_conversation_workdir(
+        self: &std::sync::Arc<Self>,
+        request_id: String,
+        conversation_id: String,
+    ) -> Option<String> {
+        let value = self
+            .run_composer_action(GatewayComposerActionEvent {
+                request_id,
+                kind: "history".into(),
+                conversation_id,
+                action: "get".into(),
+                cron: String::new(),
+                interval: String::new(),
+                prompt: String::new(),
+                reasoning: String::new(),
+                loop_id: String::new(),
+                data: Some(json!({"maxMessages":1})),
+            })
+            .await
+            .ok()?;
+        summary_cwd(&value)
+    }
+
     pub(crate) async fn handle_kbrain_history_request(
         self: &std::sync::Arc<Self>,
         request_id: String,

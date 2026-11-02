@@ -118,8 +118,12 @@ test("Gateway chat file opens run off-loop with bounded host concurrency", () =>
   assert.match(branch, /send_agent_envelope_to\(sender, envelope\)/);
   assert.ok(
     branch.indexOf("tauri::async_runtime::spawn") <
-      branch.indexOf("handle_chat_file_open(request).await"),
+      branch.indexOf("handle_chat_file_open(request, current_workdir).await"),
   );
+  // K-brain conversations resolve their workdir through the desktop's own
+  // session record; the WebUI-supplied workdir is never the link base.
+  assert.match(branch, /kbrain_conversation_workdir\(lookup_id, conversation_id\)/);
+  assert.doesNotMatch(branch, /request\.workdir/);
   assert.match(chatFileLinks, /tokio::time::timeout\(CHAT_FILE_OPEN_TIMEOUT/);
   assert.match(chatFileLinks, /CHAT_FILE_OPEN_SEMAPHORE/);
   assert.match(chatFileLinks, /let _permit = permit/);

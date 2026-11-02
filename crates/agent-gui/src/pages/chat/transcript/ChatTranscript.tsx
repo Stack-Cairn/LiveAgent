@@ -1,4 +1,5 @@
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
+import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatFileLinkContextMenu";
 import { ChevronDown, Copy } from "@liveagent/ui/components/IconSet";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -25,6 +26,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { isTauriHost } from "../../../lib/host";
 import { RowInteractionProvider, useRowInteractionStore } from "./rowInteraction";
 import { TranscriptList, type TranscriptNavHandle } from "./TranscriptList";
 import { HistorySwitchLoadingOverlay } from "./TranscriptLoadingStates";
@@ -391,6 +393,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           ) : null}
         </ContextMenuPopup>
       ) : null}
+      <ChatFileLinkContextMenuHost canOpenWithDefaultApp={isTauriHost()} />
       {isTranscriptBusy ? <HistorySwitchLoadingOverlay /> : null}
     </div>
   );
