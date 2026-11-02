@@ -5,8 +5,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // inputModalities（模型输入模态用户覆盖）的反漂移锁：
 // 1. normalizer 的过滤/补齐/规范顺序契约；
 // 2. 设置加载往返不丢字段；
-// 3. modelFactory 只在附件发送确实受 model.input 门控的分支（codex/gemini/
-//    deepseek）应用覆盖，anthropic 不适用（避免虚假能力声明）。
+// 3. modelFactory 对所有供应商（含 Anthropic 兼容）应用覆盖：K-brain 按模型条目的
+//    inputModalities 判定能否收图，与 API 类型无关（#1045）。
 const loader = createTsModuleLoader();
 const { normalizeInputModalities, normalizeProviderModelConfig, normalizeProviderModelConfigs } =
   loader.loadModule("src/lib/settings/index.ts");
@@ -106,7 +106,8 @@ test(
     assert.equal(providerSupportsModelInputModalitiesOverride("xai"), true);
     assert.equal(providerSupportsModelInputModalitiesOverride("gemini"), true);
     assert.equal(providerSupportsModelInputModalitiesOverride("deepseek"), true);
-    assert.equal(providerSupportsModelInputModalitiesOverride("claude_code"), false);
+    // #1045：Anthropic 兼容供应商同样可以手动开启图片输入。
+    assert.equal(providerSupportsModelInputModalitiesOverride("claude_code"), true);
   },
 );
 

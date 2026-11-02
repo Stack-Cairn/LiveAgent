@@ -42,7 +42,10 @@ export function providerSupportsModelInputModalitiesOverride(providerId: Provide
     // deepseek：Responses wire 已接受 input_image（官方《图像理解》指南），模型
     // 能力默认按 id 推断（flash 家族吃图、Pro 纯文本），中转端点不吃图时用覆盖
     // 改回 ["text"]。
-    providerId === "deepseek"
+    providerId === "deepseek" ||
+    // claude_code（Anthropic 兼容）：K-brain 按模型条目的 inputModalities 判定能否
+    // 收图，与 API 类型无关；中转的 /v1/models 不返回模态时，靠覆盖开启图片输入（#1045）。
+    providerId === "claude_code"
   );
 }
 
