@@ -1,5 +1,6 @@
 import { useLocale } from "../../i18n/index";
 import { parseRunProgress } from "../../lib/chat/runProgress";
+import { Loader2 } from "../IconSet";
 
 export function RunProgressStatus({ status }: { status: string | null }) {
   const { t } = useLocale();
@@ -19,6 +20,10 @@ export function RunProgressStatus({ status }: { status: string | null }) {
       data-run-progress={progress.stage}
     >
       <summary className="cursor-pointer break-words" aria-live="polite">
+        <Loader2
+          aria-hidden="true"
+          className="mr-1.5 inline-block size-3 shrink-0 animate-spin align-[-2px] motion-reduce:animate-none"
+        />
         {t(`chat.runProgress.${progress.stage}`)}
         {progress.elapsed_ms === undefined ? "" : ` · ${seconds(progress.elapsed_ms)}`}
       </summary>

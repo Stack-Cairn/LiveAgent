@@ -3,7 +3,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { chatTimestamp, workDuration } from "@liveagent/ui/lib/chat/workTiming";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
 import { useAttentionDisclosure } from "./useAttentionDisclosure";
 
@@ -19,6 +19,15 @@ const PIXEL_KEYS = [
   "bottom-end",
 ] as const;
 
+// Diagonal wave from the left column outward: 90ms per step away from the middle row.
+const PIXEL_DELAYS = PIXEL_KEYS.map((_, index) => {
+  const row = Math.floor(index / 3);
+  const column = index % 3;
+  return (column + Math.abs(row - 1)) * 90;
+});
+
+type WorkPixelStyle = CSSProperties & { "--chat-work-delay": `${number}ms` };
+
 function WorkPixelGrid({ active }: { active: boolean }) {
   return (
     // 3×4px + 2×1.5px = 15px，比下方活动行的 12px 图标列宽：居中溢出到图标列
@@ -29,11 +38,16 @@ function WorkPixelGrid({ active }: { active: boolean }) {
       data-chat-work-grid=""
     >
       <span className="grid shrink-0 grid-cols-activity-dots gap-1p5px">
-        {PIXEL_KEYS.map((key) => (
+        {PIXEL_KEYS.map((key, index) => (
           <span
             key={key}
-            className={cn("size-1 bg-foreground opacity-15", "data-paused:opacity-45")}
+            // Frozen while the turn waits on the user: still legible, visibly not cycling.
+            className={cn(
+              "size-1 bg-foreground opacity-15 animate-chat-work-pixel motion-reduce:animate-none",
+              "data-paused:animate-none data-paused:opacity-45",
+            )}
             data-paused={active ? undefined : ""}
+            style={{ "--chat-work-delay": `${PIXEL_DELAYS[index] ?? 0}ms` } as WorkPixelStyle}
           />
         ))}
       </span>

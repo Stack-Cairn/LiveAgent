@@ -3,6 +3,7 @@ import { useLocale } from "../../i18n/index";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "../../lib/chat/assistantStatus";
 import { parseRunProgress } from "../../lib/chat/runProgress";
 import { cn } from "../../lib/shared/utils";
+import { Loader2 } from "../IconSet";
 import { CompactionBand } from "./CompactionBand";
 import { LiveSparkle } from "./LiveSparkle";
 import { RunProgressStatus } from "./RunProgressStatus";
@@ -53,11 +54,11 @@ export function LiveAssistantStatus(props: {
 export function AssistantStatus({
   children,
   className,
+  iconClassName,
   textClassName,
 }: {
   children: ReactNode;
   className?: string;
-  /** Kept for caller compatibility; text-only statuses intentionally render no loader icon. */
   iconClassName?: string;
   textClassName?: string;
 }) {
@@ -65,10 +66,14 @@ export function AssistantStatus({
     <span
       role="status"
       className={cn(
-        "inline-flex min-h-5 min-w-0 max-w-full items-center text-sm font-normal text-muted-foreground",
+        "inline-flex min-h-5 min-w-0 max-w-full items-center gap-1.5 text-sm font-normal text-muted-foreground",
         className,
       )}
     >
+      <Loader2
+        aria-hidden="true"
+        className={cn("size-3.5 shrink-0 animate-spin motion-reduce:animate-none", iconClassName)}
+      />
       <span className={cn("shimmer min-w-0 truncate whitespace-nowrap", textClassName)}>
         {children}
       </span>

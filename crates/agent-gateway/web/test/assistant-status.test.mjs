@@ -13,10 +13,12 @@ const loader = createWebModuleLoader({
 
 const { AssistantStatus } = loader.loadModule("@liveagent/ui/components/chat/AssistantStatus");
 
-test("assistant running status renders one compact animated text label", () => {
+test("assistant running status renders a spinning icon and one compact animated text label", () => {
   const status = AssistantStatus({ children: "Vibing" });
-  const text = status.props.children;
+  const [icon, text] = status.props.children;
 
+  assert.match(icon.props.className, /(?:^|\s)animate-spin(?:\s|$)/);
+  assert.match(icon.props.className, /(?:^|\s)motion-reduce:animate-none(?:\s|$)/);
   assert.match(status.props.className, /(?:^|\s)min-w-0(?:\s|$)/);
   assert.match(status.props.className, /(?:^|\s)max-w-full(?:\s|$)/);
   assert.match(text.props.className, /(?:^|\s)shimmer(?:\s|$)/);

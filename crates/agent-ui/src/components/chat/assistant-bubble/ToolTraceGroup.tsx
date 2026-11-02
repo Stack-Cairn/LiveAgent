@@ -214,7 +214,10 @@ function ToolTraceGroupInner(props: {
         {showStatus ? (
           <span className="shrink-0 text-xs text-foreground/45">
             {showTurnStatus && counts.running > 0 ? (
-              <AssistantStatus className="min-h-0 text-xs text-foreground/45">
+              <AssistantStatus
+                className="min-h-0 text-xs text-foreground/45"
+                iconClassName="size-3"
+              >
                 {statusLabel}
               </AssistantStatus>
             ) : (
