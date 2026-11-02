@@ -54,7 +54,14 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-type RevealState = { text: string; position: number };
+type RevealState = {
+  text: string;
+  position: number;
+  /** Pending frame of the reveal loop, or null while the loop is not running. */
+  frame: number | null;
+  /** Timestamp of the previous tick. */
+  last: number;
+};
 
 /**
  * The part of a streaming text to draw now. Text present when the reveal starts
@@ -69,7 +76,8 @@ export function useStreamingReveal(text: string, enabled: boolean): string {
 
   const previous = stateRef.current;
   if (!active || previous === null || !isStreamingAppend(previous.text, text)) {
-    stateRef.current = { text, position: text.length };
+    // A replaced state also retires its loop: the pending tick sees it is stale.
+    stateRef.current = { text, position: text.length, frame: null, last: 0 };
   } else {
     previous.text = text;
   }
@@ -77,27 +85,39 @@ export function useStreamingReveal(text: string, enabled: boolean): string {
   const cut = streamingRevealCut(text, state.position);
   const behind = cut < text.length;
 
+  // Runs after every commit, not on a dependency change: the loop stops once the
+  // cursor catches up, and new text committed in that same frame must restart it.
   useEffect(() => {
-    if (!active || !behind || typeof globalThis.requestAnimationFrame !== "function") return;
-    let frame = 0;
-    let last = performance.now();
+    const current = stateRef.current;
+    if (!active || !current || current.frame !== null) return;
+    if (streamingRevealCut(current.text, current.position) >= current.text.length) return;
+    if (typeof globalThis.requestAnimationFrame !== "function") return;
     const tick = (now: number) => {
-      const current = stateRef.current;
-      if (!current) return;
+      if (stateRef.current !== current) return;
+      current.frame = null;
       const before = streamingRevealCut(current.text, current.position);
       current.position = nextStreamingRevealPosition(
         current.position,
         current.text.length,
-        now - last,
+        now - current.last,
       );
-      last = now;
+      current.last = now;
+      if (current.position < current.text.length) current.frame = requestAnimationFrame(tick);
       // Re-render only when another character becomes visible.
       if (streamingRevealCut(current.text, current.position) !== before) rerender();
-      if (current.position < current.text.length) frame = requestAnimationFrame(tick);
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [active, behind]);
+    current.last = performance.now();
+    current.frame = requestAnimationFrame(tick);
+  });
+
+  useEffect(
+    () => () => {
+      const current = stateRef.current;
+      if (current?.frame != null) cancelAnimationFrame(current.frame);
+      if (current) current.frame = null;
+    },
+    [],
+  );
 
   return behind ? text.slice(0, cut) : text;
 }
