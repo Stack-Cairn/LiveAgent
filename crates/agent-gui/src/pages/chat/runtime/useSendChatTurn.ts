@@ -134,6 +134,7 @@ import {
   finalizeChatRunInOrder,
   releaseChatRunUi,
   settleChatRunFinalization,
+  shouldKeepPendingRowAfterAbort,
   trackTerminalHistoryPersist,
 } from "./chatRunFinalization";
 import { buildPreparedContext as buildPreparedConversationContext } from "./conversationContextBuilders";
@@ -1633,7 +1634,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         runCleanupPromise = (async () => {
           commitVisibleAbortedConversation();
           if (shouldCreatePendingHistoryItem && !abortedConversationCommitted) {
-            sidebarStore.removeLocal(conversationId);
+            // 首次落库已发起时，提问可能已经写入历史；只有确认没落成，占位行才是幻影。
+            // 否则删掉后会被落库的 upsert 推回来，表现为「先消失、约 1 秒后又出现」。
+            const persisted = await shouldKeepPendingRowAfterAbort(initialPersistPromise);
+            if (!persisted) sidebarStore.removeLocal(conversationId);
           }
         })();
       } else {

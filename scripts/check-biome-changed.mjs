@@ -97,6 +97,8 @@ export function biomeInvocation(filter, files, ci = Boolean(process.env.CI)) {
     "--line-ending=lf",
     "--max-diagnostics=none",
     "--error-on-warnings",
+    // 只改了 biome.json 忽略的文件（如 catalog.generated.ts）时不应报 "No files were processed"。
+    "--no-errors-on-unmatched",
   ];
   // CI installs the exact Node/pnpm versions before this gate. It does not
   // install mise; local runs keep using the repository's mise toolchain.
