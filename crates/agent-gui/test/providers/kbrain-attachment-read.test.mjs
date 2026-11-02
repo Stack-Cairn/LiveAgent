@@ -4,6 +4,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const {
+  customProviderFromKBrain,
   kBrainSettingsUpdateForMissingInputModalities,
   kBrainSettingsUpdateFromLegacyProviders,
 } = loader.loadModule(
@@ -46,6 +47,32 @@ test("relay models without modalities are pushed to K-brain with catalog vision"
   // 目录明确为纯文本、或目录未知的模型不做猜测，保留 K-brain 现值。
   assert.equal(pushedModel(update, "relay", "deepseek-v4-pro").inputModalities, undefined);
   assert.equal(pushedModel(update, "relay", "unknown-relay-model").inputModalities, undefined);
+});
+
+test("anthropic-compatible user modality override reaches K-brain and survives reload", () => {
+  // #1045：目录未知的中转模型，用户在设置里选「文本与图片」后必须原样推给 K-brain
+  // （K-brain 只按 inputModalities/vision 判定收图），再读回时仍保留该覆盖。
+  const saved = relayProvider("relay", [
+    { id: "unknown-relay-model", contextWindow: 8192, inputModalities: ["text", "image"] },
+  ]);
+  const update = kBrainSettingsUpdateFromLegacyProviders([saved], [saved]);
+  const pushedProvider = update.providers.find((provider) => provider.id === "relay");
+  assert.equal(pushedProvider.api, "anthropic-messages");
+  assert.deepEqual(pushedModel(update, "relay", "unknown-relay-model").inputModalities, [
+    "text",
+    "image",
+  ]);
+
+  const reloaded = customProviderFromKBrain({
+    id: "relay",
+    name: "relay",
+    api: "anthropic-messages",
+    baseUrl: "https://relay.invalid/claude/v1",
+    apiKeyConfigured: true,
+    models: [{ id: "unknown-relay-model", contextWindow: 8192, vision: true }],
+  });
+  assert.equal(reloaded.type, "claude_code");
+  assert.deepEqual(reloaded.models[0].inputModalities, ["text", "image"]);
 });
 
 test("explicit modalities win and are shared across providers for the same model id", () => {
