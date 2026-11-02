@@ -87,7 +87,7 @@ function mountBlock() {
   return { root, render };
 }
 
-test("desktop/WebUI text block: a reply stops typing for the rest of the turn after a same-frame flush", () => {
+test("desktop/WebUI text block: a same-frame flush does not stop the reply from typing out", () => {
   markdownCalls.length = 0;
   withFrameClock(({ advance, requestFrame }) => {
     const { root, render } = mountBlock();
@@ -144,7 +144,7 @@ test("verified: even a stalled reveal is completed when the turn settles", () =>
   });
 });
 
-test("thinking area: the same hook stalls the streaming reasoning text", () => {
+test("thinking area: streaming reasoning keeps typing after a same-frame flush", () => {
   markdownCalls.length = 0;
   withFrameClock(({ advance, requestFrame }) => {
     const container = document.createElement("div");

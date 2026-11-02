@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef } from "react";
+import { resolveStreamingRenderDelay } from "./streamingRenderPolicy";
 
 // Model deltas arrive as multi-character tokens, so a reply drawn the moment each
 // one lands pops in word by word. The reveal walks a display cursor over the text
@@ -61,6 +62,9 @@ type RevealState = {
   frame: number | null;
   /** Timestamp of the previous tick. */
   last: number;
+  /** What renders draw, moved only by the loop; and when the loop last moved it. */
+  shownCut: number;
+  shownAt: number;
 };
 
 /**
@@ -72,17 +76,28 @@ type RevealState = {
 export function useStreamingReveal(text: string, enabled: boolean): string {
   const [, rerender] = useReducer((count: number) => count + 1, 0);
   const stateRef = useRef<RevealState | null>(null);
-  const active = enabled && !prefersReducedMotion();
+  // Without a frame loop nothing would ever advance the cursor: show text as it arrives.
+  const active =
+    enabled && !prefersReducedMotion() && typeof globalThis.requestAnimationFrame === "function";
 
   const previous = stateRef.current;
   if (!active || previous === null || !isStreamingAppend(previous.text, text)) {
     // A replaced state also retires its loop: the pending tick sees it is stale.
-    stateRef.current = { text, position: text.length, frame: null, last: 0 };
+    stateRef.current = {
+      text,
+      position: text.length,
+      frame: null,
+      last: 0,
+      shownCut: text.length,
+      shownAt: 0,
+    };
   } else {
     previous.text = text;
   }
   const state = stateRef.current as RevealState;
-  const cut = streamingRevealCut(text, state.position);
+  // A store flush re-renders with longer text but draws the same prefix as before,
+  // so the memoized Markdown below skips it; only the loop advances what is drawn.
+  const cut = streamingRevealCut(text, state.shownCut);
   const behind = cut < text.length;
 
   // Runs after every commit, not on a dependency change: the loop stops once the
@@ -91,20 +106,27 @@ export function useStreamingReveal(text: string, enabled: boolean): string {
     const current = stateRef.current;
     if (!active || !current || current.frame !== null) return;
     if (streamingRevealCut(current.text, current.position) >= current.text.length) return;
-    if (typeof globalThis.requestAnimationFrame !== "function") return;
     const tick = (now: number) => {
       if (stateRef.current !== current) return;
       current.frame = null;
-      const before = streamingRevealCut(current.text, current.position);
       current.position = nextStreamingRevealPosition(
         current.position,
         current.text.length,
         now - current.last,
       );
       current.last = now;
-      if (current.position < current.text.length) current.frame = requestAnimationFrame(tick);
-      // Re-render only when another character becomes visible.
-      if (streamingRevealCut(current.text, current.position) !== before) rerender();
+      const caughtUp = current.position >= current.text.length;
+      if (!caughtUp) current.frame = requestAnimationFrame(tick);
+      // Re-render only when another character becomes visible, and for long texts no
+      // more often than the store's own flush budget: every render re-parses the
+      // Markdown tail, so the cursor keeps moving per frame but is drawn in steps.
+      const due = now - current.shownAt >= resolveStreamingRenderDelay(current.text.length);
+      const next = streamingRevealCut(current.text, current.position);
+      if (next !== current.shownCut && (caughtUp || due)) {
+        current.shownCut = next;
+        current.shownAt = now;
+        rerender();
+      }
     };
     current.last = performance.now();
     current.frame = requestAnimationFrame(tick);

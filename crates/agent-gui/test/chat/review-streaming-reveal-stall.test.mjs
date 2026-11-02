@@ -124,7 +124,7 @@ function mountProbe() {
   return { root, render };
 }
 
-test("steady 31 chars/s stream at 60fps: the reveal stalls and never resumes until the turn ends", () => {
+test("steady 31 chars/s stream at 60fps: the reveal keeps typing to the end", () => {
   withFrameClock((clock) => {
     const { root, render } = mountProbe();
     // Store flush = rAF requested when the delta arrives between frames, i.e.
