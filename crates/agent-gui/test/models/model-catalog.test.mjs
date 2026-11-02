@@ -172,7 +172,11 @@ test("normalizeModelIdCandidates strips a month-day date suffix only when no ful
 test("a dated relay id resolves to the catalog entry, an exact dated id keeps its own entry", () => {
   const relayed = catalog.findCatalogModelAcrossProviders("deepseek-ai/deepseek-v4-pro-0813");
   assert.equal(relayed?.id, "deepseek-v4-pro");
-  assert.equal(relayed?.contextWindow, 1000000);
+  // 限额对照目录快照本身，不写死数值：目录每日自动刷新会改动上游限额。
+  assert.deepEqual(
+    relayed,
+    catalog.MODEL_CATALOG.deepseek.find((model) => model.id === "deepseek-v4-pro"),
+  );
   assert.equal(catalog.findCatalogModelAcrossProviders("deepseek-r1-0528")?.id, "deepseek-r1-0528");
   assert.equal(catalog.findCatalogModelAcrossProviders("deepseek-r1-0601")?.id, "deepseek-r1");
 });

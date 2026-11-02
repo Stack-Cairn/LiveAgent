@@ -6,7 +6,20 @@ const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
 const normalize = loader.loadModule("@liveagent/ui/lib/settings/normalize.ts");
 const sync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
+const modelCatalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
+
+// 目录每日自动刷新会改动上游限额：断言"取到目录真值"的用例对照快照条目，
+// 不写死数值。
+function catalogLimits(section, modelId) {
+  const entry = modelCatalog.MODEL_CATALOG[section].find((model) => model.id === modelId);
+  assert.ok(entry, `${section}/${modelId} missing from the catalog snapshot`);
+  return { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
+}
+
+function pickLimits(limits) {
+  return { contextWindow: limits.contextWindow, maxOutputToken: limits.maxOutputToken };
+}
 
 async function withNavigator(value, task) {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
@@ -315,8 +328,11 @@ test("DeepSeek provider normalization keeps native routing and native search", (
   assert.equal(provider.promptCachingEnabled, false);
   assert.equal(provider.promptCacheHintMode, undefined);
   assert.equal(provider.nativeWebSearchEnabled, true);
-  assert.equal(provider.models[0].contextWindow, 1_000_000);
-  assert.equal(provider.models[0].maxOutputToken, 393_216);
+  assert.deepEqual(pickLimits(provider.models[0]), catalogLimits("deepseek", "deepseek-v4-flash"));
+  assert.notDeepEqual(
+    pickLimits(provider.models[0]),
+    modelCatalog.PROVIDER_FALLBACK_LIMITS.deepseek,
+  );
 });
 
 test("legacy Codex-group DeepSeek configs stay untouched — migration is user-driven", () => {
@@ -3044,8 +3060,14 @@ test("cross-provider models resolve real catalog limits instead of provider fall
     "claude_code",
     "deepseek-v4-flash",
   );
-  assert.equal(deepseekUnderClaude.contextWindow, 1_000_000);
-  assert.equal(deepseekUnderClaude.maxOutputToken, 393_216);
+  assert.deepEqual(
+    pickLimits(deepseekUnderClaude),
+    catalogLimits("deepseek", "deepseek-v4-flash"),
+  );
+  assert.notDeepEqual(
+    pickLimits(deepseekUnderClaude),
+    modelCatalog.PROVIDER_FALLBACK_LIMITS.claude_code,
+  );
   const glmUnderCodex = settings.getProviderModelDefaults("codex", "glm-4.7");
   assert.equal(glmUnderCodex.contextWindow, 204_800);
   assert.equal(glmUnderCodex.maxOutputToken, 131_072);

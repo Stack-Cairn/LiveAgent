@@ -6,6 +6,7 @@ const loader = createWebModuleLoader();
 const webSettings = loader.loadModule("src/lib/webSettings.ts");
 const settings = loader.loadModule("@/lib/settings/index.ts");
 const settingsSync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
+const catalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 const chatHelpers = loader.loadModule("@/lib/chat/chatPageHelpers.ts");
 const adminApi = loader.loadModule("@/lib/adminApi.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
@@ -1879,21 +1880,32 @@ test("xai model limits use the generated catalog without changing thinking detec
 });
 
 test("xai thinking levels come from the catalog per model, thinking always on", () => {
-  // 档位按型号差异化（目录真值）：grok-4.5 只有 low/medium/high；
-  // grok-4.20-multi-agent-0309 声明到 xhigh。xai 思考一律恒开
-  //（wire 无法表达 off），目录的 off 声明对 xai 供应商不生效。
-  assert.deepEqual(settings.getKnownModelThinkingLevels("xai", "grok-4.5"), [
-    "low",
-    "medium",
-    "high",
-  ]);
-  assert.equal(settings.isThinkingAlwaysOnForModel("xai", "grok-4.5"), true);
-  const multiAgent = settings.getKnownModelThinkingLevels("xai", "grok-4.20-multi-agent-0309");
-  assert.ok(multiAgent.includes("xhigh"));
-  assert.equal(settings.isThinkingAlwaysOnForModel("xai", "grok-4.3"), true);
-  // 钳制路径：xhigh 超出 grok-4.5 档位表时压回默认 high。
+  // 档位按型号取目录真值：逐条对照快照里每个 xai 条目，不写死档位表（目录每日
+  // 自动刷新）。单点对照分不出"按型号读目录"和"整个供应商一张固定表"，逐条
+  // 对照可以（快照里有档位为空的条目）。xai 思考一律恒开（wire 无法表达 off），
+  // 目录里 off: true 的条目对 xai 供应商同样不生效。
+  const entries = catalog.MODEL_CATALOG.xai.filter((model) => model.thinking);
+  assert.ok(entries.length >= 2, "xai thinking entries missing from the catalog snapshot");
+  for (const entry of entries) {
+    assert.deepEqual(
+      settings.getKnownModelThinkingLevels("xai", entry.id),
+      [...entry.thinking.levels],
+      `${entry.id} levels`,
+    );
+    assert.equal(
+      settings.isThinkingAlwaysOnForModel("xai", entry.id),
+      true,
+      `${entry.id} always on`,
+    );
+  }
+  // 钳制路径：表外档位（取档位阶梯里最高的表外档）压回默认 high。
+  const grok45Levels = settings.getKnownModelThinkingLevels("xai", "grok-4.5");
+  const outside = ["minimal", "low", "medium", "high", "xhigh", "max"]
+    .filter((level) => !grok45Levels.includes(level))
+    .at(-1);
+  assert.ok(outside, "grok-4.5 covers the whole level ladder; clamp needs another model");
   const clamped = settings.normalizeChatRuntimeControlsForProvider(
-    { reasoning: "xhigh", reasoningByProvider: { xai: "xhigh" } },
+    { reasoning: outside, reasoningByProvider: { xai: outside } },
     { providerId: "xai", modelId: "grok-4.5" },
   );
   assert.equal(clamped.reasoning, "high");
