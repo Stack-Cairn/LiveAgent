@@ -257,3 +257,41 @@ test("K-brain history summaries carry branch lineage only when the backend repor
     assert.equal("forkedFromSessionId" in bySession.get("blank-session"), false);
   });
 });
+
+test("history restoration normalizes null hosted search queries and sources from K-brain (#1069)", async () => {
+  installStorage();
+  const session = makeSession({
+    tasks: [],
+    messages: [{
+      id: "a-search", role: "assistant",
+      content: [{ type: "text", text: "北京海淀今天晴" }],
+      // Go 端 nil 切片序列化为 null：OpenAI web_search_call 在没有 action 时就是这样。
+      hosted_search: [
+        { type: "hostedSearch", id: "ws_1", provider: "openai", status: "completed", queries: null, sources: null },
+        { type: "hostedSearch", id: "ws_2", provider: "openai", status: "completed", queries: ["北京海淀 天气"], sources: [{ url: "https://weather.example.com/haidian", title: "海淀天气" }] },
+      ],
+      provider: "fixture", model: "fixture-model",
+    }],
+    message_count: 1,
+  });
+  await withHttpFixture(async (_request, response) => {
+    sendJson(response, {
+      session, revision: session.revision, oldest_offset: 0, has_more_before: false,
+      total_message_count: 1, active_messages: session.messages,
+    });
+  }, async () => {
+    mapping.setKBrainSessionId("hosted-search-null", session.id);
+    const restored = await history.getKBrainHistoryWindow("hosted-search-null");
+    const content = restored.activeSegment.messages[0].content;
+    const searches = content.filter((block) => block.type === "hostedSearch");
+    assert.equal(searches.length, 2);
+    for (const search of searches) {
+      assert.ok(Array.isArray(search.queries), "queries must be an array");
+      assert.ok(Array.isArray(search.sources), "sources must be an array");
+    }
+    assert.deepEqual(searches[0].queries, []);
+    assert.deepEqual(searches[0].sources, []);
+    assert.deepEqual(searches[1].queries, ["北京海淀 天气"]);
+    assert.equal(searches[1].sources[0].url, "https://weather.example.com/haidian");
+  });
+});
