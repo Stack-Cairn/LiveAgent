@@ -10,10 +10,14 @@ const loader = createTsModuleLoader({
 
 const { AssistantStatus } = loader.loadModule("@liveagent/ui/components/chat/AssistantStatus");
 
-test("assistant running status renders one text-only label", () => {
-  const status = AssistantStatus({ children: "Vibing" });
-  const text = status.props.children;
+test("assistant running status renders a spinning icon before one text label", () => {
+  const status = AssistantStatus({ children: "Vibing", iconClassName: "size-3" });
+  const [icon, text] = status.props.children;
 
+  assert.match(icon.props.className, /(?:^|\s)animate-spin(?:\s|$)/);
+  assert.match(icon.props.className, /(?:^|\s)motion-reduce:animate-none(?:\s|$)/);
+  assert.match(icon.props.className, /(?:^|\s)size-3(?:\s|$)/);
+  assert.equal(icon.props["aria-hidden"], "true");
   assert.equal(text.type, "span");
   assert.equal(text.props.children, "Vibing");
   assert.match(status.props.className, /(?:^|\s)min-w-0(?:\s|$)/);

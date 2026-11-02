@@ -9,6 +9,8 @@
   --animate-file-drop-overlay-card: fileDropCardIn var(--ui-duration-220ms) var(--ease-ui-enter);
   --animate-git-review-generate-progress: gitReviewGenerateSweep var(--ui-duration-1100ms)
     ease-in-out infinite;
+  --animate-chat-work-pixel: chatWorkPixel var(--ui-duration-650ms) ease-in-out
+    var(--chat-work-delay, 0ms) infinite;
   @keyframes tw-shimmer {
     from {
       background-position: 100% 0;
@@ -61,6 +63,20 @@
     }
     100% {
       transform: translateX(300%);
+    }
+  }
+
+  /* "Working" pixel grid in the live work-trace header: a diagonal wave. */
+  @keyframes chatWorkPixel {
+    0%,
+    55%,
+    100% {
+      opacity: 0.15;
+      transform: scale(0.8);
+    }
+    25% {
+      opacity: 1;
+      transform: scale(1);
     }
   }
 

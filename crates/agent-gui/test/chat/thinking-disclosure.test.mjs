@@ -47,7 +47,11 @@ const env = await createDomTestEnv({
       cn: (...values) => values.filter(Boolean).join(" "),
     },
     "@liveagent/ui/components/IconSet": { ChevronDown: EmptyIcon },
-    "../../IconSet": { Brain: EmptyIcon, ChevronRight: EmptyIcon },
+    "../../IconSet": {
+      Brain: () => React.createElement("svg", { "data-icon": "brain" }),
+      ChevronRight: EmptyIcon,
+      Loader2: (props) => React.createElement("svg", { "data-icon": "loader", ...props }),
+    },
   },
 });
 const { React, act, createRoot } = env;
@@ -187,6 +191,24 @@ test("scroll follow disengages once the segment settles or is collapsed", () => 
   renderDisclosure(root, { active: false });
   assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
   assert.equal(scrollFollowCalls.at(-1).enabled, false);
+
+  act(() => root.unmount());
+});
+
+test("an active segment spins a loader in place of the brain icon", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  renderDisclosure(root, { active: true });
+  const loader = container.querySelector('[data-icon="loader"]');
+  assert.ok(loader, "thinking shows a spinning loader");
+  assert.match(loader.getAttribute("class"), /(?:^|\s)animate-spin(?:\s|$)/);
+  assert.match(loader.getAttribute("class"), /(?:^|\s)motion-reduce:animate-none(?:\s|$)/);
+  assert.equal(container.querySelector('[data-icon="brain"]'), null);
+
+  renderDisclosure(root, { active: false });
+  assert.equal(container.querySelector('[data-icon="loader"]'), null);
+  assert.ok(container.querySelector('[data-icon="brain"]'));
 
   act(() => root.unmount());
 });
