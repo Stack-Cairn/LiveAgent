@@ -57,6 +57,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { type DetectedProxy, DetectedProxyList } from "./DetectedProxyList";
 import { PlanningTimeZoneSetting } from "./PlanningTimeZoneSetting";
 import { SidebarShortcutsSection } from "./SidebarShortcutsSection";
+import { parseSystemProxyPortDraft } from "./systemProxyInput";
 
 const FONT_SCALE_OPTIONS = [0.9, 1, 1.1, 1.2] as const;
 type FontFamilySettingKey = "interfaceFontFamily" | "chatFontFamily" | "codeFontFamily";
@@ -303,7 +304,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
   // 会先把按钮变回可用，但落在禁用按钮上的这次 click 已被浏览器吞掉，需点两次。
   const effectiveProxyHost = (proxyHostDraft ?? systemProxy.host).trim();
   const effectiveProxyPort =
-    proxyPortDraft !== null ? Number.parseInt(proxyPortDraft, 10) : systemProxy.port;
+    proxyPortDraft !== null ? parseSystemProxyPortDraft(proxyPortDraft) : systemProxy.port;
   const proxyConfigValid =
     isValidSystemProxyHost(effectiveProxyHost) &&
     Number.isInteger(effectiveProxyPort) &&
@@ -341,8 +342,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
 
   function commitProxyPortDraft(nextDraft = proxyPortDraft) {
     if (nextDraft !== null) {
-      const parsed = Number.parseInt(nextDraft, 10);
-      patchSystemProxy({ port: Number.isNaN(parsed) ? 0 : parsed });
+      patchSystemProxy({ port: parseSystemProxyPortDraft(nextDraft) });
       setProxyPortDraft(null);
     }
   }
