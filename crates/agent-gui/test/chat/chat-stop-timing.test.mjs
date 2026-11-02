@@ -675,6 +675,36 @@ test("terminal history persistence marks both false results and thrown errors", 
   assert.equal(failures, 2);
 });
 
+test("a stopped new conversation keeps its sidebar row once the user turn persisted (#945)", async () => {
+  const loader = createTsModuleLoader();
+  const { shouldKeepPendingRowAfterAbort } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+
+  assert.equal(await shouldKeepPendingRowAfterAbort(null), false);
+  assert.equal(await shouldKeepPendingRowAfterAbort(Promise.resolve(true)), true);
+  assert.equal(await shouldKeepPendingRowAfterAbort(Promise.resolve(false)), false);
+  assert.equal(
+    await shouldKeepPendingRowAfterAbort(Promise.reject(new Error("history database unavailable"))),
+    false,
+  );
+
+  // 落库完成前按停止：必须等落库结果，而不是立即删除占位行。
+  let resolvePersist;
+  const pending = new Promise((resolve) => {
+    resolvePersist = resolve;
+  });
+  let settled = false;
+  const decision = shouldKeepPendingRowAfterAbort(pending).then((keep) => {
+    settled = true;
+    return keep;
+  });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  resolvePersist(true);
+  assert.equal(await decision, true);
+});
+
 test("terminal history persistence retries transient failures before succeeding", async () => {
   const loader = createTsModuleLoader();
   const { persistTerminalHistoryWithRetry, trackTerminalHistoryPersist } = loader.loadModule(
