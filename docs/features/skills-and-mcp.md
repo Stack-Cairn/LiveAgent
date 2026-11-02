@@ -98,35 +98,6 @@
 
 Registry card 会被归一化为统一的 `McpRegistryCard`，其中 `installDraft` 表示可直接生成 server config，`manualDraft` 表示需要用户手工补全。
 
-## 示例：免 Key 的网页搜索与页面抓取
-
-LiveAgent 不内置网页搜索 MCP。需要时可手动接入 Parallel 提供的远程 MCP server（Streamable HTTP）：无需 API key 即可使用 `web_search`（网页搜索）和 `web_fetch`（按 URL 抓取页面并提取为 markdown）。这是第三方服务，默认不启用，按需导入；查询与 URL 会发送给 Parallel，匿名请求的速率限制较低。
-
-将以下内容保存为 JSON 文件（如 `parallel-mcp.json`）：
-
-```json
-{
-  "mcpServers": {
-    "parallel-search": {
-      "type": "http",
-      "url": "https://mcp.parallel.ai/mcp"
-    }
-  }
-}
-```
-
-导入解析见 `src-tauri/src/services/skills/external_mcp.rs`：接受 `mcpServers` 包装或裸 server map；`type` 支持 `http`（含 `streamable-http`）、`sse`、`stdio`，省略时有 `url` 即按 `http` 处理；`headers`、`timeout`（毫秒）可选，未填 timeout 时按 60000 导入。
-
-| 步骤 | 操作 |
-|---|---|
-| 导入 | MCP Hub →「本地导入」→「从文件导入」，选择上述 JSON，勾选 `parallel-search` 后点「导入」。也可点「添加」手动填写：Transport 选 `http（Streamable HTTP）`，URL 填同一地址。 |
-| 选择 | 导入后 server 默认启用，确认卡片开关为开。若当前工作空间的「配置 Skills 与 MCP」为「自定义」，还需在其中勾选 `parallel-search`；「全部关闭」时不暴露任何 MCP。 |
-| 发现工具 | 在 tools 模式的对话中让模型调用 `McpManager`（`action: "tools"`，`server_id: "parallel-search"`），应返回 `web_search`、`web_fetch`（匿名时还会列出 `web_decisions`）。它们在对话中以 `mcp_parallel-search_web_search` 等动态工具名出现。 |
-| 试搜索 | 例如「搜索 MCP 规范的最新版本」，tool trace 中应出现 `mcp_parallel-search_web_search` 调用及结果摘录。 |
-| 试抓取 | 例如「抓取 https://modelcontextprotocol.io 并总结」，应出现 `mcp_parallel-search_web_fetch` 调用。 |
-
-匿名访问适合试用和轻量使用。需要更高额度时，可在 Parallel Platform 创建 API key，并按其文档以 `Authorization: Bearer <key>` 请求头发送：写入配置的 `headers`，或在卡片编辑的 Headers 一栏填 `Authorization=Bearer <key>`。LiveAgent 不展开 headers 中的环境变量，key 会以明文保存在 MCP 设置中，含 key 的配置文件不要提交到仓库。鉴权方式、计费与限额以 [Parallel MCP 文档](https://docs.parallel.ai/integrations/mcp/quickstart) 为准。旧 endpoint `https://search.parallel.ai/mcp`（Parallel 文档标为 legacy，仍在服务）同样免 key，只提供 `web_search` 和 `web_fetch`。
-
 ## GUI/WebUI Parity 要点
 
 | 区域 | 注意事项 |
