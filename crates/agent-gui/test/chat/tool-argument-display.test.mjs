@@ -135,10 +135,10 @@ function createToolArgsRenderer() {
         },
       }),
     );
-  renderToolArgs.renderShell = (toolCall, result) =>
+  renderToolArgs.renderShell = (toolCall, result, liveOutput) =>
     renderToStaticMarkup(
       jsxRuntime.jsx(ShellToolDisplay, {
-        item: { toolCall, toolResult: result },
+        item: liveOutput === undefined ? { toolCall, toolResult: result } : { toolCall, toolResult: result, liveOutput },
         result,
       }),
     );
@@ -320,7 +320,11 @@ function createToolCallItemRenderer() {
   return (toolCall, options = {}) =>
     renderToStaticMarkup(
       jsxRuntime.jsx(MemoToolCallItem, {
-        item: options.result ? { toolCall, toolResult: options.result } : { toolCall },
+        item: {
+          toolCall,
+          ...(options.result ? { toolResult: options.result } : {}),
+          ...(options.liveOutput !== undefined ? { liveOutput: options.liveOutput } : {}),
+        },
         isRunning: options.isRunning,
         onOpenFileLink: options.onOpenFileLink,
       }),
@@ -583,6 +587,41 @@ test("shell display combines command and output without runtime session metadata
   assert.match(html, /git diff --stat/);
   assert.match(html, /M src\/App\.tsx/);
   assert.doesNotMatch(html, /bash-private|session_id|status:|cursor:|duration_ms|shell: zsh/);
+});
+
+test("running shell shows the live output tail until the final result replaces it (#975)", () => {
+  const renderToolDisplay = createToolArgsRenderer();
+  const toolCall = { type: "toolCall", id: "bash-live", name: "Bash", arguments: { command: "cargo build" } };
+  const live = renderToolDisplay.renderShell(
+    toolCall,
+    undefined,
+    "\u001b[32m   Compiling\u001b[0m serde\r\n[=====>    ] 50%\r[==========] 100%\n",
+  );
+  assert.match(live, /data-shell-live-output=""/);
+  assert.match(live, /cargo build/);
+  assert.match(live, /Compiling serde/);
+  assert.match(live, /\[==========\] 100%/);
+  assert.doesNotMatch(live, /50%|\u001b/);
+
+  const result = {
+    role: "toolResult",
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+    content: [{ type: "text", text: "Finished dev profile" }],
+    isError: false,
+  };
+  const settled = renderToolDisplay.renderShell(toolCall, result, "stale live tail");
+  assert.match(settled, /Finished dev profile/);
+  assert.doesNotMatch(settled, /data-shell-live-output|stale live tail/);
+});
+
+test("a running Bash card opens to show live output; without output it stays collapsed (#975)", () => {
+  const renderToolCallItem = createToolCallItemRenderer();
+  const toolCall = { type: "toolCall", id: "bash-live-card", name: "Bash", arguments: { command: "make" } };
+  const quiet = renderToolCallItem(toolCall, { isRunning: true });
+  const streaming = renderToolCallItem(toolCall, { isRunning: true, liveOutput: "cc -c a.c\n" });
+  assert.match(quiet, /aria-expanded="false"/);
+  assert.match(streaming, /aria-expanded="true"/);
 });
 
 test("historical shell envelopes fall back to clean stdout and stderr only", () => {

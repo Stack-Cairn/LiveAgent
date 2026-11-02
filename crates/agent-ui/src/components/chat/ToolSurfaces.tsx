@@ -1,5 +1,5 @@
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 // Presentational primitives shared by the tool cards (args displays, result
 // displays, streaming previews).
@@ -108,10 +108,15 @@ export function MetaTags({ tags }: { tags: MetaTag[] }) {
   );
 }
 
-export function ToolScrollablePre(props: { children: ReactNode; className?: string }) {
-  const { children, className } = props;
+export function ToolScrollablePre(props: {
+  children: ReactNode;
+  className?: string;
+  ref?: Ref<HTMLPreElement>;
+}) {
+  const { children, className, ref } = props;
   return (
     <pre
+      ref={ref}
       className={cn(
         "tool-text-scroll overflow-x-auto overflow-y-auto",
         "whitespace-pre break-normal rounded-md px-2.5 py-2 text-xs leading-1p6",

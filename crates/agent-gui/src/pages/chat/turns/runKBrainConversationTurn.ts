@@ -13,6 +13,7 @@ import {
   attachToolResultToRound,
   collapseThinking,
   type LiveRound,
+  setToolLiveOutputInRound,
   updateLiveRound,
   upsertHostedSearchToRound,
   upsertToolCallToRound,
@@ -216,6 +217,19 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       });
     } else projectToolResult(call, result);
   };
+  // 运行中命令的输出快照只更新实时轮次里的工具卡，不进历史，也不转发给 WebUI。
+  const onToolOutput = (toolCallId: string, output: string) => {
+    if (results.has(toolCallId)) return;
+    const callRound = callRounds.get(toolCallId);
+    if (callRound === undefined) return;
+    params.batchLiveRoundsUpdate(
+      (previous) =>
+        updateLiveRound(previous, callRound, (target) =>
+          setToolLiveOutputInRound(target, toolCallId, output),
+        ),
+      transcriptStore,
+    );
+  };
   hookLifecycle.startAgent();
   const command = "composerCommand" in params ? params.composerCommand : undefined;
   // 目标续跑：后端在每轮终止前用 goal.updated 给出下一轮的请求标识，这里挂接上去，
@@ -288,6 +302,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         },
         onToolCall,
         onToolResult,
+        onToolOutput,
         onStatus: status,
         onQuestionRequest: async (
           request: KBrainQuestionRequest,
