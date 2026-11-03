@@ -219,10 +219,21 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # 与 CI 和 Linux 发布任务一样装官方 release。choco 源出错时安装会失败，
+      # 但旧步骤最后一条命令是 Out-File，步骤仍显示成功，十几分钟后才在构建里报找不到 protoc。
       - name: Install protobuf compiler
+        env:
+          PROTOC_VERSION: "34.0"
         run: |
-          choco install protoc -y --no-progress
-          "$env:ChocolateyInstall\lib\protoc\tools\bin" | Out-File -Append $env:GITHUB_PATH
+          $archive = Join-Path $env:RUNNER_TEMP "protoc.zip"
+          $destination = Join-Path $env:RUNNER_TEMP "protoc-$env:PROTOC_VERSION"
+          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v$env:PROTOC_VERSION/protoc-$env:PROTOC_VERSION-win64.zip" -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath $destination -Force
+          $protoc = Join-Path $destination "bin\protoc.exe"
+          & $protoc --version
+          if ($LASTEXITCODE -ne 0) { throw "protoc verification failed: $LASTEXITCODE" }
+          "PROTOC=$protoc" | Out-File -Append $env:GITHUB_ENV
+          (Split-Path $protoc) | Out-File -Append $env:GITHUB_PATH
 
       - uses: Swatinem/rust-cache@v2
         with:
