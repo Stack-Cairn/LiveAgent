@@ -69,3 +69,14 @@ test("application chat wrapper preserves the transcript flex height chain", () =
     /className=\{cn\(\s*"relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",\s*containerProps\?\.className,\s*\)\}/s,
   );
 });
+
+test("the deferred resize flush measures rows live", () => {
+  // Behaviour lives in transcript-measure-live.test.mjs; this pins the wiring:
+  // with the flush deferred a frame, the default measurer sizes rows from a
+  // frame-old box and a gap flashes under a collapsing tool group.
+  const options = transcriptListSource.match(/useVirtualizer\(\{[\s\S]*?\n {2}\}\);/);
+  assert.ok(options, "TranscriptList configures the transcript virtualizer");
+  assert.match(options[0], /useAnimationFrameWithResizeObserver:\s*true/);
+  assert.match(options[0], /^\s*measureElement:\s*measureRowLive,/m);
+  assert.match(transcriptListSource, /import \{ measureRowLive \} from "\.\/measureRowLive";/);
+});

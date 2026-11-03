@@ -45,6 +45,7 @@ import {
   readTranscriptScrollPosition,
   saveTranscriptScrollPosition,
 } from "./initialTranscriptLayout";
+import { measureRowLive } from "./measureRowLive";
 import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
 import { createReplyHoverStore } from "./replyHoverStore";
 import { ReplyHoverProvider } from "./rowInteraction";
@@ -288,6 +289,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     },
     // Defer measurement-driven DOM writes out of WebKit's resize delivery.
     useAnimationFrameWithResizeObserver: true,
+    measureElement: measureRowLive,
     // Pixel overscan covers the next paint; avoid synchronously rendering
     // Markdown inside every native scroll event.
     useFlushSync: false,
