@@ -8,6 +8,7 @@ import {
   type HistoryMigrationFailureKind,
   type HistoryMigrationFailureRecord,
   knownDeterministicFailure,
+  LEGACY_IMPORT_MAX_BODY_BYTES,
   mergeHistoryMigrationFailures,
   readHistoryMigrationFailures,
   writeHistoryMigrationFailures,
@@ -662,6 +663,7 @@ export async function migrateLegacyHistoryPage(
           fingerprint: sourceFingerprint,
           kind,
           bytes: bodyBytes,
+          ...(kind === "too_large" ? { limitBytes: LEGACY_IMPORT_MAX_BODY_BYTES } : {}),
           message,
           failedAt: Date.now(),
         });

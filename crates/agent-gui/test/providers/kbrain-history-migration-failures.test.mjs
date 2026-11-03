@@ -248,3 +248,56 @@ test("a partial checkpoint result is cached; startup stops re-uploading it, manu
     runtime.clearKBrainRuntimeConnection();
   }
 });
+
+test("size failures recorded under the old 64 MiB cap are retried once after the upgrade", async () => {
+  const storage = memoryStorage();
+  globalThis.localStorage = storage;
+  runtime.setKBrainRuntimeConnection({
+    baseUrl: "http://migration-cap-upgrade.test",
+    token: "",
+    protocolVersion: "kbrain.agent.v1",
+  });
+  const scope = loader.loadModule("src/lib/kbrain/mapping.ts").kBrainStorageScope();
+  const source = page("old-cap");
+  let posts = 0;
+  let accept = false;
+  const fetch = async (_url, init) => {
+    if (init.method !== "POST") return new Response("{}", { status: 404 });
+    posts++;
+    if (!accept) {
+      return new Response(JSON.stringify({ error: "request body exceeds 512 MiB limit" }), {
+        status: 413,
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        source_id: "old-cap",
+        backend_id: "old-cap",
+        status: "imported",
+        checkpoint: "not_found",
+        fingerprint: "fp",
+      }),
+      { status: 200 },
+    );
+  };
+  try {
+    await migration.migrateLegacyHistoryPage(source, { fetch });
+    const [recorded] = failures.readHistoryMigrationFailures(scope, storage);
+    assert.equal(recorded.limitBytes, failures.LEGACY_IMPORT_MAX_BODY_BYTES);
+
+    // Under the current cap the record suppresses startup re-uploads.
+    await migration.migrateLegacyHistoryPage(source, { fetch });
+    assert.equal(posts, 1);
+
+    // A record from an older release has no cap marker: startup retries it.
+    const { limitBytes: _limit, ...legacyRecord } = recorded;
+    failures.writeHistoryMigrationFailures(scope, [legacyRecord], storage);
+    accept = true;
+    const retried = await migration.migrateLegacyHistoryPage(source, { fetch });
+    assert.equal(posts, 2);
+    assert.deepEqual(retried.failures, []);
+    assert.equal(failures.readHistoryMigrationFailures(scope, storage).length, 0);
+  } finally {
+    runtime.clearKBrainRuntimeConnection();
+  }
+});
