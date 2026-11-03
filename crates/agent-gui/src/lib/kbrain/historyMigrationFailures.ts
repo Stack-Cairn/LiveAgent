@@ -27,6 +27,8 @@ export type HistoryMigrationFailureRecord = {
   kind: HistoryMigrationFailureKind;
   /** Serialized request body size when known. */
   bytes?: number;
+  /** For too_large: the import cap the failure was recorded under. */
+  limitBytes?: number;
   message: string;
   failedAt: number;
 };
@@ -53,6 +55,12 @@ export function classifyHistoryMigrationFailure(input: {
   // Network errors and authentication/rate-limit failures can recover without payload changes.
   return "transient";
 }
+
+/**
+ * Import cap of the bundled K-brain (maxLegacyHistoryBodyBytes). Size failures recorded
+ * under an older, smaller cap are retried once at startup after the backend upgrade.
+ */
+export const LEGACY_IMPORT_MAX_BODY_BYTES = 512 << 20;
 
 /** Failures that will fail identically until the conversation or K-brain changes. */
 export function isDeterministicHistoryMigrationFailure(kind: HistoryMigrationFailureKind) {
@@ -118,7 +126,8 @@ export function knownDeterministicFailure(
     (record) =>
       record.sourceId === sourceId &&
       record.fingerprint === fingerprint &&
-      isDeterministicHistoryMigrationFailure(record.kind),
+      isDeterministicHistoryMigrationFailure(record.kind) &&
+      (record.kind !== "too_large" || record.limitBytes === LEGACY_IMPORT_MAX_BODY_BYTES),
   );
 }
 
