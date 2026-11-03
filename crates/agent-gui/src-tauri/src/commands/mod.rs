@@ -16,6 +16,7 @@ pub mod runtime_commands;
 pub mod workspace_commands;
 
 pub use app_commands::app;
+pub use app_commands::data_dir;
 pub use app_commands::fonts;
 pub use app_commands::proxy_detect;
 pub use app_commands::system;

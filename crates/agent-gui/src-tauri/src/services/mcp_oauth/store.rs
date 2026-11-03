@@ -116,8 +116,7 @@ fn keyring_load(server_id: &str) -> Result<Option<TokenRecord>, String> {
 // ---- 文件降级后端 ----
 
 fn file_store_path() -> Result<PathBuf, String> {
-    let home = crate::runtime::data_home::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
-    let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
+    let dir = crate::runtime::data_home::data_root().ok_or_else(|| "无法定位用户目录".to_string())?;
     fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败：{e}"))?;
     Ok(dir.join(FILE_STORE_NAME))
 }
