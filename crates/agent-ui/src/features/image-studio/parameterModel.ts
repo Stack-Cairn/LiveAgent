@@ -41,11 +41,40 @@ export function validateParameters(
       errors.push({ key, message: message("imageStudio.parameterError.unknown") });
   return errors;
 }
+export function normalizeParameters(
+  target: ImageTarget,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...values };
+  const compression = target.parameters.find((spec) => spec.key === "output_compression");
+  if (compression) {
+    if (next.output_format === "jpeg" || next.output_format === "webp") {
+      const fallback = compression.default ?? 100;
+      if (next.output_compression === undefined && !parameterError(compression, fallback))
+        next.output_compression = fallback;
+    } else delete next.output_compression;
+  }
+  return next;
+}
+export function updateParameterValue(
+  target: ImageTarget,
+  values: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): Record<string, unknown> {
+  const next = { ...values };
+  if (value === undefined) delete next[key];
+  else next[key] = value;
+  return normalizeParameters(target, next);
+}
 export function defaultParameters(target: ImageTarget): Record<string, unknown> {
-  return Object.fromEntries(
-    target.parameters
-      .filter((spec) => spec.default !== undefined && !parameterError(spec, spec.default))
-      .map((spec) => [spec.key, spec.default]),
+  return normalizeParameters(
+    target,
+    Object.fromEntries(
+      target.parameters
+        .filter((spec) => spec.default !== undefined && !parameterError(spec, spec.default))
+        .map((spec) => [spec.key, spec.default]),
+    ),
   );
 }
 /** A restored job may predate the target's current schema (e.g. `size` before ratio tiers). */
@@ -60,7 +89,7 @@ export function keepDeclaredParameters(
     if (spec && !parameterError(spec, value)) values[key] = value;
     else dropped.push(key);
   }
-  return { values, dropped };
+  return { values: normalizeParameters(target, values), dropped };
 }
 export function migrateParameters(
   from: ImageTarget,
@@ -75,5 +104,5 @@ export function migrateParameters(
     if (old && next && old.type === next.type && !parameterError(next, value)) values[key] = value;
     else dropped.push(key);
   }
-  return { values, dropped };
+  return { values: normalizeParameters(to, values), dropped };
 }

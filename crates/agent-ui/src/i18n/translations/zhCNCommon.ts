@@ -1827,6 +1827,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "imageStudio.composer.providerSettings": "供应商设置",
   "imageStudio.composer.refreshModels": "刷新模型",
   "imageStudio.option.unset": "请选择",
+  "imageStudio.compression.formats": "仅适用于 JPEG 和 WebP。",
   "imageStudio.option.yes": "是",
   "imageStudio.option.no": "否",
   "imageStudio.parameterError.required": "此项必填",
