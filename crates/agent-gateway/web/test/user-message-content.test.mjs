@@ -29,6 +29,25 @@ const renderedUserMessageContent = renderLoader.loadModule(
   "@liveagent/ui/lib/chat/userMessageContent.tsx",
 );
 
+const citation = "\uE200cite\uE202turn442022search6\uE201";
+
+test("WebUI user bubbles hide citations and keep original tokens for edit and resend", () => {
+  const text = `打开 @src/main.tsx 正文${citation}后续`;
+  const html = renderToStaticMarkup(jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, { text, legacyInlineFileMentions: true }));
+  assert.doesNotMatch(html, /[\uE200-\uE202]|turn442022search6/);
+  assert.match(html, /正文后续/);
+  assert.match(html, />main\.tsx</);
+  assert.ok(webUserMessageContent.tokenizeUserMessage(text, []).some(part => part.type === "text" && part.value.includes(citation)));
+});
+
+test("WebUI user bubbles preserve literal code and normal source URLs", () => {
+  const text = `正文${citation}后续\n\`example ${citation}\`\nhttps://example.com/source`;
+  const html = renderToStaticMarkup(jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, { text }));
+  assert.match(html, /正文后续/);
+  assert.ok(html.includes(`\`example ${citation}\``));
+  assert.ok(html.includes("https://example.com/source"));
+});
+
 function compactSegments(segments) {
   return segments.map((segment) => {
     if (segment.type === "mention") {

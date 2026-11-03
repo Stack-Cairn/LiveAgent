@@ -1,7 +1,6 @@
 // Boundary-advance logic for StreamingSplitMarkdown: freezes completed
 // paragraphs of a streaming markdown text into reference-stable segments so
-// only the live tail is re-parsed per flush. Pure string/state logic with no
-// React or markdown dependencies — unit-tested directly.
+// only the live tail is re-parsed per flush. Unit-tested directly.
 //
 // Correctness rules for a boundary (never split mid-construct):
 //   - only at a blank line ("\n\n"), with code-fence and $$-math parity even
@@ -15,6 +14,8 @@
 //     same instance as their references;
 //   - if no safe boundary exists the tail simply keeps growing (falls back to
 //     exactly the old behaviour, correctness first).
+
+import { findMarkdownCitationRanges } from "../markdownCitations";
 
 const SEGMENT_TARGET_CHARS = 8_192;
 const TAIL_KEEP_CHARS = 2_048;
@@ -110,6 +111,11 @@ export function advanceBoundary(state: SplitState, text: string) {
     }
     return;
   }
+  const citationRanges =
+    text.length - state.boundary > SEGMENT_TARGET_CHARS + TAIL_KEEP_CHARS
+      ? findMarkdownCitationRanges(text.slice(state.boundary), true, true)
+      : [];
+  const citationBase = state.boundary;
   while (text.length - state.boundary > SEGMENT_TARGET_CHARS + TAIL_KEEP_CHARS) {
     const searchEnd = text.length - TAIL_KEEP_CHARS;
     const fencePositions = countMarkers(text, "```", state.boundary, searchEnd);
@@ -125,7 +131,15 @@ export function advanceBoundary(state: SplitState, text: string) {
       const fenceParityEven = (state.fenceCount + countBelow(fencePositions, candidate)) % 2 === 0;
       const mathParityEven = (state.mathCount + countBelow(mathPositions, candidate)) % 2 === 0;
       const nextLine = text.slice(cut, cut + 8);
-      if (fenceParityEven && mathParityEven && !UNSAFE_LINE_START.test(nextLine)) {
+      const insideCitation = citationRanges.some(
+        (range) => range.start + citationBase < cut && cut < range.end + citationBase,
+      );
+      if (
+        !insideCitation &&
+        fenceParityEven &&
+        mathParityEven &&
+        !UNSAFE_LINE_START.test(nextLine)
+      ) {
         accepted = cut;
         break;
       }

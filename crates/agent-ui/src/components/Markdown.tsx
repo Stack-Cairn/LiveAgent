@@ -41,6 +41,7 @@ import {
   shouldSkipExternalLinkConfirmation,
 } from "../lib/externalLinkPreference";
 import { parseChatMarkdownBlocks } from "../lib/markdownBlocks";
+import { stripMarkdownCitationMarkers } from "../lib/markdownCitations";
 import {
   getCollapsedCodeBlockPreview,
   resolveCodeBlockRenderPolicy,
@@ -212,6 +213,7 @@ export type MarkdownProps = {
   // the flip never invalidates Streamdown's memoized blocks; the caret slot
   // itself stays mounted for the whole life of a streaming-mode block.
   showCaret?: boolean;
+  citationAtDocumentEnd?: boolean;
   readOnly?: boolean;
   // Extra component overrides merged over the built-in map. Used by the
   // workspace file preview to render images and links against workspace
@@ -838,6 +840,7 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
     className,
     renderMode = "static",
     showCaret = false,
+    citationAtDocumentEnd = true,
     readOnly = false,
     componentOverrides,
     preserveRelativeUrls = false,
@@ -846,8 +849,12 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
   } = props;
   const streaming = renderMode === "streaming";
   const normalizedContent = useMemo(
-    () => normalizeLatexDelimiters(content, streaming && showCaret),
-    [content, showCaret, streaming],
+    () =>
+      normalizeLatexDelimiters(
+        stripMarkdownCitationMarkers(content, citationAtDocumentEnd, streaming),
+        streaming && showCaret,
+      ),
+    [citationAtDocumentEnd, content, showCaret, streaming],
   );
   const components = useMemo(() => {
     const baseComponents = readOnly ? markdownReadOnlyComponents : markdownComponents;
