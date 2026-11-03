@@ -193,6 +193,8 @@ macro_rules! app_invoke_handler {
             commands::update::app_release_announcement,
             commands::update::app_release_announcement_preview,
             commands::update::app_restart,
+            commands::data_dir::data_dir_status,
+            commands::data_dir::data_dir_migrate,
             commands::app::app_runtime_platform,
             commands::app::app_frontend_ready,
             commands::app::app_set_close_window_behavior,

@@ -299,8 +299,8 @@ impl KBrainBackendState {
             .app_data_dir()
             .map_err(|error| format!("failed to resolve LiveAgent app data directory: {error}"))?;
         let binary = resolve_binary()?;
-        let home =
-            crate::runtime::data_home::home_dir().ok_or_else(|| "failed to resolve LiveAgent home".to_string())?;
+        let data_root = crate::runtime::data_home::data_root()
+            .ok_or_else(|| "failed to resolve LiveAgent home".to_string())?;
         let preferred = std::env::var_os("LIVEAGENT_HOME")
             .filter(|v| !v.is_empty())
             .map(PathBuf::from);
@@ -310,7 +310,7 @@ impl KBrainBackendState {
         let overridden = preferred.is_some() || legacy_override.is_some();
         let root = preferred
             .or(legacy_override)
-            .unwrap_or_else(|| home.join(".liveagent"));
+            .unwrap_or(data_root);
         let legacy = (!overridden).then(|| data_dir.join(BACKEND_DIR));
         self.ensure_started_with_paths(binary, root, legacy)
     }

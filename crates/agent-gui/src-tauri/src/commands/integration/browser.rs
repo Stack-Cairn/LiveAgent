@@ -51,7 +51,8 @@ pub struct BrowserExtensionInstallInfo {
 /// 或 .app 移动后即失效；固定到 .liveagent 下路径终身稳定，内容由每次启动
 /// 的同步保持最新。
 fn liveagent_extension_dir() -> Option<PathBuf> {
-    crate::runtime::data_home::home_dir().map(|home| home.join(".liveagent").join("extension"))
+    // Chrome 记录的是绝对路径，自定义数据目录时也固定留在默认根目录。
+    crate::runtime::data_home::default_data_root().map(|root| root.join("extension"))
 }
 
 /// 同步数据源：打包产物为 bundle resources 下的 browser-extension/

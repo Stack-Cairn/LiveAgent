@@ -1,8 +1,9 @@
-import { Archive, Info, Keyboard } from "@liveagent/ui/components/IconSet";
+import { Archive, HardDrive, Info, Keyboard } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
 import { AboutSection } from "../pages/settings/AboutSection";
 import { BackupSyncSection } from "../pages/settings/BackupSyncSection";
+import { DataDirectorySection } from "../pages/settings/DataDirectorySection";
 import { GlobalShortcutsSection } from "../pages/settings/GlobalShortcutsSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 
@@ -46,6 +47,15 @@ export function createSettingsExtension(props: SettingsPageProps): {
             reloadSettings={reloadSettings}
           />
         ),
+      },
+      {
+        id: "data-dir",
+        groupKey: "settings.groupOther",
+        groupOrder: 50,
+        order: 17,
+        labelKey: "settings.navDataDir",
+        icon: <HardDrive className="size-3.5" />,
+        render: () => <DataDirectorySection />,
       },
       {
         id: "about",

@@ -150,9 +150,9 @@ fn sanitize_conversation_id(id: &str) -> Option<String> {
 }
 
 fn checkpoints_root() -> Result<PathBuf, String> {
-    let home =
-        crate::runtime::data_home::home_dir().ok_or_else(|| "Failed to locate the user home directory".to_string())?;
-    Ok(home.join(".liveagent").join("checkpoints"))
+    let root = crate::runtime::data_home::data_root()
+        .ok_or_else(|| "Failed to locate the user home directory".to_string())?;
+    Ok(root.join("checkpoints"))
 }
 
 fn conversation_dir(conversation_id: &str) -> Result<PathBuf, String> {
