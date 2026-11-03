@@ -29,11 +29,6 @@ export type ChatTranscriptProps = {
   liveTranscriptStore: LiveTranscriptStore;
   isCompactionRunning: boolean;
   bottomReservePx?: number;
-  // Composer chrome floating above the reserve line (queue panel, task
-  // progress pill). Deliberately excluded from bottomReservePx so the
-  // transcript reserve stays put; overlays anchored above the composer must
-  // clear it or they end up hidden underneath.
-  floatingOverhangPx?: number;
   // Horizontal offset of the composer card's center from the pane center
   // (positive = right). The desktop card is shifted to align with the
   // assistant message body; overlays centered above it must follow.
