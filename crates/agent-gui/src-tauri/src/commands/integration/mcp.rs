@@ -538,6 +538,9 @@ struct StdioTransport {
     /// stdout 读到 EOF 后置位：进程关闭 stdout 早于其退出状态可被 `try_wait`
     /// 观察到，只看退出状态会把已无法通信的进程当成存活（探测后重启判定失效）。
     stdout_closed: Arc<AtomicBool>,
+    /// 写 stdin 遇到 BrokenPipe 后置位：进程已关闭 stdin（通常已退出），但退出状态
+    /// 和 stdout EOF 可能都还没被观察到；不置位的话重启判定会把它当成存活。
+    stdin_closed: bool,
     stderr_tail: Arc<Mutex<Vec<String>>>,
 }
 
@@ -641,6 +644,7 @@ impl StdioTransport {
             stdin,
             stdout_rx: rx,
             stdout_closed,
+            stdin_closed: false,
             stderr_tail,
         })
     }
@@ -669,6 +673,12 @@ impl StdioTransport {
                 self.stderr_summary()
             ));
         }
+        if self.stdin_closed {
+            return Err(format!(
+                "MCP server closed stdin unexpectedly{}",
+                self.stderr_summary()
+            ));
+        }
         Ok(())
     }
 
@@ -679,6 +689,9 @@ impl StdioTransport {
             .and_then(|_| self.stdin.write_all(b"\n"))
             .and_then(|_| self.stdin.flush())
             .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::BrokenPipe {
+                    self.stdin_closed = true;
+                }
                 format!(
                     "Failed to write to MCP server stdin: {e}{}",
                     self.stderr_summary()
