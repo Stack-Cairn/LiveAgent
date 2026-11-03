@@ -20,7 +20,6 @@ export type ConversationTranscriptBindings = Omit<
   | "isSending"
   | "isCompactionRunning"
   | "bottomReservePx"
-  | "floatingOverhangPx"
   | "composerCenterOffsetPx"
 >;
 
@@ -34,7 +33,6 @@ export type ConversationComposerBindings = Omit<
   | "onManualCompactConfirm"
   | "manualCompactBlocked"
   | "onHeightChange"
-  | "onFloatingOverhangChange"
   | "onCenterOffsetChange"
   | "taskProgressBar"
   | "approvalBar"

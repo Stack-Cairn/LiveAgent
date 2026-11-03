@@ -61,7 +61,6 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     liveTranscriptStore,
     isCompactionRunning,
     bottomReservePx = 0,
-    floatingOverhangPx = 0,
     composerCenterOffsetPx = 0,
     contentWidth,
     onContentWidthChange,
@@ -368,7 +367,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           // over the transcript, so any overlap would hide the button.
           style={{
             left: `calc(50% + ${Math.round(composerCenterOffsetPx)}px)`,
-            bottom: Math.ceil(bottomReservePx) + Math.ceil(floatingOverhangPx) + 16,
+            bottom: Math.ceil(bottomReservePx) + 16,
           }}
         >
           <ChevronDown className="size-4" />

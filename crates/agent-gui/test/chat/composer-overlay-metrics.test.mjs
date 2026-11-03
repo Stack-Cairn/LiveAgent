@@ -7,168 +7,89 @@ const { measureComposerOverlay } = createTsModuleLoader().loadModule(
   "@liveagent/ui/lib/chat/composerOverlayMetrics.ts",
 );
 
-// Composer layer anchored to the bottom of an 800px-tall, 1000px-wide pane.
 const layer = { top: 700, bottom: 800, height: 100, left: 0, width: 1000 };
-// Task pill wrapper: 32px tall, mb-3 (12px) above the card column top.
 const pill = (columnTop) => ({ top: columnTop - 44, bottom: columnTop - 12, height: 32 });
-// Desktop card column: centered in the layer, then translated 18px right.
-const column = { left: 20 + 18, width: 960 };
+const column = { left: 38, width: 960 };
 
-test("no floating chrome: reserve equals layer height and nothing overhangs", () => {
-  const metrics = measureComposerOverlay({
-    layer,
-    queueHeight: 0,
-    floating: { top: 700, bottom: 700, height: 0 },
-    column,
-  });
-  assert.deepEqual(metrics, { heightPx: 100, floatingOverhangPx: 0, centerOffsetPx: 18 });
-
-  for (const floating of [null, undefined]) {
-    assert.deepEqual(measureComposerOverlay({ layer, queueHeight: 0, floating, column }), {
-      heightPx: 100,
-      floatingOverhangPx: 0,
-      centerOffsetPx: 18,
-    });
-  }
-});
-
-test("task pill overhangs the reserve line by its height plus gap without growing the reserve", () => {
-  const metrics = measureComposerOverlay({
-    layer,
-    queueHeight: 0,
-    floating: pill(layer.top),
-    column,
-  });
-  assert.deepEqual(metrics, { heightPx: 100, floatingOverhangPx: 44, centerOffsetPx: 18 });
-});
-
-test("queue panel is excluded from the reserve but counted as overhang", () => {
+test("reserve clears the entire composer, including queue and task pill", () => {
   const withQueue = { ...layer, top: 640, height: 160 };
-  const queueOnly = measureComposerOverlay({
-    layer: withQueue,
-    queueHeight: 60,
-    floating: null,
-    column,
-  });
-  assert.deepEqual(queueOnly, { heightPx: 100, floatingOverhangPx: 60, centerOffsetPx: 18 });
-
-  const queueAndPill = measureComposerOverlay({
-    layer: withQueue,
-    queueHeight: 60,
-    floating: pill(withQueue.top),
-    column,
-  });
-  assert.deepEqual(queueAndPill, { heightPx: 100, floatingOverhangPx: 104, centerOffsetPx: 18 });
-});
-
-test("center offset follows the card column, not its width", () => {
-  // Narrow column (content width clamp) keeps the same center shift.
-  const clamped = measureComposerOverlay({
-    layer,
-    queueHeight: 0,
-    floating: null,
-    column: { left: (1000 - 692) / 2 + 18, width: 692 },
-  });
-  assert.equal(clamped.centerOffsetPx, 18);
-
-  // Column flush with the layer center (gateway-style) reports no shift.
-  const centered = measureComposerOverlay({
-    layer,
-    queueHeight: 0,
-    floating: null,
-    column: { left: 100, width: 800 },
-  });
-  assert.equal(centered.centerOffsetPx, 0);
-
-  // Offset layer (split pane not at x=0) still measures relative to itself.
-  const shiftedLayer = measureComposerOverlay({
-    layer: { ...layer, left: 500 },
-    queueHeight: 0,
-    floating: null,
-    column: { left: 500 + 38, width: 960 },
-  });
-  assert.equal(shiftedLayer.centerOffsetPx, 18);
-
-  for (const missing of [null, undefined, { left: 0, width: 0 }]) {
-    assert.equal(
-      measureComposerOverlay({ layer, queueHeight: 0, floating: null, column: missing })
-        .centerOffsetPx,
-      0,
-    );
+  for (const [currentLayer, floating, expectedHeight] of [
+    [layer, null, 100],
+    [layer, undefined, 100],
+    [layer, { top: 700, bottom: 700, height: 0 }, 100],
+    [layer, pill(layer.top), 144],
+    [withQueue, null, 160],
+    [withQueue, pill(withQueue.top), 204],
+  ]) {
+    const metrics = measureComposerOverlay({ layer: currentLayer, floating, column });
+    assert.deepEqual(metrics, { heightPx: expectedHeight, centerOffsetPx: 18 });
+    const reserveTop = currentLayer.bottom - metrics.heightPx;
+    assert.ok(reserveTop <= currentLayer.top, "queue and input must clear the transcript");
+    if (floating?.height > 0) assert.ok(reserveTop <= floating.top, "pill must clear the transcript");
   }
 });
 
-test("hidden composer layer reports zero for every metric", () => {
-  const metrics = measureComposerOverlay({
-    layer: { top: 0, bottom: 0, height: 0, left: 0, width: 0 },
-    queueHeight: 0,
-    floating: { top: 0, bottom: 0, height: 0 },
-    column: { left: 0, width: 0 },
-  });
-  assert.deepEqual(metrics, { heightPx: 0, floatingOverhangPx: 0, centerOffsetPx: 0 });
+test("reserve grows and shrinks with queue, goal bar, approval and multiline input", () => {
+  for (const height of [100, 164, 220, 132, 280, 100]) {
+    const currentLayer = { ...layer, top: layer.bottom - height, height };
+    assert.equal(measureComposerOverlay({ layer: currentLayer, floating: null, column }).heightPx, height);
+    assert.equal(measureComposerOverlay({ layer: currentLayer, floating: pill(currentLayer.top), column }).heightPx, height + 44);
+  }
 });
 
-test("fractional geometry rounds and never goes negative", () => {
-  const fractional = { ...layer, top: 700.4, height: 99.6 };
-  const metrics = measureComposerOverlay({
-    layer: fractional,
-    queueHeight: 0,
-    floating: { top: 656.4, bottom: 688.4, height: 32 },
-    column: { left: 38.4, width: 960 },
-  });
-  assert.deepEqual(metrics, { heightPx: 100, floatingOverhangPx: 44, centerOffsetPx: 18 });
+test("center offset follows the card column in narrow and split panes", () => {
+  for (const [currentLayer, currentColumn, expected] of [
+    [layer, { left: (1000 - 692) / 2 + 18, width: 692 }, 18],
+    [layer, { left: 100, width: 800 }, 0],
+    [{ ...layer, left: 500 }, { left: 538, width: 960 }, 18],
+    [layer, null, 0],
+    [layer, undefined, 0],
+    [layer, { left: 0, width: 0 }, 0],
+  ]) {
+    assert.equal(measureComposerOverlay({ layer: currentLayer, floating: null, column: currentColumn }).centerOffsetPx, expected);
+  }
+});
 
-  const belowLine = measureComposerOverlay({
+test("hidden composer reserves no space, even with a stale pill rectangle", () => {
+  const hidden = { top: 0, bottom: 0, height: 0, left: 0, width: 0 };
+  for (const floating of [null, pill(0), { top: 0, bottom: 0, height: 0 }]) {
+    assert.deepEqual(measureComposerOverlay({ layer: hidden, floating, column: null }), { heightPx: 0, centerOffsetPx: 0 });
+  }
+});
+
+test("fractional geometry rounds once and interior floating content adds no space", () => {
+  assert.equal(measureComposerOverlay({
+    layer: { ...layer, top: 700.4, height: 99.6 },
+    floating: { top: 656.4, bottom: 688.4, height: 32 },
+    column,
+  }).heightPx, 144);
+  assert.equal(measureComposerOverlay({
     layer,
-    queueHeight: 0,
-    // Floating rect that somehow sits inside the layer must not subtract.
     floating: { top: 720, bottom: 752, height: 32 },
     column,
-  });
-  assert.equal(belowLine.floatingOverhangPx, 0);
+  }).heightPx, 100);
 });
 
 const composerBarSource = fs.readFileSync(
-  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
-  "utf8",
+  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url), "utf8",
 );
 const transcriptSource = fs.readFileSync(
-  new URL("../../src/pages/chat/transcript/ChatTranscript.tsx", import.meta.url),
-  "utf8",
-);
-const paneHostSource = fs.readFileSync(
-  new URL("../../src/pages/chat/surfaces/ConversationPaneHost.tsx", import.meta.url),
-  "utf8",
+  new URL("../../src/pages/chat/transcript/ChatTranscript.tsx", import.meta.url), "utf8",
 );
 
-test("composer bar measures the card column and task pill wrapper alongside the layer", () => {
-  assert.match(composerBarSource, /ref=\{composerColumnRef\}/);
-  assert.match(composerBarSource, /ref=\{setTaskProgressBarElement\}/);
-  assert.match(composerBarSource, /resizeObserver\?\.observe\(composerColumnRef\.current\)/);
+test("both surfaces publish the same measured height and observe floating content", () => {
+  assert.equal((composerBarSource.match(/measureComposerOverlay\(\{/g) ?? []).length, 1);
+  assert.match(composerBarSource, /onHeightChange\?\.\(metrics\.heightPx\)/);
+  assert.match(composerBarSource, /"--gateway-chat-composer-overlay-height",\s*`\$\{metrics\.heightPx\}px`/);
   assert.match(composerBarSource, /resizeObserver\?\.observe\(taskProgressBarElement\)/);
-  assert.match(
-    composerBarSource,
-    /measureComposerOverlay\(\{\s*layer:\s*composerLayer\.getBoundingClientRect\(\),\s*queueHeight:[^}]*floating:\s*taskProgressBarElement\?\.getBoundingClientRect\(\),\s*column:\s*composerColumnRef\.current\?\.getBoundingClientRect\(\),\s*\}\)/s,
-  );
-  assert.match(composerBarSource, /onFloatingOverhangChange\?\.\(metrics\.floatingOverhangPx\)/);
-  assert.match(composerBarSource, /onCenterOffsetChange\?\.\(metrics\.centerOffsetPx\)/);
+  assert.match(composerBarSource, /resizeObserver\?\.observe\(composerColumnRef\.current\)/);
+  assert.doesNotMatch(composerBarSource, /composerLayerHeight - queueHeight|queueHeight:/);
 });
 
-test("jump-to-bottom centers on the composer card and clears its floating chrome", () => {
+test("jump-to-bottom clears the full reserve without counting the pill twice", () => {
   const jumpButton = transcriptSource.match(/chat-jump-to-bottom[\s\S]*?<ChevronDown/)?.[0];
-  assert.ok(jumpButton, "jump-to-bottom button markup not found");
-  assert.doesNotMatch(jumpButton, /left-1\/2/);
-  assert.match(
-    jumpButton,
-    /left:\s*`calc\(50% \+ \$\{Math\.round\(composerCenterOffsetPx\)\}px\)`/,
-  );
-  assert.match(
-    jumpButton,
-    /bottom:\s*Math\.ceil\(bottomReservePx\)\s*\+\s*Math\.ceil\(floatingOverhangPx\)\s*\+\s*16/,
-  );
-
-  assert.match(paneHostSource, /onFloatingOverhangChange=\{setComposerFloatingOverhang\}/);
-  assert.match(paneHostSource, /floatingOverhangPx=\{composerFloatingOverhang\}/);
-  assert.match(paneHostSource, /onCenterOffsetChange=\{setComposerCenterOffset\}/);
-  assert.match(paneHostSource, /composerCenterOffsetPx=\{composerCenterOffset\}/);
+  assert.ok(jumpButton);
+  assert.match(jumpButton, /left:\s*`calc\(50% \+ \$\{Math\.round\(composerCenterOffsetPx\)\}px\)`/);
+  assert.match(jumpButton, /bottom:\s*Math\.ceil\(bottomReservePx\)\s*\+\s*16/);
+  assert.doesNotMatch(transcriptSource, /floatingOverhangPx/);
 });
