@@ -24,13 +24,11 @@ import {
   normalizeGatewayCommandSafetyMode,
   normalizeGatewayExecutionMode,
   normalizeGatewayWorkdir,
-  type PrepareEditResend,
 } from "./gatewayBridgeTypes";
 import { runGatewayComposerAction } from "./gatewayComposerActions";
 import { runGatewayHistoryAction } from "./gatewayHistoryActions";
 
 type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
-  prepareEditResend?: PrepareEditResend;
   queueGatewayBridgeEventForRequest: (
     requestId: string,
     event: Record<string, unknown>,
@@ -479,7 +477,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           failClaimedRequest(requestId, targetConversationId, "invalid_chat_command", message);
           return;
         }
-        let editResendBaseMessageRef = baseMessageRef;
+        const editResendBaseMessageRef = baseMessageRef;
 
         if (targetConversationId && payload.rebased !== true) {
           const running = Boolean(
@@ -516,17 +514,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
               rebased: payload.rebased === true,
             },
           );
-
-        const prepareEditResend = latestParamsRef.current.prepareEditResend;
-        if (payload.rebased === true && editResendBaseMessageRef && prepareEditResend) {
-          const prepared = await prepareEditResend(
-            resolvedConversationId,
-            editResendBaseMessageRef,
-            { activate: false },
-          );
-          resolvedConversationId = prepared.conversationId;
-          editResendBaseMessageRef = prepared.messageRef;
-        }
 
         const runningRequest =
           getActiveGatewayBridgeRequestByConversationId(resolvedConversationId) ||
