@@ -66,12 +66,6 @@ export type EnsureGatewayBridgeConversationReadyOptions = {
   rebased?: boolean;
 };
 
-export type PrepareEditResend = (
-  conversationId: string,
-  messageRef: HistoryMessageRef,
-  options?: { activate?: boolean },
-) => Promise<{ conversationId: string; messageRef: HistoryMessageRef }>;
-
 export type GatewayChatCancelEvent = {
   requestId: string;
   conversationId: string;

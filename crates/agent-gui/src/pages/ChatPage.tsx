@@ -22,7 +22,6 @@ import {
 import { ThemeToggleButton } from "@liveagent/ui/components/ThemeToggleButton";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { SidebarProvider, useSidebar } from "@liveagent/ui/components/ui/sidebar";
-import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { PaneChrome } from "@liveagent/ui/components/workbench/PaneChrome";
 import {
   type ProjectToolPaneEnvironment,
@@ -137,12 +136,7 @@ import {
   createConversationStateFromContext,
   type RenderTimelineItem,
 } from "../lib/chat/conversation/conversationState";
-import {
-  buildConversationStateFromWindow,
-  CHAT_HISTORY_WINDOW_MESSAGES,
-  type ChatHistorySummary,
-  getChatHistoryWindow,
-} from "../lib/chat/history/chatHistory";
+import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import {
   buildFallbackConversationTitle,
   createConversationIdentity,
@@ -216,7 +210,6 @@ import { useConversationPaneHostBridge } from "./chat/conversations/useConversat
 import { useConversationRuntimeEntrySnapshot } from "./chat/conversations/useConversationRuntimeEntrySnapshot";
 import type {
   EnsureGatewayBridgeConversationReadyOptions,
-  PrepareEditResend,
   SendChatAction,
 } from "./chat/gateway/gatewayBridgeTypes";
 import { useGatewayBridgeListeners } from "./chat/gateway/useGatewayBridgeListeners";
@@ -224,10 +217,7 @@ import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadin
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
-import {
-  branchConversationWithReload,
-  useConversationHistoryActions,
-} from "./chat/history/useConversationHistoryActions";
+import { useConversationHistoryActions } from "./chat/history/useConversationHistoryActions";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
 import { useChatPageRuntimeStore } from "./chat/hooks/useChatPageRuntimeStore";
 import {
@@ -249,7 +239,6 @@ import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
 import { createChatRuntimeHost } from "./chat/runtime/ChatRuntimeHost";
 import {
   pruneIdleConversationRuntimeCaches,
-  setConversationRuntimeCacheEntry,
   syncMovedConversationRuntimeWorkdir,
 } from "./chat/runtime/chatPageRuntime";
 import { createGuiClarifyRunner } from "./chat/runtime/clarifyRunner";
@@ -1579,70 +1568,6 @@ function ChatPageContent(props: ChatPageProps) {
     setContext(currentRequestContext);
   }, [currentRequestContext, setContext]);
 
-  const prepareEditResend = useCallback<PrepareEditResend>(
-    async (requestedConversationId, messageRef, options) => {
-      const sourceConversationId =
-        requestedConversationId.trim() || currentConversationIdRef.current.trim();
-      if (!sourceConversationId) throw new Error("当前会话不存在，无法编辑重发");
-      if (!kBrainBackendEnabled) return { conversationId: sourceConversationId, messageRef };
-      const summary = await branchConversationWithReload(
-        sourceConversationId,
-        messageRef,
-        reloadConversation,
-      );
-      sidebarStore.upsertLocal({ ...summary, isPending: undefined });
-      const childWindow = await getChatHistoryWindow({
-        id: summary.id,
-        maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
-        includeActiveSegment: true,
-      });
-      if (!childWindow.activeSegment) throw new Error("编辑重发分支缺少活跃历史");
-      const childState = buildConversationStateFromWindow(childWindow);
-      const childRef = childState.transcript.items
-        .filter((item): item is Extract<typeof item, { kind: "user" }> => item.kind === "user")
-        .find((item) => item.messageRef?.messageId === messageRef.messageId)?.messageRef;
-      if (!childRef) throw new Error("编辑重发分支缺少稳定消息标识");
-      const sourceEntry = conversationRuntimeCacheRef.current.get(sourceConversationId);
-      if (!sourceEntry) throw new Error("当前会话运行状态不存在，无法编辑重发");
-      const childEntry = {
-        ...sourceEntry,
-        state: childState,
-        sessionId: childWindow.conversation.sessionId ?? childWindow.conversation.id,
-        createdAt: childWindow.conversation.createdAt,
-        workdir: childWindow.conversation.cwd,
-        isSending: false,
-        errorMessage: null,
-      };
-      setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, summary.id, childEntry);
-      conversationPersistenceCursorRef.current.set(summary.id, {
-        activeSegmentIndex: childWindow.activeSegment?.segmentIndex ?? 0,
-        activeSegmentId: childWindow.activeSegment?.segmentId ?? `kbrain:${summary.sessionId}`,
-      });
-      if (options?.activate !== false) {
-        // Activate the child before its run starts. The source session remains
-        // available in the sidebar and is never edited.
-        await openInitialActionRef.current(summary.id);
-        toast.success(t("chat.editResendBranched"), {
-          id: `edit-resend-branch:${summary.id}`,
-          action: {
-            label: t("chat.editResendOpenSource"),
-            onClick: () => void openInitialActionRef.current(sourceConversationId),
-          },
-        });
-      }
-      return { conversationId: summary.id, messageRef: childRef };
-    },
-    [
-      conversationPersistenceCursorRef,
-      conversationRuntimeCacheRef,
-      currentConversationIdRef,
-      kBrainBackendEnabled,
-      reloadConversation,
-      sidebarStore,
-      t,
-    ],
-  );
-
   const { send } = useSendChatTurn({
     settings,
     workspaceProjects,
@@ -1709,7 +1634,6 @@ function ChatPageContent(props: ChatPageProps) {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
     ensureGatewayBridgeConversationReadyRef,
-    prepareEditResend,
     sendActionRef,
     queueGatewayBridgeEventForRequest,
     shouldQueueGatewayChatRequest,
@@ -2373,7 +2297,6 @@ function ChatPageContent(props: ChatPageProps) {
     isConversationHydrationFailed,
     currentConversationIdRef,
     onError: handleEditResendError,
-    prepareEditResend,
     sendActionRef,
   });
 

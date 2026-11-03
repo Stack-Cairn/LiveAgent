@@ -295,8 +295,6 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.conversationBranchFrom": "分支自「{title}」",
   "chat.conversationBranchSourceMissing": "分支会话，原会话不在当前列表中",
   "chat.conversationOpenBranchSource": "打开原会话",
-  "chat.editResendBranched": "已在新分支中重发，原会话保持不变",
-  "chat.editResendOpenSource": "查看原会话",
   "chat.conversationRenameTitle": "重命名聊天",
   "chat.conversationRenameHint": "保持简短且易于识别",
   "chat.conversationRenameSave": "保存",

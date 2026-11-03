@@ -322,8 +322,6 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.conversationBranchFrom": "Branched from “{title}”",
   "chat.conversationBranchSourceMissing": "Branch; the source conversation is not in this list",
   "chat.conversationOpenBranchSource": "Open source conversation",
-  "chat.editResendBranched": "Resent in a new branch; the original conversation is unchanged",
-  "chat.editResendOpenSource": "View original",
   "chat.conversationRenameTitle": "Rename chat",
   "chat.conversationRenameHint": "Keep it short and recognizable",
   "chat.conversationRenameSave": "Save",
