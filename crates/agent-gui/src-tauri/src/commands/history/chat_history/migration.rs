@@ -279,10 +279,50 @@ type LegacyMigrationRow = (
     bool,
 );
 
+/// Upper bound for the conversation data one migration page carries to the webview.
+/// A page crosses IPC as a single JSON document and the webview then holds several
+/// copies of it (parsed rows, converted messages, the import request body), so twenty
+/// conversations with large transcripts or inline images ran the renderer out of memory
+/// (#1136). A conversation larger than the budget still travels alone on its own page.
+const MIGRATION_PAGE_BYTE_BUDGET: usize = 8 * 1024 * 1024;
+
 fn migration_page_sync(
     conn: &Connection,
     cursor: Option<&str>,
     home: &std::path::Path,
+) -> Result<LegacyMigrationPage, String> {
+    migration_page_sync_with_budget(conn, cursor, home, MIGRATION_PAGE_BYTE_BUDGET)
+}
+
+fn migration_conversation_bytes(
+    segments: &[LegacyMigrationSegment],
+    checkpoint: &LegacyMigrationCheckpoint,
+    context_meta_json: &str,
+    selected_model_json: Option<&str>,
+) -> usize {
+    let segment_bytes: usize = segments
+        .iter()
+        .map(|segment| {
+            segment.messages_json.len() + segment.summary_json.as_deref().map_or(0, str::len)
+        })
+        .sum();
+    let checkpoint_bytes: usize = checkpoint.index_jsonl.len()
+        + checkpoint
+            .records
+            .iter()
+            .map(|record| record.blob_base64.as_deref().map_or(0, str::len))
+            .sum::<usize>();
+    segment_bytes
+        + checkpoint_bytes
+        + context_meta_json.len()
+        + selected_model_json.map_or(0, str::len)
+}
+
+fn migration_page_sync_with_budget(
+    conn: &Connection,
+    cursor: Option<&str>,
+    home: &std::path::Path,
+    byte_budget: usize,
 ) -> Result<LegacyMigrationPage, String> {
     const PAGE_SIZE: i64 = 20;
     let after = cursor.unwrap_or("");
@@ -326,6 +366,9 @@ fn migration_page_sync(
         .map_err(|e| format!("read legacy migration rows failed: {e}"))?;
     drop(stmt);
 
+    let fetched = rows.len();
+    let mut page_bytes = 0usize;
+    let mut over_budget = false;
     let mut conversations = Vec::with_capacity(rows.len());
     for (
         id,
@@ -373,6 +416,19 @@ fn migration_page_sync(
             .map_err(|e| format!("query legacy segments failed: {e}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("read legacy segments failed: {e}"))?;
+        let checkpoint = checkpoint_export(&id, home);
+        let bytes = migration_conversation_bytes(
+            &segments,
+            &checkpoint,
+            &context_meta_json,
+            selected_model_json.as_deref(),
+        );
+        if !conversations.is_empty() && page_bytes.saturating_add(bytes) > byte_budget {
+            // Leave this conversation for the next page; the cursor stops before it.
+            over_budget = true;
+            break;
+        }
+        page_bytes = page_bytes.saturating_add(bytes);
         conversations.push(LegacyMigrationConversation {
             id: id.clone(),
             title,
@@ -392,11 +448,11 @@ fn migration_page_sync(
             total_segment_count: total_segment_count.unwrap_or(segments.len() as i64),
             total_message_count: total_message_count.unwrap_or(0),
             segments,
-            checkpoint: checkpoint_export(&id, home),
+            checkpoint,
         });
     }
     let next_cursor = conversations.last().map(|item| item.id.clone());
-    let complete = conversations.len() < PAGE_SIZE as usize;
+    let complete = !over_budget && fetched < PAGE_SIZE as usize;
     Ok(LegacyMigrationPage {
         conversations,
         next_cursor: (!complete).then_some(next_cursor.unwrap_or_default()),

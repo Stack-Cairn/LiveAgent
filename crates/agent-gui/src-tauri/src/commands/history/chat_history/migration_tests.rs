@@ -77,6 +77,67 @@ mod migration_tests {
     }
 
     #[test]
+    fn page_stops_at_byte_budget_and_resumes_after_last_exported_conversation() {
+        let conn = Connection::open_in_memory().expect("open fixture");
+        history_db::initialize_connection(&conn).expect("initialize fixture");
+        let home = tempfile::tempdir().unwrap();
+        // 600-byte transcripts: a 1000-byte budget fits one per page, the oversized one alone.
+        let body = format!(
+            "[{{\"role\":\"user\",\"id\":\"u\",\"content\":\"{}\"}}]",
+            "x".repeat(560)
+        );
+        for (id, repeat) in [("c-1", 1), ("c-2", 1), ("c-3", 3), ("c-4", 0)] {
+            conn.execute(
+                "INSERT INTO chatHistory (id,title,provider_id,model,context_meta_json,active_segment_index,total_segment_count,total_message_count,created_at,updated_at) VALUES (?1,'t','p','m','{}',0,1,1,1,1)",
+                [id],
+            )
+            .unwrap();
+            let messages = if repeat == 0 {
+                "[]".to_string()
+            } else {
+                body.repeat(repeat)
+            };
+            conn.execute(
+                "INSERT INTO chatHistorySegment (conversation_id,segment_index,segment_id,messages_json,message_count,created_at,updated_at) VALUES (?1,0,'s',?2,1,1,1)",
+                rusqlite::params![id, messages],
+            )
+            .unwrap();
+        }
+
+        let mut cursor: Option<String> = None;
+        let mut pages: Vec<Vec<String>> = Vec::new();
+        loop {
+            let page = migration_page_sync_with_budget(&conn, cursor.as_deref(), home.path(), 1000)
+                .unwrap();
+            pages.push(page.conversations.iter().map(|c| c.id.clone()).collect());
+            if page.complete {
+                assert!(page.next_cursor.is_none());
+                break;
+            }
+            let next = page
+                .next_cursor
+                .expect("incomplete page must carry a cursor");
+            assert_eq!(Some(&next), page.conversations.last().map(|c| &c.id));
+            cursor = Some(next);
+            assert!(pages.len() < 10, "paging did not terminate");
+        }
+        assert_eq!(
+            pages,
+            vec![
+                vec!["c-1".to_string()],
+                vec!["c-2".to_string()],
+                vec!["c-3".to_string()],
+                vec!["c-4".to_string()],
+            ]
+        );
+
+        // The default budget keeps small conversations together on one page.
+        let page = migration_page_sync(&conn, None, home.path()).unwrap();
+        assert_eq!(page.conversations.len(), 4);
+        assert!(page.complete);
+    }
+
+    #[test]
     fn malformed_segment_is_exported_for_per_conversation_isolation() {
         let conn = Connection::open_in_memory().expect("open fixture");
         history_db::initialize_connection(&conn).expect("initialize fixture");
