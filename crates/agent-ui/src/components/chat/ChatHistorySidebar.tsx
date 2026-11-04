@@ -35,6 +35,11 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  isCommandPaletteShortcut,
+  isCommandPaletteSuppressed,
+  isMacLikePlatform,
+} from "@liveagent/ui/lib/chat/commandPalette";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SidebarBatchDeleteOptions,
@@ -216,6 +221,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     isOpen,
     fontScale = 1,
     conversationSearchRequestKey,
+    getCommandPaletteActions,
     activeView = "chat",
     showProjects = false,
     projects = [],
@@ -275,6 +281,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const { t } = useLocale();
 
   const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
+  const [conversationSearchMode, setConversationSearchMode] = useState<"search" | "palette">(
+    "search",
+  );
+  const conversationSearchOpenRef = useRef(conversationSearchOpen);
+  conversationSearchOpenRef.current = conversationSearchOpen;
   const [revealedSearchConversationId, setRevealedSearchConversationId] = useState<string | null>(
     null,
   );
@@ -371,9 +382,32 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     }
     lastConversationSearchRequestKeyRef.current = conversationSearchRequestKey;
     if (!sectionsDisabled) {
+      setConversationSearchMode("search");
       setConversationSearchOpen(true);
     }
   }, [conversationSearchRequestKey, sectionsDisabled]);
+
+  const commandPaletteEnabled = Boolean(getCommandPaletteActions) && !sectionsDisabled;
+  useEffect(() => {
+    if (!commandPaletteEnabled) return;
+    const isMac = isMacLikePlatform();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isCommandPaletteShortcut(event, isMac)) return;
+      // A covering surface (the desktop settings overlay) owns the keyboard.
+      if (isCommandPaletteSuppressed()) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      // The same chord closes an open palette (focus sits in its input).
+      if (conversationSearchOpenRef.current) {
+        setConversationSearchOpen(false);
+        return;
+      }
+      setConversationSearchMode("palette");
+      setConversationSearchOpen(true);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [commandPaletteEnabled]);
   const selectionAnchorRef = useRef<string | null>(null);
   const bulkConfirmOpenRef = useRef(false);
   // Bumped to invalidate an in-flight bulk delete: its shouldStop callback
@@ -1423,7 +1457,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   variant="ghost"
                   size="icon-sm"
                   disabled={sectionsDisabled}
-                  onClick={() => setConversationSearchOpen(true)}
+                  onClick={() => {
+                    setConversationSearchMode("search");
+                    setConversationSearchOpen(true);
+                  }}
                   title={t("chat.searchConversations")}
                   aria-label={t("chat.searchConversations")}
                   className="chat-history-search-button rounded-lg text-muted-foreground hover:text-foreground"
@@ -2230,6 +2267,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         conversations={items}
         currentWorkdir={currentConversationWorkdir}
         onSelectConversation={handleSelectConversation}
+        mode={conversationSearchMode}
+        getActions={getCommandPaletteActions}
       />
     </>
   );
