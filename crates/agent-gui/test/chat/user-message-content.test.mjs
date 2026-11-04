@@ -40,6 +40,36 @@ const renderedUserMessageContent = reactRenderLoader.loadModule(
   "@liveagent/ui/lib/chat/userMessageContent.tsx",
 );
 
+const citation = "\uE200cite\uE202turn442022search6\uE201";
+
+function renderCitationUserText(text) {
+  return renderToStaticMarkup(jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, { text }));
+}
+
+test("user message display hides citations while raw tokenization retains the submitted text", () => {
+  for (const text of [`正文${citation}后续`, `/code-review 正文${citation}后续`]) {
+    const html = renderCitationUserText(text);
+    assert.doesNotMatch(html, /[\uE200-\uE202]|turn442022search6/);
+    assert.match(html, /正文后续/);
+    assert.ok(userMessageContent.tokenizeUserMessage(text, []).some(part => part.type === "text" && part.value.includes(citation)));
+  }
+});
+
+test("user message display hides unfinished citation prefixes", () => {
+  for (let length = 1; length <= citation.length; length += 1) {
+    assert.equal(renderCitationUserText(`正文${citation.slice(0, length)}`), '<span class="chat-user-message-content">正文</span>');
+  }
+});
+
+test("user message display preserves code, URLs, whitespace and unrelated private-use text", () => {
+  const text = `正文${citation}后续\n\n\`example ${citation}\`\n\n\`\`\`text\n${citation}\n\`\`\`\nhttps://example.com/source\n\uE123`;
+  const html = renderCitationUserText(text);
+  assert.match(html, /正文后续/);
+  assert.ok(html.includes(`\`example ${citation}\``));
+  assert.ok(html.includes(`\`\`\`text\n${citation}\n\`\`\``));
+  assert.ok(html.includes("https://example.com/source\n\uE123"));
+});
+
 function compactSegments(segments) {
   return segments.map((segment) => {
     if (segment.type === "mention") {

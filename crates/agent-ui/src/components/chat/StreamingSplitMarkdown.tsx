@@ -77,6 +77,7 @@ export function StreamingSplitMarkdown(props: {
         >
           <Markdown
             content={segment}
+            citationAtDocumentEnd={false}
             className={className}
             renderMode="static"
             readOnly={readOnly}

@@ -1,86 +1,10 @@
+import {
+  sanitizeCitationText,
+  stripProviderCitationMarkers,
+} from "@liveagent/ui/lib/providerCitationMarkers";
+
+export { stripProviderCitationMarkers } from "@liveagent/ui/lib/providerCitationMarkers";
 export { assistantMessageToText } from "@liveagent/ui/lib/providers/errorMessage";
-
-/** OpenAI citation markers: `\uE200cite\uE202<source>[\uE202<locator>...]\uE201`. */
-const CITATION_START = "\uE200cite";
-const CITATION_DELIMITER = "\uE202";
-const CITATION_END = "\uE201";
-
-type CitationMatch = { kind: "complete"; end: number } | { kind: "incomplete" } | { kind: "none" };
-
-function matchCitationAt(text: string, from: number): CitationMatch {
-  const remaining = text.slice(from);
-  if (!remaining.startsWith(CITATION_START)) {
-    return CITATION_START.startsWith(remaining) ? { kind: "incomplete" } : { kind: "none" };
-  }
-
-  let index = from + CITATION_START.length;
-  if (index >= text.length) return { kind: "incomplete" };
-  if (text[index] !== CITATION_DELIMITER) return { kind: "none" };
-
-  while (index < text.length && text[index] === CITATION_DELIMITER) {
-    index += 1;
-    while (
-      index < text.length &&
-      text[index] !== CITATION_END &&
-      text[index] !== CITATION_DELIMITER
-    ) {
-      index += 1;
-    }
-    if (index >= text.length) return { kind: "incomplete" };
-  }
-
-  if (text[index] === CITATION_END) {
-    return { kind: "complete", end: index + CITATION_END.length };
-  }
-  return { kind: "none" };
-}
-
-function longestCitationStartPrefix(text: string) {
-  for (let length = Math.min(CITATION_START.length - 1, text.length); length > 0; length -= 1) {
-    const suffix = text.slice(-length);
-    if (CITATION_START.startsWith(suffix)) return suffix;
-  }
-  return "";
-}
-
-function sanitizeCitationText(text: string, holdIncomplete: boolean) {
-  let visible = "";
-  let index = 0;
-
-  while (index < text.length) {
-    const start = text.indexOf(CITATION_START, index);
-    if (start < 0) {
-      const rest = text.slice(index);
-      const prefix = longestCitationStartPrefix(rest);
-      visible += rest.slice(0, rest.length - prefix.length);
-      return { visible, pending: holdIncomplete ? prefix : "" };
-    }
-
-    visible += text.slice(index, start);
-    const match = matchCitationAt(text, start);
-    if (match.kind === "complete") {
-      index = match.end;
-      continue;
-    }
-    if (match.kind === "incomplete") {
-      return { visible, pending: holdIncomplete ? text.slice(start) : "" };
-    }
-
-    visible += CITATION_START;
-    index = start + CITATION_START.length;
-  }
-
-  return { visible, pending: "" };
-}
-
-/**
- * Provider-native web-search citations are sometimes returned as ChatGPT's
- * private-use text markup instead of structured citation annotations. They
- * are protocol metadata, not user-visible answer text.
- */
-export function stripProviderCitationMarkers(text: string) {
-  return sanitizeCitationText(text, false).visible;
-}
 
 function createProviderCitationStreamSanitizer() {
   let pending = "";

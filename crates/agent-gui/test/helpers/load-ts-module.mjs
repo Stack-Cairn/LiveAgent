@@ -210,7 +210,23 @@ export function createTsModuleLoader(options = {}) {
       specifier.startsWith("@liveagent/adapters/");
 
     if (!isRootRelative && !specifier.startsWith(".") && !path.isAbsolute(specifier)) {
-      return createRequire(path.join(parentDir, "__liveagent_test_loader__.js"))(specifier);
+      const require = createRequire(path.join(parentDir, "__liveagent_test_loader__.js"));
+      try {
+        return require(specifier);
+      } catch (error) {
+        if (error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+        // Import-only ESM packages still run synchronously in Node when they have no top-level await.
+        for (const modulesDir of require.resolve.paths(specifier) ?? []) {
+          const manifestPath = path.join(modulesDir, specifier, "package.json");
+          if (!fs.existsSync(manifestPath)) continue;
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          const target = manifest.exports?.["."]?.import;
+          if (typeof target === "string") {
+            return require(path.resolve(path.dirname(manifestPath), target));
+          }
+        }
+        throw error;
+      }
     }
 
     const filePath = resolveLocal(specifier, isRootRelative ? rootDir : parentDir);

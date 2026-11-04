@@ -349,12 +349,24 @@ importers:
       docx-preview:
         specifier: ^0.4.0
         version: 0.4.0
+      hast-util-from-html:
+        specifier: ^2.0.3
+        version: 2.0.3
       ical.js:
         specifier: ^2.2.1
         version: 2.2.1
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
+      mdast-util-from-markdown:
+        specifier: 2.0.3
+        version: 2.0.3
+      mdast-util-gfm:
+        specifier: 3.1.0
+        version: 3.1.0
+      micromark-extension-gfm:
+        specifier: 3.0.0
+        version: 3.0.0
       modern-screenshot:
         specifier: ^4.7.0
         version: 4.7.0
@@ -373,6 +385,9 @@ importers:
       remark-breaks:
         specifier: ^4.0.0
         version: 4.0.0
+      remend:
+        specifier: 1.3.0
+        version: 1.3.0
       streamdown:
         specifier: ^2.5.0
         version: 2.5.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
