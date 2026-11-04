@@ -1,7 +1,7 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { PanelLeft, PanelLeftClose, Settings } from "@liveagent/ui/components/IconSet";
 import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
-import { SIDEBAR_TOGGLE_SHORTCUT } from "@liveagent/ui/components/ui/sidebar";
+import { useSidebarToggleShortcut } from "@liveagent/ui/components/ui/sidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useState } from "react";
@@ -179,6 +179,7 @@ export function MacOsTitleBarToggle({
   appUpdate?: AppUpdateController;
 }) {
   const { t } = useLocale();
+  const sidebarToggleShortcut = useSidebarToggleShortcut();
   const [show] = useState(isMacOsTauri);
   const { metrics: trafficLightMetrics, hidden: trafficLightsHidden } =
     useMacOsTrafficLightMetrics(show);
@@ -200,7 +201,7 @@ export function MacOsTitleBarToggle({
     >
       <ShortcutTooltip
         label={t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar")}
-        shortcut={SIDEBAR_TOGGLE_SHORTCUT}
+        shortcut={sidebarToggleShortcut}
         side="bottom"
       >
         <button

@@ -3,7 +3,7 @@ import type { AppSettings } from "@liveagent/app/lib/settings";
 import { PanelLeft, Settings } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
-import { SIDEBAR_TOGGLE_SHORTCUT } from "@liveagent/ui/components/ui/sidebar";
+import { useSidebarToggleShortcut } from "@liveagent/ui/components/ui/sidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode } from "react";
@@ -38,6 +38,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
     className,
   } = props;
   const { t } = useLocale();
+  const sidebarToggleShortcut = useSidebarToggleShortcut();
   const desktopTitleBarInset = isDesktopChatHeaderInset();
   const sidebarToggleLabel = t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar");
 
@@ -61,7 +62,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         {!desktopTitleBarInset ? (
           <ShortcutTooltip
             label={sidebarToggleLabel}
-            shortcut={SIDEBAR_TOGGLE_SHORTCUT}
+            shortcut={sidebarToggleShortcut}
             side="bottom"
           >
             <Button

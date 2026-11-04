@@ -89,7 +89,6 @@ import {
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 import { ShortcutTooltip } from "../ui/shortcut-tooltip";
 import {
-  SIDEBAR_TOGGLE_SHORTCUT,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -101,6 +100,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
+  useSidebarToggleShortcut,
 } from "../ui/sidebar";
 import { HistoryRow, ProjectGroupHeader, ProjectRow } from "./ChatHistorySidebarRows";
 import {
@@ -301,6 +301,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     footerTrailing,
   } = props;
   const { t } = useLocale();
+  const sidebarToggleShortcut = useSidebarToggleShortcut();
 
   const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
   const [conversationSearchMode, setConversationSearchMode] = useState<"search" | "palette">(
@@ -1571,7 +1572,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 {!hideCloseButton || isMobileMenuLayout ? (
                   <ShortcutTooltip
                     label={t("sidebar.closeSidebar")}
-                    shortcut={SIDEBAR_TOGGLE_SHORTCUT}
+                    shortcut={sidebarToggleShortcut}
                     side="bottom"
                   >
                     <SidebarTrigger
