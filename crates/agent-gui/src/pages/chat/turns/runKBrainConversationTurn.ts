@@ -1,6 +1,9 @@
 import type { AssistantMessage, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
-import { resolveKBrainPermissionMode } from "@liveagent/ui/lib/chat/permissionModes";
+import {
+  resolveKBrainPermissionMode,
+  resolveKBrainRunSandbox,
+} from "@liveagent/ui/lib/chat/permissionModes";
 import {
   approvalPreviewFromToolCall,
   clampApprovalText,
@@ -55,7 +58,7 @@ const SESSION_SCOPE_LABEL_MAX_CHARS = 300;
 
 type Params = RunAgentConversationTurnParams | RunTextConversationTurnParams;
 
-function canonicalRunOptions(params: Params, uploadsRoot?: string): KBrainRunOptions {
+export function canonicalRunOptions(params: Params, uploadsRoot?: string): KBrainRunOptions {
   const agentMode = "effectiveWorkdir" in params;
   const workspaceRoots = [
     {
@@ -73,6 +76,7 @@ function canonicalRunOptions(params: Params, uploadsRoot?: string): KBrainRunOpt
   const policies = canonicalKBrainToolPolicies(configured);
   const safety = agentMode && "commandSafetyMode" in params ? params.commandSafetyMode : undefined;
   const reasoning = params.runtime.reasoning;
+  const sandbox = agentMode ? resolveKBrainRunSandbox(safety) : undefined;
   return {
     mode: agentMode ? "agent" : "chat",
     ...(reasoning ? { reasoning } : {}),
@@ -83,6 +87,7 @@ function canonicalRunOptions(params: Params, uploadsRoot?: string): KBrainRunOpt
       agentMode && params.planModeEnabled === true,
     ),
     ...(roots.length ? { workspace_roots: roots } : {}),
+    ...(sandbox ? { sandbox } : {}),
     ...(Object.keys(policies).length ? { tools: { policies } } : {}),
     ...(agentMode && params.planModeEnabled !== undefined
       ? { plan_mode_enabled: params.planModeEnabled }

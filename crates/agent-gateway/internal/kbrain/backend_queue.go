@@ -81,11 +81,7 @@ func (r *Relay) startBackendQueuedRun(ctx context.Context, gatewayRunID, convers
 	}
 	// Verify the handshake before any backend write or persisted binding, so a
 	// refused backend leaves no session or recovery record behind.
-	mode := ""
-	if prompt.Options != nil {
-		mode = prompt.Options.PermissionMode
-	}
-	if err := r.client.requireHandshake(ctx, mode); err != nil {
+	if err := r.client.requireRunOptions(ctx, prompt.Options); err != nil {
 		return false, err
 	}
 	prompt = r.client.withReviewScope(ctx, prompt)

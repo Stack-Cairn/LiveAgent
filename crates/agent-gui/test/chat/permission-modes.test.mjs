@@ -4,7 +4,9 @@ import http from "node:http";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { resolveKBrainPermissionMode } = loader.loadModule("@liveagent/ui/lib/chat/permissionModes");
+const { resolveKBrainPermissionMode, resolveKBrainRunSandbox } = loader.loadModule(
+  "@liveagent/ui/lib/chat/permissionModes",
+);
 const { normalizeCommandSafetyMode, strictestCommandSafetyMode } = loader.loadModule("src/lib/settings");
 const { normalizeGatewayCommandSafetyMode } = loader.loadModule("src/pages/chat/gateway/gatewayBridgeTypes");
 
@@ -15,6 +17,60 @@ test("permission choices map to K-brain and plan always takes precedence", () =>
     assert.equal(resolveKBrainPermissionMode(mode), expected);
     assert.equal(resolveKBrainPermissionMode(mode, true), "plan");
   }
+});
+
+test("sandbox modes auto-edit and confine commands with the backend's OS sandbox", () => {
+  for (const [mode, network] of [["sandbox", true], ["sandboxOffline", false]]) {
+    assert.equal(normalizeCommandSafetyMode(mode), mode);
+    assert.equal(normalizeGatewayCommandSafetyMode(mode), mode);
+    assert.equal(resolveKBrainPermissionMode(mode), "auto_edit");
+    assert.equal(resolveKBrainPermissionMode(mode, true), "plan");
+    assert.deepEqual(resolveKBrainRunSandbox(mode), { mode: "workspace", network });
+  }
+  for (const mode of ["ask", "autoEdit", "autoReview", "always", "auto", undefined]) {
+    assert.equal(resolveKBrainRunSandbox(mode), undefined);
+  }
+});
+
+test("a sandboxed run is refused, never sent unconfined, when the backend cannot enforce it", async (t) => {
+  const posts = [];
+  let runSandbox;
+  const server = http.createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    res.setHeader("content-type", "application/json");
+    if (req.url === "/v1/health") {
+      const capabilities = { permission_modes: ["auto_edit"] };
+      if (runSandbox) capabilities.run_sandbox = runSandbox;
+      res.end(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities }));
+      return;
+    }
+    posts.push(JSON.parse(raw));
+    res.end(JSON.stringify({ version: "kbrain.agent.v1", conversation_id: "session", run_id: "run", accepted_seq: 1 }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const { createKBrainClient } = loader.loadModule("src/lib/kbrain/client");
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const run = (network) =>
+    createKBrainClient({ baseUrl: url }).startRun({
+      conversation_id: "session",
+      client_request_id: `r-${posts.length}-${network}`,
+      prompt: "hi",
+      options: { mode: "agent", permission_mode: "auto_edit", sandbox: { mode: "workspace", network } },
+    });
+
+  await assert.rejects(run(true), /cannot sandbox commands/);
+  runSandbox = { supported: true, network_control: false };
+  await assert.rejects(run(false), /offline sandbox/);
+  assert.equal(posts.length, 0, "nothing reaches the backend unconfined");
+  await run(true);
+  runSandbox = { supported: true, network_control: true };
+  await run(false);
+  assert.deepEqual(posts.map((body) => body.options.sandbox), [
+    { mode: "workspace", network: true },
+    { mode: "workspace", network: false },
+  ]);
 });
 
 test("the retired full-access mode migrates to always allow", () => {
@@ -116,4 +172,40 @@ test("runs opt into per-run AI review only when the backend advertises it", asyn
   health = null;
   await run(createKBrainClient({ baseUrl: url }), "normal");
   assert.equal("review_scope" in posts.at(-1).options, false, "a relay without health still runs");
+});
+
+test("agent turns carry the sandbox the composer mode asks for", () => {
+  const { canonicalRunOptions } = loader.loadModule("src/pages/chat/turns/runKBrainConversationTurn");
+  const agent = (commandSafetyMode) =>
+    canonicalRunOptions({ effectiveWorkdir: "/w", runtime: {}, commandSafetyMode });
+  assert.deepEqual(agent("sandbox").sandbox, { mode: "workspace", network: true });
+  assert.equal(agent("sandbox").permission_mode, "auto_edit");
+  assert.deepEqual(agent("sandboxOffline").sandbox, { mode: "workspace", network: false });
+  assert.equal("sandbox" in agent("ask"), false);
+  assert.equal("sandbox" in agent("always"), false);
+  // Plan mode keeps the sandbox for anything it lets through.
+  const plan = canonicalRunOptions({ effectiveWorkdir: "/w", runtime: {}, commandSafetyMode: "sandbox", planModeEnabled: true });
+  assert.equal(plan.permission_mode, "plan");
+  assert.deepEqual(plan.sandbox, { mode: "workspace", network: true });
+});
+
+test("the desktop reads the sandbox capability from K-brain health", () => {
+  const { sandboxCapabilityFromHealth } = loader.loadModule("src/agent-ui-adapters/sandboxCapability");
+  const old = sandboxCapabilityFromHealth({ capabilities: { permission_modes: ["auto_edit"] } });
+  assert.equal(old.supported, false);
+  assert.match(old.reason, /update K-brain/);
+  assert.deepEqual(
+    sandboxCapabilityFromHealth({
+      capabilities: {
+        run_sandbox: { supported: true, version: "kbrain.sandbox.v1", mechanism: "seatbelt", platform: "darwin", network_control: true, read_masking: true, modes: ["workspace"] },
+      },
+    }),
+    { supported: true, mechanism: "seatbelt", platform: "darwin", network_control: true, read_masking: true },
+  );
+  const unsupported = sandboxCapabilityFromHealth({
+    capabilities: { run_sandbox: { supported: false, network_control: true, reason: "bwrap not found" } },
+  });
+  assert.equal(unsupported.supported, false);
+  assert.equal(unsupported.network_control, false, "no offline sandbox without a sandbox");
+  assert.equal(unsupported.reason, "bwrap not found");
 });

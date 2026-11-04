@@ -314,8 +314,10 @@ func kbrainOptions(body handler.ChatRequestBody) *kbrain.RunOptions {
 		options.PermissionMode = "always"
 	case "autoReview":
 		options.PermissionMode = "auto_review"
-	case "sandboxOffline":
-		options.ApprovalPolicy = "deny"
+	case "sandbox", "sandboxOffline":
+		// File edits proceed; commands run inside the backend's OS sandbox.
+		options.PermissionMode = "auto_edit"
+		options.Sandbox = &kbrain.RunSandbox{Mode: "workspace", Network: body.CommandSafetyMode == "sandbox"}
 	}
 	if body.RuntimeControls != nil {
 		options.Reasoning = body.RuntimeControls.Reasoning

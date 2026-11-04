@@ -36,6 +36,23 @@ func TestKBrainPermissionModeTransport(t *testing.T) {
 	}
 }
 
+func TestKBrainSandboxModeTransport(t *testing.T) {
+	for input, network := range map[string]bool{"sandbox": true, "sandboxOffline": false} {
+		options := kbrainOptions(handler.ChatRequestBody{CommandSafetyMode: input, ExecutionMode: "tools"})
+		if options.PermissionMode != "auto_edit" || options.ApprovalPolicy != "ask" {
+			t.Fatalf("%s: permission %q approval %q", input, options.PermissionMode, options.ApprovalPolicy)
+		}
+		if options.Sandbox == nil || options.Sandbox.Mode != "workspace" || options.Sandbox.Network != network {
+			t.Fatalf("%s: sandbox %+v", input, options.Sandbox)
+		}
+	}
+	for _, input := range []string{"ask", "autoEdit", "autoReview", "always"} {
+		if options := kbrainOptions(handler.ChatRequestBody{CommandSafetyMode: input, ExecutionMode: "tools"}); options.Sandbox != nil {
+			t.Fatalf("%s asked for a sandbox", input)
+		}
+	}
+}
+
 func TestExplicitPlanCommandOverridesRuntimeControls(t *testing.T) {
 	plan := false
 	options := kbrainOptions(handler.ChatRequestBody{

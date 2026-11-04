@@ -182,6 +182,19 @@ func (h Health) CapabilityAtLeast(name string, minimum int64) bool {
 	return ok && n >= minimum
 }
 
+// SupportsRunSandbox reports whether capability run_sandbox can confine a run
+// as sandbox asks: supported on the backend's machine and, offline, able to
+// block the network.
+func (h Health) SupportsRunSandbox(sandbox RunSandbox) bool {
+	raw, ok := h.Capabilities["run_sandbox"].(map[string]any)
+	if !ok {
+		return false
+	}
+	supported, _ := raw["supported"].(bool)
+	network, _ := raw["network_control"].(bool)
+	return supported && (sandbox.Network || network)
+}
+
 func (h Health) SupportsPermissionMode(mode string) bool {
 	modes, ok := h.Capabilities["permission_modes"].([]any)
 	return ok && slices.Contains(modes, any(mode))
@@ -270,6 +283,41 @@ func (c *Client) verifiedHealth(ctx context.Context, maxAge time.Duration) (Heal
 
 func isElevatedPermissionMode(mode string) bool {
 	return mode == "always" || mode == "auto_edit" || mode == "auto_review"
+}
+
+// requireRunOptions is requireHandshake for a run: the permission mode decides
+// the handshake, and a sandboxed run also needs the backend to enforce its
+// sandbox. Without that answer the run is refused rather than sent unconfined.
+func (c *Client) requireRunOptions(ctx context.Context, options *RunOptions) error {
+	mode := ""
+	if options != nil {
+		mode = options.PermissionMode
+	}
+	if err := c.requireHandshake(ctx, mode); err != nil {
+		return err
+	}
+	if options == nil || options.Sandbox == nil {
+		return nil
+	}
+	health, err := c.verifiedHealth(ctx, handshakeCapabilityMaxAge)
+	if err == nil && !health.SupportsRunSandbox(*options.Sandbox) {
+		// A just-upgraded backend must not stay refused for the cache lifetime.
+		health, err = c.verifiedHealth(ctx, 0)
+	}
+	switch {
+	case errors.Is(err, errHealthUnavailable):
+		return errors.New("kbrain does not support run sandboxing; update the backend")
+	case err != nil:
+		return err
+	case health.Capabilities["run_sandbox"] == nil:
+		return errors.New("kbrain does not support run sandboxing; update the backend")
+	case !health.SupportsRunSandbox(*options.Sandbox):
+		if !options.Sandbox.Network {
+			return errors.New("kbrain cannot run an offline sandbox on this machine")
+		}
+		return errors.New("kbrain cannot sandbox commands on this machine")
+	}
+	return nil
 }
 
 // requireHandshake gates every request that hands work to the backend. A

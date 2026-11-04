@@ -530,16 +530,17 @@ export const EN_US_COMMON_TRANSLATIONS = {
     "Runs according to the tool permission policies, without per-step approval",
   "chat.safety.sandbox": "Sandbox",
   "chat.safety.sandboxDesc":
-    "Runs inside the sandbox, with writes restricted and sensitive directories unreadable",
-  // The Windows networked backend (WRITE_RESTRICTED token) fences writes only; reads stay
-  // broadly allowed, so this platform must not promise credential read masking. Masking is
-  // only real on the offline (AppContainer) backend.
+    "Commands run automatically inside the sandbox: writes stay in the workspace and sensitive directories are unreadable",
+  // On some platforms K-brain's sandbox fences writes only (capabilities.run_sandbox.read_masking
+  // is false), so the description must not promise that credentials are hidden.
   "chat.safety.sandboxDescNoReadMask":
-    "Runs inside the sandbox with writes restricted; read masking is unavailable on this platform",
+    "Commands run automatically inside the sandbox with writes kept to the workspace; reads are not masked on this machine",
   "chat.safety.sandboxOffline": "Offline sandbox",
-  "chat.safety.sandboxOfflineDesc": "Runs inside the sandbox, with no network access for commands",
-  "chat.safety.sandboxUnavailable": "Sandbox mechanism unavailable on this platform",
-  "chat.safety.sandboxOfflineUnavailable": "Offline sandbox unavailable on this platform",
+  "chat.safety.sandboxOfflineDesc":
+    "Commands run automatically inside the sandbox with writes kept to the workspace and no network access",
+  "chat.safety.sandboxUnavailable": "K-brain cannot sandbox commands on this machine",
+  "chat.safety.sandboxOfflineUnavailable":
+    "K-brain cannot cut the sandbox off from the network on this machine",
   "chat.safety.cycleShortcut": "Shift+Tab to switch",
   "chat.safety.cycleNextTurn": "next turn",
   "chat.safety.cycleNewMessages": "new messages",
