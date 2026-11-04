@@ -859,6 +859,7 @@ function ChatPageContent(props: ChatPageProps) {
     handleRightDockInsertFileMention,
     handleRightDockInsertCommitMention,
     handleRightDockInsertGitFileMention,
+    handleRightDockInsertComposerSegments,
     handleInsertCodeMention,
     handleEmptyStateSuggestion,
   } = useComposerActions(composerRef);
@@ -3985,6 +3986,7 @@ function ChatPageContent(props: ChatPageProps) {
         onInsertCodeReviewSkill: codeReviewSkill ? handleRightDockInsertCodeReviewSkill : undefined,
         onInsertCommitMention: handleRightDockInsertCommitMention,
         onInsertGitFileMention: handleRightDockInsertGitFileMention,
+        onInsertComposerSegments: handleRightDockInsertComposerSegments,
         focusRequest: gitReviewFocusRequest,
         onFocusRequestHandled: handleGitReviewFocusRequestHandled,
       },
@@ -4016,6 +4018,7 @@ function ChatPageContent(props: ChatPageProps) {
       handleOpenSshTerminal,
       handleRightDockInsertCodeReviewSkill,
       handleRightDockInsertCommitMention,
+      handleRightDockInsertComposerSegments,
       handleRightDockInsertFileMention,
       handleRightDockInsertGitFileMention,
       openWorkspaceEditorFile,
@@ -4577,6 +4580,7 @@ function ChatPageContent(props: ChatPageProps) {
               }
               onInsertCommitMention={handleRightDockInsertCommitMention}
               onInsertGitFileMention={handleRightDockInsertGitFileMention}
+              onInsertComposerSegments={handleRightDockInsertComposerSegments}
             />
           </WorkspaceToolsPanel>
         </WorkspacePanelGroup>

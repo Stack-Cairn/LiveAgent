@@ -147,6 +147,12 @@ export interface MentionComposerHandle {
   runCommandDraft: () => boolean;
   clear: () => void;
   focus: () => void;
+  /**
+   * Appends draft segments as their own paragraph at the end of the draft,
+   * then focuses the composer with the caret after them. Returns false when
+   * the composer is disabled or nothing was inserted.
+   */
+  appendSegments: (segments: MentionComposerDraftSegment[]) => boolean;
   beginTransientText: () => boolean;
   updateTransientText: (text: string) => void;
   commitTransientText: (text?: string) => void;

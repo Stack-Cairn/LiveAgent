@@ -41,6 +41,7 @@ import {
   normalizeLogicalLineEndings,
 } from "@liveagent/ui/lib/chat/composerText";
 import type { ConversationReferenceInsertResult } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
+import { composerBlockSeparator } from "@liveagent/ui/lib/chat/diffLineComments";
 import {
   type CodeMentionReference,
   formatAppMentionToken,
@@ -70,6 +71,7 @@ import {
 import { readSendShortcut, shouldSendOnEnter } from "../../lib/chat/sendShortcut";
 import { ComposerCommandPanel } from "./ComposerCommandPanel";
 import {
+  CARET_ANCHOR_TEXT,
   COMMIT_MENTION_SHA_ATTR,
   CONVERSATION_MENTION_ID_ATTR,
   CommitMentionTooltip,
@@ -124,6 +126,7 @@ import {
   type MentionComposerConversation,
   type MentionComposerConversationMention,
   type MentionComposerDraft,
+  type MentionComposerDraftSegment,
   type MentionComposerGitFileMention,
   type MentionComposerHandle,
   type MentionComposerLargePaste,
@@ -1298,6 +1301,25 @@ export const MentionComposer = memo(
           refreshEmptyState();
         },
         focus: () => editorRef.current?.focus(),
+        appendSegments: (segments: MentionComposerDraftSegment[]) => {
+          const el = editorRef.current;
+          if (!el || disabled || segments.length === 0) return false;
+          const existing = normalizeSerializedText(serializeChildren(el, largePastesRef.current));
+          const separator = composerBlockSeparator(existing);
+          const payload: MentionComposerDraftSegment[] = [
+            ...(separator ? [{ type: "text" as const, text: separator }] : []),
+            ...segments,
+            { type: "text", text: `\n\n${CARET_ANCHOR_TEXT}` },
+          ];
+          resetPromptHistoryRecall();
+          el.focus({ preventScroll: true });
+          placeCaretAtEditorEnd();
+          if (!insertComposerSegmentsAtSelection(el, payload, largePastesRef.current)) return false;
+          closeMentionSession();
+          refreshEmptyState();
+          scheduleComposerSelectionScroll(el);
+          return true;
+        },
       }),
       [
         applyDraft,
@@ -1307,6 +1329,7 @@ export const MentionComposer = memo(
         closeComposerContextMenu,
         closeMentionSession,
         focusEditorAtSavedSelection,
+        placeCaretAtEditorEnd,
         refreshEmptyState,
         resetPromptHistoryRecall,
         runCommandDraft,

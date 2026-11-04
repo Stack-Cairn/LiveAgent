@@ -275,6 +275,7 @@ export function GatewayAppView({
     handleRightDockFileTreeStateChange,
     handleRightDockInsertCodeReviewSkill,
     handleRightDockInsertCommitMention,
+    handleRightDockInsertComposerSegments,
     handleRightDockInsertFileMention,
     handleRightDockInsertGitFileMention,
     handleRightDockProjectStateChange,
@@ -1082,6 +1083,7 @@ export function GatewayAppView({
         onInsertCodeReviewSkill: codeReviewSkill ? handleRightDockInsertCodeReviewSkill : undefined,
         onInsertCommitMention: handleRightDockInsertCommitMention,
         onInsertGitFileMention: handleRightDockInsertGitFileMention,
+        onInsertComposerSegments: handleRightDockInsertComposerSegments,
         focusRequest: gitReviewFocusRequest,
         onFocusRequestHandled: handleGitReviewFocusRequestHandled,
       },
@@ -1122,6 +1124,7 @@ export function GatewayAppView({
     handleOpenSshTerminal,
     handleRightDockInsertCodeReviewSkill,
     handleRightDockInsertCommitMention,
+    handleRightDockInsertComposerSegments,
     handleRightDockInsertFileMention,
     handleRightDockInsertGitFileMention,
     isAgentMode,
@@ -2206,6 +2209,7 @@ export function GatewayAppView({
                       }
                       onInsertCommitMention={handleRightDockInsertCommitMention}
                       onInsertGitFileMention={handleRightDockInsertGitFileMention}
+                      onInsertComposerSegments={handleRightDockInsertComposerSegments}
                       onClose={handleRightDockClose}
                     />
                   ) : null}

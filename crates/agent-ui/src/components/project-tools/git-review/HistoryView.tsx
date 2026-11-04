@@ -576,6 +576,7 @@ export function GitReviewHistoryView(props: {
   const context = useRightDockToolContext();
   const onInsertCommitMention = context.git.onInsertCommitMention;
   const onInsertGitFileMention = context.git.onInsertGitFileMention;
+  const onInsertComposerSegments = context.git.onInsertComposerSegments;
   const { t } = useLocale();
   const operationBusy = busy !== "";
 
@@ -1212,6 +1213,7 @@ export function GitReviewHistoryView(props: {
                     error={historyError}
                     loading={commitDiffLoading}
                     showStat={useSplitReviewLayout}
+                    onInsertComposerSegments={onInsertComposerSegments}
                   />
                 </section>
               ) : (
