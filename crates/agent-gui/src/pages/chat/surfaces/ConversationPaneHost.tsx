@@ -9,6 +9,7 @@ import {
   type ForwardedRef,
   forwardRef,
   memo,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -197,6 +198,10 @@ const RegisteredConversationPaneHostContent = forwardRef<
     [controller, sendDraft],
   );
 
+  const handleQuoteSelection = useCallback((text: string) => {
+    composerRef.current?.insertQuote(text);
+  }, []);
+
   useImperativeHandle(
     forwardedRef,
     () => ({
@@ -270,6 +275,7 @@ const RegisteredConversationPaneHostContent = forwardRef<
                   isCompactionRunning={isCompactionRunning}
                   bottomReservePx={composerOverlayHeight}
                   composerCenterOffsetPx={composerCenterOffset}
+                  onQuoteSelection={handleQuoteSelection}
                 />
               </CheckpointRewindProvider>
             </ChangedFilesActionsProvider>

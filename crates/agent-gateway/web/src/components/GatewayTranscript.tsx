@@ -12,6 +12,7 @@ import {
   TranscriptAssistantMessageActions,
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
+import { TranscriptQuoteSelection } from "@liveagent/ui/components/chat/TranscriptQuoteSelection";
 import { UserAttachmentCards } from "@liveagent/ui/components/chat/UserAttachmentCards";
 import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
@@ -130,6 +131,8 @@ type GatewayTranscriptProps = {
   redactToolContent?: boolean;
   /** Start the agent process disclosures expanded (settings, #1154). */
   expandProcessByDefault?: boolean;
+  /** Selected message text → composer blockquote. Omit to disable the quote button. */
+  onQuoteSelection?: (text: string) => void;
 };
 
 // Stream-born rows keep Streamdown's streaming render mode forever — even
@@ -1109,6 +1112,7 @@ export function GatewayTranscript({
   readOnly = false,
   redactToolContent = false,
   expandProcessByDefault = false,
+  onQuoteSelection,
 }: GatewayTranscriptProps) {
   const transcriptListRef = useRef<HTMLDivElement | null>(null);
   const [transcriptScrollViewport, setTranscriptScrollViewport] = useState<HTMLDivElement | null>(
@@ -1211,6 +1215,13 @@ export function GatewayTranscript({
         ) : null}
       </div>
       <div className="col-2 h-gateway-transcript-bottom-spacer-h" />
+      {onQuoteSelection && !readOnly ? (
+        <TranscriptQuoteSelection
+          rootRef={transcriptListRef}
+          scopeKey={conversationId}
+          onQuote={onQuoteSelection}
+        />
+      ) : null}
       <ChatFileLinkContextMenuHost />
     </div>
   );

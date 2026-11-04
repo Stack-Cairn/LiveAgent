@@ -165,6 +165,9 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
     <div
       className={cn(!isLive && "w-full")}
       data-assistant-operation={isOperationBlock ? "" : undefined}
+      // Reply prose is quotable into the composer; tool traces, thinking and
+      // other operation blocks are not (see lib/chat/transcriptQuote).
+      data-quote-source={isOperationBlock ? undefined : "assistant"}
     >
       {content}
     </div>

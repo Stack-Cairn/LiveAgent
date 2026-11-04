@@ -137,6 +137,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "tooltip.openSidebar": "Open Sidebar",
   "chat.newConversation": "New Conversation",
   "chat.pendingTitle": "New Chat",
+  "chat.quoteSelection": "Quote",
+  "chat.quoteSelectionHint": "Quote selection in composer",
   "chat.recentConversation": "Conversations",
   "chat.searchConversations": "Search conversations",
   "chat.searchConversationsPlaceholder": "Search conversations",

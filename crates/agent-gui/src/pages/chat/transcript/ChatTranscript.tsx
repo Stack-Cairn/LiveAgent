@@ -1,5 +1,6 @@
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatFileLinkContextMenu";
+import { TranscriptQuoteSelection } from "@liveagent/ui/components/chat/TranscriptQuoteSelection";
 import { ChevronDown, Copy } from "@liveagent/ui/components/IconSet";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -70,6 +71,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     branchPendingMessageId,
     onOpenSettings,
     onSuggestionSelect,
+    onQuoteSelection,
   } = props;
   const { locale } = useLocale();
   const showNoModelsState = !hasModels;
@@ -391,6 +393,14 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
             </ContextMenuItem>
           ) : null}
         </ContextMenuPopup>
+      ) : null}
+      {onQuoteSelection ? (
+        <TranscriptQuoteSelection
+          rootRef={transcriptRootRef}
+          scopeKey={conversationId}
+          enabled={!isTranscriptBusy}
+          onQuote={onQuoteSelection}
+        />
       ) : null}
       <ChatFileLinkContextMenuHost canOpenWithDefaultApp={isTauriHost()} />
       {isTranscriptBusy ? <HistorySwitchLoadingOverlay /> : null}

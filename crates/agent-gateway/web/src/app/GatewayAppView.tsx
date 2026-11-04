@@ -461,6 +461,12 @@ export function GatewayAppView({
     viewForConversation,
     setConversationView,
   } = useConversationViewState(displayedConversationId);
+  const handleQuoteSelection = useCallback(
+    (text: string) => {
+      composerRef.current?.insertQuote(text);
+    },
+    [composerRef],
+  );
   const trajectoryHost = useMemo(
     () => createGatewayTrajectoryHost(api, handleOpenChatFileLink),
     [api, handleOpenChatFileLink],
@@ -1778,6 +1784,7 @@ export function GatewayAppView({
                                             onBranchConversation={handleBranchConversation}
                                             branchPendingMessageId={branchPendingMessageId}
                                             onSuggestionSelect={handleEmptyStateSuggestion}
+                                            onQuoteSelection={handleQuoteSelection}
                                           />
                                         </CheckpointRewindProvider>
                                       </ChangedFilesActionsProvider>

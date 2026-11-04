@@ -57,7 +57,7 @@ test("user message display hides citations while raw tokenization retains the su
 
 test("user message display hides unfinished citation prefixes", () => {
   for (let length = 1; length <= citation.length; length += 1) {
-    assert.equal(renderCitationUserText(`正文${citation.slice(0, length)}`), '<span class="chat-user-message-content">正文</span>');
+    assert.equal(renderCitationUserText(`正文${citation.slice(0, length)}`), '<span class="chat-user-message-content" data-quote-source="user">正文</span>');
   }
 });
 
@@ -273,7 +273,7 @@ test("trailing newlines render a visual line anchor without changing DOM text", 
       text: "alpha\n",
     }),
   );
-  assert.match(html, /^<span class="chat-user-message-content">alpha\n/);
+  assert.match(html, /^<span class="chat-user-message-content" data-quote-source="user">alpha\n/);
   assert.match(html, /<span aria-hidden="true" class="before:content-/);
   assert.match(html, /<\/span><\/span>$/);
   assert.doesNotMatch(html, /\u200b/i);
@@ -286,7 +286,7 @@ test("plain user message text is wrapped in an inline selection boundary", () =>
     }),
   );
 
-  assert.match(html, /^<span class="chat-user-message-content">/);
+  assert.match(html, /^<span class="chat-user-message-content" data-quote-source="user">/);
   assert.match(html, /不要重写整个文件。<\/span>$/);
 });
 
