@@ -123,18 +123,18 @@ for (const [name, baseUrl, expected] of [
       assert.equal(snapshot().canShareHistory, true, "disabled legacy Remote must not gate K-brain sharing");
       await click('[data-action="share"]');
       assert.deepEqual(calls.get, [conversation.id]);
-      await click('[aria-label="开启分享"]');
+      await click('[aria-label="sharedHistory.shareDialog.enableShare"]');
       assert.equal(rows.get(conversation.id).isShared, true);
       assert.equal(snapshot().sharedHistoryItems.length, 1);
       assert.equal(host.querySelector('a[title]').getAttribute("href"), expected);
-      await click('[aria-label="复制链接"]');
+      await click('[aria-label="sharedHistory.copyLink"]');
       assert.deepEqual(calls.copied, [expected]);
-      await click('[aria-label="关闭分享"]');
+      await click('[aria-label="sharedHistory.disableShare"]');
       assert.equal(rows.get(conversation.id).isShared, false);
       assert.equal(snapshot().sharedHistoryItems.length, 0);
-      assert.equal(host.querySelector('[aria-label="复制链接"]'), null);
+      assert.equal(host.querySelector('[aria-label="sharedHistory.copyLink"]'), null);
       assert.deepEqual(calls.set.map(call => call.enabled), [true, false]);
-      await click('[aria-label="开启分享"]');
+      await click('[aria-label="sharedHistory.shareDialog.enableShare"]');
       await act(async () => snapshot().handleCloseShareModal());
       await click('[data-action="manage"]');
       await click('[aria-label="sharedHistory.refresh"]');
@@ -155,7 +155,7 @@ test("K-brain share mutation errors are rendered without claiming success", asyn
   await mount({}, async ({ host, click, snapshot }) => {
     await click('[data-action="share"]');
     mutationError = "Backend share unavailable";
-    await click('[aria-label="开启分享"]');
+    await click('[aria-label="sharedHistory.shareDialog.enableShare"]');
     assert.match(host.textContent, /Backend share unavailable/);
     assert.equal(snapshot().shareStatus.enabled, false);
     assert.equal(snapshot().sharedHistoryItems.length, 0);

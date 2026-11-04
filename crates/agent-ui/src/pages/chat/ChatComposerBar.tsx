@@ -1853,12 +1853,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 ) : null}
 
                 {stt.available ? (
-                  <RuntimeControlTooltip label={stt.active ? "停止语音输入" : "开始语音输入"}>
+                  <RuntimeControlTooltip
+                    label={stt.active ? t("chat.stt.stop") : t("chat.stt.start")}
+                  >
                     <button
                       type="button"
                       disabled={isInputDisabled}
                       onClick={stt.toggle}
-                      aria-label={stt.active ? "停止语音输入" : "开始语音输入"}
+                      aria-label={stt.active ? t("chat.stt.stop") : t("chat.stt.start")}
                       aria-pressed={stt.active}
                       className={cn(
                         "composer-toolbar-action inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-hidden",

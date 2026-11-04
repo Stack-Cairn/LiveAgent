@@ -32,6 +32,7 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import type {
@@ -43,35 +44,35 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 const PROVIDERS: Array<{
   id: SttProviderId;
-  label: string;
+  labelKey: string;
   vendor: string;
   fields: Array<keyof SttProviderSettings>;
   secretFields: Array<keyof SttProviderSettings>;
 }> = [
   {
     id: "tencent_cloud",
-    label: "腾讯云实时语音识别",
+    labelKey: "settings.stt.provider.tencent_cloud",
     vendor: "Tencent Cloud",
     fields: ["appId", "engineModelType", "secretId", "secretKey"],
     secretFields: ["secretId", "secretKey"],
   },
   {
     id: "volcengine_seed_v3",
-    label: "火山引擎实时语音识别",
+    labelKey: "settings.stt.provider.volcengine_seed_v3",
     vendor: "Volcengine",
     fields: ["websocketUrl", "appId", "accessToken", "resourceId"],
     secretFields: ["accessToken"],
   },
   {
     id: "aliyun_dashscope",
-    label: "阿里云 DashScope",
+    labelKey: "settings.stt.provider.aliyun_dashscope",
     vendor: "Alibaba Cloud",
     fields: ["websocketUrl", "model", "apiKey"],
     secretFields: ["apiKey"],
   },
   {
     id: "baidu_cloud",
-    label: "百度智能云实时语音识别",
+    labelKey: "settings.stt.provider.baidu_cloud",
     vendor: "Baidu AI Cloud",
     fields: ["websocketUrl", "baiduAppId", "devPid", "baiduApiKey"],
     secretFields: ["baiduApiKey"],
@@ -113,59 +114,70 @@ function ProviderBrandBadge({
   );
 }
 
+type Translate = (key: string) => string;
+
+const FIELD_LABEL_KEYS: Partial<Record<keyof SttProviderSettings, string>> = {
+  websocketUrl: "settings.stt.field.websocketUrl",
+  model: "settings.stt.field.model",
+  engineModelType: "settings.stt.field.engineModelType",
+  devPid: "settings.stt.field.devPid",
+};
+
 const FIELD_LABELS: Partial<Record<keyof SttProviderSettings, string>> = {
-  websocketUrl: "实时识别 WebSocket 地址",
-  model: "模型名称",
   apiKey: "API Key",
   secretId: "SecretId",
   secretKey: "SecretKey",
   accessToken: "Access Token",
   resourceId: "Resource ID",
-  engineModelType: "引擎模型（16k_zh）",
   baiduAppId: "App ID",
   baiduApiKey: "API Key",
-  devPid: "dev_pid（识别模型编号）",
 };
 
 const FIELD_PLACEHOLDERS: Partial<Record<keyof SttProviderSettings, string>> = {
   model: "paraformer-realtime-v2",
   engineModelType: "16k_zh",
-  resourceId: "火山引擎资源 ID",
-  baiduAppId: "例如：124151367",
-  devPid: "请按已开通的实时识别模型填写",
+};
+
+const FIELD_PLACEHOLDER_KEYS: Partial<Record<keyof SttProviderSettings, string>> = {
+  resourceId: "settings.stt.placeholder.resourceId",
+  devPid: "settings.stt.placeholder.devPid",
 };
 
 // The value is deliberately synthetic. A password input renders it as dots
 // without placing a saved credential in the page or browser state.
 const SAVED_SECRET_MASK = "saved-secret-placeholder";
 
-const RESULT_LABEL: Record<SttConnectionTestResult, string> = {
-  connected: "连接成功",
-  connected_no_speech: "连接成功，未检测到有效语音",
-  authentication_failed: "鉴权失败",
-  protocol_failed: "协议错误",
-  network_failed: "网络错误",
-  timeout: "连接超时",
+const RESULT_LABEL_KEYS: Record<SttConnectionTestResult, string> = {
+  connected: "settings.stt.result.connected",
+  connected_no_speech: "settings.stt.result.connected_no_speech",
+  authentication_failed: "settings.stt.result.authentication_failed",
+  protocol_failed: "settings.stt.result.protocol_failed",
+  network_failed: "settings.stt.result.network_failed",
+  timeout: "settings.stt.result.timeout",
 };
 
 type ConfigStep = "providers" | "form";
 
-function fieldLabel(provider: SttProviderId, field: keyof SttProviderSettings) {
+function fieldLabel(t: Translate, provider: SttProviderId, field: keyof SttProviderSettings) {
   if (field === "appId") return provider === "tencent_cloud" ? "AppId" : "App ID";
+  const key = FIELD_LABEL_KEYS[field];
+  if (key) return t(key);
   return FIELD_LABELS[field] ?? field;
 }
 
-function fieldPlaceholder(provider: SttProviderId, field: keyof SttProviderSettings) {
+function fieldPlaceholder(t: Translate, provider: SttProviderId, field: keyof SttProviderSettings) {
   if (field === "appId") {
-    if (provider === "tencent_cloud") return "腾讯云应用 AppId";
-    if (provider === "volcengine_seed_v3") return "火山引擎应用 App ID";
+    if (provider === "tencent_cloud") return t("settings.stt.placeholder.tencentAppId");
+    if (provider === "volcengine_seed_v3") return t("settings.stt.placeholder.volcengineAppId");
   }
   if (field === "apiKey") return "sk-...";
   if (field === "secretId") return "SecretId";
   if (field === "secretKey") return "SecretKey";
   if (field === "accessToken") return "Access Token";
-  if (field === "baiduAppId") return "百度语音应用 App ID";
+  if (field === "baiduAppId") return t("settings.stt.placeholder.baiduAppId");
   if (field === "baiduApiKey") return "API Key";
+  const key = FIELD_PLACEHOLDER_KEYS[field];
+  if (key) return t(key);
   return FIELD_PLACEHOLDERS[field] ?? "";
 }
 
@@ -186,6 +198,7 @@ export function SttSection({
   selectedProvider: SttProviderId;
   onSelectedProviderChange: (provider: SttProviderId) => void;
 }) {
+  const { t } = useLocale();
   const displayedStt = settings.stt;
   const definition = useMemo(
     () => PROVIDERS.find((item) => item.id === selectedProvider) ?? PROVIDERS[0],
@@ -255,7 +268,7 @@ export function SttSection({
         return;
       }
       if (!service.revealSecret) {
-        setError("当前运行端不支持查看已保存的 STT 密钥");
+        setError(t("settings.stt.revealUnsupported"));
         return;
       }
 
@@ -268,12 +281,12 @@ export function SttSection({
         setVisibleSecrets((previous) => ({ ...previous, [field]: true }));
       } catch (cause) {
         if (revealRequestRef.current !== requestId) return;
-        setError(errorMessageWithFallback(cause, "无法查看已保存的 STT 密钥"));
+        setError(errorMessageWithFallback(cause, t("settings.stt.revealFailed")));
       } finally {
         if (revealRequestRef.current === requestId) setRevealingSecret(null);
       }
     },
-    [definition.id, draftSecrets, service, visibleSecrets],
+    [definition.id, draftSecrets, service, t, visibleSecrets],
   );
 
   const updateProvider = useCallback(
@@ -321,7 +334,7 @@ export function SttSection({
       resetSecretVisibility();
       return true;
     } catch (cause) {
-      setError(errorMessageWithFallback(cause, "STT 配置保存失败"));
+      setError(errorMessageWithFallback(cause, t("settings.stt.saveFailed")));
       return false;
     } finally {
       setSaving(false);
@@ -330,11 +343,11 @@ export function SttSection({
 
   const clearProviderSecrets = async () => {
     const confirmed = await confirm({
-      title: "清空已保存的密钥？",
-      subtitle: definition.label,
-      description: "清空后，该识别服务将无法使用，直到重新填写凭据。",
-      confirmLabel: "清空密钥",
-      cancelLabel: "取消",
+      title: t("settings.stt.clearConfirmTitle"),
+      subtitle: t(definition.labelKey),
+      description: t("settings.stt.clearConfirmDescription"),
+      confirmLabel: t("settings.stt.clearSecrets"),
+      cancelLabel: t("settings.cancel"),
     });
     if (!confirmed) return;
 
@@ -372,12 +385,12 @@ export function SttSection({
       }));
       setDraftSecrets({});
       resetSecretVisibility();
-      toast.success("密钥已清空", {
+      toast.success(t("settings.stt.secretsCleared"), {
         id: `${toastScope}-test`,
         appearance: "notice",
       });
     } catch (cause) {
-      setError(errorMessageWithFallback(cause, "STT 密钥清空失败"));
+      setError(errorMessageWithFallback(cause, t("settings.stt.clearFailed")));
     } finally {
       setClearing(false);
     }
@@ -390,12 +403,17 @@ export function SttSection({
     try {
       const result = await service.test(definition.id);
       const passed = result.result === "connected" || result.result === "connected_no_speech";
-      const message = [RESULT_LABEL[result.result], result.message].filter(Boolean).join("：");
+      const resultLabel = t(RESULT_LABEL_KEYS[result.result]);
+      const message = result.message
+        ? t("settings.stt.resultWithMessage")
+            .replace("{result}", resultLabel)
+            .replace("{message}", () => result.message ?? "")
+        : resultLabel;
       const options = { id: `${toastScope}-test`, appearance: "notice" as const };
       if (passed) toast.success(message, options);
       else toast.error(message, options);
     } catch (cause) {
-      setError(errorMessageWithFallback(cause, "连接测试失败"));
+      setError(errorMessageWithFallback(cause, t("settings.stt.testFailed")));
     } finally {
       setTesting(false);
     }
@@ -419,15 +437,17 @@ export function SttSection({
 
   return (
     <div className="w-full min-w-0 space-y-6">
-      <SettingsSection title="通用">
+      <SettingsSection title={t("settings.groupGeneral")}>
         <SettingsCard>
           <SettingsRow
-            title="开启语音输入"
+            title={t("settings.stt.enable")}
             description={
               <>
-                在聊天输入框中显示麦克风按钮。
+                {t("settings.stt.enableDescription")}
                 {service.runtimeLabel ? (
-                  <span className="block">当前运行端：{service.runtimeLabel}</span>
+                  <span className="block">
+                    {t("settings.stt.runtime").replace("{runtime}", service.runtimeLabel)}
+                  </span>
                 ) : null}
               </>
             }
@@ -440,17 +460,17 @@ export function SttSection({
                     stt: { ...previous.stt, enabled, allowIncomplete: true },
                   }))
                 }
-                aria-label="开启语音输入"
+                aria-label={t("settings.stt.enable")}
               />
             }
           />
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="识别服务">
+      <SettingsSection title={t("settings.stt.sectionService")}>
         <SettingsCard>
           <SettingsRow
-            title={definition.label}
+            title={t(definition.labelKey)}
             description={
               <span className="inline-flex items-center gap-1.5">
                 <span>{definition.vendor}</span>
@@ -467,7 +487,9 @@ export function SttSection({
                       provider.configured ? "bg-emerald-500" : "bg-muted-foreground/40",
                     )}
                   />
-                  {provider.configured ? "已配置" : "未配置"}
+                  {provider.configured
+                    ? t("settings.stt.configured")
+                    : t("settings.stt.notConfigured")}
                 </span>
               </span>
             }
@@ -478,19 +500,19 @@ export function SttSection({
                     <Button size="sm" variant={provider.configured ? "outline" : "default"} />
                   }
                 >
-                  {provider.configured ? "管理" : "设置服务"}
+                  {provider.configured ? t("settings.stt.manage") : t("settings.stt.setUp")}
                 </DialogTrigger>
                 <DialogContent
                   className="flex max-h-[calc(100dvh-2rem)] max-w-xl flex-col"
-                  closeLabel="关闭"
+                  closeLabel={t("settings.close")}
                   showCloseButton
                 >
                   {configStep === "providers" ? (
                     <>
                       <DialogHeader>
-                        <DialogTitle>选择语音识别服务</DialogTitle>
+                        <DialogTitle>{t("settings.stt.chooseProviderTitle")}</DialogTitle>
                         <DialogDescription>
-                          选择一家服务商，然后填写对应的连接凭据。
+                          {t("settings.stt.chooseProviderDescription")}
                         </DialogDescription>
                       </DialogHeader>
 
@@ -515,7 +537,7 @@ export function SttSection({
                               />
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate text-sm font-medium text-foreground">
-                                  {item.label}
+                                  {t(item.labelKey)}
                                 </span>
                                 <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                                   <span>{item.vendor}</span>
@@ -524,7 +546,7 @@ export function SttSection({
                                       <span aria-hidden="true">·</span>
                                       <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                                         <span className="size-1.5 rounded-full bg-emerald-500" />
-                                        已配置
+                                        {t("settings.stt.configured")}
                                       </span>
                                     </>
                                   ) : null}
@@ -544,8 +566,8 @@ export function SttSection({
                             variant="ghost"
                             size="icon-sm"
                             className="-ml-2 shrink-0 rounded-lg"
-                            aria-label="返回选择服务"
-                            title="返回选择服务"
+                            aria-label={t("settings.stt.backToProviders")}
+                            title={t("settings.stt.backToProviders")}
                             onClick={() => {
                               setDraftProviders({});
                               setDraftSecrets({});
@@ -557,11 +579,11 @@ export function SttSection({
                             <ArrowLeft className="size-4" />
                           </Button>
                           <div className="min-w-0">
-                            <DialogTitle className="truncate">{definition.label}</DialogTitle>
+                            <DialogTitle className="truncate">{t(definition.labelKey)}</DialogTitle>
                             <DialogDescription>
                               {provider.configured
-                                ? "凭据已保存，可以修改后重新测试连接。"
-                                : "填写凭据并测试连接。"}
+                                ? t("settings.stt.formConfiguredDescription")
+                                : t("settings.stt.formDescription")}
                             </DialogDescription>
                           </div>
                         </div>
@@ -580,7 +602,7 @@ export function SttSection({
                           const value = !secretField
                             ? fieldValue(provider, field)
                             : visible && service.secretRevealMode === "field-name"
-                              ? fieldLabel(definition.id, field)
+                              ? fieldLabel(t, definition.id, field)
                               : hasDraft
                                 ? (draftSecrets[secretField] ?? "")
                                 : visible
@@ -595,10 +617,10 @@ export function SttSection({
                                 htmlFor={inputId}
                                 className="block text-xs font-medium text-foreground"
                               >
-                                {fieldLabel(definition.id, field)}
+                                {fieldLabel(t, definition.id, field)}
                                 {secret && provider.configured ? (
                                   <span className="ml-1 font-normal text-muted-foreground">
-                                    （已保存）
+                                    {t("settings.stt.savedSuffix")}
                                   </span>
                                 ) : null}
                               </label>
@@ -623,7 +645,7 @@ export function SttSection({
                                       : undefined
                                   }
                                   value={value}
-                                  placeholder={fieldPlaceholder(definition.id, field)}
+                                  placeholder={fieldPlaceholder(t, definition.id, field)}
                                   onFocus={(event) => {
                                     if (secret && provider.configured && !hasDraft && !visible) {
                                       event.currentTarget.select();
@@ -667,15 +689,18 @@ export function SttSection({
                                     onClick={() => void toggleSecretVisibility(secretField)}
                                     title={
                                       visible
-                                        ? "隐藏该字段"
+                                        ? t("settings.stt.hideField")
                                         : service.secretRevealMode === "field-name"
-                                          ? "查看字段名（WebUI 不显示密钥内容）"
-                                          : "查看已保存的密钥"
+                                          ? t("settings.stt.showFieldName")
+                                          : t("settings.stt.showSavedSecret")
                                     }
                                     aria-label={
                                       visible
-                                        ? "隐藏该字段"
-                                        : `查看 ${fieldLabel(definition.id, field)}`
+                                        ? t("settings.stt.hideField")
+                                        : t("settings.stt.showField").replace(
+                                            "{field}",
+                                            fieldLabel(t, definition.id, field),
+                                          )
                                     }
                                   >
                                     {revealingSecret === secretField ? (
@@ -694,12 +719,12 @@ export function SttSection({
 
                         {service.secretRevealMode === "field-name" ? (
                           <p className="text-xs leading-5 text-muted-foreground">
-                            WebUI 仅显示密钥字段名，已保存的密钥内容不会发送到浏览器。
+                            {t("settings.stt.webuiSecretNotice")}
                           </p>
                         ) : null}
                         {definition.id === "baidu_cloud" ? (
                           <p className="text-xs leading-5 text-muted-foreground">
-                            App ID 必须是数字；dev_pid 请按已开通的识别模型填写。
+                            {t("settings.stt.baiduHint")}
                           </p>
                         ) : null}
                       </DialogBody>
@@ -719,7 +744,9 @@ export function SttSection({
                               ) : (
                                 <Trash2 className="size-3.5" />
                               )}
-                              {clearing ? "正在清空…" : "清空密钥"}
+                              {clearing
+                                ? t("settings.stt.clearing")
+                                : t("settings.stt.clearSecrets")}
                             </Button>
                           ) : null}
                         </div>
@@ -733,7 +760,11 @@ export function SttSection({
                           ) : (
                             <Plug className="size-3.5" />
                           )}
-                          {saving ? "正在保存…" : testing ? "正在测试…" : "保存并测试连接"}
+                          {saving
+                            ? t("settings.stt.saving")
+                            : testing
+                              ? t("settings.stt.testing")
+                              : t("settings.stt.saveAndTest")}
                         </Button>
                       </DialogFooter>
                     </>

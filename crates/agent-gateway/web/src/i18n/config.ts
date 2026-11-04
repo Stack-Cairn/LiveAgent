@@ -110,6 +110,25 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
       "与 Gateway 连接的保活心跳间隔（生效范围 10-60 秒），用于维持连接和检测在线状态",
     "settings.remoteInfoBanner":
       "启用后，本地 LiveAgent 将通过 WebSocket（v2 协议）连接云端 Gateway。你可以在浏览器中通过 WebUI 远程发送 Chat 消息、管理 Cron 任务和查看历史记录。所有工具执行仍在本地完成，远程端仅转发指令和结果。",
+    "chat.gatewayHistory.loading": "正在加载会话历史",
+    "chat.gatewayHistory.loadEarlier": "加载更早历史",
+    "chat.gatewayHistory.loadingEarlier": "正在加载更早历史...",
+    "chat.gatewayHistory.editUnavailable": "旧历史缺少稳定消息标识，无法编辑重发",
+    "chat.gatewayHistory.retryUnavailable": "旧历史缺少稳定消息标识，无法重试",
+    "sharedHistory.page.loading": "正在加载分享会话",
+    "sharedHistory.page.loadFailed": "读取分享会话失败",
+    "sharedHistory.page.errorHint": "分享可能已被关闭，或桌面端当前不在线。",
+    "sharedHistory.page.empty": "该会话暂无可展示内容",
+    "chat.gatewayHistory.loadingPlaceholder": "正在加载会话历史，请稍候...",
+    "chat.largePasteImportFailed": "大段粘贴内容导入失败",
+    "login.tagline": "安全连接到远程代理会话，在浏览器中获得完整的控制台体验。",
+    "login.featureRemoteChat": "按桌面端式样查看 token、thinking、tool_call 与 tool_result。",
+    "login.featureHistoryResume": "从远程历史回填会话并继续对话，而不是只看原始 JSON。",
+    "login.featureCronControl": "在浏览器里完成任务查看、创建、更新与删除的转发调试。",
+    "login.title": "连接控制台",
+    "login.description": "输入 Gateway 服务端的 Access Token 以验证身份",
+    "login.submit": "进入 Gateway",
+    "login.rememberHint": "Token 验证通过后将本地保存，下次自动登录",
   },
   "en-US": {
     "app.desktopSettingsSyncFailed": "Failed to sync desktop settings.",
@@ -215,6 +234,32 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
       "Keepalive heartbeat interval for the Gateway connection (effective range 10-60 seconds), used to maintain the connection and detect online status",
     "settings.remoteInfoBanner":
       "When enabled, the local LiveAgent connects to the cloud Gateway over WebSocket (protocol v2). You can remotely send Chat messages, manage Cron tasks, and view history through the WebUI in your browser. All tool execution remains local — the remote end only relays commands and results.",
+    "chat.gatewayHistory.loading": "Loading conversation history",
+    "chat.gatewayHistory.loadEarlier": "Load earlier history",
+    "chat.gatewayHistory.loadingEarlier": "Loading earlier history...",
+    "chat.gatewayHistory.editUnavailable":
+      "This older message cannot be edited because it has no stable message identifier.",
+    "chat.gatewayHistory.retryUnavailable":
+      "This reply cannot be retried because its prompt has no stable message identifier.",
+    "sharedHistory.page.loading": "Loading shared conversation",
+    "sharedHistory.page.loadFailed": "Couldn't load the shared conversation",
+    "sharedHistory.page.errorHint":
+      "The share may have been turned off, or the desktop app is offline.",
+    "sharedHistory.page.empty": "This conversation has nothing to show yet",
+    "chat.gatewayHistory.loadingPlaceholder": "Loading conversation history, please wait...",
+    "chat.largePasteImportFailed": "Failed to import the large paste",
+    "login.tagline":
+      "Connect securely to remote agent sessions and get the full console experience in your browser.",
+    "login.featureRemoteChat":
+      "View tokens, thinking, tool_call and tool_result the way the desktop app shows them.",
+    "login.featureHistoryResume":
+      "Restore conversations from remote history and keep chatting, instead of reading raw JSON.",
+    "login.featureCronControl": "View, create, update and delete scheduled tasks from the browser.",
+    "login.title": "Connect to console",
+    "login.description": "Enter the Gateway server's Access Token to sign in",
+    "login.submit": "Enter Gateway",
+    "login.rememberHint":
+      "After the token is verified it is saved locally, and you'll be signed in automatically next time",
   },
 };
 

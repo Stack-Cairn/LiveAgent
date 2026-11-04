@@ -89,11 +89,13 @@ export function XTermViewport({
   const sessionRef = useRef(session);
   const themeRef = useRef(theme);
   const onErrorRef = useRef(onError);
+  const translateRef = useRef(t);
   const initialSnapshotRef = useRef(initialSnapshot);
   const onInitialSnapshotConsumedRef = useRef(onInitialSnapshotConsumed);
   sessionRef.current = session;
   themeRef.current = theme;
   onErrorRef.current = onError;
+  translateRef.current = t;
   onInitialSnapshotConsumedRef.current = onInitialSnapshotConsumed;
 
   const termRef = useRef<XTerm | null>(null);
@@ -386,7 +388,7 @@ export function XTermViewport({
       applyStdinState();
       if (state.paused) {
         inputBackpressureMessageActive = true;
-        reportError(terminalInputPausedMessage(state));
+        reportError(translateRef.current(terminalInputPausedMessageKey(state)));
       } else if (inputBackpressureMessageActive) {
         inputBackpressureMessageActive = false;
         reportError(null);
@@ -715,14 +717,14 @@ export function XTermViewport({
   );
 }
 
-function terminalInputPausedMessage(state: TerminalStreamInputState) {
+function terminalInputPausedMessageKey(state: TerminalStreamInputState) {
   if (state.reason === "offline") {
-    return "终端连接正在恢复，已暂停输入以避免过期按键。";
+    return "projectTools.terminalInputPaused.offline";
   }
   if (state.reason === "closed") {
-    return "终端输入已关闭。";
+    return "projectTools.terminalInputPaused.closed";
   }
-  return "终端连接较慢，已暂停输入以避免输入队列过大。";
+  return "projectTools.terminalInputPaused.backpressure";
 }
 
 function terminalSnapshotStartOffset(snapshot: TerminalSnapshot) {

@@ -123,7 +123,9 @@ export function ChatEmptyState({
       ) : (
         <>
           <div className="whitespace-nowrap text-center text-xl font-semibold leading-7 tracking-tight text-foreground">
-            {t(GREETING_KEYS[period])}，{t("chat.greetingSubtitle")}
+            {t("chat.greetingTemplate")
+              .replace("{greeting}", t(GREETING_KEYS[period]))
+              .replace("{subtitle}", t("chat.greetingSubtitle"))}
           </div>
           {onSuggestionSelect ? (
             <div

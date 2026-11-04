@@ -1,5 +1,6 @@
 import { AlertCircle, Loader2, MessageSquareText } from "@liveagent/ui/components/IconSet";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { GatewayTranscript } from "../components/GatewayTranscript";
@@ -37,6 +38,7 @@ function SharedHistoryStateLayout({ children }: { children: ReactNode }) {
 }
 
 export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
+  const { t } = useLocale();
   const [state, setState] = useState<SharedHistoryState>({ status: "loading" });
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error ?? "");
-          setState({ status: "error", error: message || "读取分享会话失败" });
+          setState({ status: "error", error: message });
         }
       }
     })();
@@ -64,7 +66,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
   }, [token]);
 
   const summary = state.status === "ready" ? state.detail.conversation : undefined;
-  const title = summary?.title?.trim() || "分享会话";
+  const title = summary?.title?.trim() || t("sharedHistory.shareDialog.title");
   const updatedAt = useMemo(
     () => formatSharedHistoryTimestamp(summary?.updated_at),
     [summary?.updated_at],
@@ -112,7 +114,10 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
                 )}
               >
                 <span className="rounded-full py-4px px-9px">
-                  {summary?.message_count ?? state.entries.length} 条消息
+                  {t("sharedHistory.messageCount").replace(
+                    "{count}",
+                    String(summary?.message_count ?? state.entries.length),
+                  )}
                 </span>
                 {updatedAt ? <span className="rounded-full py-4px px-9px">{updatedAt}</span> : null}
               </div>
@@ -123,7 +128,9 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
             {state.status === "loading" ? (
               <SharedHistoryStateLayout>
                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                <div className="text-sm font-medium text-foreground/85">正在加载分享会话</div>
+                <div className="text-sm font-medium text-foreground/85">
+                  {t("sharedHistory.page.loading")}
+                </div>
               </SharedHistoryStateLayout>
             ) : state.status === "error" ? (
               <SharedHistoryStateLayout>
@@ -135,15 +142,19 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
                 >
                   <AlertCircle className="size-5" />
                 </div>
-                <div className="text-sm font-medium text-foreground/85">{state.error}</div>
+                <div className="text-sm font-medium text-foreground/85">
+                  {state.error || t("sharedHistory.page.loadFailed")}
+                </div>
                 <div className="max-w-md text-center text-xs leading-5 text-muted-foreground">
-                  分享可能已被关闭，或桌面端当前不在线。
+                  {t("sharedHistory.page.errorHint")}
                 </div>
               </SharedHistoryStateLayout>
             ) : state.entries.length === 0 ? (
               <SharedHistoryStateLayout>
                 <MessageSquareText className="size-5 text-muted-foreground" />
-                <div className="text-sm font-medium text-foreground/85">该会话暂无可展示内容</div>
+                <div className="text-sm font-medium text-foreground/85">
+                  {t("sharedHistory.page.empty")}
+                </div>
               </SharedHistoryStateLayout>
             ) : (
               <ScrollArea className="h-full [overflow-anchor:none]">
