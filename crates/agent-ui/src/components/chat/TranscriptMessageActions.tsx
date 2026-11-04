@@ -15,6 +15,7 @@ import type { ReplyShareSource } from "../../lib/chat/replyShare";
 import { cachedDateTimeFormat } from "../../lib/shared/intlFormatters";
 import { cn } from "../../lib/shared/utils";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
+import { ShortcutTooltip } from "../ui/shortcut-tooltip";
 import { type UsageDetailEntry, UsageInfoPopover } from "./UsagePanel";
 
 // 分享弹窗依赖 Markdown 渲染和截图库，按需加载，不进转录区首屏。
@@ -124,50 +125,53 @@ export function TranscriptUserMessageActions(
       >
         {!readOnly ? (
           <div className="flex gap-0.5">
-            <button
-              type="button"
-              className={cn(
-                "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
-                "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
-              )}
-              title={t("chat.copy")}
-              aria-label={t("chat.copy")}
-              disabled={copyDisabled}
-              onClick={onCopy}
-            >
-              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
-                "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
-              )}
-              title={editTitle}
-              aria-label={editTitle}
-              disabled={editDisabled}
-              onClick={onEdit}
-            >
-              <SquarePen className="size-3.5" />
-            </button>
-            {rewind ? (
+            <ShortcutTooltip label={t("chat.copy")} triggerDisabled={copyDisabled}>
               <button
                 type="button"
                 className={cn(
                   "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
                   "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
                 )}
-                title={rewindTitle}
-                aria-label={rewindTitle}
-                disabled={rewind.disabled}
-                onClick={rewind.onRewind}
+                aria-label={t("chat.copy")}
+                disabled={copyDisabled}
+                onClick={onCopy}
               >
-                {rewind.pending ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Undo2 className="size-3.5" />
-                )}
+                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
               </button>
+            </ShortcutTooltip>
+            <ShortcutTooltip label={editTitle} triggerDisabled={editDisabled}>
+              <button
+                type="button"
+                className={cn(
+                  "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
+                  "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+                )}
+                aria-label={editTitle}
+                disabled={editDisabled}
+                onClick={onEdit}
+              >
+                <SquarePen className="size-3.5" />
+              </button>
+            </ShortcutTooltip>
+            {rewind ? (
+              <ShortcutTooltip label={rewindTitle} triggerDisabled={rewind.disabled}>
+                <button
+                  type="button"
+                  className={cn(
+                    "chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors",
+                    "hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+                  )}
+                  aria-label={rewindTitle}
+                  disabled={rewind.disabled}
+                  onClick={rewind.onRewind}
+                >
+                  {rewind.pending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Undo2 className="size-3.5" />
+                  )}
+                </button>
+              </ShortcutTooltip>
             ) : null}
           </div>
         ) : null}
@@ -227,33 +231,35 @@ export function TranscriptAssistantMessageActions(
         )}
         data-force-visible={branchPending ? "true" : undefined}
       >
-        <button
-          type="button"
-          className={cn(
-            "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
-            "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
-          )}
-          title={t("chat.copy")}
-          aria-label={t("chat.copy")}
-          disabled={copyDisabled}
-          onClick={onCopy}
-        >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-        </button>
-        {shareSource ? (
+        <ShortcutTooltip label={t("chat.copy")} triggerDisabled={copyDisabled}>
           <button
             type="button"
             className={cn(
               "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
               "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
             )}
-            title={t("chat.share")}
-            aria-label={t("chat.share")}
-            disabled={shareDisabled}
-            onClick={() => setShareOpen(true)}
+            aria-label={t("chat.copy")}
+            disabled={copyDisabled}
+            onClick={onCopy}
           >
-            <Share2 className="size-3.5" />
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           </button>
+        </ShortcutTooltip>
+        {shareSource ? (
+          <ShortcutTooltip label={t("chat.share")} triggerDisabled={shareDisabled}>
+            <button
+              type="button"
+              className={cn(
+                "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+              )}
+              aria-label={t("chat.share")}
+              disabled={shareDisabled}
+              onClick={() => setShareOpen(true)}
+            >
+              <Share2 className="size-3.5" />
+            </button>
+          </ShortcutTooltip>
         ) : null}
         <ConfirmActionPopover
           title={t("chat.retryConfirmTitle")}
@@ -264,19 +270,20 @@ export function TranscriptAssistantMessageActions(
           onConfirm={onRetry}
         >
           {(open) => (
-            <button
-              type="button"
-              className={cn(
-                "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
-                "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
-              )}
-              title={retryTitle}
-              aria-label={retryTitle}
-              disabled={retryDisabled}
-              onClick={open}
-            >
-              <RefreshCw className="size-3.5" />
-            </button>
+            <ShortcutTooltip label={retryTitle} triggerDisabled={retryDisabled}>
+              <button
+                type="button"
+                className={cn(
+                  "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                  "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+                )}
+                aria-label={retryTitle}
+                disabled={retryDisabled}
+                onClick={open}
+              >
+                <RefreshCw className="size-3.5" />
+              </button>
+            </ShortcutTooltip>
           )}
         </ConfirmActionPopover>
         <ConfirmActionPopover
@@ -289,23 +296,24 @@ export function TranscriptAssistantMessageActions(
           onConfirm={onBranch}
         >
           {(open) => (
-            <button
-              type="button"
-              className={cn(
-                "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
-                "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
-              )}
-              title={branchTitle}
-              aria-label={branchTitle}
-              disabled={branchDisabled}
-              onClick={open}
-            >
-              {branchPending ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <GitBranch className="size-3.5" />
-              )}
-            </button>
+            <ShortcutTooltip label={branchTitle} triggerDisabled={branchDisabled}>
+              <button
+                type="button"
+                className={cn(
+                  "chat-assistant-action inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                  "transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+                )}
+                aria-label={branchTitle}
+                disabled={branchDisabled}
+                onClick={open}
+              >
+                {branchPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <GitBranch className="size-3.5" />
+                )}
+              </button>
+            </ShortcutTooltip>
           )}
         </ConfirmActionPopover>
         <UsageInfoPopover entries={usageEntries} contextWindow={usageContextWindow} />

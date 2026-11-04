@@ -1,5 +1,6 @@
 import { ArrowLeft, Search } from "@liveagent/ui/components/IconSet";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { KbdShortcut } from "../../components/ui/kbd";
 import { ZoneFontScaleContext } from "../../components/ui/zone-font-scale";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";
@@ -182,14 +183,12 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
               >
                 <ArrowLeft className="size-3.5 shrink-0" />
                 <span>{t("settings.backToChat")}</span>
-                <kbd
-                  className={cn(
-                    "ml-auto rounded border border-border/60 px-1.5 py-0.5",
-                    "font-sans text-tiny leading-none text-muted-foreground/70",
-                  )}
-                >
-                  Esc
-                </kbd>
+                <KbdShortcut
+                  shortcut="Escape"
+                  size="sm"
+                  className="ml-auto"
+                  keyClassName="border-border/60 px-1.5 text-muted-foreground/70"
+                />
               </button>
               <div className="relative mt-2.5">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/75" />

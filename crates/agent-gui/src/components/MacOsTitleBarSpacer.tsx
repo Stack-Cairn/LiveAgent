@@ -1,5 +1,7 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { PanelLeft, PanelLeftClose, Settings } from "@liveagent/ui/components/IconSet";
+import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
+import { useSidebarToggleShortcut } from "@liveagent/ui/components/ui/sidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useState } from "react";
@@ -177,6 +179,7 @@ export function MacOsTitleBarToggle({
   appUpdate?: AppUpdateController;
 }) {
   const { t } = useLocale();
+  const sidebarToggleShortcut = useSidebarToggleShortcut();
   const [show] = useState(isMacOsTauri);
   const { metrics: trafficLightMetrics, hidden: trafficLightsHidden } =
     useMacOsTrafficLightMetrics(show);
@@ -196,31 +199,16 @@ export function MacOsTitleBarToggle({
         height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
       }}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={sidebarOpen}
-        aria-label={t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar")}
-        className={cn(
-          "flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors",
-          "hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]",
-        )}
-        style={{
-          height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
-          width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
-        }}
+      <ShortcutTooltip
+        label={t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar")}
+        shortcut={sidebarToggleShortcut}
+        side="bottom"
       >
-        {sidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeft className="size-4" />}
-      </button>
-      {!sidebarOpen && onOpenSettings && (
         <button
           type="button"
-          onClick={onOpenSettings}
-          // 自动化脚本按 testid 定位；可读名走 i18n——屏幕阅读器念给用户
-          // 听的东西不该为了脚本方便固定成英文。
-          data-testid="open-settings"
-          aria-label={t("tooltip.settings")}
-          title={t("tooltip.settings")}
+          onClick={onToggle}
+          aria-expanded={sidebarOpen}
+          aria-label={t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar")}
           className={cn(
             "flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors",
             "hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]",
@@ -230,8 +218,30 @@ export function MacOsTitleBarToggle({
             width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
           }}
         >
-          <Settings className="size-4" />
+          {sidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeft className="size-4" />}
         </button>
+      </ShortcutTooltip>
+      {!sidebarOpen && onOpenSettings && (
+        <ShortcutTooltip label={t("tooltip.settings")} side="bottom">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            // 自动化脚本按 testid 定位；可读名走 i18n——屏幕阅读器念给用户
+            // 听的东西不该为了脚本方便固定成英文。
+            data-testid="open-settings"
+            aria-label={t("tooltip.settings")}
+            className={cn(
+              "flex cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors",
+              "hover:bg-accent/60 hover:text-foreground [-webkit-app-region:no-drag]",
+            )}
+            style={{
+              height: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
+              width: MAC_OS_TITLEBAR_TOGGLE_BUTTON_SIZE,
+            }}
+          >
+            <Settings className="size-4" />
+          </button>
+        </ShortcutTooltip>
       )}
       {!sidebarOpen && onOpenSettings && appUpdate ? (
         <AppUpdateButton appUpdate={appUpdate} className="ml-1" />

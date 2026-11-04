@@ -14,9 +14,8 @@ export function Tooltip<Payload = unknown>(props: TooltipPrimitive.Root.Props<Pa
  */
 export const createTooltipHandle = TooltipPrimitive.createHandle;
 
-export function TooltipTrigger(
-  props: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Trigger>,
-) {
+// React 19 passes `ref` as a prop; spreading it reaches the primitive.
+export function TooltipTrigger(props: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 

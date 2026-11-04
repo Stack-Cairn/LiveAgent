@@ -5,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
+import { formatShortcutText, Kbd } from "../../components/ui/kbd";
 import { usePlanningT } from "./usePlanningT";
 
 const SHORTCUTS: [keys: string[], label: string][] = [
@@ -46,7 +47,9 @@ export function ShortcutHelp({ onClose }: { onClose(): void }) {
                   {keys.map((key, index) => (
                     <span key={key} className="flex items-center gap-1">
                       {index > 0 && (keys[0] === "Alt" ? "+" : t("planner.shortcuts.or"))}
-                      <kbd className="rounded border border-foreground/10 px-1.5">{key}</kbd>
+                      <Kbd className="px-1.5">
+                        {key === "Alt" ? formatShortcutText("Alt") : key}
+                      </Kbd>
                     </span>
                   ))}
                 </dd>

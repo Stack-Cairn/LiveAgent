@@ -1,5 +1,6 @@
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { AlertTriangle, ChevronRight, FolderTree, Loader2 } from "@liveagent/ui/components/IconSet";
+import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 import { floatingSurfaceClassName } from "@liveagent/ui/components/ui/menu-surface";
 import type { SftpClient, SftpEntry, SftpSide } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -311,9 +312,11 @@ export function SftpPathNavigator(props: {
           />
           <span className="pointer-events-none absolute right-2 flex items-center gap-1 text-tiny text-muted-foreground/70">
             {loading ? <Loader2 className="size-3.5 animate-spin text-primary" /> : null}
-            <kbd className="rounded-sm border border-border/70 bg-background/80 px-1 py-0.5 font-sans text-muted-foreground/80">
-              ↵
-            </kbd>
+            <KbdShortcut
+              shortcut="Enter"
+              size="sm"
+              keyClassName="rounded-sm border-border/70 bg-background/80 text-muted-foreground/80"
+            />
           </span>
         </div>
       ) : (

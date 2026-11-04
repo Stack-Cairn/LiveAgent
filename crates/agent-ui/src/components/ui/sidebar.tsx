@@ -11,7 +11,11 @@ import { useIsMobile } from "../../hooks/use-mobile";
 import { useLocale } from "../../i18n";
 import { isMacLikePlatform } from "../../lib/shared/platform";
 import { cn } from "../../lib/shared/utils";
-import { matchesShortcutCommand } from "../../lib/shortcuts/shortcutCommands";
+import {
+  getShortcutBinding,
+  matchesShortcutCommand,
+  useShortcutOverrides,
+} from "../../lib/shortcuts/shortcutCommands";
 import { Button } from "./button";
 import { Input } from "./input";
 import { Separator } from "./separator";
@@ -279,6 +283,14 @@ function Sidebar({
       </div>
     </div>
   );
+}
+
+/**
+ * Chord shown in sidebar toggle tooltips, read from the shortcut table so a
+ * rebinding (or an unbind) in settings shows up there; null when unbound.
+ */
+export function useSidebarToggleShortcut(): string | null {
+  return getShortcutBinding("toggleSidebar", useShortcutOverrides()) || null;
 }
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {

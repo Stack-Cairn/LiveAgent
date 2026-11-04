@@ -55,6 +55,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/ui/label-tooltip";
+import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
 import { SwitchIndicator } from "@liveagent/ui/components/ui/switch";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -70,6 +71,7 @@ import {
 } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import { nextComposerPermissionMode } from "@liveagent/ui/lib/chat/permissionModes";
+import { readSendShortcut } from "@liveagent/ui/lib/chat/sendShortcut";
 import {
   clearActiveWorkspacePathDrag,
   getActiveWorkspacePathDrag,
@@ -621,10 +623,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
   const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
+  // Mirrors the editor's send key preference; while a run streams the same
+  // button stops it, and Esc does too (useEscapeToStopRun below).
+  const sendShortcutKeys = readSendShortcut() === "ctrlEnter" ? "Mod+Enter" : "Enter";
   const primaryActionTitle = canQueueDraftWhileSending
     ? t("chat.queue.addToQueue")
     : isSending
-      ? t("chat.stopGenerationWithEsc")
+      ? t("chat.stopGeneration")
       : t("chat.sendMessage");
   // Esc stops the run; open popups, the expanded composer and a pending
   // approval keep the key first (see escapeStopRun.ts for the precedence).
@@ -1715,44 +1720,45 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-0.5">
               <div className="flex min-w-0 flex-1 items-center gap-1">
                 <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <button
-                        type="button"
-                        disabled={composerAddMenuDisabled}
-                        aria-label={addMenuTooltip}
-                        title={addMenuTooltip}
-                        className={cn(
-                          "composer-toolbar-action relative inline-flex size-8 shrink-0 items-center justify-center",
-                          "rounded-full outline-hidden transition-colors",
-                          "hover:bg-muted/60 focus-visible:bg-muted/60 data-[popup-open]:bg-muted/60",
-                          "disabled:pointer-events-none disabled:opacity-40",
-                          pendingUploadedFiles.length > 0
-                            ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
-                            : "text-muted-foreground hover:text-foreground dark:hover:text-white",
-                        )}
-                      />
-                    }
-                  >
-                    {isUploadingFiles ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Plus className="size-4" />
-                    )}
-                    {pendingUploadedFiles.length > 0 ? (
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "absolute -right-0.5 -top-0.5 flex h-15px min-w-15px items-center justify-center",
-                          "rounded-full bg-sky-500 px-3px",
-                          "text-tiny font-semibold leading-none text-white shadow-ui-chatcomposerbar-41",
-                          "dark:bg-sky-400 dark:text-slate-900 dark:shadow-ui-chatcomposerbar-42",
-                        )}
-                      >
-                        {pendingUploadedFiles.length}
-                      </span>
-                    ) : null}
-                  </DropdownMenuTrigger>
+                  <ShortcutTooltip label={addMenuTooltip} triggerDisabled={composerAddMenuDisabled}>
+                    <DropdownMenuTrigger
+                      render={
+                        <button
+                          type="button"
+                          disabled={composerAddMenuDisabled}
+                          aria-label={addMenuTooltip}
+                          className={cn(
+                            "composer-toolbar-action relative inline-flex size-8 shrink-0 items-center justify-center",
+                            "rounded-full outline-hidden transition-colors",
+                            "hover:bg-muted/60 focus-visible:bg-muted/60 data-[popup-open]:bg-muted/60",
+                            "disabled:pointer-events-none disabled:opacity-40",
+                            pendingUploadedFiles.length > 0
+                              ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
+                              : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                          )}
+                        />
+                      }
+                    >
+                      {isUploadingFiles ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Plus className="size-4" />
+                      )}
+                      {pendingUploadedFiles.length > 0 ? (
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "absolute -right-0.5 -top-0.5 flex h-15px min-w-15px items-center justify-center",
+                            "rounded-full bg-sky-500 px-3px",
+                            "text-tiny font-semibold leading-none text-white shadow-ui-chatcomposerbar-41",
+                            "dark:bg-sky-400 dark:text-slate-900 dark:shadow-ui-chatcomposerbar-42",
+                          )}
+                        >
+                          {pendingUploadedFiles.length}
+                        </span>
+                      ) : null}
+                    </DropdownMenuTrigger>
+                  </ShortcutTooltip>
                   <DropdownMenuContent
                     variant="soft"
                     className="flex w-60 flex-col overflow-hidden"
@@ -1886,59 +1892,63 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </div>
 
               <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  disabled={isSending ? false : sendDisabled}
-                  onClick={() => {
-                    if (canQueueDraftWhileSending) {
-                      handleComposerSend();
-                      return;
-                    }
-                    if (isSending) {
-                      onStop();
-                      return;
-                    }
-                    if (sendDisabled) return;
-                    handleComposerSend();
-                  }}
-                  size="sm"
-                  title={primaryActionTitle}
-                  aria-label={primaryActionTitle}
-                  aria-keyshortcuts={isSending && !canQueueDraftWhileSending ? "Escape" : undefined}
-                  style={
-                    canQueueDraftWhileSending
-                      ? {
-                          backgroundColor: "var(--ui-color-hsl-160-84-39)",
-                          backgroundImage: "none",
-                          color: "white",
-                        }
-                      : isSending
-                        ? {
-                            backgroundColor: "var(--destructive)",
-                            backgroundImage: "none",
-                            color: "var(--destructive-foreground)",
-                          }
-                        : undefined
-                  }
-                  className={cn(
-                    // 点击区保持 32px；背景经 p-0.5 + bg-clip-content 只涂 28px 内圆，
-                    // 与用量环外径、展开按钮悬停圆等大，避免实心圆盘显大。
-                    "size-8 shrink-0 rounded-full border-0 bg-clip-content p-0.5 shadow-none transition-all",
-                    "[&_svg]:stroke-[2.25]",
-                    canQueueDraftWhileSending
-                      ? "hover:brightness-105 active:scale-95"
-                      : isSending
-                        ? "hover:opacity-90 active:scale-95"
-                        : "disabled:opacity-100 [&:not(:disabled)]:bg-foreground [&:not(:disabled)]:text-background [&:not(:disabled)]:hover:bg-foreground/85 [&:not(:disabled)]:active:scale-95 disabled:bg-muted/60 disabled:text-muted-foreground",
-                  )}
+                <ShortcutTooltip
+                  label={primaryActionTitle}
+                  shortcut={isSending && !canQueueDraftWhileSending ? "Escape" : sendShortcutKeys}
+                  triggerDisabled={isSending ? false : sendDisabled}
                 >
-                  {canQueueDraftWhileSending ? (
-                    <ArrowUp className="size-4" />
-                  ) : isSending ? (
-                    <Square className="size-3 fill-current" />
-                  ) : (
-                    <ArrowUp className="size-4" />
-                  )}
-                </Button>
+                  <Button
+                    disabled={isSending ? false : sendDisabled}
+                    onClick={() => {
+                      if (canQueueDraftWhileSending) {
+                        handleComposerSend();
+                        return;
+                      }
+                      if (isSending) {
+                        onStop();
+                        return;
+                      }
+                      if (sendDisabled) return;
+                      handleComposerSend();
+                    }}
+                    size="sm"
+                    aria-label={primaryActionTitle}
+                    style={
+                      canQueueDraftWhileSending
+                        ? {
+                            backgroundColor: "var(--ui-color-hsl-160-84-39)",
+                            backgroundImage: "none",
+                            color: "white",
+                          }
+                        : isSending
+                          ? {
+                              backgroundColor: "var(--destructive)",
+                              backgroundImage: "none",
+                              color: "var(--destructive-foreground)",
+                            }
+                          : undefined
+                    }
+                    className={cn(
+                      // 点击区保持 32px；背景经 p-0.5 + bg-clip-content 只涂 28px 内圆，
+                      // 与用量环外径、展开按钮悬停圆等大，避免实心圆盘显大。
+                      "size-8 shrink-0 rounded-full border-0 bg-clip-content p-0.5 shadow-none transition-all",
+                      "[&_svg]:stroke-[2.25]",
+                      canQueueDraftWhileSending
+                        ? "hover:brightness-105 active:scale-95"
+                        : isSending
+                          ? "hover:opacity-90 active:scale-95"
+                          : "disabled:opacity-100 [&:not(:disabled)]:bg-foreground [&:not(:disabled)]:text-background [&:not(:disabled)]:hover:bg-foreground/85 [&:not(:disabled)]:active:scale-95 disabled:bg-muted/60 disabled:text-muted-foreground",
+                    )}
+                  >
+                    {canQueueDraftWhileSending ? (
+                      <ArrowUp className="size-4" />
+                    ) : isSending ? (
+                      <Square className="size-3 fill-current" />
+                    ) : (
+                      <ArrowUp className="size-4" />
+                    )}
+                  </Button>
+                </ShortcutTooltip>
               </div>
             </div>
           </div>

@@ -2,6 +2,8 @@ import { isDesktopChatHeaderInset } from "@liveagent/adapters/chatHeaderChrome";
 import type { AppSettings } from "@liveagent/app/lib/settings";
 import { PanelLeft, Settings } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
+import { useSidebarToggleShortcut } from "@liveagent/ui/components/ui/sidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode } from "react";
@@ -36,7 +38,9 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
     className,
   } = props;
   const { t } = useLocale();
+  const sidebarToggleShortcut = useSidebarToggleShortcut();
   const desktopTitleBarInset = isDesktopChatHeaderInset();
+  const sidebarToggleLabel = t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar");
 
   return (
     <header
@@ -56,21 +60,26 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
       >
         {navigationActions}
         {!desktopTitleBarInset ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onOpenSidebar}
-            title={t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar")}
-            aria-expanded={sidebarOpen}
-            aria-label={t(sidebarOpen ? "sidebar.closeSidebar" : "tooltip.openSidebar")}
-            className={cn(
-              "rounded-lg text-muted-foreground hover:text-foreground",
-              // web 端侧栏打开时折叠入口在侧栏品牌行（搜索右侧），顶部只保留收起态的展开入口；桌面端不变。
-              sidebarOpen && "web:hidden",
-            )}
+          <ShortcutTooltip
+            label={sidebarToggleLabel}
+            shortcut={sidebarToggleShortcut}
+            side="bottom"
           >
-            <PanelLeft className="size-4.5" />
-          </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onOpenSidebar}
+              aria-expanded={sidebarOpen}
+              aria-label={sidebarToggleLabel}
+              className={cn(
+                "rounded-lg text-muted-foreground hover:text-foreground",
+                // web 端侧栏打开时折叠入口在侧栏品牌行（搜索右侧），顶部只保留收起态的展开入口；桌面端不变。
+                sidebarOpen && "web:hidden",
+              )}
+            >
+              <PanelLeft className="size-4.5" />
+            </Button>
+          </ShortcutTooltip>
         ) : null}
       </div>
       <div
@@ -88,15 +97,17 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         {preThemeActions}
         <ThemeToggleButton theme={settings.theme} onToggle={onToggleTheme} />
         {!sidebarOpen && !desktopTitleBarInset ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onOpenSettings()}
-            title={t("tooltip.settings")}
-            className="rounded-lg text-muted-foreground hover:text-foreground"
-          >
-            <Settings className="size-4" />
-          </Button>
+          <ShortcutTooltip label={t("tooltip.settings")} side="bottom">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onOpenSettings()}
+              aria-label={t("tooltip.settings")}
+              className="rounded-lg text-muted-foreground hover:text-foreground"
+            >
+              <Settings className="size-4" />
+            </Button>
+          </ShortcutTooltip>
         ) : null}
         {trailingActions}
       </div>

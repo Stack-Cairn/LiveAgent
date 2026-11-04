@@ -21,6 +21,7 @@ import {
 import { useAutosizeTextarea } from "../../../lib/shared/useAutosizeTextarea";
 import { cn } from "../../../lib/shared/utils";
 import { Button } from "../../ui/button";
+import { formatShortcutText, Kbd } from "../../ui/kbd";
 import { Textarea } from "../../ui/textarea";
 import { useRightDockToolContext } from "../RightDockContext";
 import {
@@ -37,11 +38,7 @@ const COARSE_POINTER_BUTTON_CLASS = "[@media(pointer:coarse)]:h-9";
 
 // Keyboard hint for the commit shortcut; the handler accepts both Cmd and
 // Ctrl, the hint only mirrors the platform's conventional modifier.
-const COMMIT_SHORTCUT_HINT = /Mac|iPhone|iPad|iPod/i.test(
-  typeof navigator === "undefined" ? "" : `${navigator.userAgent} ${navigator.platform}`,
-)
-  ? "⌘↩"
-  : "Ctrl+↩";
+const COMMIT_SHORTCUT_HINT = formatShortcutText("Mod+Enter");
 
 export function GitCommitComposer(props: {
   commitMessage: string;
@@ -340,9 +337,13 @@ export function GitCommitComposer(props: {
                     {stagedEntries.length}
                   </span>
                 ) : null}
-                <kbd className="hidden font-sans text-tiny font-normal leading-none opacity-70 @min-[19rem]:inline">
+                <Kbd
+                  variant="plain"
+                  size="inline"
+                  className="hidden text-tiny text-inherit opacity-70 @min-[19rem]:inline-flex"
+                >
                   {COMMIT_SHORTCUT_HINT}
-                </kbd>
+                </Kbd>
               </>
             )}
           </Button>

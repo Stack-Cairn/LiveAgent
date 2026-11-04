@@ -22,6 +22,7 @@ import {
   CommandList,
   CommandPanel,
 } from "@liveagent/ui/components/ui/command";
+import { Kbd, KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   COMMAND_PALETTE_GROUP_ORDER,
@@ -454,11 +455,7 @@ export function ConversationSearchDialog({
                                   className="size-3.5 shrink-0 text-primary"
                                 />
                               ) : null}
-                              {action.shortcut ? (
-                                <kbd className="shrink-0 rounded border border-foreground/10 px-1 text-xs text-muted-foreground">
-                                  {action.shortcut}
-                                </kbd>
-                              ) : null}
+                              {action.shortcut ? <Kbd>{action.shortcut}</Kbd> : null}
                             </CommandItem>
                           );
                         }
@@ -513,23 +510,24 @@ export function ConversationSearchDialog({
           </CommandPanel>
           <CommandFooter>
             <div className="flex items-center gap-4">
-              <span>
-                <kbd className="mr-1.5 rounded border border-foreground/10 px-1">↑ ↓</kbd>
+              <span className="flex items-center">
+                <KbdShortcut shortcut="ArrowUp" className="mr-0.5" />
+                <KbdShortcut shortcut="ArrowDown" className="mr-1.5" />
                 {t("chat.conversationSearchNavigate")}
               </span>
-              <span>
-                <kbd className="mr-1.5 rounded border border-foreground/10 px-1">↵</kbd>
+              <span className="flex items-center">
+                <KbdShortcut shortcut="Enter" className="mr-1.5" />
                 {t("chat.conversationSearchOpen")}
               </span>
               {paletteMode ? (
-                <span>
-                  <kbd className="mr-1.5 rounded border border-foreground/10 px-1">&gt;</kbd>
+                <span className="flex items-center">
+                  <Kbd className="mr-1.5">&gt;</Kbd>
                   {t("chat.commandPalette.actionsOnlyHint")}
                 </span>
               ) : null}
             </div>
-            <span>
-              <kbd className="mr-1.5 rounded border border-foreground/10 px-1">Esc</kbd>
+            <span className="flex items-center">
+              <KbdShortcut shortcut="Escape" className="mr-1.5" />
               {t("chat.conversationSearchClose")}
             </span>
           </CommandFooter>

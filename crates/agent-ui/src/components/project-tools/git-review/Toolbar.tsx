@@ -64,6 +64,7 @@ import {
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
 import { Input } from "../../ui/input";
+import { ShortcutTooltip } from "../../ui/shortcut-tooltip";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
 import { useRightDockToolContext } from "../RightDockContext";
 import {
@@ -748,6 +749,13 @@ export function GitReviewToolbar(props: {
   const { t } = useLocale();
   const { onInsertCodeReviewSkill } = useRightDockToolContext().git;
   const operationBusy = busy !== "";
+  const aiReviewTitle = t(
+    !onInsertCodeReviewSkill
+      ? "projectTools.gitReview.aiReviewUnavailable"
+      : state.status === "ready"
+        ? "projectTools.gitReview.addAiReview"
+        : "projectTools.gitReview.noRepository",
+  );
   // Which selector the dial exposes; branch is the everyday one, so it wins
   // the full-width dropdown by default.
   const [scope, setScope] = useState<GitReviewScope>("branch");
@@ -844,99 +852,113 @@ export function GitReviewToolbar(props: {
             <GitReviewBranchMenu data={data} writeDisabled={writeDisabled} />
           )}
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={!onInsertCodeReviewSkill || state.status !== "ready"}
-          className="size-7 px-0"
-          title={t(
-            !onInsertCodeReviewSkill
-              ? "projectTools.gitReview.aiReviewUnavailable"
-              : state.status === "ready"
-                ? "projectTools.gitReview.addAiReview"
-                : "projectTools.gitReview.noRepository",
-          )}
-          aria-label={t("projectTools.gitReview.addAiReview")}
-          onClick={onInsertCodeReviewSkill}
+        <ShortcutTooltip
+          label={aiReviewTitle}
+          triggerDisabled={!onInsertCodeReviewSkill || state.status !== "ready"}
         >
-          <Sparkles className="size-3.5 text-primary" />
-        </Button>
-        <RefreshButton
-          aria-busy={loading || historyLoading}
-          size="sm"
-          variant="ghost"
-          disabled={loading || historyLoading || operationBusy}
-          className="size-7 px-0"
-          title={t("projectTools.gitReview.refresh")}
-          aria-label={t("projectTools.gitReview.refresh")}
-          onClick={() => {
-            if (data.isBusy()) return;
-            // Manual refresh also re-scans for repositories so ones created
-            // mid-session (e.g. a fresh clone in a subdirectory) show up.
-            void discoverRepositories();
-            if (reviewMode === "history") {
-              void loadHistory();
-            } else {
-              void refresh();
-            }
-          }}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!onInsertCodeReviewSkill || state.status !== "ready"}
+            className="size-7 px-0"
+            aria-label={t("projectTools.gitReview.addAiReview")}
+            onClick={onInsertCodeReviewSkill}
+          >
+            <Sparkles className="size-3.5 text-primary" />
+          </Button>
+        </ShortcutTooltip>
+        <ShortcutTooltip
+          label={t("projectTools.gitReview.refresh")}
+          triggerDisabled={loading || historyLoading || operationBusy}
         >
-          <RefreshCw
-            data-refresh-icon
-            className={cn("size-3.5", (loading || historyLoading) && "animate-spin")}
-          />
-        </RefreshButton>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={writeDisabled || operationBusy}
-          title={t("projectTools.gitReview.fetch")}
-          aria-label={t("projectTools.gitReview.fetch")}
-          className="size-7 px-0"
-          onClick={() => {
-            if (gitClient) void runOperation("fetch", () => gitClient.fetch(cwd), "fetch");
-          }}
+          <RefreshButton
+            aria-busy={loading || historyLoading}
+            size="sm"
+            variant="ghost"
+            disabled={loading || historyLoading || operationBusy}
+            className="size-7 px-0"
+            aria-label={t("projectTools.gitReview.refresh")}
+            onClick={() => {
+              if (data.isBusy()) return;
+              // Manual refresh also re-scans for repositories so ones created
+              // mid-session (e.g. a fresh clone in a subdirectory) show up.
+              void discoverRepositories();
+              if (reviewMode === "history") {
+                void loadHistory();
+              } else {
+                void refresh();
+              }
+            }}
+          >
+            <RefreshCw
+              data-refresh-icon
+              className={cn("size-3.5", (loading || historyLoading) && "animate-spin")}
+            />
+          </RefreshButton>
+        </ShortcutTooltip>
+        <ShortcutTooltip
+          label={t("projectTools.gitReview.fetch")}
+          triggerDisabled={writeDisabled || operationBusy}
         >
-          {busy === "fetch" ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Cloud className="size-3.5" />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={writeDisabled || operationBusy}
-          title={t("projectTools.gitReview.pull")}
-          aria-label={t("projectTools.gitReview.pull")}
-          className="size-7 px-0"
-          onClick={() => {
-            if (gitClient) void runOperation("pull", () => gitClient.pull(cwd), "pull");
-          }}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={writeDisabled || operationBusy}
+            aria-label={t("projectTools.gitReview.fetch")}
+            className="size-7 px-0"
+            onClick={() => {
+              if (gitClient) void runOperation("fetch", () => gitClient.fetch(cwd), "fetch");
+            }}
+          >
+            {busy === "fetch" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Cloud className="size-3.5" />
+            )}
+          </Button>
+        </ShortcutTooltip>
+        <ShortcutTooltip
+          label={t("projectTools.gitReview.pull")}
+          triggerDisabled={writeDisabled || operationBusy}
         >
-          {busy === "pull" ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Download className="size-3.5" />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={writeDisabled || operationBusy}
-          title={t("projectTools.gitReview.push")}
-          aria-label={t("projectTools.gitReview.push")}
-          className="size-7 px-0"
-          onClick={() => {
-            if (gitClient) void runOperation("push", () => gitClient.push(cwd), "push");
-          }}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={writeDisabled || operationBusy}
+            aria-label={t("projectTools.gitReview.pull")}
+            className="size-7 px-0"
+            onClick={() => {
+              if (gitClient) void runOperation("pull", () => gitClient.pull(cwd), "pull");
+            }}
+          >
+            {busy === "pull" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Download className="size-3.5" />
+            )}
+          </Button>
+        </ShortcutTooltip>
+        <ShortcutTooltip
+          label={t("projectTools.gitReview.push")}
+          triggerDisabled={writeDisabled || operationBusy}
         >
-          {busy === "push" ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Upload className="size-3.5" />
-          )}
-        </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={writeDisabled || operationBusy}
+            aria-label={t("projectTools.gitReview.push")}
+            className="size-7 px-0"
+            onClick={() => {
+              if (gitClient) void runOperation("push", () => gitClient.push(cwd), "push");
+            }}
+          >
+            {busy === "push" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Upload className="size-3.5" />
+            )}
+          </Button>
+        </ShortcutTooltip>
       </div>
       {state.status === "ready" ? (
         <div
@@ -1044,26 +1066,28 @@ export function GitReviewToolbar(props: {
             }}
             aria-label={t("projectTools.gitReview.listPane")}
           >
-            <SettingsToggleGroupItem
-              value="list"
-              aria-label={t("projectTools.gitReview.listPane")}
-              title={t("projectTools.gitReview.listPane")}
-              className="min-w-7 px-1.5"
-            >
-              {reviewMode === "changes" ? (
-                <GitBranch className="size-3.5" />
-              ) : (
-                <History className="size-3.5" />
-              )}
-            </SettingsToggleGroupItem>
-            <SettingsToggleGroupItem
-              value="detail"
-              aria-label={t("projectTools.gitReview.detailPane")}
-              title={t("projectTools.gitReview.detailPane")}
-              className="min-w-7 px-1.5"
-            >
-              <Eye className="size-3.5" />
-            </SettingsToggleGroupItem>
+            <ShortcutTooltip label={t("projectTools.gitReview.listPane")}>
+              <SettingsToggleGroupItem
+                value="list"
+                aria-label={t("projectTools.gitReview.listPane")}
+                className="min-w-7 px-1.5"
+              >
+                {reviewMode === "changes" ? (
+                  <GitBranch className="size-3.5" />
+                ) : (
+                  <History className="size-3.5" />
+                )}
+              </SettingsToggleGroupItem>
+            </ShortcutTooltip>
+            <ShortcutTooltip label={t("projectTools.gitReview.detailPane")}>
+              <SettingsToggleGroupItem
+                value="detail"
+                aria-label={t("projectTools.gitReview.detailPane")}
+                className="min-w-7 px-1.5"
+              >
+                <Eye className="size-3.5" />
+              </SettingsToggleGroupItem>
+            </ShortcutTooltip>
           </SettingsToggleGroup>
         ) : null}
       </div>

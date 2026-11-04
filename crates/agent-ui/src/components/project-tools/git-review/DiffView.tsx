@@ -48,6 +48,7 @@ import {
 import { cn } from "../../../lib/shared/utils";
 import type { MentionComposerDraftSegment } from "../../chat/MentionComposerModel";
 import { Button } from "../../ui/button";
+import { ShortcutTooltip } from "../../ui/shortcut-tooltip";
 import {
   basename,
   buildPatchChunks,
@@ -1376,28 +1377,30 @@ export function DiffReviewCard(props: {
           {diffLoading ? (
             <Loader2 className="mr-1 size-3.5 animate-spin text-muted-foreground" />
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant={activeView === "workingTree" ? "secondary" : "ghost"}
-            className="size-7 px-0"
-            title={workingTreeTitle}
-            aria-label={t("projectTools.gitReview.showWorkingTree")}
-            onClick={() => onActiveViewChange("workingTree")}
-          >
-            <FolderTree className="size-3.5" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={activeView === "branch" ? "secondary" : "ghost"}
-            className="size-7 px-0"
-            title={branchTitle}
-            aria-label={t("projectTools.gitReview.showBranchDiff")}
-            onClick={() => onActiveViewChange("branch")}
-          >
-            <GitBranch className="size-3.5" />
-          </Button>
+          <ShortcutTooltip label={workingTreeTitle}>
+            <Button
+              type="button"
+              size="sm"
+              variant={activeView === "workingTree" ? "secondary" : "ghost"}
+              className="size-7 px-0"
+              aria-label={t("projectTools.gitReview.showWorkingTree")}
+              onClick={() => onActiveViewChange("workingTree")}
+            >
+              <FolderTree className="size-3.5" />
+            </Button>
+          </ShortcutTooltip>
+          <ShortcutTooltip label={branchTitle}>
+            <Button
+              type="button"
+              size="sm"
+              variant={activeView === "branch" ? "secondary" : "ghost"}
+              className="size-7 px-0"
+              aria-label={t("projectTools.gitReview.showBranchDiff")}
+              onClick={() => onActiveViewChange("branch")}
+            >
+              <GitBranch className="size-3.5" />
+            </Button>
+          </ShortcutTooltip>
         </div>
       </div>
       <DiffContent
