@@ -1853,7 +1853,7 @@ test("settings reload uses persisted right dock state only", () => {
 test("gateway settings sync keeps right dock width local and syncs project state", () => {
   const current = settings.normalizeSettings({
     customSettings: {
-      chatTranscript: { width: 920 },
+      chatTranscript: { width: 920, expandProcessByDefault: true },
       rightDock: {
         width: 612,
         projects: {
@@ -1899,7 +1899,7 @@ test("gateway settings sync keeps right dock width local and syncs project state
   });
   const incoming = settings.normalizeSettings({
     customSettings: {
-      chatTranscript: { width: 1100 },
+      chatTranscript: { width: 1100, expandProcessByDefault: false },
       rightDock: {
         width: 360,
         projects: {
@@ -1948,6 +1948,8 @@ test("gateway settings sync keeps right dock width local and syncs project state
 
   assert.equal(payload.customSettings.chatTranscript.width, 768);
   assert.equal(synced.customSettings.chatTranscript.width, 920);
+  assert.equal(payload.customSettings.chatTranscript.expandProcessByDefault, false);
+  assert.equal(synced.customSettings.chatTranscript.expandProcessByDefault, true);
   assert.equal(synced.customSettings.rightDock.width, 612);
   assert.deepEqual(Object.keys(synced.customSettings.rightDock.projects).sort(), [
     "/desktop/project",
@@ -2792,15 +2794,46 @@ test("font scale settings normalize invalid values to 1 and clamp out-of-range v
 });
 
 test("chat transcript width defaults, clamps, and updates locally", () => {
-  assert.deepEqual(settings.normalizeChatTranscriptSettings(undefined), { width: 768 });
-  assert.deepEqual(settings.normalizeChatTranscriptSettings({ width: 400 }), { width: 560 });
-  assert.deepEqual(settings.normalizeChatTranscriptSettings({ width: 1400 }), { width: 1200 });
-  assert.deepEqual(settings.normalizeChatTranscriptSettings({ width: 920.4 }), { width: 920 });
+  const width = (value) => ({ width: value, expandProcessByDefault: false });
+  assert.deepEqual(settings.normalizeChatTranscriptSettings(undefined), width(768));
+  assert.deepEqual(settings.normalizeChatTranscriptSettings({ width: 400 }), width(560));
+  assert.deepEqual(settings.normalizeChatTranscriptSettings({ width: 1400 }), width(1200));
+  assert.deepEqual(settings.normalizeChatTranscriptSettings({ width: 920.4 }), width(920));
 
   const current = settings.normalizeSettings({ customSettings: { chatTranscript: { width: 768 } } });
   const updated = settings.updateChatTranscriptWidth(current, 960);
   assert.equal(updated.customSettings.chatTranscript.width, 960);
   assert.equal(settings.updateChatTranscriptWidth(updated, 960), updated);
+});
+
+test("expand-process-by-default is opt-in, local, and survives width updates (#1154)", () => {
+  assert.equal(settings.normalizeChatTranscriptSettings({}).expandProcessByDefault, false);
+  assert.equal(
+    settings.normalizeChatTranscriptSettings({ expandProcessByDefault: "yes" })
+      .expandProcessByDefault,
+    false,
+  );
+  assert.equal(
+    settings.normalizeChatTranscriptSettings({ expandProcessByDefault: true })
+      .expandProcessByDefault,
+    true,
+  );
+
+  const current = settings.normalizeSettings({});
+  assert.equal(current.customSettings.chatTranscript.expandProcessByDefault, false);
+  const enabled = settings.updateExpandProcessByDefault(current, true);
+  assert.equal(enabled.customSettings.chatTranscript.expandProcessByDefault, true);
+  assert.equal(enabled.customSettings.chatTranscript.width, 768);
+  assert.equal(settings.updateExpandProcessByDefault(enabled, true), enabled);
+
+  // Resizing the transcript must not drop the preference.
+  const resized = settings.updateChatTranscriptWidth(enabled, 960);
+  assert.equal(resized.customSettings.chatTranscript.expandProcessByDefault, true);
+  assert.equal(
+    settings.normalizeSettings(JSON.parse(JSON.stringify(resized))).customSettings.chatTranscript
+      .expandProcessByDefault,
+    true,
+  );
 });
 
 test("close window behavior defaults to minimize and only accepts exit", () => {

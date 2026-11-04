@@ -441,6 +441,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "The system accepted the test notification. Check banners or Notification Center; acceptance does not confirm banner visibility.",
   "settings.defaultTimeZoneDesc":
     "Shared by all clients through the calendar backend. Automatic follows the backend system time zone. Does not change scheduled task trigger time zones.",
+  "settings.expandProcessByDefault": "Expand agent activity by default",
+  "settings.expandProcessByDefaultDesc":
+    'Show the work trace, thinking, and tool calls (such as "Ran commands") expanded in conversations, and keep them open after the turn finishes. Saved on this device only.',
   "settings.defaultTimeZoneAuto": "Automatic (system: {zone})",
   "settings.timeZoneSearch": "Search time zones or cities",
   "settings.timeZoneEmpty": "No matching time zones",

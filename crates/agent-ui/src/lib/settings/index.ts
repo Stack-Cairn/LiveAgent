@@ -2408,7 +2408,16 @@ export function getRightDockProjectState(
 export function updateChatTranscriptWidth(prev: AppSettings, width: number): AppSettings {
   const nextWidth = normalizeChatTranscriptSettings({ width }).width;
   if (prev.customSettings.chatTranscript.width === nextWidth) return prev;
-  return updateCustomSettings(prev, { chatTranscript: { width: nextWidth } });
+  return updateCustomSettings(prev, {
+    chatTranscript: { ...prev.customSettings.chatTranscript, width: nextWidth },
+  });
+}
+
+export function updateExpandProcessByDefault(prev: AppSettings, enabled: boolean): AppSettings {
+  if (prev.customSettings.chatTranscript.expandProcessByDefault === enabled) return prev;
+  return updateCustomSettings(prev, {
+    chatTranscript: { ...prev.customSettings.chatTranscript, expandProcessByDefault: enabled },
+  });
 }
 
 export function updateRightDockWidth(prev: AppSettings, width: number): AppSettings {

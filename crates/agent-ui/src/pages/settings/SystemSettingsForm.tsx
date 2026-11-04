@@ -16,6 +16,7 @@ import {
   THEME_OPTIONS,
   type Theme,
   updateCustomSettings,
+  updateExpandProcessByDefault,
   updateSystem,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
@@ -469,6 +470,25 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           title={t("settings.defaultTimeZone")}
           description={t("settings.defaultTimeZoneDesc")}
           control={<PlanningTimeZoneSetting />}
+        />
+
+        <SettingsRow
+          title={t("settings.expandProcessByDefault")}
+          description={t("settings.expandProcessByDefaultDesc")}
+          control={
+            <AgentActivationSwitch
+              checked={settings.customSettings.chatTranscript.expandProcessByDefault}
+              title={t("settings.expandProcessByDefault")}
+              onToggle={() =>
+                setSettings((prev) =>
+                  updateExpandProcessByDefault(
+                    prev,
+                    !prev.customSettings.chatTranscript.expandProcessByDefault,
+                  ),
+                )
+              }
+            />
+          }
         />
       </SettingsGroup>
 

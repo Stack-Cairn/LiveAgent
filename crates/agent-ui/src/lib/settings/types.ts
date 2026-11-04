@@ -154,6 +154,8 @@ export type FontScaleSettings = {
 
 export type ChatTranscriptSettings = {
   width: number;
+  /** Start thinking segments and tool-trace groups expanded (#1154). */
+  expandProcessByDefault: boolean;
 };
 
 /**
