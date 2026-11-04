@@ -1,0 +1,12 @@
+/*
+ * @git-diff-view resets `color: initial` on everything inside widget and
+ * extend rows. That rule is unlayered, so it beats Tailwind's layered
+ * utilities and paints line-comment UI black (unreadable on primary buttons
+ * and in dark mode). Hand color back to the utility layers for our content.
+ */
+.diff-line-widget-wrapper [data-diff-line-comment],
+.diff-line-widget-wrapper [data-diff-line-comment] *,
+.diff-line-extend-wrapper [data-diff-line-comment],
+.diff-line-extend-wrapper [data-diff-line-comment] * {
+  color: revert-layer;
+}

@@ -9,6 +9,7 @@ import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/c
 import { DiffFile } from "@git-diff-view/file";
 import { DiffModeEnum, DiffView, SplitSide } from "@git-diff-view/react";
 import "@git-diff-view/react/styles/diff-view.css";
+import "./DiffView.css";
 import {
   Copy,
   FolderTree,
