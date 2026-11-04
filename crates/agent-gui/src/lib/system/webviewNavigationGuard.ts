@@ -1,3 +1,8 @@
+import {
+  markKeyEventDefaultBlockedByHost,
+  wasKeyEventDefaultBlockedByHost,
+} from "@liveagent/ui/lib/shortcuts/shortcutKeys";
+
 /**
  * 桌面端 webview 导航守卫（GUI 专属，勿镜像到 WebUI —— 浏览器里 F5 刷新是用户预期）。
  *
@@ -110,12 +115,10 @@ export interface GuardEventSource {
   ): void;
 }
 
-// 只记录由导航守卫取消的默认行为，让应用快捷键仍可处理这些事件。
-// WeakSet 不修改原生事件，也不会在按键处理结束后保留事件引用。
-const browserDefaultBlockedEvents = new WeakSet<Event>();
-
+// 只记录由导航守卫取消的默认行为，让应用快捷键（含 agent-ui 共享快捷键命令）
+// 仍可处理这些事件。共享 WeakSet 不修改原生事件，也不保留事件引用。
 export function wasBrowserKeyDefaultBlocked(event: Event): boolean {
-  return browserDefaultBlockedEvents.has(event);
+  return wasKeyEventDefaultBlockedByHost(event);
 }
 
 let uninstallCurrent: (() => void) | null = null;
@@ -140,7 +143,7 @@ export function installWebviewNavigationGuard(
   const onKeyDown = (event: KeyboardEvent) => {
     if (!event.defaultPrevented && shouldBlockBrowserKeyDefault(event, keyOptions)) {
       event.preventDefault();
-      browserDefaultBlockedEvents.add(event);
+      markKeyEventDefaultBlockedByHost(event);
     }
   };
 

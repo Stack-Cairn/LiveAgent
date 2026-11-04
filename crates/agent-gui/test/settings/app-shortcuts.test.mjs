@@ -41,21 +41,21 @@ test.beforeEach(() => {
   calls.length = 0;
   shortcuts.setShortcutsSuspended(false);
   shortcuts.writeGlobalShortcutBindings({
-    searchConversations: { accelerator: "Ctrl+KeyK", enabled: true, scope: "app" },
+    pin: { accelerator: "Ctrl+KeyK", enabled: true, scope: "app" },
   });
 });
 test("app scope persists and never registers with the OS; switching scope removes registration", async () => {
   const binding = { accelerator: "Ctrl+KeyK", enabled: true, scope: "global" };
-  await shortcuts.applyGlobalShortcuts({ searchConversations: binding });
+  await shortcuts.applyGlobalShortcuts({ pin: binding });
   await shortcuts.applyGlobalShortcuts(shortcuts.readGlobalShortcutBindings());
   assert.deepEqual(calls, [
     [
       "app_set_global_shortcuts",
-      { bindings: [{ action: "searchConversations", accelerator: "Ctrl+KeyK" }] },
+      { bindings: [{ action: "pin", accelerator: "Ctrl+KeyK" }] },
     ],
     ["app_set_global_shortcuts", { bindings: [] }],
   ]);
-  assert.equal(shortcuts.readGlobalShortcutBindings().searchConversations.scope, "app");
+  assert.equal(shortcuts.readGlobalShortcutBindings().pin.scope, "app");
 });
 test("rapid scope changes serialize full replacement requests", async () => {
   let release;
@@ -63,10 +63,10 @@ test("rapid scope changes serialize full replacement requests", async () => {
     release = resolve;
   });
   const first = shortcuts.applyGlobalShortcuts({
-    searchConversations: { accelerator: "Ctrl+KeyK", enabled: true, scope: "global" },
+    pin: { accelerator: "Ctrl+KeyK", enabled: true, scope: "global" },
   });
   const second = shortcuts.applyGlobalShortcuts({
-    searchConversations: { accelerator: "Ctrl+KeyK", enabled: true, scope: "app" },
+    pin: { accelerator: "Ctrl+KeyK", enabled: true, scope: "app" },
   });
   await new Promise((resolve) => setImmediate(resolve));
   const startedBeforeRelease = calls.length;
@@ -80,7 +80,7 @@ test("local shortcut dispatches once, matches modifiers exactly and consumes rep
   assert.equal(key().defaultPrevented, true);
   assert.equal(key({ repeat: true }).defaultPrevented, true);
   assert.equal(key({ shiftKey: true }).defaultPrevented, false);
-  assert.deepEqual(calls, [["app_run_shortcut", { action: "searchConversations" }]]);
+  assert.deepEqual(calls, [["app_run_shortcut", { action: "pin" }]]);
 });
 test("blur, IME composition and shortcut recording suppress local actions", () => {
   focused = false;
@@ -95,7 +95,7 @@ test("blur, IME composition and shortcut recording suppress local actions", () =
 test("global and disabled bindings are never dispatched by local listener", () => {
   for (const patch of [{ scope: "global" }, { enabled: false }]) {
     shortcuts.writeGlobalShortcutBindings({
-      searchConversations: { accelerator: "Ctrl+KeyK", scope: "app", enabled: true, ...patch },
+      pin: { accelerator: "Ctrl+KeyK", scope: "app", enabled: true, ...patch },
     });
     assert.equal(key().defaultPrevented, false);
   }
@@ -103,18 +103,18 @@ test("global and disabled bindings are never dispatched by local listener", () =
 });
 test("unmodified local shortcuts do not steal typing in editors", () => {
   shortcuts.writeGlobalShortcutBindings({
-    newChat: { accelerator: "KeyK", scope: "app", enabled: true },
+    toggle: { accelerator: "KeyK", scope: "app", enabled: true },
   });
   assert.equal(key({ ctrlKey: false }).defaultPrevented, false);
   assert.equal(key({ ctrlKey: false }, document.body).defaultPrevented, true);
-  assert.deepEqual(calls, [["app_run_shortcut", { action: "newChat" }]]);
+  assert.deepEqual(calls, [["app_run_shortcut", { action: "toggle" }]]);
 });
 test("browser navigation protection does not swallow configured app shortcuts", () => {
   for (const accelerator of ["Super+KeyF", "Ctrl+KeyF", "Super+KeyS", "F3", "F5"]) {
     calls.length = 0;
     const code = accelerator.split("+").at(-1);
     shortcuts.writeGlobalShortcutBindings({
-      searchConversations: { accelerator, enabled: true, scope: "app" },
+      pin: { accelerator, enabled: true, scope: "app" },
     });
     const event = key({
       key: code.startsWith("Key") ? code.slice(3).toLowerCase() : code,
@@ -123,12 +123,12 @@ test("browser navigation protection does not swallow configured app shortcuts", 
       metaKey: accelerator.includes("Super"),
     });
     assert.equal(event.defaultPrevented, true);
-    assert.deepEqual(calls, [["app_run_shortcut", { action: "searchConversations" }]], accelerator);
+    assert.deepEqual(calls, [["app_run_shortcut", { action: "pin" }]], accelerator);
   }
 });
 test("an event already handled before the navigation guard does not trigger app actions", () => {
   shortcuts.writeGlobalShortcutBindings({
-    searchConversations: { accelerator: "Super+KeyF", enabled: true, scope: "app" },
+    pin: { accelerator: "Super+KeyF", enabled: true, scope: "app" },
   });
   const event = new KeyboardEvent("keydown", {
     bubbles: true,

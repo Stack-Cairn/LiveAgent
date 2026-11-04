@@ -5,6 +5,8 @@
  * view, and only then is the rendered text highlighted in the DOM.
  */
 
+import { matchesShortcutCommand } from "../shortcuts/shortcutCommands";
+
 export type TranscriptFindEntry = {
   /** Virtual row key; the rendered row carries it as `data-row-key`. */
   rowKey: string;
@@ -97,26 +99,31 @@ export function stepTranscriptFindIndex(current: number, total: number, directio
   return (current + direction + total) % total;
 }
 
-export function isMacLikePlatform(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Mac|iPhone|iPad|iPod/i.test(`${navigator.userAgent} ${navigator.platform}`);
-}
+export { isMacLikePlatform } from "../shared/platform";
 
 type FindShortcutEvent = Pick<
   KeyboardEvent,
-  "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "isComposing" | "keyCode"
+  | "key"
+  | "code"
+  | "metaKey"
+  | "ctrlKey"
+  | "altKey"
+  | "shiftKey"
+  | "isComposing"
+  | "keyCode"
+  | "target"
 >;
 
 /**
- * Cmd+F on macOS, Ctrl+F elsewhere. `defaultPrevented` is deliberately not
- * checked: the desktop webview guard cancels the browser's own Cmd/Ctrl+F in
- * the capture phase before any app handler runs.
+ * The find binding from the shortcut table (default Cmd+F on macOS, Ctrl+F
+ * elsewhere). `defaultPrevented` is deliberately not checked: the desktop
+ * webview guard cancels the browser's own Cmd/Ctrl+F in the capture phase
+ * before any app handler runs.
  */
 export function isTranscriptFindShortcut(event: FindShortcutEvent, isMac: boolean) {
-  if (event.isComposing || event.keyCode === 229) return false;
-  if (event.altKey || event.shiftKey) return false;
-  if (isMac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return false;
-  return event.code === "KeyF" || event.key.toLowerCase() === "f";
+  // Same guard as every other table command: a rebinding to a bare key must
+  // not fire while the user is typing in a field.
+  return matchesShortcutCommand(event, "findInConversation", isMac);
 }
 
 /** Editors and terminals bring their own find widget. */

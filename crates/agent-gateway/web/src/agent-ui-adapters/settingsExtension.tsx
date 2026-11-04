@@ -1,20 +1,25 @@
-import { MonitorSmartphone } from "@liveagent/ui/components/IconSet";
+import { Keyboard, MonitorSmartphone } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import {
   configureResourceHostCapabilities,
   kbrainResourceHostCapabilities,
 } from "@liveagent/ui/lib/resourceHost";
 import type { GatewaySettingsSyncUpdatePayload } from "@liveagent/ui/lib/settings/sync";
+import type { ShortcutCommandId } from "@liveagent/ui/lib/shortcuts/shortcutCommands";
 import type {
   KBrainMemoryConfig,
   KBrainSettingsAdapter,
   PermissionRule,
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
+import { ShortcutCommandsSection } from "@liveagent/ui/pages/settings/ShortcutCommandsSection";
 import { getGatewayWebSocketClient } from "../lib/gatewaySocket";
 import { loadToken } from "../lib/storage";
 import { DevicesSection } from "../pages/settings/DevicesSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 import { gatewaySkillsAdapter } from "./kbrainSkills";
+
+// The WebUI transcript has no find bar; the browser keeps its own Cmd/Ctrl+F.
+const WEB_UNSUPPORTED_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = ["findInConversation"];
 
 export function createSettingsExtension(props: SettingsPageProps): {
   surface: "web";
@@ -27,6 +32,18 @@ export function createSettingsExtension(props: SettingsPageProps): {
     iconClassName: "size-4",
     slots: {},
     sections: [
+      {
+        id: "shortcuts",
+        groupKey: "settings.groupGeneral",
+        groupOrder: 10,
+        order: 40,
+        labelKey: "settings.navShortcuts",
+        icon: <Keyboard className="size-4" />,
+        showSaveIndicator: false,
+        render: () => (
+          <ShortcutCommandsSection excludeCommandIds={WEB_UNSUPPORTED_SHORTCUT_COMMANDS} />
+        ),
+      },
       {
         id: "devices",
         groupKey: "settings.groupConnectivity",

@@ -9,7 +9,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { useLocale } from "../../i18n";
+import { isMacLikePlatform } from "../../lib/shared/platform";
 import { cn } from "../../lib/shared/utils";
+import { matchesShortcutCommand } from "../../lib/shortcuts/shortcutCommands";
 import { Button } from "./button";
 import { Input } from "./input";
 import { Separator } from "./separator";
@@ -22,7 +24,6 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "272px";
 const SIDEBAR_WIDTH_MOBILE = "min(86vw, 272px)";
 const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed";
@@ -101,15 +102,16 @@ function SidebarProvider({
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
+    const isMac = isMacLikePlatform();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         !event.defaultPrevented &&
+        // Rich-text editors keep Cmd/Ctrl+B (bold), so text fields never toggle.
         !(
           event.target instanceof Element &&
           event.target.closest("input, textarea, [contenteditable=true], .monaco-editor, .xterm")
         ) &&
-        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
+        matchesShortcutCommand(event, "toggleSidebar", isMac)
       ) {
         event.preventDefault();
         toggleSidebar();

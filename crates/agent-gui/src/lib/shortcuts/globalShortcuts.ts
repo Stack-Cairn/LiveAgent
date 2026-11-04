@@ -1,4 +1,13 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import {
+  readShortcutOverrides,
+  type ShortcutCommandId,
+  writeShortcutOverrides,
+} from "@liveagent/ui/lib/shortcuts/shortcutCommands";
+import {
+  isShortcutModifierToken,
+  setInAppShortcutsSuspended,
+} from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 import { wasBrowserKeyDefaultBlocked } from "../system/webviewNavigationGuard";
 
 /**
@@ -37,102 +46,54 @@ export interface GlobalShortcutFailure {
 
 const GLOBAL_SHORTCUT_STORAGE_KEY = "liveagent.globalShortcuts.v1";
 
-export const SHORTCUT_MODIFIER_ORDER = ["Ctrl", "Shift", "Alt", "Super"] as const;
-export type ShortcutModifier = (typeof SHORTCUT_MODIFIER_ORDER)[number];
+export {
+  globalShortcutDisplayToken,
+  globalShortcutKeyDisplayLabel,
+  isShortcutModifierToken,
+  modifierFromEventCode,
+  SHORTCUT_MODIFIER_ORDER,
+  type ShortcutModifier,
+} from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 
-const MODIFIER_SET = new Set<string>(SHORTCUT_MODIFIER_ORDER);
+/**
+ * 应用内（scope=app）的新建对话 / 搜索会话已并入 agent-ui 共享快捷键命令表，
+ * 由侧栏直接处理；这里把旧绑定迁移为共享命令的用户覆盖，系统全局绑定保持不变。
+ * 停用的旧绑定迁移为"未绑定"，保持升级前"应用内无快捷键"的行为。
+ */
+const APP_SCOPE_COMMAND_MIGRATIONS: ReadonlyArray<
+  readonly [GlobalShortcutAction, ShortcutCommandId]
+> = [
+  ["newChat", "newConversation"],
+  ["searchConversations", "searchConversations"],
+];
 
-const SHORTCUT_CODE_DISPLAY: Record<string, string> = {
-  Space: "Space",
-  Tab: "Tab",
-  CapsLock: "Caps",
-  Backspace: "⌫",
-  Backquote: "`",
-  Minus: "-",
-  Equal: "=",
-  BracketLeft: "[",
-  BracketRight: "]",
-  Backslash: "\\",
-  Semicolon: ";",
-  Quote: "'",
-  Comma: ",",
-  Period: ".",
-  Slash: "/",
-  ArrowUp: "↑",
-  ArrowDown: "↓",
-  ArrowLeft: "←",
-  ArrowRight: "→",
-  Insert: "Ins",
-  Delete: "Del",
-  Home: "Home",
-  End: "End",
-  PageUp: "PgUp",
-  PageDown: "PgDn",
-  PrintScreen: "PrtSc",
-  ScrollLock: "ScrLk",
-  Pause: "Pause",
-  ContextMenu: "Menu",
-  NumLock: "NumLock",
-  NumpadDivide: "Num /",
-  NumpadMultiply: "Num *",
-  NumpadSubtract: "Num -",
-  NumpadAdd: "Num +",
-  NumpadDecimal: "Num .",
-  Numpad0: "Num 0",
-  Numpad1: "Num 1",
-  Numpad2: "Num 2",
-  Numpad3: "Num 3",
-  Numpad4: "Num 4",
-  Numpad5: "Num 5",
-  Numpad6: "Num 6",
-  Numpad7: "Num 7",
-  Numpad8: "Num 8",
-  Numpad9: "Num 9",
-};
-
-const MAC_MODIFIER_DISPLAY: Record<ShortcutModifier, string> = {
-  Ctrl: "⌃",
-  Shift: "⇧",
-  Alt: "⌥",
-  Super: "⌘",
-};
-
-export function isShortcutModifierToken(token: string): token is ShortcutModifier {
-  return MODIFIER_SET.has(token);
-}
-
-export function globalShortcutKeyDisplayLabel(code: string): string {
-  if (code.startsWith("Key") && code.length === 4) return code.slice(3);
-  if (code.startsWith("Digit") && code.length === 6) return code.slice(5);
-  return SHORTCUT_CODE_DISPLAY[code] ?? code;
-}
-
-export function globalShortcutDisplayToken(token: string, isMac: boolean): string {
-  if (isShortcutModifierToken(token)) {
-    if (isMac) return MAC_MODIFIER_DISPLAY[token];
-    return token === "Super" ? "Win" : token;
+/** 迁移已执行时从返回值里剔除被迁走的条目，并回写旧存储。 */
+function migrateAppScopedBindings(
+  parsed: Record<string, unknown>,
+  bindings: GlobalShortcutBindings,
+): GlobalShortcutBindings {
+  const migrated = APP_SCOPE_COMMAND_MIGRATIONS.filter(
+    ([action]) => bindings[action]?.scope === "app",
+  );
+  if (migrated.length === 0) return bindings;
+  const overrides = { ...readShortcutOverrides() };
+  const next = { ...bindings };
+  const raw = { ...parsed };
+  for (const [action, command] of migrated) {
+    const binding = next[action];
+    if (binding && overrides[command] === undefined) {
+      overrides[command] = binding.enabled ? binding.accelerator : "";
+    }
+    delete next[action];
+    delete raw[action];
   }
-  return globalShortcutKeyDisplayLabel(token);
-}
-
-/** KeyboardEvent.code -> 修饰键 token；非修饰键返回 null。 */
-export function modifierFromEventCode(code: string): ShortcutModifier | null {
-  switch (code) {
-    case "ControlLeft":
-    case "ControlRight":
-      return "Ctrl";
-    case "ShiftLeft":
-    case "ShiftRight":
-      return "Shift";
-    case "AltLeft":
-    case "AltRight":
-      return "Alt";
-    case "MetaLeft":
-    case "MetaRight":
-      return "Super";
-    default:
-      return null;
+  writeShortcutOverrides(overrides);
+  try {
+    window.localStorage.setItem(GLOBAL_SHORTCUT_STORAGE_KEY, JSON.stringify(raw));
+  } catch {
+    // localStorage 不可用时静默忽略。
   }
+  return next;
 }
 
 export function readGlobalShortcutBindings(): GlobalShortcutBindings {
@@ -162,7 +123,7 @@ export function readGlobalShortcutBindings(): GlobalShortcutBindings {
         }
       }
     }
-    return bindings;
+    return migrateAppScopedBindings(parsed as Record<string, unknown>, bindings);
   } catch {
     return {};
   }
@@ -220,9 +181,10 @@ export async function applyStoredGlobalShortcuts(): Promise<void> {
 
 let shortcutsSuspended = false;
 
-/** 录制时同时挂起系统注册与软件内监听。 */
+/** 录制时同时挂起系统注册、软件内监听与共享的应用内快捷键命令。 */
 export function setShortcutsSuspended(suspended: boolean): void {
   shortcutsSuspended = suspended;
+  setInAppShortcutsSuspended(suspended);
 }
 
 export function matchesShortcutEvent(event: KeyboardEvent, accelerator: string): boolean {

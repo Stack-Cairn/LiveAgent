@@ -6,7 +6,9 @@ import {
   Cable,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   CirclePlus,
   Clock3,
   Folder,
@@ -36,11 +38,19 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  type CommandPaletteAction,
   isCommandPaletteShortcut,
   isCommandPaletteSuppressed,
   isMacLikePlatform,
 } from "@liveagent/ui/lib/chat/commandPalette";
+import { withCommandShortcuts } from "@liveagent/ui/lib/chat/commandPaletteActions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import {
+  getShortcutCommand,
+  matchesShortcutCommand,
+  type ShortcutCommandId,
+} from "@liveagent/ui/lib/shortcuts/shortcutCommands";
+import { isKeyEventHandledElsewhere } from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 import type {
   SidebarBatchDeleteOptions,
   SidebarBatchDeleteResult,
@@ -152,6 +162,16 @@ function isMobileSidebarLayout() {
   }
   return window.matchMedia(MOBILE_SIDEBAR_MEDIA_QUERY).matches;
 }
+
+const SIDEBAR_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = [
+  "newConversation",
+  "openSettings",
+  "searchConversations",
+  "previousConversation",
+  "nextConversation",
+  "toggleRightPanel",
+];
+const SHORTCUT_DIALOG_SELECTOR = "[role=dialog], [role=alertdialog], [aria-modal=true]";
 
 function useStableEvent<Args extends unknown[], Return>(
   handler: (...args: Args) => Return,
@@ -388,26 +408,62 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   }, [conversationSearchRequestKey, sectionsDisabled]);
 
   const commandPaletteEnabled = Boolean(getCommandPaletteActions) && !sectionsDisabled;
+  // Shortcut commands the sidebar runs itself: the palette, plain search,
+  // stepping through the visible conversation list, and palette actions that
+  // already exist for the host (new conversation, settings, right panel).
+  const runSidebarShortcut = useStableEvent((command: ShortcutCommandId): boolean => {
+    if (command === "searchConversations") {
+      setConversationSearchMode("search");
+      setConversationSearchOpen(true);
+      return true;
+    }
+    if (command === "previousConversation" || command === "nextConversation") {
+      return stepConversation(command === "nextConversation" ? 1 : -1);
+    }
+    const paletteActionId = getShortcutCommand(command)?.paletteActionId;
+    const action = paletteActionId
+      ? getCommandPaletteActions?.().find((entry) => entry.id === paletteActionId)
+      : undefined;
+    if (!action) return false;
+    action.run();
+    return true;
+  });
   useEffect(() => {
-    if (!commandPaletteEnabled) return;
+    if (sectionsDisabled) return;
     const isMac = isMacLikePlatform();
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isCommandPaletteShortcut(event, isMac)) return;
-      // A covering surface (the desktop settings overlay) owns the keyboard.
-      if (isCommandPaletteSuppressed()) return;
-      event.preventDefault();
-      if (event.repeat) return;
-      // The same chord closes an open palette (focus sits in its input).
-      if (conversationSearchOpenRef.current) {
-        setConversationSearchOpen(false);
+      if (commandPaletteEnabled && isCommandPaletteShortcut(event, isMac)) {
+        // A covering surface (the desktop settings overlay) owns the keyboard.
+        if (isCommandPaletteSuppressed()) return;
+        event.preventDefault();
+        if (event.repeat) return;
+        // The same chord closes an open palette (focus sits in its input).
+        if (conversationSearchOpenRef.current) {
+          setConversationSearchOpen(false);
+          return;
+        }
+        setConversationSearchMode("palette");
+        setConversationSearchOpen(true);
         return;
       }
-      setConversationSearchMode("palette");
-      setConversationSearchOpen(true);
+      if (isKeyEventHandledElsewhere(event) || isCommandPaletteSuppressed()) return;
+      const command = SIDEBAR_SHORTCUT_COMMANDS.find((id) =>
+        matchesShortcutCommand(event, id, isMac),
+      );
+      if (!command) return;
+      // An open dialog (the palette itself, confirmations) owns the keyboard.
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(SHORTCUT_DIALOG_SELECTOR)) return;
+      const repeatable = command === "previousConversation" || command === "nextConversation";
+      if (event.repeat && !repeatable) {
+        event.preventDefault();
+        return;
+      }
+      if (runSidebarShortcut(command)) event.preventDefault();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [commandPaletteEnabled]);
+  }, [commandPaletteEnabled, runSidebarShortcut, sectionsDisabled]);
   const selectionAnchorRef = useRef<string | null>(null);
   const bulkConfirmOpenRef = useRef(false);
   // Bumped to invalidate an in-flight bulk delete: its shouldStop callback
@@ -539,6 +595,42 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     visibleProjectConversations,
   ]);
   const orderedConversationIds = useMemo(() => visibleItems.map((item) => item.id), [visibleItems]);
+  // Previous/next conversation follow the list as rendered (pinned first, then
+  // expanded projects); collapsed sections are skipped. No wrap-around.
+  const stepConversation = useStableEvent((direction: 1 | -1): boolean => {
+    const ids = orderedConversationIds;
+    if (ids.length === 0) return false;
+    const index = currentConversationId ? ids.indexOf(currentConversationId) : -1;
+    const nextIndex = index < 0 ? (direction > 0 ? 0 : ids.length - 1) : index + direction;
+    const nextId = ids[nextIndex];
+    if (!nextId) return true;
+    handleSelectConversation(nextId);
+    return true;
+  });
+  const getPaletteActions = useStableEvent((): CommandPaletteAction[] => {
+    const actions = [...(getCommandPaletteActions?.() ?? [])];
+    if (orderedConversationIds.length > 1) {
+      actions.push(
+        {
+          id: "previous-conversation",
+          group: "navigation",
+          label: t("shortcuts.command.previousConversation"),
+          keywords: ["previous", "up", "conversation"],
+          icon: ChevronUp,
+          run: () => void stepConversation(-1),
+        },
+        {
+          id: "next-conversation",
+          group: "navigation",
+          label: t("shortcuts.command.nextConversation"),
+          keywords: ["next", "down", "conversation"],
+          icon: ChevronDown,
+          run: () => void stepConversation(1),
+        },
+      );
+    }
+    return withCommandShortcuts(actions, isMacLikePlatform());
+  });
   const visibleRunningProjectPathKeys = useMemo(() => {
     // A conversation waiting on the user — for a tool approval or for an
     // AskUserQuestion answer — is suspended, not working. Both must drop out of
@@ -2270,7 +2362,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         currentWorkdir={currentConversationWorkdir}
         onSelectConversation={handleSelectConversation}
         mode={conversationSearchMode}
-        getActions={getCommandPaletteActions}
+        getActions={getCommandPaletteActions ? getPaletteActions : undefined}
       />
     </>
   );

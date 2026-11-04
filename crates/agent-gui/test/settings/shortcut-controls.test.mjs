@@ -7,7 +7,18 @@ const env = await createDomTestEnv({
   mocks: {
     "@liveagent/ui/i18n/index": { useLocale: () => locale },
     "@liveagent/ui/components/IconSet": Object.fromEntries(
-      ["Send", "Keyboard", "MonitorSmartphone", "Pin", "Search", "SquarePen", "X", "Zap"].map(
+      [
+        "AlertTriangle",
+        "Keyboard",
+        "MonitorSmartphone",
+        "Pin",
+        "RotateCcw",
+        "Search",
+        "Send",
+        "SquarePen",
+        "X",
+        "Zap",
+      ].map(
         (name) => [name, () => null],
       ),
     ),
@@ -21,7 +32,7 @@ globalThis.ResizeObserver = class {
 };
 const shortcuts = env.loadModule("src/lib/shortcuts/globalShortcuts.ts");
 const { readSendShortcut } = env.loadModule("@liveagent/ui/lib/chat/sendShortcut.ts");
-shortcuts.writeGlobalShortcutBindings({ newChat: { accelerator: "Ctrl+KeyN", enabled: true } });
+shortcuts.writeGlobalShortcutBindings({ toggle: { accelerator: "Ctrl+KeyN", enabled: true } });
 const { GlobalShortcutsSection } = env.loadModule("src/pages/settings/GlobalShortcutsSection.tsx");
 const host = document.createElement("div");
 document.body.append(host);
@@ -29,7 +40,7 @@ const root = env.createRoot(host);
 await env.act(async () => root.render(env.React.createElement(GlobalShortcutsSection)));
 
 test("scope choice migrates an existing binding and preserves its accelerator", async () => {
-  const row = host.querySelector('[data-ghk-row="newChat"]');
+  const row = host.querySelector('[data-ghk-row="toggle"]');
   const group = row.querySelector('[data-slot="toggle-group"]');
   const items = [...group.querySelectorAll('[data-slot="toggle-group-item"]')];
   assert.equal(row.querySelector("select"), null);
@@ -41,7 +52,7 @@ test("scope choice migrates an existing binding and preserves its accelerator", 
   assert.ok(group.nextElementSibling.querySelector(".ghk-kbd"));
   await env.act(async () => items[1].click());
   assert.equal(items[1].getAttribute("aria-pressed"), "true");
-  assert.deepEqual(shortcuts.readGlobalShortcutBindings().newChat, {
+  assert.deepEqual(shortcuts.readGlobalShortcutBindings().toggle, {
     accelerator: "Ctrl+KeyN",
     enabled: true,
     scope: "app",
@@ -49,7 +60,7 @@ test("scope choice migrates an existing binding and preserves its accelerator", 
 });
 test("scope choice keeps the shared roving-tabindex keyboard model", async () => {
   const items = [
-    ...host.querySelectorAll('[data-ghk-row="newChat"] [data-slot="toggle-group-item"]'),
+    ...host.querySelectorAll('[data-ghk-row="toggle"] [data-slot="toggle-group-item"]'),
   ];
   await env.act(async () => items[1].focus());
   assert.equal(items[1].getAttribute("tabindex"), "0");
@@ -61,14 +72,14 @@ test("scope choice keeps the shared roving-tabindex keyboard model", async () =>
   assert.equal(document.activeElement, items[0]);
   assert.equal(items[0].getAttribute("tabindex"), "0");
   await env.act(async () => items[0].click());
-  assert.equal(shortcuts.readGlobalShortcutBindings().newChat.scope, "global");
+  assert.equal(shortcuts.readGlobalShortcutBindings().toggle.scope, "global");
   await env.act(async () => items[1].click());
-  assert.equal(shortcuts.readGlobalShortcutBindings().newChat.scope, "app");
-  assert.ok(host.querySelector('[data-ghk-row="newChat"] [data-slot="toggle-group"]'));
+  assert.equal(shortcuts.readGlobalShortcutBindings().toggle.scope, "app");
+  assert.ok(host.querySelector('[data-ghk-row="toggle"] [data-slot="toggle-group"]'));
 });
 test("send shortcut uses the shared segmented control and saves both directions", async () => {
   const row = host.querySelector('[data-ghk-row="sendMessage"]');
-  assert.equal(row.parentElement, host.querySelector('[data-ghk-row="newChat"]').parentElement);
+  assert.equal(row.parentElement, host.querySelector('[data-ghk-row="toggle"]').parentElement);
   assert.equal(row.querySelector("select"), null);
   const group = row.querySelector('[data-slot="toggle-group"]');
   const items = [...group.querySelectorAll('[data-slot="toggle-group-item"]')];
@@ -78,7 +89,7 @@ test("send shortcut uses the shared segmented control and saves both directions"
   assert.equal(items[0].getAttribute("aria-pressed"), "true");
   assert.deepEqual(
     items.map((item) => item.className),
-    [...host.querySelectorAll('[data-ghk-row="newChat"] [data-slot="toggle-group-item"]')].map(
+    [...host.querySelectorAll('[data-ghk-row="toggle"] [data-slot="toggle-group-item"]')].map(
       (item) => item.className,
     ),
   );
@@ -106,7 +117,7 @@ test("send shortcut choice keeps the shared roving-tabindex keyboard model", asy
   assert.equal(readSendShortcut(), "ctrlEnter");
 });
 test("recording a replacement shortcut retains the chosen app scope", async () => {
-  await env.act(async () => host.querySelector('[data-ghk-row="newChat"] button').click());
+  await env.act(async () => host.querySelector('[data-ghk-row="toggle"] button').click());
   await env.act(async () =>
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -128,7 +139,7 @@ test("recording a replacement shortcut retains the chosen app scope", async () =
       }),
     ),
   );
-  assert.deepEqual(shortcuts.readGlobalShortcutBindings().newChat, {
+  assert.deepEqual(shortcuts.readGlobalShortcutBindings().toggle, {
     accelerator: "Ctrl+KeyJ",
     enabled: true,
     scope: "app",

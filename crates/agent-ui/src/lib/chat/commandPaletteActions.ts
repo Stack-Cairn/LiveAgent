@@ -26,6 +26,7 @@ import {
 import type { SidebarShortcutId } from "../settings/sidebarShortcuts";
 import { getNextTheme } from "../settings/themeAndMemory";
 import type { Theme } from "../settings/types";
+import { formatPaletteActionShortcut } from "../shortcuts/shortcutCommands";
 import type { ConversationViewId } from "../trajectory/conversationViewState";
 import type { CommandPaletteAction } from "./commandPalette";
 
@@ -114,7 +115,6 @@ export function buildCommandPaletteActions(
   input: BuildCommandPaletteActionsInput,
 ): CommandPaletteAction[] {
   const { t } = input;
-  const mod = input.isMac ? "⌘" : "Ctrl+";
   const actions: CommandPaletteAction[] = [];
 
   if (input.onNewConversation) {
@@ -182,7 +182,6 @@ export function buildCommandPaletteActions(
       label: open ? t("sidebar.closeSidebar") : t("tooltip.openSidebar"),
       keywords: ["toggle sidebar", "hide", "show", "panel"],
       icon: PanelLeft,
-      shortcut: `${mod}B`,
       run: onToggle,
     });
   }
@@ -307,5 +306,17 @@ export function buildCommandPaletteActions(
     }
   }
 
-  return actions;
+  return withCommandShortcuts(actions, input.isMac);
+}
+
+/** Fills each row's shortcut hint from the shortcut table (user overrides included). */
+export function withCommandShortcuts(
+  actions: CommandPaletteAction[],
+  isMac: boolean,
+): CommandPaletteAction[] {
+  return actions.map((action) => {
+    if (action.shortcut) return action;
+    const shortcut = formatPaletteActionShortcut(action.id, isMac);
+    return shortcut ? { ...action, shortcut } : action;
+  });
 }
