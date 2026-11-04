@@ -365,3 +365,13 @@ body > div:has([data-streamdown="table-fullscreen"]):not(#root) {
   border-radius: 8px;
   background-clip: padding-box;
 }
+
+/* Find in conversation, painted with the CSS Custom Highlight API (engines
+   without it paint nothing; the find bar still counts and navigates). */
+::highlight(transcript-find-match) {
+  background-color: color-mix(in oklab, var(--color-amber-300) 45%, transparent);
+}
+::highlight(transcript-find-active) {
+  background-color: var(--color-amber-400);
+  color: var(--color-black);
+}
