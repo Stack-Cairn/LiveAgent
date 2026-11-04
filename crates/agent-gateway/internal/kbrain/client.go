@@ -161,6 +161,15 @@ type RunOptions struct {
 	Tools           *ToolSelection  `json:"tools,omitempty"`
 	PlanModeEnabled bool            `json:"plan_mode_enabled,omitempty"`
 	MCPServerIDs    []string        `json:"mcp_server_ids,omitempty"`
+	// Sandbox confines the run's commands with the backend's OS sandbox
+	// (capability run_sandbox). Runs asking for it are refused, never started
+	// unconfined, when the backend cannot enforce it.
+	Sandbox *RunSandbox `json:"sandbox,omitempty"`
+}
+
+type RunSandbox struct {
+	Mode    string `json:"mode"`
+	Network bool   `json:"network"`
 }
 
 type WorkspaceRoot struct {
@@ -394,11 +403,7 @@ func (c *Client) StartRun(ctx context.Context, sessionID string, in PromptReques
 	var out RunAccepted
 	// Every run needs a valid handshake: a backend that contradicts
 	// kbrain.agent.v1 must not accept work in any permission mode.
-	mode := ""
-	if in.Options != nil {
-		mode = in.Options.PermissionMode
-	}
-	if err := c.requireHandshake(ctx, mode); err != nil {
+	if err := c.requireRunOptions(ctx, in.Options); err != nil {
 		return out, 0, err
 	}
 	in = c.withReviewScope(ctx, in)

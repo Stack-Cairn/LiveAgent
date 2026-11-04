@@ -313,6 +313,8 @@ export type KBrainRunOptions = {
   workspace_roots?: Array<{ path: string; access: "read" | "write" }>;
   tools?: { policies?: Record<string, "ask" | "allow" | "deny"> };
   plan_mode_enabled?: boolean;
+  /** OS confinement for the run's commands; sent only when capability run_sandbox allows it. */
+  sandbox?: import("@liveagent/ui/lib/chat/permissionModes").KBrainRunSandbox;
   /** Desktop-executed tools offered to the model for this run (e.g. Browser). */
   client_tools?: KBrainClientToolDefinition[];
 };

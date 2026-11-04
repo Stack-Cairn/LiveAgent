@@ -17,6 +17,8 @@ function iconComponent(name) {
 }
 
 let loadConfig = async () => null;
+// The backend's capabilities.run_sandbox as the adapter reports it; null while unknown.
+let sandboxCapability = null;
 // The models K-brain can route to; a reviewer outside this list is unusable.
 const models = [
   { provider: "p", id: "m" },
@@ -32,7 +34,7 @@ const env = await createDomTestEnv({
       { get: (_target, name) => (name === "__esModule" ? true : iconComponent(String(name))) },
     ),
     "@liveagent/ui/i18n/index": { useLocale: () => ({ t: (key) => key }) },
-    "@liveagent/adapters/sandboxCapability": { useSandboxCapability: () => null },
+    "@liveagent/adapters/sandboxCapability": { useSandboxCapability: () => sandboxCapability },
     "@liveagent/adapters/aiApprovalReadiness": {
       loadAIApprovalState: () => {
         loadCalls += 1;
@@ -81,7 +83,14 @@ test("every permission mode has its own icon and full access is no longer offere
   try {
     await view.open();
     const icons = view.items().map((item) => item.querySelector("svg")?.getAttribute("data-icon"));
-    assert.deepEqual(icons, ["Hand", "SquarePen", "ShieldCheck", "ShieldAlert"]);
+    assert.deepEqual(icons, [
+      "Hand",
+      "SquarePen",
+      "ShieldCheck",
+      "Shield",
+      "ShieldOff",
+      "ShieldAlert",
+    ]);
     assert.equal(new Set(icons).size, icons.length);
     const labels = view.items().map((item) => item.querySelector("span span")?.textContent);
     // Plan mode lives in the plus menu; full access is retired.
@@ -89,8 +98,87 @@ test("every permission mode has its own icon and full access is no longer offere
       "chat.safety.ask",
       "chat.safety.autoEdit",
       "chat.safety.autoReview",
+      "chat.safety.sandbox",
+      "chat.safety.sandboxOffline",
       "chat.safety.always",
     ]);
+  } finally {
+    await view.close();
+  }
+});
+
+test("sandbox entries follow the backend's run sandbox capability", async () => {
+  loadConfig = async () => null;
+  const disabled = (view, key) =>
+    view
+      .items()
+      .find((item) => item.querySelector("span span")?.textContent === key)
+      ?.getAttribute("data-disabled") != null;
+  try {
+    sandboxCapability = {
+      supported: false,
+      mechanism: "",
+      platform: "",
+      network_control: false,
+      reason: "update K-brain to a version with run sandboxing",
+    };
+    let view = await mount({ value: "ask" });
+    try {
+      await view.open();
+      assert.equal(disabled(view, "chat.safety.sandbox"), true);
+      assert.equal(disabled(view, "chat.safety.sandboxOffline"), true);
+      assert.match(view.items()[3].textContent, /chat\.safety\.sandboxUnavailable: update K-brain/);
+    } finally {
+      await view.close();
+    }
+
+    // Networked sandbox only: the offline entry stays disabled.
+    sandboxCapability = {
+      supported: true,
+      mechanism: "bubblewrap",
+      platform: "linux",
+      network_control: false,
+      read_masking: true,
+    };
+    view = await mount({ value: "ask" });
+    try {
+      await view.open();
+      assert.equal(disabled(view, "chat.safety.sandbox"), false);
+      assert.equal(disabled(view, "chat.safety.sandboxOffline"), true);
+      assert.match(view.items()[3].textContent, /chat\.safety\.sandboxDesc$/);
+    } finally {
+      await view.close();
+    }
+
+    // A sandbox that cannot hide credentials must not promise it.
+    sandboxCapability = {
+      supported: true,
+      mechanism: "seatbelt",
+      platform: "darwin",
+      network_control: true,
+      read_masking: false,
+    };
+    view = await mount({ value: "sandbox" });
+    try {
+      assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-emerald-600/);
+      await view.open();
+      assert.equal(disabled(view, "chat.safety.sandboxOffline"), false);
+      assert.match(view.items()[3].textContent, /chat\.safety\.sandboxDescNoReadMask/);
+      await env.act(async () => view.items()[4].click());
+      assert.deepEqual(view.calls.change, ["sandboxOffline"]);
+    } finally {
+      await view.close();
+    }
+  } finally {
+    sandboxCapability = null;
+  }
+});
+
+test("always allow keeps its risk visible on the trigger", async () => {
+  loadConfig = async () => null;
+  const view = await mount({ value: "always" });
+  try {
+    assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-amber-600/);
   } finally {
     await view.close();
   }

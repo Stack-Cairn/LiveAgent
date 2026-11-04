@@ -46,8 +46,17 @@ const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
 };
 
 // "Full access" (auto) is retired: auto review takes its place in the list and
-// saved "auto" values are migrated to "always" by settings normalization.
-const SAFETY_MODES = ["ask", "autoEdit", "autoReview", "always"] as const;
+// saved "auto" values are migrated to "always" by settings normalization. The
+// sandboxes sit between the reviewed modes and always allow, ordered by how much
+// each one lets through without asking.
+const SAFETY_MODES = [
+  "ask",
+  "autoEdit",
+  "autoReview",
+  "sandbox",
+  "sandboxOffline",
+  "always",
+] as const;
 
 /**
  * 读掩蔽是平台/后端相关的能力,不能作为跨平台的肯定承诺(P2#7)。
@@ -92,6 +101,8 @@ function triggerIconClass(mode: CommandSafetyMode, reviewerMissing: boolean) {
     return "size-4 shrink-0 text-emerald-600 dark:text-emerald-400";
   }
   if (mode === "ask") return "size-4 shrink-0 text-sky-600 dark:text-sky-400";
+  // Always allow runs everything without review; keep the risk visible.
+  if (mode === "always") return "size-4 shrink-0 text-amber-600 dark:text-amber-400";
   return "size-4 shrink-0 text-muted-foreground";
 }
 
@@ -124,14 +135,20 @@ export function CommandSafetyModeSelector(props: {
   const offlineUnavailable =
     sandboxUnavailable || (capability !== null && !capability.network_control);
   // 禁用时的说明文案:整体不可用优先,否则为“仅断网不可用”。
-  const disabledHint = sandboxUnavailable
-    ? t("chat.safety.sandboxUnavailable")
-    : t("chat.safety.sandboxOfflineUnavailable");
+  // The backend's reason (for example a missing bubblewrap) follows the fixed text.
+  const disabledHint =
+    (sandboxUnavailable
+      ? t("chat.safety.sandboxUnavailable")
+      : t("chat.safety.sandboxOfflineUnavailable")) +
+    (capability?.reason ? `: ${capability.reason}` : "");
   // 联网写围栏后端是否缺失读掩蔽(Windows 受限令牌);缺失时 sandbox 项换用不承诺
   // “敏感目录不可读”的文案。探测返回前(null)以及 WebUI(永远拿不到桌面 mechanism)
   // 保守按缺失处理,避免先给出过强承诺。
   const sandboxLacksReadMasking =
-    capability === null ? true : MECHANISMS_WITHOUT_READ_MASKING.has(capability.mechanism);
+    capability === null
+      ? true
+      : capability.read_masking === false ||
+        MECHANISMS_WITHOUT_READ_MASKING.has(capability.mechanism);
   const modeDescKey = (mode: CommandSafetyMode) =>
     mode === "sandbox" && sandboxLacksReadMasking
       ? "chat.safety.sandboxDescNoReadMask"
@@ -152,10 +169,7 @@ export function CommandSafetyModeSelector(props: {
     (selected === "autoReview" && reviewerMissing
       ? ` · ${t("chat.safety.autoReviewNeedsModel")}`
       : "");
-  const modes: readonly CommandSafetyMode[] =
-    selected === "sandbox" || selected === "sandboxOffline"
-      ? [...SAFETY_MODES, selected]
-      : SAFETY_MODES;
+  const modes: readonly CommandSafetyMode[] = SAFETY_MODES;
 
   return (
     <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>

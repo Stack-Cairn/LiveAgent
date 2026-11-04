@@ -9,6 +9,8 @@ The shared composer mode selector is used by desktop and Gateway WebUI. Mode cha
 | 自动编辑 / Auto edit | `autoEdit` | `auto_edit` |
 | 自动审查 / Auto review | `autoReview` | `auto_review` |
 | 完全访问 / Full access | `auto` (existing selection) | `full_access` |
+| 沙箱 / Sandbox | `sandbox` | `auto_edit` + `sandbox: {mode: "workspace", network: true}` |
+| 离线沙箱 / Offline sandbox | `sandboxOffline` | `auto_edit` + `sandbox: {mode: "workspace", network: false}` |
 | 始终允许 / Always allow | `always` | `always` |
 
 Selecting a non-plan mode leaves plan mode. Selecting plan preserves the underlying permission selection so leaving plan can restore it. Existing plan submission/approval continues through K-brain's `ExitPlanMode` flow.
@@ -19,7 +21,9 @@ The new `always`, `auto_edit` and `auto_review` modes require K-brain to adverti
 
 Full access honors backend per-tool ask/deny rules and configured AI review. Always allow skips interactive/AI review but not explicit denials or filesystem/sandbox boundaries. Auto review uses the reviewer configured in AI approval settings; unavailable or uncertain review falls back to a user confirmation, not silent approval.
 
-Legacy `sandbox` and `sandboxOffline` settings remain valid and are retained if already selected. They are not reinterpreted as an unrestricted mode. A remote/queued request cannot loosen a stricter local selection.
+The sandbox modes approve file edits automatically and run shell commands without asking, inside K-brain's OS sandbox: commands can write only to the workspace (and temp), sensitive directories are hidden where the platform supports read masking, and the offline variant also blocks the network. A configured AI reviewer still sees every command, and explicit deny rules still apply. Plan mode keeps the sandbox for anything it lets through.
+
+Commands run in K-brain, so the desktop selector reads `capabilities.run_sandbox` from K-brain's `/v1/health`, not a desktop probe; the WebUI leaves it unknown and relies on the Gateway's check at submission. On the desktop the entries are disabled, with K-brain's reason, when the capability is absent or unsupported; the offline entry also needs `network_control`, and the description drops the read-masking promise when `read_masking` is false. The desktop client and the Gateway both refuse to submit a sandboxed run the backend cannot enforce, and K-brain itself rejects one with `400 options.sandbox`, so a sandbox mode never runs commands unconfined. A remote/queued request cannot loosen a stricter local selection.
 
 Transport ownership:
 

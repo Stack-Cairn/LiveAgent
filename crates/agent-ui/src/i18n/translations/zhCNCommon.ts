@@ -490,14 +490,14 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.safety.configureReviewer": "去设置审查模型",
   "chat.safety.autoReviewDesc": "由 K-brain AI 审查；低风险自动批准，未知或高风险交由用户确认",
   "chat.safety.sandbox": "沙箱",
-  "chat.safety.sandboxDesc": "在沙箱内运行，写入受限、敏感目录不可读",
-  // Windows 联网后端（受限令牌 WRITE_RESTRICTED）只围栏“写”，读广泛放行 ⇒ 该平台不得
-  // 承诺敏感目录不可读；读掩蔽只在断网后端（AppContainer）成立。
-  "chat.safety.sandboxDescNoReadMask": "在沙箱内运行，写入受限，本平台不屏蔽读取",
+  "chat.safety.sandboxDesc": "命令在沙箱内自动运行，只能写入工作区，敏感目录不可读",
+  // K-brain 的沙箱在部分平台只围栏写入（capabilities.run_sandbox.read_masking=false），
+  // 这时不得承诺敏感目录不可读。
+  "chat.safety.sandboxDescNoReadMask": "命令在沙箱内自动运行，只能写入工作区；本机不屏蔽读取",
   "chat.safety.sandboxOffline": "离线沙箱",
-  "chat.safety.sandboxOfflineDesc": "在沙箱内运行，并禁止命令访问网络",
-  "chat.safety.sandboxUnavailable": "当前平台沙箱机制不可用",
-  "chat.safety.sandboxOfflineUnavailable": "当前平台不支持离线沙箱",
+  "chat.safety.sandboxOfflineDesc": "命令在沙箱内自动运行，只能写入工作区，且不能访问网络",
+  "chat.safety.sandboxUnavailable": "K-brain 无法在本机启用沙箱",
+  "chat.safety.sandboxOfflineUnavailable": "K-brain 无法在本机断开沙箱网络",
   "chat.safety.cycleShortcut": "Shift+Tab 切换",
   "chat.safety.cycleNextTurn": "下一轮生效",
   "chat.safety.cycleNewMessages": "新消息生效",

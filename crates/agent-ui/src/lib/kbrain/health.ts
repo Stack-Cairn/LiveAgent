@@ -164,6 +164,21 @@ export function capabilityAtLeast(
   return isNonNegativeInteger(value) && value >= minimum;
 }
 
+/**
+ * Whether the backend can confine a run as `options.sandbox` asks (capability
+ * run_sandbox): supported on this machine and, for an offline run, able to cut
+ * the network.
+ */
+export function supportsRunSandbox(
+  health: Pick<KBrainHealth, "capabilities">,
+  sandbox: { network: boolean },
+): boolean {
+  const raw = health.capabilities.run_sandbox;
+  if (!raw || typeof raw !== "object") return false;
+  const value = raw as Record<string, unknown>;
+  return value.supported === true && (sandbox.network || value.network_control === true);
+}
+
 export function supportsPermissionMode(
   health: Pick<KBrainHealth, "capabilities">,
   mode: string,

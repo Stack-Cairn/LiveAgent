@@ -3,6 +3,7 @@ import {
   type KBrainHealth,
   readKBrainHealthResponse,
   supportsPermissionMode,
+  supportsRunSandbox,
 } from "@liveagent/ui/lib/kbrain/health";
 import { createKBrainQueueClient } from "./queueClient";
 import { fetchKBrain, KBrainTransportError } from "./transport";
@@ -674,6 +675,15 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
           `K-brain does not support permission mode ${mode}; update the backend before using this mode.`,
         );
       }
+    }
+    const sandbox = input.options?.sandbox;
+    if (sandbox && !supportsRunSandbox(await getHealth(signal), sandbox)) {
+      // Never drop the field and run the commands unconfined.
+      throw new Error(
+        sandbox.network
+          ? "K-brain cannot sandbox commands on this machine; choose another execution mode or update the backend."
+          : "K-brain cannot run an offline sandbox on this machine; choose another execution mode or update the backend.",
+      );
     }
     const body = { ...input, options: await scopedRunOptions(input.options, signal) };
     const path = `/v1/sessions/${encodeURIComponent(input.conversation_id)}/runs`;
