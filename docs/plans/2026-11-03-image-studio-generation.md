@@ -149,3 +149,26 @@
 - Gateway通过mise Go1.25.12执行全量Go测试，22包通过、2包无测试；UI/GUI/WebUI三个typecheck、两端生产build、两端LF lint、共享改动lint、Mirror和diff检查，共11项独立检查全部通过。
 - K-brain全量Go、改动包race与最终独立对抗复核待完成。两PR先保留draft；真实人工验收和已通过的指定回归不能替代这些未完成项。
 - 正式K-brain锁仍为v0.107.11；后端补丁PR与本地开发产物不代表正式依赖已经更新。
+
+## 2026-11-04 预检收敛与独立复核
+
+两个PR已推送：`Stack-Cairn/K-brain#86` 与 `Stack-Cairn/LiveAgent#1152`。用户于2026-11-03T23:52:16Z再次确认生图验收通过，并授权把已保存的真实截图补入PR；四张截图使用固定资产提交 `a5effc2f7c0345eea0d5608f04a2187e22ed5470`，两个PR中的图片均已确认可加载。
+
+独立对抗复核发现一个P2：当官方OpenAI域名被配置为provider来源时，URL-only结果被错误接受。K-brain追加提交 `ce12074a00f72f45f9ede21258d32658da2a8ceb` 复用 `officialOpenAI` 判定，在通用provider URL分支排除官方域名。永久回归 `TestProviderOfficialOpenAIRemainsBase64Only` 覆盖普通域名、混合大小写和`:443`；两例均先失败后通过，原复核fixture也通过，独立复核确认P2关闭。Volcengine及专用profile保持原条件。此场景为自动化专用：fixture返回URL-only，预期无outputs，状态为`unknown / IMAGE_RESULT_UNKNOWN / DeliveryUncertain`，不需要真实供应商请求。
+
+K-brain通过mise Go1.27.0运行图像包完整测试、vet和direct包 `-race -count=10`。追加修复后的CI run `41745361774` 四项均成功：Linux完整套件49包通过、0失败、3包无测试；含子测试事件4336通过、0失败、34跳过，顶层用例2790通过、0失败、34跳过。Windows/macOS执行现有定向测试和全仓构建，Linux另执行race，未将这两平台的定向测试称为全量。
+
+本地Windows完整套件仍有失败，以下保留实际结果，不以CI通过替代本地失败：
+
+| 范围 | 实际结果 | 定向核查与限制 |
+| --- | --- | --- |
+| K-brain，追加修复后 | 45包通过、5包失败、2包无测试；含子测试事件4349通过、10失败、58跳过 | 仅测试子进程清除继承的backend token及两项应用home配置；`go test ./... -json -p 2 -count=1 -timeout=15m`。8个持续失败的顶层场景，当前源码和原始`b143a827`基线均各复跑20次且全部失败。前一轮额外失败的Bash yield场景在两边各20次均通过，未定位该单次失败原因。 |
+| LiveAgent Node全量 | 657文件、12/12批；4473项中4461通过、11失败、1跳过 | 两项CWD测试在根目录各3轮失败，在GUI目录各3轮通过；Edge退出用例复跑3轮通过，未定位其首次失败的单一原因。另四组backend定向复跑通过，没有重跑整个Node套件。 |
+| backend permission与trajectory | 默认PowerShell分别7通过/3失败、5通过/2失败；显式Git Bash后10/10、7/7通过 | 当前开发产物和原始基线均得到相同结果；真实SSE记录证明默认PowerShell不识别fixture的POSIX `printf`。基线产物经mise Go1.27.3构建，当前验收产物经Go1.27.0构建，未声称工具链版本相同。permission失败计数含父级聚合。 |
+| Rust完整套件 | `cargo test --manifest-path src-tauri/Cargo.toml`：1145通过、23失败、4忽略，退出101 | cargo已实际运行，不能沿用首次`spawn cargo ENOENT`作为最终结果。失败包括2项shell语法、10项Windows扩展Git路径、5项Unix路径假设、1项`/etc`预期、5项sandbox/MSYS对象或DLL初始化；未做Rust基线重放，不能声称23项都已复现于基线。相对本任务准确基线`274de94f`，Rust及Cargo文件无任务改动。 |
+
+完整本地证据保存在忽略的 `.image-diagnostics/preflight/`：`kb-baseline-confirm-summary.json`、`kb-postreview-summary.json`、`ci-kbrain-final-summary.json`、`la-final-findings.json`和对应原始日志。任务相关图像工作台166/166、恢复与冻结快照的30/30定向复核、provider URL/画布/专用profile/安全下载相关回归均通过。此前通过的三项typecheck、两端build与lint、Gateway全量Go、Mirror Check结果继续保留，未重复声称本地全套全绿。
+
+LiveAgent实现提交 `aee59246e238bfb04342b2bbc20086f20e631a71` 的CI run `41742001262` 共9项成功；Rust与Desktop Gateway按路径跳过，draft阶段治理检查跳过。追加本验收记录后，继续核对最终PR head及治理检查到终态，最终远端状态以各PR检查记录为准。
+
+截至2026-11-04，最新正式K-brain仍为v0.107.11，发布时间为2026-11-03T12:57:36Z。本次没有创建tag、合入或触发发布；正式lock与四平台校验值未更新。Moonup后端修复的安装版交付继续依赖K-brain补丁合入及正式产物发布，供应商格式和精确4K限制也继续保留。
