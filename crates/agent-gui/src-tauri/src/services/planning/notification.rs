@@ -1,3 +1,44 @@
+use std::sync::OnceLock;
+
+/// Request identifiers for chat-run notifications carry the conversation id.
+const CHAT_NOTIFICATION_ID_PREFIX: &str = "chat-run:";
+
+static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+/// Keeps a handle so the notification delegate can route clicks back to the app.
+pub fn install(app: &tauri::AppHandle) {
+    let _ = APP.set(app.clone());
+}
+
+pub fn chat_notification_id(conversation_id: &str) -> String {
+    format!(
+        "{CHAT_NOTIFICATION_ID_PREFIX}{conversation_id}:{}",
+        uuid::Uuid::new_v4()
+    )
+}
+
+/// Extracts the conversation id from a chat-run notification identifier.
+pub fn conversation_id_from_notification_id(id: &str) -> Option<&str> {
+    let rest = id.strip_prefix(CHAT_NOTIFICATION_ID_PREFIX)?;
+    let (conversation_id, _nonce) = rest.rsplit_once(':')?;
+    (!conversation_id.is_empty()).then_some(conversation_id)
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn activate_from_notification(id: &str) {
+    let Some(app) = APP.get() else { return };
+    let Some(conversation_id) = conversation_id_from_notification_id(id) else {
+        return;
+    };
+    use tauri::Emitter;
+    let _ = crate::show_main_window(app);
+    // Same action the tray menu uses to open a conversation.
+    let _ = app.emit(
+        "app:action",
+        serde_json::json!({ "action": "open-conversation", "id": conversation_id }),
+    );
+}
+
 pub fn disabled() -> bool {
     std::env::var("LIVEAGENT_DISABLE_NOTIFICATIONS").as_deref() == Ok("1")
 }
@@ -60,6 +101,18 @@ mod mac {
                 completion.call((UNNotificationPresentationOptions::Banner
                     | UNNotificationPresentationOptions::List
                     | UNNotificationPresentationOptions::Sound,));
+            }
+
+            #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
+            fn receive(
+                &self,
+                _center: &UNUserNotificationCenter,
+                response: &UNNotificationResponse,
+                completion: &DynBlock<dyn Fn()>,
+            ) {
+                let id = response.notification().request().identifier().to_string();
+                super::activate_from_notification(&id);
+                completion.call(());
             }
         }
     );

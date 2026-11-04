@@ -858,6 +858,11 @@ export const EN_US_COMMON_TRANSLATIONS = {
   // Sidebar row pill, mirroring chat.toolApproval.sidebarStatus. Distinct from
   // chat.askUser.waiting, which is the in-transcript status label.
   "chat.askUser.sidebarStatus": "Answer needed",
+  "chat.conversationUnread": "New reply",
+  "chat.runNotification.completedTitle": "Conversation finished",
+  "chat.runNotification.approvalTitle": "Approval needed",
+  "chat.runNotification.questionTitle": "Waiting for your answer",
+  "chat.runNotification.untitled": "Untitled conversation",
   "chat.askUser.tabFallback": "Q",
   "chat.askUser.recommended": "Recommended",
   "chat.askUser.customPlaceholder": "Type a custom answer…",

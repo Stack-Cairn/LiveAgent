@@ -402,6 +402,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.languageDesc": "选择界面显示语言，切换后立即生效。",
   "settings.defaultTimeZone": "默认时区",
   "settings.calendarNotifications": "日程通知",
+  "settings.notificationsGroup": "通知",
+  "settings.runNotifications": "后台对话通知",
+  "settings.runNotificationsDesc":
+    "窗口不在前台时，对话完成或需要你批准、回答，会发送系统通知（点击直接打开该对话），并在 Dock 图标显示角标；在其他对话中完成的回复会在侧栏显示未读圆点。仅保存在本机。",
   "settings.notificationTest": "测试系统通知",
   "settings.notificationTestHint":
     "请求通知权限并发送测试通知。请在 macOS 系统设置中允许横幅；专注模式可能隐藏横幅。",

@@ -128,6 +128,8 @@ type HistoryRowProps = {
   isRunning: boolean;
   needsApproval: boolean;
   hasPendingQuestion: boolean;
+  /** Run finished while the user was elsewhere; cleared on open. */
+  isUnread?: boolean;
   isDeleteDisabled: boolean;
   canShareConversation: boolean;
   isRenaming: boolean;
@@ -241,6 +243,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     isRunning,
     needsApproval,
     hasPendingQuestion,
+    isUnread = false,
     isDeleteDisabled,
     canShareConversation,
     isRenaming,
@@ -960,6 +963,15 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 >
                   {blockedBadgeLabel}
                 </span>
+              ) : null}
+              {!isSelectionMode && isUnread && !blockedBadgeLabel && !isRunning ? (
+                <span
+                  role="img"
+                  aria-label={t("chat.conversationUnread")}
+                  title={t("chat.conversationUnread")}
+                  data-sidebar-unread-dot=""
+                  className="size-2 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400"
+                />
               ) : null}
             </SidebarMenuButton>
           </div>

@@ -17,7 +17,7 @@ import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarContainerState } from "@liveagent/ui/lib/sidebar/useSidebarContainerState";
 import { sortWorkspaceProjectsByActivity } from "@liveagent/ui/lib/workspaceProjects";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import {
   DesktopSidebarBrand,
   DesktopSidebarTitleBar,
@@ -26,9 +26,11 @@ import {
 } from "../../../agent-ui-adapters/sidebarChrome";
 import type { AppUpdateController } from "../../../lib/appUpdates";
 import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
+import type { UnreadConversationStore } from "../../../lib/notifications/runAttention";
 import type { WorkspaceProject, WorkspaceProjectGroup } from "../../../lib/settings";
 import type { ConversationApprovalStore } from "../conversations/conversationApprovalStore";
 import type { ConversationQuestionStore } from "../conversations/conversationQuestionStore";
+import { useBlockedConversationIds } from "../conversations/useBlockedConversationIds";
 import {
   moveConversationsToWorkspace,
   moveConversationToWorkspace,
@@ -37,6 +39,8 @@ import {
 type ChatSidebarContainerProps = ChatHistorySidebarContainerSource & {
   store: SidebarStore;
   approvalStore: ConversationApprovalStore;
+  /** Device-local unread marks for runs that finished out of view. */
+  unreadStore?: UnreadConversationStore;
   questionStore: ConversationQuestionStore;
   workspaceProjectGroups: WorkspaceProjectGroup[];
   onCreateWorkspaceGroup: (name: string) => void;
@@ -71,42 +75,9 @@ type ChatSidebarContainerProps = ChatHistorySidebarContainerSource & {
   appUpdate?: AppUpdateController;
 };
 
-/** Both the approval and the ask-question registries expose this shape, so one
- *  hook covers "which visible conversations are blocked on the user". */
-type PendingConversationStore = {
-  getSnapshot: (conversationId: string) => readonly unknown[];
-  subscribe: (conversationId: string, listener: () => void) => () => void;
-};
-
-function useBlockedConversationIds(
-  items: readonly SidebarConversation[],
-  pendingStore: PendingConversationStore,
-): ReadonlySet<string> {
-  const conversationIds = useMemo(() => items.map((item) => item.id), [items]);
-  const readSnapshot = useCallback(() => {
-    const result = new Set<string>();
-    for (const conversationId of conversationIds) {
-      if (pendingStore.getSnapshot(conversationId).length > 0) result.add(conversationId);
-    }
-    return result;
-  }, [pendingStore, conversationIds]);
-  const [blockedConversationIds, setBlockedConversationIds] =
-    useState<ReadonlySet<string>>(readSnapshot);
-
-  useEffect(() => {
-    const notify = () => setBlockedConversationIds(readSnapshot());
-    const unsubscribers = conversationIds.map((conversationId) =>
-      pendingStore.subscribe(conversationId, notify),
-    );
-    // Close the small render→subscribe race by re-reading once subscriptions exist.
-    notify();
-    return () => {
-      for (const unsubscribe of unsubscribers) unsubscribe();
-    };
-  }, [pendingStore, conversationIds, readSnapshot]);
-
-  return blockedConversationIds;
-}
+const EMPTY_UNREAD: ReadonlySet<string> = new Set();
+const subscribeNoop = () => () => {};
+const emptyUnreadSnapshot = () => EMPTY_UNREAD;
 
 export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
   const {
@@ -134,6 +105,11 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
   const [renameDraft, setRenameDraft] = useState("");
   const approvalConversationIds = useBlockedConversationIds(items, approvalStore);
   const questionConversationIds = useBlockedConversationIds(items, questionStore);
+  const unreadStore = props.unreadStore;
+  const unreadConversationIds = useSyncExternalStore(
+    unreadStore?.subscribe ?? subscribeNoop,
+    unreadStore?.getSnapshot ?? emptyUnreadSnapshot,
+  );
 
   const sortedProjects = useMemo(
     () =>
@@ -267,6 +243,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       })}
       approvalConversationIds={approvalConversationIds}
       questionConversationIds={questionConversationIds}
+      unreadConversationIds={unreadConversationIds}
       {...buildChatHistorySidebarWorkspaceProps(
         props,
         sortedProjects,
