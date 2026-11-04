@@ -30,6 +30,7 @@ import {
   defaultParameters,
   keepDeclaredParameters,
   migrateParameters,
+  normalizeParameters,
   validateParameters,
 } from "./parameterModel";
 import {
@@ -1093,7 +1094,8 @@ export class ImageStudioController {
   }
   /** Every click is a new job built from the current draft; only an in-flight request blocks it. */
   async submit() {
-    if (this.pendingSubmit || this.disposed || !this.view.draftReady) return;
+    const target = this.target;
+    if (this.pendingSubmit || this.disposed || !this.view.draftReady || !target) return;
     const errors = this.validationMessages();
     if (errors.length) {
       this.say(...errors);
@@ -1106,7 +1108,7 @@ export class ImageStudioController {
       prompt: usesPromptFraming(this.target)
         ? composeFramedPrompt(draft.prompt, draft.framing)
         : draft.prompt,
-      parameters: draft.parameters as Record<string, Scalar>,
+      parameters: normalizeParameters(target, draft.parameters) as Record<string, Scalar>,
       inputs: draft.inputs,
       operation,
       count,

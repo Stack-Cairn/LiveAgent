@@ -1,6 +1,6 @@
 import type { CreateJobRequest, ImageTarget } from "../../lib/imaging/types";
 import { type Framing, sanitizeFraming } from "./framing";
-import { parameterError } from "./parameterModel";
+import { normalizeParameters, parameterError } from "./parameterModel";
 import { type FrozenSubmission, freezeSubmission } from "./studioModel";
 
 export interface DraftScope {
@@ -62,7 +62,7 @@ export function sanitizeDraft(value: unknown, targets: ImageTarget[]): StudioDra
   return {
     prompt: typeof data.prompt === "string" ? data.prompt.slice(0, 100000) : "",
     targetId,
-    parameters,
+    parameters: target ? normalizeParameters(target, parameters) : parameters,
     inputs,
     ...(assetId(data.parentAssetId) && inputs.some((input) => input.assetId === data.parentAssetId)
       ? { parentAssetId: data.parentAssetId }

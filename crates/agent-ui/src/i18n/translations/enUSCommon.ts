@@ -1829,6 +1829,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "imageStudio.parameter.background.transparent": "Transparent",
   "imageStudio.parameter.background.auto": "Auto",
   "imageStudio.parameter.output_compression": "Output compression",
+  "imageStudio.compression.formats": "JPEG and WebP only.",
   "imageStudio.parameter.response_format": "Response format",
   "imageStudio.parameter.watermark": "Watermark",
   "imageStudio.parameter.optimize_prompt_options.mode": "Prompt optimization",
