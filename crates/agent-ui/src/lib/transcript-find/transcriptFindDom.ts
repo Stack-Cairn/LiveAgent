@@ -68,6 +68,29 @@ export function findTextRangesInElement(element: Element, query: string): Range[
   });
 }
 
+/**
+ * Collapsed transcript content (a clamped long user message) marks itself
+ * with this attribute and expands when it receives TRANSCRIPT_REVEAL_EVENT.
+ */
+export const TRANSCRIPT_COLLAPSED_ATTR = "data-transcript-collapsed";
+export const TRANSCRIPT_REVEAL_EVENT = "liveagent:transcript-reveal";
+
+/**
+ * Asks the collapsed block around `range` to expand. Returns true when one was
+ * found: the range will move once the block re-renders, so callers position it
+ * after the row has settled.
+ */
+export function revealCollapsedTranscriptRange(range: Range): boolean {
+  const node = range.startContainer;
+  const element = node.nodeType === 1 ? (node as Element) : node.parentElement;
+  const collapsed = element?.closest(`[${TRANSCRIPT_COLLAPSED_ATTR}]`);
+  if (!collapsed) return false;
+  const view = collapsed.ownerDocument.defaultView;
+  const EventCtor = view?.Event ?? Event;
+  collapsed.dispatchEvent(new EventCtor(TRANSCRIPT_REVEAL_EVENT));
+  return true;
+}
+
 export const TRANSCRIPT_FIND_MATCH_HIGHLIGHT = "transcript-find-match";
 export const TRANSCRIPT_FIND_ACTIVE_HIGHLIGHT = "transcript-find-active";
 

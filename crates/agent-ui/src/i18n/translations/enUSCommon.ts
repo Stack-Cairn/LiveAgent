@@ -623,6 +623,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.markdown.expandCode": "Expand {count} lines",
   "chat.markdown.expandAllCode": "Show all",
   "chat.markdown.collapseCode": "Collapse code",
+  "chat.userMessage.expand": "Show more",
+  "chat.userMessage.collapse": "Show less",
   "chat.fileLink.open": "Open file",
   "chat.fileLink.openContainingDirectory": "Open containing folder",
   "chat.fileLink.openWithDefaultApp": "Open with default app",

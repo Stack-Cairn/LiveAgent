@@ -13,23 +13,17 @@ import {
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
 import { TranscriptQuoteSelection } from "@liveagent/ui/components/chat/TranscriptQuoteSelection";
-import { UserAttachmentCards } from "@liveagent/ui/components/chat/UserAttachmentCards";
+import { UserMessageBubbleBody } from "@liveagent/ui/components/chat/UserMessageBubbleBody";
 import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
 import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { ReplyShareSource } from "@liveagent/ui/lib/chat/replyShare";
-import {
-  type PendingUploadedFile,
-  splitUserAttachmentsForDisplay,
-} from "@liveagent/ui/lib/chat/uploadedFiles";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { UploadedImagePreviewLoader } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { useCommitDetailsLoader } from "@liveagent/ui/lib/chat/useCommitDetailsLoader";
-import {
-  type CommitDetailsLoader,
-  UserMessageContent,
-} from "@liveagent/ui/lib/chat/userMessageContent";
+import type { CommitDetailsLoader } from "@liveagent/ui/lib/chat/userMessageContent";
 import { chatDuration } from "@liveagent/ui/lib/chat/workTiming";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
@@ -228,42 +222,6 @@ function CheckpointCard(props: {
   );
 }
 
-function GatewayUserMessageBubbleBody(props: {
-  text: string;
-  attachments: PendingUploadedFile[];
-  workspaceRoot?: string;
-  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
-  loadCommitDetails?: CommitDetailsLoader;
-}) {
-  const { text, attachments, workspaceRoot, onLoadUploadedImagePreview, loadCommitDetails } = props;
-  const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(attachments, text);
-
-  return (
-    <div
-      className={cn(
-        "ml-auto w-fit max-w-full",
-        "whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5",
-        "font-chat text-sm leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
-      )}
-    >
-      <UserAttachmentCards
-        files={visibleFiles}
-        workspaceRoot={workspaceRoot}
-        onLoadUploadedImagePreview={onLoadUploadedImagePreview}
-        imagePreviewMode="imageKind"
-      />
-      {text ? (
-        <UserMessageContent
-          text={text}
-          pastedTextFiles={pastedTextFiles}
-          loadCommitDetails={loadCommitDetails}
-          legacyInlineFileMentions
-        />
-      ) : null}
-    </div>
-  );
-}
-
 // Shared user-row body: the bubble plus hover actions (copy / edit), or the
 // inline editor while this row is being edited. Both transcript regions
 // render it; the per-row copied/editing state lives in the owning region so
@@ -338,12 +296,15 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
       className="chat-user-bubble-wrap group relative ml-auto max-w-user-bubble-web"
       data-user-bubble-wrap
     >
-      <GatewayUserMessageBubbleBody
+      <UserMessageBubbleBody
+        messageKey={row.key}
         text={row.text}
         attachments={row.attachments}
         workspaceRoot={workspaceRoot}
         onLoadUploadedImagePreview={onLoadUploadedImagePreview}
+        imagePreviewMode="imageKind"
         loadCommitDetails={loadCommitDetails}
+        legacyInlineFileMentions
       />
       <TranscriptUserMessageActions
         timestamp={row.timestamp}
