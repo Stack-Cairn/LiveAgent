@@ -124,6 +124,7 @@ const PROJECT_LIST_COLLAPSED_MAX = 30;
 const EMPTY_PROJECT_PATH_KEYS = new Set<string>();
 const EMPTY_APPROVAL_CONVERSATION_IDS = new Set<string>();
 const EMPTY_QUESTION_CONVERSATION_IDS = new Set<string>();
+const EMPTY_UNREAD_CONVERSATION_IDS = new Set<string>();
 const HISTORY_LOADING_SKELETON_ROWS = [
   { title: "w-36", meta: "w-20" },
   { title: "w-44", meta: "w-24" },
@@ -201,6 +202,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     runningConversationIds,
     approvalConversationIds = EMPTY_APPROVAL_CONVERSATION_IDS,
     questionConversationIds = EMPTY_QUESTION_CONVERSATION_IDS,
+    unreadConversationIds = EMPTY_UNREAD_CONVERSATION_IDS,
     listStatus,
     scopeKey = "",
     hasMore,
@@ -1175,6 +1177,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         isRunning={runningConversationIds.has(item.id)}
         needsApproval={approvalConversationIds.has(item.id)}
         hasPendingQuestion={questionConversationIds.has(item.id)}
+        isUnread={unreadConversationIds.has(item.id) && currentConversationId !== item.id}
         isDeleteDisabled={runningConversationIds.has(item.id)}
         canShareConversation={canShareConversations}
         isRenaming={renamingId === item.id}
@@ -1234,6 +1237,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       activeProjects,
       approvalConversationIds,
       questionConversationIds,
+      unreadConversationIds,
       enterSelectionMode,
       isBulkDeleting,
       isBulkMoving,

@@ -152,6 +152,7 @@ import { publishGoalState } from "../lib/kbrain/goalStore";
 import { subscribeHistoryImported } from "../lib/kbrain/manualHistoryImport";
 import { getKBrainSessionId } from "../lib/kbrain/mapping";
 import { watchKBrainHistory } from "../lib/kbrain/watchHistory";
+import { createUnreadConversationStore } from "../lib/notifications/runAttention";
 import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
 import {
   applyConversationThinking,
@@ -231,6 +232,7 @@ import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { MAX_UPLOAD_FILES, usePendingUploads } from "./chat/hooks/usePendingUploads";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
 import { useUploadZoneDrop } from "./chat/hooks/useUploadZoneDrop";
+import { RunAttentionNotifier } from "./chat/notifications/RunAttentionNotifier";
 import {
   getQueuedConversationIds,
   removeQueuedChatTurnsForConversation,
@@ -1905,6 +1907,7 @@ function ChatPageContent(props: ChatPageProps) {
 
   // 托盘/快捷键动作参数的 ref 镜像：监听 effect 是 []-dep，闭包内一律
   // 经 ref 取最新值（handleSelectWorkspaceProject 等依赖 settings，不稳定）。
+  const [unreadConversationStore] = useState(createUnreadConversationStore);
   const sidebarRunningConversationIds = useSidebarSelector(
     sidebarStore,
     selectRunningConversationIds,
@@ -4266,6 +4269,14 @@ function ChatPageContent(props: ChatPageProps) {
         className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
       >
         {workbenchDragGhost}
+        <RunAttentionNotifier
+          sidebarStore={sidebarStore}
+          approvalStore={conversationRuntimeRegistry.approvals}
+          questionStore={conversationRuntimeRegistry.questions}
+          unreadStore={unreadConversationStore}
+          visibleConversationId={activeView === "chat" ? currentConversationId : ""}
+          enabled={settings.customSettings.runNotifications}
+        />
         {/* ---- Left column: navigation/sidebar ---- */}
         <ChatSidebarContainer
           pinnedOrder={settings.system.sidebarPinnedOrder}
@@ -4285,6 +4296,7 @@ function ChatPageContent(props: ChatPageProps) {
           store={sidebarStore}
           approvalStore={conversationRuntimeRegistry.approvals}
           questionStore={conversationRuntimeRegistry.questions}
+          unreadStore={unreadConversationStore}
           currentConversationId={currentConversationId}
           isOpen={sidebarOpen}
           fontScale={settings.customSettings.fontScale.sidebar}

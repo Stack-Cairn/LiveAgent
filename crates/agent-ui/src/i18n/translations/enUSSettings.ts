@@ -434,6 +434,10 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Choose the display language for the interface. Changes take effect immediately.",
   "settings.defaultTimeZone": "Default time zone",
   "settings.calendarNotifications": "Calendar notifications",
+  "settings.notificationsGroup": "Notifications",
+  "settings.runNotifications": "Background conversation notifications",
+  "settings.runNotificationsDesc":
+    "When LiveAgent is in the background, send a system notification (click to open the conversation) and show a Dock badge when a conversation finishes or needs your approval or answer. Replies that finish in other conversations get an unread dot in the sidebar. Saved on this device only.",
   "settings.notificationTest": "Test system notification",
   "settings.notificationTestHint":
     "Request permission and send a test notification. Enable banners in macOS System Settings; Focus may hide banners.",

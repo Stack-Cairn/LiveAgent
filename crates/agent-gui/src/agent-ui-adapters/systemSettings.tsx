@@ -6,6 +6,7 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Select, SelectItem, SelectValue } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { updateRunNotifications } from "@liveagent/ui/lib/settings/index";
 import {
   AgentActivationSwitch,
   SettingsGroup,
@@ -48,6 +49,25 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
   return (
     <>
       <LegacyHistoryImportSettings />
+      {isTauriHost() && (
+        <SettingsGroup title={t("settings.notificationsGroup")}>
+          <SettingsRow
+            title={t("settings.runNotifications")}
+            description={t("settings.runNotificationsDesc")}
+            control={
+              <AgentActivationSwitch
+                checked={settings.customSettings.runNotifications}
+                title={t("settings.runNotifications")}
+                onToggle={() =>
+                  setSettings((prev) =>
+                    updateRunNotifications(prev, !prev.customSettings.runNotifications),
+                  )
+                }
+              />
+            }
+          />
+        </SettingsGroup>
+      )}
       {isTauriHost() && (
         <SettingsGroup title={t("settings.calendarNotifications")}>
           <SettingsRow

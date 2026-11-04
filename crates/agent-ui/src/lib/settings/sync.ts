@@ -539,6 +539,7 @@ function syncableCustomSettings(
     chatFontFamily: "",
     codeFontFamily: "",
     chatTranscript: { width: DEFAULT_CHAT_TRANSCRIPT_WIDTH, expandProcessByDefault: false },
+    runNotifications: true,
     fontScale: { sidebar: 1, chat: 1, rightDock: 1, settings: 1 },
   };
 }
@@ -1394,6 +1395,7 @@ export function applyGatewaySettingsSyncPayload(
       chatFontFamily: current.customSettings.chatFontFamily,
       codeFontFamily: current.customSettings.codeFontFamily,
       chatTranscript: current.customSettings.chatTranscript,
+      runNotifications: current.customSettings.runNotifications,
       fontScale: current.customSettings.fontScale,
     },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,

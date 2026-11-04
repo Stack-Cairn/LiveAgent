@@ -1849,6 +1849,8 @@ export function normalizeCustomSettings(
     },
     sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
     chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
+    // 缺省开启：老配置无此字段时启用后台对话通知。
+    runNotifications: obj.runNotifications !== false,
     rightDock: normalizeRightDockSettings(obj.rightDock),
     // 三档枚举：历史配置无此字段或值不合法（含曾设想过的 "auto"）一律落回默认的统计状态栏。
     composerContextDisplay:
@@ -2418,6 +2420,11 @@ export function updateExpandProcessByDefault(prev: AppSettings, enabled: boolean
   return updateCustomSettings(prev, {
     chatTranscript: { ...prev.customSettings.chatTranscript, expandProcessByDefault: enabled },
   });
+}
+
+export function updateRunNotifications(prev: AppSettings, enabled: boolean): AppSettings {
+  if (prev.customSettings.runNotifications === enabled) return prev;
+  return updateCustomSettings(prev, { runNotifications: enabled });
 }
 
 export function updateRightDockWidth(prev: AppSettings, width: number): AppSettings {

@@ -215,6 +215,8 @@ macro_rules! app_invoke_handler {
             commands::planning::planning_export,
             commands::planning::planning_set_labels,
             commands::planning::planning_notification_test,
+            commands::notifications::chat_notification_deliver,
+            commands::notifications::app_set_badge_count,
             commands::planning::planning_subscription,
             commands::planning::planning_import,
             commands::cron::cron_validate_expression,
@@ -966,6 +968,7 @@ pub fn run() {
             move |app| {
                 commands::history_db::initialize_history_db()?;
                 configure_system_tray(app)?;
+                services::planning::notification::install(app.handle());
                 #[cfg(target_os = "windows")]
                 configure_windows_window_chrome(app)?;
                 #[cfg(target_os = "macos")]
