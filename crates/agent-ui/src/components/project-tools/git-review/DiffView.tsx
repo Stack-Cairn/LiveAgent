@@ -7,13 +7,34 @@ import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/c
 // and optional platform capabilities enter through the shared contracts.
 
 import { DiffFile } from "@git-diff-view/file";
-import { DiffModeEnum, DiffView } from "@git-diff-view/react";
+import { DiffModeEnum, DiffView, SplitSide } from "@git-diff-view/react";
 import "@git-diff-view/react/styles/diff-view.css";
-import { Copy, FolderTree, GitBranch, Loader2 } from "@liveagent/ui/components/IconSet";
+import "./DiffView.css";
+import {
+  Copy,
+  FolderTree,
+  GitBranch,
+  Loader2,
+  MessageSquareText,
+  SquarePen,
+  Trash2,
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  buildDiffLineCommentSegments,
+  type DiffLineComment,
+  type DiffLineCommentInput,
+  type DiffLineCommentLineKind,
+  diffLineCommentFileKey,
+  pruneDiffLineComments,
+  removeDiffLineComment,
+  sortDiffLineComments,
+  upsertDiffLineComment,
+} from "@liveagent/ui/lib/chat/diffLineComments";
 import type { GitDiffResponse } from "@liveagent/ui/lib/git/types";
 import {
   memo,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -25,6 +46,7 @@ import {
   useState,
 } from "react";
 import { cn } from "../../../lib/shared/utils";
+import type { MentionComposerDraftSegment } from "../../chat/MentionComposerModel";
 import { Button } from "../../ui/button";
 import {
   basename,
@@ -210,8 +232,192 @@ function useIsDark() {
   return isDark;
 }
 
-const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isDark: boolean }) {
-  const { item, isDark } = props;
+const DIFF_LINE_COMMENT_ATTR = "data-diff-line-comment";
+const NO_LINE_COMMENTS: readonly DiffLineComment[] = [];
+
+type DiffChunkCommenting = {
+  comments: readonly DiffLineComment[];
+  onSave: (input: DiffLineCommentInput) => void;
+  onDelete: (id: string) => void;
+};
+
+function isDiffLineCommentTarget(target: EventTarget | null) {
+  return target instanceof Element && target.closest(`[${DIFF_LINE_COMMENT_ATTR}]`) !== null;
+}
+
+function DiffLineCommentEditor(props: {
+  initialValue?: string;
+  onSave: (comment: string) => void;
+  onCancel: () => void;
+}) {
+  const { initialValue = "", onSave, onCancel } = props;
+  const { t } = useLocale();
+  const [value, setValue] = useState(initialValue);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const canSave = value.trim().length > 0;
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, []);
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+      return;
+    }
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (canSave) onSave(value);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <textarea
+        ref={textareaRef}
+        value={value}
+        rows={2}
+        placeholder={t("projectTools.gitReview.lineComments.placeholder")}
+        aria-label={t("projectTools.gitReview.lineComments.placeholder")}
+        className={cn(
+          "min-h-14 w-full select-text resize-y rounded-md border border-border/70 bg-background px-2 py-1.5",
+          "font-sans text-xs leading-relaxed text-foreground outline-none",
+          "focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/30",
+        )}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={handleKeyDown}
+      />
+      <div className="flex items-center justify-end gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-6 px-2 text-xs"
+          onClick={onCancel}
+        >
+          {t("projectTools.gitReview.lineComments.cancel")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          disabled={!canSave}
+          title={t("projectTools.gitReview.lineComments.saveHint")}
+          onClick={() => onSave(value)}
+        >
+          {t("projectTools.gitReview.lineComments.save")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function diffLineCommentLabel(
+  t: (key: string) => string,
+  comment: Pick<DiffLineComment, "lineKind" | "lineNumber">,
+) {
+  const key =
+    comment.lineKind === "delete"
+      ? "projectTools.gitReview.lineComments.deletedLineLabel"
+      : "projectTools.gitReview.lineComments.lineLabel";
+  return t(key).replace("{line}", String(comment.lineNumber));
+}
+
+function DiffLineCommentCard(props: {
+  comment: DiffLineComment;
+  onSave: (input: DiffLineCommentInput) => void;
+  onDelete: (id: string) => void;
+}) {
+  const { comment, onSave, onDelete } = props;
+  const { t } = useLocale();
+  const [editing, setEditing] = useState(false);
+  const { id: _id, ...input } = comment;
+
+  return (
+    <div
+      {...{ [DIFF_LINE_COMMENT_ATTR]: "saved" }}
+      className="border-y border-border/60 bg-muted/30 px-3 py-2 font-sans"
+    >
+      {editing ? (
+        <DiffLineCommentEditor
+          initialValue={comment.comment}
+          onCancel={() => setEditing(false)}
+          onSave={(text) => {
+            onSave({ ...input, comment: text });
+            setEditing(false);
+          }}
+        />
+      ) : (
+        <div className="flex items-start gap-2">
+          <MessageSquareText className="mt-0.5 size-3.5 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <div className="text-tiny font-medium text-muted-foreground">
+              {diffLineCommentLabel(t, comment)}
+            </div>
+            <div className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+              {comment.comment}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="size-6 px-0"
+              title={t("projectTools.gitReview.lineComments.edit")}
+              aria-label={t("projectTools.gitReview.lineComments.edit")}
+              onClick={() => setEditing(true)}
+            >
+              <SquarePen className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="size-6 px-0 hover:text-destructive"
+              title={t("projectTools.gitReview.lineComments.delete")}
+              aria-label={t("projectTools.gitReview.lineComments.delete")}
+              onClick={() => onDelete(comment.id)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function resolveDiffLineCommentLine(
+  diffFile: DiffFile,
+  lineNumber: number,
+  side: SplitSide,
+): { lineKind: DiffLineCommentLineKind; code: string } {
+  const line = diffFile.getUnifiedLineByLineNumber(lineNumber, side);
+  const hasOld = typeof line?.oldLineNumber === "number";
+  const hasNew = typeof line?.newLineNumber === "number";
+  const lineKind: DiffLineCommentLineKind =
+    side === SplitSide.old && !hasNew
+      ? "delete"
+      : side === SplitSide.new && !hasOld
+        ? "add"
+        : "context";
+  return { lineKind, code: line?.value ?? "" };
+}
+
+const DiffChunkView = memo(function DiffChunkView(props: {
+  item: PatchChunk;
+  isDark: boolean;
+  commenting?: DiffChunkCommenting;
+}) {
+  const { item, isDark, commenting } = props;
   const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Lazy parse/highlight: a chunk only builds its DiffFile once it scrolls
@@ -268,6 +474,76 @@ const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isD
       : item.chunk;
   }, [item, t]);
 
+  const comments = commenting?.comments ?? NO_LINE_COMMENTS;
+  const onSaveComment = commenting?.onSave;
+  const onDeleteComment = commenting?.onDelete;
+  const commentingEnabled = Boolean(onSaveComment && onDeleteComment);
+  const fileNames = useMemo(() => getPatchFileNames(item.chunk, item.label), [item]);
+  const fileKey = diffLineCommentFileKey(fileNames.oldFileName, fileNames.newFileName);
+
+  const extendData = useMemo(() => {
+    const oldFile: Record<string, { data: DiffLineComment }> = {};
+    const newFile: Record<string, { data: DiffLineComment }> = {};
+    for (const comment of comments) {
+      const target = comment.side === "old" ? oldFile : newFile;
+      target[String(comment.lineNumber)] = { data: comment };
+    }
+    return { oldFile, newFile };
+  }, [comments]);
+
+  const renderWidgetLine = useCallback(
+    ({
+      diffFile: lineDiffFile,
+      lineNumber,
+      side,
+      onClose,
+    }: {
+      diffFile: DiffFile;
+      lineNumber: number;
+      side: SplitSide;
+      onClose: () => void;
+    }) => {
+      if (!onSaveComment) return null;
+      const commentSide = side === SplitSide.old ? "old" : "new";
+      const existing = comments.find(
+        (comment) => comment.side === commentSide && comment.lineNumber === lineNumber,
+      );
+      return (
+        <div
+          {...{ [DIFF_LINE_COMMENT_ATTR]: "editor" }}
+          className="border-y border-border/60 bg-muted/30 px-3 py-2 font-sans"
+        >
+          <DiffLineCommentEditor
+            initialValue={existing?.comment}
+            onCancel={onClose}
+            onSave={(text) => {
+              const line = resolveDiffLineCommentLine(lineDiffFile, lineNumber, side);
+              onSaveComment({
+                fileKey,
+                path: commentSide === "old" ? fileNames.oldFileName : fileNames.newFileName,
+                side: commentSide,
+                lineNumber,
+                lineKind: line.lineKind,
+                code: line.code,
+                comment: text,
+              });
+              onClose();
+            }}
+          />
+        </div>
+      );
+    },
+    [comments, fileKey, fileNames, onSaveComment],
+  );
+
+  const renderExtendLine = useCallback(
+    ({ data }: { data: DiffLineComment }) =>
+      onSaveComment && onDeleteComment ? (
+        <DiffLineCommentCard comment={data} onSave={onSaveComment} onDelete={onDeleteComment} />
+      ) : null,
+    [onDeleteComment, onSaveComment],
+  );
+
   // Rough height estimate so the scroll range stays stable while the chunk is
   // still a placeholder (large chunks render a capped raw preview instead).
   const placeholderHeight = item.large ? 416 : Math.max(48, item.lineCount * 20);
@@ -298,6 +574,14 @@ const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isD
           diffViewHighlight
           diffViewWrap={false}
           diffViewFontSize={12}
+          {...(commentingEnabled
+            ? {
+                diffViewAddWidget: true,
+                extendData,
+                renderWidgetLine,
+                renderExtendLine,
+              }
+            : {})}
         />
       ) : (
         <pre className="git-review-diff-selectable-content max-h-104 select-text overflow-auto p-3 text-xs leading-relaxed text-muted-foreground">
@@ -416,8 +700,11 @@ export function DiffContent(props: {
   error?: string;
   loading?: boolean;
   showStat?: boolean;
+  /** Enables per-line comments; pending comments are handed over as composer
+   *  segments and cleared once the composer accepts them. */
+  onInsertComposerSegments?: (segments: MentionComposerDraftSegment[]) => boolean;
 }) {
-  const { diff, title, error, loading = false, showStat = true } = props;
+  const { diff, title, error, loading = false, showStat = true, onInsertComposerSegments } = props;
   const { locale, t } = useLocale();
   const isDark = useIsDark();
   const rootRef = useRef<HTMLElement | null>(null);
@@ -449,6 +736,64 @@ export function DiffContent(props: {
   );
   const showLoadingState = loading && !error && !diff;
   const showDiffStat = showStat && Boolean(diff?.stat);
+  const [lineComments, setLineComments] = useState<DiffLineComment[]>([]);
+  const lineCommentsEnabled = Boolean(onInsertComposerSegments);
+
+  const chunkFileKeys = useMemo(
+    () =>
+      patchChunks.map((chunk) => {
+        const names = getPatchFileNames(chunk.chunk, chunk.label);
+        return diffLineCommentFileKey(names.oldFileName, names.newFileName);
+      }),
+    [patchChunks],
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    setLineComments((current) => pruneDiffLineComments(current, chunkFileKeys));
+  }, [chunkFileKeys, loading]);
+
+  const handleSaveLineComment = useCallback((input: DiffLineCommentInput) => {
+    setLineComments((current) => upsertDiffLineComment(current, input));
+  }, []);
+  const handleDeleteLineComment = useCallback((id: string) => {
+    setLineComments((current) => removeDiffLineComment(current, id));
+  }, []);
+  const handleClearLineComments = useCallback(() => setLineComments([]), []);
+  const handleSendLineComments = useCallback(() => {
+    if (!onInsertComposerSegments || lineComments.length === 0) return;
+    const ordered = sortDiffLineComments(lineComments, chunkFileKeys);
+    const segments = buildDiffLineCommentSegments(ordered, {
+      heading: t("projectTools.gitReview.lineComments.composerHeading"),
+    });
+    if (onInsertComposerSegments(segments)) setLineComments([]);
+  }, [chunkFileKeys, lineComments, onInsertComposerSegments, t]);
+
+  const chunkCommenting = useMemo(() => {
+    const byChunk = new Map<string, DiffChunkCommenting>();
+    if (!lineCommentsEnabled) return byChunk;
+    const grouped = new Map<string, DiffLineComment[]>();
+    for (const comment of lineComments) {
+      const list = grouped.get(comment.fileKey);
+      if (list) list.push(comment);
+      else grouped.set(comment.fileKey, [comment]);
+    }
+    patchChunks.forEach((chunk, index) => {
+      byChunk.set(chunk.key, {
+        comments: grouped.get(chunkFileKeys[index] ?? "") ?? NO_LINE_COMMENTS,
+        onSave: handleSaveLineComment,
+        onDelete: handleDeleteLineComment,
+      });
+    });
+    return byChunk;
+  }, [
+    chunkFileKeys,
+    handleDeleteLineComment,
+    handleSaveLineComment,
+    lineComments,
+    lineCommentsEnabled,
+    patchChunks,
+  ]);
   const closeSelectionContextMenu = useCallback(() => {
     setSelectionContextMenu(null);
   }, []);
@@ -741,7 +1086,10 @@ export function DiffContent(props: {
 
   const handleContextMenu = useCallback(
     (event: ReactMouseEvent<HTMLFieldSetElement>) => {
-      if (!isDiffSelectableContentTarget(rootRef.current, event.target)) {
+      if (
+        isDiffLineCommentTarget(event.target) ||
+        !isDiffSelectableContentTarget(rootRef.current, event.target)
+      ) {
         closeSelectionContextMenu();
         return;
       }
@@ -764,6 +1112,7 @@ export function DiffContent(props: {
   const handleSelectionPointerDownCapture = useCallback(
     (event: ReactPointerEvent<HTMLFieldSetElement>) => {
       if (event.button !== 0) return;
+      if (isDiffLineCommentTarget(event.target)) return;
       if (!isDiffSelectableContentTarget(rootRef.current, event.target)) return;
 
       const target = event.target instanceof Element ? event.target : null;
@@ -851,7 +1200,12 @@ export function DiffContent(props: {
           className="git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto"
         >
           {patchChunks.map((item) => (
-            <DiffChunkView key={item.key} item={item} isDark={isDark} />
+            <DiffChunkView
+              key={item.key}
+              item={item}
+              isDark={isDark}
+              commenting={chunkCommenting.get(item.key)}
+            />
           ))}
         </div>
       ) : null}
@@ -877,6 +1231,43 @@ export function DiffContent(props: {
           )}
         >
           {t("projectTools.gitReview.noDiff")}
+        </div>
+      ) : null}
+      {lineCommentsEnabled && lineComments.length > 0 ? (
+        <div
+          {...{ [DIFF_LINE_COMMENT_ATTR]: "pending" }}
+          className={cn(
+            "flex shrink-0 select-none items-center gap-2 border-t border-border/70",
+            "bg-muted/20 px-3 py-1.5 text-xs",
+          )}
+        >
+          <MessageSquareText className="size-3.5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 truncate font-medium" aria-live="polite">
+            {lineComments.length === 1
+              ? t("projectTools.gitReview.lineComments.pendingOne")
+              : t("projectTools.gitReview.lineComments.pending").replace(
+                  "{count}",
+                  String(lineComments.length),
+                )}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs"
+            onClick={handleClearLineComments}
+          >
+            {t("projectTools.gitReview.lineComments.clear")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            title={t("projectTools.gitReview.lineComments.sendHint")}
+            onClick={handleSendLineComments}
+          >
+            {t("projectTools.gitReview.lineComments.send")}
+          </Button>
         </div>
       ) : null}
       {diff?.truncated ? (
@@ -941,6 +1332,7 @@ export function DiffReviewCard(props: {
   onActiveViewChange: (view: DiffViewKind) => void;
   showStat?: boolean;
   worktreeDiff?: GitDiffResponse | null;
+  onInsertComposerSegments?: (segments: MentionComposerDraftSegment[]) => boolean;
 }) {
   const {
     activeView,
@@ -950,6 +1342,7 @@ export function DiffReviewCard(props: {
     onActiveViewChange,
     showStat,
     worktreeDiff,
+    onInsertComposerSegments,
   } = props;
   const { t } = useLocale();
   const activeDiff = activeView === "branch" ? branchDiff : worktreeDiff;
@@ -1013,6 +1406,7 @@ export function DiffReviewCard(props: {
         error={activeError}
         loading={diffLoading}
         showStat={showStat}
+        onInsertComposerSegments={onInsertComposerSegments}
       />
     </section>
   );

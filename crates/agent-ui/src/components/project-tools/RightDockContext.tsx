@@ -7,6 +7,7 @@ import type {
   RightDockFileTreeStatePatch,
   SshHostConfig,
 } from "@liveagent/app/lib/settings";
+import type { MentionComposerDraftSegment } from "@liveagent/ui/components/chat/MentionComposer";
 import type {
   GitCommitContextPayload,
   GitFileContextPayload,
@@ -65,6 +66,9 @@ export type RightDockGitContext = {
   onInsertCodeReviewSkill?: () => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
+  /** Appends a context block (e.g. diff line comments) to the active
+   *  composer; returns false when nothing could be inserted. */
+  onInsertComposerSegments?: (segments: MentionComposerDraftSegment[]) => boolean;
   focusRequest?: GitReviewFocusRequest | null;
   onFocusRequestHandled?: (nonce: number) => void;
 };

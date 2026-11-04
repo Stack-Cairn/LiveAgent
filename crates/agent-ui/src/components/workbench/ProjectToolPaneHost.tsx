@@ -160,6 +160,7 @@ export function ProjectToolPaneHost(props: ProjectToolPaneHostProps) {
         onInsertCodeReviewSkill: isActiveProject ? git.onInsertCodeReviewSkill : undefined,
         onInsertCommitMention: isActiveProject ? git.onInsertCommitMention : undefined,
         onInsertGitFileMention: isActiveProject ? git.onInsertGitFileMention : undefined,
+        onInsertComposerSegments: isActiveProject ? git.onInsertComposerSegments : undefined,
         focusRequest: isActiveProject ? git.focusRequest : null,
       },
       ssh: {

@@ -1,4 +1,5 @@
 import type {
+  MentionComposerDraftSegment,
   MentionComposerHandle,
   MentionComposerSkill,
 } from "@liveagent/ui/components/chat/MentionComposer";
@@ -118,6 +119,11 @@ export function useComposerActions(composerRef: MutableRefObject<MentionComposer
     },
     [composerRef],
   );
+  const handleRightDockInsertComposerSegments = useCallback(
+    (segments: MentionComposerDraftSegment[]) =>
+      composerRef.current?.appendSegments(segments) ?? false,
+    [composerRef],
+  );
   const handleEmptyStateSuggestion = useCallback(
     (text: string) => {
       const composer = composerRef.current;
@@ -133,6 +139,7 @@ export function useComposerActions(composerRef: MutableRefObject<MentionComposer
     handleRightDockInsertCommitMention,
     handleRightDockInsertGitFileMention,
     handleInsertCodeMention,
+    handleRightDockInsertComposerSegments,
     handleEmptyStateSuggestion,
   };
 }

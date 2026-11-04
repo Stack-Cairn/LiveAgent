@@ -574,6 +574,7 @@ export function GitReviewStatusView(props: {
                 onActiveViewChange={onActiveDiffViewChange}
                 showStat={useSplitReviewLayout}
                 worktreeDiff={worktreeDiff}
+                onInsertComposerSegments={context.git.onInsertComposerSegments}
               />
             </div>
           ) : (

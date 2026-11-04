@@ -9,6 +9,7 @@ import {
   type WorkspaceProject,
 } from "@liveagent/app/lib/settings";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import type { MentionComposerDraftSegment } from "@liveagent/ui/components/chat/MentionComposer";
 import { X } from "@liveagent/ui/components/IconSet";
 import type {
   GitCommitContextPayload,
@@ -146,6 +147,7 @@ type RightDockPanelProps = {
   onInsertCodeReviewSkill?: () => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
+  onInsertComposerSegments?: (segments: MentionComposerDraftSegment[]) => boolean;
   gitReviewFocusRequest?: GitReviewFocusRequest | null;
   onGitReviewFocusRequestHandled?: (nonce: number) => void;
   onClose?: () => void;
@@ -442,6 +444,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onInsertCodeReviewSkill,
     onInsertCommitMention,
     onInsertGitFileMention,
+    onInsertComposerSegments,
     gitReviewFocusRequest,
     onGitReviewFocusRequestHandled,
     onClose,
@@ -760,6 +763,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         onInsertCodeReviewSkill,
         onInsertCommitMention,
         onInsertGitFileMention,
+        onInsertComposerSegments,
         focusRequest: gitReviewFocusRequest,
         onFocusRequestHandled: onGitReviewFocusRequestHandled,
       },
@@ -792,6 +796,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       onGitReviewFocusRequestHandled,
       onInsertCodeReviewSkill,
       onInsertCommitMention,
+      onInsertComposerSegments,
       onInsertFileMention,
       onInsertGitFileMention,
       onOpenFile,
