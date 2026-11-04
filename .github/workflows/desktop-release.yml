@@ -173,7 +173,11 @@ jobs:
       - name: Verify macOS executables match the target architecture
         run: |
           set -euo pipefail
-          expected="$(case "${{ matrix.target }}" in x86_64-*) echo x86_64 ;; aarch64-*) echo arm64 ;; esac)"
+          case "${{ matrix.target }}" in
+            x86_64-*) expected=x86_64 ;;
+            aarch64-*) expected=arm64 ;;
+            *) echo "::error::unsupported macOS target ${{ matrix.target }}"; exit 1 ;;
+          esac
           macos_dir="target/${{ matrix.target }}/release/bundle/macos/LiveAgent.app/Contents/MacOS"
           for bin in "$macos_dir"/*; do
             file -b "$bin" | grep -q '^Mach-O' || continue
