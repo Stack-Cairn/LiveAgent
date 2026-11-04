@@ -682,7 +682,10 @@ export function GatewayAppView({
           files = materialized.uploadedFiles;
           referencedConversations = materialized.referencedConversations;
         } catch (error) {
-          addNotify("error", asErrorMessage(error, "大段粘贴内容导入失败"));
+          addNotify(
+            "error",
+            asErrorMessage(error, translate("chat.largePasteImportFailed", settings.locale)),
+          );
           return;
         }
         if (!text && files.length === 0) return;
@@ -724,6 +727,7 @@ export function GatewayAppView({
     queuedChatTurnsForDisplayedConversation.length,
     sendChat,
     setPendingUploadsForConversation,
+    settings.locale,
     submitCurrentComposerToGuiQueue,
     updatePendingUploadsForConversation,
   ]);
@@ -995,10 +999,8 @@ export function GatewayAppView({
           hostRef={transcriptStageRef}
           width={settings.customSettings.chatTranscript.width}
           onWidthChange={handleChatTranscriptWidthChange}
-          resizeLabel={
-            settings.locale === "en-US" ? "Resize conversation content" : "调整对话正文宽度"
-          }
-          resetLabel={settings.locale === "en-US" ? "Double-click to reset" : "双击恢复默认宽度"}
+          resizeLabel={translate("chat.transcript.resizeWidth", settings.locale)}
+          resetLabel={translate("chat.transcript.resizeWidthReset", settings.locale)}
           // The history overlay below is a blocking panel layer above the
           // handles; suspend them for exactly as long as it is mounted (#749).
           suspended={conversationOpenState.showOverlay}
@@ -1874,16 +1876,14 @@ export function GatewayAppView({
                                       hostRef={transcriptStageRef}
                                       width={settings.customSettings.chatTranscript.width}
                                       onWidthChange={handleChatTranscriptWidthChange}
-                                      resizeLabel={
-                                        settings.locale === "en-US"
-                                          ? "Resize conversation content"
-                                          : "调整对话正文宽度"
-                                      }
-                                      resetLabel={
-                                        settings.locale === "en-US"
-                                          ? "Double-click to reset"
-                                          : "双击恢复默认宽度"
-                                      }
+                                      resizeLabel={translate(
+                                        "chat.transcript.resizeWidth",
+                                        settings.locale,
+                                      )}
+                                      resetLabel={translate(
+                                        "chat.transcript.resizeWidthReset",
+                                        settings.locale,
+                                      )}
                                       suspended={conversationOpenState.showOverlay}
                                     />
                                     {displayedTranscriptRowCount > 0 &&
@@ -1908,8 +1908,14 @@ export function GatewayAppView({
                                     type="button"
                                     className={GATEWAY_SCROLL_TO_BOTTOM_CLASS}
                                     onClick={transcriptFollow.jumpToBottom}
-                                    aria-label="滚动到底部"
-                                    title="滚动到底部"
+                                    aria-label={translate(
+                                      "chat.transcript.scrollToBottom",
+                                      settings.locale,
+                                    )}
+                                    title={translate(
+                                      "chat.transcript.scrollToBottom",
+                                      settings.locale,
+                                    )}
                                   >
                                     <ChevronDown className="size-4" />
                                   </button>
@@ -2059,7 +2065,13 @@ export function GatewayAppView({
                                         } catch (error) {
                                           addNotify(
                                             "error",
-                                            asErrorMessage(error, "大段粘贴内容导入失败"),
+                                            asErrorMessage(
+                                              error,
+                                              translate(
+                                                "chat.largePasteImportFailed",
+                                                settings.locale,
+                                              ),
+                                            ),
                                           );
                                           return;
                                         }

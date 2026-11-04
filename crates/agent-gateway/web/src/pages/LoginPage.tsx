@@ -9,6 +9,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
 
@@ -24,27 +25,28 @@ const features = [
   {
     icon: MessageSquareText,
     title: "Remote Chat",
-    desc: "按桌面端式样查看 token、thinking、tool_call 与 tool_result。",
+    descKey: "login.featureRemoteChat",
     accent:
       "[&>div:first-child]:bg-hsl-215-80-52-0p1 [&>div:first-child]:text-hsl-215-80-52 dark:[&>div:first-child]:bg-hsl-215-80-60-0p14 dark:[&>div:first-child]:text-hsl-215-80-70",
   },
   {
     icon: History,
     title: "History Resume",
-    desc: "从远程历史回填会话并继续对话，而不是只看原始 JSON。",
+    descKey: "login.featureHistoryResume",
     accent:
       "[&>div:first-child]:bg-hsl-255-60-56-0p1 [&>div:first-child]:text-hsl-255-60-56 dark:[&>div:first-child]:bg-hsl-255-60-60-0p14 dark:[&>div:first-child]:text-hsl-255-60-72",
   },
   {
     icon: Timer,
     title: "Cron Control",
-    desc: "在浏览器里完成任务查看、创建、更新与删除的转发调试。",
+    descKey: "login.featureCronControl",
     accent:
       "[&>div:first-child]:bg-hsl-32-90-48-0p1 [&>div:first-child]:text-hsl-32-90-48 dark:[&>div:first-child]:bg-hsl-32-80-50-0p14 dark:[&>div:first-child]:text-hsl-32-80-64",
   },
 ];
 
 export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit }: LoginPageProps) {
+  const { t } = useLocale();
   const [isFocused, setIsFocused] = useState(false);
 
   return (
@@ -118,7 +120,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               "max-640:text-sm max-640:mt-10px max-380:text-xs max-380:leading-1p6",
             )}
           >
-            安全连接到远程代理会话，在浏览器中获得完整的控制台体验。
+            {t("login.tagline")}
           </p>
 
           <div className="mt-32px flex flex-col gap-10px max-640:mt-20px max-640:gap-8px max-380:mt-16px max-380:gap-6px">
@@ -149,7 +151,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                     {f.title}
                   </strong>
                   <span className="block text-xs leading-1p55 text-muted-foreground max-820:text-xs max-640:hidden">
-                    {f.desc}
+                    {t(f.descKey)}
                   </span>
                 </div>
               </div>
@@ -178,11 +180,11 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                   <Lock size={16} strokeWidth={2} />
                 </div>
                 <h2 className="m-0 text-2xl font-bold tracking-minus-0p02em text-foreground max-820:text-xl max-380:text-lg">
-                  连接控制台
+                  {t("login.title")}
                 </h2>
               </div>
               <p className="mx-0 mt-8px mb-0 text-sm leading-1p6 text-muted-foreground max-640:text-xs max-380:text-xs">
-                输入 Gateway 服务端的 Access Token 以验证身份
+                {t("login.description")}
               </p>
             </div>
 
@@ -254,14 +256,14 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 <span className="inline-block size-18px animate-spin rounded-full border-2 border-solid border-primary-foreground/30 border-t-primary-foreground motion-reduce:animate-none" />
               ) : (
                 <>
-                  进入 Gateway
+                  {t("login.submit")}
                   <ArrowRight size={15} strokeWidth={2.2} />
                 </>
               )}
             </Button>
 
             <p className="mt-16px text-center text-xs text-muted-foreground/60 max-640:text-xs max-380:mt-12px">
-              Token 验证通过后将本地保存，下次自动登录
+              {t("login.rememberHint")}
             </p>
           </div>
         </div>

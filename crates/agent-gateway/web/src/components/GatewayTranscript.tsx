@@ -171,6 +171,7 @@ function resolveNearestScrollViewport(element: HTMLElement | null) {
 }
 
 function HistoryLoadingState(props: { title?: string }) {
+  const { t } = useLocale();
   const title = props.title?.trim();
   return (
     <div className={GATEWAY_TRANSCRIPT_SHELL_CLASS}>
@@ -191,7 +192,9 @@ function HistoryLoadingState(props: { title?: string }) {
           >
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
-          <div className="max-w-112 text-sm font-medium text-foreground/90">正在加载会话历史</div>
+          <div className="max-w-112 text-sm font-medium text-foreground/90">
+            {t("chat.gatewayHistory.loading")}
+          </div>
           {title ? (
             <div className="mt-1 max-w-112 truncate text-xs text-muted-foreground">{title}</div>
           ) : null}
@@ -260,15 +263,11 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
     loadCommitDetails,
     onResendFromEdit,
   } = props;
-  const { locale, t } = useLocale();
+  const { t } = useLocale();
   const effectiveMessageRef = row.messageRef;
   const missingStableRef = !effectiveMessageRef;
   const editDisabled = readOnly || isStreaming || !onResendFromEdit || missingStableRef;
-  const editTitle = missingStableRef
-    ? locale === "en-US"
-      ? "This older message cannot be edited because it has no stable message identifier."
-      : "旧历史缺少稳定消息标识，无法编辑重发"
-    : t("chat.edit");
+  const editTitle = missingStableRef ? t("chat.gatewayHistory.editUnavailable") : t("chat.edit");
 
   if (isEditing && effectiveMessageRef) {
     return (
@@ -370,7 +369,7 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
     onBranchConversation,
     branchPendingMessageId,
   } = props;
-  const { locale, t } = useLocale();
+  const { t } = useLocale();
   const replyText = row.rounds
     .map((round) => getRoundText(round).trim())
     .filter((text) => text.length > 0)
@@ -391,11 +390,7 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
     [replyText, retryPrompt, row.timestamp],
   );
   const retryDisabled = isStreaming || !onResendFromEdit || !retryMessageRef;
-  const retryTitle = retryMessageRef
-    ? t("chat.retry")
-    : locale === "en-US"
-      ? "This reply cannot be retried because its prompt has no stable message identifier."
-      : "旧历史缺少稳定消息标识，无法重试";
+  const retryTitle = retryMessageRef ? t("chat.retry") : t("chat.gatewayHistory.retryUnavailable");
   const branchPending = branchPendingMessageId != null;
   const isRowBranchPending =
     branchPending && !!retryMessageRef && branchPendingMessageId === retryMessageRef.messageId;
@@ -563,7 +558,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     readOnly = false,
     redactToolContent = false,
   } = props;
-  const { locale } = useLocale();
+  const { t } = useLocale();
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const historyIdentityKey = `${conversationId ?? ""}\n${rows[0]?.key ?? ""}`;
@@ -869,12 +864,8 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 )}
               >
                 {isLoadingMoreHistory
-                  ? locale === "en-US"
-                    ? "Loading earlier history..."
-                    : "正在加载更早历史..."
-                  : locale === "en-US"
-                    ? "Load earlier history"
-                    : "加载更早历史"}
+                  ? t("chat.gatewayHistory.loadingEarlier")
+                  : t("chat.gatewayHistory.loadEarlier")}
               </button>
             </div>
           );

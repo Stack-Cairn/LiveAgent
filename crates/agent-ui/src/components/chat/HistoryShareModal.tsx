@@ -18,6 +18,7 @@ import {
 } from "@liveagent/ui/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@liveagent/ui/components/ui/radio-group";
 import { Switch } from "@liveagent/ui/components/ui/switch";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { COPY_FEEDBACK_DURATION, useCopyFeedback } from "@liveagent/ui/lib/shared/useCopyFeedback";
@@ -58,6 +59,7 @@ function RedactionPicker(props: {
   onChange: (next: boolean) => void;
 }) {
   const { value, disabled, onChange } = props;
+  const { t } = useLocale();
   const redactionGroupName = useId();
   return (
     <RadioGroup
@@ -65,7 +67,7 @@ function RedactionPicker(props: {
       disabled={disabled}
       onValueChange={onChange}
       name={redactionGroupName}
-      aria-label="工具调用脱敏"
+      aria-label={t("sharedHistory.redactionTitle")}
       className={cn(
         "inline-flex shrink-0 items-center rounded-full border border-border/60 bg-muted/40 p-0.5",
         disabled && "pointer-events-none opacity-60",
@@ -84,7 +86,7 @@ function RedactionPicker(props: {
         )}
       >
         <RadioGroupItem className="sr-only" value={true} disabled={disabled} />
-        开启
+        {t("sharedHistory.shareDialog.on")}
       </label>
       {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders its associated native radio inside this label. */}
       <label
@@ -99,7 +101,7 @@ function RedactionPicker(props: {
         )}
       >
         <RadioGroupItem className="sr-only" value={false} disabled={disabled} />
-        关闭
+        {t("sharedHistory.shareDialog.off")}
       </label>
     </RadioGroup>
   );
@@ -107,14 +109,18 @@ function RedactionPicker(props: {
 
 function ShareSwitch(props: { checked: boolean; disabled: boolean; onToggle: () => void }) {
   const { checked, disabled, onToggle } = props;
+  const { t } = useLocale();
+  const label = checked
+    ? t("sharedHistory.disableShare")
+    : t("sharedHistory.shareDialog.enableShare");
   return (
     <Switch
       size="lg"
       nativeButton
       render={<button type="button" />}
       checked={checked}
-      aria-label={checked ? "关闭分享" : "开启分享"}
-      title={checked ? "关闭分享" : "开启分享"}
+      aria-label={label}
+      title={label}
       disabled={disabled}
       onCheckedChange={() => onToggle()}
     />
@@ -135,6 +141,7 @@ export function HistoryShareModal({
   onRedactToolContentChange,
   onClose,
 }: HistoryShareModalProps) {
+  const { t } = useLocale();
   const { copied, showCopied, resetCopied } = useCopyFeedback(
     false,
     COPY_FEEDBACK_DURATION.default,
@@ -175,7 +182,7 @@ export function HistoryShareModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg p-0" closeLabel="关闭" showCloseButton>
+      <DialogContent className="max-w-lg p-0" closeLabel={t("sharedHistory.close")} showCloseButton>
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div
@@ -187,7 +194,9 @@ export function HistoryShareModal({
               <Share2 className="size-5" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-sm leading-normal">分享会话</DialogTitle>
+              <DialogTitle className="text-sm leading-normal">
+                {t("sharedHistory.shareDialog.title")}
+              </DialogTitle>
               <DialogDescription
                 className="mt-1 truncate text-xs text-muted-foreground"
                 title={conversation.title}
@@ -202,9 +211,11 @@ export function HistoryShareModal({
           <div className="rounded-2xl border border-border/60 bg-muted/25 px-4 py-3">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-sm font-medium text-foreground">公开只读链接</div>
+                <div className="text-sm font-medium text-foreground">
+                  {t("sharedHistory.shareDialog.publicLinkTitle")}
+                </div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  开启后，拥有链接的用户只能查看该会话内容，无法发送消息或执行其他操作。
+                  {t("sharedHistory.shareDialog.publicLinkDescription")}
                 </div>
               </div>
               <ShareSwitch
@@ -236,9 +247,11 @@ export function HistoryShareModal({
                   {redactToolContent ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium text-foreground">工具调用脱敏</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {t("sharedHistory.redactionTitle")}
+                  </span>
                   <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                    仅展示工具卡片，隐藏参数、命令、返回内容与图片，且分享页中不可展开。
+                    {t("sharedHistory.shareDialog.redactionDescription")}
                   </p>
                 </div>
               </div>
@@ -261,7 +274,7 @@ export function HistoryShareModal({
               )}
             >
               <Loader2 className="size-4 animate-spin" />
-              正在读取分享状态...
+              {t("sharedHistory.shareDialog.loadingStatus")}
             </div>
           ) : null}
 
@@ -273,7 +286,9 @@ export function HistoryShareModal({
 
           {isEnabled && token ? (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">分享链接</div>
+              <div className="text-xs font-medium text-muted-foreground">
+                {t("sharedHistory.shareDialog.linkLabel")}
+              </div>
               <div
                 className={cn(
                   "flex items-center gap-2",
@@ -297,10 +312,10 @@ export function HistoryShareModal({
                 ) : (
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                     {shareOriginLoading
-                      ? "正在读取 Gateway 地址..."
+                      ? t("sharedHistory.loadingGateway")
                       : publicOrigin
                         ? token
-                        : "Gateway 地址暂时不可用"}
+                        : t("sharedHistory.shareDialog.gatewayUnavailable")}
                   </span>
                 )}
                 <button
@@ -313,8 +328,8 @@ export function HistoryShareModal({
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "cursor-not-allowed text-muted-foreground/40",
                   )}
-                  title="复制链接"
-                  aria-label="复制链接"
+                  title={t("sharedHistory.copyLink")}
+                  aria-label={t("sharedHistory.copyLink")}
                 >
                   {copied ? (
                     <Check className="size-4 text-emerald-500" />
@@ -333,7 +348,7 @@ export function HistoryShareModal({
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "pointer-events-none text-muted-foreground/40",
                   )}
-                  title="打开链接"
+                  title={t("sharedHistory.openLink")}
                 >
                   <ExternalLink className="size-4" />
                 </a>
@@ -345,13 +360,13 @@ export function HistoryShareModal({
                     "text-xs leading-5 text-amber-700 dark:text-amber-300",
                   )}
                 >
-                  当前 Gateway 地址无法用于生成公开链接，请确认 Remote 连接状态后再复制。
+                  {t("sharedHistory.shareDialog.originWarning")}
                 </div>
               ) : null}
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
-              开启分享后会在这里生成公开访问链接。
+              {t("sharedHistory.shareDialog.emptyHint")}
             </div>
           )}
         </DialogBody>

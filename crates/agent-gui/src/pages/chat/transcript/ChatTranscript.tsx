@@ -77,7 +77,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     onSuggestionSelect,
     onQuoteSelection,
   } = props;
-  const { locale } = useLocale();
+  const { t } = useLocale();
   const showNoModelsState = !hasModels;
   const showStartChatState = hasModels && historyItems.length === 0 && !isSending;
   const shouldReserveTranscriptBottomSpace = !(showNoModelsState || showStartChatState);
@@ -275,12 +275,10 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     [closeTranscriptContextMenu],
   );
 
-  const copySelectedTextLabel = locale === "en-US" ? "Copy selected text" : "复制选中文本";
-  const jumpToBottomLabel = locale === "en-US" ? "Scroll to bottom" : "回到底部";
-  const resizeTranscriptLabel =
-    locale === "en-US" ? "Resize conversation content" : "调整对话正文宽度";
-  const resetTranscriptWidthLabel =
-    locale === "en-US" ? "Double-click to reset" : "双击恢复默认宽度";
+  const copySelectedTextLabel = t("chat.transcript.copySelectedText");
+  const jumpToBottomLabel = t("chat.transcript.scrollToBottom");
+  const resizeTranscriptLabel = t("chat.transcript.resizeWidth");
+  const resetTranscriptWidthLabel = t("chat.transcript.resizeWidthReset");
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: The transcript surface exposes a pointer context menu; transcript content and menu items retain their own keyboard semantics.
