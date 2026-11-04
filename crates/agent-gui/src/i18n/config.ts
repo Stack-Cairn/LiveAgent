@@ -175,7 +175,6 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.closeWindowExit": "退出应用",
     "settings.closeWindowExitDesc": "关闭窗口即退出；有运行中的终端时会先确认。",
     "settings.globalShortcuts": "快捷键",
-    "settings.navShortcuts": "快捷键",
     "settings.navBackup": "备份与同步",
     "settings.navDataDir": "数据目录",
     "settings.dataDirDesc":
@@ -288,6 +287,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncLastAt": "上次同步：",
     "settings.globalShortcutsDesc":
       "点击快捷键录制，Enter 保存，Esc 取消。全局快捷键在其他应用中也可用，应用快捷键仅在当前窗口生效。",
+    "settings.shortcutDesktopTitle": "桌面端快捷键",
     "settings.shortcutScope": "生效范围",
     "settings.shortcutScopeSwitch": "点击切换：左侧全局快捷键，右侧应用快捷键",
     "settings.shortcutScopeGlobal": "全局",
@@ -555,7 +555,6 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.closeWindowExitDesc":
       "Quit when the window closes. Running terminals still require confirmation.",
     "settings.globalShortcuts": "Keyboard Shortcuts",
-    "settings.navShortcuts": "Shortcuts",
     "settings.navBackup": "Backup & Sync",
     "settings.navDataDir": "Data Directory",
     "settings.dataDirDesc":
@@ -677,6 +676,7 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncLastAt": "Last sync: ",
     "settings.globalShortcutsDesc":
       "Click a shortcut to record. Enter saves; Esc cancels. Global shortcuts also work in other apps; App shortcuts work while this window is focused.",
+    "settings.shortcutDesktopTitle": "Desktop shortcuts",
     "settings.shortcutScope": "Scope",
     "settings.shortcutScopeSwitch": "Click to switch: global on the left, in app only on the right",
     "settings.shortcutScopeGlobal": "Global",

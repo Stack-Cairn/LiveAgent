@@ -11,6 +11,14 @@ import {
   writeSendShortcut,
 } from "@liveagent/ui/lib/chat/sendShortcut";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import {
+  getResolvedShortcutBinding,
+  SHORTCUT_COMMANDS,
+} from "@liveagent/ui/lib/shortcuts/shortcutCommands";
+import {
+  type ExternalShortcutBinding,
+  ShortcutCommandsSection,
+} from "@liveagent/ui/pages/settings/ShortcutCommandsSection";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inferRuntimePlatform } from "../../lib/runtimePlatform";
@@ -31,6 +39,9 @@ import {
 } from "../../lib/shortcuts/globalShortcuts";
 
 const IS_MAC = inferRuntimePlatform() === "macos";
+
+/** 应用内版本已由共享快捷键命令表提供，这两项在此只能注册为系统全局快捷键。 */
+const SYSTEM_WIDE_ONLY_ACTIONS = new Set<GlobalShortcutAction>(["newChat", "searchConversations"]);
 
 function displayToken(token: string): string {
   return globalShortcutDisplayToken(token, IS_MAC);
@@ -190,37 +201,42 @@ export function GlobalShortcutsSection() {
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
 
-  const actionMeta: Array<{
-    id: GlobalShortcutAction;
-    label: string;
-    desc: string;
-  }> = [
-    {
-      id: "summon",
-      label: t("settings.shortcutSummon"),
-      desc: t("settings.shortcutSummonDesc"),
-    },
-    {
-      id: "toggle",
-      label: t("settings.shortcutToggle"),
-      desc: t("settings.shortcutToggleDesc"),
-    },
-    {
-      id: "newChat",
-      label: t("settings.shortcutNewChat"),
-      desc: t("settings.shortcutNewChatDesc"),
-    },
-    {
-      id: "pin",
-      label: t("settings.shortcutPin"),
-      desc: t("settings.shortcutPinDesc"),
-    },
-    {
-      id: "searchConversations",
-      label: t("settings.shortcutSearchConversations"),
-      desc: t("settings.shortcutSearchConversationsDesc"),
-    },
-  ];
+  const actionMeta = useMemo<
+    Array<{
+      id: GlobalShortcutAction;
+      label: string;
+      desc: string;
+    }>
+  >(
+    () => [
+      {
+        id: "summon",
+        label: t("settings.shortcutSummon"),
+        desc: t("settings.shortcutSummonDesc"),
+      },
+      {
+        id: "toggle",
+        label: t("settings.shortcutToggle"),
+        desc: t("settings.shortcutToggleDesc"),
+      },
+      {
+        id: "newChat",
+        label: t("settings.shortcutNewChat"),
+        desc: t("settings.shortcutNewChatDesc"),
+      },
+      {
+        id: "pin",
+        label: t("settings.shortcutPin"),
+        desc: t("settings.shortcutPinDesc"),
+      },
+      {
+        id: "searchConversations",
+        label: t("settings.shortcutSearchConversations"),
+        desc: t("settings.shortcutSearchConversationsDesc"),
+      },
+    ],
+    [t],
+  );
 
   const formatRegisterFailures = useCallback(
     (failures: GlobalShortcutFailure[]) =>
@@ -294,9 +310,13 @@ export function GlobalShortcutsSection() {
         return;
       }
       const accelerator = [...current.mods, current.main].join("+");
-      const conflict = GLOBAL_SHORTCUT_ACTIONS.some(
-        (other) => other !== action && bindingsRef.current[other]?.accelerator === accelerator,
-      );
+      const conflict =
+        GLOBAL_SHORTCUT_ACTIONS.some(
+          (other) => other !== action && bindingsRef.current[other]?.accelerator === accelerator,
+        ) ||
+        SHORTCUT_COMMANDS.some(
+          (command) => getResolvedShortcutBinding(command.id, IS_MAC) === accelerator,
+        );
       if (conflict) {
         setStatus({ kind: "error", text: t("settings.shortcutConflict") });
         void applyGlobalShortcuts(bindingsRef.current);
@@ -394,12 +414,37 @@ export function GlobalShortcutsSection() {
     return tokens;
   }, [draft]);
 
+  const externalBindings = useMemo<ExternalShortcutBinding[]>(
+    () =>
+      actionMeta.flatMap((action) => {
+        const binding = bindings[action.id];
+        return binding?.enabled
+          ? [{ id: `global:${action.id}`, label: action.label, accelerator: binding.accelerator }]
+          : [];
+      }),
+    [actionMeta, bindings],
+  );
+
+  const handleInAppRecordingChange = useCallback((active: boolean) => {
+    setShortcutsSuspended(active);
+    // 录制期间暂停系统注册，避免录到的组合被全局热键抢走。
+    void applyGlobalShortcuts(active ? {} : bindingsRef.current);
+  }, []);
+
   return (
     <div className="ghk-root space-y-6">
+      <ShortcutCommandsSection
+        isMac={IS_MAC}
+        externalBindings={externalBindings}
+        onRecordingChange={handleInAppRecordingChange}
+      />
       <section className="space-y-3">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t("settings.globalShortcutsDesc")}
-        </p>
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium">{t("settings.shortcutDesktopTitle")}</h3>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("settings.globalShortcutsDesc")}
+          </p>
+        </div>
 
         <div className="space-y-2">
           <ShortcutRow
@@ -445,7 +490,8 @@ export function GlobalShortcutsSection() {
               : binding
                 ? binding.accelerator.split("+").map((token) => displayToken(token))
                 : [];
-            const scope = binding?.scope ?? "global";
+            const systemWideOnly = SYSTEM_WIDE_ONLY_ACTIONS.has(action.id);
+            const scope = systemWideOnly ? "global" : (binding?.scope ?? "global");
             const changeScope = (nextScope: ShortcutScope) => {
               if (!binding || nextScope === scope) return;
               setStatus(null);
@@ -470,7 +516,7 @@ export function GlobalShortcutsSection() {
                 editing={isRecording}
                 onEdit={toggleRecording}
               >
-                {!isRecording && binding ? (
+                {!isRecording && binding && !systemWideOnly ? (
                   <ShortcutChoiceSwitch
                     checked={scope === "app"}
                     leftLabel={t("settings.shortcutScopeGlobal")}

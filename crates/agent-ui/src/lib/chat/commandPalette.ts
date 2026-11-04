@@ -1,4 +1,6 @@
 import type { ComponentType } from "react";
+import { matchesShortcutCommand } from "../shortcuts/shortcutCommands";
+import { SHORTCUT_IGNORED_TARGETS } from "../shortcuts/shortcutKeys";
 
 /**
  * Cmd/Ctrl+K command palette model. The palette lives inside the conversation
@@ -94,10 +96,7 @@ export function filterCommandPaletteActions(
     .map(({ action }) => action);
 }
 
-export function isMacLikePlatform(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Mac|iPhone|iPad|iPod/i.test(`${navigator.userAgent} ${navigator.platform}`);
-}
+export { isMacLikePlatform } from "../shared/platform";
 
 type ShortcutKeyEvent = Pick<
   KeyboardEvent,
@@ -118,22 +117,15 @@ type ShortcutKeyEvent = Pick<
  * Editors and terminals own their own chords (Monaco uses Cmd+K as a chord
  * prefix, terminals use it to clear); never steal the key from them.
  */
-export const COMMAND_PALETTE_IGNORED_TARGETS = ".monaco-editor, .xterm";
+export const COMMAND_PALETTE_IGNORED_TARGETS = SHORTCUT_IGNORED_TARGETS;
 
 /**
- * Cmd+K on macOS, Ctrl+K elsewhere. Ctrl+K on macOS stays the native
- * "kill to end of line" text binding.
+ * The palette binding from the shortcut table (default Cmd+K on macOS, Ctrl+K
+ * elsewhere). Ctrl+K on macOS stays the native "kill to end of line" binding.
  */
 export function isCommandPaletteShortcut(event: ShortcutKeyEvent, isMac: boolean): boolean {
-  if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return false;
-  if (event.altKey || event.shiftKey) return false;
-  if (isMac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return false;
-  if (event.code !== "KeyK" && event.key.toLowerCase() !== "k") return false;
-  const target =
-    event.target && typeof (event.target as Element).closest === "function"
-      ? (event.target as Element)
-      : null;
-  return !target?.closest(COMMAND_PALETTE_IGNORED_TARGETS);
+  if (event.defaultPrevented) return false;
+  return matchesShortcutCommand(event, "commandPalette", isMac);
 }
 
 /** Surfaces that cover the chat (the desktop settings overlay) opt out of the shortcut. */

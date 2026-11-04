@@ -1371,9 +1371,10 @@ export function GatewayAppView({
       onOpenWorkspace: isAgentMode ? handleOpenCreateWorkspaceProject : undefined,
       onOpenSettings: (section) => openSettings(section as Parameters<typeof openSettings>[0]),
       // The WebUI hides the remote section (see the SettingsPage below).
-      settingsSections: SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS.filter(
-        (section) => section.id !== "remote",
-      ),
+      settingsSections: [
+        ...SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS.filter((section) => section.id !== "remote"),
+        { id: "shortcuts", labelKey: "settings.navShortcuts" },
+      ],
       sidebar: { open: sidebarOpen, onToggle: () => setSidebarOpen((open) => !open) },
       theme: {
         current: settings.theme,

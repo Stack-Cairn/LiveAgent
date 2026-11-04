@@ -109,6 +109,7 @@ import {
   type UploadedImagePreviewLoader,
 } from "../../lib/chat/uploadedImagePreview";
 import type { PendingUploadedFile } from "../../lib/chat/uploadTypes";
+import { useComposerShortcuts } from "../../lib/shortcuts/useComposerShortcuts";
 import { useComposerStt } from "./useComposerStt";
 
 function useComposerUploadedImagePreview(
@@ -606,6 +607,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onChatRuntimeControlsChange,
     t,
   ]);
+  useComposerShortcuts({
+    rootRef: composerLayerRef,
+    enabled: !hidden,
+    focusComposer: () => composerRef.current?.focus(),
+    openModelPicker: modelPickerAvailable ? () => setModelPickerOpen(true) : undefined,
+  });
   const canDropConversationReference = isAgentMode && !controlsDisabled && !hidden;
   // "+"菜单不只有上传:plan 开关不依赖 workdir/上传状态,菜单触发键只按
   // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
