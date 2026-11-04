@@ -48,6 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -1747,16 +1748,20 @@ export const ProjectRow = memo(function ProjectRow(props: {
           ) : (
             <>
               {!isArchived ? (
-                <SidebarMenuAction
-                  type="button"
-                  className={cn(PROJECT_ICON_BUTTON_CLASS, "static after:hidden")}
-                  title={t("chat.newConversation")}
-                  aria-label={t("chat.newConversation")}
-                  onClick={() => props.onNewConversation?.(project)}
-                  disabled={isInteractionDisabled || !props.onNewConversation}
+                <ShortcutTooltip
+                  label={t("chat.newConversation")}
+                  triggerDisabled={isInteractionDisabled || !props.onNewConversation}
                 >
-                  <SquarePen className="size-3.5" />
-                </SidebarMenuAction>
+                  <SidebarMenuAction
+                    type="button"
+                    className={cn(PROJECT_ICON_BUTTON_CLASS, "static after:hidden")}
+                    aria-label={t("chat.newConversation")}
+                    onClick={() => props.onNewConversation?.(project)}
+                    disabled={isInteractionDisabled || !props.onNewConversation}
+                  >
+                    <SquarePen className="size-3.5" />
+                  </SidebarMenuAction>
+                </ShortcutTooltip>
               ) : null}
               <DropdownMenu
                 open={!isInteractionDisabled && menuOpen}

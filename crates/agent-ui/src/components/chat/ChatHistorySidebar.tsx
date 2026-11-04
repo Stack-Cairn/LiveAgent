@@ -87,7 +87,9 @@ import {
   sliceWorkspaceProjectSections,
 } from "../../lib/workspaceProjects";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
+import { ShortcutTooltip } from "../ui/shortcut-tooltip";
 import {
+  SIDEBAR_TOGGLE_SHORTCUT,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -1546,31 +1548,42 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               )}
 
               <div className="flex shrink-0 items-center gap-0.5">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={sectionsDisabled}
-                  onClick={() => {
-                    setConversationSearchMode("search");
-                    setConversationSearchOpen(true);
-                  }}
-                  title={t("chat.searchConversations")}
-                  aria-label={t("chat.searchConversations")}
-                  className="chat-history-search-button rounded-lg text-muted-foreground hover:text-foreground"
+                <ShortcutTooltip
+                  label={t("chat.searchConversations")}
+                  triggerDisabled={sectionsDisabled}
+                  side="bottom"
                 >
-                  <Search className="size-4" />
-                </Button>
-                {!hideCloseButton || isMobileMenuLayout ? (
-                  <SidebarTrigger
+                  <Button
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    title={t("sidebar.closeSidebar")}
-                    className="shrink-0 rounded-lg text-muted-foreground hover:text-foreground desktop:min-[768px]:hidden"
+                    disabled={sectionsDisabled}
+                    onClick={() => {
+                      setConversationSearchMode("search");
+                      setConversationSearchOpen(true);
+                    }}
+                    aria-label={t("chat.searchConversations")}
+                    className="chat-history-search-button rounded-lg text-muted-foreground hover:text-foreground"
                   >
-                    <PanelLeftClose className="size-4" />
-                  </SidebarTrigger>
+                    <Search className="size-4" />
+                  </Button>
+                </ShortcutTooltip>
+                {!hideCloseButton || isMobileMenuLayout ? (
+                  <ShortcutTooltip
+                    label={t("sidebar.closeSidebar")}
+                    shortcut={SIDEBAR_TOGGLE_SHORTCUT}
+                    side="bottom"
+                  >
+                    <SidebarTrigger
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("sidebar.closeSidebar")}
+                      className="shrink-0 rounded-lg text-muted-foreground hover:text-foreground desktop:min-[768px]:hidden"
+                    >
+                      <PanelLeftClose className="size-4" />
+                    </SidebarTrigger>
+                  </ShortcutTooltip>
                 ) : null}
               </div>
             </div>

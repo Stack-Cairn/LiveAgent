@@ -281,6 +281,9 @@ function Sidebar({
   );
 }
 
+/** Chord shown in sidebar toggle tooltips (Kbd syntax); the keydown handler above accepts it. */
+export const SIDEBAR_TOGGLE_SHORTCUT = "Mod+KeyB";
+
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar } = useSidebar();
   const { t } = useLocale();

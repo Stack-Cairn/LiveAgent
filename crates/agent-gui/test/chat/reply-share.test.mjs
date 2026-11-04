@@ -58,8 +58,8 @@ test("text is base64-encoded as UTF-8", () => {
 test("assistant action bar exposes share inside the hover chrome and both hosts wire it", () => {
   const source = read("../../../agent-ui/src/components/chat/TranscriptMessageActions.tsx");
   const assistantFn = source.slice(source.indexOf("export function TranscriptAssistantMessageActions"));
-  const share = assistantFn.indexOf('title={t("chat.share")}');
-  const copy = assistantFn.indexOf('title={t("chat.copy")}');
+  const share = assistantFn.indexOf('label={t("chat.share")}');
+  const copy = assistantFn.indexOf('label={t("chat.copy")}');
   const retry = assistantFn.indexOf('title={t("chat.retryConfirmTitle")}');
   assert.ok(copy > -1 && share > copy && share < retry, "share sits between copy and retry");
   assert.match(assistantFn, /<AssistantReplyShareDialog source=\{shareSource\}/);

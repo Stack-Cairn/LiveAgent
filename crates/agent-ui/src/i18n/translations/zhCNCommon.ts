@@ -388,7 +388,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.stt.configurationIncompleteDescription": "请先补全语音供应商配置，再使用麦克风输入。",
   "chat.stt.configureAction": "去配置",
   "chat.send": "发送",
-  "chat.stopGenerationWithEsc": "停止生成（Esc）",
+  "chat.stopGeneration": "停止生成",
   "chat.thinking": "思考中",
   "chat.thinkingActive": "正在思考",
   "chat.thoughtFor": "思考了",

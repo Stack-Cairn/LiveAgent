@@ -38,8 +38,10 @@ import {
   ContextMenuItem as StandardContextMenuItem,
 } from "@liveagent/ui/components/ui/context-menu";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
+import { formatShortcutText, Kbd } from "@liveagent/ui/components/ui/kbd";
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { isMacLikePlatform } from "@liveagent/ui/lib/chat/commandPalette";
 import {
   type CodeMentionReference,
   createCodeMentionReference,
@@ -193,23 +195,18 @@ function editorModelUri(tabKey: string) {
   });
 }
 
-function isMacLikePlatform() {
-  if (typeof navigator === "undefined") return false;
-  const platform = `${navigator.userAgent} ${navigator.platform}`;
-  return /Mac|iPhone|iPad|iPod/i.test(platform);
-}
-
 function getEditorContextMenuShortcuts() {
   const isMac = isMacLikePlatform();
+  const format = (shortcut: string) => formatShortcutText(shortcut, isMac);
   return {
-    undo: isMac ? "⌘Z" : "Ctrl+Z",
-    redo: isMac ? "⌘⇧Z" : "Ctrl+Y",
-    cut: isMac ? "⌘X" : "Ctrl+X",
-    copy: isMac ? "⌘C" : "Ctrl+C",
-    paste: isMac ? "⌘V" : "Ctrl+V",
-    selectAll: isMac ? "⌘A" : "Ctrl+A",
-    find: isMac ? "⌘F" : "Ctrl+F",
-    replace: isMac ? "⌥⌘F" : "Ctrl+H",
+    undo: format("Mod+KeyZ"),
+    redo: format(isMac ? "Mod+Shift+KeyZ" : "Ctrl+KeyY"),
+    cut: format("Mod+KeyX"),
+    copy: format("Mod+KeyC"),
+    paste: format("Mod+KeyV"),
+    selectAll: format("Mod+KeyA"),
+    find: format("Mod+KeyF"),
+    replace: format(isMac ? "Alt+Mod+KeyF" : "Ctrl+KeyH"),
   } as const;
 }
 
@@ -1191,9 +1188,13 @@ function ContextMenuItem(props: {
       )}
       <span className="min-w-0 flex-1 truncate">{props.label}</span>
       {props.shortcut ? (
-        <kbd className="shrink-0 text-xs tracking-wide text-muted-foreground/60">
+        <Kbd
+          variant="plain"
+          size="inline"
+          className="text-xs tracking-wide text-muted-foreground/60"
+        >
           {props.shortcut}
-        </kbd>
+        </Kbd>
       ) : null}
     </StandardContextMenuItem>
   );

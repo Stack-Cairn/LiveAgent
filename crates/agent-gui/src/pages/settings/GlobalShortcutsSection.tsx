@@ -4,6 +4,7 @@ import {
   SettingsToggleGroupItem,
 } from "@liveagent/ui/components/settings/SettingsToggleGroup";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { Kbd } from "@liveagent/ui/components/ui/kbd";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   readSendShortcut,
@@ -102,9 +103,9 @@ function ShortcutKeys({ tokens }: { tokens: string[] }) {
   return tokens.map((token, index) => (
     <span key={token} className="flex items-center gap-1.5">
       {index > 0 ? <span className="text-xs text-muted-foreground">+</span> : null}
-      <kbd className="ghk-kbd rounded-md bg-settings-tile px-1.5 py-0.5 font-sans text-xs text-foreground">
+      <Kbd variant="tile" className="ghk-kbd rounded-md px-1.5">
         {token}
-      </kbd>
+      </Kbd>
     </span>
   ));
 }
