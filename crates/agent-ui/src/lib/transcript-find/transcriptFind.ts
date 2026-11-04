@@ -5,8 +5,7 @@
  * view, and only then is the rendered text highlighted in the DOM.
  */
 
-import { matchesShortcutCommandKeys } from "../shortcuts/shortcutCommands";
-import { areInAppShortcutsSuspended } from "../shortcuts/shortcutKeys";
+import { matchesShortcutCommand } from "../shortcuts/shortcutCommands";
 
 export type TranscriptFindEntry = {
   /** Virtual row key; the rendered row carries it as `data-row-key`. */
@@ -104,7 +103,15 @@ export { isMacLikePlatform } from "../shared/platform";
 
 type FindShortcutEvent = Pick<
   KeyboardEvent,
-  "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "isComposing" | "keyCode"
+  | "key"
+  | "code"
+  | "metaKey"
+  | "ctrlKey"
+  | "altKey"
+  | "shiftKey"
+  | "isComposing"
+  | "keyCode"
+  | "target"
 >;
 
 /**
@@ -114,9 +121,9 @@ type FindShortcutEvent = Pick<
  * before any app handler runs.
  */
 export function isTranscriptFindShortcut(event: FindShortcutEvent, isMac: boolean) {
-  if (event.isComposing || event.keyCode === 229) return false;
-  if (areInAppShortcutsSuspended()) return false;
-  return matchesShortcutCommandKeys(event, "findInConversation", isMac);
+  // Same guard as every other table command: a rebinding to a bare key must
+  // not fire while the user is typing in a field.
+  return matchesShortcutCommand(event, "findInConversation", isMac);
 }
 
 /** Editors and terminals bring their own find widget. */

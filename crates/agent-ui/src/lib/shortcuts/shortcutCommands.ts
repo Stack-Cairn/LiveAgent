@@ -79,14 +79,14 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
     id: "previousConversation",
     group: "navigation",
     labelKey: "shortcuts.command.previousConversation",
-    defaultBinding: "Mod+Alt+ArrowUp",
+    defaultBinding: "Mod+Alt+BracketLeft",
     paletteActionId: "previous-conversation",
   },
   {
     id: "nextConversation",
     group: "navigation",
     labelKey: "shortcuts.command.nextConversation",
-    defaultBinding: "Mod+Alt+ArrowDown",
+    defaultBinding: "Mod+Alt+BracketRight",
     paletteActionId: "next-conversation",
   },
   {
@@ -286,16 +286,6 @@ type ShortcutCommandEvent = Pick<
   | "keyCode"
   | "target"
 >;
-
-/** Key match only: the binding equals the pressed chord. */
-export function matchesShortcutCommandKeys(
-  event: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "shiftKey" | "altKey" | "metaKey">,
-  id: ShortcutCommandId,
-  isMac: boolean,
-): boolean {
-  const binding = getShortcutBinding(id);
-  return Boolean(binding) && matchesAccelerator(event, binding, isMac);
-}
 
 /**
  * Full check for a handler: the chord matches, shortcuts are not suspended

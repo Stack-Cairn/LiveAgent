@@ -116,6 +116,18 @@ test("Cmd/Ctrl+F is routed to one transcript and never stolen from editors, term
     assert.deepEqual(owners($("settings-button")), [], "overlays outside the chat shell keep it");
     assert.deepEqual(owners($("dialog-button")), []);
     assert.deepEqual(owners($("sidebar-row")), ["root-a"], "a focused sidebar row routes to the focused pane");
+
+    // A rebinding to a bare key goes through the same typing guard as every table command.
+    const commands = env.loadModule("@liveagent/ui/lib/shortcuts/shortcutCommands.ts");
+    commands.writeShortcutOverrides({ findInConversation: "Shift+KeyF" });
+    try {
+      const shiftF = (target) => key({ key: "F", shiftKey: true, target });
+      assert.equal(isTranscriptFindShortcut(shiftF(document.body), false), true);
+      assert.equal(isTranscriptFindShortcut(shiftF($("composer-a")), false), false, "typing a capital F stays text");
+      assert.equal(isTranscriptFindShortcut(key({ ctrlKey: true, target: document.body }), false), false);
+    } finally {
+      commands.writeShortcutOverrides({});
+    }
   } finally {
     env.cleanup();
   }
