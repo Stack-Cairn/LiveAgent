@@ -1,5 +1,6 @@
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatFileLinkContextMenu";
+import { TranscriptFindBar } from "@liveagent/ui/components/chat/TranscriptFindBar";
 import { TranscriptQuoteSelection } from "@liveagent/ui/components/chat/TranscriptQuoteSelection";
 import { ChevronDown, Copy } from "@liveagent/ui/components/IconSet";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
@@ -14,6 +15,9 @@ import { buildFloorEntries } from "@liveagent/ui/lib/chat-floor-nav/floorModel";
 import { BOTTOM_REATTACH_ZONE_PX } from "@liveagent/ui/lib/chat-scroll/scrollFollowCore";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { isMacLikePlatform } from "@liveagent/ui/lib/transcript-find/transcriptFind";
+import { createTranscriptFindSource } from "@liveagent/ui/lib/transcript-find/transcriptFindSource";
+import { useTranscriptFind } from "@liveagent/ui/lib/transcript-find/useTranscriptFind";
 import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
 import { TranscriptWidthControls } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import {
@@ -89,6 +93,12 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
   // computed-style and inherited CSS-variable work from WebKit's hot path.
   const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null);
   const transcriptRootRef = useRef<HTMLDivElement | null>(null);
+  // The find shortcut listener binds to the root element itself (always
+  // rendered, so one read after mount is enough).
+  const [transcriptRoot, setTranscriptRoot] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    setTranscriptRoot(transcriptRootRef.current);
+  }, []);
 
   const [transcriptContextMenu, setTranscriptContextMenu] =
     useState<TranscriptContextMenuState | null>(null);
@@ -183,6 +193,25 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     isHistorySwitching,
     onLoadEarlierHistory,
   ]);
+
+  // Find in conversation (Cmd/Ctrl+F): matches are counted on the row model
+  // TranscriptList publishes, then the active row is mounted through the
+  // floor-jump handle and highlighted in the DOM.
+  const [findSource] = useState(createTranscriptFindSource);
+  const [isMac] = useState(isMacLikePlatform);
+  const scrollToFindRow = useCallback((rowKey: string) => {
+    transcriptNavRef.current?.scrollToRowKey(rowKey);
+  }, []);
+  const find = useTranscriptFind({
+    root: transcriptRoot,
+    scrollViewport,
+    source: findSource,
+    scrollToRowKey: scrollToFindRow,
+    breakFollow: scrollFollowHandle.breakFollow,
+    bottomInsetPx: transcriptBottomReservePx,
+    resetKey: conversationId,
+    isMac,
+  });
 
   // Run-scoped state reaches row action bars through this store instead of
   // row props, so settled rows stay memo-stable across run start/settle.
@@ -328,6 +357,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
                 onFirstLayoutSettled={
                   shouldDeferTranscriptReveal ? handleFirstLayoutSettled : undefined
                 }
+                findSource={findSource}
               />
             </RowInteractionProvider>
           </div>
@@ -402,6 +432,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           onQuote={onQuoteSelection}
         />
       ) : null}
+      <TranscriptFindBar find={find} />
       <ChatFileLinkContextMenuHost canOpenWithDefaultApp={isTauriHost()} />
       {isTranscriptBusy ? <HistorySwitchLoadingOverlay /> : null}
     </div>
