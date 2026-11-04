@@ -22,6 +22,7 @@ import {
   findTranscriptRowElement,
   paintTranscriptFindHighlights,
   releaseTranscriptFindHighlights,
+  revealCollapsedTranscriptRange,
   supportsTranscriptFindHighlights,
 } from "./transcriptFindDom";
 import type { TranscriptFindSource } from "./transcriptFindSource";
@@ -301,15 +302,18 @@ export function useTranscriptFind(options: UseTranscriptFindOptions): Transcript
       frame = null;
       if (cancelled) return;
       const range = locate();
-      if (attempt === 0 && range) {
+      // A match inside a collapsed block (a clamped user message) expands it
+      // first; the match is positioned once the taller row has settled.
+      const revealing = range !== null && revealCollapsedTranscriptRange(range);
+      if (attempt === 0 && range && !revealing) {
         if (!isRangeVisible(range)) scrollRangeIntoView(range);
         paint();
         return;
       }
-      if (attempt === 0) {
+      if (attempt === 0 && !range) {
         current.breakFollow?.();
         current.scrollToRowKey(match.rowKey);
-      } else if (range && attempt >= ROW_SETTLE_FRAMES) {
+      } else if (range && !revealing && attempt >= ROW_SETTLE_FRAMES) {
         if (!isRangeVisible(range)) scrollRangeIntoView(range);
         paint();
         return;

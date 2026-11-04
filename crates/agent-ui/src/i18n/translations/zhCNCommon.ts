@@ -578,6 +578,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.markdown.expandCode": "展开 {count} 行",
   "chat.markdown.expandAllCode": "展开全部",
   "chat.markdown.collapseCode": "收起代码",
+  "chat.userMessage.expand": "展开全文",
+  "chat.userMessage.collapse": "收起",
   "chat.fileLink.open": "打开文件",
   "chat.fileLink.openContainingDirectory": "打开所在目录",
   "chat.fileLink.openWithDefaultApp": "用默认应用打开",
