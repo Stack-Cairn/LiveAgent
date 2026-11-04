@@ -98,6 +98,26 @@ test("Esc stops only from its own conversation and yields to editors, IME and ov
     );
     dialog.remove();
 
+    // Settings covers the chat with a plain layer, not a dialog: Esc closes it.
+    const settings = document.createElement("div");
+    settings.setAttribute("data-command-palette-suppressed", "");
+    document.body.append(settings);
+    assert.equal(shouldEscapeStopRun(esc(document.body), ctxA), false, "settings keeps Esc");
+    settings.remove();
+
+    // Sidebar selection mode leaves on Esc.
+    $("sidebar-row").setAttribute("data-escape-owner", "sidebar-selection");
+    assert.equal(shouldEscapeStopRun(esc(document.body), ctxA), false, "selection mode keeps Esc");
+    $("sidebar-row").removeAttribute("data-escape-owner");
+
+    // A text selection (and its Quote button) is dismissed first.
+    const range = document.createRange();
+    range.selectNodeContents($("text-a"));
+    window.getSelection().addRange(range);
+    assert.equal(shouldEscapeStopRun(esc(document.body), ctxA), false, "selection keeps Esc");
+    window.getSelection().removeAllRanges();
+    assert.equal(shouldEscapeStopRun(esc(document.body), ctxA), true);
+
     $("scope-a").getClientRects = () => [];
     assert.equal(shouldEscapeStopRun(esc(document.body), ctxA), false, "hidden scope never stops");
   } finally {

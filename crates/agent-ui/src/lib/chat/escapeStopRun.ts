@@ -11,15 +11,21 @@ import { type RefObject, useEffect, useRef } from "react";
  * 2. a pending tool approval keeps Esc for itself (the caller disables this
  *    while the approval bar is shown);
  * 3. Base UI dialogs, popovers and menus `preventDefault` when they close,
- *    and a target inside any of them is ignored anyway;
- * 4. only then does Esc stop the run.
+ *    and a target inside any of them is ignored anyway; so is any key while
+ *    the settings layer covers the chat;
+ * 4. a surface marked `data-escape-owner` (sidebar selection mode) and a
+ *    non-empty text selection keep Esc for themselves;
+ * 5. only then does Esc stop the run.
  */
 
 /** Element that scopes one conversation: its transcript plus its composer. */
 export const ESCAPE_STOP_RUN_SCOPE = "[data-workbench-pane-id], [data-conversation-scope]";
 const WORKBENCH_PANE = "[data-workbench-pane]";
-// Modal and popup surfaces (shared Dialog/AlertDialog/Menu render these roles).
-const OVERLAY = "[role=dialog], [role=alertdialog], [aria-modal=true], [role=menu], [role=listbox]";
+// Modal and popup surfaces (shared Dialog/AlertDialog/Menu render these roles),
+// plus full-page layers such as settings that cover the chat without a dialog role,
+// and any surface that marks itself as owning Esc (sidebar selection mode).
+const OVERLAY =
+  "[role=dialog], [role=alertdialog], [aria-modal=true], [role=menu], [role=listbox], [data-command-palette-suppressed], [data-escape-owner]";
 const EDITABLE_TARGET =
   'input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]';
 
@@ -64,6 +70,9 @@ export function shouldEscapeStopRun(
     // Clicking transcript text leaves focus on <body>: the focused pane takes
     // the key, unless some overlay is open on top of it.
     if (doc.querySelector(OVERLAY)) return false;
+    // With text selected, Esc dismisses the selection (and its Quote button).
+    const selection = doc.defaultView?.getSelection?.();
+    if (selection && !selection.isCollapsed && selection.toString().trim()) return false;
     const pane = scope.closest(WORKBENCH_PANE);
     return !pane || pane.getAttribute("data-workbench-pane-focused") === "true";
   }
