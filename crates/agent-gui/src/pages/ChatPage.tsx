@@ -39,6 +39,14 @@ import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-edito
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
+import {
+  type CommandPaletteAction,
+  isMacLikePlatform,
+} from "@liveagent/ui/lib/chat/commandPalette";
+import {
+  buildCommandPaletteActions,
+  SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS,
+} from "@liveagent/ui/lib/chat/commandPaletteActions";
 import type {
   ComposerCommandHost,
   ComposerTurnCommand,
@@ -52,10 +60,12 @@ import {
   useInsertCodeReviewSkill,
 } from "@liveagent/ui/lib/chat/useComposerActions";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
+import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
+import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
 import type { ChatRuntimeControls } from "@liveagent/ui/lib/settings/types";
 import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -165,6 +175,7 @@ import {
   isThinkingAlwaysOnForModel,
   normalizeChatRuntimeControlsForProvider,
   normalizeSelectedModelForProviders,
+  openRightDockSingletonTab,
   parseSelectedModelJson,
   resolveEffectiveTheme,
   resolveWorkspaceResources,
@@ -181,6 +192,7 @@ import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
+import { toggleDesktopWindowPin } from "../lib/system/windowPin";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import {
@@ -4198,6 +4210,82 @@ function ChatPageContent(props: ChatPageProps) {
       </div>
     ) : null;
 
+  // Cmd/Ctrl+K palette: the sidebar reads this snapshot only when it opens, so
+  // the closure is rebuilt per render without re-rendering the sidebar.
+  const buildCommandPaletteActionsLatestRef = useRef<() => CommandPaletteAction[]>(() => []);
+  buildCommandPaletteActionsLatestRef.current = () => {
+    const projectToolsAvailable = !projectToolsUserDisabledMessage;
+    return buildCommandPaletteActions({
+      t,
+      isMac: isMacLikePlatform(),
+      onNewConversation: () => {
+        const wasInHub = activeView !== "chat";
+        setActiveView("chat");
+        if (!wasInHub || !isDraftConversation) handleNewConversation();
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => composerRef.current?.focus());
+        });
+      },
+      onOpenWorkspace: isAgentMode ? handleOpenCreateWorkspaceProject : undefined,
+      onOpenSettings: (section) => onOpenSettings(section as Parameters<typeof onOpenSettings>[0]),
+      settingsSections: [
+        ...SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS,
+        { id: "shortcuts", labelKey: "settings.navShortcuts" },
+        { id: "about", labelKey: "settings.navAbout" },
+      ],
+      sidebar: { open: sidebarOpen, onToggle: handleToggleSidebar },
+      theme: { current: settings.theme, onToggle: onToggleTheme },
+      projectTools: projectToolsAvailable
+        ? {
+            open: activeView === "chat" && rightDockOpen,
+            onToggle: () => {
+              const open = activeView === "chat" && rightDockOpen;
+              setActiveView("chat");
+              setRightDockOpen(!open);
+            },
+            onOpenTool: terminalProjectPathKey
+              ? (tool) => {
+                  setActiveView("chat");
+                  setRightDockOpen(true);
+                  setSettings((prev) =>
+                    openRightDockSingletonTab(prev, terminalProjectPathKey, tool),
+                  );
+                }
+              : undefined,
+          }
+        : undefined,
+      resourceHubs: {
+        visible: normalizeSidebarShortcuts(settings.customSettings.sidebarShortcuts),
+        onOpen: (resource) => {
+          cacheActiveComposerDraft();
+          setRightDockOpen(false);
+          setActiveView(`${resource}-hub`);
+        },
+      },
+      conversationView:
+        activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes
+          ? { active: renderedConversationView, onChange: setActiveConversationView }
+          : undefined,
+      executionMode: { isAgent: isAgentMode, onSelect: handleSelectExecutionMode },
+      models: hasModels
+        ? {
+            options: modelOptions,
+            selectedValue,
+            onSelect: (value) => {
+              const parsed = parseModelValue(value);
+              if (parsed) handleSelectModel(parsed);
+            },
+          }
+        : undefined,
+      onStopRun: isSending ? () => stopSendingActionRef.current() : undefined,
+      windowPin: isKBrainBrowserHost() ? undefined : { onToggle: toggleDesktopWindowPin },
+    });
+  };
+  const getCommandPaletteActions = useCallback(
+    () => buildCommandPaletteActionsLatestRef.current(),
+    [],
+  );
+
   return (
     <div
       data-app-frame="three-column"
@@ -4304,6 +4392,7 @@ function ChatPageContent(props: ChatPageProps) {
           isOpen={sidebarOpen}
           fontScale={settings.customSettings.fontScale.sidebar}
           conversationSearchRequestKey={conversationSearchRequestKey}
+          getCommandPaletteActions={getCommandPaletteActions}
           activeView={activeView}
           showProjects={isAgentMode}
           projects={workspaceProjects}

@@ -970,6 +970,8 @@ export default function App() {
         </AppErrorBoundary>
         {visible && (
           <div
+            // The settings overlay covers the chat, so the Cmd/Ctrl+K palette stays closed.
+            data-command-palette-suppressed=""
             className={cn(
               "absolute inset-0 z-50 flex flex-col transition-all duration-300 ease-out",
               active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",

@@ -43,11 +43,20 @@ import {
   type CheckpointRewoundInfo,
   formatCheckpointRewoundNotification,
 } from "@liveagent/ui/lib/chat/checkpointRewind";
+import {
+  type CommandPaletteAction,
+  isMacLikePlatform,
+} from "@liveagent/ui/lib/chat/commandPalette";
+import {
+  buildCommandPaletteActions,
+  SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS,
+} from "@liveagent/ui/lib/chat/commandPaletteActions";
 import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { kbrainResourceHostCapabilities } from "@liveagent/ui/lib/resourceHost";
+import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import {
@@ -98,6 +107,7 @@ import {
   getNextTheme,
   getRightDockFileTreeState,
   getSshProjectHostIds,
+  openRightDockSingletonTab,
   updateExecutionModeFromChatSelection,
   updateRightDockFileTreeState,
   updateSshProjectHostIds,
@@ -1351,6 +1361,70 @@ export function GatewayAppView({
     [workbenchController.leasedDockSessionIds],
   );
 
+  // Cmd/Ctrl+K palette: rebuilt per render, read by the sidebar only when it opens.
+  const buildCommandPaletteActionsLatestRef = useRef<() => CommandPaletteAction[]>(() => []);
+  buildCommandPaletteActionsLatestRef.current = () =>
+    buildCommandPaletteActions({
+      t: (key) => translate(key, settings.locale),
+      isMac: isMacLikePlatform(),
+      onNewConversation: handleSidebarNewConversation,
+      onOpenWorkspace: isAgentMode ? handleOpenCreateWorkspaceProject : undefined,
+      onOpenSettings: (section) => openSettings(section as Parameters<typeof openSettings>[0]),
+      // The WebUI hides the remote section (see the SettingsPage below).
+      settingsSections: SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS.filter(
+        (section) => section.id !== "remote",
+      ),
+      sidebar: { open: sidebarOpen, onToggle: () => setSidebarOpen((open) => !open) },
+      theme: {
+        current: settings.theme,
+        onToggle: () => setSettings((prev) => ({ ...prev, theme: getNextTheme(prev.theme) })),
+      },
+      projectTools: projectToolsDisabledMessage
+        ? undefined
+        : {
+            open: activeView === "chat" && rightDockOpen,
+            onToggle: () => {
+              const open = activeView === "chat" && rightDockOpen;
+              setActiveView("chat");
+              setRightDockOpen(!open);
+            },
+            onOpenTool: terminalProjectPathKey
+              ? (tool) => {
+                  setActiveView("chat");
+                  setRightDockOpen(true);
+                  setSettings((prev) =>
+                    openRightDockSingletonTab(prev, terminalProjectPathKey, tool),
+                  );
+                }
+              : undefined,
+          },
+      resourceHubs: {
+        visible: normalizeSidebarShortcuts(settings.customSettings.sidebarShortcuts),
+        onOpen: handleSidebarOpenResourceHub,
+      },
+      conversationView:
+        activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes
+          ? { active: renderedConversationView, onChange: setActiveConversationView }
+          : undefined,
+      executionMode: { isAgent: isAgentMode, onSelect: handleSelectExecutionMode },
+      models:
+        modelOptions.length > 0
+          ? {
+              options: modelOptions,
+              selectedValue,
+              onSelect: (value) => {
+                const parsed = parseModelValue(value);
+                if (parsed) handleSelectModel(parsed);
+              },
+            }
+          : undefined,
+      onStopRun: composerIsSending ? handlePrimaryComposerStop : undefined,
+    });
+  const getCommandPaletteActions = useCallback(
+    () => buildCommandPaletteActionsLatestRef.current(),
+    [],
+  );
+
   // 拖拽幽灵:跟随指针的载荷标题,提交/取消后随 dragState 清空。
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchController.dragState ? (
@@ -1529,6 +1603,7 @@ export function GatewayAppView({
                 sidebarShortcuts={settings.customSettings.sidebarShortcuts}
                 onOpenSettings={openSettings}
                 onOpenResourceHub={handleSidebarOpenResourceHub}
+                getCommandPaletteActions={getCommandPaletteActions}
               />
 
               {shareConversation ? (
@@ -2253,6 +2328,8 @@ export function GatewayAppView({
 
           {settingsOpen ? (
             <div
+              // The settings overlay covers the chat, so the Cmd/Ctrl+K palette stays closed.
+              data-command-palette-suppressed=""
               className={cn(
                 GATEWAY_SETTINGS_OVERLAY_CLASS,
                 // Keep the settled translate at none: a transformed settings scroller

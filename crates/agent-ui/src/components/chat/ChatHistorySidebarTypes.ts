@@ -5,6 +5,7 @@ import type {
   SidebarBatchDeleteResult,
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
+import type { CommandPaletteActionsProvider } from "../../lib/chat/commandPalette";
 import type { SidebarShortcutId, SidebarShortcuts } from "../../lib/settings/sidebarShortcuts";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { WorkspaceHistoryState } from "../../lib/sidebar/store";
@@ -68,6 +69,11 @@ export type ChatHistorySidebarProps = {
   fontScale?: number;
   /** Incremented by the desktop host when its configured search shortcut fires. */
   conversationSearchRequestKey?: number;
+  /**
+   * Host actions for the Cmd/Ctrl+K command palette. When provided the
+   * sidebar installs the shortcut and opens the search dialog in palette mode.
+   */
+  getCommandPaletteActions?: CommandPaletteActionsProvider;
   activeView?: ApplicationViewId;
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
@@ -222,6 +228,7 @@ export type ChatHistorySidebarContainerSource = Required<
     | "isOpen"
     | "fontScale"
     | "conversationSearchRequestKey"
+    | "getCommandPaletteActions"
     | "onNewConversation"
     | "onSelectConversation"
     | "canShareConversations"
@@ -286,7 +293,12 @@ type ChatHistorySidebarBaseState = Pick<
 export function buildChatHistorySidebarBaseProps(
   source: Pick<
     ChatHistorySidebarContainerSource,
-    "currentConversationId" | "isOpen" | "fontScale" | "conversationSearchRequestKey" | "activeView"
+    | "currentConversationId"
+    | "isOpen"
+    | "fontScale"
+    | "conversationSearchRequestKey"
+    | "getCommandPaletteActions"
+    | "activeView"
   >,
   state: ChatHistorySidebarBaseState,
 ) {
@@ -309,6 +321,7 @@ export function buildChatHistorySidebarBaseProps(
     isOpen: source.isOpen,
     fontScale: source.fontScale,
     conversationSearchRequestKey: source.conversationSearchRequestKey,
+    getCommandPaletteActions: source.getCommandPaletteActions,
     activeView: source.activeView,
   };
 }
