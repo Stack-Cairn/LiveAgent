@@ -130,6 +130,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "tooltip.openSidebar": "打开边栏",
   "chat.newConversation": "新对话",
   "chat.pendingTitle": "新会话",
+  "chat.quoteSelection": "引用",
+  "chat.quoteSelectionHint": "引用到输入框",
   "chat.recentConversation": "最近会话",
   "chat.searchConversations": "搜索会话",
   "chat.searchConversationsPlaceholder": "搜索会话",

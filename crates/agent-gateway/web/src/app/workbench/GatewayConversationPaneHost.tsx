@@ -502,6 +502,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
 
   // ---- 发送/停止:严格按本 Pane 的 conversationId 路由(桌面端口径) --------
   const composerRef = useRef<MentionComposerHandle | null>(null);
+  const handleQuoteSelection = useCallback((text: string) => {
+    composerRef.current?.insertQuote(text);
+  }, []);
   const sendInFlightRef = useRef(false);
   const workdir = context.workdirForConversation(conversationId);
   const workdirRef = useRef(workdir);
@@ -858,6 +861,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         usePrimary ? (primary?.branchPendingMessageId ?? undefined) : undefined
       }
       onSuggestionSelect={usePrimary ? primary?.onSuggestionSelect : () => onFocusPane()}
+      onQuoteSelection={handleQuoteSelection}
     />
   );
 

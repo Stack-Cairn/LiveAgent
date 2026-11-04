@@ -48,4 +48,6 @@ export type ChatTranscriptProps = {
   branchPendingMessageId?: string | null;
   onOpenSettings: (section?: SectionId) => void;
   onSuggestionSelect?: (text: string) => void;
+  /** Selected message text → composer blockquote. Omit to disable the quote button. */
+  onQuoteSelection?: (text: string) => void;
 };

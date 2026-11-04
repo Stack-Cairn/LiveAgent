@@ -48,6 +48,7 @@ import {
   formatConversationMentionToken,
   formatFileMentionToken,
 } from "@liveagent/ui/lib/chat/mentionReferences";
+import { buildComposerQuoteInsertion } from "@liveagent/ui/lib/chat/transcriptQuote";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
@@ -70,6 +71,7 @@ import {
 import { readSendShortcut, shouldSendOnEnter } from "../../lib/chat/sendShortcut";
 import { ComposerCommandPanel } from "./ComposerCommandPanel";
 import {
+  CARET_ANCHOR_TEXT,
   COMMIT_MENTION_SHA_ATTR,
   CONVERSATION_MENTION_ID_ATTR,
   CommitMentionTooltip,
@@ -1222,6 +1224,27 @@ export const MentionComposer = memo(
           closeMentionSession();
           refreshEmptyState();
         },
+        insertQuote: (text: string) => {
+          const el = editorRef.current;
+          if (!el || disabled) return false;
+          const existing = normalizeSerializedText(serializeChildren(el, largePastesRef.current));
+          const insertion = buildComposerQuoteInsertion(existing, text);
+          if (!insertion) return false;
+          resetPromptHistoryRecall();
+          el.focus({ preventScroll: true });
+          placeCaretAtEditorEnd();
+          insertComposerSegmentsAtSelection(
+            el,
+            // The trailing caret anchor gives the empty reply line a line box
+            // so the caret paints below the quote; serialization strips it.
+            [{ type: "text", text: `${insertion}${CARET_ANCHOR_TEXT}` }],
+            largePastesRef.current,
+          );
+          closeMentionSession();
+          refreshEmptyState();
+          scheduleComposerSelectionScroll(el);
+          return true;
+        },
         beginTransientText: () => {
           const el = editorRef.current;
           if (!el || disabled) return false;
@@ -1307,6 +1330,7 @@ export const MentionComposer = memo(
         closeComposerContextMenu,
         closeMentionSession,
         focusEditorAtSavedSelection,
+        placeCaretAtEditorEnd,
         refreshEmptyState,
         resetPromptHistoryRecall,
         runCommandDraft,
