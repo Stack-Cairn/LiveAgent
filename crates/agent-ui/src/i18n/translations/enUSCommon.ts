@@ -423,7 +423,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
     "Complete the speech provider settings before using microphone input.",
   "chat.stt.configureAction": "Configure",
   "chat.send": "Send",
-  "chat.stopGeneration": "Stop Generation",
+  "chat.stopGenerationWithEsc": "Stop Generation (Esc)",
   "chat.thinking": "Thinking",
   "chat.thinkingActive": "Thinking",
   "chat.thoughtFor": "Thought for",

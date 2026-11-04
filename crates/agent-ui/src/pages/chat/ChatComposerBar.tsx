@@ -102,6 +102,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useEscapeToStopRun } from "../../lib/chat/escapeStopRun";
 import {
   getUploadedImagePreviewCacheKey,
   loadUploadedImagePreview,
@@ -616,8 +617,16 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const primaryActionTitle = canQueueDraftWhileSending
     ? t("chat.queue.addToQueue")
     : isSending
-      ? t("chat.stopGeneration")
+      ? t("chat.stopGenerationWithEsc")
       : t("chat.sendMessage");
+  // Esc stops the run; open popups, the expanded composer and a pending
+  // approval keep the key first (see escapeStopRun.ts for the precedence).
+  useEscapeToStopRun({
+    enabled: isSending && !hidden && approvalBar == null,
+    onStop,
+    anchorRef: composerLayerRef,
+    composerInputRef: glassCardRef,
+  });
   const uploadTooltip = isUploadingFiles
     ? t("chat.upload.uploading")
     : !isAgentMode
@@ -1521,6 +1530,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               ? (event) => {
                   // mention 弹层消费 Escape 时会 preventDefault，此处让路。
                   if (event.key === "Escape" && !event.defaultPrevented) {
+                    // Consumed: the same press must not also stop the run.
+                    event.preventDefault();
                     setComposerExpanded(false);
                   }
                 }
@@ -1883,6 +1894,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   size="sm"
                   title={primaryActionTitle}
                   aria-label={primaryActionTitle}
+                  aria-keyshortcuts={isSending && !canQueueDraftWhileSending ? "Escape" : undefined}
                   style={
                     canQueueDraftWhileSending
                       ? {
