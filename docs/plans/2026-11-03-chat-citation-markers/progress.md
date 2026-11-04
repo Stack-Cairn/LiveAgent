@@ -31,10 +31,11 @@
 ## 已运行验证
 
 - 最终聚焦测试：120/120 通过，包含 Markdown、供应商、用户气泡、编辑重发与 WebUI 链接。
-- GUI、WebUI production build 通过；共享 UI typecheck、Mirror Check、`git diff --check` 通过。
+- GUI、WebUI production build 通过；`pnpm typecheck:ui`、`pnpm typecheck:gui`、`pnpm typecheck:webui`、`cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests`、Mirror Check、`git diff --check` 通过。
 - Biome 对 1,187 个源文件的 lint 通过，含一条无关 informational diagnostic。完整 lint/check 因基线格式与行尾问题失败：GUI 236 条，WebUI 59 条；修改文件另行按 LF 检查。
 - 最终全量 Node 测试的 8 批全部执行：4,517 项，4,506 通过，9 失败，2 跳过；未宣称全量通过。
-- permission-mode、planning timezone 与两项 trajectory 失败已在同一依赖及后端下加载基线测试、helper 与源代码复现；两个相对 CWD 的失败在 GUI 目录重跑通过。Rust 全量测试包装用例的超时或失败仍需进一步核实，不采用历史脚本内“23 条基线失败”的描述作本次证据。
+- permission-mode、planning timezone 与两项 trajectory 失败已在同一依赖及后端下加载基线测试、helper 与源代码复现；两个相对 CWD 的失败在 GUI 目录重跑通过。
+- 关闭本轮桌面调试进程后，直接运行 `cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml`：1,157 通过、14 失败、4 ignored，退出码 101。失败涉及 Git Bash 0xC0000142、Windows sandbox、路径解析、hook 和 worktree；当前工作区含任务开始前未提交的 Rust 改动，本 PR 未提交 Rust 代码，未将这 14 项全部归为已证实的基线失败。关闭桌面前首次重跑在 tauri-build 复制 sidecar 时 PermissionDenied；关闭后已能运行完整测试。
 
 ## 实际界面验收矩阵
 
@@ -45,11 +46,15 @@
 | 桌面代码 | 查看行内代码及两行 Python 围栏 | 内容及代码样式保留；已通过 |
 | 桌面窄窗口 | 将 viewport 改为 390 宽，再查看两种消息 | 无横向溢出、无 pageerror；已通过 |
 | 桌面编辑取消 | 编辑含 marker 的用户消息，再按 Escape | 编辑器保留原文，取消后恢复干净气泡；已通过 |
-| WebUI 同类交互 | 宽屏与窄屏打开同一会话，检查链接、刷新和编辑取消 | 最终复核与截图继续执行，结果补充到 PR |
-| 两端实际流式 | 分别从桌面和 WebUI 发送含原始 marker 的真实供应商提示；观察 DOM 直到唯一结束标识 | 用户及助手展示不泄漏 marker，原始输入仍在；最新补漏后复核继续执行 |
+| WebUI 同类交互 | 1280/390 宽度打开同一会话，检查链接、刷新和编辑取消 | 用户/助手气泡干净、代码链接正常，编辑原文保留，无溢出和 pageerror；已通过 |
+| 两端实际流式 | 分别从桌面和 WebUI 发送含原始 marker 的真实供应商提示；观察 DOM 直到唯一结束标识 | 两次发送的四组宿主观察均无用户/助手 marker 泄漏，原始输入仍在；已通过 |
 
 截图的“修复前”使用相同历史消息，临时通过 CDP 响应拦截关闭新增的展示过滤。未改写历史消息或撤销源码；PR 必须明确注明为对照重放。已取得桌面用户气泡的有效前后对比及两端助手修复后截图；仅发布经过目视检查的图片。
 
 ## 后续记录
 
-关联上游 issue：#1151。按用户要求先推送 PR，后续补充剩余本地检查、实际流式、有效截图与 required CI 的终态；尚未验证的项目不按通过报告。
+关联上游 issue：#1151；PR：#1153，目标 `main`。修复提交 `b42c1eaa3f759e975c27c5843a3739a637d4b6ca` 已推送至 fork，PR head 核对一致、无冲突且非 draft。已发布两端有效截图并补进 PR 正文。
+
+桌面发起真实供应商输出时记录桌面 97 次、WebUI 18 次 DOM 更新；WebUI 发起时记录桌面 95 次、WebUI 35 次。四组均断言原始用户及助手输入含 marker，展示无泄漏，并等待本次唯一完成标识。
+
+首轮 CI 的 GUI、两组 GUI frontend、Gateway WebUI、Docker Smoke、三平台 Desktop Gateway、Shared UI Boundaries、Diff Hygiene 和合规检查通过；Tauri Rust Check 按变更范围跳过。Gateway 的 Go 测试首轮在 `TestV2KBrainCommandsWithoutDesktop` 中等待 hello 时收到 `HistorySyncStatus`，仅重跑失败 job 后在 `TestV2ComposerRejectionReplaysAfterReconnectWithoutHistory` 出现同类帧顺序错误。两次均已读取具体失败日志，未擅自修改无关 Go 代码；该问题正在独立核查。最终 CI 状态以 PR 最新 head 的 checks 为准，尚未全部通过前不宣告目标完成。
