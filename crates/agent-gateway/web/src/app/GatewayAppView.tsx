@@ -1740,6 +1740,10 @@ export function GatewayAppView({
                                             contentWidth={
                                               settings.customSettings.chatTranscript.width
                                             }
+                                            expandProcessByDefault={
+                                              settings.customSettings.chatTranscript
+                                                .expandProcessByDefault
+                                            }
                                             isViewportFollowing={transcriptFollow.isFollowing}
                                             viewportFollowing={transcriptFollowing}
                                             navRef={transcriptNavRef}

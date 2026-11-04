@@ -78,7 +78,7 @@ test("a turn waiting on the user freezes its progress indicators", () => {
 test("a settled turn with a final answer collapses its work trace on both surfaces", () => {
   // Shared AssistantTurnContent (WebUI path) and the GUI's own bubble unit
   // bypass each other, so the auto-collapse wiring must exist in both.
-  assert.match(workTraceSource, /if \(!running && !attentionRequired && collapseAfterAnswer\)/);
+  assert.match(workTraceSource, /if \(!running && !attentionRequired && collapseAfterAnswer && !expandProcessByDefault\)/);
   assert.match(roundContentSource, /collapseAfterAnswer=\{layout\.answer\.length > 0\}/);
   assert.match(guiBubbleSource, /collapseAfterAnswer=\{unit\.hasAnswer\}/);
   assert.match(rowModelSource, /hasAnswer: layout\.answer\.length > 0/);

@@ -538,7 +538,7 @@ function syncableCustomSettings(
     interfaceFontFamily: "",
     chatFontFamily: "",
     codeFontFamily: "",
-    chatTranscript: { width: DEFAULT_CHAT_TRANSCRIPT_WIDTH },
+    chatTranscript: { width: DEFAULT_CHAT_TRANSCRIPT_WIDTH, expandProcessByDefault: false },
     fontScale: { sidebar: 1, chat: 1, rightDock: 1, settings: 1 },
   };
 }

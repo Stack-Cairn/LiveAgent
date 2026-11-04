@@ -1,6 +1,10 @@
 import { retainRunningToolContent } from "@liveagent/adapters/assistantBubble";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import {
+  useExpandProcessByDefault,
+  useProcessDefaultChange,
+} from "@liveagent/ui/components/chat/processDisclosure";
 import { useAttentionDisclosure } from "@liveagent/ui/components/chat/useAttentionDisclosure";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ToolTraceItem } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
@@ -158,7 +162,9 @@ function ToolTraceGroupInner(props: {
     () => hasActiveUserInteraction(items, runningToolCallIds),
     [items, runningToolCallIds],
   );
-  const [open, setOpen] = useAttentionDisclosure(attentionRequired);
+  const expandByDefault = useExpandProcessByDefault();
+  const [open, setOpen] = useAttentionDisclosure(attentionRequired, expandByDefault);
+  useProcessDefaultChange(expandByDefault, (expand) => setOpen(expand || attentionRequired));
 
   // The latest live batch drops the count prefix ("运行中" instead of
   // "1 运行中"), nothing more. Idle phases render no filler status here:

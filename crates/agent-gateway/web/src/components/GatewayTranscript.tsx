@@ -6,6 +6,7 @@ import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatFileLinkContextMenu";
 import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
 import { EditableUserMessageBubble } from "@liveagent/ui/components/chat/EditableUserMessageBubble";
+import { ProcessDisclosureProvider } from "@liveagent/ui/components/chat/processDisclosure";
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import {
   TranscriptAssistantMessageActions,
@@ -127,6 +128,8 @@ type GatewayTranscriptProps = {
   onSuggestionSelect?: (text: string) => void;
   readOnly?: boolean;
   redactToolContent?: boolean;
+  /** Start the agent process disclosures expanded (settings, #1154). */
+  expandProcessByDefault?: boolean;
 };
 
 // Stream-born rows keep Streamdown's streaming render mode forever — even
@@ -1105,6 +1108,7 @@ export function GatewayTranscript({
   onSuggestionSelect,
   readOnly = false,
   redactToolContent = false,
+  expandProcessByDefault = false,
 }: GatewayTranscriptProps) {
   const transcriptListRef = useRef<HTMLDivElement | null>(null);
   const [transcriptScrollViewport, setTranscriptScrollViewport] = useState<HTMLDivElement | null>(
@@ -1162,37 +1166,39 @@ export function GatewayTranscript({
         {/* Keyed remount per conversation: per-conversation state (measured
             heights, scroll-to-end latch) initializes fresh, and row keys can
             never collide across conversations in the itemSizeCache. */}
-        <GatewayTranscriptListRegion
-          key={conversationId ?? "shared"}
-          conversationId={conversationId}
-          rows={rows}
-          liveStartIndex={liveStartIndex}
-          activeTurnKey={activeTurnKey}
-          contentWidth={contentWidth}
-          scrollViewport={transcriptScrollViewport}
-          isViewportFollowing={isViewportFollowing}
-          viewportFollowing={viewportFollowing}
-          navRef={navRef}
-          onAnchorUserRowChange={onAnchorUserRowChange}
-          hasMoreHistory={hasMoreHistory}
-          isLoadingMoreHistory={isLoadingMoreHistory}
-          onLoadEarlierHistory={onLoadEarlierHistory}
-          isStreaming={isStreaming}
-          showUsage={showUsage}
-          usageContextWindow={usageContextWindow}
-          workspaceRoot={workspaceRoot}
-          gitClient={gitClient}
-          onOpenFileLink={onOpenFileLink}
-          onLoadUploadedImagePreview={onLoadUploadedImagePreview}
-          onResendFromEdit={onResendFromEdit}
-          onBranchConversation={onBranchConversation}
-          branchPendingMessageId={branchPendingMessageId}
-          toolStatus={toolStatus}
-          toolStatusIsCompaction={toolStatusIsCompaction}
-          retryAttempts={retryAttempts}
-          readOnly={readOnly}
-          redactToolContent={redactToolContent}
-        />
+        <ProcessDisclosureProvider expandByDefault={expandProcessByDefault}>
+          <GatewayTranscriptListRegion
+            key={conversationId ?? "shared"}
+            conversationId={conversationId}
+            rows={rows}
+            liveStartIndex={liveStartIndex}
+            activeTurnKey={activeTurnKey}
+            contentWidth={contentWidth}
+            scrollViewport={transcriptScrollViewport}
+            isViewportFollowing={isViewportFollowing}
+            viewportFollowing={viewportFollowing}
+            navRef={navRef}
+            onAnchorUserRowChange={onAnchorUserRowChange}
+            hasMoreHistory={hasMoreHistory}
+            isLoadingMoreHistory={isLoadingMoreHistory}
+            onLoadEarlierHistory={onLoadEarlierHistory}
+            isStreaming={isStreaming}
+            showUsage={showUsage}
+            usageContextWindow={usageContextWindow}
+            workspaceRoot={workspaceRoot}
+            gitClient={gitClient}
+            onOpenFileLink={onOpenFileLink}
+            onLoadUploadedImagePreview={onLoadUploadedImagePreview}
+            onResendFromEdit={onResendFromEdit}
+            onBranchConversation={onBranchConversation}
+            branchPendingMessageId={branchPendingMessageId}
+            toolStatus={toolStatus}
+            toolStatusIsCompaction={toolStatusIsCompaction}
+            retryAttempts={retryAttempts}
+            readOnly={readOnly}
+            redactToolContent={redactToolContent}
+          />
+        </ProcessDisclosureProvider>
         {shouldShowInlineError ? (
           <div
             className={cn(

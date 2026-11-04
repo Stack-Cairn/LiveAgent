@@ -5,6 +5,7 @@ import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
+import { useExpandProcessByDefault, useProcessDefaultChange } from "./processDisclosure";
 import { useAttentionDisclosure } from "./useAttentionDisclosure";
 
 const PIXEL_KEYS = [
@@ -110,17 +111,24 @@ export function AssistantWorkTrace({
   const validDuration = workDuration(durationMs);
   // 没有总结文案的回合（被打断、失败、只有过程）挂载时展开：折叠后只剩标题，
   // 用户看不到已经执行过的步骤。有文案的历史回合仍折叠，只露出回答。
+  // 设置里开了「默认展开执行过程」时，过程区块始终以展开态挂载，且回合结束后不再自动折叠。
+  const expandProcessByDefault = useExpandProcessByDefault();
   const [expanded, setExpanded] = useAttentionDisclosure(
     attentionRequired,
-    running || !collapseAfterAnswer,
+    running || !collapseAfterAnswer || expandProcessByDefault,
   );
 
   // 有总结文案时，回合完成（running 变 false）后自动折叠「处理中」区块一次；
   // 之后 disclosure 所有权交还给用户，手动展开/折叠不再被强制收回，
   // 也不会和 attentionRequired（待用户交互的卡片）的强制展开打架。
   useEffect(() => {
-    if (!running && !attentionRequired && collapseAfterAnswer) setExpanded(false);
-  }, [running, attentionRequired, collapseAfterAnswer, setExpanded]);
+    if (!running && !attentionRequired && collapseAfterAnswer && !expandProcessByDefault) {
+      setExpanded(false);
+    }
+  }, [running, attentionRequired, collapseAfterAnswer, expandProcessByDefault, setExpanded]);
+  useProcessDefaultChange(expandProcessByDefault, (expand) =>
+    setExpanded(expand || running || !collapseAfterAnswer || attentionRequired),
+  );
   const [elapsedMs, setElapsedMs] = useState(
     () =>
       validDuration ??

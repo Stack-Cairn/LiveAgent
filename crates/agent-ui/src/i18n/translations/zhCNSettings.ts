@@ -409,6 +409,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "系统已接受测试通知。请检查横幅或通知中心；接受请求不代表横幅已显示。",
   "settings.defaultTimeZoneDesc":
     "由日程后端统一保存，所有客户端共享；自动模式跟随后端系统时区。不会改变定时任务的触发时区。",
+  "settings.expandProcessByDefault": "默认展开执行过程",
+  "settings.expandProcessByDefaultDesc":
+    "对话中的处理过程、思考过程和工具调用（如“运行了命令”）默认展开显示，回合结束后也不自动折叠。仅保存在本机。",
   "settings.defaultTimeZoneAuto": "自动（跟随系统：{zone}）",
   "settings.timeZoneSearch": "搜索时区或城市",
   "settings.timeZoneEmpty": "没有匹配的时区",

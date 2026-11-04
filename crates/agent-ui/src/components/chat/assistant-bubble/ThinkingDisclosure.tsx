@@ -1,5 +1,9 @@
 import { formatElapsedTime } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import {
+  useExpandProcessByDefault,
+  useProcessDefaultChange,
+} from "@liveagent/ui/components/chat/processDisclosure";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
@@ -40,13 +44,20 @@ export function ThinkingDisclosure(props: {
   const { t } = useLocale();
   // A segment born streaming starts open so the reasoning is watchable; once
   // it settles it folds back down — unless the user toggled it, after which
-  // disclosure ownership stays with them.
-  const [open, setOpen] = useState(active);
+  // disclosure ownership stays with them. With "expand process by default" on,
+  // every segment starts open and stays open after it settles.
+  const expandByDefault = useExpandProcessByDefault();
+  const [open, setOpen] = useState(active || expandByDefault);
   const userOwnsDisclosureRef = useRef(false);
 
   useEffect(() => {
-    if (!active && !userOwnsDisclosureRef.current) setOpen(false);
-  }, [active]);
+    if (!active && !expandByDefault && !userOwnsDisclosureRef.current) setOpen(false);
+  }, [active, expandByDefault]);
+  // Flipping the preference is an explicit request, so it wins over a manual toggle.
+  useProcessDefaultChange(expandByDefault, (expand) => {
+    userOwnsDisclosureRef.current = false;
+    setOpen(expand || active);
+  });
 
   // Callback ref → state so the follow engine re-binds whenever LazyCollapse
   // mounts a fresh body (the element identity changes on every reopen).

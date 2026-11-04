@@ -2,6 +2,7 @@ import type { Context } from "@liveagent/app/lib/agentTypes";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
+import { ProcessDisclosureProvider } from "@liveagent/ui/components/chat/processDisclosure";
 import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Toaster } from "@liveagent/ui/components/ui/toaster";
@@ -945,22 +946,26 @@ export default function App() {
           <Suspense
             fallback={<AppBootShell loadingLabel={translate("app.loading", settings.locale)} />}
           >
-            <ChatPage
-              settings={settings}
-              setSettings={setSettings}
-              resourceHost={guiResourceHostCapabilities}
-              imageStudioHost={imageStudioHost}
-              onImageStudioWorkspaceChange={setImageStudioWorkspace}
-              sttProviderOverride={sttProviderOverride}
-              getMcpSettings={getMcpSettings}
-              getToolPolicies={getToolPolicies}
-              context={context}
-              setContext={setContext}
-              onOpenSettings={openSettings}
-              onToggleTheme={toggleTheme}
-              appUpdate={appUpdate}
-              onRunningConversationCountChange={handleRunningConversationCountChange}
-            />
+            <ProcessDisclosureProvider
+              expandByDefault={settings.customSettings.chatTranscript.expandProcessByDefault}
+            >
+              <ChatPage
+                settings={settings}
+                setSettings={setSettings}
+                resourceHost={guiResourceHostCapabilities}
+                imageStudioHost={imageStudioHost}
+                onImageStudioWorkspaceChange={setImageStudioWorkspace}
+                sttProviderOverride={sttProviderOverride}
+                getMcpSettings={getMcpSettings}
+                getToolPolicies={getToolPolicies}
+                context={context}
+                setContext={setContext}
+                onOpenSettings={openSettings}
+                onToggleTheme={toggleTheme}
+                appUpdate={appUpdate}
+                onRunningConversationCountChange={handleRunningConversationCountChange}
+              />
+            </ProcessDisclosureProvider>
           </Suspense>
         </AppErrorBoundary>
         {visible && (
