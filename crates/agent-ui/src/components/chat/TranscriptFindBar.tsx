@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Search, X } from "@liveagent/ui/components/Icon
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { formatShortcutLabel } from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 import type { TranscriptFindState } from "@liveagent/ui/lib/transcript-find/useTranscriptFind";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -16,6 +17,12 @@ export function TranscriptFindBar(props: TranscriptFindBarProps) {
   const { t } = useLocale();
   if (!find.open) return null;
 
+  // Keys handled by the find input below; shown in the button labels.
+  const withKeys = (key: string, chord: string) =>
+    t(key).replace("{keys}", formatShortcutLabel(chord));
+  const previousLabel = withKeys("chat.find.previous", "Shift+Enter");
+  const nextLabel = withKeys("chat.find.next", "Enter");
+  const closeLabel = withKeys("chat.find.close", "Escape");
   const hasQuery = find.query.trim().length > 0;
   const status =
     find.total > 0
@@ -81,8 +88,8 @@ export function TranscriptFindBar(props: TranscriptFindBarProps) {
         variant="ghost"
         size="icon-xs"
         className="size-6"
-        aria-label={t("chat.find.previous")}
-        title={t("chat.find.previous")}
+        aria-label={previousLabel}
+        title={previousLabel}
         disabled={find.total === 0}
         onClick={find.previous}
       >
@@ -93,8 +100,8 @@ export function TranscriptFindBar(props: TranscriptFindBarProps) {
         variant="ghost"
         size="icon-xs"
         className="size-6"
-        aria-label={t("chat.find.next")}
-        title={t("chat.find.next")}
+        aria-label={nextLabel}
+        title={nextLabel}
         disabled={find.total === 0}
         onClick={find.next}
       >
@@ -105,8 +112,8 @@ export function TranscriptFindBar(props: TranscriptFindBarProps) {
         variant="ghost"
         size="icon-xs"
         className="size-6"
-        aria-label={t("chat.find.close")}
-        title={t("chat.find.close")}
+        aria-label={closeLabel}
+        title={closeLabel}
         onClick={find.close}
       >
         <X className="size-3.5" />

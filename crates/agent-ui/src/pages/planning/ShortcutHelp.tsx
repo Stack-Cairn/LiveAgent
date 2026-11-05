@@ -5,10 +5,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
-import { formatShortcutText, Kbd } from "../../components/ui/kbd";
+import { KbdShortcut } from "../../components/ui/kbd";
 import { usePlanningT } from "./usePlanningT";
 
-const SHORTCUTS: [keys: string[], label: string][] = [
+// Each entry lists alternative chords in the shared Kbd syntax; the planner
+// matches letters on `event.key`, so they are written as plain labels.
+const SHORTCUTS: [chords: string[], label: string][] = [
   [["D"], "planner.shortcuts.day"],
   [["W"], "planner.shortcuts.week"],
   [["M"], "planner.shortcuts.month"],
@@ -18,9 +20,9 @@ const SHORTCUTS: [keys: string[], label: string][] = [
   [["K", "P"], "planner.shortcuts.previous"],
   [["C"], "planner.shortcuts.create"],
   [["/"], "planner.shortcuts.search"],
-  [["Alt", "↑ ↓"], "planner.shortcuts.moveTime"],
-  [["Alt", "← →"], "planner.shortcuts.moveDay"],
-  [["Esc"], "planner.shortcuts.cancel"],
+  [["Alt+ArrowUp", "Alt+ArrowDown"], "planner.shortcuts.moveTime"],
+  [["Alt+ArrowLeft", "Alt+ArrowRight"], "planner.shortcuts.moveDay"],
+  [["Escape"], "planner.shortcuts.cancel"],
   [["?"], "planner.shortcuts.help"],
 ];
 
@@ -40,16 +42,14 @@ export function ShortcutHelp({ onClose }: { onClose(): void }) {
         </DialogHeader>
         <DialogBody>
           <dl className="divide-y divide-border text-sm">
-            {SHORTCUTS.map(([keys, label]) => (
+            {SHORTCUTS.map(([chords, label]) => (
               <div key={label} className="flex items-center justify-between gap-4 py-2">
                 <dt>{t(label)}</dt>
                 <dd className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                  {keys.map((key, index) => (
-                    <span key={key} className="flex items-center gap-1">
-                      {index > 0 && (keys[0] === "Alt" ? "+" : t("planner.shortcuts.or"))}
-                      <Kbd className="px-1.5">
-                        {key === "Alt" ? formatShortcutText("Alt") : key}
-                      </Kbd>
+                  {chords.map((chord, index) => (
+                    <span key={chord} className="flex items-center gap-1">
+                      {index > 0 && t("planner.shortcuts.or")}
+                      <KbdShortcut shortcut={chord} keyClassName="px-1.5" />
                     </span>
                   ))}
                 </dd>

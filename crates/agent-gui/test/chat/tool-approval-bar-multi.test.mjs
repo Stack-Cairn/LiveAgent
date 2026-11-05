@@ -3,6 +3,13 @@ import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
+// The key hint is a Kbd cap whose label follows the platform; compare the label only.
+function labelWithoutKeys(button) {
+  const clone = button.cloneNode(true);
+  for (const cap of clone.querySelectorAll('[data-slot="kbd"]')) cap.remove();
+  return clone.textContent;
+}
+
 // 审查回归:共享 ToolApprovalBar 在多条待审批、会话级提示与可记忆授权组合下的菜单与计数;
 // 以及两种语言的新增文案键都存在。
 async function renderBar(pending) {
@@ -39,7 +46,7 @@ test("会话级提示排在首位且后面还有待审批项:计数 1/2,菜单�
     assert.deepEqual(menuItems(), ["全部允许", "全部拒绝"]);
     assert.match(host.textContent, /允许后，本对话里的 Computer Use 操作不再询问/);
     const approve = [...host.querySelectorAll("button")].find((b) => b.getAttribute("aria-keyshortcuts") === "Enter");
-    assert.equal(approve.textContent.replace("↵", ""), "允许");
+    assert.equal(labelWithoutKeys(approve), "允许");
     assert.match(approve.className, /rounded-r-none/, "有菜单时主按钮右侧与下拉拼接");
     const [approveAll] = host.querySelectorAll('[role="menuitem"]');
     await env.act(async () => { approveAll.click(); await Promise.resolve(); });

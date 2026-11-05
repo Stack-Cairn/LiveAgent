@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
+import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -393,15 +394,14 @@ export function ToolApprovalBar({
             <Loader2 className="size-3.5 animate-spin" />
           ) : null}
           {t("chat.toolApproval.deny")}
-          <span
+          <KbdShortcut
+            compact
+            shortcut="Escape"
             aria-hidden="true"
-            className={cn(
-              "rounded bg-muted px-1 py-0.5",
-              "font-sans text-tiny font-normal leading-none text-muted-foreground",
-            )}
-          >
-            Esc
-          </span>
+            variant="plain"
+            size="inline"
+            className="rounded bg-muted px-1 py-0.5 text-tiny text-muted-foreground"
+          />
         </Button>
 
         <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
@@ -423,15 +423,14 @@ export function ToolApprovalBar({
                   ? "chat.toolApproval.approveForSession"
                   : "chat.toolApproval.approve",
               )}
-              <span
+              <KbdShortcut
+                compact
+                shortcut="Enter"
                 aria-hidden="true"
-                className={cn(
-                  "rounded bg-primary-foreground/10 px-1 py-0.5",
-                  "font-sans text-tiny font-normal leading-none text-primary-foreground/75",
-                )}
-              >
-                ↵
-              </span>
+                variant="plain"
+                size="inline"
+                className="rounded bg-primary-foreground/10 px-1 py-0.5 text-tiny text-primary-foreground/75"
+              />
             </Button>
             {hasMoreActions ? (
               <DropdownMenuTrigger

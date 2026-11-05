@@ -38,7 +38,7 @@ import {
   ContextMenuItem as StandardContextMenuItem,
 } from "@liveagent/ui/components/ui/context-menu";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
-import { formatShortcutText, Kbd } from "@liveagent/ui/components/ui/kbd";
+import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { isMacLikePlatform } from "@liveagent/ui/lib/chat/commandPalette";
@@ -195,18 +195,18 @@ function editorModelUri(tabKey: string) {
   });
 }
 
+/** Monaco's own chords; redo and replace use different keys per platform. */
 function getEditorContextMenuShortcuts() {
   const isMac = isMacLikePlatform();
-  const format = (shortcut: string) => formatShortcutText(shortcut, isMac);
   return {
-    undo: format("Mod+KeyZ"),
-    redo: format(isMac ? "Mod+Shift+KeyZ" : "Ctrl+KeyY"),
-    cut: format("Mod+KeyX"),
-    copy: format("Mod+KeyC"),
-    paste: format("Mod+KeyV"),
-    selectAll: format("Mod+KeyA"),
-    find: format("Mod+KeyF"),
-    replace: format(isMac ? "Alt+Mod+KeyF" : "Ctrl+KeyH"),
+    undo: "Mod+KeyZ",
+    redo: isMac ? "Mod+Shift+KeyZ" : "Ctrl+KeyY",
+    cut: "Mod+KeyX",
+    copy: "Mod+KeyC",
+    paste: "Mod+KeyV",
+    selectAll: "Mod+KeyA",
+    find: "Mod+KeyF",
+    replace: isMac ? "Alt+Mod+KeyF" : "Ctrl+KeyH",
   } as const;
 }
 
@@ -1188,13 +1188,13 @@ function ContextMenuItem(props: {
       )}
       <span className="min-w-0 flex-1 truncate">{props.label}</span>
       {props.shortcut ? (
-        <Kbd
+        <KbdShortcut
+          compact
+          shortcut={props.shortcut}
           variant="plain"
           size="inline"
           className="text-xs tracking-wide text-muted-foreground/60"
-        >
-          {props.shortcut}
-        </Kbd>
+        />
       ) : null}
     </StandardContextMenuItem>
   );

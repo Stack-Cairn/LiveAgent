@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
+// The key hint is a Kbd cap whose label follows the platform; compare the label only.
+function labelWithoutKeys(button) {
+  const clone = button.cloneNode(true);
+  for (const cap of clone.querySelectorAll('[data-slot="kbd"]')) cap.remove();
+  return clone.textContent;
+}
+
 async function renderBar(pending) {
   const decisions = [];
   const env = await createDomTestEnv({ mocks: {
@@ -38,7 +45,7 @@ test("a session-wide Computer Use prompt says approving covers the chat", async 
     assert.match(bar.className, /\bmin-h-32\b/);
     assert.doesNotMatch(bar.className, /(^|\s)h-32\b/);
     const approve = [...host.querySelectorAll("button")].find((b) => b.getAttribute("aria-keyshortcuts") === "Enter");
-    assert.equal(approve.textContent.replace("↵", ""), "允许");
+    assert.equal(labelWithoutKeys(approve), "允许");
     assert.equal(host.querySelector('[aria-label="更多审批选项"]'), null, "no separate session option to choose");
     await env.act(async () => { approve.click(); await Promise.resolve(); });
     assert.deepEqual(decisions, [["p1", "approve"]]);
@@ -55,7 +62,7 @@ test("other prompts keep the one-time wording", async () => {
     assert.match(host.textContent, /是否允许执行此 终端 操作？/);
     assert.doesNotMatch(host.textContent, /本对话里的 Computer Use/);
     const approve = [...host.querySelectorAll("button")].find((b) => b.getAttribute("aria-keyshortcuts") === "Enter");
-    assert.equal(approve.textContent.replace("↵", ""), "允许本次");
+    assert.equal(labelWithoutKeys(approve), "允许本次");
   } finally {
     await cleanup();
   }

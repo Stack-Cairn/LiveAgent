@@ -46,6 +46,7 @@ import {
   useState,
 } from "react";
 import { cn } from "../../../lib/shared/utils";
+import { formatShortcutLabel } from "../../../lib/shortcuts/shortcutKeys";
 import type { MentionComposerDraftSegment } from "../../chat/MentionComposerModel";
 import { Button } from "../../ui/button";
 import { ShortcutTooltip } from "../../ui/shortcut-tooltip";
@@ -310,7 +311,10 @@ function DiffLineCommentEditor(props: {
           size="sm"
           className="h-6 px-2 text-xs"
           disabled={!canSave}
-          title={t("projectTools.gitReview.lineComments.saveHint")}
+          title={t("projectTools.gitReview.lineComments.saveHint").replace(
+            "{keys}",
+            formatShortcutLabel("Mod+Enter"),
+          )}
           onClick={() => onSave(value)}
         >
           {t("projectTools.gitReview.lineComments.save")}
