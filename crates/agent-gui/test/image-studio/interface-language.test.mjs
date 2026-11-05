@@ -197,7 +197,7 @@ test("English workbench shows no Chinese across history, preview, pickers, notic
     assert.ok(buttons.includes("Stop locally"), "short label keeps the status badge visible");
     assert.deepEqual(
       [...host.querySelectorAll('fieldset[aria-label="Filter history"] button')].map((b) => b.textContent),
-      ["All", "Results", "Active", "Issues"],
+      ["All", "Results", "Active", "Verify", "Issues"],
     );
     assert.match(host.textContent, /Image request limit reached — Wait for the rate limit/);
     assert.match(host.textContent, /Local processing stopped/);
@@ -214,7 +214,9 @@ test("English workbench shows no Chinese across history, preview, pickers, notic
     const failed = host.querySelector('[aria-label="View job: Prompt failed"]');
     assert.ok(failed, "history cards are named in English");
     await click(failed);
-    assert.match(host.textContent, /No image was generated/);
+    // The failed-job panel titles the failure by its kind instead of one generic line.
+    assert.match(host.textContent, /Request limit reached/);
+    assert.match(host.textContent, /Restore inputs and regenerate/);
     assert.deepEqual(screen(), [], "failed job preview");
 
     await click(host.querySelector('button[title="Aspect ratio and size"]'));

@@ -223,7 +223,7 @@ test("history searches prompt/model, filters status and changes original preview
     assert.equal(gallery.querySelectorAll("article").length, 4);
     await click(byLabel("查看任务：Prompt failed"));
     assert.equal(byLabel("图片预览").querySelector("img"), null, "a failed job never falls back to another job's image");
-    assert.match(byLabel("图片预览").textContent, /这次没有生成图片/);
+    assert.match(byLabel("图片预览").textContent, /供应商没有接受这次请求/);
     assert.equal(byLabel("图片预览").textContent.split("图像输入无效").length - 1, 1);
   }, { jobs: [older, newer, active, failed] });
 });

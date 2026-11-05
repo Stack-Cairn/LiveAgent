@@ -50,6 +50,8 @@ export interface ImageError {
   message: string;
   requestId: string;
   retryable: boolean;
+  /** Short, already sanitized hint from the backend; absent on older backends. */
+  reason?: string;
   details?: ImageErrorDetails;
 }
 export interface ImageProject {

@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Download,
   ImageIcon,
-  ImageOff,
   Info,
   Loader2,
   RefreshCw,
@@ -18,12 +17,13 @@ import type { ExportDestination, ImageStudioClient } from "../../lib/imaging/typ
 import { AssetImage } from "./AssetImage";
 import { AssetLightbox } from "./AssetLightbox";
 import type { DraftStorage } from "./drafts";
+import { FailurePanel } from "./FailurePanel";
 import { splitFramedPrompt } from "./framing";
 import { ImageComposer } from "./ImageComposer";
+import { JobDetailPane } from "./JobDetailPane";
 import { ResultGallery } from "./ResultGallery";
 import {
   formatJobTime,
-  jobErrorLines,
   type NoticeTone,
   noticeDuration,
   statusLabel,
@@ -188,7 +188,7 @@ function ImageStudioWorkbench({
     );
   return (
     <section
-      className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
+      className="@container relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
       aria-label={t("imageStudio.name")}
     >
       <header className="shrink-0 px-4 pt-4 sm:px-6">
@@ -251,7 +251,9 @@ function ImageStudioWorkbench({
           onReconnect={() => void controller.start()}
         />
       )}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:overflow-hidden xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div
+        className={`grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:overflow-hidden ${selectedJob ? "@5xl:grid-cols-[17rem_minmax(0,1fr)_16rem] @7xl:grid-cols-[19rem_minmax(0,1fr)_19rem]" : "xl:grid-cols-[minmax(0,1fr)_22rem]"}`}
+      >
         <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:overflow-y-auto">
           <section
             aria-label={t("imageStudio.preview")}
@@ -325,22 +327,12 @@ function ImageStudioWorkbench({
                   <p className="text-sm">{t("imageStudio.generating")}</p>
                 </div>
               ) : selectedJob ? (
-                <div className="flex max-w-md flex-col items-center gap-3 px-6 py-12 text-center">
-                  <ImageOff className="size-8 text-muted-foreground opacity-60" strokeWidth={1.5} />
-                  <p className="text-sm font-medium">{t("imageStudio.noImage")}</p>
-                  {jobErrorLines(selectedJob, t).map((line) => (
-                    <p key={line} className="break-words text-xs text-destructive">
-                      {line}
-                    </p>
-                  ))}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void controller.restoreJob(selectedJob.id)}
-                  >
-                    {t("imageStudio.restoreRetry")}
-                  </Button>
-                </div>
+                <FailurePanel
+                  key={selectedJob.id}
+                  job={selectedJob}
+                  controller={controller}
+                  onOpenSettings={onOpenSettings}
+                />
               ) : (
                 <div className="flex flex-col items-center gap-3 px-6 py-12 text-center text-muted-foreground">
                   <ImageIcon className="size-8 opacity-60" strokeWidth={1.5} />
@@ -394,7 +386,7 @@ function ImageStudioWorkbench({
         </div>
         <aside
           aria-label={t("imageStudio.history")}
-          className={`${historyOpen ? "flex" : "hidden"} min-h-64 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card lg:flex lg:min-h-0`}
+          className={`${historyOpen ? "flex" : "hidden"} min-h-64 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card lg:flex lg:min-h-0 ${selectedJob ? "@5xl:order-first" : ""}`}
         >
           <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4">
             <h2 className="font-semibold">{t("imageStudio.history")}</h2>
@@ -420,6 +412,14 @@ function ImageStudioWorkbench({
             }}
           />
         </aside>
+        {selectedJob && (
+          <aside
+            aria-label={t("imageStudio.jobDetail.title")}
+            className="hidden min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card @5xl:flex"
+          >
+            <JobDetailPane job={selectedJob} />
+          </aside>
+        )}
       </div>
     </section>
   );
