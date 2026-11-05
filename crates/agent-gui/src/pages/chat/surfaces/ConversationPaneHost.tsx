@@ -28,6 +28,10 @@ import { KBrainGoalBarHost } from "../composer/KBrainGoalBarHost";
 import type { ConversationPaneHostHandle } from "../conversations/useConversationPaneHostBridge";
 import { useConversationSurfaceSnapshot } from "../conversations/useConversationSurfaceSnapshot";
 import { buildQueuedChatTurnPreview } from "../queue/chatTurnQueue";
+import {
+  KBrainSubagentPaneHost,
+  KBrainSubagentRunningChip,
+} from "../subagents/KBrainSubagentPaneHost";
 
 const CheckpointRewindProvider = isKBrainBackendEnabled()
   ? KBrainCheckpointRewindProvider
@@ -236,7 +240,8 @@ const RegisteredConversationPaneHostContent = forwardRef<
     });
   }, [controller, isBackgroundPane]);
 
-  return (
+  const kbrainSubagents = isKBrainBackendEnabled();
+  const surface = (
     <ConversationSurface
       paneId={paneId}
       contentWidth={transcript.contentWidth}
@@ -305,12 +310,20 @@ const RegisteredConversationPaneHostContent = forwardRef<
               onHeightChange={setComposerOverlayHeight}
               onCenterOffsetChange={setComposerCenterOffset}
               taskProgressBar={
-                <CurrentTaskProgress
-                  key={snapshot.conversationId}
-                  historyItems={historyItems}
-                  liveTranscriptStore={transcript.liveTranscriptStore}
-                  isConversationRunning={isSending || isConversationRunning}
-                />
+                <>
+                  <CurrentTaskProgress
+                    key={snapshot.conversationId}
+                    historyItems={historyItems}
+                    liveTranscriptStore={transcript.liveTranscriptStore}
+                    isConversationRunning={isSending || isConversationRunning}
+                  />
+                  {kbrainSubagents && !trajectoryActive ? (
+                    <KBrainSubagentRunningChip
+                      key={`subagents-${snapshot.conversationId}`}
+                      conversationId={snapshot.conversationId}
+                    />
+                  ) : null}
+                </>
               }
               approvalBar={
                 snapshot.approvals.length > 0 ? (
@@ -350,6 +363,18 @@ const RegisteredConversationPaneHostContent = forwardRef<
         };
       }}
     />
+  );
+  if (!kbrainSubagents) return surface;
+  // The subagent pane sits beside this conversation, so split panes each get their own.
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      {surface}
+      <KBrainSubagentPaneHost
+        conversationId={conversationId}
+        workdir={transcript.workspaceRoot}
+        onOpenFileLink={transcript.onOpenFileLink}
+      />
+    </div>
   );
 });
 

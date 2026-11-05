@@ -283,10 +283,30 @@ export type KBrainSubagent = {
   started_at?: string;
   updated_at?: string;
   ended_at?: string;
+  /** The parent's `subagent` tool call that started it (backends with subagent_transcripts). */
+  parent_tool_call_id?: string;
+  background?: boolean;
+  usage?: KBrainUsage;
+  tool_count?: number;
+  duration_ms?: number;
 };
 
 export type KBrainSubagentEvent = {
   subagent: KBrainSubagent;
+};
+
+/** GET /v1/sessions/{id}/subagents */
+export type KBrainSubagentList = {
+  subagents?: KBrainSubagent[];
+  last_seq?: number;
+};
+
+/** GET /v1/sessions/{id}/subagents/{task}: the transcript so far. */
+export type KBrainSubagentTranscript = {
+  subagent: KBrainSubagent;
+  messages?: KBrainMessage[];
+  last_seq?: number;
+  live?: boolean;
 };
 
 export type KBrainCreateSessionRequest = {

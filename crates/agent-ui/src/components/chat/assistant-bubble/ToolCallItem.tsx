@@ -57,7 +57,9 @@ import {
   getToolMeta,
   isBuiltinShareToolName,
   isSubagentCardToolCall,
+  KBRAIN_SUBAGENT_TOOL_NAME,
 } from "./assistantBubbleUtils";
+import { SubagentToolCall } from "./SubagentToolCard";
 import { ToolPermissionMarker } from "./ToolPermissionMarker";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
 
@@ -690,8 +692,24 @@ export function areToolTraceItemsEqual(previous: ToolTraceItem, next: ToolTraceI
   );
 }
 
+type ToolCallItemProps = Parameters<typeof ToolCallItem>[0];
+
+// A K-brain `subagent` call is a subagent card when the host can link it; shared
+// (redacted) transcripts keep the plain row.
+function ToolCallItemSwitch(props: ToolCallItemProps) {
+  if (props.item.toolCall.name === KBRAIN_SUBAGENT_TOOL_NAME && !props.redactToolContent) {
+    return (
+      <SubagentToolCall
+        toolCallId={props.item.toolCall.id}
+        fallback={<ToolCallItem {...props} />}
+      />
+    );
+  }
+  return <ToolCallItem {...props} />;
+}
+
 export const MemoToolCallItem = memo(
-  ToolCallItem,
+  ToolCallItemSwitch,
   (previousProps, nextProps) =>
     previousProps.isRunning === nextProps.isRunning &&
     previousProps.readOnly === nextProps.readOnly &&
