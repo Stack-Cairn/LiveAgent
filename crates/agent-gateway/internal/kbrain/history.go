@@ -363,6 +363,9 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 		if message.Role == "tool" {
 			entry["role"], entry["toolCallId"], entry["toolName"] = "toolResult", message.ToolCallID, message.Name
 			entry["isError"] = message.StopReason == "error" || message.StopReason == "cancelled"
+			if details := questionResultDetails(message.Name, historyText(message)); details != nil {
+				entry["details"] = details
+			}
 		}
 		if message.Role == "assistant" {
 			for _, search := range message.HostedSearch {

@@ -40,6 +40,7 @@ type Relay struct {
 	backendWorkers  sync.WaitGroup
 	historyWatching bool
 	historyState    *relayHistoryState
+	interactive     *interactiveState
 }
 
 type runState struct {
@@ -130,6 +131,7 @@ func newRelay(client *Client, target string, defaultModel ModelRef, cwd, queuePa
 		activeRuns:      map[string]string{},
 		backendRuns:     map[string]backendQueueRun{},
 		backendWatching: map[string]bool{},
+		interactive:     newInteractiveState(),
 	}
 	r.backendContext, r.backendCancel = context.WithCancel(context.Background())
 	if r.queuePath != "" {
@@ -750,19 +752,9 @@ func (r *Relay) execute(ctx context.Context, state *runState, cwd string, prompt
 			if event.RunID != accepted.RunID {
 				return nil
 			}
-			if event.Type == "permission.requested" {
-				if err := r.client.rejectUnsupportedPermission(readerCtx, event); err != nil {
-					return err
-				}
-			}
-			mappedEvent := event
-			mappedEvent.ConversationID = conversationID
-			chat, control, mapErr := ToChatEvent(mappedEvent)
+			control, mapErr := r.relayRunEvent(readerCtx, event, conversationID, r.runEmitter(state))
 			if mapErr != nil {
 				return mapErr
-			}
-			if chat != nil && cb.OnEvent != nil {
-				cb.OnEvent(gatewayRunID, chat)
 			}
 			if control != nil {
 				control.RequestId = gatewayRunID
@@ -785,6 +777,22 @@ func (r *Relay) execute(ctx context.Context, state *runState, cwd string, prompt
 		case <-ctx.Done():
 			return
 		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+// runEmitter forwards chat events to the run's current callbacks; a stored
+// emitter (an approval card redrawn later) follows a resubscribed client.
+func (r *Relay) runEmitter(state *runState) func(*gatewayv2.ChatEvent) {
+	return func(chat *gatewayv2.ChatEvent) {
+		if chat == nil {
+			return
+		}
+		r.mu.Lock()
+		cb, gatewayRunID := state.callbacks, state.gatewayRunID
+		r.mu.Unlock()
+		if cb.OnEvent != nil {
+			cb.OnEvent(gatewayRunID, chat)
 		}
 	}
 }
@@ -977,19 +985,9 @@ func (r *Relay) resumeRun(state *runState) {
 			if event.RunID != state.kbrainRunID {
 				return nil
 			}
-			if event.Type == "permission.requested" {
-				if err := r.client.rejectUnsupportedPermission(ctx, event); err != nil {
-					return err
-				}
-			}
-			mapped := event
-			mapped.ConversationID = state.conversationID
-			chat, control, mapErr := ToChatEvent(mapped)
+			control, mapErr := r.relayRunEvent(ctx, event, state.conversationID, r.runEmitter(state))
 			if mapErr != nil {
 				return mapErr
-			}
-			if chat != nil && callbacks.OnEvent != nil {
-				callbacks.OnEvent(state.gatewayRunID, chat)
 			}
 			if control != nil {
 				control.RequestId = state.gatewayRunID

@@ -48,6 +48,11 @@ func ToChatEvent(event Event) (*v2.ChatEvent, *v2.ChatControlEvent, error) {
 		if result, ok := payload["tool_result"].(map[string]any); ok {
 			payload["id"], payload["name"] = result["id"], result["name"]
 			payload["isError"] = result["failed"] == true || result["cancelled"] == true
+			name, _ := result["name"].(string)
+			output, _ := result["output"].(string)
+			if details := questionResultDetails(name, output); details != nil {
+				payload["details"] = details
+			}
 			content := []any{map[string]any{"type": "text", "text": result["output"]}}
 			if blocks, ok := result["content"].([]any); ok {
 				for _, value := range blocks {
@@ -66,9 +71,6 @@ func ToChatEvent(event Event) (*v2.ChatEvent, *v2.ChatControlEvent, error) {
 			}
 			payload["content"] = content
 		}
-	case "permission.requested":
-		base.Type = v2.ChatEvent_TOOL_STATUS
-		payload["status"] = "Manual approval required. This WebUI transport cannot confirm permissions; the action was rejected. Retry in LiveAgent desktop or K-brain TUI."
 	case "approval.reviewed":
 		base.Type = v2.ChatEvent_TOOL_STATUS
 		if object, ok := payloadAsMap(payload); ok {
