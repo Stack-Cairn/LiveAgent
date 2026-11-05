@@ -516,6 +516,26 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.process_stop.name": "停止命令",
   "settings.builtinTool.process_stop.desc": "停止运行中的 Bash 会话",
   "settings.builtinTool.process_stop.detail": "终止 Bash 会话的完整进程树，并返回最终缓冲输出。",
+  "settings.builtinTool.terminal_session.name": "终端会话",
+  "settings.builtinTool.terminal_session.desc": "启动交互式终端会话",
+  "settings.builtinTool.terminal_session.detail":
+    "在后端启动运行指定命令的交互式终端，模型通过「读取终端」跟进输出。命令遵循权限与沙箱策略。",
+  "settings.builtinTool.wait.name": "等待条件",
+  "settings.builtinTool.wait.desc": "在后台反复运行命令，直到条件满足",
+  "settings.builtinTool.wait.detail":
+    "按间隔反复运行一条 shell 命令，等待期间不消耗模型轮次；命令以 0 退出（并匹配可选的正则）、超时或持续失败时通知模型一次。适合等待 CI、部署或服务启动。命令在本机执行。",
+  "settings.builtinTool.remember.name": "记住",
+  "settings.builtinTool.remember.desc": "把一条简短事实写入记忆笔记",
+  "settings.builtinTool.remember.detail":
+    "向每轮都会注入上下文的 Markdown 记忆笔记追加一条：installation 范围记录关于你的长期事实，session 范围记录本会话的备注。仅在记忆开启时注册。",
+  "settings.builtinTool.forget.name": "忘记",
+  "settings.builtinTool.forget.desc": "从记忆笔记中删除一条",
+  "settings.builtinTool.forget.detail":
+    "按编号删除 installation 或 session 记忆笔记中的一条。仅在记忆开启时注册。",
+  "settings.builtinTool.new_context.name": "新上下文",
+  "settings.builtinTool.new_context.desc": "在新的上下文窗口中继续",
+  "settings.builtinTool.new_context.detail":
+    "不压缩历史，直接开启新的上下文窗口；上下文将满时，长任务可从工作区状态继续。",
   "settings.builtinTool.read_terminal.name": "读取终端",
   "settings.builtinTool.read_terminal.desc": "读取右侧终端面板的屏幕内容",
   "settings.builtinTool.read_terminal.detail":

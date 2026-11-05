@@ -19,6 +19,7 @@ import {
   resolveHostedSearchTextBoundary,
   splitTextAroundHostedSearch,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import { summarizeKBrainToolArgs } from "@liveagent/ui/lib/chat/kbrainToolSummaries";
 import {
   EXIT_PLAN_MODE_APPROVED_ARG,
   EXIT_PLAN_MODE_PENDING_ARG,
@@ -505,7 +506,7 @@ export function summarizeToolCall(
                                               ? summarizeLspToolCall(args)
                                               : name === "web_fetch" || name === "WebFetch"
                                                 ? summarizeWebFetchToolCall(args)
-                                                : [];
+                                                : (summarizeKBrainToolArgs(name, args) ?? []);
 
   const summary = parts.filter(Boolean).join(" ");
   if (!summary) return includeName ? name : "";

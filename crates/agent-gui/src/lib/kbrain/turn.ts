@@ -20,6 +20,7 @@ import type { Locale } from "../../i18n/config";
 import type { ConversationViewState } from "../chat/conversation/conversationState";
 import { appendMessagesToConversation } from "../chat/conversation/conversationState";
 import { createKBrainClient } from "./client";
+import { hookWarningNotice, parseHookWarning } from "./hookWarning";
 import { getKBrainSessionId, setKBrainSessionId } from "./mapping";
 import { questionResultDetails } from "./questions";
 import { aiReviewTitle, localizeAIReviewReason } from "./reviewNotice";
@@ -787,6 +788,21 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           toast.warning(aiReviewTitle(review.tool, params.locale), {
             description: localizeAIReviewReason(review.report.reason, params.locale),
             id: `ai-review-${params.conversationId}`,
+            duration: 15000,
+          });
+        }
+        break;
+      }
+      case "hook.warning": {
+        // A failing hook does not stop the run, so without this the user never learns
+        // their hook is broken. One toast per hook and turn: a hook bound to a per-tool
+        // event updates the same toast instead of stacking one per call.
+        const warning = parseHookWarning(eventPayload<unknown>(event));
+        if (warning) {
+          const notice = hookWarningNotice(warning, params.locale);
+          toast.warning(notice.title, {
+            description: notice.description,
+            id: `hook-warning-${params.conversationId}-${accepted.run_id}-${warning.hookName}`,
             duration: 15000,
           });
         }
