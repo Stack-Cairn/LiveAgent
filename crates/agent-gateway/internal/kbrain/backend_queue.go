@@ -404,19 +404,14 @@ func (r *Relay) watchBackendQueuedRun(binding backendQueueRun, cb Callbacks) {
 							r.emitBackendQueue(cb, backendQueueResponse{Accepted: true, Snapshot: snapshot})
 						}
 						if event.RunID == run.RunID {
-							if event.Type == "permission.requested" {
-								if err := r.client.rejectUnsupportedPermission(ctx, event); err != nil {
-									return err
+							gatewayRunID := binding.GatewayRunID
+							control, mapErr := r.relayRunEvent(ctx, event, binding.ConversationID, func(chat *gatewayv2.ChatEvent) {
+								if chat != nil && cb.OnEvent != nil {
+									cb.OnEvent(gatewayRunID, chat)
 								}
-							}
-							mapped := event
-							mapped.ConversationID = binding.ConversationID
-							chat, control, mapErr := ToChatEvent(mapped)
+							})
 							if mapErr != nil {
 								return mapErr
-							}
-							if chat != nil && cb.OnEvent != nil {
-								cb.OnEvent(binding.GatewayRunID, chat)
 							}
 							if control != nil {
 								control.RequestId = binding.GatewayRunID
