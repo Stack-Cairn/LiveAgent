@@ -1954,6 +1954,9 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "TaskList"
             | "TunnelManager"
             | "Write"
+            | "lsp"
+            | "web_fetch"
+            | "WebFetch"
     )
 }
 
@@ -3319,6 +3322,14 @@ mod tests {
             );
         }
         assert!(count > 0, "catalog parser found no tools");
+        // K-brain tools that are not in the settings catalog still carry
+        // workspace content, so shared history must redact them too.
+        for tool_name in ["lsp", "web_fetch", "WebFetch"] {
+            assert!(
+                is_builtin_share_tool_name(tool_name),
+                "{tool_name} is missing from share redaction"
+            );
+        }
     }
 
     #[tokio::test]

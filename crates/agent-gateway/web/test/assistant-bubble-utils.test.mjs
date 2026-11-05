@@ -21,6 +21,9 @@ test("shared history recognizes every catalog tool as builtin", () => {
     assert.equal(isBuiltinShareToolName(entry.toolName), true, entry.toolName);
   }
   assert.equal(isBuiltinShareToolName("mcp_docs_search"), true);
+  for (const name of ["lsp", "web_fetch", "WebFetch"]) {
+    assert.equal(isBuiltinShareToolName(name), true, name);
+  }
   assert.equal(isBuiltinShareToolName("CustomTool"), false);
 });
 

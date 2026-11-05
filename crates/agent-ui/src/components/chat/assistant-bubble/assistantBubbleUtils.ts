@@ -972,5 +972,8 @@ export function isBuiltinShareToolName(name: string) {
     "SshManager",
     "TunnelManager",
     "Write",
+    "lsp",
+    "web_fetch",
+    "WebFetch",
   ].includes(trimmed);
 }
