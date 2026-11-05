@@ -166,6 +166,28 @@ function asSubagentBatchDetails(details: unknown): SubagentBatchDetails | null {
 // in resolveToolCallForResult would mis-bind it to a pending card. Synthesize
 // the parent call instead; attachToolResultToRound expands an ok batch into
 // cards and keeps a rejected batch visible as an error block.
+// Mirrors the desktop live round: a running tool card shows the latest output
+// snapshot until its result arrives (attaching the result drops liveOutput).
+function withToolLiveOutput(
+  round: GatewayTranscriptRound,
+  toolCallId: string | undefined,
+  liveOutput: string | undefined,
+): GatewayTranscriptRound {
+  if (!toolCallId || !liveOutput) {
+    return round;
+  }
+  const index = round.blocks.findIndex(
+    (block) => block.kind === "tool" && block.item.toolCall.id === toolCallId,
+  );
+  const block = index >= 0 ? round.blocks[index] : undefined;
+  if (block?.kind !== "tool" || block.item.toolResult || block.item.liveOutput === liveOutput) {
+    return round;
+  }
+  const blocks = round.blocks.slice();
+  blocks[index] = { kind: "tool", item: { ...block.item, liveOutput } };
+  return { ...round, blocks };
+}
+
 function buildParentAgentToolCallForBatchResult(toolResult: ToolResultMessage): ToolCall {
   return {
     type: "toolCall",
@@ -369,10 +391,11 @@ function buildRawRowsFromEntries(
             : entry.toolCall.id
               ? [entry.toolCall.id]
               : [];
-        const withToolCall = upsertToolCallToRound(
-          collapseThinking(round),
-          entry.toolCall,
-        ) as GatewayTranscriptRound;
+        const withToolCall = withToolLiveOutput(
+          upsertToolCallToRound(collapseThinking(round), entry.toolCall) as GatewayTranscriptRound,
+          entry.toolCall.id,
+          entry.liveOutput,
+        );
         const visibleToolCallIds = new Set(
           getRoundToolTrace(withToolCall)
             .map((item) => item.toolCall.id)

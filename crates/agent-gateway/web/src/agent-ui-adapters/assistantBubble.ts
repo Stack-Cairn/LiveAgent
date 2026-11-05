@@ -1,3 +1,4 @@
+import type { SubagentCardBinding } from "@liveagent/ui/contracts/subagentPane";
 import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   readAskUserQuestionDeadlineAt,
@@ -73,4 +74,10 @@ export function usePlanDecisionState(toolCallId: string, toolArguments: Record<s
 
 export function submitPlanDecision(toolCallId: string, answer: PlanDecisionAnswer) {
   return submitPlanDecisionViaGateway(toolCallId, answer);
+}
+
+// The gateway does not relay K-brain subagent events yet, so subagent calls keep
+// the plain tool row.
+export function useSubagentCard(_toolCallId: string): SubagentCardBinding | null {
+  return null;
 }

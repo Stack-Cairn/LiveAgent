@@ -45,6 +45,7 @@ export function createKBrainTrajectoryHost(
   loadWindow: (
     conversationId: string,
     beforeSegmentIndex?: number,
+    maxSegments?: number,
   ) => Promise<KBrainTrajectoryWindow>;
   loadStats: (conversationId: string) => Promise<KBrainTrajectoryStats>;
 } {
@@ -79,8 +80,13 @@ export function createKBrainTrajectoryHost(
   }
 
   return {
-    async loadWindow(conversationId, beforeSegmentIndex) {
-      const query = new URLSearchParams({ max_segments: "8" });
+    async loadWindow(conversationId: string, beforeSegmentIndex?: number, maxSegments?: number) {
+      // Remote callers may ask for a different page size; 0/absent keeps the desktop default.
+      const pageSize =
+        maxSegments !== undefined && Number.isSafeInteger(maxSegments) && maxSegments > 0
+          ? Math.min(maxSegments, 64)
+          : 8;
+      const query = new URLSearchParams({ max_segments: String(pageSize) });
       if (beforeSegmentIndex !== undefined) {
         if (!Number.isSafeInteger(beforeSegmentIndex) || beforeSegmentIndex < 0) {
           throw new Error("Invalid trajectory pagination cursor");

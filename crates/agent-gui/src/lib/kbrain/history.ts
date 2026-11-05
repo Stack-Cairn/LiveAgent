@@ -288,6 +288,8 @@ function taskMessages(session: KBrainSession, offset: number): Message[] {
   for (const task of session.tasks ?? []) {
     if (seen.has(task.id)) continue;
     seen.add(task.id);
+    // Linked tasks show on the card of the real `subagent` call that started them.
+    if (task.parent_tool_call_id) continue;
     const id = `kbrain-subagent:${task.id}`;
     const assistant = toMessage(
       {
@@ -396,7 +398,8 @@ function revisionFor(session: KBrainSession): string {
   return session.revision;
 }
 
-function convertMessages(
+/** K-brain messages as chat messages; the subagent pane renders transcripts with it. */
+export function convertMessages(
   messages: KBrainMessage[],
   offset = 0,
   cwd?: string,
@@ -833,4 +836,34 @@ export function resolveKBrainLocalId(backendId: string): string {
     getKBrainConversationId(backendId, baseUrl()) ??
     ensureKBrainConversationId(backendId, baseUrl())
   );
+}
+
+export type KBrainSharedHistory = {
+  conversationId: string;
+  title: string;
+  messages: Message[];
+  redactToolContent: boolean;
+};
+
+/**
+ * Resolve a public share token against K-brain. The backend already applies the
+ * share's redaction (tool results and tool calls are omitted), so the redaction
+ * flag is derived from the projection instead of trusting a separate field.
+ */
+export async function resolveKBrainHistoryShare(token: string): Promise<KBrainSharedHistory> {
+  const value = token.trim();
+  if (!value) throw new Error("share token is required");
+  const shared = await client().resolveShareToken(value);
+  const source = Array.isArray(shared.messages) ? shared.messages : [];
+  const redactToolContent = !source.some(
+    (message) => message.role === "tool" || (message.tool_calls?.length ?? 0) > 0,
+  );
+  return {
+    // Never mint a local alias for a token visitor; fall back to the backend id.
+    conversationId:
+      getKBrainConversationId(shared.conversation_id, baseUrl()) ?? shared.conversation_id,
+    title: shared.title?.trim() || "K-brain session",
+    messages: convertMessages(source),
+    redactToolContent,
+  };
 }

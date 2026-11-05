@@ -134,6 +134,14 @@ export type ChatEvent = (
       conversation_id?: string;
     }
   | {
+      // Full latest output snapshot of a running tool call (replaces, never appends).
+      type: "tool_output";
+      id?: string;
+      output?: string;
+      round?: number;
+      conversation_id?: string;
+    }
+  | {
       type: "hosted_search";
       id?: string;
       provider?: string;

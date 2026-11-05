@@ -1,6 +1,13 @@
+import type { SubagentCardBinding } from "@liveagent/ui/contracts/subagentPane";
 import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
+import {
+  getKBrainSubagentForToolCall,
+  openKBrainSubagent,
+  subscribeKBrainSubagents,
+} from "../lib/subagents/kbrainSubagentStore";
+import { kbrainSubagentView } from "../lib/subagents/kbrainSubagentView";
 import {
   answerAskUserQuestion,
   getAskUserQuestionDeadlineAt,
@@ -84,4 +91,26 @@ export function usePlanDecisionState(toolCallId: string, _toolArguments: Record<
 
 export function submitPlanDecision(toolCallId: string, answer: PlanDecisionAnswer) {
   return Promise.resolve(answerPlanDecision(toolCallId, answer));
+}
+
+// The K-brain subagent the parent's `subagent` call started. Null until the backend
+// links the two (older K-brain never does), and the plain tool row renders instead.
+export function useSubagentCard(toolCallId: string): SubagentCardBinding | null {
+  // Each snapshot must be stable between store changes, so read the entry and its
+  // conversation separately rather than as a fresh pair.
+  const entry = useSyncExternalStore(
+    subscribeKBrainSubagents,
+    () => getKBrainSubagentForToolCall(toolCallId)?.entry,
+  );
+  const conversationId = useSyncExternalStore(
+    subscribeKBrainSubagents,
+    () => getKBrainSubagentForToolCall(toolCallId)?.conversationId,
+  );
+  return useMemo(() => {
+    if (!entry || !conversationId) return null;
+    return {
+      view: kbrainSubagentView(entry),
+      open: () => openKBrainSubagent(conversationId, entry.subagent.id),
+    };
+  }, [conversationId, entry]);
 }

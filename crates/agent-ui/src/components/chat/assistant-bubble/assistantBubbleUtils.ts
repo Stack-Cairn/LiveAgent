@@ -119,6 +119,7 @@ export function getToolActivityCategory(name: string): ToolActivityCategory {
       return "code";
     case "Agent":
     case "SendMessage":
+    case KBRAIN_SUBAGENT_TOOL_NAME:
       return "agent";
     // K-brain 后端自带、旧前端 runtime 没有的工具（#1194 之后补齐）。
     case "PlanningQuery":
@@ -240,6 +241,8 @@ export function getToolMeta(name: string): {
       return { Icon: Bot, accent: "var(--tool-list-accent)", category: "system" };
     case "SendMessage":
       return { Icon: Bot, accent: "var(--tool-list-accent)", category: "system" };
+    case KBRAIN_SUBAGENT_TOOL_NAME:
+      return { Icon: Bot, accent: "var(--tool-list-accent)", category: "agent" };
     case "Write":
       return { Icon: FileText, accent: "var(--tool-file-accent)", category: "file" };
     case "Edit":
@@ -725,8 +728,11 @@ export function getToolTraceKey(item: ToolTraceItem, index: number) {
   return `${item.toolCall.name}-${index}-${getStableValueSignature(item.toolCall.arguments)}`;
 }
 
+/** K-brain's tool for delegating to a subagent; each call is one subagent card. */
+export const KBRAIN_SUBAGENT_TOOL_NAME = "subagent";
+
 export function isAgentToolName(name: string) {
-  return name === "Agent";
+  return name === "Agent" || name === KBRAIN_SUBAGENT_TOOL_NAME;
 }
 
 /**

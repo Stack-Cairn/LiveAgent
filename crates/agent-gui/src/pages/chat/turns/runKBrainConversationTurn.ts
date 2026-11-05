@@ -47,6 +47,11 @@ import {
   resolveUploadStagingRoot,
   withUploadStagingRoot,
 } from "../../../lib/kbrain/uploadStagingRoot";
+import {
+  ingestKBrainSubagentEvent,
+  noteKBrainSubagentTurnEnded,
+  noteKBrainSubagentTurnStarted,
+} from "../../../lib/subagents/kbrainSubagentStore";
 import { requestBackendQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { recordPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { projectBackendPlan } from "../../../lib/tools/planModeTools";
@@ -239,7 +244,8 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       });
     } else projectToolResult(call, result);
   };
-  // 运行中命令的输出快照只更新实时轮次里的工具卡，不进历史，也不转发给 WebUI。
+  // 运行中命令的输出快照只更新实时轮次里的工具卡，不进历史；WebUI 收到同一份
+  // 完整快照（替换而非追加），工具结果到达后忽略。
   const onToolOutput = (toolCallId: string, output: string) => {
     if (results.has(toolCallId)) return;
     const callRound = callRounds.get(toolCallId);
@@ -251,6 +257,13 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         ),
       transcriptStore,
     );
+    gatewayBridgeEvents.queueEvent({
+      type: "tool_output",
+      id: toolCallId,
+      output,
+      round: callRound,
+      conversation_id: params.conversationId,
+    });
   };
   hookLifecycle.startAgent();
   const command = "composerCommand" in params ? params.composerCommand : undefined;
@@ -271,6 +284,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   let goalInvolved = command?.kind === "goal" || answersGoal;
   const readGoalState = () => latestGoalState;
   let attachClientRequestId: string | undefined;
+  noteKBrainSubagentTurnStarted(params.conversationId);
   try {
     const uploadsRoot = await resolveUploadStagingRoot();
     for (;;) {
@@ -321,6 +335,17 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         },
         onHostedSearch: (search) => {
           update((target) => upsertHostedSearchToRound(target, search));
+          gatewayBridgeEvents.queueEvent({
+            type: "hosted_search",
+            id: search.id,
+            ...(search.provider ? { provider: search.provider } : {}),
+            status: search.status,
+            queries: search.queries,
+            sources: search.sources,
+            ...(search.updatedAt === undefined ? {} : { updatedAt: search.updatedAt }),
+            round,
+            conversation_id: params.conversationId,
+          });
         },
         onToolCall,
         onToolResult,
@@ -409,7 +434,11 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           return scope ? { decision: "allow_always", scope } : "allow_always";
         },
         onPermissionAutoResolved,
+        onSubagentEvent: (event) =>
+          ingestKBrainSubagentEvent(params.conversationId, event.conversation_id, event),
         onSubagent: (subagent) => {
+          // Backends that link a subagent to its tool call show it on that call's card.
+          if (subagent.parent_tool_call_id) return;
           const id = `kbrain-subagent:${subagent.id}`;
           const call: ToolCall = {
             type: "toolCall",
@@ -539,6 +568,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         publish: publishGoalState,
       });
     }
+    noteKBrainSubagentTurnEnded(params.conversationId);
     approvalController.abort();
     cancellation.userStop.signal.removeEventListener("abort", cancelApprovals);
     status(null);

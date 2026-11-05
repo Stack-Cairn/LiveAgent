@@ -382,3 +382,36 @@ test("history restoration normalizes null hosted search queries and sources from
     assert.equal(searches[1].sources[0].url, "https://weather.example.com/haidian");
   });
 });
+
+test("tasks linked to their subagent call stay on that call instead of a synthetic card", async () => {
+  installStorage();
+  const session = makeSession({
+    messages: [
+      { id: "u1", role: "user", content: [{ type: "text", text: "survey it" }], created_at: "2026-11-05T00:00:01Z" },
+      { id: "a1", role: "assistant", content: [], tool_calls: [{ id: "call-1", name: "subagent", arguments: { description: "Review" } }], created_at: "2026-11-05T00:00:02Z" },
+      { id: "t1", role: "tool", tool_call_id: "call-1", name: "subagent", content: [{ type: "text", text: "Reviewed" }], created_at: "2026-11-05T00:00:09Z" },
+      { id: "a2", role: "assistant", content: [{ type: "text", text: "done" }], created_at: "2026-11-05T00:00:10Z" },
+    ],
+    tasks: [
+      { id: "child-linked", parent_id: "run-1", parent_tool_call_id: "call-1", description: "Review", status: "done", model: { provider: "fixture", model: "fixture-model" }, report: "Reviewed" },
+      { id: "child-legacy", parent_id: "run-1", description: "Inspect", status: "done", model: { provider: "fixture", model: "fixture-model" }, report: "Inspected" },
+    ],
+  });
+  await withHttpFixture(async (_request, response) => sendJson(response, {
+    session, revision: session.revision, oldest_offset: 0, has_more_before: false,
+    total_message_count: session.messages.length, active_messages: session.messages,
+  }), async () => {
+    mapping.setKBrainSessionId("linked-tasks", session.id);
+    const restored = await history.getKBrainHistoryWindow("linked-tasks");
+    const messages = restored.activeSegment.messages;
+    const callIds = messages.flatMap((message) =>
+      message.role === "assistant"
+        ? message.content.filter((block) => block.type === "toolCall").map((block) => block.id)
+        : [],
+    );
+    assert.deepEqual(callIds, ["call-1", "kbrain-subagent:child-legacy"]);
+    // The real call keeps its place, before the reply that followed it.
+    assert.equal(messages[1].content.find((block) => block.type === "toolCall").id, "call-1");
+    assert.equal(messages[2].toolCallId, "call-1");
+  });
+});
