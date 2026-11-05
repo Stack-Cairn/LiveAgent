@@ -30,7 +30,7 @@ jobs:
           # buf breaking uses the actual PR base, including v2 integration PRs.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: crates/agent-gateway/go.mod
           cache-dependency-path: crates/agent-gateway/go.sum
@@ -69,7 +69,7 @@ jobs:
           git diff --exit-code -- crates/agent-gateway/internal/proto crates/agent-gateway/web/src/lib/proto/gen
 
       - name: Lint gateway
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           working-directory: crates/agent-gateway
@@ -220,7 +220,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       desktop: ${{ steps.filter.outputs.desktop }}
     steps:
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -280,7 +280,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: crates/agent-gateway/go.mod
           cache-dependency-path: crates/agent-gateway/go.sum
@@ -367,7 +367,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: crates/agent-gateway/go.mod
           cache-dependency-path: crates/agent-gateway/go.sum
