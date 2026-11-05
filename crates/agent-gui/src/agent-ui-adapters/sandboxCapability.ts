@@ -1,3 +1,4 @@
+import { runSandboxLacksPathProtection } from "@liveagent/ui/lib/kbrain/health";
 import { useEffect, useState } from "react";
 import { isKBrainBrowserHost } from "../lib/host";
 import { getKBrainHealth } from "./kbrainSettings";
@@ -10,6 +11,11 @@ export type SandboxCapability = {
   network_control: boolean;
   /** False when the sandbox fences writes but cannot hide credential directories. */
   read_masking?: boolean;
+  /**
+   * False when protected workspace paths (.liveagent, .git/hooks, ...) stay
+   * writable inside the sandbox; LiveAgent then reports the sandbox unsupported.
+   */
+  path_protection?: boolean;
   reason?: string;
 };
 
@@ -19,7 +25,9 @@ const BACKEND_TOO_OLD = "update K-brain to a version with run sandboxing";
  * Reads K-brain's capabilities.run_sandbox from /v1/health. Commands run in the
  * backend, so its sandbox, not the desktop's, is the one that applies. A backend
  * without the capability reports unsupported, so the sandbox modes are disabled
- * instead of silently running commands unconfined.
+ * instead of silently running commands unconfined. So does a sandbox that leaves
+ * the protected workspace paths writable (path_protection false, e.g. Landlock):
+ * those files are used outside the sandbox, which would let a command escape.
  */
 export function sandboxCapabilityFromHealth(health: {
   capabilities?: Record<string, unknown>;
@@ -36,13 +44,21 @@ export function sandboxCapabilityFromHealth(health: {
   }
   const value = raw as Record<string, unknown>;
   const text = (key: string) => (typeof value[key] === "string" ? (value[key] as string) : "");
-  const supported = value.supported === true;
+  // Only a sandbox the backend can run reports path protection; an unsupported
+  // one keeps the backend's own reason.
+  const lacksPathProtection = runSandboxLacksPathProtection(value);
+  const supported = value.supported === true && !lacksPathProtection;
   return {
     supported,
     mechanism: text("mechanism"),
     platform: text("platform"),
     network_control: supported && value.network_control === true,
     ...(typeof value.read_masking === "boolean" ? { read_masking: value.read_masking } : {}),
+    ...(lacksPathProtection
+      ? { path_protection: false }
+      : supported && typeof value.path_protection === "boolean"
+        ? { path_protection: value.path_protection }
+        : {}),
     ...(text("reason") ? { reason: text("reason") } : {}),
   };
 }

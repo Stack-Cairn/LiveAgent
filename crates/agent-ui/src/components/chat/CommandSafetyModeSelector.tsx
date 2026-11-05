@@ -129,18 +129,27 @@ export function CommandSafetyModeSelector(props: {
   const capability = useSandboxCapability();
   // 写围栏(sandbox):平台不支持时禁用。桌面端探测返回前(null)乐观启用,由执行层
   // fail-closed 兜底;WebUI 执行端平台未知,同样交由 fail-closed。
-  const sandboxUnavailable = capability !== null && !capability.supported;
+  // 受保护路径(.liveagent、.git/hooks 等)在沙箱内仍可写(path_protection=false,
+  // 如 Linux 的 Landlock 回退)时,这些文件随后会在沙箱外被使用,等同逃逸,按不可用处理。
+  const sandboxLacksPathProtection = capability?.path_protection === false;
+  const sandboxUnavailable =
+    capability !== null && (!capability.supported || sandboxLacksPathProtection);
   // 断网(sandboxOffline):额外要求平台可断网。探测判定 network_control=false 时
   // (如 Windows 派生不出 AppContainer SID)仅此项禁用,sandbox 仍可用。
   const offlineUnavailable =
     sandboxUnavailable || (capability !== null && !capability.network_control);
   // 禁用时的说明文案:整体不可用优先,否则为“仅断网不可用”。
   // The backend's reason (for example a missing bubblewrap) follows the fixed text.
+  // Without path protection the fixed explanation replaces the backend's reason.
   const disabledHint =
     (sandboxUnavailable
       ? t("chat.safety.sandboxUnavailable")
       : t("chat.safety.sandboxOfflineUnavailable")) +
-    (capability?.reason ? `: ${capability.reason}` : "");
+    (sandboxLacksPathProtection
+      ? `: ${t("chat.safety.sandboxNoPathProtection")}`
+      : capability?.reason
+        ? `: ${capability.reason}`
+        : "");
   // 联网写围栏后端是否缺失读掩蔽(Windows 受限令牌);缺失时 sandbox 项换用不承诺
   // “敏感目录不可读”的文案。探测返回前(null)以及 WebUI(永远拿不到桌面 mechanism)
   // 保守按缺失处理,避免先给出过强承诺。

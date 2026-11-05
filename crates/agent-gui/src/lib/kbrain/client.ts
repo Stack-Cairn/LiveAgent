@@ -2,6 +2,7 @@ import {
   hasFrozenCapability,
   type KBrainHealth,
   readKBrainHealthResponse,
+  runSandboxLacksPathProtection,
   supportsPermissionMode,
   supportsRunSandbox,
 } from "@liveagent/ui/lib/kbrain/health";
@@ -679,13 +680,18 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
       }
     }
     const sandbox = input.options?.sandbox;
-    if (sandbox && !supportsRunSandbox(await getHealth(signal), sandbox)) {
-      // Never drop the field and run the commands unconfined.
-      throw new Error(
-        sandbox.network
-          ? "K-brain cannot sandbox commands on this machine; choose another execution mode or update the backend."
-          : "K-brain cannot run an offline sandbox on this machine; choose another execution mode or update the backend.",
-      );
+    if (sandbox) {
+      const health = await getHealth(signal);
+      if (!supportsRunSandbox(health, sandbox)) {
+        // Never drop the field and run the commands unconfined.
+        throw new Error(
+          runSandboxLacksPathProtection(health.capabilities.run_sandbox)
+            ? "K-brain cannot sandbox commands on this machine: its sandbox cannot keep protected paths (.liveagent, .git/hooks) read-only; install bubblewrap or allow unprivileged user namespaces, or choose another execution mode."
+            : sandbox.network
+              ? "K-brain cannot sandbox commands on this machine; choose another execution mode or update the backend."
+              : "K-brain cannot run an offline sandbox on this machine; choose another execution mode or update the backend.",
+        );
+      }
     }
     const body = { ...input, options: await scopedRunOptions(input.options, signal) };
     const path = `/v1/sessions/${encodeURIComponent(input.conversation_id)}/runs`;

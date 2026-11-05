@@ -77,8 +77,11 @@ test("LiveAgent modes authorize actual K-brain tools and return approval events"
   const loader = createTsModuleLoader();
   const { createKBrainClient } = loader.loadModule("src/lib/kbrain/client");
   const { resolveKBrainPermissionMode, resolveKBrainRunSandbox } = loader.loadModule("@liveagent/ui/lib/chat/permissionModes");
-  // Sandbox cases need a backend that can enforce one (capabilities.run_sandbox).
-  const sandboxed = health.capabilities?.run_sandbox?.supported === true;
+  // Sandbox cases need a backend that can enforce one (capabilities.run_sandbox),
+  // including read-only protected paths: LiveAgent refuses a sandbox without them.
+  const runSandbox = health.capabilities?.run_sandbox;
+  const unprotected = runSandbox?.supported === true && runSandbox.path_protection === false;
+  const sandboxed = runSandbox?.supported === true && !unprotected;
   await mkdir(path.join(workdir, ".liveagent"));
   const client = createKBrainClient({ baseUrl, token: "modes-token" });
   const cases = [
@@ -96,6 +99,13 @@ test("LiveAgent modes authorize actual K-brain tools and return approval events"
     { name: "sandbox-protected", mode: "sandbox", bash: true, target: ".liveagent/sandbox-protected.txt", permission: false, changed: false },
     { name: "outside-sandbox-protected", mode: "always", bash: true, target: ".liveagent/unsandboxed.txt", permission: false, changed: true },
   ];
+  if (unprotected) {
+    // A sandbox that leaves .liveagent writable (Landlock) is refused before any run starts.
+    await t.test("sandbox-without-path-protection", async () => {
+      const session = await client.createSession({ cwd: workdir, model: { provider: "fixture", model: "fixture-model" } });
+      await assert.rejects(client.startRun({ conversation_id: session.id, client_request_id: "modes-unprotected", prompt: "Write changed to the fixture marker in this workspace", options: { mode: "agent", approval_policy: "ask", permission_mode: resolveKBrainPermissionMode("sandbox"), workspace_roots: [{ path: workdir, access: "write" }], sandbox: resolveKBrainRunSandbox("sandbox") } }), /protected paths/);
+    });
+  }
   for (const tc of cases) {
     const sandbox = resolveKBrainRunSandbox(tc.mode);
     await t.test(tc.name, { skip: sandbox && !sandboxed && "backend cannot sandbox runs here" }, async () => {

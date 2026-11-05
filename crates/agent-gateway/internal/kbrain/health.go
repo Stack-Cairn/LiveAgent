@@ -183,8 +183,8 @@ func (h Health) CapabilityAtLeast(name string, minimum int64) bool {
 }
 
 // SupportsRunSandbox reports whether capability run_sandbox can confine a run
-// as sandbox asks: supported on the backend's machine and, offline, able to
-// block the network.
+// as sandbox asks: supported on the backend's machine, keeping the protected
+// workspace paths read-only and, offline, able to block the network.
 func (h Health) SupportsRunSandbox(sandbox RunSandbox) bool {
 	raw, ok := h.Capabilities["run_sandbox"].(map[string]any)
 	if !ok {
@@ -192,7 +192,29 @@ func (h Health) SupportsRunSandbox(sandbox RunSandbox) bool {
 	}
 	supported, _ := raw["supported"].(bool)
 	network, _ := raw["network_control"].(bool)
-	return supported && (sandbox.Network || network)
+	return supported && !h.RunSandboxLacksPathProtection() && (sandbox.Network || network)
+}
+
+// RunSandboxLacksPathProtection reports whether the backend's supported sandbox
+// leaves the protected workspace paths (.liveagent, .k-brain, .git/hooks,
+// .git/config) writable. Those files are used outside the sandbox, so such a
+// sandbox counts as unavailable. An explicit path_protection wins; older
+// backends omit it and only used mechanisms that protect the paths, so a
+// missing field counts as protected unless the mechanism is Landlock. An
+// unsupported sandbox answers false: it is unavailable for its own reason.
+func (h Health) RunSandboxLacksPathProtection() bool {
+	raw, ok := h.Capabilities["run_sandbox"].(map[string]any)
+	if !ok {
+		return false
+	}
+	if supported, _ := raw["supported"].(bool); !supported {
+		return false
+	}
+	if protected, ok := raw["path_protection"].(bool); ok {
+		return !protected
+	}
+	mechanism, _ := raw["mechanism"].(string)
+	return mechanism == "landlock"
 }
 
 func (h Health) SupportsPermissionMode(mode string) bool {
@@ -312,6 +334,9 @@ func (c *Client) requireRunOptions(ctx context.Context, options *RunOptions) err
 	case health.Capabilities["run_sandbox"] == nil:
 		return errors.New("kbrain does not support run sandboxing; update the backend")
 	case !health.SupportsRunSandbox(*options.Sandbox):
+		if health.RunSandboxLacksPathProtection() {
+			return errors.New("kbrain cannot sandbox commands on this machine: its sandbox cannot keep protected paths (.liveagent, .git/hooks) read-only; install bubblewrap or allow unprivileged user namespaces")
+		}
 		if !options.Sandbox.Network {
 			return errors.New("kbrain cannot run an offline sandbox on this machine")
 		}

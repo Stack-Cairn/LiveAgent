@@ -169,6 +169,34 @@ test("sandbox entries follow the backend's run sandbox capability", async () => 
     } finally {
       await view.close();
     }
+
+    // Protected paths left writable (Landlock): both entries disabled with the fixed
+    // explanation, even if a capability still says supported.
+    for (const supported of [false, true]) {
+      sandboxCapability = {
+        supported,
+        mechanism: "landlock",
+        platform: "linux",
+        network_control: supported,
+        read_masking: false,
+        path_protection: false,
+        reason: "using Landlock (ABI 6) with seccomp",
+      };
+      view = await mount({ value: "ask" });
+      try {
+        await view.open();
+        assert.equal(disabled(view, "chat.safety.sandbox"), true);
+        assert.equal(disabled(view, "chat.safety.sandboxOffline"), true);
+        for (const index of [3, 4]) {
+          assert.match(
+            view.items()[index].textContent,
+            /chat\.safety\.sandboxUnavailable: chat\.safety\.sandboxNoPathProtection$/,
+          );
+        }
+      } finally {
+        await view.close();
+      }
+    }
   } finally {
     sandboxCapability = null;
   }

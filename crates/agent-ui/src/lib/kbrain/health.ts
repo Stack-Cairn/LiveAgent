@@ -164,10 +164,32 @@ export function capabilityAtLeast(
   return isNonNegativeInteger(value) && value >= minimum;
 }
 
+/** Sandbox mechanisms that cannot keep protected workspace paths read-only. */
+const MECHANISMS_WITHOUT_PATH_PROTECTION: ReadonlySet<string> = new Set(["landlock"]);
+
+/**
+ * Whether a supported run_sandbox capability leaves the protected workspace
+ * paths (`.liveagent/`, `.k-brain/`, `.git/hooks`, `.git/config`) writable.
+ * Those files are used outside the sandbox, so LiveAgent treats such a sandbox
+ * as unavailable. An explicit `path_protection` wins; older backends omit it and
+ * only ever used mechanisms that protect the paths, so a missing field counts
+ * as protected unless the mechanism is known not to be. An unsupported sandbox
+ * answers false: it is unavailable for its own reason.
+ */
+export function runSandboxLacksPathProtection(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const value = raw as Record<string, unknown>;
+  if (value.supported !== true) return false;
+  if (typeof value.path_protection === "boolean") return !value.path_protection;
+  return (
+    typeof value.mechanism === "string" && MECHANISMS_WITHOUT_PATH_PROTECTION.has(value.mechanism)
+  );
+}
+
 /**
  * Whether the backend can confine a run as `options.sandbox` asks (capability
- * run_sandbox): supported on this machine and, for an offline run, able to cut
- * the network.
+ * run_sandbox): supported on this machine, keeping the protected workspace
+ * paths read-only and, for an offline run, able to cut the network.
  */
 export function supportsRunSandbox(
   health: Pick<KBrainHealth, "capabilities">,
@@ -176,7 +198,11 @@ export function supportsRunSandbox(
   const raw = health.capabilities.run_sandbox;
   if (!raw || typeof raw !== "object") return false;
   const value = raw as Record<string, unknown>;
-  return value.supported === true && (sandbox.network || value.network_control === true);
+  return (
+    value.supported === true &&
+    !runSandboxLacksPathProtection(value) &&
+    (sandbox.network || value.network_control === true)
+  );
 }
 
 export function supportsPermissionMode(

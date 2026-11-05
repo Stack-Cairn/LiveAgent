@@ -579,6 +579,9 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.safety.sandboxOfflineDesc":
     "Commands run automatically inside the sandbox with writes kept to the workspace and no network access",
   "chat.safety.sandboxUnavailable": "K-brain cannot sandbox commands on this machine",
+  // Follows chat.safety.sandboxUnavailable when run_sandbox.path_protection is false.
+  "chat.safety.sandboxNoPathProtection":
+    "protected paths (.liveagent, .git/hooks) can't be kept read-only with the Landlock fallback; install bubblewrap or allow unprivileged user namespaces",
   "chat.safety.sandboxOfflineUnavailable":
     "K-brain cannot cut the sandbox off from the network on this machine",
   "chat.safety.cycleShortcut": "{keys} to switch",

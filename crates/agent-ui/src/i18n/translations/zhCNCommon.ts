@@ -537,6 +537,9 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.safety.sandboxOffline": "离线沙箱",
   "chat.safety.sandboxOfflineDesc": "命令在沙箱内自动运行，只能写入工作区，且不能访问网络",
   "chat.safety.sandboxUnavailable": "K-brain 无法在本机启用沙箱",
+  // 接在 chat.safety.sandboxUnavailable 之后，用于 run_sandbox.path_protection=false。
+  "chat.safety.sandboxNoPathProtection":
+    "Landlock 回退方案无法让受保护路径（.liveagent、.git/hooks）保持只读；请安装 bubblewrap 或允许非特权用户命名空间",
   "chat.safety.sandboxOfflineUnavailable": "K-brain 无法在本机断开沙箱网络",
   "chat.safety.cycleShortcut": "{keys} 切换",
   "chat.safety.cycleNextTurn": "下一轮生效",
