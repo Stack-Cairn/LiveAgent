@@ -93,6 +93,15 @@ func NewServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store
 	return s
 }
 
+// KBrainUploads returns the attachment store of the direct K-brain target, or
+// nil when agentID is not that target.
+func (s *Server) KBrainUploads(agentID string) *kbrain.UploadStore {
+	if s.kbrainRelay == nil || agentID == "" || agentID != s.kbrainTargetID {
+		return nil
+	}
+	return s.kbrainRelay.Uploads()
+}
+
 func (s *Server) Close() {
 	if s.kbrainRelay != nil {
 		s.kbrainRelay.Close()

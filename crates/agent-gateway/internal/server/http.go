@@ -91,7 +91,16 @@ func NewHTTPServerWithLocalImages(cfg *config.Config, sm *session.Manager, token
 	apiMux.Handle("/api/image/", images)
 	apiMux.Handle("/api/image", images)
 	apiMux.HandleFunc("GET /api/status", handler.Status(sm))
-	apiMux.HandleFunc("POST /api/files/import", handler.ImportReadableFiles(sm, cfg.RequestTimeout))
+	importFiles := handler.ImportReadableFiles(sm, cfg.RequestTimeout)
+	apiMux.HandleFunc("POST /api/files/import", func(w http.ResponseWriter, r *http.Request) {
+		// A direct K-brain target has no desktop to store attachments; the
+		// Gateway keeps them until the message inlines them.
+		if uploads := v2.KBrainUploads(strings.TrimSpace(r.URL.Query().Get("agent_id"))); uploads != nil {
+			uploads.ImportHandler(w, r)
+			return
+		}
+		importFiles(w, r)
+	})
 	apiMux.HandleFunc("POST /api/files/import-directory", handler.ImportDirectory(sm, cfg.RequestTimeout))
 	// Agent 目录与凭证管理，仅管理 token 可访问。
 	apiMux.HandleFunc("GET /api/agents", handler.ListAgents(sm, tokens))

@@ -193,6 +193,14 @@ type PromptRequest struct {
 	ConversationID  string `json:"conversation_id"`
 	ClientRequestID string `json:"client_request_id"`
 	Prompt          string `json:"prompt,omitempty"`
+	// Content follows Prompt in the user message: attachments as canonical blocks.
+	Content []ContentBlock `json:"content,omitempty"`
+	// TurnID names the user message, so checkpoints and rewind find the turn.
+	TurnID string `json:"turn_id,omitempty"`
+	// HookPolicy "backend" runs the session hooks in K-brain; HookScopeID groups
+	// the hook state of one Gateway conversation.
+	HookPolicy  string `json:"hook_policy,omitempty"`
+	HookScopeID string `json:"hook_scope_id,omitempty"`
 	// PromptCommand 表示 Prompt 是 "/name args" 提示词指令，由 K-brain 展开，历史保留原文。
 	PromptCommand bool        `json:"prompt_command,omitempty"`
 	Model         *ModelRef   `json:"model,omitempty"`
