@@ -239,14 +239,13 @@ func vetCheckpoint(req *gatewayv2.CheckpointRequest) error {
 		if req.GetTurnSeq() != 0 || len(req.GetAuthorizedRoots()) != 0 || len(req.GetExpected()) != 0 {
 			return errors.New("checkpoint list payload is invalid")
 		}
+	// K-brain numbers turns from 0, so turn_seq 0 is the first turn, not a
+	// missing value; the desktop and K-brain validate the sequence itself.
 	case "diff":
-		if req.GetTurnSeq() == 0 || len(req.GetExpected()) != 0 {
+		if len(req.GetExpected()) != 0 {
 			return errors.New("checkpoint diff payload is invalid")
 		}
 	case "rewind":
-		if req.GetTurnSeq() == 0 {
-			return errors.New("checkpoint rewind turn_seq is required")
-		}
 	default:
 		return errors.New("checkpoint action is invalid")
 	}
