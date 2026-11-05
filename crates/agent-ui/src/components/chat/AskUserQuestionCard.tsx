@@ -38,15 +38,20 @@ function formatCountdown(remainingMs: number) {
  * 截止时间落在“挂载时刻（不含）～挂载时刻 + 完整应答窗口（含）”内才采信，
  * 否则视为时钟不可比、回退挂载近似，避免把可作答的卡片锁死；真正过期的
  * 提交仍由桌面挂起表权威拒绝。
+ *
+ * 窗口从卡片首次可作答时算起，而不是挂载时：卡片随工具调用挂载，提问可能
+ * 等 AI 审查或审批之后才登记，截止时间也从那时起算。
  */
 function useAnswerCountdown(active: boolean, deadlineAt?: number) {
-  const [mountedAt] = useState(() => Date.now());
+  const [openedAt, setOpenedAt] = useState<number | null>(() => (active ? Date.now() : null));
+  if (active && openedAt === null) setOpenedAt(Date.now());
+  const windowStart = openedAt ?? Date.now();
   const deadline =
     deadlineAt !== undefined &&
-    deadlineAt > mountedAt &&
-    deadlineAt <= mountedAt + ASK_USER_QUESTION_TIMEOUT_MS
+    deadlineAt > windowStart &&
+    deadlineAt <= windowStart + ASK_USER_QUESTION_TIMEOUT_MS
       ? deadlineAt
-      : mountedAt + ASK_USER_QUESTION_TIMEOUT_MS;
+      : windowStart + ASK_USER_QUESTION_TIMEOUT_MS;
   const [remainingMs, setRemainingMs] = useState(() => deadline - Date.now());
 
   useEffect(() => {

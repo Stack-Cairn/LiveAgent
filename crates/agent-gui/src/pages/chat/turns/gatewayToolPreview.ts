@@ -2,7 +2,9 @@ import type { ToolCall } from "@liveagent/app/lib/agentTypes";
 
 import {
   ASK_USER_QUESTION_DEADLINE_ARG,
+  ASK_USER_QUESTION_PENDING_ARG,
   ASK_USER_QUESTION_TOOL_NAME,
+  readAskUserQuestionDeadlineAt,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   EXIT_PLAN_MODE_APPROVED_ARG,
@@ -33,7 +35,10 @@ import {
   type StreamPreviewMeta,
 } from "@liveagent/ui/lib/chat/toolPreview";
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
-import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
+import {
+  ensureAskUserQuestionDeadlineAt,
+  hasPendingAskUserQuestion,
+} from "../../../lib/tools/askUserQuestionTools";
 import { getPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { isPlanApprovalToolCall, isPlanDecisionPending } from "../../../lib/tools/planModeTools";
 import { getPendingToolApproval } from "../../../lib/tools/toolApproval";
@@ -212,12 +217,19 @@ export function buildGatewayToolCallPreviewArguments(
       ? { [TOOL_PERMISSION_AUTO_RESOLVED_ARG]: autoResolved }
       : null;
   // AskUserQuestion：附带权威应答截止时间，WebUI 卡片倒计时与桌面计时同源
-  //（execute 挂起时复用同一预置值；见 askUserQuestionTools）。ask 工具只读、
-  // 永不进入审批门,故此处无需叠加 approvalOverlay。
+  //（execute 挂起时复用同一预置值；见 askUserQuestionTools），以及提问是否已
+  // 登记——之前卡片不可作答。K-brain 的 AI 审查判定需人工确认时，提问也会先
+  // 进审批门，所以同样叠加 approvalOverlay。
+  // K-brain 的提问请求自带截止时间，未登记时也优先用它，不另行预置。
   if (toolCall.name === ASK_USER_QUESTION_TOOL_NAME) {
+    const pending = hasPendingAskUserQuestion(toolCall.id);
     return {
       ...sourceArgs,
-      [ASK_USER_QUESTION_DEADLINE_ARG]: ensureAskUserQuestionDeadlineAt(toolCall.id),
+      ...(approvalOverlay ?? {}),
+      [ASK_USER_QUESTION_DEADLINE_ARG]:
+        (pending ? null : readAskUserQuestionDeadlineAt(sourceArgs)) ??
+        ensureAskUserQuestionDeadlineAt(toolCall.id),
+      [ASK_USER_QUESTION_PENDING_ARG]: pending,
     };
   }
   // ExitPlanMode：附带待决/已批准标记(桌面登记表权威),WebUI 卡片据此渲染

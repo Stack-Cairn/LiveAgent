@@ -1,4 +1,5 @@
 import type { AssistantMessage, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
+import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import {
   resolveKBrainPermissionMode,
@@ -161,6 +162,16 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   // Calls K-brain allowed without asking, keyed by tool call; the marker can arrive
   // before or after the call itself.
   const autoResolvedCallIds = new Set<string>();
+  const pushGatewayToolCall = (call: ToolCall) => {
+    gatewayBridgeEvents.queueEvent({
+      type: "tool_call",
+      id: call.id,
+      name: call.name,
+      arguments: buildGatewayToolCallPreviewArguments(call),
+      conversation_id: params.conversationId,
+      round: callRounds.get(call.id) ?? round,
+    });
+  };
   const onToolCall = (call: ToolCall) => {
     calls.set(call.id, call);
     callRounds.set(call.id, round);
@@ -172,9 +183,12 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       type: "tool_call",
       id: call.id,
       name: call.name,
-      arguments: autoResolvedCallIds.has(call.id)
-        ? buildGatewayToolCallPreviewArguments(call)
-        : withoutApprovalSyntheticArgs(call.arguments),
+      // AskUserQuestion carries the pending marker from the start, so WebUI keeps the
+      // card closed until K-brain registers the question.
+      arguments:
+        autoResolvedCallIds.has(call.id) || call.name === ASK_USER_QUESTION_TOOL_NAME
+          ? buildGatewayToolCallPreviewArguments(call)
+          : withoutApprovalSyntheticArgs(call.arguments),
       conversation_id: params.conversationId,
       round,
     });
@@ -184,15 +198,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
     if (!recordPermissionAutoResolved(toolCallId, marker)) return;
     autoResolvedCallIds.add(toolCallId);
     const call = calls.get(toolCallId);
-    if (!call) return;
-    gatewayBridgeEvents.queueEvent({
-      type: "tool_call",
-      id: call.id,
-      name: call.name,
-      arguments: buildGatewayToolCallPreviewArguments(call),
-      conversation_id: params.conversationId,
-      round: callRounds.get(call.id) ?? round,
-    });
+    if (call) pushGatewayToolCall(call);
   };
   const projectToolResult = (call: ToolCall, result: ToolResultMessage) => {
     const prior = results.get(call.id);
@@ -319,13 +325,23 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           request: KBrainQuestionRequest,
           signal?: AbortSignal,
         ): Promise<KBrainQuestionAnswer[]> => {
-          const answers = await requestBackendQuestion({
+          const pending = requestBackendQuestion({
             toolCallId: request.tool_call_id,
             conversationId: params.conversationId,
             questions: request.questions,
             deadlineAt: request.deadline_at,
             signal,
           });
+          // Re-push the call when the question registers and when it settles: WebUI
+          // reads the pending marker and the backend deadline from its arguments.
+          const call = calls.get(request.tool_call_id);
+          if (call) pushGatewayToolCall(call);
+          let answers: Awaited<typeof pending>;
+          try {
+            answers = await pending;
+          } finally {
+            if (call) pushGatewayToolCall(call);
+          }
           return answers.map((answer) => ({
             question_id: answer.questionId,
             selected_label: answer.selectedLabel,

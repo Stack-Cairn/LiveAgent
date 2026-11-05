@@ -290,6 +290,33 @@ test("a deadline beyond the full answer window is distrusted and clamps the coun
   assert.match(treeText(tree), /(?:3:00|2:59) chat\.askUser\.timeoutHint/);
 });
 
+test("the answer window starts when the card becomes answerable, not at mount", () => {
+  const card = createCardHarness();
+  const effects = [];
+  card.hooks.react.useEffect = (effect) => {
+    effects.push(effect);
+  };
+  const realNow = Date.now;
+  const mountedAt = realNow();
+  try {
+    // K-brain's tool call mounts the card; AI review or an approval runs before
+    // the question registers, so the card starts out not answerable.
+    card.render({ interactive: false, onSubmit: async () => ({ ok: true }) });
+    Date.now = () => mountedAt + 60_000;
+    const deadlineAt = mountedAt + 60_000 + ASK_USER_QUESTION_TIMEOUT_MS;
+    effects.length = 0;
+    card.render({ interactive: true, deadlineAt, onSubmit: async () => ({ ok: true }) });
+    const cleanups = effects.map((effect) => effect()).filter(Boolean);
+    for (const cleanup of cleanups) cleanup();
+    const tree = card.render({ interactive: true, deadlineAt, onSubmit: async () => ({ ok: true }) });
+    // The backend deadline counts from registration, so it is trusted in full
+    // instead of being clamped to mount + window (which would show 2:00).
+    assert.match(treeText(tree), /3:00 chat\.askUser\.timeoutHint/);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 test("a complete answer before the deadline submits the selected non-first option", async () => {
   const submitted = [];
   const card = createCardHarness({ draftSelections: { choice: "Second" } });

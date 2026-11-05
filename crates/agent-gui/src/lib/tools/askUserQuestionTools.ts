@@ -46,7 +46,23 @@ const pendingSnapshotsByConversation = new Map<string, PendingAskUserQuestionSum
 const EMPTY_PENDING_QUESTIONS: PendingAskUserQuestionSummary[] = [];
 Object.freeze(EMPTY_PENDING_QUESTIONS);
 
+// 全局订阅：提问卡片只知道 toolCallId，靠它在登记/落定时重渲染。工具调用事件
+// 先于提问登记到达（K-brain 的 AI 审查或审批门夹在中间），卡片只能在登记后作答。
+const listeners = new Set<() => void>();
+let version = 0;
+
+export function subscribeAskUserQuestions(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getAskUserQuestionVersion() {
+  return version;
+}
+
 function emitChange(conversationId: string) {
+  version += 1;
+  for (const listener of Array.from(listeners)) listener();
   const key = conversationId.trim();
   if (!key) return;
   pendingSnapshotsByConversation.delete(key);
@@ -188,6 +204,8 @@ export function requestBackendQuestion(params: {
       else reject(new Error("Question cancelled"));
     };
     const abort = () => settle({ kind: "cancelled" });
+    // 后端截止时间是权威值；工具调用事件到达时为网关预置的值作废。
+    presetDeadlineByToolCallId.delete(params.toolCallId);
     pendingByToolCallId.set(params.toolCallId, {
       conversationId: params.conversationId,
       questions: params.questions,

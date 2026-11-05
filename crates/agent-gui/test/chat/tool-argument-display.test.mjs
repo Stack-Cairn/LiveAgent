@@ -155,6 +155,9 @@ function createToolCallItemRenderer() {
         readAskUserQuestionDeadline() {
           return undefined;
         },
+        useAskUserQuestionPending() {
+          return false;
+        },
         usePlanDecisionState() {
           return { pending: false, approved: false };
         },
