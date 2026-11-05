@@ -87,7 +87,8 @@ test("a linked subagent call is one card that opens the subagent", async () => {
     const text = card.textContent;
     assert.ok(text.includes("Survey the parser"));
     assert.ok(text.includes("fixture-model"));
-    assert.ok(text.includes("1m 05s"), text);
+    // Elapsed time counts from startedAtMs, so a slow runner adds a few seconds.
+    assert.match(text, /1m \d\ds/);
     assert.ok(text.includes("1.5k"), text);
     assert.ok(text.includes("Read · src/parser.go"), text);
     assert.ok(text.includes("chat.tool.running"));
