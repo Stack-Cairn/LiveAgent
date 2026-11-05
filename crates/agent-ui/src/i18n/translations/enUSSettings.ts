@@ -549,6 +549,26 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.process_stop.desc": "Stop a running Bash session",
   "settings.builtinTool.process_stop.detail":
     "Terminates the Bash session's complete process tree and returns its final buffered output.",
+  "settings.builtinTool.terminal_session.name": "Terminal Session",
+  "settings.builtinTool.terminal_session.desc": "Start an interactive terminal session",
+  "settings.builtinTool.terminal_session.detail":
+    "Starts a backend-owned interactive terminal running the given command; the model follows its output with Read Terminal. Commands obey the permission and sandbox policy.",
+  "settings.builtinTool.wait.name": "Wait for Condition",
+  "settings.builtinTool.wait.desc": "Re-run a command in the background until a condition is met",
+  "settings.builtinTool.wait.detail":
+    "Polls a shell command on an interval without spending model turns and notifies the model once it exits 0 (and matches the optional pattern), times out or keeps failing. Useful for CI runs, deploys or servers coming up. The command runs on this machine.",
+  "settings.builtinTool.remember.name": "Remember",
+  "settings.builtinTool.remember.desc": "Save a short fact to the memory notes",
+  "settings.builtinTool.remember.detail":
+    "Adds one bullet to the markdown memory notes that are injected back into every turn: installation scope for lasting facts about you, session scope for notes about this conversation. Registered while memory is enabled.",
+  "settings.builtinTool.forget.name": "Forget",
+  "settings.builtinTool.forget.desc": "Remove an entry from the memory notes",
+  "settings.builtinTool.forget.detail":
+    "Deletes one numbered bullet from the installation or session memory notes. Registered while memory is enabled.",
+  "settings.builtinTool.new_context.name": "New Context",
+  "settings.builtinTool.new_context.desc": "Continue in a fresh context window",
+  "settings.builtinTool.new_context.detail":
+    "Starts a fresh context window without summarizing earlier history, so a long task can continue from the workspace state when the context is nearly full.",
   "settings.builtinTool.read_terminal.name": "Read Terminal",
   "settings.builtinTool.read_terminal.desc": "Read the on-screen content of the terminal panel",
   "settings.builtinTool.read_terminal.detail":

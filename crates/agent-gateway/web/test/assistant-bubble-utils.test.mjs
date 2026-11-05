@@ -9,6 +9,7 @@ const loader = createWebModuleLoader({ rootDir });
 const { BUILTIN_TOOL_CATALOG } = loader.loadModule("@liveagent/ui/lib/tools/builtinToolCatalog.ts");
 const {
   getToolActivityCategory,
+  getToolDisplayName,
   getToolMeta,
   groupRoundBlocks,
   isBuiltinShareToolName,
@@ -40,6 +41,23 @@ test("K-brain lsp and web_fetch rows get their own activity, icon and accent", (
   // Unknown tools keep the generic fallback instead of borrowing either mapping.
   assert.equal(getToolActivityCategory("LSP"), "other");
   assert.equal(getToolMeta("web_fetch_20250910").Icon, IconSet.Wrench);
+});
+
+test("K-brain mcp__<server>__<tool> rows show server and tool, and cua-driver stays distinct", () => {
+  assert.equal(getToolDisplayName("mcp__docs__search"), "docs · search");
+  assert.equal(getToolDisplayName("mcp_docs_search"), "docs · search");
+  assert.equal(getToolMeta("mcp__cua-driver__click").Icon, IconSet.Hand);
+  assert.equal(getToolMeta("mcp__docs__search").Icon, IconSet.Plug);
+});
+
+test("K-brain-only tools render with their own category and icon in the WebUI", () => {
+  assert.equal(getToolActivityCategory("wait"), "wait");
+  assert.equal(getToolMeta("wait").Icon, IconSet.Timer);
+  assert.equal(getToolActivityCategory("remember"), "memory");
+  assert.equal(getToolMeta("PlanningMutate").Icon, IconSet.CalendarDays);
+  for (const name of ["TerminalSession", "wait", "remember", "browser_exec", "computer_exec"]) {
+    assert.equal(isBuiltinShareToolName(name), true, name);
+  }
 });
 
 test("ordinary tool activity keeps one group identity as later tools append", () => {
