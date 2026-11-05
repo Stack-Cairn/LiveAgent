@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -301,6 +302,32 @@ func sessionSummary(id string, session Session) *gatewayv2.ConversationSummary {
 		IsPinned: session.Pinned, IsShared: session.Shared, SelectedModelJson: string(model)}
 }
 
+// legacyBackgroundNotice matches the fixed headers of the notices K-brain 0.107.17
+// and earlier saved as plain user messages, without origin (#1211). Task ids and
+// statuses come from the backend, so typed text does not match by accident.
+var legacyBackgroundNotice = regexp.MustCompile(`^(?:` +
+	`\[process (?:mp|bash)-\d+ (?:completed|failed|cancelled|timed_out)(?: exit_code=-?\d+)?\][^\n]*\n\$ ` +
+	`|\[subagent [a-z0-9]+(?:-[a-z0-9]+)* (?:done|error|cancelled)\] ` +
+	`|\[subagent [a-z0-9]+(?:-[a-z0-9]+)*\] prepare subagent workspace` +
+	`|\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)* (?:done|timeout)\] ` +
+	`|\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)*\] gave up: ` +
+	`|\[workflow run-[0-9a-f]+(?:-[0-9a-f]+)+ [a-z_]+\] )`)
+
+// isBackgroundNotice reports whether a user message is a notice K-brain delivered
+// on its own rather than text the user wrote.
+func isBackgroundNotice(message Message) bool {
+	if message.Origin != "" {
+		return message.Origin == OriginBackground
+	}
+	var text strings.Builder
+	for _, block := range message.Content {
+		if block.Type == "text" {
+			text.WriteString(block.Text)
+		}
+	}
+	return legacyBackgroundNotice.MatchString(text.String())
+}
+
 // The WebUI history parser consumes LiveAgent messages, not canonical messages.
 // Each entry carries its canonical offset (firstOffset + slice index) so the
 // WebUI can match search hits, which report whole-session offsets.
@@ -330,7 +357,7 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 		if !message.CreatedAt.IsZero() {
 			entry["timestamp"] = message.CreatedAt.UnixMilli()
 		}
-		if message.Role == "user" && message.Origin == OriginBackground {
+		if message.Role == "user" && isBackgroundNotice(message) {
 			entry["liveAgentBackgroundNotice"] = true
 		}
 		if message.Role == "tool" {

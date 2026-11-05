@@ -126,6 +126,27 @@ function toHostedSearch(value: KBrainMessage["hosted_search"]): HostedSearchBloc
 
 export const KBRAIN_ORIGIN_BACKGROUND = "background";
 
+// K-brain 0.107.17 及更早版本把这些通知存成没有 origin 的普通用户消息；跨升级
+// 的长对话里它们还在，会继续显示成用户气泡（#1211）。只认后端生成的固定开头：
+// 任务 ID 与状态都来自后端，用户手打的文字不会恰好长这样。
+const LEGACY_BACKGROUND_NOTICE_PATTERNS = [
+  /^\[process (?:mp|bash)-\d+ (?:completed|failed|cancelled|timed_out)(?: exit_code=-?\d+)?\][^\n]*\n\$ /,
+  /^\[subagent [a-z0-9]+(?:-[a-z0-9]+)* (?:done|error|cancelled)\] /,
+  /^\[subagent [a-z0-9]+(?:-[a-z0-9]+)*\] prepare subagent workspace/,
+  /^\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)* (?:done|timeout)\] /,
+  /^\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)*\] gave up: /,
+  /^\[workflow run-[0-9a-f]+(?:-[0-9a-f]+)+ [a-z_]+\] /,
+];
+
+function isLegacyBackgroundNotice(text: string): boolean {
+  return LEGACY_BACKGROUND_NOTICE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function isBackgroundNotice(message: KBrainMessage, text: string): boolean {
+  if (message.origin === KBRAIN_ORIGIN_BACKGROUND) return true;
+  return !message.origin && isLegacyBackgroundNotice(text);
+}
+
 function toMessage(
   message: KBrainMessage,
   index: number,
@@ -136,9 +157,16 @@ function toMessage(
   const timestamp = epoch(message.created_at, 0);
   if (message.role === "user") {
     const content = userContent(message);
+    const rawText =
+      typeof content === "string"
+        ? content
+        : content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("");
     // 后端自己送来的通知（wait 结果、进程退出、后台任务报告）不是用户写的，
     // 标出来让对话按系统通知显示，而不是用户气泡。
-    if (message.origin === KBRAIN_ORIGIN_BACKGROUND) {
+    if (isBackgroundNotice(message, rawText)) {
       return {
         role: "user",
         content,
@@ -149,13 +177,6 @@ function toMessage(
     }
     // K-brain 只存文本。带附件的消息落库时正文与附件指令拼在一起，历史回读
     // 要把它拆回去，否则界面会把整段指令当正文显示，附件卡片和粘贴 chip 都丢。
-    const rawText =
-      typeof content === "string"
-        ? content
-        : content
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
-            .join("");
     const parsed = parseUserMessageContentWithUploads(rawText, cwd);
     if (parsed.parsed) {
       // content 保持原样（仍是给模型的完整文本），只补展示用元数据：正文给

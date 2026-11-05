@@ -247,6 +247,49 @@ test("background notices from K-brain render as notices, not as user messages", 
   });
 });
 
+// K-brain 0.107.17 and earlier saved these notices without origin, so long chats
+// that span the upgrade still hold them (#1211).
+test("runtime notices saved before K-brain set origin still render as notices", async () => {
+  installStorage();
+  const legacy = [
+    '[process bash-1793875844913105000 completed exit_code=0]\n$ sleep 5; echo READY\n\nLast output:\nREADY\n\nFull log: ManagedProcess(action="read_log", process_id="bash-1793875844913105000") or /tmp/k-brain-managed-process-1.log',
+    "[process mp-1793875844913105001 timed_out] build\n$ sleep 30\n\nFull log: ManagedProcess(action=\"read_log\", process_id=\"mp-1793875844913105001\") or /tmp/k-brain-managed-process-2.log",
+    "[subagent count-files-3 done] count files\n\n42 files",
+    "[subagent sub-4 cancelled] 统计文件\n\ncontext canceled",
+    "[subagent count-files-5] prepare subagent workspace: not a git repository",
+    "[wait wait-cat-build-log-6 done] condition met (ran every 2s):\n$ cat build.log\n\nBUILD-READY",
+    "[wait wait-cat-build-log-7 timeout] deadline elapsed without the condition being met:\n$ cat build.log",
+    "[wait wait-cat-build-log-8] gave up: command failed 5 consecutive times (last: exit status 1)\n\nLast output:\n",
+    "[workflow run-19a5c2d3e4f-1-ab12 complete] review\n\n{}",
+  ];
+  const typed = [
+    "[process bash-1 completed] what does this mean?",
+    "[subagent] why did it stop?",
+    "[wait] how long is left?",
+    "please check [process bash-1 completed exit_code=0]\n$ ls",
+  ];
+  const texts = [...legacy, ...typed];
+  const messages = texts.flatMap((text, index) => [
+    { id: `u-${index}`, role: "user", content: [{ type: "text", text }] },
+    { id: `a-${index}`, role: "assistant", content: [{ type: "text", text: "ok" }], provider: "fixture", model: "fixture-model" },
+  ]);
+  const session = makeSession({ tasks: [], messages, message_count: messages.length });
+  await withHttpFixture(async (_request, response) => {
+    sendJson(response, {
+      session, revision: session.revision, oldest_offset: 0, has_more_before: false,
+      total_message_count: messages.length, active_messages: messages,
+    });
+  }, async () => {
+    mapping.setKBrainSessionId("legacy-notice", session.id);
+    const restored = await history.getKBrainHistoryWindow("legacy-notice");
+    const users = restored.segments.flatMap((segment) => segment.messages).filter((message) => message.role === "user");
+    assert.deepEqual(
+      users.map((message) => [message.content[0]?.text ?? message.content, message.liveAgentBackgroundNotice === true]),
+      texts.map((text, index) => [text, index < legacy.length]),
+    );
+  });
+});
+
 test("task projections are counted once on newest windows while full active context stays intact", async () => {
   installStorage();
   const session = makeSession();
