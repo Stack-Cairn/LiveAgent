@@ -247,3 +247,64 @@ test("the length cap never leaves half an emoji either", () => {
     assert.equal(lone.test(preview.after), false, `lead=${JSON.stringify(lead)}`);
   }
 });
+
+// K-brain sends the change itself (permission.requested.preview): diff rows computed
+// against the file on disk, a new-file flag, and truncated when cut or left out.
+test("K-brain's preview of the change is shown as its own diff rows", async () => {
+  const loader = createTsModuleLoader();
+  const { approvalPreviewFromKBrain, pendingToolApprovalFromToolCall } = loader.loadModule("@liveagent/ui/lib/chat/toolApprovalArgs.ts");
+  const preview = approvalPreviewFromKBrain("edit", { path: "/w/a.go", diff: "3 - a := 1\n3 + a := 2", truncated: false });
+  assert.deepEqual(preview, { path: "/w/a.go", before: "", after: "", truncated: false, diff: "3 - a := 1\n3 + a := 2" });
+  assert.deepEqual(approvalPreviewFromKBrain("Write", { path: "big.bin", new_file: true, truncated: true }), {
+    path: "big.bin", before: "", after: "", truncated: true, diff: "", newFile: true,
+  });
+  assert.equal(approvalPreviewFromKBrain("Bash", { path: "x", diff: "1 + y" }), undefined);
+  assert.equal(approvalPreviewFromKBrain("Edit", { path: "x", diff: "" }), undefined, "nothing to show falls back to the arguments");
+  const long = approvalPreviewFromKBrain("Edit", { path: "x", diff: "1 + abcdefgh\n".repeat(5000) });
+  assert.equal(long.truncated, true);
+  assert.equal(long.diff.length <= 32 * 1024 && !long.diff.endsWith("\n"), true);
+
+  // WebUI reads the copy the desktop or the Gateway syncs onto the call.
+  const remote = pendingToolApprovalFromToolCall({
+    id: "w1",
+    name: "Write",
+    arguments: {
+      path: "notes.md",
+      content: "ignored: the synced preview wins",
+      __toolApprovalPending: true,
+      __toolApprovalPreview: { path: "notes.md", before: "", after: "", diff: "1 + # Notes", newFile: true, truncated: false },
+    },
+  });
+  assert.deepEqual(remote.preview, { path: "notes.md", before: "", after: "", truncated: false, diff: "1 + # Notes", newFile: true });
+});
+
+test("the approval card renders K-brain diff rows, a new file and a change too large to preview", async () => {
+  diffs.length = 0;
+  const { host, cleanup } = await renderBar([{
+    toolCallId: "c7",
+    toolName: "Write",
+    summary: "notes.md",
+    preview: { path: "notes.md", before: "", after: "", truncated: false, diff: "1 + # Notes\n2 + hi", newFile: true },
+  }]);
+  try {
+    assert.deepEqual(diffs.at(-1), { beforeText: "", afterText: "", diffText: "1 + # Notes\n2 + hi", filePath: "notes.md" });
+    assert.equal(host.querySelector("[data-approval-preview-new-file]") !== null, true);
+    assert.doesNotMatch(host.textContent, /预览已截断/);
+  } finally {
+    await cleanup();
+  }
+  diffs.length = 0;
+  const large = await renderBar([{
+    toolCallId: "c8",
+    toolName: "Edit",
+    summary: "huge.json",
+    preview: { path: "huge.json", before: "", after: "", truncated: true, diff: "" },
+  }]);
+  try {
+    assert.equal(diffs.length, 0, "no diff when K-brain left it out");
+    assert.match(large.host.textContent, /改动过大，无法预览/);
+    assert.match(large.host.querySelector("[data-approval-preview]")?.textContent ?? "", /huge\.json/);
+  } finally {
+    await large.cleanup();
+  }
+});

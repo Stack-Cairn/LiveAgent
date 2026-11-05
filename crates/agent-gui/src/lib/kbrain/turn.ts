@@ -6,6 +6,7 @@ import type {
   ToolResultMessage,
 } from "@liveagent/app/lib/agentTypes";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
+import { KBRAIN_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   type HostedSearchBlock,
   normalizeHostedSearchBlock,
@@ -16,13 +17,20 @@ import {
   type RunProgress,
 } from "@liveagent/ui/lib/chat/runProgress";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
+import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
 import type { Locale } from "../../i18n/config";
 import type { ConversationViewState } from "../chat/conversation/conversationState";
 import { appendMessagesToConversation } from "../chat/conversation/conversationState";
 import { createKBrainClient } from "./client";
 import { hookWarningNotice, parseHookWarning } from "./hookWarning";
 import { getKBrainSessionId, setKBrainSessionId } from "./mapping";
-import { questionResultDetails } from "./questions";
+import {
+  KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG,
+  kbrainToolResultName,
+  normalizeKBrainQuestionToolCall,
+  originalKBrainToolCall,
+  questionResultDetails,
+} from "./questions";
 import { aiReviewTitle, localizeAIReviewReason } from "./reviewNotice";
 import { isSubagentEventType } from "./subagentEvents";
 import { displayImageResultDetails, kbrainToolImages } from "./toolImages";
@@ -134,9 +142,22 @@ export function contextToKBrainMessages(context: Context): KBrainMessage[] {
       role: "system",
       content: [{ type: "text", text: context.systemPrompt }],
     });
+  // K-brain `question` calls show as AskUserQuestion; send them back under their own name.
+  const renamed = new Set<string>();
   for (const message of context.messages) {
     const canonical = canonicalMessage(message);
-    if (canonical) messages.push(canonical);
+    if (!canonical) continue;
+    for (const call of canonical.tool_calls ?? []) {
+      const original = originalKBrainToolCall(call as Pick<ToolCall, "name" | "arguments">);
+      if (original.name === call.name) continue;
+      call.name = original.name;
+      call.arguments = original.arguments;
+      renamed.add(call.id);
+    }
+    if (canonical.role === "tool" && renamed.has(canonical.tool_call_id ?? "")) {
+      canonical.name = KBRAIN_QUESTION_TOOL_NAME;
+    }
+    messages.push(canonical);
   }
   return messages;
 }
@@ -161,6 +182,8 @@ export type KBrainPermissionRequest = {
   shell?: string;
   /** What allow_always would remember, from backends with permission_rules. */
   suggestion?: { rules: string[]; default_scope?: string };
+  /** The change a file tool will make; diff rows are "<line> <mark> <text>". */
+  preview?: { path: string; diff?: string; new_file?: boolean; truncated?: boolean };
 };
 
 /** The answer to a permission request: a bare decision, or one with the remember
@@ -278,12 +301,12 @@ function usage(message?: KBrainMessage): AssistantMessage["usage"] {
 }
 
 function toolCall(call: KBrainToolCall): ToolCall {
-  return {
+  return normalizeKBrainQuestionToolCall({
     type: "toolCall",
     id: call.id,
     name: call.name,
     arguments: (call.arguments ?? {}) as Record<string, unknown>,
-  };
+  });
 }
 
 function toolResult(
@@ -297,12 +320,15 @@ function toolResult(
   return {
     role: "toolResult",
     toolCallId: result.id,
-    toolName: result.name ?? "tool",
+    toolName: kbrainToolResultName(result.name),
     content: [{ type: "text", text: result.output }, ...images.content],
-    details:
-      questionResultDetails(result.name, result.output) ??
-      taskResultDetails(result.name, call?.arguments, result, runId, revision) ??
-      displayImageResultDetails(result.name, images.images, isError),
+    details: withToolRunInfo(
+      result.name,
+      questionResultDetails(result.name, result.output, call?.arguments, isError) ??
+        taskResultDetails(result.name, call?.arguments, result, runId, revision) ??
+        displayImageResultDetails(result.name, images.images, isError),
+      result,
+    ),
     isError,
     timestamp: Date.now(),
   };
@@ -656,6 +682,9 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
   let permissionFailure: Error | undefined;
   const pendingPermissions = new Map<string, AbortController>();
   const pendingQuestions = new Map<string, AbortController>();
+  // question.resolved carries the exact answers (custom flags included); the later
+  // tool.result of K-brain's `question` tool is only text, so its card keeps these.
+  const resolvedQuestionResults = new Map<string, ToolResultMessage>();
   const pendingClientTools = new Map<string, AbortController>();
   // Never cleared: replayed events after a reconnect must not run the same action twice.
   const handledClientTools = new Set<string>();
@@ -733,12 +762,17 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
       case "tool.result": {
         const payload = eventPayload<{ tool_result?: KBrainToolResult }>(event);
         if (!payload?.tool_result) break;
-        const result = toolResult(
+        const computed = toolResult(
           payload.tool_result,
           calls.get(payload.tool_result.id),
           event.run_id,
           event.seq,
         );
+        const resolvedQuestion = resolvedQuestionResults.get(computed.toolCallId);
+        const result =
+          resolvedQuestion?.details && !computed.isError
+            ? { ...computed, details: resolvedQuestion.details }
+            : computed;
         const call = calls.get(result.toolCallId) ?? {
           type: "toolCall",
           id: result.toolCallId,
@@ -846,6 +880,7 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         if (request.run_id !== accepted.run_id || !request.question_id || !request.tool_call_id)
           throw new Error("Question identity mismatch");
         if (pendingQuestions.has(request.question_id)) break;
+        const previous = calls.get(request.tool_call_id)?.arguments ?? {};
         const call: ToolCall = {
           type: "toolCall",
           id: request.tool_call_id,
@@ -853,6 +888,12 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           arguments: {
             questions: request.questions,
             __askUserQuestionDeadlineAt: request.deadline_at,
+            ...(previous[KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG] !== undefined
+              ? {
+                  [KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG]:
+                    previous[KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG],
+                }
+              : {}),
           },
         };
         calls.set(call.id, call);
@@ -890,20 +931,20 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           pendingQuestions.get(resolution.question_id)?.abort();
           pendingQuestions.delete(resolution.question_id);
           const call = calls.get(resolution.tool_call_id);
-          if (call)
-            params.onToolResult(
+          if (call) {
+            const resolved = toolResult(
+              {
+                id: call.id,
+                name: "AskUserQuestion",
+                output: JSON.stringify(resolution),
+              },
               call,
-              toolResult(
-                {
-                  id: call.id,
-                  name: "AskUserQuestion",
-                  output: JSON.stringify(resolution),
-                },
-                call,
-                event.run_id,
-                event.seq,
-              ),
+              event.run_id,
+              event.seq,
             );
+            resolvedQuestionResults.set(call.id, resolved);
+            params.onToolResult(call, resolved);
+          }
         }
         reportStatus(null);
         break;

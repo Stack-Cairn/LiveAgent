@@ -4,13 +4,17 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@liveagent/app/lib/agentTypes";
-import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
+  ASK_USER_QUESTION_TOOL_NAME,
+  askUserQuestionAnswerIsCustomForBackend,
+} from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import {
   resolveKBrainPermissionMode,
   resolveKBrainRunSandbox,
 } from "@liveagent/ui/lib/chat/permissionModes";
 import {
+  approvalPreviewFromKBrain,
   approvalPreviewFromToolCall,
   clampApprovalText,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
@@ -372,10 +376,12 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           } finally {
             if (call) pushGatewayToolCall(call);
           }
+          // K-brain takes one label per answer: several picks of a multi-select
+          // question go as their joined labels, marked custom so it accepts them.
           return answers.map((answer) => ({
             question_id: answer.questionId,
             selected_label: answer.selectedLabel,
-            ...(answer.custom ? { custom: true } : {}),
+            ...(askUserQuestionAnswerIsCustomForBackend(answer) ? { custom: true } : {}),
           }));
         },
         onPermissionRequest: async (request, signal, refusal) => {
@@ -413,8 +419,11 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
             sessionWide: request.scope === "session",
             rememberRules,
             defaultScope: request.suggestion?.default_scope,
-            // The edit being approved, from the call's full arguments.
-            preview: call ? approvalPreviewFromToolCall(request.tool, call.arguments) : undefined,
+            // The edit being approved: K-brain's own preview of the change when it sends
+            // one, else worked out from the call's full arguments.
+            preview:
+              approvalPreviewFromKBrain(request.tool, request.preview) ??
+              (call ? approvalPreviewFromToolCall(request.tool, call.arguments) : undefined),
             notice: refusal,
             signal: signal
               ? AbortSignal.any([approvalController.signal, signal])

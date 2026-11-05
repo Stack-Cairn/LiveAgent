@@ -152,3 +152,29 @@ test("model-written approval keys never reach WebUI on the first tool_call event
     `synthetic keys from the model reached the Gateway: ${JSON.stringify({ leaked: [...new Set(leaked)], webuiCards: cards })}`,
   );
 });
+
+// K-brain sends its own preview of the change (permission.requested.preview); the
+// approval shows that diff instead of one worked out from the call's arguments.
+test("K-brain's permission preview reaches the desktop approval and the WebUI copy", async (t) => {
+  const { listed, gatewayEvents, errors } = await runTurn(t, {
+    answers: [["approve"]],
+    events: (event) => {
+      event("tool.call", { tool_call: { id: "ed", name: "Edit", arguments: { file_path: "/w/a.ts", old_string: "a", new_string: "b" } } });
+      event("permission.requested", {
+        permission_id: "perm-ed", tool: "Edit", description: "Edit /w/a.ts", tool_call_id: "ed",
+        options: [{ id: "allow_once" }, { id: "reject" }],
+        preview: { path: "/w/a.ts", diff: "4 - const a = 1;\n4 + const a = 2;", truncated: false },
+      });
+    },
+  });
+  assert.equal(errors.length, 0, `turn failed: ${errors.join(" | ")}`);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].preview?.diff, "4 - const a = 1;\n4 + const a = 2;");
+  assert.equal(listed[0].preview?.before, "");
+  const cards = gatewayEvents
+    .filter((value) => value.type === "tool_call" && value.id === "ed")
+    .map((value) => args.pendingToolApprovalFromToolCall({ id: value.id, name: value.name, arguments: value.arguments }))
+    .filter(Boolean);
+  assert.equal(cards.length > 0, true, "WebUI saw the pending approval");
+  assert.equal(cards[0].preview?.diff, "4 - const a = 1;\n4 + const a = 2;");
+});

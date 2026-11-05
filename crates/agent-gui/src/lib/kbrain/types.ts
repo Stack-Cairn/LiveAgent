@@ -82,13 +82,20 @@ export type KBrainMessage = {
   origin?: string;
 };
 
-export type KBrainToolCall = {
+/** 调用如何运行（仅展示用，均可缺省）：命令类工具的退出码、是否超时，工具自身耗时。 */
+export type KBrainToolRunInfo = {
+  exit_code?: number;
+  timed_out?: boolean;
+  duration_ms?: number;
+};
+
+export type KBrainToolCall = KBrainToolRunInfo & {
   id: string;
   name: string;
   arguments: unknown;
 };
 
-export type KBrainToolResult = {
+export type KBrainToolResult = KBrainToolRunInfo & {
   content?: KBrainContentBlock[];
   id: string;
   name?: string;

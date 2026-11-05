@@ -12,6 +12,12 @@ import (
 // event vocabulary. Provider-specific response/chat-message fields never cross
 // this boundary.
 func ToChatEvent(event Event) (*v2.ChatEvent, *v2.ChatControlEvent, error) {
+	return toChatEvent(event, nil)
+}
+
+// toChatEvent is ToChatEvent with the recorded arguments of a tool call, which
+// the question tool's plain-text result is read against.
+func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.ChatEvent, *v2.ChatControlEvent, error) {
 	payload := map[string]any{}
 	if len(event.Payload) != 0 && string(event.Payload) != "null" {
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
@@ -46,11 +52,25 @@ func ToChatEvent(event Event) (*v2.ChatEvent, *v2.ChatControlEvent, error) {
 	case "tool.result":
 		base.Type = v2.ChatEvent_TOOL_RESULT
 		if result, ok := payload["tool_result"].(map[string]any); ok {
-			payload["id"], payload["name"] = result["id"], result["name"]
-			payload["isError"] = result["failed"] == true || result["cancelled"] == true
 			name, _ := result["name"].(string)
+			id, _ := result["id"].(string)
+			isError := result["failed"] == true || result["cancelled"] == true
+			payload["id"], payload["name"] = result["id"], toolResultName(name)
+			payload["isError"] = isError
 			output, _ := result["output"].(string)
-			if details := questionResultDetails(name, output); details != nil {
+			var args map[string]any
+			if callArgs != nil && id != "" {
+				args = callArgs(id)
+			}
+			details := resultDetails(name, output, args, isError)
+			var exitCode *int
+			if code, ok := result["exit_code"].(float64); ok {
+				value := int(code)
+				exitCode = &value
+			}
+			timedOut := result["timed_out"] == true
+			duration, _ := result["duration_ms"].(float64)
+			if details = withRunInfo(name, details, exitCode, timedOut, int64(duration)); details != nil {
 				payload["details"] = details
 			}
 			content := []any{map[string]any{"type": "text", "text": result["output"]}}

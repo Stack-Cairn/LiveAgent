@@ -30,6 +30,7 @@ const (
 	argApprovalRules       = "__toolApprovalRememberRules"
 	argApprovalDefault     = "__toolApprovalDefaultScope"
 	argApprovalNotice      = "__toolApprovalNotice"
+	argApprovalPreview     = "__toolApprovalPreview"
 	argAutoResolved        = "__toolPermissionAutoResolved"
 	argQuestionPending     = "__askUserQuestionPending"
 	argQuestionDeadline    = "__askUserQuestionDeadlineAt"
@@ -42,6 +43,8 @@ const (
 
 	approvalTextMax  = 2000
 	approvalScopeMax = 300
+	// approvalPreviewMax bounds the synced diff, as K-brain bounds its own (32 KiB).
+	approvalPreviewMax = 32 * 1024
 )
 
 var syntheticArgPrefixes = []string{"__toolApproval", "__toolPermission", "__askUserQuestion", "__exitPlanMode"}
@@ -279,7 +282,7 @@ func (r *Relay) relayRunEvent(ctx context.Context, event Event, conversationID s
 	}
 	mapped := event
 	mapped.ConversationID = conversationID
-	chat, control, err := ToChatEvent(mapped)
+	chat, control, err := toChatEvent(mapped, func(id string) map[string]any { return s.callArguments(conversationID, id) })
 	if err != nil {
 		return nil, err
 	}
@@ -304,6 +307,13 @@ type permissionRequest struct {
 	} `json:"suggestion"`
 	Scope      string `json:"scope"`
 	ToolCallID string `json:"tool_call_id"`
+	// Preview is the change a file tool will make, as diff rows.
+	Preview *struct {
+		Path      string `json:"path"`
+		Diff      string `json:"diff"`
+		NewFile   bool   `json:"new_file"`
+		Truncated bool   `json:"truncated"`
+	} `json:"preview"`
 }
 
 type questionRequest struct {
@@ -329,6 +339,10 @@ func (s *interactiveState) recordCall(conversationID, runID string, call ToolCal
 			delete(args, key)
 		}
 	}
+	if call.Name == kbrainQuestionTool {
+		// K-brain's question tool is answered on the AskUserQuestion card.
+		call.Name, args = askUserQuestionTool, normalizeQuestionToolArgs(args)
+	}
 	key := interactionKey(conversationID, call.ID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -346,6 +360,21 @@ func (s *interactiveState) recordCall(conversationID, runID string, call ToolCal
 		s.calls[key].arguments[argAutoResolved] = marker
 	}
 	return s.callEventLocked(conversationID, call.ID)
+}
+
+// callArguments is a copy of a recorded call's arguments; nil when unknown.
+func (s *interactiveState) callArguments(conversationID, toolCallID string) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call := s.calls[interactionKey(conversationID, toolCallID)]
+	if call == nil {
+		return nil
+	}
+	args := make(map[string]any, len(call.arguments))
+	for key, value := range call.arguments {
+		args[key] = value
+	}
+	return args
 }
 
 func (s *interactiveState) settleCall(conversationID, toolCallID string) {
@@ -431,6 +460,14 @@ func (s *interactiveState) requestPermission(conversationID, sessionID, runID st
 		overlay[argApprovalDefault] = request.Suggestion.DefaultScope
 	} else if request.Rule != "" {
 		overlay[argApprovalScope] = clampText(request.Rule, approvalTextMax)
+	}
+	if preview := request.Preview; preview != nil && (preview.Diff != "" || preview.Truncated) {
+		// WebUI shows K-brain's diff rows instead of diffing the call's arguments.
+		diff, cut := clampDiffRows(preview.Diff, approvalPreviewMax)
+		overlay[argApprovalPreview] = map[string]any{
+			"path": preview.Path, "before": "", "after": "", "diff": diff,
+			"newFile": preview.NewFile, "truncated": preview.Truncated || cut,
+		}
 	}
 	s.pending[key] = &pendingInteraction{
 		kind: "permission", conversationID: conversationID, sessionID: sessionID, runID: runID,
@@ -656,10 +693,11 @@ func (r *Relay) answerQuestion(ctx context.Context, conversationID, toolCallID, 
 		return queueError("not_found", "This question is no longer pending.")
 	}
 	var answers []struct {
-		QuestionID    string `json:"questionId"`
-		Prompt        string `json:"prompt"`
-		SelectedLabel string `json:"selectedLabel"`
-		Custom        bool   `json:"custom"`
+		QuestionID     string   `json:"questionId"`
+		Prompt         string   `json:"prompt"`
+		SelectedLabel  string   `json:"selectedLabel"`
+		SelectedLabels []string `json:"selectedLabels"`
+		Custom         bool     `json:"custom"`
 	}
 	if err := json.Unmarshal([]byte(requestJSON), &answers); err != nil || len(answers) == 0 {
 		return queueError("invalid_request", "question answers are invalid")
@@ -670,7 +708,9 @@ func (r *Relay) answerQuestion(ctx context.Context, conversationID, toolCallID, 
 		if answer.Prompt != "" {
 			item["prompt"] = answer.Prompt
 		}
-		if answer.Custom {
+		// K-brain takes one label per answer: several picks of a multi-select
+		// question arrive as their joined labels, which it only accepts as custom.
+		if answer.Custom || len(answer.SelectedLabels) > 1 {
 			item["custom"] = true
 		}
 		out = append(out, item)
@@ -831,6 +871,21 @@ func nonEmpty(values ...string) []string {
 	return out
 }
 
+// clampDiffRows cuts diff rows to max bytes at a row boundary.
+func clampDiffRows(diff string, max int) (string, bool) {
+	if len(diff) <= max {
+		return diff, false
+	}
+	end := strings.LastIndexByte(diff[:max], '\n')
+	if end <= 0 {
+		end = max
+		for end > 0 && !utf8.RuneStart(diff[end]) {
+			end--
+		}
+	}
+	return diff[:end], true
+}
+
 func clampText(text string, max int) string {
 	if utf8.RuneCountInString(text) <= max {
 		return text
@@ -855,6 +910,15 @@ func clampRules(rules []string, max int) []string {
 		total += size
 	}
 	return out
+}
+
+// resultDetails is the question card's details for a question or
+// AskUserQuestion result; nil for other tools.
+func resultDetails(name, output string, args map[string]any, isError bool) map[string]any {
+	if name == kbrainQuestionTool {
+		return questionToolResultDetails(args, output, isError)
+	}
+	return questionResultDetails(name, output)
 }
 
 // questionResultDetails turns K-brain's AskUserQuestion result text into the

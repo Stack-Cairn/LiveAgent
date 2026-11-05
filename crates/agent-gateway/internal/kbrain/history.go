@@ -338,6 +338,14 @@ func isBackgroundNotice(message Message) bool {
 // WebUI can match search hits, which report whole-session offsets.
 func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) {
 	out := make([]map[string]any, 0, len(messages))
+	// A tool result is read against its call: the question tool's text answers
+	// against the questions asked, and run info sits on the call.
+	calls := map[string]ToolCall{}
+	for _, message := range messages {
+		for _, call := range message.ToolCalls {
+			calls[call.ID] = call
+		}
+	}
 	for i, message := range messages {
 		if message.Role != "user" && message.Role != "assistant" && message.Role != "tool" {
 			continue
@@ -366,9 +374,19 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 			entry["liveAgentBackgroundNotice"] = true
 		}
 		if message.Role == "tool" {
-			entry["role"], entry["toolCallId"], entry["toolName"] = "toolResult", message.ToolCallID, message.Name
-			entry["isError"] = message.StopReason == "error" || message.StopReason == "cancelled"
-			if details := questionResultDetails(message.Name, historyText(message)); details != nil {
+			isError := message.StopReason == "error" || message.StopReason == "cancelled"
+			entry["role"], entry["toolCallId"], entry["toolName"] = "toolResult", message.ToolCallID, toolResultName(message.Name)
+			entry["isError"] = isError
+			call, known := calls[message.ToolCallID]
+			var args map[string]any
+			if known && len(call.Arguments) > 0 {
+				_ = json.Unmarshal(call.Arguments, &args)
+			}
+			details := resultDetails(message.Name, historyText(message), args, isError)
+			if known {
+				details = withRunInfo(message.Name, details, call.ExitCode, call.TimedOut, call.DurationMs)
+			}
+			if details != nil {
 				entry["details"] = details
 			}
 		}
@@ -388,7 +406,16 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 						return "", fmt.Errorf("invalid history tool arguments at %d: %w", i, err)
 					}
 				}
-				content = append(content, map[string]any{"type": "toolCall", "id": call.ID, "name": call.Name, "arguments": args})
+				name := call.Name
+				if name == kbrainQuestionTool {
+					if record, ok := args.(map[string]any); ok {
+						args = normalizeQuestionToolArgs(record)
+					} else {
+						args = normalizeQuestionToolArgs(map[string]any{})
+					}
+					name = askUserQuestionTool
+				}
+				content = append(content, map[string]any{"type": "toolCall", "id": call.ID, "name": name, "arguments": args})
 			}
 			entry["content"], entry["api"], entry["provider"], entry["model"] = content, protocolVersion, message.Provider, message.Model
 			stop := message.StopReason

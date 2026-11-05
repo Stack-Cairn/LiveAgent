@@ -10,6 +10,7 @@ import {
   ToolSurfaceLabel,
 } from "@liveagent/ui/components/chat/ToolSurfaces";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type BrowserResultDetails,
   type DeleteResultDetails,
@@ -35,6 +36,7 @@ import {
   type WriteResultDetails,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { formatLiveShellOutput } from "@liveagent/ui/lib/chat/liveShellOutput";
+import { formatToolRunInfo, readToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SubagentBatchDetails,
@@ -448,6 +450,7 @@ export function ShellToolDisplay({
   item: ToolTraceItem;
   result: ToolResultMessage | undefined;
 }) {
+  const { t } = useLocale();
   const command =
     item.toolCall.name === "Bash" && typeof item.toolCall.arguments?.command === "string"
       ? item.toolCall.arguments.command.trim()
@@ -476,6 +479,10 @@ export function ShellToolDisplay({
     element.scrollTop = element.scrollHeight;
   }, [liveOutput]);
   const body = output ? previewText(output, 6000) : liveOutput;
+  const runInfo = formatToolRunInfo(readToolRunInfo(result?.details), {
+    exitCode: t("chat.tool.run.exitCode"),
+    timedOut: t("chat.tool.run.timedOut"),
+  });
   if (!command && !body) return null;
 
   return (
@@ -484,7 +491,20 @@ export function ShellToolDisplay({
       aria-label="Shell"
       data-shell-tool-display=""
     >
-      <div className="px-3 pb-0.5 pt-2.5 text-xs font-medium text-muted-foreground/75">Shell</div>
+      <div className="flex items-baseline justify-between gap-3 px-3 pb-0.5 pt-2.5 text-xs font-medium text-muted-foreground/75">
+        <span>Shell</span>
+        {runInfo ? (
+          <span
+            className={cn(
+              "shrink-0 font-mono text-[11px] font-normal tabular-nums text-muted-foreground/60",
+              result?.isError && "text-red-700/75 dark:text-red-300/75",
+            )}
+            data-shell-run-info=""
+          >
+            {runInfo}
+          </span>
+        ) : null}
+      </div>
       <ToolScrollablePre
         ref={preRef}
         className={cn(
