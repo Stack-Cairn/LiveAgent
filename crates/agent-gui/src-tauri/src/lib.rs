@@ -973,6 +973,10 @@ pub fn run() {
                 configure_windows_window_chrome(app)?;
                 #[cfg(target_os = "macos")]
                 install_fullscreen_exit_observer(app, hide_after_fullscreen_exit)?;
+                #[cfg(target_os = "macos")]
+                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    runtime::webview_background::keep_webview_live_when_covered(&window);
+                }
                 if let Err(error) = commands::settings::initialize_system_proxy_from_db() {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }

@@ -11,4 +11,6 @@ pub mod shell_runner;
 pub mod shell_session;
 pub mod task_runner;
 pub mod terminal;
+#[cfg(target_os = "macos")]
+pub(crate) mod webview_background;
 pub mod windows_sandbox;
