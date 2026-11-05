@@ -584,6 +584,43 @@ export const EN_US_COMMON_TRANSLATIONS = {
     "protected paths (.liveagent, .git/hooks) can't be kept read-only with the Landlock fallback; install bubblewrap or allow unprivileged user namespaces",
   "chat.safety.sandboxOfflineUnavailable":
     "K-brain cannot cut the sandbox off from the network on this machine",
+  // Windows: K-brain's sandbox setup (POST /v1/sandbox/setup) enables the offline sandbox.
+  "chat.safety.setupOffline": "Set up offline sandbox…",
+  "chat.safety.setupOfflineDesc": "Needs Windows administrator approval",
+  "chat.safety.setup.title": "Set up the offline sandbox?",
+  "chat.safety.setup.intro":
+    "To run sandboxed commands with no network access, K-brain will make these changes to this computer:",
+  "chat.safety.setup.accounts":
+    "Create two hidden local Windows accounts that sandboxed commands run as: one with network access, one without.",
+  "chat.safety.setup.firewall":
+    "Add Windows firewall rules that block all network access for the offline account, including services on this computer.",
+  "chat.safety.setup.admin": "Windows will ask you for administrator approval.",
+  "chat.safety.setup.undo": "You can undo all of it later by running {command} in a terminal.",
+  "chat.safety.setup.backendNote": "K-brain: {hint}",
+  "chat.safety.setup.confirm": "Set up",
+  "chat.safety.setup.cancel": "Cancel",
+  "chat.safety.setup.close": "Close",
+  "chat.safety.setup.retry": "Try again",
+  "chat.safety.setup.running": "Waiting for administrator approval…",
+  "chat.safety.setup.runningDesc":
+    "Approve the Windows prompt to continue. Setup takes a moment after you approve; keep LiveAgent open.",
+  "chat.safety.setup.ready": "The offline sandbox is ready",
+  "chat.safety.setup.readyDesc": "Commands in the offline sandbox now run with no network access.",
+  "chat.safety.setup.useOffline": "Use offline sandbox",
+  "chat.safety.setup.incomplete": "Setup finished, but the offline sandbox is still unavailable",
+  "chat.safety.setup.incompleteDesc":
+    "K-brain's sandbox self-test did not pass. Run setup again to repair it.",
+  "chat.safety.setup.declined": "Administrator approval was declined",
+  "chat.safety.setup.declinedDesc": "Nothing on this computer was changed.",
+  "chat.safety.setup.busy": "Sandbox setup is already running",
+  "chat.safety.setup.busyDesc":
+    "Another sandbox setup is in progress. Answer the open Windows prompt, then try again.",
+  "chat.safety.setup.failed": "Sandbox setup failed",
+  "chat.safety.setup.failedDesc":
+    "Running setup again repairs a partial install; {command} removes it.",
+  "chat.safety.setup.unsupported": "Sandbox setup is not available",
+  "chat.safety.setup.unsupportedDesc": "K-brain can set up the offline sandbox only on Windows.",
+  "chat.safety.setup.error": "Could not run sandbox setup",
   "chat.safety.cycleShortcut": "{keys} to switch",
   "chat.safety.cycleNextTurn": "next turn",
   "chat.safety.cycleNewMessages": "new messages",

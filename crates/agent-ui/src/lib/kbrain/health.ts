@@ -205,6 +205,23 @@ export function supportsRunSandbox(
   );
 }
 
+/**
+ * Whether K-brain offers to install its Windows sandbox accounts so the offline
+ * sandbox can cut the network (`sandbox_setup` 1 and `run_sandbox.setup_available`),
+ * and the run sandbox cannot do so yet. Setup never makes a sandbox without path
+ * protection usable, so that one stays unavailable rather than offered a fix.
+ */
+export function offersRunSandboxSetup(health: Pick<KBrainHealth, "capabilities">): boolean {
+  if (!hasFrozenCapability(health, "sandbox_setup")) return false;
+  const raw = health.capabilities.run_sandbox;
+  if (!isObject(raw)) return false;
+  return (
+    raw.setup_available === true &&
+    !(raw.supported === true && raw.network_control === true) &&
+    !runSandboxLacksPathProtection(raw)
+  );
+}
+
 export function supportsPermissionMode(
   health: Pick<KBrainHealth, "capabilities">,
   mode: string,

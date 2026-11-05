@@ -1,4 +1,8 @@
 import { type KBrainHealth, readKBrainHealthResponse } from "@liveagent/ui/lib/kbrain/health";
+import {
+  readSandboxSetupResponse,
+  type SandboxSetupOutcome,
+} from "@liveagent/ui/lib/kbrain/sandboxSetup";
 import type {
   KBrainComputerStatus,
   KBrainSettingsAdapter,
@@ -73,6 +77,24 @@ function rulesQuery(values: Record<string, string | undefined>): string {
 
 export function getKBrainHealth(): Promise<KBrainHealth> {
   return send("/v1/health").then(readKBrainHealthResponse);
+}
+
+/**
+ * Runs K-brain's Windows sandbox setup (`POST /v1/sandbox/setup`). The backend shows
+ * a UAC prompt on its own desktop and answers only once the user chose, so there is
+ * no client timeout; every status, including errors, comes back as an outcome.
+ */
+export async function setUpKBrainSandbox(): Promise<SandboxSetupOutcome> {
+  const connection = getKBrainRuntimeConnection();
+  if (!connection) throw new Error("K-brain backend connection is not ready");
+  const response = await fetch(`${connection.baseUrl}/v1/sandbox/setup`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      ...(connection.token ? { Authorization: `Bearer ${connection.token}` } : {}),
+    },
+  });
+  return readSandboxSetupResponse(response);
 }
 
 export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
