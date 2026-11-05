@@ -13,8 +13,8 @@ import {
   setChatHistoryShare,
 } from "../../../lib/chat/history/chatHistory";
 import { kBrainCheckpointClient } from "../../../lib/kbrain/checkpoints";
-import { resolveKBrainHistoryShare, resolveKBrainLocalId } from "../../../lib/kbrain/history";
-import { getKBrainSessionId, setKBrainSessionId } from "../../../lib/kbrain/mapping";
+import { resolveKBrainHistoryShare } from "../../../lib/kbrain/history";
+import { getKBrainConversationId, getKBrainSessionId } from "../../../lib/kbrain/mapping";
 import { kBrainSidebarSync } from "../../../lib/kbrain/sidebarSync";
 import { createKBrainTrajectoryHost } from "../../../lib/kbrain/trajectory";
 import type { GatewayComposerActionEvent } from "./gatewayBridgeTypes";
@@ -22,8 +22,11 @@ import type { GatewayComposerActionEvent } from "./gatewayBridgeTypes";
 export async function runGatewayHistoryAction(event: GatewayComposerActionEvent): Promise<unknown> {
   const data = event.data ?? {};
   const target = event.conversationId.trim();
-  const id = target && !getKBrainSessionId(target) ? resolveKBrainLocalId(target) : target;
-  if (target && id !== target) setKBrainSessionId(id, target);
+  // A target may be a backend session id the desktop already knows; translate it
+  // to its local alias. Never mint one here: a WebUI-created conversation sends
+  // trajectory/checkpoint reads before its first turn binds a session, and a
+  // minted alias would shadow that local id and misroute every later turn.
+  const id = (target && !getKBrainSessionId(target) && getKBrainConversationId(target)) || target;
   switch (event.action) {
     case "list": {
       if (kBrainSidebarSync.isHealthy()) {

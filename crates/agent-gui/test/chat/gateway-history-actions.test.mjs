@@ -15,13 +15,8 @@ test("remote history shares the desktop K-brain projection and preserves message
     mocks: {
       [fileURLToPath(new URL("../../src/lib/kbrain/mapping.ts", import.meta.url))]: {
         getKBrainSessionId: (id) => (id === "conversation" ? "session" : undefined),
-        setKBrainSessionId() {},
-      },
-      [fileURLToPath(new URL("../../src/lib/kbrain/history.ts", import.meta.url))]: {
-        resolveKBrainLocalId: (id) => {
-          assert.equal(id, "session");
-          return "conversation";
-        },
+        getKBrainConversationId: (id) => (id === "session" ? "conversation" : undefined),
+        setKBrainSessionId: () => assert.fail("history actions must not rewrite mappings"),
       },
       [path.normalize(historyPath)]: {
         listChatHistory: async (...args) => {
@@ -114,10 +109,10 @@ test("bridge branch, share, trajectory and checkpoint requests are served by K-b
     mocks: {
       [src("lib/kbrain/mapping.ts")]: {
         getKBrainSessionId: (id) => (id === "conversation" ? "session" : undefined),
-        setKBrainSessionId() {},
+        getKBrainConversationId: () => assert.fail("mapped ids must not be re-resolved"),
+        setKBrainSessionId: () => assert.fail("history actions must not rewrite mappings"),
       },
       [src("lib/kbrain/history.ts")]: {
-        resolveKBrainLocalId: () => assert.fail("mapped ids must not be re-resolved"),
         resolveKBrainHistoryShare: async (token) => {
           calls.push(["resolve", token]);
           return {
@@ -217,4 +212,42 @@ test("bridge branch, share, trajectory and checkpoint requests are served by K-b
   assert.equal(rewound.result.failed, false);
   assert.deepEqual(calls.at(-1)[1].expected, [{ key: "k", currentHash: "h" }]);
   await assert.rejects(run(event("checkpoint_diff", { turnSeq: -1 })), /turn sequence/);
+});
+
+test("reads for a conversation without a K-brain session never mint a shadow alias", async () => {
+  const src = (file) => fileURLToPath(new URL(`../../src/${file}`, import.meta.url));
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      [src("lib/kbrain/mapping.ts")]: {
+        getKBrainSessionId: () => undefined,
+        getKBrainConversationId: () => undefined,
+        ensureKBrainConversationId: () => assert.fail("must not mint a local alias"),
+        setKBrainSessionId: () => assert.fail("must not bind the local id as a backend id"),
+      },
+      [src("lib/kbrain/checkpoints.ts")]: {
+        kBrainCheckpointClient: {
+          list: async (id) => {
+            calls.push(["checkpoint_list", id]);
+            return [];
+          },
+        },
+      },
+      [src("lib/kbrain/trajectory.ts")]: {
+        createKBrainTrajectoryHost: () => ({
+          loadWindow: async (id) => {
+            calls.push(["trajectory", id]);
+            return { eventsJson: "[]", truncated: false, oldestSegmentIndex: 0, returnedSegmentCount: 0, totalSegmentCount: 0, hasMoreBefore: false };
+          },
+        }),
+      },
+    },
+  });
+  const { runGatewayHistoryAction: run } = loader.loadModule(
+    "src/pages/chat/gateway/gatewayHistoryActions.ts",
+  );
+  const fresh = "11111111-2222-4333-8444-555555555555";
+  await run({ kind: "history", conversationId: fresh, action: "trajectory", data: {} });
+  await run({ kind: "history", conversationId: fresh, action: "checkpoint_list", data: {} });
+  assert.deepEqual(calls, [["trajectory", fresh], ["checkpoint_list", fresh]]);
 });
