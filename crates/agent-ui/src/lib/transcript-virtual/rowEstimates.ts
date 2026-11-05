@@ -88,3 +88,6 @@ export function measureEstimateText(text: string): EstimateTextMeasurement {
 
 // Collapsed checkpoint/summary card.
 export const CHECKPOINT_ROW_ESTIMATE_PX = 88;
+
+/** A folded background notice: one muted line. */
+export const BACKGROUND_NOTICE_ROW_ESTIMATE_PX = 24;

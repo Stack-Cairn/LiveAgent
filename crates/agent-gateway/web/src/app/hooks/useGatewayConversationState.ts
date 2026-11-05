@@ -99,7 +99,7 @@ export function useGatewayConversationState(options: Options) {
     if (!store) return [];
     const prompts: string[] = [];
     for (const row of store.getSnapshot().rows) {
-      if (row.kind === "user" && row.text.trim()) prompts.push(row.text);
+      if (row.kind === "user" && !row.backgroundNotice && row.text.trim()) prompts.push(row.text);
     }
     return prompts;
   }, [getDisplayedConversationId, options.transcriptStoreRegistry]);

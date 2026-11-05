@@ -278,6 +278,7 @@ function buildRawRowsFromEntries(
           referencedConversations: entry.referencedConversations ?? [],
           messageRef: entry.messageRef,
           timestamp: entry.timestamp,
+          ...(entry.backgroundNotice ? { backgroundNotice: true } : {}),
         });
       } else if (entry.kind === "checkpoint") {
         rows.push({

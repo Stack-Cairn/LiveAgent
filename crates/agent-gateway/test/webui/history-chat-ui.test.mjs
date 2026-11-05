@@ -109,6 +109,19 @@ test("parseHistoryMessagesJson uses canonical history ids for editable user rows
   assert.equal(entries[0].messageRef.contentHash, "m3bicr");
 });
 
+test("parseHistoryMessagesJson keeps backend notices apart from user rows", () => {
+  const notice = "[process p1 completed exit_code=0] build\n\nBUILD-READY";
+  const entries = chatUi.parseHistoryMessagesJson(JSON.stringify([
+    { id: "u-1", role: "user", content: "build it" },
+    { id: "u-2", role: "user", content: notice, liveAgentBackgroundNotice: true },
+  ]));
+  const rows = buildRowsFromEntries(entries, "history").filter((row) => row.kind === "user");
+  assert.deepEqual(rows.map((row) => [row.text, row.backgroundNotice === true]), [
+    ["build it", false],
+    [notice, true],
+  ]);
+});
+
 test("parseHistoryMessagesJson preserves upload display text and checkpoint metadata", () => {
   const entries = chatUi.parseHistoryMessagesJson(JSON.stringify([
     {

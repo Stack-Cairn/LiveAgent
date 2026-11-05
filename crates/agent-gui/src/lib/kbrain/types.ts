@@ -78,6 +78,8 @@ export type KBrainMessage = {
   hosted_search?: KBrainHostedSearch[];
   stop_reason?: string;
   created_at?: string;
+  /** "background" on a user-role notice K-brain delivered on its own (a wait result, a process exit). */
+  origin?: string;
 };
 
 export type KBrainToolCall = {

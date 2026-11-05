@@ -49,6 +49,8 @@ type SharedGatewayChatEntry = SharedChatEntry<
     messageRef?: HistoryMessageRef;
     timestamp?: number;
     referencedConversations?: ConversationMentionReference[];
+    /** A notice the backend delivered on its own; shown as a system line, not a user bubble. */
+    backgroundNotice?: boolean;
   },
   { timestamp?: number }
 >;
@@ -86,6 +88,7 @@ type StoredMessage = {
   timestamp?: unknown;
   summaryMeta?: unknown;
   liveAgentHistoryRef?: unknown;
+  liveAgentBackgroundNotice?: unknown;
 };
 
 function readMessageTimestamp(value: unknown): number | undefined {
@@ -779,6 +782,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
           messageId: messageRef?.messageId,
           messageRef,
           timestamp: readMessageTimestamp(message.timestamp),
+          ...(message.liveAgentBackgroundNotice === true ? { backgroundNotice: true } : {}),
         });
       }
       continue;

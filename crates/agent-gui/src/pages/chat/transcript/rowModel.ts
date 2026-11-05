@@ -12,6 +12,7 @@ import {
 } from "@liveagent/ui/lib/chat/replyContinuity";
 import { chatDuration } from "@liveagent/ui/lib/chat/workTiming";
 import {
+  BACKGROUND_NOTICE_ROW_ESTIMATE_PX,
   CHECKPOINT_ROW_ESTIMATE_PX,
   estimateAssistantRowHeight,
   estimateUserRowHeight,
@@ -774,7 +775,9 @@ export function createTranscriptRowModel(): TranscriptRowModel {
         {
           kind: "user",
           key: leader.key,
-          estimate: estimateUserRowHeight(leader.text.length, leader.attachments.length),
+          estimate: leader.backgroundNotice
+            ? BACKGROUND_NOTICE_ROW_ESTIMATE_PX
+            : estimateUserRowHeight(leader.text.length, leader.attachments.length),
           renderCost: Math.min(4, 1 + leader.attachments.length),
           gapAfter: TRANSCRIPT_ROW_GAP_PX,
           anchorUserKey: leader.key,

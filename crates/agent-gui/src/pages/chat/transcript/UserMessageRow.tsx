@@ -1,3 +1,4 @@
+import { BackgroundNoticeMessage } from "@liveagent/ui/components/chat/BackgroundNoticeMessage";
 import { EditableUserMessageBubble } from "@liveagent/ui/components/chat/EditableUserMessageBubble";
 import { UserMessageBubbleBody } from "@liveagent/ui/components/chat/UserMessageBubbleBody";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -39,6 +40,10 @@ export const UserMessageRow = memo(function UserMessageRow(props: UserMessageRow
 
   const effectiveMessageRef = item.messageRef;
   const compactedClass = item.isFromCompactedSegment ? "opacity-70" : "";
+
+  if (item.backgroundNotice) {
+    return <BackgroundNoticeMessage text={item.text} className={compactedClass} />;
+  }
 
   if (isEditing && effectiveMessageRef) {
     return (

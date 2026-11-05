@@ -9,7 +9,8 @@ export function useComposerHistoryPrompts(transcriptItems: readonly RenderTimeli
   return useCallback(() => {
     const prompts: string[] = [];
     for (const item of transcriptItemsRef.current) {
-      if (item.kind === "user" && item.text.trim()) prompts.push(item.text);
+      if (item.kind === "user" && !item.backgroundNotice && item.text.trim())
+        prompts.push(item.text);
     }
     return prompts;
   }, []);
