@@ -1,3 +1,7 @@
+import {
+  GenerationStoppedNotice,
+  isStoppedReply,
+} from "@liveagent/ui/components/chat/AssistantStatus";
 import { ChangedFilesCard } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { collectChangedFiles } from "@liveagent/ui/lib/chat/changedFiles";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
@@ -63,6 +67,7 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
       data-assistant-row
       className={cn("group/assistant w-full max-w-full", compacted && "opacity-70")}
     >
+      {isStoppedReply(unit.rounds) ? <GenerationStoppedNotice className="mb-1" /> : null}
       {changedFiles ? (
         <div className="w-full max-w-full">
           <div className="min-w-0">

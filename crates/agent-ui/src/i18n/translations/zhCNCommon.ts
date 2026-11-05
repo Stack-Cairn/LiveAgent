@@ -717,6 +717,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.expandProvider": "展开该提供商的模型",
   "chat.collapseProvider": "收起该提供商的模型",
   "chat.aborted": "已取消",
+  "chat.generationStopped": "已停止生成",
   "chat.contextWindow": "上下文窗口",
   "chat.usage": "用量",
   "chat.usageTotal": "总计",

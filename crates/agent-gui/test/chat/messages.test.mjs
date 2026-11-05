@@ -462,6 +462,43 @@ test("UI message builder groups assistant rounds and attaches matching tool resu
   assert.equal("contextUsageTokens" in ui[1].rounds[1].meta, false);
 });
 
+test("UI message builder marks stopped replies without raw abort text but keeps error text", () => {
+  const assistant = (content, stopReason, errorMessage) => ({
+    role: "assistant",
+    content,
+    provider: "kbrain",
+    model: "fixture",
+    api: "kbrain.agent.v1",
+    stopReason,
+    ...(errorMessage ? { errorMessage } : {}),
+    timestamp: 2,
+  });
+  const roundsFor = (message) =>
+    uiMessages.buildUiMessages([{ role: "user", content: "go", timestamp: 1 }, message])[1]?.rounds;
+
+  // Stopped while reasoning: no "Cancelled：<transport error>" text block is synthesized.
+  const thinking = roundsFor(
+    assistant([{ type: "thinking", thinking: "planning" }], "aborted", "Fetch is aborted"),
+  );
+  assert.deepEqual(
+    thinking[0].blocks.map((block) => block.kind),
+    ["thinking"],
+  );
+  assert.equal(thinking[0].meta.stopReason, "aborted");
+  assert.equal(assistantStatus.isStoppedReply(thinking), true);
+
+  // Stopped before any output: the reply survives so it can render its stopped state.
+  const empty = roundsFor(assistant([], "aborted"));
+  assert.equal(empty.length, 1);
+  assert.deepEqual(empty[0].blocks, []);
+  assert.equal(assistantStatus.isStoppedReply(empty), true);
+
+  // Real failures still show their error.
+  const failed = roundsFor(assistant([], "error", "provider exploded"));
+  assert.equal(uiMessages.getRoundText(failed[0]), "Request failed：provider exploded");
+  assert.equal(assistantStatus.isStoppedReply(failed), false);
+});
+
 test("UI message builder stores Responses reasoning replay units on thinking blocks", () => {
   const signature = JSON.stringify({
     id: "rs_1",

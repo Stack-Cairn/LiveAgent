@@ -491,7 +491,8 @@ function buildUiRoundBlocks(
     }
   }
   const hasTextBlock = blocks.some((block) => block.kind === "text" && block.text.trim());
-  if (!hasTextBlock && (assistant.stopReason === "error" || assistant.stopReason === "aborted")) {
+  // Stopped replies get no fallback text: the transcript renders a localized stopped notice.
+  if (!hasTextBlock && assistant.stopReason === "error") {
     const fallbackText = getMessageText(assistant);
     if (fallbackText.trim()) {
       blocks = appendTextLikeBlock(blocks, "text", fallbackText);
@@ -549,7 +550,8 @@ export function buildUiMessages(messages: Message[], indexOffset = 0): UiMessage
         const blocks = buildUiRoundBlocks(assistant, toolResultById);
         const hasContent = hasRoundContent({ blocks });
 
-        if (!hasContent) continue;
+        // Keep an empty stopped round so the reply still shows its stopped state.
+        if (!hasContent && assistant.stopReason !== "aborted") continue;
 
         rounds.push({
           round: roundNum,

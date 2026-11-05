@@ -597,3 +597,63 @@ test("other run conflicts are not retried as a busy session", async () => {
   );
   assert.equal(calls.length, 1);
 });
+
+// WKWebView rejects an aborted fetch body with this AbortError; Stop must not surface it.
+const webKitFetchAbort = () => new DOMException("Fetch is aborted", "AbortError");
+
+function stopFetch({ controller, firstEvents = "" }) {
+  let eventStreams = 0;
+  return async (url, init = {}) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname === "/v1/sessions" && init.method === "POST") {
+      return json({ id: "backend-session-1", model, messages: [], last_seq: 0 });
+    }
+    if (parsed.pathname.endsWith("/runs")) {
+      return json({ version: "kbrain.agent.v1", conversation_id: "backend-session-1", run_id: "run-1", accepted_seq: 1 }, 202);
+    }
+    if (parsed.pathname.includes("/cancel")) return json({ ok: true });
+    if (!parsed.pathname.endsWith("/events")) throw new Error(`unexpected K-brain URL ${parsed.pathname}`);
+    eventStreams += 1;
+    if (eventStreams > 1) {
+      // After Stop the turn waits for the backend to confirm the cancellation.
+      const seq = Number(parsed.searchParams.get("after_seq")) + 1;
+      return new Response(stream(event(seq, "run.cancelled")));
+    }
+    const body = new ReadableStream({
+      start(stream) {
+        if (firstEvents) stream.enqueue(new TextEncoder().encode(firstEvents));
+        init.signal?.addEventListener("abort", () => stream.error(webKitFetchAbort()), { once: true });
+        // The user presses Stop while the reply is still streaming.
+        setTimeout(() => controller.abort(), 20);
+      },
+    });
+    return new Response(body, { headers: { "content-type": "text/event-stream" } });
+  };
+}
+
+test("Stop mid-stream keeps the partial reply without the fetch AbortError text", async () => {
+  storage.clear();
+  const controller = new AbortController();
+  const result = await runKBrainTurn({
+    ...baseParams,
+    fetch: stopFetch({ controller, firstEvents: event(2, "assistant.text.delta", { text: "partial reply" }) }),
+    signal: controller.signal,
+  });
+  assert.equal(result.stopReason, "aborted");
+  assert.equal(result.errorMessage, undefined);
+  assert.deepEqual(result.content, [{ type: "text", text: "partial reply" }]);
+  assert.doesNotMatch(JSON.stringify(result), /Fetch is aborted/);
+});
+
+test("Stop before any output settles as an empty stopped turn, not raw abort text", async () => {
+  storage.clear();
+  const controller = new AbortController();
+  const result = await runKBrainTurn({
+    ...baseParams,
+    fetch: stopFetch({ controller }),
+    signal: controller.signal,
+  });
+  assert.equal(result.stopReason, "aborted");
+  assert.equal(result.errorMessage, undefined);
+  assert.deepEqual(result.content, []);
+});

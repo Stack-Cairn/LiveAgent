@@ -1,11 +1,15 @@
-import { CompactingText, LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
+import {
+  CompactingText,
+  GenerationStoppedNotice,
+  LiveAssistantStatus,
+} from "@liveagent/ui/components/chat/AssistantStatus";
 import { AssistantWorkTrace } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearchGroupView";
 import { LiveSparkle } from "@liveagent/ui/components/chat/LiveSparkle";
 import { StreamingSplitMarkdown } from "@liveagent/ui/components/chat/StreamingSplitMarkdown";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
-import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
+import { isStoppedReply, normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { parseRunProgress } from "@liveagent/ui/lib/chat/runProgress";
 import { useStreamingReveal } from "@liveagent/ui/lib/chat/streamingReveal";
@@ -257,8 +261,10 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
   const activeThinkingKey = running ? resolveActiveThinkingEntryKey(layout.work) : null;
   const collapsedTailEntry = running ? resolveActiveWorkEntry(layout.work) : null;
   const showWorkTrace = running || layout.work.length > 0;
+  const stopped = !running && isStoppedReply(rounds);
 
-  if (!showWorkTrace && layout.interaction.length === 0 && layout.answer.length === 0) return null;
+  if (!showWorkTrace && !stopped && layout.interaction.length === 0 && layout.answer.length === 0)
+    return null;
 
   const renderEntry = (
     entry: AssistantTurnLayoutEntry,
@@ -307,6 +313,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
 
       {layout.interaction.map((entry) => renderEntry(entry, false, true))}
       {layout.answer.map((entry) => renderEntry(entry, false))}
+      {stopped ? <GenerationStoppedNotice /> : null}
       {running ? (
         !attentionRequired && parseRunProgress(normalizedToolStatus) ? (
           <LiveAssistantStatus status={normalizedToolStatus} />

@@ -767,6 +767,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.expandProvider": "Expand provider models",
   "chat.collapseProvider": "Collapse provider models",
   "chat.aborted": "Cancelled",
+  "chat.generationStopped": "Generation stopped",
   "chat.contextWindow": "Context Window",
   "chat.usage": "Usage",
   "chat.usageTotal": "Total",
