@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/liveagent/agent-gateway/internal/chatcmd"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -345,8 +346,9 @@ func vetSlashCommandList(req *gatewayv2.SlashCommandListRequest) error {
 	return nil
 }
 
-// vetGoalManage 只放行 clear：set/resume 会开始一轮运行，走 ChatRequest 的 goal_action。
-// 校验后原地规范化，桌面端按规范值精确匹配。
+// vetGoalManage 放行目标栏的非运行动作 get/pause/update/clear：set/resume 会开始一轮
+// 运行，走 ChatRequest 的 goal_action。校验后原地规范化，桌面端按规范值精确匹配；
+// 只有 update 带目标正文，其余动作把它清空后再转发。
 func vetGoalManage(req *gatewayv2.GoalManageRequest) error {
 	if req == nil {
 		return errors.New("conversation is unavailable")
@@ -356,8 +358,19 @@ func vetGoalManage(req *gatewayv2.GoalManageRequest) error {
 	if req.ConversationId == "" || len(req.ConversationId) > maxComposerIDLen {
 		return errors.New("conversation is unavailable")
 	}
-	if req.Action != "clear" {
-		return errors.New("goal action must be clear")
+	switch req.Action {
+	case "get", "pause", "clear":
+		req.Goal = ""
+	case "update":
+		req.Goal = strings.TrimSpace(req.GetGoal())
+		if req.Goal == "" {
+			return errors.New("goal text is required for goal update")
+		}
+		if len(req.Goal) > chatcmd.MaxGoalTextLen {
+			return errors.New("goal text is too long")
+		}
+	default:
+		return errors.New("goal action must be get, pause, update or clear")
 	}
 	return nil
 }

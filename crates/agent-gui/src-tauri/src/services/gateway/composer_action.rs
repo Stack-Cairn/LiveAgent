@@ -1,4 +1,4 @@
-//! WebUI 输入框“/”指令的非运行动作往返（/goal clear、/loop）。
+//! WebUI 输入框“/”指令与目标栏的非运行动作往返（目标的 get/pause/update/clear、/loop）。
 //!
 //! 对话 id 到 K-brain 会话 id 的映射只在桌面 WebView 里，所以 Rust 收到
 //! `GoalManageRequest` / `LoopManageRequest` 后以 `gateway:composer-action-requested`
@@ -68,7 +68,15 @@ pub(crate) fn goal_response(value: &Value) -> proto::GoalManageResponse {
         round: number("round"),
         max_rounds: number("max_rounds"),
         reason: text(value, "reason"),
+        started_at: text(value, "started_at"),
     }
+}
+
+/// update 的新目标正文随 data.goal 交给 TS；其余动作不带数据（Gateway 已校验并清空）。
+fn goal_action_data(request: &proto::GoalManageRequest) -> Option<Value> {
+    let goal = request.goal.trim();
+    (request.action.trim() == "update" && !goal.is_empty())
+        .then(|| serde_json::json!({ "goal": goal }))
 }
 
 fn loop_summary(item: &Value) -> proto::LoopSummary {
@@ -159,7 +167,7 @@ impl GatewayController {
                 prompt: String::new(),
                 reasoning: String::new(),
                 loop_id: String::new(),
-                data: None,
+                data: goal_action_data(&request),
             })
             .await;
         match outcome {
@@ -250,6 +258,10 @@ mod tests {
         assert_eq!(goal.status, "cleared");
         assert_eq!(goal.round, 2);
         assert_eq!(goal.max_rounds, 100);
+        assert_eq!(goal.started_at, "");
+        let started =
+            goal_response(&json!({ "status": "active", "started_at": "2026-11-05T10:00:00Z" }));
+        assert_eq!(started.started_at, "2026-11-05T10:00:00Z");
 
         let loops = loop_response(&json!({ "loops": [
             { "id": "l-1", "interval": "10m", "cron": "0 */10 * * * *", "prompt": "check", "enabled": true }
@@ -258,6 +270,22 @@ mod tests {
         assert_eq!(loops.loops[0].interval, "10m");
         assert!(loops.loops[0].enabled);
         assert!(loop_response(&Value::Null).loops.is_empty());
+    }
+
+    #[test]
+    fn only_goal_update_forwards_goal_text() {
+        let request = |action: &str, goal: &str| proto::GoalManageRequest {
+            conversation_id: "c-1".to_string(),
+            action: action.to_string(),
+            goal: goal.to_string(),
+        };
+        assert_eq!(
+            goal_action_data(&request("update", " next goal ")),
+            Some(json!({ "goal": "next goal" }))
+        );
+        assert_eq!(goal_action_data(&request("update", "  ")), None);
+        assert_eq!(goal_action_data(&request("pause", "stray")), None);
+        assert_eq!(goal_action_data(&request("get", "")), None);
     }
 
     #[test]

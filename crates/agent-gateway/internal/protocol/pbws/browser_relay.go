@@ -242,6 +242,21 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 			c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_LoopManageResp{LoopManageResp: response}})
 			return
 		}
+		if request := env.GetGoalManage(); request != nil {
+			if err := vetGoalManage(request); err != nil {
+				_ = c.sendLocalError(requestID, err.Error())
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+			defer cancel()
+			response, err := c.srv.kbrainRelay.GoalManage(ctx, request)
+			if err != nil {
+				_ = c.sendLocalError(requestID, errorMessage(err))
+				return
+			}
+			c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_GoalManageResp{GoalManageResp: response}})
+			return
+		}
 		if request := env.GetSkillManage(); request != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
 			defer cancel()

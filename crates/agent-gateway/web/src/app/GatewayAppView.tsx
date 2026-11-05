@@ -145,6 +145,7 @@ import { useWindowFileDropGuard } from "./hooks/useWindowFileDropGuard";
 import { sendComposerCommandTurn } from "./sendComposerCommandTurn";
 import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
 import { UserMenu } from "./UserMenu";
+import { WebGoalBarHost } from "./WebGoalBarHost";
 import { createWebComposerCommandHost } from "./webComposerCommandHost";
 import {
   GatewayConversationPaneHost,
@@ -1961,6 +1962,19 @@ export function GatewayAppView({
                                   searchMentionableConversations={searchMentionableConversations}
                                   mentionApps={mentionApps}
                                   commandHost={composerCommandHost}
+                                  goalBar={
+                                    <WebGoalBarHost
+                                      key={`goal-${displayedConversationId}`}
+                                      conversationId={
+                                        isLocalDraftConversationId(displayedConversationId)
+                                          ? undefined
+                                          : displayedConversationId
+                                      }
+                                      client={api ?? undefined}
+                                      commandHost={composerCommandHost}
+                                      running={composerIsSending}
+                                    />
+                                  }
                                   executionMode={settings.system.executionMode}
                                   hasModels={modelOptions.length > 0}
                                   currentModelLabel={currentModelLabel}

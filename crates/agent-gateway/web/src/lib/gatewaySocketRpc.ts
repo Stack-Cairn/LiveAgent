@@ -1192,12 +1192,37 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     });
   }
 
-  /** /goal clear：清除会话目标（set/resume 会开始一轮运行，走聊天请求）。改状态的请求不自动重发。 */
-  async clearGoal(conversationId: string): Promise<GoalManageResponse> {
+  /** 读取会话目标（目标栏）。只读，可安全重试。 */
+  async getGoal(conversationId: string): Promise<GoalManageResponse> {
+    return this.requestWithRecovery<GoalManageResponse>("goal.manage", {
+      conversationId,
+      action: "get",
+    });
+  }
+
+  /**
+   * 目标的非运行动作：暂停、修改正文与清除（set/resume 会开始一轮运行，走聊天请求）。
+   * 改状态的请求不自动重发。
+   */
+  async manageGoal(
+    conversationId: string,
+    input: { action: "pause" | "clear" } | { action: "update"; goal: string },
+  ): Promise<GoalManageResponse> {
     return this.request<GoalManageResponse>("goal.manage", {
       conversationId,
-      action: "clear",
+      action: input.action,
+      goal: input.action === "update" ? input.goal : "",
     });
+  }
+
+  /** /goal clear：清除会话目标。 */
+  async clearGoal(conversationId: string): Promise<GoalManageResponse> {
+    return this.manageGoal(conversationId, { action: "clear" });
+  }
+
+  /** /goal pause：暂停会话目标。 */
+  async pauseGoal(conversationId: string): Promise<GoalManageResponse> {
+    return this.manageGoal(conversationId, { action: "pause" });
   }
 
   async listLoops(conversationId: string): Promise<LoopManageResponse> {

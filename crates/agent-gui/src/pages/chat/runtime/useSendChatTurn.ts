@@ -1540,7 +1540,15 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             sessionId,
             clientRequestId: gatewayBridgeRequest?.clientRequestId,
             composerCommand: overrides?.composerCommand,
-            onGoalUpdate: (state) => showGoalProgress(conversationId, state, t),
+            onGoalUpdate: (state) => {
+              showGoalProgress(conversationId, state, t);
+              // WebUI 目标栏消费与直连网关相同的形状：{type:"goal_updated", goal:<GoalState>}。
+              gatewayBridgeEvents.queueEvent({
+                type: "goal_updated",
+                goal: state,
+                conversation_id: conversationId,
+              });
+            },
             taskStateStore,
             conversationId,
             referencedConversations,

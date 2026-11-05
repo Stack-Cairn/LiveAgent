@@ -11318,14 +11318,16 @@ func (x *PromptTemplateExpandResponse) GetText() string {
 	return ""
 }
 
-// 会话目标的非运行动作（目前只有 clear）。set/resume 会开始一轮运行，走
+// 会话目标的非运行动作：get、pause、update 与 clear。set/resume 会开始一轮运行，走
 // ChatRequest 的 goal_action，复用聊天的流式与镜像链路。
 type GoalManageRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	Action         string                 `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// update 的新目标正文；其余动作为空。
+	Goal          string `protobuf:"bytes,3,opt,name=goal,proto3" json:"goal,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GoalManageRequest) Reset() {
@@ -11372,15 +11374,24 @@ func (x *GoalManageRequest) GetAction() string {
 	return ""
 }
 
+func (x *GoalManageRequest) GetGoal() string {
+	if x != nil {
+		return x.Goal
+	}
+	return ""
+}
+
 type GoalManageResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	Goal           string                 `protobuf:"bytes,2,opt,name=goal,proto3" json:"goal,omitempty"`
 	// none、active、continuing、met、paused 或 cleared。
-	Status        string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	Round         int32  `protobuf:"varint,4,opt,name=round,proto3" json:"round,omitempty"`
-	MaxRounds     int32  `protobuf:"varint,5,opt,name=max_rounds,json=maxRounds,proto3" json:"max_rounds,omitempty"`
-	Reason        string `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	Status    string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	Round     int32  `protobuf:"varint,4,opt,name=round,proto3" json:"round,omitempty"`
+	MaxRounds int32  `protobuf:"varint,5,opt,name=max_rounds,json=maxRounds,proto3" json:"max_rounds,omitempty"`
+	Reason    string `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	// 目标设定或最近一次恢复的时间（RFC3339），目标栏据此显示已运行时长。
+	StartedAt     string `protobuf:"bytes,7,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11453,6 +11464,13 @@ func (x *GoalManageResponse) GetMaxRounds() int32 {
 func (x *GoalManageResponse) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *GoalManageResponse) GetStartedAt() string {
+	if x != nil {
+		return x.StartedAt
 	}
 	return ""
 }
@@ -17517,10 +17535,11 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\aworkdir\x18\x03 \x01(\tR\aworkdir\"F\n" +
 	"\x1cPromptTemplateExpandResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04text\"T\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\"h\n" +
 	"\x11GoalManageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x16\n" +
-	"\x06action\x18\x02 \x01(\tR\x06action\"\xb6\x01\n" +
+	"\x06action\x18\x02 \x01(\tR\x06action\x12\x12\n" +
+	"\x04goal\x18\x03 \x01(\tR\x04goal\"\xd5\x01\n" +
 	"\x12GoalManageResponse\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x12\n" +
 	"\x04goal\x18\x02 \x01(\tR\x04goal\x12\x16\n" +
@@ -17528,7 +17547,9 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x05round\x18\x04 \x01(\x05R\x05round\x12\x1d\n" +
 	"\n" +
 	"max_rounds\x18\x05 \x01(\x05R\tmaxRounds\x12\x16\n" +
-	"\x06reason\x18\x06 \x01(\tR\x06reason\"3\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"started_at\x18\a \x01(\tR\tstartedAt\"3\n" +
 	"\x17SlashCommandListRequest\x12\x18\n" +
 	"\aworkdir\x18\x01 \x01(\tR\aworkdir\"\x9c\x01\n" +
 	"\x13SlashCommandSummary\x12\x12\n" +

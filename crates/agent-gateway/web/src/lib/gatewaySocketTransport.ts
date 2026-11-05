@@ -12,6 +12,7 @@ import type {
   WorkspaceActivity,
   WorkspaceActivityEventPayload,
 } from "@liveagent/ui/lib/workspace-activity/types";
+import { absorbGoalChatEvent } from "@/lib/chat/goalState";
 import { ConversationStreamClient } from "@/lib/chat/stream/conversationStreamClient";
 import { normalizeActivityEvent, normalizeCommandUpdate } from "@/lib/chat/stream/streamTypes";
 import { BrowserGatewayTerminalStreamClient } from "@/lib/terminal/gatewayTerminalStreamClient";
@@ -1343,6 +1344,8 @@ export class GatewayWebSocketTransport {
     }
 
     if (type === "chat.event") {
+      // 目标推送同时进目标栏状态；事件仍交给对话流，seq 才连续。
+      absorbGoalChatEvent(payload);
       this.conversationStreams.handleChatEvent(payload);
       return;
     }
