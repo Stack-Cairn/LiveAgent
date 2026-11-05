@@ -54,6 +54,7 @@ import {
 import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { copyTextToClipboard } from "../lib/shared/clipboard";
 import { cn } from "../lib/shared/utils";
+import { createStreamingBlockParser } from "../lib/streamingMarkdownBlocks";
 import { MarkdownMermaidBlock } from "./markdown/MarkdownMermaidBlock";
 import {
   CHAT_MARKDOWN_CLASS,
@@ -232,6 +233,32 @@ export type MarkdownProps = {
 // code 走包装插件：有界 LRU + 流式增长块 300ms 节流（见 markdownCodeHighlight.ts）。
 // 删除线只认 `~~text~~`，单个 `~` 按普通字符显示（见 markdownStrikethrough.ts）。
 const streamdownPlugins = { code: throttledCodePlugin, math, cjk: cjkDoubleTildeStrikethrough };
+// Streamdown folds these props into the value of the context every block,
+// code block and table reads. Fresh literals per render would hand that
+// context a new value on each streaming update, re-rendering the consumers in
+// every already-finished block and walking the whole tree to find them.
+type StreamdownProps = ComponentProps<typeof Streamdown>;
+const streamdownShikiThemes: StreamdownProps["shikiTheme"] = ["github-light", "github-dark"];
+function streamdownControls(interactive: boolean): StreamdownProps["controls"] {
+  return {
+    code: false,
+    mermaid: { copy: interactive, download: false, fullscreen: false, panZoom: interactive },
+    table: false,
+  };
+}
+const interactiveStreamdownControls = streamdownControls(true);
+const readOnlyStreamdownControls = streamdownControls(false);
+const renderExternalLinkModal = (modalProps: LinkSafetyModalProps) => (
+  <ExternalLinkModal {...modalProps} />
+);
+const interactiveLinkSafety: StreamdownProps["linkSafety"] = {
+  enabled: true,
+  renderModal: renderExternalLinkModal,
+};
+const readOnlyLinkSafety: StreamdownProps["linkSafety"] = {
+  enabled: false,
+  renderModal: renderExternalLinkModal,
+};
 const remarkPlugins = [
   ...Object.entries(defaultRemarkPlugins).map(([name, plugin]) =>
     name === "gfm" ? withDoubleTildeStrikethrough(plugin) : plugin,
@@ -868,6 +895,13 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
   } = props;
   const streamdownTranslations = useStreamdownTranslations();
   const streaming = renderMode === "streaming";
+  // Streaming text only grows: split it incrementally and repair just the
+  // last block instead of letting Streamdown remend + re-lex all of it on
+  // every update (see streamingMarkdownBlocks).
+  const streamingBlockParser = useMemo(
+    () => (streaming ? createStreamingBlockParser() : null),
+    [streaming],
+  );
   const normalizedContent = useMemo(
     () =>
       normalizeLatexDelimiters(
@@ -918,27 +952,15 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
         components={components}
         mode={streaming ? "streaming" : "static"}
         dir="auto"
-        parseIncompleteMarkdown
-        parseMarkdownIntoBlocksFn={parseChatMarkdownBlocks}
+        parseIncompleteMarkdown={streamingBlockParser === null}
+        parseMarkdownIntoBlocksFn={streamingBlockParser ?? parseChatMarkdownBlocks}
         normalizeHtmlIndentation
         isAnimating={showCaret}
         caret={streaming ? "block" : undefined}
         animated={false}
-        linkSafety={{
-          enabled: !readOnly,
-          renderModal: (modalProps) => <ExternalLinkModal {...modalProps} />,
-        }}
-        shikiTheme={["github-light", "github-dark"] as const}
-        controls={{
-          code: false,
-          mermaid: {
-            copy: !readOnly,
-            download: false,
-            fullscreen: false,
-            panZoom: !readOnly,
-          },
-          table: false,
-        }}
+        linkSafety={readOnly ? readOnlyLinkSafety : interactiveLinkSafety}
+        shikiTheme={streamdownShikiThemes}
+        controls={readOnly ? readOnlyStreamdownControls : interactiveStreamdownControls}
         translations={streamdownTranslations}
       >
         {normalizedContent}

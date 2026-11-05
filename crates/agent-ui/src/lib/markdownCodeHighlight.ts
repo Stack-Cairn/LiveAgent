@@ -18,6 +18,14 @@
 //     forwards the newest content, so the final state is always exact.
 // Upstream's internal cache then only accumulates one entry per throttle
 // step instead of one per delta (~20x fewer), and our own caches are bounded.
+//
+// Forwarded calls also go through a one-at-a-time queue. Upstream tokenizes
+// inside the callback of a shared promise, so every block that asks in the
+// same render (opening a conversation, rows scrolling into view) used to be
+// tokenized back to back in one microtask checkpoint: a single long task that
+// grows with the number of visible code blocks. The queue hands upstream one
+// block per macrotask and starts the next only after the previous delivered,
+// so frames and input run in between.
 import {
   code as baseCodePlugin,
   type CodeHighlighterPlugin,
@@ -29,6 +37,50 @@ const EXACT_CACHE_LIMIT = 256;
 const IDENTITY_CACHE_LIMIT = 64;
 const IDENTITY_HEAD_CHARS = 80;
 const THROTTLE_MS = 300;
+// Upstream drops the callback when highlighting fails (it only logs), so a
+// queued job that never delivers must not stall the blocks behind it.
+const QUEUE_JOB_TIMEOUT_MS = 2_000;
+
+export type HighlightScheduler = (run: () => void) => void;
+
+const scheduleMacrotask: HighlightScheduler = (run) => {
+  setTimeout(run, 0);
+};
+
+type HighlightJob = (done: () => void) => void;
+
+// Serial, macrotask-paced runner for upstream highlight calls.
+function createHighlightQueue(schedule: HighlightScheduler, jobTimeoutMs: number) {
+  const jobs: HighlightJob[] = [];
+  let busy = false;
+  const pump = () => {
+    if (busy) return;
+    const job = jobs.shift();
+    if (!job) return;
+    busy = true;
+    schedule(() => {
+      let finished = false;
+      const timer = setTimeout(() => done(), jobTimeoutMs);
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        busy = false;
+        pump();
+      };
+      try {
+        job(done);
+      } catch (error) {
+        done();
+        throw error;
+      }
+    });
+  };
+  return (job: HighlightJob) => {
+    jobs.push(job);
+    pump();
+  };
+}
 
 type IdentityEntry = {
   lastForwardAt: number;
@@ -94,29 +146,41 @@ function lruSet<Value>(cache: Map<string, Value>, key: string, value: Value, lim
 
 export function createThrottledCodePlugin(
   base: CodeHighlighterPlugin = baseCodePlugin,
+  config: { schedule?: HighlightScheduler; jobTimeoutMs?: number } = {},
 ): CodeHighlighterPlugin {
   const exactCache = new Map<string, HighlightResult>();
   const identities = new Map<string, IdentityEntry>();
+  const enqueue = createHighlightQueue(
+    config.schedule ?? scheduleMacrotask,
+    config.jobTimeoutMs ?? QUEUE_JOB_TIMEOUT_MS,
+  );
 
+  // Always answers through `callback`: the forward itself only queues.
   const forward = (
     entry: IdentityEntry,
     options: HighlightOptions,
     callback?: (result: HighlightResult) => void,
-  ): HighlightResult | null => {
+  ): null => {
     entry.lastForwardAt = Date.now();
     entry.lastCode = options.code;
     const key = exactKey(options);
-    const deliver = (result: HighlightResult) => {
-      entry.lastResult = result;
-      lruSet(exactCache, key, result, EXACT_CACHE_LIMIT);
-      callback?.(result);
-    };
-    const immediate = base.highlight(options, deliver);
-    if (immediate) {
-      entry.lastResult = immediate;
-      lruSet(exactCache, key, immediate, EXACT_CACHE_LIMIT);
-    }
-    return immediate;
+    enqueue((done) => {
+      const deliver = (result: HighlightResult) => {
+        entry.lastResult = result;
+        lruSet(exactCache, key, result, EXACT_CACHE_LIMIT);
+        callback?.(result);
+        done();
+      };
+      // Another view of the same code may have been tokenized while this one waited.
+      const cached = lruGet(exactCache, key);
+      if (cached) {
+        deliver(cached);
+        return;
+      }
+      const immediate = base.highlight(options, deliver);
+      if (immediate) deliver(immediate);
+    });
+    return null;
   };
 
   return {
