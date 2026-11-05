@@ -7,8 +7,14 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const loader = createWebModuleLoader({ rootDir });
 const { BUILTIN_TOOL_CATALOG } = loader.loadModule("@liveagent/ui/lib/tools/builtinToolCatalog.ts");
-const { groupRoundBlocks, isBuiltinShareToolName, resolveAssistantTurnLayout } =
-  loader.loadModule("@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts");
+const {
+  getToolActivityCategory,
+  getToolMeta,
+  groupRoundBlocks,
+  isBuiltinShareToolName,
+  resolveAssistantTurnLayout,
+} = loader.loadModule("@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts");
+const IconSet = loader.loadModule("@liveagent/ui/components/IconSet.tsx");
 
 test("shared history recognizes every catalog tool as builtin", () => {
   for (const entry of BUILTIN_TOOL_CATALOG) {
@@ -16,6 +22,21 @@ test("shared history recognizes every catalog tool as builtin", () => {
   }
   assert.equal(isBuiltinShareToolName("mcp_docs_search"), true);
   assert.equal(isBuiltinShareToolName("CustomTool"), false);
+});
+
+test("K-brain lsp and web_fetch rows get their own activity, icon and accent", () => {
+  assert.equal(getToolActivityCategory("lsp"), "code");
+  assert.equal(getToolMeta("lsp").Icon, IconSet.Braces);
+  assert.equal(getToolMeta("lsp").accent, "var(--tool-search-accent)");
+
+  for (const name of ["web_fetch", "WebFetch"]) {
+    assert.equal(getToolActivityCategory(name), "fetch", name);
+    assert.equal(getToolMeta(name).Icon, IconSet.Globe, name);
+  }
+
+  // Unknown tools keep the generic fallback instead of borrowing either mapping.
+  assert.equal(getToolActivityCategory("LSP"), "other");
+  assert.equal(getToolMeta("web_fetch_20250910").Icon, IconSet.Wrench);
 });
 
 test("ordinary tool activity keeps one group identity as later tools append", () => {
