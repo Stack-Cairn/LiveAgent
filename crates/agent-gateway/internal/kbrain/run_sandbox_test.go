@@ -23,6 +23,13 @@ func TestRunSandboxCapabilityBeforeSubmission(t *testing.T) {
 		{"offline without network control", false, map[string]any{"supported": true, "network_control": false}, "offline sandbox"},
 		{"networked sandbox", true, map[string]any{"supported": true, "network_control": false}, ""},
 		{"offline sandbox", false, map[string]any{"supported": true, "network_control": true}, ""},
+		// Landlock fences writes but leaves .liveagent and .git/hooks writable.
+		{"sandbox without path protection", true, map[string]any{"supported": true, "mechanism": "landlock", "network_control": true, "path_protection": false}, "protected paths"},
+		{"offline sandbox without path protection", false, map[string]any{"supported": true, "mechanism": "landlock", "network_control": true, "path_protection": false}, "protected paths"},
+		{"landlock from a backend without the field", true, map[string]any{"supported": true, "mechanism": "landlock", "network_control": true}, "protected paths"},
+		{"unsupported sandbox without path protection", true, map[string]any{"supported": false, "mechanism": "bubblewrap", "network_control": false, "path_protection": false}, "cannot sandbox commands on this machine"},
+		{"path protection reported", true, map[string]any{"supported": true, "mechanism": "bubblewrap", "network_control": true, "path_protection": true}, ""},
+		{"older backend without the field", false, map[string]any{"supported": true, "mechanism": "bubblewrap", "network_control": true}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			posts := 0

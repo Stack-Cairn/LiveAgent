@@ -5,6 +5,7 @@ export type SandboxCapability = {
   /** 是否支持断网变体(sandboxOffline)。 */
   network_control: boolean;
   read_masking?: boolean;
+  path_protection?: boolean;
   reason?: string;
 };
 

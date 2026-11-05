@@ -67,10 +67,41 @@ test("a sandboxed run is refused, never sent unconfined, when the backend cannot
   await run(true);
   runSandbox = { supported: true, network_control: true };
   await run(false);
+  // A sandbox that leaves .liveagent and .git/hooks writable is no sandbox for LiveAgent.
+  runSandbox = { supported: true, mechanism: "landlock", network_control: true, read_masking: false, path_protection: false };
+  await assert.rejects(run(true), /protected paths/);
+  await assert.rejects(run(false), /protected paths/);
+  runSandbox = { supported: true, mechanism: "bubblewrap", network_control: true, read_masking: true, path_protection: true };
+  await run(true);
   assert.deepEqual(posts.map((body) => body.options.sandbox), [
     { mode: "workspace", network: true },
     { mode: "workspace", network: false },
+    { mode: "workspace", network: true },
   ]);
+});
+
+test("run sandbox health gate requires path protection", () => {
+  const { supportsRunSandbox, runSandboxLacksPathProtection } = loader.loadModule("@liveagent/ui/lib/kbrain/health");
+  const health = (runSandbox) => ({ capabilities: { run_sandbox: runSandbox } });
+  const online = { network: true };
+  const offline = { network: false };
+  const landlock = { supported: true, mechanism: "landlock", network_control: true, read_masking: false, path_protection: false };
+  assert.equal(runSandboxLacksPathProtection(landlock), true);
+  assert.equal(supportsRunSandbox(health(landlock), online), false);
+  assert.equal(supportsRunSandbox(health(landlock), offline), false);
+  // Older K-brain omits the field and only used mechanisms that protect the paths.
+  const legacy = { supported: true, mechanism: "seatbelt", network_control: true };
+  assert.equal(runSandboxLacksPathProtection(legacy), false);
+  assert.equal(supportsRunSandbox(health(legacy), online), true);
+  assert.equal(supportsRunSandbox(health(legacy), offline), true);
+  // ...except Landlock, which never protects them.
+  assert.equal(runSandboxLacksPathProtection({ supported: true, mechanism: "landlock", network_control: true }), true);
+  const protectedSandbox = { ...landlock, mechanism: "bubblewrap", read_masking: true, path_protection: true };
+  assert.equal(supportsRunSandbox(health(protectedSandbox), online), true);
+  assert.equal(supportsRunSandbox(health(protectedSandbox), offline), true);
+  assert.equal(runSandboxLacksPathProtection(undefined), false);
+  assert.equal(runSandboxLacksPathProtection({ ...landlock, supported: false }), false, "unsupported for its own reason");
+  assert.equal(supportsRunSandbox({ capabilities: {} }, online), false);
 });
 
 test("the retired full-access mode migrates to always allow", () => {
@@ -208,4 +239,38 @@ test("the desktop reads the sandbox capability from K-brain health", () => {
   assert.equal(unsupported.supported, false);
   assert.equal(unsupported.network_control, false, "no offline sandbox without a sandbox");
   assert.equal(unsupported.reason, "bwrap not found");
+  const reason = "bwrap is not installed; using Landlock (ABI 6) with seccomp";
+  const landlock = sandboxCapabilityFromHealth({
+    capabilities: {
+      run_sandbox: { supported: true, mechanism: "landlock", platform: "linux", network_control: true, read_masking: false, path_protection: false, reason },
+    },
+  });
+  assert.deepEqual(
+    landlock,
+    { supported: false, mechanism: "landlock", platform: "linux", network_control: false, read_masking: false, path_protection: false, reason },
+    "protected paths left writable disable both sandbox modes",
+  );
+  assert.deepEqual(
+    sandboxCapabilityFromHealth({
+      capabilities: {
+        run_sandbox: { supported: true, mechanism: "bubblewrap", platform: "linux", network_control: true, read_masking: true, path_protection: true },
+      },
+    }),
+    { supported: true, mechanism: "bubblewrap", platform: "linux", network_control: true, read_masking: true, path_protection: true },
+  );
+  // Landlock from a backend that predates the field is still unprotected.
+  const unlabelled = sandboxCapabilityFromHealth({
+    capabilities: { run_sandbox: { supported: true, mechanism: "landlock", platform: "linux", network_control: true } },
+  });
+  assert.equal(unlabelled.supported, false);
+  assert.equal(unlabelled.path_protection, false);
+  // An unsupported sandbox keeps the backend's reason; path protection is moot.
+  const bwrapMissing = sandboxCapabilityFromHealth({
+    capabilities: {
+      run_sandbox: { supported: false, mechanism: "bubblewrap", platform: "linux", network_control: false, read_masking: false, path_protection: false, reason: "bubblewrap (bwrap) is not installed" },
+    },
+  });
+  assert.equal(bwrapMissing.supported, false);
+  assert.equal("path_protection" in bwrapMissing, false);
+  assert.equal(bwrapMissing.reason, "bubblewrap (bwrap) is not installed");
 });
