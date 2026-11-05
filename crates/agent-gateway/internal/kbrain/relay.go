@@ -21,6 +21,7 @@ type Relay struct {
 	target       string
 	defaultModel ModelRef
 	createCWD    string
+	uploads      *UploadStore
 
 	mu              sync.Mutex
 	sessions        map[string]string
@@ -121,6 +122,7 @@ func newRelay(client *Client, target string, defaultModel ModelRef, cwd, queuePa
 		target:          target,
 		defaultModel:    defaultModel,
 		createCWD:       cwd,
+		uploads:         NewUploadStore(),
 		queuePath:       strings.TrimSpace(queuePath),
 		sessions:        map[string]string{},
 		runs:            map[string]*runState{},
@@ -457,7 +459,7 @@ func (r *Relay) StartWithCWD(ctx context.Context, gatewayRunID, conversationID, 
 	gatewayRunID = strings.TrimSpace(gatewayRunID)
 	conversationID = strings.TrimSpace(conversationID)
 	clientRequestID = strings.TrimSpace(clientRequestID)
-	if gatewayRunID == "" || conversationID == "" || strings.TrimSpace(prompt.Prompt) == "" {
+	if gatewayRunID == "" || conversationID == "" || !prompt.hasInput() {
 		return false, errors.New("kbrain relay run identity and prompt are required")
 	}
 	if ctx == nil {

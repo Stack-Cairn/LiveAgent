@@ -66,7 +66,7 @@ func (r *Relay) startBackendQueuedRun(ctx context.Context, gatewayRunID, convers
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if strings.TrimSpace(gatewayRunID) == "" || strings.TrimSpace(conversationID) == "" || strings.TrimSpace(requestID) == "" || strings.TrimSpace(prompt.Prompt) == "" {
+	if strings.TrimSpace(gatewayRunID) == "" || strings.TrimSpace(conversationID) == "" || strings.TrimSpace(requestID) == "" || !prompt.hasInput() {
 		return false, errors.New("queue run identity and prompt are required")
 	}
 	if policy == "" || policy == "auto" {
