@@ -1,4 +1,9 @@
-import type { AssistantMessage, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
+import type {
+  AssistantMessage,
+  Message,
+  ToolCall,
+  ToolResultMessage,
+} from "@liveagent/app/lib/agentTypes";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import {
@@ -517,11 +522,17 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           ? goalState
           : undefined;
       if (nextRound?.next_client_request_id) {
-        // 把刚完成的一轮落进转录区，并先显示后端为下一轮写入的用户消息。
+        // 把刚完成的一轮落进转录区，并先显示后端为下一轮写入的用户消息。这条消息
+        // 是后端写的，按通知显示，与历史回读（origin background）一致。
         params.settleLiveTranscript(transcriptStore);
         params.applyConversationState(
           appendMessagesToConversation(state, [
-            { role: "user", content: nextRound.next_prompt ?? "", timestamp: Date.now() },
+            {
+              role: "user",
+              content: nextRound.next_prompt ?? "",
+              timestamp: Date.now(),
+              liveAgentBackgroundNotice: true,
+            } as Message,
           ]),
         );
         hookLifecycle.ensureMessageEnded();

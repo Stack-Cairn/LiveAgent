@@ -69,6 +69,16 @@ func TestHistoryMessagesJSONMarksLegacyBackgroundNotices(t *testing.T) {
 		{"[subagent] why did it stop?", false},
 		{"[wait] how long is left?", false},
 		{"please check [process bash-1 completed exit_code=0]\n$ ls", false},
+		{"[goal 10/100] Draft the v1.3 release notes", true},
+		{"[goal 1/3] 整理发布说明\n第二行", true},
+		{"A new context window is active. Continue the current task using the available workspace and tools. The previous conversation was intentionally discarded.\n\nCurrent task:\nship it", true},
+		{"<system-reminder>\nYour previous response was cut off because it reached the output token limit. Continue exactly where it stopped. Do not repeat text you already wrote.\n</system-reminder>", true},
+		{"<system-reminder>\nYour previous response was cut off because it reached the output token limit while you were writing a tool call.\n</system-reminder>", true},
+		{"[goal] what is the goal?", false},
+		{"[goal 0/3] start", false},
+		{"/goal Draft the v1.3 release notes", false},
+		{"what does [goal 2/5] mean?", false},
+		{"A new context window is active, right?", false},
 	}
 	messages := make([]Message, 0, len(cases))
 	for _, c := range cases {

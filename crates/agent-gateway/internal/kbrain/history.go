@@ -304,14 +304,19 @@ func sessionSummary(id string, session Session) *gatewayv2.ConversationSummary {
 
 // legacyBackgroundNotice matches the fixed headers of the notices K-brain 0.107.17
 // and earlier saved as plain user messages, without origin (#1211). Task ids and
-// statuses come from the backend, so typed text does not match by accident.
+// statuses come from the backend, so typed text does not match by accident. Goal
+// continuation rounds, the new-context notice and the output-limit reminder carry
+// no origin up to 0.107.18; their text is fixed by the backend as well.
 var legacyBackgroundNotice = regexp.MustCompile(`^(?:` +
 	`\[process (?:mp|bash)-\d+ (?:completed|failed|cancelled|timed_out)(?: exit_code=-?\d+)?\][^\n]*\n\$ ` +
 	`|\[subagent [a-z0-9]+(?:-[a-z0-9]+)* (?:done|error|cancelled)\] ` +
 	`|\[subagent [a-z0-9]+(?:-[a-z0-9]+)*\] prepare subagent workspace` +
 	`|\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)* (?:done|timeout)\] ` +
 	`|\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)*\] gave up: ` +
-	`|\[workflow run-[0-9a-f]+(?:-[0-9a-f]+)+ [a-z_]+\] )`)
+	`|\[workflow run-[0-9a-f]+(?:-[0-9a-f]+)+ [a-z_]+\] ` +
+	`|\[goal [1-9]\d*/[1-9]\d*\] \S` +
+	`|A new context window is active\. Continue the current task using the available workspace and tools\. The previous conversation was intentionally discarded\.(?:\n|$)` +
+	`|<system-reminder>\nYour previous response was cut off because it reached the output token limit[ .])`)
 
 // isBackgroundNotice reports whether a user message is a notice K-brain delivered
 // on its own rather than text the user wrote.

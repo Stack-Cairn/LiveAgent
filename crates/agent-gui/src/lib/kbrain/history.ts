@@ -136,6 +136,11 @@ const LEGACY_BACKGROUND_NOTICE_PATTERNS = [
   /^\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)* (?:done|timeout)\] /,
   /^\[wait wait-[a-z0-9]+(?:-[a-z0-9]+)*\] gave up: /,
   /^\[workflow run-[0-9a-f]+(?:-[0-9a-f]+)+ [a-z_]+\] /,
+  // 目标续跑轮次、新上下文通知与输出上限续写提醒（0.107.18 及更早没有 origin）：
+  // 都是后端写的固定文本，round/max 是后端的轮次计数。
+  /^\[goal [1-9]\d*\/[1-9]\d*\] \S/,
+  /^A new context window is active\. Continue the current task using the available workspace and tools\. The previous conversation was intentionally discarded\.(?:\n|$)/,
+  /^<system-reminder>\nYour previous response was cut off because it reached the output token limit[ .]/,
 ];
 
 function isLegacyBackgroundNotice(text: string): boolean {

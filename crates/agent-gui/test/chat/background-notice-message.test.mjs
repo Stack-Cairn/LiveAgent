@@ -25,14 +25,14 @@ const loader = createTsModuleLoader({
   mocks: {
     "react/jsx-runtime": jsxRuntime,
     [path.join(uiDir, "i18n/index.ts")]: { useLocale: () => ({ t: (key) => key }) },
-    [path.join(uiDir, "components/IconSet.tsx")]: { Activity: NullIcon, ChevronRight: NullIcon },
+    [path.join(uiDir, "components/IconSet.tsx")]: { Activity: NullIcon, ChevronRight: NullIcon, Goal: NullIcon },
     "@liveagent/ui/components/chat/EditableUserMessageBubble": { EditableUserMessageBubble: Marker("editor") },
     "@liveagent/ui/components/chat/UserMessageBubbleBody": { UserMessageBubbleBody: Marker("bubble") },
     "../../../agent-ui-adapters/composerImagePreview": { loadComposerUploadedImagePreview: () => null },
     "./RowActions": { UserRowFooter: Marker("footer") },
   },
 });
-const { BackgroundNoticeMessage, splitBackgroundNotice } = loader.loadModule(
+const { BackgroundNoticeMessage, parseGoalRoundNotice, splitBackgroundNotice } = loader.loadModule(
   "@liveagent/ui/components/chat/BackgroundNoticeMessage.tsx",
 );
 const { UserMessageRow } = loader.loadModule("src/pages/chat/transcript/UserMessageRow.tsx");
@@ -56,6 +56,41 @@ test("a backend notice renders as a folded system line", () => {
   assert.match(html, /aria-expanded="false"/);
   assert.match(html, /\[wait w1 done\] condition met/);
   assert.doesNotMatch(html, /BUILD-READY/, "the output stays folded until expanded");
+});
+
+test("a goal continuation round is labelled with its round and shows the goal", () => {
+  assert.deepEqual(parseGoalRoundNotice("[goal 10/100] Draft the v1.3 release notes"), {
+    round: 10,
+    maxRounds: 100,
+    goal: "Draft the v1.3 release notes",
+  });
+  assert.equal(parseGoalRoundNotice("[wait w1 done] condition met"), null);
+  assert.equal(parseGoalRoundNotice("[goal 0/3] start"), null);
+  const html = renderToStaticMarkup(
+    jsxRuntime.jsx(BackgroundNoticeMessage, {
+      text: "[goal 10/100] Draft the v1.3 release notes\nGroup the changes by area.",
+    }),
+  );
+  assert.match(html, /data-background-notice/);
+  assert.match(html, /data-goal-round/);
+  // The test locale returns keys; the label is chat.goal.continuing with the round filled in.
+  assert.match(html, />chat\.goal\.continuing</);
+  assert.match(html, />Draft the v1\.3 release notes</);
+  assert.doesNotMatch(html, /\[goal 10\/100\]/, "the header becomes the label");
+  assert.doesNotMatch(html, /Group the changes/, "further goal lines stay folded");
+  const plain = renderToStaticMarkup(jsxRuntime.jsx(BackgroundNoticeMessage, { text: notice }));
+  assert.doesNotMatch(plain, /data-goal-round/);
+  assert.match(plain, />chat\.backgroundNotice</);
+});
+
+test("a wrapped runtime reminder shows its text, not the tag", () => {
+  const reminder =
+    "<system-reminder>\nYour previous response was cut off because it reached the output token limit. Continue exactly where it stopped.\n</system-reminder>";
+  assert.deepEqual(splitBackgroundNotice(reminder), {
+    headline:
+      "Your previous response was cut off because it reached the output token limit. Continue exactly where it stopped.",
+    detail: "",
+  });
 });
 
 function userRow(item) {
