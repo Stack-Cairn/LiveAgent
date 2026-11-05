@@ -10,6 +10,7 @@ import {
   normalizeHostedSearchBlock,
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
+import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
 import { parseUserMessageContentWithUploads } from "@liveagent/ui/lib/chat/uploadedFiles";
 import {
   type ConversationViewState,
@@ -35,7 +36,11 @@ import {
   getKBrainSessionId,
   setKBrainSessionId,
 } from "./mapping";
-import { questionResultDetails } from "./questions";
+import {
+  kbrainToolResultName,
+  normalizeKBrainQuestionToolCall,
+  questionResultDetails,
+} from "./questions";
 import { getConfiguredKBrainConnection } from "./runtimeConnection";
 import { confirmKBrainMutation, hasKBrainMutationSync } from "./sessionSyncState";
 import { displayImageResultDetails, kbrainToolImages } from "./toolImages";
@@ -46,6 +51,7 @@ import type {
   KBrainMessageRef,
   KBrainModelRef,
   KBrainSession,
+  KBrainToolCall,
 } from "./types";
 
 const KBRAIN_API = "kbrain.agent.v1" as AssistantMessage["api"];
@@ -156,7 +162,7 @@ function toMessage(
   message: KBrainMessage,
   index: number,
   cwd?: string,
-  toolArguments?: unknown,
+  toolCall?: KBrainToolCall,
   taskRunId?: string,
 ): Message | null {
   const timestamp = epoch(message.created_at, 0);
@@ -214,33 +220,29 @@ function toMessage(
     const isError = message.stop_reason === "error" || message.stop_reason === "cancelled";
     const images = kbrainToolImages(message.content, output);
     const content = [...textAndFiles, ...images.content];
+    const text = content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("");
     return {
       role: "toolResult",
       toolCallId: message.tool_call_id || `kbrain-tool-${index}`,
-      toolName: message.name || "tool",
+      toolName: kbrainToolResultName(message.name),
       content,
-      details:
-        questionResultDetails(
-          message.name,
-          content
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
-            .join(""),
-        ) ??
-        taskResultDetails(
-          message.name,
-          toolArguments,
-          {
-            output: content
-              .filter((part) => part.type === "text")
-              .map((part) => part.text)
-              .join(""),
-            isError: message.stop_reason === "error" || message.stop_reason === "cancelled",
-          },
-          taskRunId ?? "history",
-          index,
-        ) ??
-        displayImageResultDetails(message.name, images.images, isError),
+      // 运行信息（退出码/超时/耗时）在历史里挂在 assistant 的 tool_calls[] 上。
+      details: withToolRunInfo(
+        message.name,
+        questionResultDetails(message.name, text, toolCall?.arguments, isError) ??
+          taskResultDetails(
+            message.name,
+            toolCall?.arguments,
+            { output: text, isError },
+            taskRunId ?? "history",
+            index,
+          ) ??
+          displayImageResultDetails(message.name, images.images, isError),
+        toolCall,
+      ),
       isError,
       timestamp,
     };
@@ -254,12 +256,14 @@ function toMessage(
   }
   content.push(...toHostedSearch(message.hosted_search));
   for (const call of message.tool_calls ?? []) {
-    content.push({
-      type: "toolCall",
-      id: call.id,
-      name: call.name,
-      arguments: (call.arguments ?? {}) as Record<string, unknown>,
-    });
+    content.push(
+      normalizeKBrainQuestionToolCall({
+        type: "toolCall",
+        id: call.id,
+        name: call.name,
+        arguments: (call.arguments ?? {}) as Record<string, unknown>,
+      }),
+    );
   }
   return {
     role: "assistant",
@@ -405,16 +409,16 @@ export function convertMessages(
   cwd?: string,
   taskRunId?: string,
 ): Message[] {
-  const toolArguments = new Map<string, unknown>();
+  const toolCalls = new Map<string, KBrainToolCall>();
   for (const message of messages) {
-    for (const call of message.tool_calls ?? []) toolArguments.set(call.id, call.arguments);
+    for (const call of message.tool_calls ?? []) toolCalls.set(call.id, call);
   }
   return messages.flatMap((message, index) => {
     const converted = toMessage(
       message,
       offset + index,
       cwd,
-      message.role === "tool" ? toolArguments.get(message.tool_call_id ?? "") : undefined,
+      message.role === "tool" ? toolCalls.get(message.tool_call_id ?? "") : undefined,
       taskRunId,
     );
     return converted ? [converted] : [];
@@ -447,9 +451,9 @@ function historyWindow(
   ) {
     throw new Error("K-brain history message_offsets are invalid");
   }
-  const toolArguments = new Map<string, unknown>();
+  const toolCalls = new Map<string, KBrainToolCall>();
   for (const message of source) {
-    for (const call of message.tool_calls ?? []) toolArguments.set(call.id, call.arguments);
+    for (const call of message.tool_calls ?? []) toolCalls.set(call.id, call);
   }
   const indexedMessages = source.flatMap((message, index) => {
     const offset = offsets[index];
@@ -457,7 +461,7 @@ function historyWindow(
       message,
       offset,
       session.cwd,
-      message.role === "tool" ? toolArguments.get(message.tool_call_id ?? "") : undefined,
+      message.role === "tool" ? toolCalls.get(message.tool_call_id ?? "") : undefined,
       session.id,
     );
     return converted ? [{ message: converted, offset }] : [];

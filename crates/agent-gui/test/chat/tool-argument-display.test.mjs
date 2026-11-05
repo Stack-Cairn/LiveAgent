@@ -905,3 +905,22 @@ test("failed file operations keep an expandable error disclosure", () => {
   assert.match(html, /aria-expanded="false"/);
   assert.doesNotMatch(html, /data-chat-file-link/);
 });
+
+test("generic results show K-brain run info as one line instead of raw details JSON", () => {
+  const renderToolDisplay = createToolArgsRenderer();
+  const toolCall = { type: "toolCall", id: "native-bash", name: "bash", arguments: { command: "exit 3" } };
+  const onlyRunInfo = renderToolDisplay.renderResult(toolCall, { kbrainRun: { exitCode: 3, durationMs: 16 } });
+  assert.match(onlyRunInfo, /data-tool-run-info=""/);
+  assert.match(onlyRunInfo, /3 · 16ms/);
+  assert.doesNotMatch(onlyRunInfo, /kbrainRun|exitCode|durationMs/);
+
+  const withOther = renderToolDisplay.renderResult(toolCall, {
+    kbrainRun: { exitCode: 0 },
+    note: "kept",
+  });
+  assert.match(withOther, /data-tool-run-info=""/);
+  assert.match(withOther, /note/);
+  assert.doesNotMatch(withOther, /kbrainRun/);
+
+  assert.equal(renderToolDisplay.renderResult(toolCall, {}), "");
+});

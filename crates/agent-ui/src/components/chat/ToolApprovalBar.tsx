@@ -295,13 +295,33 @@ export function ToolApprovalBar({
         {current.preview ? (
           <>
             {/* Above the scroll box, so a long preview cannot push it out of view. */}
+            {current.preview.newFile ? (
+              <p data-approval-preview-new-file="" className="mt-2 text-tiny text-muted-foreground">
+                {t("chat.toolApproval.previewNewFile")}
+              </p>
+            ) : null}
             {current.preview.truncated ? (
               <p className="mt-2 text-tiny text-muted-foreground">
-                {t("chat.toolApproval.previewTruncated")}
+                {current.preview.diff === ""
+                  ? t("chat.toolApproval.previewTooLarge")
+                  : t("chat.toolApproval.previewTruncated")}
               </p>
             ) : null}
             <div data-approval-preview="" className="mt-2 max-h-56 overflow-auto">
-              {current.preview.split ? (
+              {current.preview.diff !== undefined ? (
+                current.preview.diff ? (
+                  <EditDiffView
+                    beforeText=""
+                    afterText=""
+                    diffText={current.preview.diff}
+                    filePath={current.preview.path}
+                  />
+                ) : current.preview.path ? (
+                  <p className="break-all font-mono text-xs text-foreground">
+                    {current.preview.path}
+                  </p>
+                ) : null
+              ) : current.preview.split ? (
                 // Two separately cut sides: a diff of them would hide or invent changes.
                 <div className="space-y-2">
                   {current.preview.path ? (

@@ -38,3 +38,23 @@ test("edit tool diff keeps real unified diff data without the legacy renderer", 
   assert.doesNotMatch(source, /@git-diff-view\/react/);
   assert.doesNotMatch(source, /<DiffView/);
 });
+
+test("backend diff rows parse into context, change and note rows", async () => {
+  const { createTsModuleLoader } = await import("../helpers/load-ts-module.mjs");
+  const { parseDiffRowsText } = createTsModuleLoader().loadModule("@liveagent/ui/lib/chat/diffRows.ts");
+  assert.deepEqual(parseDiffRowsText("11   keep\n12 - old\n12 + new\n12 +\n13   \n- bare\n… +4 more lines"), [
+    { type: "ctx", lineNumber: 11, text: "keep" },
+    { type: "del", lineNumber: 12, text: "old" },
+    { type: "add", lineNumber: 12, text: "new" },
+    { type: "add", lineNumber: 12, text: "" },
+    { type: "ctx", lineNumber: 13, text: "" },
+    { type: "del", lineNumber: null, text: "bare" },
+    { type: "note", lineNumber: null, text: "… +4 more lines" },
+  ]);
+  assert.deepEqual(parseDiffRowsText(""), []);
+});
+
+test("edit tool diff shows a backend diff as given instead of diffing two texts", () => {
+  assert.match(source, /if \(diffText !== undefined\) return buildTextDiffRows\(diffText\)/);
+  assert.match(source, /data-diff-note=""/);
+});

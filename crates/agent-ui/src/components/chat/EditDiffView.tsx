@@ -1,5 +1,6 @@
 import { type DiffLine, DiffLineType, generateDiffFile } from "@git-diff-view/file";
 import { type CSSProperties, type ReactNode, useMemo } from "react";
+import { parseDiffRowsText } from "../../lib/chat/diffRows";
 import { cn } from "../../lib/shared/utils";
 
 type DiffPiece = {
@@ -11,7 +12,8 @@ type DiffPiece = {
 type DiffRow = {
   key: string;
   lineNumber: number | null;
-  type: "ctx" | "add" | "del";
+  /** note: a line the backend added to the diff, such as "… +12 more lines". */
+  type: "ctx" | "add" | "del" | "note";
   pieces: DiffPiece[];
 };
 
@@ -237,12 +239,39 @@ function buildDiffRows(beforeText: string, afterText: string, filePath?: string)
   };
 }
 
-export function EditDiffView(props: { beforeText: string; afterText: string; filePath?: string }) {
-  const { beforeText, afterText, filePath } = props;
-  const diff = useMemo(
-    () => (beforeText || afterText ? buildDiffRows(beforeText, afterText, filePath) : null),
-    [afterText, beforeText, filePath],
-  );
+/** Rows from a diff the backend already computed (K-brain's "<line> <mark> <text>" form). */
+function buildTextDiffRows(diffText: string) {
+  const rows: DiffRow[] = [];
+  let added = 0;
+  let removed = 0;
+  let widestLineNumber = 0;
+  parseDiffRowsText(diffText).forEach((row, index) => {
+    if (row.type === "add") added += 1;
+    if (row.type === "del") removed += 1;
+    if (row.lineNumber && row.lineNumber > widestLineNumber) widestLineNumber = row.lineNumber;
+    rows.push({
+      key: `${row.type}-${row.lineNumber ?? ""}-${index}`,
+      lineNumber: row.lineNumber,
+      type: row.type,
+      pieces: [{ key: "whole", text: row.text }],
+    });
+  });
+  if (rows.length === 0) return null;
+  return { added, removed, gutterDigits: Math.max(2, String(widestLineNumber).length), rows };
+}
+
+export function EditDiffView(props: {
+  beforeText: string;
+  afterText: string;
+  filePath?: string;
+  /** A diff the backend computed; when set it is shown instead of diffing the two texts. */
+  diffText?: string;
+}) {
+  const { beforeText, afterText, filePath, diffText } = props;
+  const diff = useMemo(() => {
+    if (diffText !== undefined) return buildTextDiffRows(diffText);
+    return beforeText || afterText ? buildDiffRows(beforeText, afterText, filePath) : null;
+  }, [afterText, beforeText, diffText, filePath]);
 
   if (!diff) return null;
 
@@ -279,6 +308,18 @@ export function EditDiffView(props: { beforeText: string; afterText: string; fil
             className="pointer-events-none absolute inset-y-0 left-[var(--diff-gutter)] w-px bg-border/70"
           />
           {diff.rows.map((row) => {
+            if (row.type === "note") {
+              return (
+                <div
+                  key={row.key}
+                  className="grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start"
+                  data-diff-note=""
+                >
+                  <span aria-hidden="true" />
+                  <span className="pl-1 pr-3 text-muted-foreground">{row.pieces[0]?.text}</span>
+                </div>
+              );
+            }
             const added = row.type === "add";
             const deleted = row.type === "del";
             return (

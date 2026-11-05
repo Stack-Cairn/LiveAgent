@@ -9,6 +9,7 @@ import type {
 import {
   ASK_USER_QUESTION_DEADLINE_ARG,
   ASK_USER_QUESTION_PENDING_ARG,
+  KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import { estimateThinkingReplayTokenUnits } from "@liveagent/ui/lib/chat/contextUsage";
 import {
@@ -616,6 +617,7 @@ const DISPLAY_SYNTHETIC_ARG_KEYS = new Set([
   TOOL_APPROVAL_PREVIEW_ARG,
   ASK_USER_QUESTION_DEADLINE_ARG,
   ASK_USER_QUESTION_PENDING_ARG,
+  KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG,
   EXIT_PLAN_MODE_PENDING_ARG,
   EXIT_PLAN_MODE_APPROVED_ARG,
 ]);

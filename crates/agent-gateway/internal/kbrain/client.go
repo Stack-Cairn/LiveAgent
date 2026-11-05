@@ -146,6 +146,11 @@ type ToolCall struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
+	// ExitCode, TimedOut and DurationMs describe how the call ran (history only;
+	// a shell tool's exit status, 0 included). Display only.
+	ExitCode   *int  `json:"exit_code,omitempty"`
+	TimedOut   bool  `json:"timed_out,omitempty"`
+	DurationMs int64 `json:"duration_ms,omitempty"`
 }
 
 type Usage struct {

@@ -37,7 +37,51 @@ export type ToolApprovalPreview = {
   after: string;
   truncated: boolean;
   split?: boolean;
+  /**
+   * 后端算好的行式 diff（K-brain permission.requested.preview）。有值时卡片照它显示，
+   * 不再对比 before/after；空串配 truncated 表示改动太大、后端没给 diff。
+   */
+  diff?: string;
+  /** 这次写入会新建文件。 */
+  newFile?: boolean;
 };
+
+/** K-brain 给 diff 的上限是 32 KiB；同步与显示时按字符数留同样的余量。 */
+const PREVIEW_DIFF_MAX_CHARS = 32 * 1024;
+
+/** 带 K-brain 预览的文件工具（LiveAgent 的 Edit/Write 与 K-brain 自带的 edit/write）。 */
+const KBRAIN_PREVIEW_TOOL_NAMES = new Set(["Edit", "Write", "edit", "write"]);
+
+function capPreviewDiff(diff: string) {
+  if (diff.length <= PREVIEW_DIFF_MAX_CHARS) return { text: diff, cut: false };
+  const end = diff.lastIndexOf("\n", PREVIEW_DIFF_MAX_CHARS);
+  return { text: diff.slice(0, end > 0 ? end : PREVIEW_DIFF_MAX_CHARS), cut: true };
+}
+
+/**
+ * permission.requested.preview（{path, diff?, new_file?, truncated?}）转成审批卡片的预览；
+ * 形状不对或既没有 diff 也没被截断（无可显示）时返回 undefined，调用方退回按工具参数算。
+ */
+export function approvalPreviewFromKBrain(
+  toolName: string,
+  preview: unknown,
+): ToolApprovalPreview | undefined {
+  if (!KBRAIN_PREVIEW_TOOL_NAMES.has(toolName)) return undefined;
+  if (!preview || typeof preview !== "object" || Array.isArray(preview)) return undefined;
+  const record = preview as Record<string, unknown>;
+  const diff = typeof record.diff === "string" ? capPreviewDiff(record.diff) : undefined;
+  const truncated = record.truncated === true || diff?.cut === true;
+  if (!diff?.text && !truncated) return undefined;
+  const path = typeof record.path === "string" ? record.path.trim() : "";
+  return {
+    ...(path ? { path } : {}),
+    before: "",
+    after: "",
+    truncated,
+    diff: diff?.text ?? "",
+    ...(record.new_file === true ? { newFile: true } : {}),
+  };
+}
 
 /** 待审批改动的预览,桌面端算好后同步给 WebUI,两端显示同一份。 */
 export const TOOL_APPROVAL_PREVIEW_ARG = "__toolApprovalPreview";
@@ -175,9 +219,12 @@ export function approvalPreviewFromToolCall(
 
 /** 读同步来的预览参数;不是 Edit/Write 或形状不对时返回 undefined。 */
 function syncedApprovalPreview(toolName: string, value: unknown): ToolApprovalPreview | undefined {
-  if (toolName !== "Edit" && toolName !== "Write") return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const { path, before, after, truncated, split } = value as Record<string, unknown>;
+  const { path, before, after, truncated, split, diff, newFile } = value as Record<string, unknown>;
+  if (typeof diff === "string") {
+    return approvalPreviewFromKBrain(toolName, { path, diff, new_file: newFile, truncated });
+  }
+  if (toolName !== "Edit" && toolName !== "Write") return undefined;
   if (typeof before !== "string" || typeof after !== "string") return undefined;
   const old = capPreviewText(before);
   const next = capPreviewText(after);

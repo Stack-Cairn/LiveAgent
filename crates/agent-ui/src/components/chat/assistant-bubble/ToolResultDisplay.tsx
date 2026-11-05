@@ -10,6 +10,7 @@ import {
   ToolSurfaceLabel,
 } from "@liveagent/ui/components/chat/ToolSurfaces";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type BrowserResultDetails,
   type DeleteResultDetails,
@@ -35,6 +36,11 @@ import {
   type WriteResultDetails,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { formatLiveShellOutput } from "@liveagent/ui/lib/chat/liveShellOutput";
+import {
+  formatToolRunInfo,
+  readToolRunInfo,
+  withoutToolRunInfo,
+} from "@liveagent/ui/lib/chat/toolRunInfo";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SubagentBatchDetails,
@@ -448,6 +454,7 @@ export function ShellToolDisplay({
   item: ToolTraceItem;
   result: ToolResultMessage | undefined;
 }) {
+  const { t } = useLocale();
   const command =
     item.toolCall.name === "Bash" && typeof item.toolCall.arguments?.command === "string"
       ? item.toolCall.arguments.command.trim()
@@ -476,6 +483,10 @@ export function ShellToolDisplay({
     element.scrollTop = element.scrollHeight;
   }, [liveOutput]);
   const body = output ? previewText(output, 6000) : liveOutput;
+  const runInfo = formatToolRunInfo(readToolRunInfo(result?.details), {
+    exitCode: t("chat.tool.run.exitCode"),
+    timedOut: t("chat.tool.run.timedOut"),
+  });
   if (!command && !body) return null;
 
   return (
@@ -484,7 +495,20 @@ export function ShellToolDisplay({
       aria-label="Shell"
       data-shell-tool-display=""
     >
-      <div className="px-3 pb-0.5 pt-2.5 text-xs font-medium text-muted-foreground/75">Shell</div>
+      <div className="flex items-baseline justify-between gap-3 px-3 pb-0.5 pt-2.5 text-xs font-medium text-muted-foreground/75">
+        <span>Shell</span>
+        {runInfo ? (
+          <span
+            className={cn(
+              "shrink-0 font-mono text-[11px] font-normal tabular-nums text-muted-foreground/60",
+              result?.isError && "text-red-700/75 dark:text-red-300/75",
+            )}
+            data-shell-run-info=""
+          >
+            {runInfo}
+          </span>
+        ) : null}
+      </div>
       <ToolScrollablePre
         ref={preRef}
         className={cn(
@@ -1234,19 +1258,46 @@ export function ToolResultDisplay({
 
   // Error results (and blocked calls) carry an empty details object — showing
   // a literal "{}" would bury the actual error text, which renders below.
-  if (
-    result.details &&
-    typeof result.details === "object" &&
-    Object.keys(result.details).length > 0
-  ) {
+  // Run info (exit code, duration) shows as one line, never as raw JSON.
+  const otherDetails = withoutToolRunInfo(result.details);
+  const hasOtherDetails =
+    otherDetails !== null &&
+    typeof otherDetails === "object" &&
+    Object.keys(otherDetails).length > 0;
+  const runInfoLine = <ToolRunInfoLine details={result.details} isError={result.isError} />;
+  if (hasOtherDetails) {
     return (
-      <ToolSurface className="overflow-hidden p-0">
-        <ToolScrollablePre className="max-h-32 rounded-none">
-          {getStableValueSignature(result.details)}
-        </ToolScrollablePre>
-      </ToolSurface>
+      <div className="space-y-1.5">
+        {runInfoLine}
+        <ToolSurface className="overflow-hidden p-0">
+          <ToolScrollablePre className="max-h-32 rounded-none">
+            {getStableValueSignature(otherDetails)}
+          </ToolScrollablePre>
+        </ToolSurface>
+      </div>
     );
   }
 
-  return null;
+  return runInfoLine;
+}
+
+/** 通用工具结果的运行信息行（如 K-brain 原生 bash）：退出码、超时与耗时。 */
+function ToolRunInfoLine({ details, isError }: { details: unknown; isError?: boolean }) {
+  const { t } = useLocale();
+  const runInfo = formatToolRunInfo(readToolRunInfo(details), {
+    exitCode: t("chat.tool.run.exitCode"),
+    timedOut: t("chat.tool.run.timedOut"),
+  });
+  if (!runInfo) return null;
+  return (
+    <div
+      className={cn(
+        "font-mono text-[11px] tabular-nums text-muted-foreground/60",
+        isError && "text-red-700/75 dark:text-red-300/75",
+      )}
+      data-tool-run-info=""
+    >
+      {runInfo}
+    </div>
+  );
 }
