@@ -34,6 +34,8 @@ import {
   type KBrainSharedProjection,
   type KBrainShareStatus,
   type KBrainSlashCommand,
+  type KBrainSubagentList,
+  type KBrainSubagentTranscript,
   type KBrainSyncSnapshot,
   type KBrainSyncSnapshotPage,
   type KBrainTextGenerateRequest,
@@ -900,14 +902,75 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     );
   }
 
-  async function subscribe(
+  function subscribe(
     conversationId: string,
     afterSeq: number,
     handlers: KBrainEventHandlers,
     signal?: AbortSignal,
   ): Promise<void> {
-    const response = await fetchKBrain(
+    return readEventStream(
       `/v1/sessions/${encodeURIComponent(conversationId)}/events?after_seq=${encodeURIComponent(String(afterSeq))}`,
+      conversationId,
+      afterSeq,
+      true,
+      handlers,
+      signal,
+    );
+  }
+
+  /** The session's subagents, foreground and background, oldest first. */
+  function listSubagents(conversationId: string, signal?: AbortSignal) {
+    return request<KBrainSubagentList>(
+      `/v1/sessions/${encodeURIComponent(conversationId)}/subagents`,
+      { signal },
+    );
+  }
+
+  /** One subagent's read-only transcript so far, running or ended. */
+  function getSubagentTranscript(conversationId: string, taskId: string, signal?: AbortSignal) {
+    return request<KBrainSubagentTranscript>(
+      `/v1/sessions/${encodeURIComponent(conversationId)}/subagents/${encodeURIComponent(taskId)}`,
+      { signal },
+    );
+  }
+
+  /** Stops one subagent; the parent run goes on. */
+  async function cancelSubagent(conversationId: string, taskId: string): Promise<void> {
+    await request<unknown>(
+      `/v1/sessions/${encodeURIComponent(conversationId)}/subagents/${encodeURIComponent(taskId)}/cancel`,
+      { method: "POST", body: "{}" },
+    );
+  }
+
+  /** Follows one subagent's events; the stream ends after its terminal event. Its
+   *  sequence numbers are the session's, so they increase but skip other events. */
+  function subscribeSubagent(
+    conversationId: string,
+    taskId: string,
+    afterSeq: number,
+    handlers: KBrainEventHandlers,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return readEventStream(
+      `/v1/sessions/${encodeURIComponent(conversationId)}/subagents/${encodeURIComponent(taskId)}/events?after_seq=${encodeURIComponent(String(afterSeq))}`,
+      conversationId,
+      afterSeq,
+      false,
+      handlers,
+      signal,
+    );
+  }
+
+  async function readEventStream(
+    path: string,
+    conversationId: string,
+    afterSeq: number,
+    contiguous: boolean,
+    handlers: KBrainEventHandlers,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await fetchKBrain(
+      path,
       {
         headers: { Accept: "text/event-stream" },
         signal,
@@ -938,7 +1001,10 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
         if (event.conversation_id !== conversationId) {
           throw new Error("K-brain event belongs to a different conversation");
         }
-        if (!Number.isSafeInteger(event.seq) || event.seq !== lastSeq + 1) {
+        if (
+          !Number.isSafeInteger(event.seq) ||
+          (contiguous ? event.seq !== lastSeq + 1 : event.seq <= lastSeq)
+        ) {
           throw new Error(
             `Malformed K-brain event sequence: expected ${lastSeq + 1}, got ${String(event.seq)}`,
           );
@@ -1023,6 +1089,10 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     setShare,
     resolveShareToken,
     subscribe,
+    listSubagents,
+    getSubagentTranscript,
+    cancelSubagent,
+    subscribeSubagent,
   };
 }
 

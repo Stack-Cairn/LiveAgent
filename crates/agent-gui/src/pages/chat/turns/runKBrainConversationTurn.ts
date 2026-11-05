@@ -42,6 +42,11 @@ import {
   resolveUploadStagingRoot,
   withUploadStagingRoot,
 } from "../../../lib/kbrain/uploadStagingRoot";
+import {
+  ingestKBrainSubagentEvent,
+  noteKBrainSubagentTurnEnded,
+  noteKBrainSubagentTurnStarted,
+} from "../../../lib/subagents/kbrainSubagentStore";
 import { requestBackendQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { recordPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { projectBackendPlan } from "../../../lib/tools/planModeTools";
@@ -266,6 +271,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   let goalInvolved = command?.kind === "goal" || answersGoal;
   const readGoalState = () => latestGoalState;
   let attachClientRequestId: string | undefined;
+  noteKBrainSubagentTurnStarted(params.conversationId);
   try {
     const uploadsRoot = await resolveUploadStagingRoot();
     for (;;) {
@@ -404,7 +410,11 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           return scope ? { decision: "allow_always", scope } : "allow_always";
         },
         onPermissionAutoResolved,
+        onSubagentEvent: (event) =>
+          ingestKBrainSubagentEvent(params.conversationId, event.conversation_id, event),
         onSubagent: (subagent) => {
+          // Backends that link a subagent to its tool call show it on that call's card.
+          if (subagent.parent_tool_call_id) return;
           const id = `kbrain-subagent:${subagent.id}`;
           const call: ToolCall = {
             type: "toolCall",
@@ -528,6 +538,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         publish: publishGoalState,
       });
     }
+    noteKBrainSubagentTurnEnded(params.conversationId);
     approvalController.abort();
     cancellation.userStop.signal.removeEventListener("abort", cancelApprovals);
     status(null);

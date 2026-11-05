@@ -283,6 +283,8 @@ function taskMessages(session: KBrainSession, offset: number): Message[] {
   for (const task of session.tasks ?? []) {
     if (seen.has(task.id)) continue;
     seen.add(task.id);
+    // Linked tasks show on the card of the real `subagent` call that started them.
+    if (task.parent_tool_call_id) continue;
     const id = `kbrain-subagent:${task.id}`;
     const assistant = toMessage(
       {
@@ -391,7 +393,8 @@ function revisionFor(session: KBrainSession): string {
   return session.revision;
 }
 
-function convertMessages(
+/** K-brain messages as chat messages; the subagent pane renders transcripts with it. */
+export function convertMessages(
   messages: KBrainMessage[],
   offset = 0,
   cwd?: string,

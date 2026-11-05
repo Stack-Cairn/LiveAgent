@@ -24,6 +24,7 @@ import { hookWarningNotice, parseHookWarning } from "./hookWarning";
 import { getKBrainSessionId, setKBrainSessionId } from "./mapping";
 import { questionResultDetails } from "./questions";
 import { aiReviewTitle, localizeAIReviewReason } from "./reviewNotice";
+import { isSubagentEventType } from "./subagentEvents";
 import { displayImageResultDetails, kbrainToolImages } from "./toolImages";
 import type {
   KBrainClientToolRequest,
@@ -195,6 +196,8 @@ export type KBrainTurnParams = {
   /** 命令运行中的输出尾部快照（整体替换，非增量）；结果到达后不再回调。 */
   onToolOutput?: (toolCallId: string, output: string) => void;
   onSubagent?: (subagent: KBrainSubagent) => void;
+  /** Every `subagent.*` and `trajectory.child.*` event, from any run of the session. */
+  onSubagentEvent?: (event: KBrainEvent) => void;
   onStatus?: (status: string | null) => void;
   content?: KBrainContentBlock[];
   onQuestionRequest?: (
@@ -676,6 +679,7 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
     if (event.seq !== afterSeq + 1)
       throw new Error(`K-brain event sequence gap: expected ${afterSeq + 1}, got ${event.seq}`);
     afterSeq = event.seq;
+    if (isSubagentEventType(event.type)) params.onSubagentEvent?.(event);
     // Session streams can include background tasks started by an earlier run.
     if (event.run_id !== accepted.run_id && !event.type.startsWith("subagent.")) return;
     if (reconnecting) {
