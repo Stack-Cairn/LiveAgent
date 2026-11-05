@@ -526,3 +526,33 @@ func TestRelayRunWaitsForPermissionAnswer(t *testing.T) {
 		t.Fatalf("permission posts = %v", permissionPosts)
 	}
 }
+
+func TestQuestionResultCarriesAnswerDetails(t *testing.T) {
+	output := `Answered: {"question_id":"q1","tool_call_id":"call-q","run_id":"run-1","kind":"ask_user_question","questions":[{"id":"color","prompt":"Which theme?","options":[{"label":"Light"},{"label":"Dark"}]}],"answers":[{"question_id":"color","prompt":"Which theme?","selected_label":"Light"},{"question_id":"note","selected_label":"blue please","custom":true}],"timed_out":false,"cancelled":false}`
+	raw, _ := json.Marshal(map[string]any{"tool_result": map[string]any{"id": "call-q", "name": "AskUserQuestion", "output": output}})
+	event, _, err := ToChatEvent(Event{Type: "tool.result", RunID: "run-1", ConversationID: "conv-1", Payload: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(event.GetData()), &payload); err != nil {
+		t.Fatal(err)
+	}
+	details, _ := payload["details"].(map[string]any)
+	answers, _ := details["answers"].([]any)
+	if details["kind"] != "ask_user_question" || len(answers) != 2 {
+		t.Fatalf("details = %+v", payload["details"])
+	}
+	first, _ := answers[0].(map[string]any)
+	second, _ := answers[1].(map[string]any)
+	if first["questionId"] != "color" || first["selectedLabel"] != "Light" || second["custom"] != true {
+		t.Fatalf("answers = %+v", answers)
+	}
+	if questionResultDetails("Bash", output) != nil || questionResultDetails(askUserQuestionTool, "no json") != nil {
+		t.Fatal("details must only come from AskUserQuestion results")
+	}
+	entries, err := historyMessagesJSON([]Message{{Role: "tool", ToolCallID: "call-q", Name: "AskUserQuestion", Content: []ContentBlock{{Type: "text", Text: output}}}}, 0)
+	if err != nil || !strings.Contains(entries, `"selectedLabel":"Light"`) {
+		t.Fatalf("history entry = %s err=%v", entries, err)
+	}
+}

@@ -856,3 +856,50 @@ func clampRules(rules []string, max int) []string {
 	}
 	return out
 }
+
+// questionResultDetails turns K-brain's AskUserQuestion result text into the
+// tool-result details the WebUI question card reads to show the chosen answers
+// (the desktop does the same in crates/agent-gui/src/lib/kbrain/questions.ts).
+func questionResultDetails(name, output string) map[string]any {
+	if name != askUserQuestionTool {
+		return nil
+	}
+	start := strings.IndexByte(output, '{')
+	if start < 0 {
+		return nil
+	}
+	var result struct {
+		Kind      string `json:"kind"`
+		Questions []any  `json:"questions"`
+		Answers   []struct {
+			QuestionID    string `json:"question_id"`
+			Prompt        string `json:"prompt"`
+			SelectedLabel string `json:"selected_label"`
+			Custom        bool   `json:"custom"`
+		} `json:"answers"`
+		TimedOut  bool `json:"timed_out"`
+		Cancelled bool `json:"cancelled"`
+	}
+	if json.Unmarshal([]byte(output[start:]), &result) != nil || result.Kind != "ask_user_question" || result.Questions == nil || result.Answers == nil {
+		return nil
+	}
+	answers := make([]any, 0, len(result.Answers))
+	for _, answer := range result.Answers {
+		item := map[string]any{"questionId": answer.QuestionID, "prompt": answer.Prompt, "selectedLabel": answer.SelectedLabel}
+		if answer.Custom {
+			item["custom"] = true
+		}
+		answers = append(answers, item)
+	}
+	return map[string]any{"kind": "ask_user_question", "questions": result.Questions, "answers": answers, "timedOut": result.TimedOut, "cancelled": result.Cancelled}
+}
+
+func historyText(message Message) string {
+	var text strings.Builder
+	for _, block := range message.Content {
+		if block.Type == "text" {
+			text.WriteString(block.Text)
+		}
+	}
+	return text.String()
+}

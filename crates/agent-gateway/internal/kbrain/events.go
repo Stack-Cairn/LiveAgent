@@ -48,6 +48,11 @@ func ToChatEvent(event Event) (*v2.ChatEvent, *v2.ChatControlEvent, error) {
 		if result, ok := payload["tool_result"].(map[string]any); ok {
 			payload["id"], payload["name"] = result["id"], result["name"]
 			payload["isError"] = result["failed"] == true || result["cancelled"] == true
+			name, _ := result["name"].(string)
+			output, _ := result["output"].(string)
+			if details := questionResultDetails(name, output); details != nil {
+				payload["details"] = details
+			}
 			content := []any{map[string]any{"type": "text", "text": result["output"]}}
 			if blocks, ok := result["content"].([]any); ok {
 				for _, value := range blocks {
