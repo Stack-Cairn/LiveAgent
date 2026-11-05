@@ -54,8 +54,9 @@ function killBrowsersUsing(profileDir) {
  * 一次启动 Edge，按顺序量完全部场景。pages: [{ key, surface: "desktop" | "web", width, html }]；
  * expression 在页面里求值，返回可序列化的结果。返回 Map<key, 结果>。
  * 结束时发 Browser.close，DevTools 连接断开即浏览器已关；没连上或等不到时按 profile 兜底结束。
+ * onClosed(browserClosed) 报告浏览器是否自己关掉，false 表示等满了超时才兜底。
  */
-export async function measureInEdge(pages, expression) {
+export async function measureInEdge(pages, expression, onClosed) {
   const results = new Map();
   const dir = mkdtempSync(join(tmpdir(), "edge-measure-"));
   const profile = join(dir, "profile");
@@ -132,6 +133,7 @@ export async function measureInEdge(pages, expression) {
           () => false,
         )
       : false;
+    onClosed?.(browserClosed);
     if (!browserClosed) {
       edge.kill();
       killBrowsersUsing(profile);

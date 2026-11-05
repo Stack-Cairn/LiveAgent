@@ -1964,7 +1964,10 @@ fn git_create_worktree_with_base(
         .try_exists()
         .map_err(|error| format!("无法检查 Worktree 目标：{error}"))?
     {
-        return Err(format!("Worktree 目标已存在：{}", target.display()));
+        return Err(format!(
+            "Worktree 目标已存在：{}",
+            strip_windows_verbatim_prefix(target.clone()).display()
+        ));
     }
     if records
         .iter()
@@ -1980,7 +1983,10 @@ fn git_create_worktree_with_base(
         .map(|value| validate_start_point(&repo_root_str, value))
         .transpose()?;
     let start_point = validated_start_point.unwrap_or_else(|| "HEAD".to_string());
-    let target_path = target.to_string_lossy().into_owned();
+    // git cannot create directories under a \\?\ path, which is what canonicalize returns.
+    let target_path = strip_windows_verbatim_prefix(target.clone())
+        .to_string_lossy()
+        .into_owned();
     let result = git_success(
         &repo_root_str,
         &[
@@ -5213,7 +5219,10 @@ mod tests {
                 .join("feature-alpha"),
         )
         .expect("resolve expected worktree path");
-        assert_eq!(PathBuf::from(&created.worktree_path), expected);
+        assert_eq!(
+            normalized_worktree_path(Path::new(&created.worktree_path)),
+            expected
+        );
         assert!(expected.is_dir(), "worktree directory should exist");
 
         // 新 worktree 检出到同名新分支
@@ -5246,7 +5255,7 @@ mod tests {
         assert_eq!(created.branch, "feature/custom-parent");
         assert_eq!(created.directory_name, "custom-folder");
         assert_eq!(
-            PathBuf::from(&created.worktree_path),
+            normalized_worktree_path(Path::new(&created.worktree_path)),
             fs::canonicalize(custom_parent.path().join("custom-folder"))
                 .expect("canonical custom worktree"),
         );
@@ -5396,7 +5405,9 @@ mod tests {
         let worktrees = git_worktrees_sync(&state.repo_root).expect("worktree list");
         let wt = worktrees
             .iter()
-            .find(|info| info.path == created.worktree_path)
+            .find(|info| {
+                worktree_paths_match(Path::new(&info.path), Path::new(&created.worktree_path))
+            })
             .expect("created worktree listed");
         assert_eq!(wt.branch, "wt-alpha");
         assert!(!wt.is_current);
@@ -5407,7 +5418,9 @@ mod tests {
         let linked_view = git_worktrees_sync(&created.worktree_path).expect("linked worktree list");
         let current = linked_view
             .iter()
-            .find(|info| info.path == created.worktree_path)
+            .find(|info| {
+                worktree_paths_match(Path::new(&info.path), Path::new(&created.worktree_path))
+            })
             .expect("current linked worktree listed");
         assert!(current.is_current);
     }

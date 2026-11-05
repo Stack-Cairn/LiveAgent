@@ -1853,6 +1853,23 @@ mod win {
         names
     }
 
+    /// 普通 Git Bash 还在运行时,msys 目录和里面的对象都是它的:中完整性、不给全部权限。
+    /// 沙箱不能改写这些对象(否则沙箱内进程能写沙箱外进程的共享内存),所以这时 Git Bash
+    /// 进不了沙箱,由 shell runner 回退到下一个 shell。
+    #[cfg(test)]
+    pub(super) fn msys_namespace_held_outside_sandbox(program: &Path) -> bool {
+        let Some(name) = msys_object_dir_names(program).into_iter().next() else {
+            return false;
+        };
+        let access = DIRECTORY_ALL_ACCESS
+            | DIRECTORY_CREATE_OBJECT
+            | DIRECTORY_CREATE_SUBDIRECTORY
+            | READ_CONTROL
+            | WRITE_DAC;
+        create_directory_object(&name, access, null_mut()).is_err()
+            && open_directory_object(&name, access).is_err()
+    }
+
     #[cfg(test)]
     pub(super) fn msys_object_dir_names_for_test(program: &Path) -> Vec<String> {
         msys_object_dir_names(program)
@@ -2863,6 +2880,22 @@ mod tests {
             );
         }
 
+        /// Git Bash 能进沙箱时返回路径。本机有普通 Git Bash 在运行时不能,见
+        /// `msys_namespace_held_outside_sandbox`。
+        fn sandboxable_git_bash() -> Option<&'static std::path::Path> {
+            let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
+            if !bash.is_file() {
+                return None;
+            }
+            if win::msys_namespace_held_outside_sandbox(bash) {
+                eprintln!(
+                    "skipped: a Git Bash running outside the sandbox holds the msys namespace"
+                );
+                return None;
+            }
+            Some(bash)
+        }
+
         fn sandbox_exec(program: &std::path::Path, args: &[String]) -> Result<i32, String> {
             let _guard = SandboxTestGuard::acquire();
             let dir = tempfile::tempdir().expect("workspace");
@@ -3004,10 +3037,9 @@ mod tests {
 
         #[test]
         fn restricted_token_can_open_stamped_msys_dir() {
-            let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
-            if !bash.is_file() {
+            let Some(bash) = sandboxable_git_bash() else {
                 return;
-            }
+            };
             win::restricted_token_can_open_msys_dir(bash)
                 .expect("WRITE_RESTRICTED token should open stamped msys directory");
         }
@@ -3015,10 +3047,9 @@ mod tests {
         /// 真机:Git Bash 在联网 Low IL token 沙箱内必须能启动。
         #[test]
         fn networked_sandbox_git_bash_exit_zero() {
-            let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
-            if !bash.is_file() {
+            let Some(bash) = sandboxable_git_bash() else {
                 return;
-            }
+            };
             let code = sandbox_exec(bash, &["-c".into(), "exit 0".into()])
                 .expect("networked sandbox Git Bash execute");
             assert_eq!(
@@ -3029,10 +3060,9 @@ mod tests {
 
         #[test]
         fn networked_sandbox_git_bash_echo() {
-            let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
-            if !bash.is_file() {
+            let Some(bash) = sandboxable_git_bash() else {
                 return;
-            }
+            };
             let code = sandbox_exec(bash, &["-c".into(), "echo sandbox-ok".into()])
                 .expect("networked sandbox Git Bash echo");
             assert_eq!(
@@ -3043,10 +3073,9 @@ mod tests {
 
         #[test]
         fn low_integrity_label_recovers_from_modify_only_owner_dacl() {
-            let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
-            if !bash.is_file() {
+            let Some(bash) = sandboxable_git_bash() else {
                 return;
-            }
+            };
             let _guard = SandboxTestGuard::acquire();
             let workspace = tempfile::tempdir().expect("workspace");
             win::prepare_modify_only_low_il_probe(workspace.path())
@@ -3117,10 +3146,9 @@ mod tests {
         /// 回归的是 TokenUser 限制性 SID 把“用户可写”路径全部重开的洞。
         #[test]
         fn networked_sandbox_git_bash_write_fence() {
-            let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
-            if !bash.is_file() {
+            let Some(bash) = sandboxable_git_bash() else {
                 return;
-            }
+            };
             let _guard = SandboxTestGuard::acquire();
             let outer = tempfile::tempdir().expect("outer");
             let workspace = outer.path().join("workspace");

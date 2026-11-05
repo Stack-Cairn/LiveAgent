@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 test("backend connection has no dependency on legacy planning or timezone validation", () => {
-  const source = fs.readFileSync("src-tauri/src/services/kbrain_backend.rs", "utf8");
+  const source = fs.readFileSync(new URL("../../src-tauri/src/services/kbrain_backend.rs", import.meta.url), "utf8");
   const command = source.slice(source.indexOf("pub async fn kbrain_backend_connection"), source.indexOf("fn resolve_binary"));
   assert(!command.includes("planning::"));
   assert(!command.includes("timezone"));
