@@ -36,7 +36,11 @@ import {
   type WriteResultDetails,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { formatLiveShellOutput } from "@liveagent/ui/lib/chat/liveShellOutput";
-import { formatToolRunInfo, readToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
+import {
+  formatToolRunInfo,
+  readToolRunInfo,
+  withoutToolRunInfo,
+} from "@liveagent/ui/lib/chat/toolRunInfo";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SubagentBatchDetails,
@@ -1254,19 +1258,46 @@ export function ToolResultDisplay({
 
   // Error results (and blocked calls) carry an empty details object — showing
   // a literal "{}" would bury the actual error text, which renders below.
-  if (
-    result.details &&
-    typeof result.details === "object" &&
-    Object.keys(result.details).length > 0
-  ) {
+  // Run info (exit code, duration) shows as one line, never as raw JSON.
+  const otherDetails = withoutToolRunInfo(result.details);
+  const hasOtherDetails =
+    otherDetails !== null &&
+    typeof otherDetails === "object" &&
+    Object.keys(otherDetails).length > 0;
+  const runInfoLine = <ToolRunInfoLine details={result.details} isError={result.isError} />;
+  if (hasOtherDetails) {
     return (
-      <ToolSurface className="overflow-hidden p-0">
-        <ToolScrollablePre className="max-h-32 rounded-none">
-          {getStableValueSignature(result.details)}
-        </ToolScrollablePre>
-      </ToolSurface>
+      <div className="space-y-1.5">
+        {runInfoLine}
+        <ToolSurface className="overflow-hidden p-0">
+          <ToolScrollablePre className="max-h-32 rounded-none">
+            {getStableValueSignature(otherDetails)}
+          </ToolScrollablePre>
+        </ToolSurface>
+      </div>
     );
   }
 
-  return null;
+  return runInfoLine;
+}
+
+/** 通用工具结果的运行信息行（如 K-brain 原生 bash）：退出码、超时与耗时。 */
+function ToolRunInfoLine({ details, isError }: { details: unknown; isError?: boolean }) {
+  const { t } = useLocale();
+  const runInfo = formatToolRunInfo(readToolRunInfo(details), {
+    exitCode: t("chat.tool.run.exitCode"),
+    timedOut: t("chat.tool.run.timedOut"),
+  });
+  if (!runInfo) return null;
+  return (
+    <div
+      className={cn(
+        "font-mono text-[11px] tabular-nums text-muted-foreground/60",
+        isError && "text-red-700/75 dark:text-red-300/75",
+      )}
+      data-tool-run-info=""
+    >
+      {runInfo}
+    </div>
+  );
 }

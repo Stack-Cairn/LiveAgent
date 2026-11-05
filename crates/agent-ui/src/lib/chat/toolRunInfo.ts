@@ -69,6 +69,14 @@ export function readToolRunInfo(details: unknown): ToolRunInfo | null {
   return Object.keys(info).length > 0 ? info : null;
 }
 
+/** 去掉运行信息后的 details；只剩运行信息时返回 undefined。 */
+export function withoutToolRunInfo(details: unknown): unknown {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return details;
+  if (!(TOOL_RUN_INFO_DETAILS_KEY in details)) return details;
+  const { [TOOL_RUN_INFO_DETAILS_KEY]: _runInfo, ...rest } = details as Record<string, unknown>;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
 /** 工具耗时：不足 1 秒显示毫秒，1 分钟内保留一位小数，更长按分秒。 */
 export function formatToolRunDuration(durationMs: number): string {
   if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
