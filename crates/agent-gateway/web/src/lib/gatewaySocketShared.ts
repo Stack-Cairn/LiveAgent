@@ -144,6 +144,8 @@ export type GoalManageResponse = {
   round: number;
   maxRounds: number;
   reason: string;
+  /** 目标设定或最近一次恢复的时间（RFC3339）；旧桌面端为空串。 */
+  startedAt: string;
 };
 
 export type LoopSummary = {

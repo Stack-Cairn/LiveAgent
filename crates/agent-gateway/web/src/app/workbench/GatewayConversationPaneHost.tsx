@@ -100,6 +100,7 @@ import {
 } from "../constants";
 import { isLocalDraftConversationId } from "../gatewayLocalDraft";
 import type { SendChatFn } from "../types";
+import { WebGoalBarHost } from "../WebGoalBarHost";
 import { resolveWorkbenchComposerInputDisabled } from "./composerInputState";
 
 type ChatQueueSnapshotLike = Parameters<
@@ -998,6 +999,15 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
             searchMentionableConversations={context.searchMentionableConversations}
             mentionApps={context.mentionApps}
             commandHost={usePrimary && primary ? primary.commandHost : backgroundCommandHost}
+            goalBar={
+              <WebGoalBarHost
+                key={`goal-${conversationId}`}
+                conversationId={isDraft ? undefined : conversationId}
+                client={context.api}
+                commandHost={usePrimary && primary ? primary.commandHost : backgroundCommandHost}
+                running={usePrimary ? (primary?.isSending ?? isRunning) : isRunning}
+              />
+            }
             executionMode={context.settings.system.executionMode}
             hasModels={context.hasModels}
             currentModelLabel={modelLabel}

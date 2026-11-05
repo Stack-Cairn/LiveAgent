@@ -768,6 +768,7 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
         value: create(GoalManageRequestSchema, {
           conversationId: trimStr(body.conversationId),
           action: trimStr(body.action),
+          goal: trimStr(body.goal),
         }),
       };
     case "loops.manage":
@@ -1479,6 +1480,7 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
         round: payload.value.round,
         maxRounds: payload.value.maxRounds,
         reason: payload.value.reason,
+        startedAt: payload.value.startedAt,
       };
     case "loopManageResp":
       return {

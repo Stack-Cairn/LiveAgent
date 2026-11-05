@@ -29,6 +29,18 @@ function actionEvent(overrides) {
 function createDeps(calls, extra = {}) {
   return {
     client: {
+      async getGoal(sessionId) {
+        calls.push(["getGoal", sessionId]);
+        return {
+          version: "v1",
+          conversation_id: sessionId,
+          goal: "ship it",
+          status: "active",
+          round: 2,
+          max_rounds: 100,
+          started_at: "2026-11-05T08:00:00Z",
+        };
+      },
       async postGoal(sessionId, input) {
         calls.push(["postGoal", sessionId, input]);
         return {
@@ -69,6 +81,31 @@ test("goal clear maps to the K-brain session and reports the LiveAgent conversat
   assert.equal(result.conversation_id, "conversation-1");
   assert.equal(result.status, "cleared");
   assert.deepEqual(published, [["conversation-1", "cleared"]]);
+});
+
+test("goal bar get, pause and update reach the mapped K-brain session", async () => {
+  const calls = [];
+  const published = [];
+  const deps = createDeps(calls, { onGoalState: (id, state) => published.push([id, state.status]) });
+  const got = await runGatewayComposerAction(actionEvent({ kind: "goal", action: " get " }), deps);
+  assert.equal(got.conversation_id, "conversation-1");
+  assert.equal(got.status, "active");
+  assert.equal(got.started_at, "2026-11-05T08:00:00Z");
+  await runGatewayComposerAction(actionEvent({ kind: "goal", action: "pause" }), deps);
+  await runGatewayComposerAction(
+    actionEvent({ kind: "goal", action: "update", data: { goal: "  draft the notes  " } }),
+    deps,
+  );
+  assert.deepEqual(calls, [
+    ["getGoal", "kb-session-1"],
+    ["postGoal", "kb-session-1", { action: "pause" }],
+    ["postGoal", "kb-session-1", { action: "update", goal: "draft the notes" }],
+  ]);
+  assert.deepEqual(published, [
+    ["conversation-1", "active"],
+    ["conversation-1", "cleared"],
+    ["conversation-1", "cleared"],
+  ]);
 });
 
 test("loop list, create and cancel always answer with a loops array", async () => {
@@ -117,6 +154,16 @@ test("composer actions fail clearly without K-brain, a session mapping or a vali
     runGatewayComposerAction(actionEvent({ kind: "goal", action: "set" }), createDeps(calls)),
     /unsupported goal action/,
   );
+  await assert.rejects(
+    runGatewayComposerAction(actionEvent({ kind: "goal", action: "resume" }), createDeps(calls)),
+    /unsupported goal action/,
+  );
+  for (const data of [undefined, null, {}, { goal: "  " }, { goal: 42 }]) {
+    await assert.rejects(
+      runGatewayComposerAction(actionEvent({ kind: "goal", action: "update", data }), createDeps(calls)),
+      /goal text is required/,
+    );
+  }
   await assert.rejects(
     runGatewayComposerAction(actionEvent({ action: "pause" }), createDeps(calls)),
     /unsupported loop action/,

@@ -5,6 +5,7 @@ import {
 } from "@liveagent/ui/lib/chat/composerCommands";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import type { ChatRuntimeControls } from "@liveagent/ui/lib/settings/types";
+import { goalStateFromResponse, publishGoalState } from "../lib/chat/goalState";
 import type {
   GoalManageResponse,
   LoopManageResponse,
@@ -15,6 +16,8 @@ import type {
 export type WebComposerCommandClient = {
   listCommands: (workdir?: string) => Promise<SlashCommandListResponse>;
   clearGoal: (conversationId: string) => Promise<GoalManageResponse>;
+  /** 旧客户端没有时 /goal pause 报不支持。 */
+  pauseGoal?: (conversationId: string) => Promise<GoalManageResponse>;
   listLoops: (conversationId: string) => Promise<LoopManageResponse>;
   createLoop: (input: {
     conversationId: string;
@@ -27,7 +30,8 @@ export type WebComposerCommandClient = {
 
 /**
  * WebUI 的“/”指令宿主，与 GUI 一致：目录由 K-brain 提供，/goal 与提示词指令
- * 随聊天请求一起发给桌面端执行；/goal clear 与 /loop 经 Gateway 转发。
+ * 随聊天请求一起发给桌面端执行；/goal clear、/goal pause 与 /loop 经 Gateway 转发，
+ * 目标变更的结果同步到目标栏。
  * /plan 与 /rewind 由 ChatComposerBar 按运行时开关与回退上下文补上。
  */
 export function createWebComposerCommandHost(params: {
@@ -77,7 +81,17 @@ export function createWebComposerCommandHost(params: {
       options?.planMode ? { kind: "plan" } : command,
       options?.planMode ? { ...params.getRuntimeControls(), planModeEnabled: true } : undefined,
     );
-  host.clearGoal = () => client.clearGoal(conversationId());
+  host.clearGoal = async () => {
+    const id = conversationId();
+    publishGoalState(id, goalStateFromResponse(await client.clearGoal(id)));
+  };
+  const { pauseGoal } = client;
+  if (pauseGoal) {
+    host.pauseGoal = async () => {
+      const id = conversationId();
+      publishGoalState(id, goalStateFromResponse(await pauseGoal.call(client, id)));
+    };
+  }
   host.loops = {
     create: async (interval, prompt) => {
       const created = await client.createLoop({

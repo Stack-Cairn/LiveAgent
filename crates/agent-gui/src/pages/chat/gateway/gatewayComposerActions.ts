@@ -5,7 +5,11 @@ import type { GatewayComposerActionEvent } from "./gatewayBridgeTypes";
 export type GatewayComposerActionDeps = {
   /** 未启用 K-brain 后端时为 undefined。 */
   client?: {
-    postGoal: (sessionId: string, input: { action: "clear" }) => Promise<KBrainGoalState>;
+    getGoal: (sessionId: string) => Promise<KBrainGoalState>;
+    postGoal: (
+      sessionId: string,
+      input: { action: "pause" | "clear" } | { action: "update"; goal: string },
+    ) => Promise<KBrainGoalState>;
     listLoops: (sessionId: string) => Promise<KBrainSessionLoop[]>;
     createLoop: (
       sessionId: string,
@@ -15,12 +19,12 @@ export type GatewayComposerActionDeps = {
   };
   /** LiveAgent 对话 id → K-brain 会话 id（与 GUI 的 getKBrainSessionId 相同映射）。 */
   getKBrainSessionId: (conversationId: string) => string | undefined;
-  /** /goal clear 之后把新状态推给桌面目标栏。 */
+  /** 目标读取或变更之后把新状态推给桌面目标栏。 */
   onGoalState?: (conversationId: string, state: KBrainGoalState) => void;
 };
 
 /**
- * 执行一条 WebUI 转来的 /goal clear 或 /loop 指令，返回交给 Rust 组装响应的 JSON：
+ * 执行一条 WebUI 转来的目标栏动作（get/pause/update/clear）或 /loop 指令，返回交给 Rust 组装响应的 JSON：
  * goal 为 GoalState（conversation_id 换回 LiveAgent 对话 id），loop 一律为 `{loops:[...]}`，
  * 创建时新建的那一项在 loops[0]，取消时为空列表。
  */
@@ -37,8 +41,7 @@ export async function runGatewayComposerAction(
   const action = event.action.trim();
 
   if (event.kind === "goal") {
-    if (action !== "clear") throw new Error(`unsupported goal action: ${action}`);
-    const state = await client.postGoal(sessionId, { action: "clear" });
+    const state = await runGoalAction(client, sessionId, action, event.data);
     deps.onGoalState?.(conversationId, state);
     return { ...state, conversation_id: conversationId };
   }
@@ -72,4 +75,27 @@ export async function runGatewayComposerAction(
     }
   }
   throw new Error(`unsupported composer action: ${event.kind}`);
+}
+
+/** 目标栏的非运行动作；resume/set 需要发起运行，只能走对话请求。 */
+async function runGoalAction(
+  client: NonNullable<GatewayComposerActionDeps["client"]>,
+  sessionId: string,
+  action: string,
+  data: GatewayComposerActionEvent["data"],
+): Promise<KBrainGoalState> {
+  switch (action) {
+    case "get":
+      return client.getGoal(sessionId);
+    case "pause":
+    case "clear":
+      return client.postGoal(sessionId, { action });
+    case "update": {
+      const goal = typeof data?.goal === "string" ? data.goal.trim() : "";
+      if (!goal) throw new Error("goal text is required");
+      return client.postGoal(sessionId, { action, goal });
+    }
+    default:
+      throw new Error(`unsupported goal action: ${action}`);
+  }
 }
