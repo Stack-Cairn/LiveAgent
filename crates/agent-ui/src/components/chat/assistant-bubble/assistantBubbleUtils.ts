@@ -21,6 +21,7 @@ import type {
 } from "@liveagent/ui/lib/subagents/protocol";
 import {
   Bot,
+  Braces,
   Brain,
   CircleHelp,
   Clock3,
@@ -28,6 +29,7 @@ import {
   FilePenLine,
   FileText,
   FolderTree,
+  Globe,
   Hand,
   type IconComponent,
   ImageIcon,
@@ -41,17 +43,40 @@ import {
   Wrench,
 } from "../../IconSet";
 
-export type ToolActivityCategory =
-  | "read"
-  | "search"
-  | "edit"
-  | "command"
-  | "list"
-  | "agent"
-  | "other";
+/**
+ * 工具行的活动类别。除 `other` 外，每个类别都有
+ * `chat.tool.activity.<category>.{running,completed,failed}` 标题；所有类别都有
+ * `chat.tool.batch.<category>` 组标签（`other` 只用 running 标题）。
+ */
+export const TOOL_ACTIVITY_CATEGORIES = [
+  "read",
+  "search",
+  "edit",
+  "command",
+  "list",
+  "code",
+  "fetch",
+  "agent",
+  "other",
+] as const;
+
+export type ToolActivityCategory = (typeof TOOL_ACTIVITY_CATEGORIES)[number];
+
+/** K-brain 的只读代码智能工具（definition / references / hover / 符号）。 */
+export const LSP_TOOL_NAME = "lsp";
+
+/**
+ * 以普通工具行出现的网页抓取调用：K-brain 的 `web_fetch` 工具，或宿主未执行、
+ * 未被隐藏桥接吞掉的 provider-native `web_fetch`/`WebFetch`。已由服务端执行的
+ * provider-native 抓取走联网搜索组（HostedSearchGroupView），不经过这里。
+ */
+export function isWebFetchToolName(name: string) {
+  return name === "web_fetch" || name === "WebFetch";
+}
 
 export function getToolActivityCategory(name: string): ToolActivityCategory {
   if (isTaskToolName(name)) return "other";
+  if (isWebFetchToolName(name)) return "fetch";
   switch (name) {
     case "Read":
     case "Image":
@@ -74,6 +99,8 @@ export function getToolActivityCategory(name: string): ToolActivityCategory {
       return "command";
     case "List":
       return "list";
+    case LSP_TOOL_NAME:
+      return "code";
     case "Agent":
     case "SendMessage":
       return "agent";
@@ -126,6 +153,9 @@ export function getToolMeta(name: string): {
       ? { Icon: Hand, accent: "var(--tool-bash-accent)", category: "cua" }
       : { Icon: Plug, accent: "var(--tool-list-accent)", category: "mcp" };
   }
+  if (isWebFetchToolName(name)) {
+    return { Icon: Globe, accent: "var(--tool-search-accent)", category: "web" };
+  }
   switch (name) {
     case "Bash":
     case "ManagedProcess":
@@ -172,6 +202,8 @@ export function getToolMeta(name: string): {
       return { Icon: ListChecks, accent: "var(--tool-list-accent)", category: "system" };
     case "ToolSearch":
       return { Icon: Search, accent: "var(--tool-search-accent)", category: "search" };
+    case LSP_TOOL_NAME:
+      return { Icon: Braces, accent: "var(--tool-search-accent)", category: "search" };
     default:
       return { Icon: Wrench, accent: "var(--tool-file-accent)", category: "other" };
   }
@@ -940,5 +972,8 @@ export function isBuiltinShareToolName(name: string) {
     "SshManager",
     "TunnelManager",
     "Write",
+    "lsp",
+    "web_fetch",
+    "WebFetch",
   ].includes(trimmed);
 }

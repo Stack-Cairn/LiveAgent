@@ -13,10 +13,12 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo } from "react";
 import {
   Bot,
+  Braces,
   ChevronRight,
   Eye,
   FilePenLine,
   FolderTree,
+  Globe,
   type IconComponent,
   Search,
   Terminal,
@@ -29,6 +31,8 @@ import {
   getToolDisplayName,
   getToolTraceKey,
   hasActiveUserInteraction,
+  isWebFetchToolName,
+  LSP_TOOL_NAME,
   type ToolActivityCategory,
 } from "./assistantBubbleUtils";
 import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
@@ -74,6 +78,8 @@ const TOOL_BATCH_ICONS: Record<ToolActivityCategory, IconComponent> = {
   edit: FilePenLine,
   command: Terminal,
   list: FolderTree,
+  code: Braces,
+  fetch: Globe,
   agent: Bot,
   other: Wrench,
 };
@@ -105,7 +111,11 @@ function getRunningToolTarget(item: ToolTraceItem) {
               ? stringArgument(item, "name", "id", "prompt")
               : name === "SendMessage"
                 ? stringArgument(item, "to", "channel", "subject")
-                : stringArgument(item, "path", "label", "name", "query", "action", "command");
+                : name === LSP_TOOL_NAME
+                  ? stringArgument(item, "path", "query")
+                  : isWebFetchToolName(name)
+                    ? stringArgument(item, "url", "uri")
+                    : stringArgument(item, "path", "label", "name", "query", "action", "command");
 
   return compactInlineText(target, 112);
 }

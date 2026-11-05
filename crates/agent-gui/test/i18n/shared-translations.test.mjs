@@ -131,6 +131,9 @@ const builtinToolCatalog = guiLoader.loadModule(
   "@liveagent/ui/lib/tools/builtinToolCatalog.ts",
 );
 const imagingErrors = guiLoader.loadModule("@liveagent/ui/lib/imaging/errors.ts");
+const { TOOL_ACTIVITY_CATEGORIES } = guiLoader.loadModule(
+  "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts",
+);
 const dynamicTranslationKeys = [
   ...[
     "preparing",
@@ -167,6 +170,12 @@ const dynamicTranslationKeys = [
   ...imagingErrors.IMAGE_ERROR_CODES.map((code) => `imageStudio.error.${code}`),
   "imageStudio.error.IMAGE_EMPTY_RESULT",
   "imageStudio.error.generic",
+  ...TOOL_ACTIVITY_CATEGORIES.flatMap((category) => [
+    `chat.tool.batch.${category}`,
+    ...(category === "other" ? ["running"] : ["running", "completed", "failed"]).map(
+      (phase) => `chat.tool.activity.${category}.${phase}`,
+    ),
+  ]),
   ...builtinToolCatalog.BUILTIN_TOOL_CATEGORIES.map((category) => category.labelKey),
   ...builtinToolCatalog.BUILTIN_TOOL_CATALOG.flatMap((entry) => [
     `settings.builtinTool.${entry.id}.name`,

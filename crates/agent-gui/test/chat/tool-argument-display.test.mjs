@@ -528,6 +528,56 @@ test("ProcessWait and ProcessStop summaries expose their session cursor", () => 
   );
 });
 
+test("lsp summaries show the operation with its file position or query", () => {
+  const summarize = (args) =>
+    uiMessages.summarizeToolCall(
+      { type: "toolCall", id: "lsp-1", name: "lsp", arguments: args },
+      { includeName: false },
+    );
+
+  assert.equal(
+    summarize({
+      operation: "definition",
+      path: "internal/tools/lsp_tool.go",
+      line: 38,
+      character: 6,
+    }),
+    "definition internal/tools/lsp_tool.go:38:6",
+  );
+  assert.equal(
+    summarize({ operation: "references", path: "src/a.go", line: 12 }),
+    "references src/a.go:12",
+  );
+  assert.equal(
+    summarize({ operation: "documentSymbol", path: "src/a.go" }),
+    "documentSymbol src/a.go",
+  );
+  assert.equal(
+    summarize({ operation: "workspaceSymbol", query: "LSPTool" }),
+    "workspaceSymbol query=LSPTool",
+  );
+  assert.equal(summarize({}), "");
+});
+
+test("web_fetch summaries lead with the URL and add paging only when requested", () => {
+  const summarize = (name, args) =>
+    uiMessages.summarizeToolCall(
+      { type: "toolCall", id: "fetch-1", name, arguments: args },
+      { includeName: false },
+    );
+
+  assert.equal(
+    summarize("web_fetch", { url: "https://go.dev/doc/effective_go" }),
+    "https://go.dev/doc/effective_go",
+  );
+  assert.equal(
+    summarize("web_fetch", { url: "https://go.dev/doc/", offset: 20_000, max_chars: 5_000 }),
+    "https://go.dev/doc/ offset=20000 maxChars=5000",
+  );
+  assert.equal(summarize("web_fetch", { url: "https://go.dev/", offset: 0 }), "https://go.dev/");
+  assert.equal(summarize("WebFetch", { uri: "https://example.com/a" }), "https://example.com/a");
+});
+
 test("shell session metadata is omitted from generic tool result details", () => {
   const renderToolDisplay = createToolArgsRenderer();
   const details = {
