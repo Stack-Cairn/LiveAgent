@@ -42,13 +42,16 @@ const { createThrottledCodePlugin } = loader.loadModule(
   "@liveagent/ui/lib/markdownCodeHighlight.ts",
 );
 
+// Throttle semantics are tested with the queue running jobs inline; the
+// queue's own pacing has dedicated tests below.
+const SYNC = { schedule: (run) => run() };
 const OPTS = (code) => ({ code, language: "ts", themes: ["github-light", "github-dark"] });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test("first sight forwards immediately; repeats hit the exact cache", async () => {
   const base = createFakeBase();
-  const plugin = createThrottledCodePlugin(base.plugin);
+  const plugin = createThrottledCodePlugin(base.plugin, SYNC);
   let delivered = null;
   plugin.highlight(OPTS("const a = 1;"), (result) => {
     delivered = result;
@@ -64,7 +67,7 @@ test("first sight forwards immediately; repeats hit the exact cache", async () =
 
 test("a growing block is throttled but the final content always lands", async () => {
   const base = createFakeBase();
-  const plugin = createThrottledCodePlugin(base.plugin);
+  const plugin = createThrottledCodePlugin(base.plugin, SYNC);
   const head = "function demo() {\n";
   let latest = null;
   const record = (result) => {
@@ -87,7 +90,7 @@ test("a growing block is throttled but the final content always lands", async ()
 
 test("theme switch is a new identity and forwards immediately", async () => {
   const base = createFakeBase();
-  const plugin = createThrottledCodePlugin(base.plugin);
+  const plugin = createThrottledCodePlugin(base.plugin, SYNC);
   plugin.highlight(OPTS("const b = 2;"));
   plugin.highlight({ code: "const b = 2;x", language: "ts", themes: ["night-owl", "night-owl"] });
   await tick();
@@ -96,7 +99,7 @@ test("theme switch is a new identity and forwards immediately", async () => {
 
 test("sibling blocks sharing the first line never borrow each other's tokens", async () => {
   const base = createFakeBase();
-  const plugin = createThrottledCodePlugin(base.plugin);
+  const plugin = createThrottledCodePlugin(base.plugin, SYNC);
   const json = (code) => ({ code, language: "json", themes: ["github-light", "github-dark"] });
   const A = '{\n "a": 1\n}';
   const B = '{\n "b": 2\n}';
@@ -122,7 +125,7 @@ test("sibling blocks sharing the first line never borrow each other's tokens", a
 
 test("a queued trailing run is not lost when a sibling block displaces it", async () => {
   const base = createFakeBase();
-  const plugin = createThrottledCodePlugin(base.plugin);
+  const plugin = createThrottledCodePlugin(base.plugin, SYNC);
   const json = (code) => ({ code, language: "json", themes: ["github-light", "github-dark"] });
   let latestA = null;
   plugin.highlight(json('{\n "a"'), (result) => {
@@ -144,4 +147,87 @@ test("a queued trailing run is not lost when a sibling block displaces it", asyn
   assert.equal(latestB.tokens[0][0].content, '{\n "b": 2\n}');
   await sleep(350);
   assert.equal(base.calls.length, 3, "no stray trailing run after displacement");
+});
+
+function createManualScheduler() {
+  const tasks = [];
+  return {
+    tasks,
+    schedule: (run) => tasks.push(run),
+    runNext() {
+      const run = tasks.shift();
+      assert.ok(run, "a task must be queued");
+      run();
+    },
+  };
+}
+const microtasks = () => new Promise((resolve) => queueMicrotask(resolve));
+
+test("blocks requested in one render are tokenized one per task, in order", async () => {
+  const base = createFakeBase();
+  const tasks = createManualScheduler();
+  const plugin = createThrottledCodePlugin(base.plugin, { schedule: tasks.schedule });
+  const got = [];
+  for (const code of ["const a = 1;", "let b = 2;", "var c = 3;"]) {
+    const immediate = plugin.highlight(OPTS(code), (result) => got.push(result.tokens[0][0].content));
+    assert.equal(immediate, null, "a first request answers through the callback");
+  }
+  assert.equal(base.calls.length, 0, "nothing tokenizes inside the render that asked");
+  assert.equal(tasks.tasks.length, 1, "only the head of the queue is scheduled");
+
+  for (let index = 0; index < 3; index += 1) {
+    tasks.runNext();
+    assert.equal(base.calls.length, index + 1, "exactly one block per task");
+    await microtasks();
+    assert.equal(got.length, index + 1, "the block delivered before the next task starts");
+  }
+  assert.deepEqual(got, ["const a = 1;", "let b = 2;", "var c = 3;"]);
+  assert.equal(tasks.tasks.length, 0);
+});
+
+test("a queued request answered meanwhile is served from the exact cache", async () => {
+  const base = createFakeBase();
+  const tasks = createManualScheduler();
+  const plugin = createThrottledCodePlugin(base.plugin, { schedule: tasks.schedule });
+  const code = "const shared = 1;";
+  let first = null;
+  plugin.highlight(OPTS(code), (result) => {
+    first = result;
+  });
+  tasks.runNext();
+  await microtasks();
+  assert.ok(first);
+  // Same code again (a second view of the message): exact cache, no queue.
+  assert.equal(plugin.highlight(OPTS(code)), first);
+  assert.equal(base.calls.length, 1);
+});
+
+test("an upstream call that never delivers does not stall the queue", async () => {
+  const calls = [];
+  const silent = {
+    name: "shiki",
+    type: "code-highlighter",
+    supportsLanguage: () => true,
+    getSupportedLanguages: () => ["ts"],
+    getThemes: () => ["github-light", "github-dark"],
+    highlight(options, callback) {
+      calls.push(options.code);
+      // Upstream logs a failed highlight and drops the callback.
+      if (options.code !== "broken();") {
+        queueMicrotask(() => callback?.({ tokens: [[{ content: options.code }]], fg: "", bg: "" }));
+      }
+      return null;
+    },
+  };
+  const plugin = createThrottledCodePlugin(silent, { jobTimeoutMs: 20 });
+  let delivered = null;
+  plugin.highlight(OPTS("broken();"));
+  plugin.highlight(OPTS("const fine = true;"), (result) => {
+    delivered = result;
+  });
+  await sleep(5);
+  assert.deepEqual(calls, ["broken();"], "the next block waits for the previous one");
+  await sleep(60);
+  assert.deepEqual(calls, ["broken();", "const fine = true;"]);
+  assert.equal(delivered?.tokens[0][0].content, "const fine = true;");
 });
