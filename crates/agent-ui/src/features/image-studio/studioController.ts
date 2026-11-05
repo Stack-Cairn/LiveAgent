@@ -1168,15 +1168,18 @@ export class ImageStudioController {
       if (this.valid(epoch)) this.pendingSubmit = false;
     }
   }
-  async refreshJob(id: string) {
+  /** Resolves true when the backend's record was read and applied. */
+  async refreshJob(id: string): Promise<boolean> {
     const epoch = this.epoch;
     try {
       const job = await this.client.getJob(id);
-      if (!this.valid(epoch)) return;
+      if (!this.valid(epoch)) return false;
       this.patch({ state: applyJobSnapshot(this.view.state, job) });
       this.streams.watch(job);
+      return true;
     } catch {
       if (this.valid(epoch)) this.say(message("imageStudio.notice.error.jobCheckFailed"));
+      return false;
     }
   }
   async cancelJob(id: string) {
@@ -1214,7 +1217,11 @@ export class ImageStudioController {
       if (this.valid(epoch))
         this.say(
           message("imageStudio.notice.error.exportFailed", {
-            action: errorActionMessage(error as { code?: string }),
+            // No export handler is not a job rejection; changing the prompt would not help.
+            action:
+              (error as { code?: string }).code === "IMAGE_UNSUPPORTED_OPERATION"
+                ? message("imageStudio.errorAction.default")
+                : errorActionMessage(error as { code?: string }),
           }),
         );
     }

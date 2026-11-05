@@ -159,18 +159,53 @@ export function submissionWasRejected(error: unknown): error is { code: string; 
     codes.includes(error.code)
   );
 }
-export function errorActionMessage(error: { code?: string } | undefined): Message {
+/**
+ * What the user should do about a failed job. `unknown` means the provider may already
+ * have produced (and billed) an image, so checking comes before regenerating.
+ */
+export type FailureKind =
+  | "unknown"
+  | "saveFailed"
+  | "rejected"
+  | "noOutput"
+  | "auth"
+  | "rateLimit"
+  | "eventGap"
+  | "other";
+export function failureKind(error: { code?: string } | undefined): FailureKind {
   const code = error?.code ?? "";
-  if (/401|403|AUTH|CREDENTIAL|FORBIDDEN/.test(code))
-    return message("imageStudio.errorAction.auth");
-  if (/429|RATE|QUOTA/.test(code)) return message("imageStudio.errorAction.rateLimit");
-  if (/422|PARAMETER|INVALID/.test(code)) return message("imageStudio.errorAction.input");
-  if (/UNKNOWN|UNCERTAIN/.test(code)) return message("imageStudio.errorAction.unknown");
-  if (/EVENT_GAP/.test(code)) return message("imageStudio.errorAction.eventGap");
-  return message("imageStudio.errorAction.default");
+  if (code === "IMAGE_OUTPUT_SAVE_FAILED") return "saveFailed";
+  if (/401|403|AUTH|CREDENTIAL|FORBIDDEN/.test(code)) return "auth";
+  if (/429|RATE|QUOTA/.test(code)) return "rateLimit";
+  if (/422|PARAMETER|INVALID|UNSUPPORTED_OPERATION/.test(code)) return "rejected";
+  if (/UNKNOWN|UNCERTAIN/.test(code)) return "unknown";
+  if (/NO_IMAGE_OUTPUT|EMPTY_RESULT/.test(code)) return "noOutput";
+  if (/EVENT_GAP/.test(code)) return "eventGap";
+  return "other";
 }
-export const errorAction = (error: { code?: string } | undefined, t = defaultTranslate) =>
-  formatMessage(errorActionMessage(error), t);
+const failureActionKeys: Record<FailureKind, string> = {
+  auth: "imageStudio.errorAction.auth",
+  rateLimit: "imageStudio.errorAction.rateLimit",
+  rejected: "imageStudio.errorAction.input",
+  unknown: "imageStudio.errorAction.unknown",
+  saveFailed: "imageStudio.errorAction.saveFailed",
+  noOutput: "imageStudio.errorAction.noOutput",
+  eventGap: "imageStudio.errorAction.eventGap",
+  other: "imageStudio.errorAction.default",
+};
+/** K-brain's fixed reason for a direct download that timed out at low speed. */
+const SLOW_DIRECT_DOWNLOAD_REASON = "image download was too slow over a direct connection";
+export function isSlowDirectDownload(error: { code?: string; reason?: string } | undefined) {
+  return failureKind(error) === "saveFailed" && error?.reason === SLOW_DIRECT_DOWNLOAD_REASON;
+}
+export function errorActionMessage(error: { code?: string; reason?: string } | undefined): Message {
+  if (isSlowDirectDownload(error)) return message("imageStudio.errorAction.slowDownload");
+  return message(failureActionKeys[failureKind(error)]);
+}
+export const errorAction = (
+  error: { code?: string; reason?: string } | undefined,
+  t = defaultTranslate,
+) => formatMessage(errorActionMessage(error), t);
 export type NoticeTone = "info" | "success" | "warning" | "error";
 const noticeTones = new Set<string>(["info", "success", "warning", "error"]);
 /**
@@ -193,14 +228,28 @@ export function jobErrorLines(job: ImageJob, t: Translate): string[] {
   const errors = [job.error, ...job.items.map((item) => item.error)].filter(
     (error): error is NonNullable<typeof error> => Boolean(error),
   );
+  // One line per code, keeping the copy that says why, and above all the one with advice.
+  const byCode = new Map<string, (typeof errors)[number]>();
+  for (const error of errors) {
+    const seen = byCode.get(error.code);
+    if (!seen || (!seen.reason && error.reason) || isSlowDirectDownload(error)) {
+      byCode.set(error.code, error);
+    }
+  }
   return [
     ...new Set(
-      errors.map((error) =>
+      [...byCode.values()].map((error) =>
         formatMessage(
-          message("imageStudio.errorLine", {
-            error: imageErrorText(error, t),
-            action: errorActionMessage(error),
-          }),
+          error.reason
+            ? message("imageStudio.errorLineReason", {
+                error: imageErrorText(error, t),
+                reason: error.reason,
+                action: errorActionMessage(error),
+              })
+            : message("imageStudio.errorLine", {
+                error: imageErrorText(error, t),
+                action: errorActionMessage(error),
+              }),
           t,
         ),
       ),

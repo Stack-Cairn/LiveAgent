@@ -146,7 +146,7 @@ OpenAsset(context.Context, Scope, string, string) (io.ReadCloser, ImageAsset, er
 
 ## HTTP、事件与客户端
 
-所有响应携带 `version:"kbrain.image.v1"`。错误：`{version,error:{code,message,retryable,requestId,details}}`，details 只含脱敏字段。401 未认证、403 无能力、404 找不到或不属于当前 owner 的对象、409 幂等/配置版本冲突、413 大文件、422 参数不支持、429 配额、503 模块未开启。旧后端无 image capability 时隐藏入口并提示升级，不反复调用不存在路由。
+所有响应携带 `version:"kbrain.image.v1"`。错误：`{version,error:{code,message,retryable,requestId,reason?,details}}`，details 只含脱敏字段。`reason` 是可选的一行短文本（最多 160 个字符），只含固定短语和枚举值，不转发供应商原文；它不写入 WAL 和快照（旧版严格解码会拒绝未知字段），持久化在独立文件 `error-reasons.v1.json`；旧后端不带该字段，客户端按错误码显示。结果未知、没有出图、已出图但保存失败（`IMAGE_OUTPUT_SAVE_FAILED`）保留各自的错误码（HTTP 502），其余未映射的错误才归为 `IMAGE_UNAVAILABLE`。输出图片下载总超时 5 分钟：路由只由连接的“使用应用代理”开关决定，开启走应用代理，未开启走直连，不做自动回退。直连下载超时且平均低于 100 KB/s 时，`reason` 固定为 `image download was too slow over a direct connection`，客户端据此建议用户打开该开关。用满 5 分钟的下载不再重试（两条路由都是），响应头阶段的短暂卡顿仍重试。走代理时保留 URL 校验、重定向上限，不带凭据，但无法校验解析后的 IP。401 未认证、403 无能力、404 找不到或不属于当前 owner 的对象、409 幂等/配置版本冲突、413 大文件、422 参数不支持、429 配额、503 模块未开启。旧后端无 image capability 时隐藏入口并提示升级，不反复调用不存在路由。
 
 | 方法 / 路由 | 请求 / 响应 |
 | --- | --- |
@@ -212,7 +212,7 @@ interface ImageStudioClient {
 | ImageAsset | id/hash/mime:string、bytes/width/height:number、source:upload或generated、parentAssetIds:string[]、jobId?:string、createdAt:string、available:boolean |
 | ImageEvent | jobId:string、seq/revision:number、type:string、timestamp:string、data:ImageEventData |
 | ImageEventData | status?:JobStatus、itemId?:string、asset?:ImageAsset、error?:ImageError；只允许白名单字段，job.finished须带status |
-| ImageError | code/message/requestId:string、retryable:boolean、details?:脱敏字段对象 |
+| ImageError | code/message/requestId:string、retryable:boolean、reason?:脱敏短文本、details?:脱敏字段对象 |
 | ImageSecretInput | connectionId:string、purpose:string、value:string；仅写请求，value不存公开配置或客户端草稿 |
 | TargetSnapshot | ImageTarget全部已验证执行字段的冻结副本，去除mutable enabled和配置诊断；connectionId指向秘密解析位置，不复制秘密 |
 

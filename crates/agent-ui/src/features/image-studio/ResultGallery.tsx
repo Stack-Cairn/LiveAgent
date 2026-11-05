@@ -25,6 +25,7 @@ const filters = [
   ["all", "imageStudio.gallery.filter.all"],
   ["completed", "imageStudio.gallery.filter.completed"],
   ["active", "imageStudio.gallery.filter.active"],
+  ["unknown", "imageStudio.gallery.filter.unknown"],
   ["failed", "imageStudio.gallery.filter.failed"],
 ] as const;
 type Filter = (typeof filters)[number][0];
@@ -35,6 +36,8 @@ const needsAttention = (job: ImageJob) =>
 function matchesFilter(job: ImageJob, filter: Filter) {
   if (filter === "active") return !terminalJob(job);
   if (filter === "completed") return job.assetIds.length > 0;
+  // Jobs whose outcome the provider never confirmed; they may already be billed.
+  if (filter === "unknown") return job.status === "result_unknown";
   if (filter === "failed") return needsAttention(job);
   return true;
 }
@@ -140,9 +143,13 @@ function HistoryCard({
             {formatJobTime(job.createdAt, locale)}
           </time>
         </p>
-        <div className="mt-1 flex h-7 min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-            <Badge variant={statusVariant(job)} size="compact" className="shrink-0">
+        <div className="relative mt-1 flex min-h-7 min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex min-w-0 flex-[1_1_auto] items-center gap-1.5 overflow-hidden">
+            <Badge
+              variant={statusVariant(job)}
+              size="compact"
+              className="shrink-0 whitespace-nowrap"
+            >
               {active && (
                 <span
                   className="size-1.5 animate-pulse rounded-full bg-current motion-reduce:animate-none"
@@ -163,9 +170,10 @@ function HistoryCard({
           <div
             className={cn(
               "pointer-events-auto relative z-10 flex shrink-0 items-center gap-0.5 transition-opacity",
+              // Hidden actions must not take width from the status badge in a narrow column.
               !active &&
-                "lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
-              selected && "lg:opacity-100",
+                !selected &&
+                "lg:absolute lg:right-0 lg:rounded-md lg:bg-muted lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
             )}
           >
             <IconAction
@@ -303,7 +311,7 @@ export function ResultGallery({
               type="button"
               aria-pressed={filter === value}
               className={cn(
-                "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                "min-w-0 flex-1 whitespace-nowrap rounded-md px-1 py-1 text-xs font-medium transition-colors",
                 "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                 filter === value
                   ? "bg-background text-foreground shadow-xs"
