@@ -316,4 +316,33 @@ test("LiveAgent composer commands run against the K-brain backend it depends on"
       ],
     );
   });
+
+  await t.test("goal continuation rounds read back as notices, not user bubbles", async () => {
+    const store = new Map();
+    globalThis.localStorage ??= {
+      get length() { return store.size; },
+      key: (index) => Array.from(store.keys())[index] ?? null,
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => store.set(key, String(value)),
+      removeItem: (key) => store.delete(key),
+      clear: () => store.clear(),
+    };
+    const session = await newSession(backend);
+    model.replies.push("first pass", "more work", "GOAL_MET shipped");
+    await startGoal(client, session.id, "ship the notice");
+    assert.equal((await settled(client, session.id)).status, "met");
+    const { setKBrainSessionId } = backend.loader.loadModule("src/lib/kbrain/mapping.ts");
+    const { getKBrainHistoryWindow } = backend.loader.loadModule("src/lib/kbrain/history.ts");
+    setKBrainSessionId("goal-notice-conversation", session.id, backend.baseUrl);
+    const window = await getKBrainHistoryWindow("goal-notice-conversation", { maxMessages: 50 });
+    const users = window.segments.flatMap((segment) => segment.messages)
+      .filter((message) => message.role === "user")
+      .map((message) => [textOf(message), message.liveAgentBackgroundNotice === true]);
+    // The /goal command the user typed stays a bubble; the rounds the runtime wrote are notices.
+    assert.deepEqual(users, [
+      ["/goal ship the notice", false],
+      ["[goal 1/100] ship the notice", true],
+      ["[goal 2/100] ship the notice", true],
+    ]);
+  });
 });

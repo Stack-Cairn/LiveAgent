@@ -261,12 +261,22 @@ test("runtime notices saved before K-brain set origin still render as notices", 
     "[wait wait-cat-build-log-7 timeout] deadline elapsed without the condition being met:\n$ cat build.log",
     "[wait wait-cat-build-log-8] gave up: command failed 5 consecutive times (last: exit status 1)\n\nLast output:\n",
     "[workflow run-19a5c2d3e4f-1-ab12 complete] review\n\n{}",
+    // Goal rounds, the new-context notice and the output-limit reminder had no origin up to 0.107.18.
+    "[goal 10/100] Draft the v1.3 release notes",
+    "[goal 1/3] 整理发布说明\n第二行",
+    "A new context window is active. Continue the current task using the available workspace and tools. The previous conversation was intentionally discarded.\n\nCurrent task:\nship it",
+    "<system-reminder>\nYour previous response was cut off because it reached the output token limit. Continue exactly where it stopped. Do not repeat text you already wrote.\n</system-reminder>",
   ];
   const typed = [
     "[process bash-1 completed] what does this mean?",
     "[subagent] why did it stop?",
     "[wait] how long is left?",
     "please check [process bash-1 completed exit_code=0]\n$ ls",
+    "[goal] what is the goal?",
+    "[goal 0/3] start",
+    "/goal Draft the v1.3 release notes",
+    "what does [goal 2/5] mean?",
+    "A new context window is active, right?",
   ];
   const texts = [...legacy, ...typed];
   const messages = texts.flatMap((text, index) => [
