@@ -40,8 +40,17 @@ impl GatewayController {
                     | proto::gateway_envelope::Payload::HistoryPin(_)
                     | proto::gateway_envelope::Payload::HistorySetCwd(_)
                     | proto::gateway_envelope::Payload::HistoryDelete(_)
+                    | proto::gateway_envelope::Payload::HistoryBranch(_)
+                    | proto::gateway_envelope::Payload::HistoryShareGet(_)
+                    | proto::gateway_envelope::Payload::HistoryShareSet(_)
+                    | proto::gateway_envelope::Payload::HistoryShareResolve(_)
+                    | proto::gateway_envelope::Payload::TrajectoryFetch(_)
+                    | proto::gateway_envelope::Payload::Checkpoint(_)
             )
         ) {
+            // Every desktop conversation is a K-brain session, and only the
+            // webview owns the local->backend id mapping, so these requests go
+            // through the frontend's K-brain history bridge, not the legacy store.
             let controller = Arc::clone(self);
             tauri::async_runtime::spawn(async move {
                 if let Some(payload) = envelope.payload {
