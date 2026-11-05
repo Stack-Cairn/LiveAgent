@@ -1,5 +1,8 @@
 import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuestion";
-import { readAskUserQuestionDeadlineAt } from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
+  readAskUserQuestionDeadlineAt,
+  readAskUserQuestionPendingMarker,
+} from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
 import { readPlanApprovedMarker, readPlanPendingMarker } from "@liveagent/ui/lib/chat/planMode";
 import {
@@ -30,6 +33,15 @@ export function usePermissionAutoResolved(
   toolArguments: Record<string, unknown>,
 ) {
   return readToolPermissionAutoResolved(toolArguments);
+}
+
+// The desktop stamps whether the question is registered. A desktop that predates the
+// marker sends none, and the card stays answerable as before.
+export function useAskUserQuestionPending(
+  _toolCallId: string,
+  toolArguments: Record<string, unknown>,
+) {
+  return readAskUserQuestionPendingMarker(toolArguments) !== false;
 }
 
 export function readAskUserQuestionDeadline(

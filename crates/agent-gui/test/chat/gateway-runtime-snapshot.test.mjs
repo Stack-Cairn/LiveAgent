@@ -274,3 +274,37 @@ test("gateway final projection is frozen from the persisted conversation state",
   assert.equal(entries[2].text, "The project is healthy.");
   assert.equal(entries.some((entry) => entry.kind === "user" && entry.text === "Next prompt"), false);
 });
+
+test("AskUserQuestion preview marks whether the desktop has the question pending", async () => {
+  const toolCall = {
+    type: "toolCall",
+    id: "call-ask-pending-marker",
+    name: "AskUserQuestion",
+    arguments: {
+      questions: [{ id: "q1", prompt: "Pick one", options: [{ label: "A" }, { label: "B" }] }],
+    },
+  };
+  const marker = () =>
+    buildGatewayToolCallPreviewArguments(toolCall)[askShared.ASK_USER_QUESTION_PENDING_ARG];
+
+  // tool.call arrives before K-brain registers the question (AI review or an
+  // approval sits in between): WebUI must not offer the card yet.
+  assert.equal(marker(), false);
+  const pending = askTools.requestBackendQuestion({
+    toolCallId: toolCall.id,
+    conversationId: "conv-marker",
+    questions: toolCall.arguments.questions,
+    deadlineAt: Date.now() + 60_000,
+  });
+  assert.equal(marker(), true);
+  assert.equal(
+    askShared.readAskUserQuestionPendingMarker(buildGatewayToolCallPreviewArguments(toolCall)),
+    true,
+  );
+  assert.equal(
+    askTools.answerAskUserQuestion(toolCall.id, [{ questionId: "q1", selectedLabel: "A" }]).ok,
+    true,
+  );
+  await pending;
+  assert.equal(marker(), false);
+});

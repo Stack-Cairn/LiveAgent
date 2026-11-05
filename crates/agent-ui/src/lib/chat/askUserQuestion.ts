@@ -15,6 +15,12 @@ export const ASK_USER_QUESTION_CUSTOM_MAX_LENGTH = 2000;
  * WebUI 卡片倒计时以它对齐桌面计时；模型参数里不存在该键（`__` 前缀防冲突）。
  */
 export const ASK_USER_QUESTION_DEADLINE_ARG = "__askUserQuestionDeadlineAt";
+/**
+ * 桌面端在网关上报的工具参数上附带的“提问确已挂起”标记。工具调用事件先于
+ * 提问登记到达（K-brain 的 AI 审查或审批门可能夹在中间），WebUI 卡片据此
+ * 只在桌面端真有挂起提问时可作答。
+ */
+export const ASK_USER_QUESTION_PENDING_ARG = "__askUserQuestionPending";
 
 export type AskUserQuestionOption = {
   label: string;
@@ -57,6 +63,13 @@ export function readAskUserQuestionDeadlineAt(args: unknown): number | null {
   if (!args || typeof args !== "object") return null;
   const value = (args as Record<string, unknown>)[ASK_USER_QUESTION_DEADLINE_ARG];
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** 读取参数上的挂起标记；旧版桌面端不盖章，缺失返回 null。 */
+export function readAskUserQuestionPendingMarker(args: unknown): boolean | null {
+  if (!args || typeof args !== "object") return null;
+  const value = (args as Record<string, unknown>)[ASK_USER_QUESTION_PENDING_ARG];
+  return typeof value === "boolean" ? value : null;
 }
 
 /** 推荐项固定排在第一位展示；其余选项保持模型给出的顺序。 */

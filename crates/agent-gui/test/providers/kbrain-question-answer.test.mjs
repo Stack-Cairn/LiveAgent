@@ -127,6 +127,16 @@ for (const mode of ["answered", "timeout", "cancelled"]) {
       const call = events.find((event) => event.type === "tool_call");
       assert.equal(call.name, "AskUserQuestion");
       assert.equal(call.arguments.__askUserQuestionDeadlineAt, request.deadline_at);
+      // WebUI sees the question open only while the desktop has it pending.
+      const askEvents = events.filter((event) => event.type === "tool_call" && event.id === "call-1");
+      assert.equal(askEvents[0].arguments.__askUserQuestionPending, false);
+      // The "answered" fixture answers inside the registration notification, before
+      // the re-push; the other modes leave the question open long enough to see it.
+      if (mode !== "answered") {
+        assert.equal(askEvents.some((event) => event.arguments.__askUserQuestionPending === true), true);
+      }
+      assert.equal(askEvents.at(-1).arguments.__askUserQuestionPending, false);
+      assert.equal(askEvents.every((event) => event.arguments.__askUserQuestionDeadlineAt === request.deadline_at), true);
       assert.equal(events.some((event) => event.type === "tool_result"), true);
       const details = projectedResults.at(-1).details;
       assert.equal(details.kind, "ask_user_question");

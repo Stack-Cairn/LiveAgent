@@ -128,6 +128,7 @@ async function renderToolRow(item, props = {}) {
     "@liveagent/ui/components/chat/PlanModeCard": { PlanModeCard: () => null },
     "@liveagent/adapters/assistantBubble": {
       readAskUserQuestionDeadline: () => undefined,
+      useAskUserQuestionPending: () => false,
       usePlanDecisionState: () => ({ pending: false, approved: false }),
       retainRunningToolContent: false,
       submitAskUserQuestionAnswers() {},

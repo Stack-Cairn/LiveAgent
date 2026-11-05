@@ -600,3 +600,49 @@ test("custom flag round-trips through the transcript parser", () => {
   assert.equal("custom" in parsed.answers[0], false);
   assert.equal(parsed.answers[1].custom, true);
 });
+
+test("a backend question is answerable only after it registers and its deadline wins", async () => {
+  const { tools } = loadModules();
+  const toolCallId = "call-ask-backend-late";
+  const questions = [{ id: "q1", prompt: "Pick one", options: [{ label: "A" }, { label: "B" }] }];
+  let notified = 0;
+  const unsubscribe = tools.subscribeAskUserQuestions(() => {
+    notified += 1;
+  });
+  try {
+    // K-brain sends tool.call first; AI review or an approval can sit before
+    // question.requested, and the gateway preview stamps a guess meanwhile.
+    const preset = tools.ensureAskUserQuestionDeadlineAt(toolCallId);
+    assert.equal(tools.hasPendingAskUserQuestion(toolCallId), false);
+    assert.equal(
+      tools.answerAskUserQuestion(toolCallId, [{ questionId: "q1", selectedLabel: "A" }]).message,
+      "Question is not pending (already answered or cancelled).",
+    );
+
+    const versionBefore = tools.getAskUserQuestionVersion();
+    const deadlineAt = preset + 10_000;
+    const pending = tools.requestBackendQuestion({
+      toolCallId,
+      conversationId: "conv-backend",
+      questions,
+      deadlineAt,
+    });
+    assert.equal(tools.hasPendingAskUserQuestion(toolCallId), true);
+    assert.equal(notified, 1);
+    assert.ok(tools.getAskUserQuestionVersion() > versionBefore);
+    assert.equal(tools.getAskUserQuestionDeadlineAt(toolCallId), deadlineAt);
+
+    assert.equal(
+      tools.answerAskUserQuestion(toolCallId, [{ questionId: "q1", selectedLabel: "B" }]).ok,
+      true,
+    );
+    const answers = await pending;
+    assert.equal(answers[0].selectedLabel, "B");
+    assert.equal(notified, 2);
+    assert.equal(tools.hasPendingAskUserQuestion(toolCallId), false);
+    // The stale preset must not outlive the question.
+    assert.equal(tools.getAskUserQuestionDeadlineAt(toolCallId), null);
+  } finally {
+    unsubscribe();
+  }
+});
