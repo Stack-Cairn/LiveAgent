@@ -1274,7 +1274,8 @@ fn canonicalize_workdir_within_rejects_paths_outside_the_project() {
         "unexpected error: {traversal}"
     );
 
-    let absolute = canonicalize_workdir_within("/etc", &root)
+    let unrelated = if cfg!(windows) { r"C:\Windows" } else { "/etc" };
+    let absolute = canonicalize_workdir_within(unrelated, &root)
         .expect_err("unrelated absolute path is rejected");
     assert!(
         absolute.contains("outside the current project"),

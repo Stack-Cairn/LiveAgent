@@ -1292,23 +1292,44 @@ mod tests {
 
     // resolve_program_in_path:本机(Unix)按 Unix 绝对/分隔规则验证“搜绝对目录、套
     // PATHEXT、跳相对项、绝对入参直通”这套算法;Windows 路径语义由 Windows 编译+真机验证。
+    // 按平台给出绝对路径,让这套算法在 Windows 上也跑。
+    fn abs_for_test(path: &str) -> PathBuf {
+        PathBuf::from(if cfg!(windows) {
+            format!("C:{path}")
+        } else {
+            path.to_string()
+        })
+    }
+
     #[test]
     fn resolve_program_searches_absolute_dirs_first_match_wins() {
-        let present: std::collections::HashSet<PathBuf> =
-            [PathBuf::from("/usr/bin/sh")].into_iter().collect();
+        let bin = abs_for_test("/usr/bin");
+        let found = bin.join("sh");
+        let present: std::collections::HashSet<PathBuf> = [found.clone()].into_iter().collect();
         let is_file = |p: &Path| present.contains(p);
-        let got =
-            resolve_program_in_path(Path::new("sh"), "/nonexist;/usr/bin;/bin", ".EXE", &is_file);
-        assert_eq!(got, Some(PathBuf::from("/usr/bin/sh")));
+        let path_var = format!(
+            "{};{};{}",
+            abs_for_test("/nonexist").display(),
+            bin.display(),
+            abs_for_test("/bin").display()
+        );
+        let got = resolve_program_in_path(Path::new("sh"), &path_var, ".EXE", &is_file);
+        assert_eq!(got, Some(found));
     }
 
     #[test]
     fn resolve_program_applies_pathext_to_bare_name() {
-        let present: std::collections::HashSet<PathBuf> =
-            [PathBuf::from("/tools/pwsh.EXE")].into_iter().collect();
+        let tools = abs_for_test("/tools");
+        let found = tools.join("pwsh.EXE");
+        let present: std::collections::HashSet<PathBuf> = [found.clone()].into_iter().collect();
         let is_file = |p: &Path| present.contains(p);
-        let got = resolve_program_in_path(Path::new("pwsh"), "/tools", ".COM;.EXE", &is_file);
-        assert_eq!(got, Some(PathBuf::from("/tools/pwsh.EXE")));
+        let got = resolve_program_in_path(
+            Path::new("pwsh"),
+            &tools.display().to_string(),
+            ".COM;.EXE",
+            &is_file,
+        );
+        assert_eq!(got, Some(found));
     }
 
     #[test]
@@ -1328,8 +1349,9 @@ mod tests {
     #[test]
     fn resolve_program_passes_absolute_input_through_without_probing() {
         let is_file = |_: &Path| panic!("absolute input must not be probed");
-        let got = resolve_program_in_path(Path::new("/bin/sh"), "/other", ".EXE", &is_file);
-        assert_eq!(got, Some(PathBuf::from("/bin/sh")));
+        let sh = abs_for_test("/bin/sh");
+        let got = resolve_program_in_path(&sh, "/other", ".EXE", &is_file);
+        assert_eq!(got, Some(sh));
     }
 
     #[test]
@@ -1425,6 +1447,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn temp_write_root_rejects_filesystem_root_and_home() {
         assert!(!temp_write_root_is_safe(Path::new("/")));
@@ -1448,6 +1471,7 @@ mod tests {
         assert_eq!(got, Some(PathBuf::from("/usr/bin/bwrap")));
     }
 
+    #[cfg(unix)]
     #[test]
     fn resolve_bwrap_skips_workspace_and_relative_path_entries() {
         let present: std::collections::HashSet<PathBuf> = [

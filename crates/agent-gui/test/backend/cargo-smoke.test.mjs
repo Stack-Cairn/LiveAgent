@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const guiRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+
+const cargoMissing =
+  spawnSync("cargo", ["--version"], { stdio: "ignore" }).status === 0 ? false : "cargo is not on PATH";
 
 function runCargoTest() {
   return new Promise((resolve) => {
@@ -37,7 +40,8 @@ function runCargoTest() {
   });
 }
 
-test("Tauri backend cargo test suite passes", { timeout: 180_000 }, async () => {
+// A cold build alone takes several minutes.
+test("Tauri backend cargo test suite passes", { skip: cargoMissing, timeout: 1_200_000 }, async () => {
   const result = await runCargoTest();
   assert.equal(
     result.code,
