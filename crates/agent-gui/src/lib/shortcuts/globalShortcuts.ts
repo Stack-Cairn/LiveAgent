@@ -47,8 +47,6 @@ export interface GlobalShortcutFailure {
 const GLOBAL_SHORTCUT_STORAGE_KEY = "liveagent.globalShortcuts.v1";
 
 export {
-  globalShortcutDisplayToken,
-  globalShortcutKeyDisplayLabel,
   isShortcutModifierToken,
   modifierFromEventCode,
   SHORTCUT_MODIFIER_ORDER,

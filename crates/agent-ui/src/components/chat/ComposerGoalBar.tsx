@@ -2,6 +2,7 @@ import { Check, Goal, Pause, Play, SquarePen, Trash2, X } from "@liveagent/ui/co
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { formatShortcutLabel } from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 /** 目标栏展示的会话目标；status 取 K-brain goal 状态里会持续显示的几种。 */
@@ -160,7 +161,9 @@ export function ComposerGoalBar({
         </span>
         {editing ? (
           <span className="min-w-10 flex-1 truncate text-muted-foreground/70">
-            {t("chat.goalBar.editHint")}
+            {t("chat.goalBar.editHint")
+              .replace("{save}", formatShortcutLabel("Mod+Enter"))
+              .replace("{cancel}", formatShortcutLabel("Escape"))}
           </span>
         ) : (
           <span className="min-w-10 flex-1 truncate text-muted-foreground" title={state.goal}>

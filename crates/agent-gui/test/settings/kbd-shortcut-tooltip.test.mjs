@@ -6,22 +6,45 @@ import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 const env = await createDomTestEnv();
 const { React, act, createRoot } = env;
 const kbd = env.loadModule("@liveagent/ui/components/ui/kbd.tsx");
+const keys = env.loadModule("@liveagent/ui/lib/shortcuts/shortcutKeys.ts");
 const { ShortcutTooltip } = env.loadModule("@liveagent/ui/components/ui/shortcut-tooltip.tsx");
 
 test.after(() => env.cleanup());
 
-test("chords render with macOS glyphs or Ctrl/Shift/Alt names", () => {
-  assert.deepEqual(kbd.shortcutKeyTokens("Mod+Shift+KeyO", true), ["⇧", "⌘", "O"]);
-  assert.deepEqual(kbd.shortcutKeyTokens("Mod+Shift+KeyO", false), ["Ctrl", "Shift", "O"]);
-  assert.deepEqual(kbd.shortcutKeyTokens("Shift+Alt+Ctrl+Mod+KeyK", true), ["⌃", "⌥", "⇧", "⌘", "K"]);
-  assert.deepEqual(kbd.shortcutKeyTokens("Alt+Mod+ArrowUp", false), ["Ctrl", "Alt", "↑"]);
-  assert.equal(kbd.formatShortcutText("Mod+Enter", true), "⌘↩");
-  assert.equal(kbd.formatShortcutText("Mod+Enter", false), "Ctrl+Enter");
-  assert.equal(kbd.formatShortcutText("Mod+Comma", false), "Ctrl+,");
-  assert.equal(kbd.formatShortcutText("Escape", true), "Esc");
-  assert.equal(kbd.formatShortcutText("Ctrl++", false), "Ctrl++");
-  assert.equal(kbd.shortcutAriaKeys("Mod+KeyB", true), "Meta+B");
-  assert.equal(kbd.shortcutAriaKeys("Mod+Shift+Slash", false), "Control+Shift+/");
+test("Kbd reads labels from the shared formatter instead of keeping its own", () => {
+  const source = fs.readFileSync(
+    new URL("../../../agent-ui/src/components/ui/kbd.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /from "\.\.\/\.\.\/lib\/shortcuts\/shortcutKeys"/);
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(code, /[⌘⌥⇧⌃↩↵]/, "no glyph table inside the component");
+  assert.equal(kbd.shortcutKeyTokens, undefined);
+  assert.equal(kbd.formatShortcutText, undefined);
+});
+
+test("KbdShortcut compact renders one cap with the compact label", async () => {
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    for (const [isMac, label] of [
+      [true, "⇧⌘O"],
+      [false, "Ctrl+Shift+O"],
+    ]) {
+      await act(async () =>
+        root.render(
+          React.createElement(kbd.KbdShortcut, { shortcut: "Mod+Shift+KeyO", isMac, compact: true }),
+        ),
+      );
+      const caps = [...host.querySelectorAll('[data-slot="kbd"]')];
+      assert.deepEqual(caps.map((cap) => cap.textContent), [label]);
+      assert.equal(host.querySelector('[data-slot="kbd-shortcut"]'), null);
+      assert.equal(keys.formatShortcutLabel("Mod+Shift+KeyO", isMac), label);
+    }
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });
 
 test("KbdShortcut renders one cap per key and a single screen-reader label", async () => {

@@ -4,6 +4,7 @@ import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 import { floatingSurfaceClassName } from "@liveagent/ui/components/ui/menu-surface";
 import type { SftpClient, SftpEntry, SftpSide } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { formatShortcutLabel } from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { basename } from "./workspaceSftpModel";
 import { joinPath, normalizePath, parentPath } from "./workspaceSftpPaths";
@@ -421,7 +422,14 @@ export function SftpPathNavigator(props: {
           </div>
 
           <div className="border-t border-border/50 bg-muted/25 px-3 py-1.5 text-tiny text-muted-foreground/80">
-            {t("workspaceSftp.pathKeyboardHint")}
+            {t("workspaceSftp.pathKeyboardHint")
+              .replace(
+                "{select}",
+                `${formatShortcutLabel("ArrowUp")}${formatShortcutLabel("ArrowDown")}`,
+              )
+              .replace("{complete}", formatShortcutLabel("Tab"))
+              .replace("{open}", formatShortcutLabel("Enter"))
+              .replace("{cancel}", formatShortcutLabel("Escape"))}
           </div>
         </div>
       ) : null}

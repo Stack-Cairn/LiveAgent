@@ -1,7 +1,8 @@
 import * as React from "react";
 
-import { isMacLikePlatform } from "../../lib/chat/commandPalette";
-import { formatShortcutText, KbdShortcut, shortcutAriaKeys } from "./kbd";
+import { isMacLikePlatform } from "../../lib/shared/platform";
+import { formatShortcutLabel, shortcutAriaKeys } from "../../lib/shortcuts/shortcutKeys";
+import { KbdShortcut } from "./kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 type TooltipContentPlacement = Pick<
@@ -51,7 +52,7 @@ export const ShortcutTooltip = React.forwardRef<HTMLButtonElement, ShortcutToolt
     ref,
   ) {
     const mac = isMac ?? isMacLikePlatform();
-    const fallbackTitle = shortcut ? `${label} (${formatShortcutText(shortcut, mac)})` : label;
+    const fallbackTitle = shortcut ? `${label} (${formatShortcutLabel(shortcut, mac)})` : label;
     return (
       <Tooltip disabled={triggerDisabled}>
         <TooltipTrigger

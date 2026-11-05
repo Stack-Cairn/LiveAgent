@@ -4,7 +4,7 @@ import {
   SettingsToggleGroupItem,
 } from "@liveagent/ui/components/settings/SettingsToggleGroup";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Kbd } from "@liveagent/ui/components/ui/kbd";
+import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   readSendShortcut,
@@ -16,6 +16,7 @@ import {
   getResolvedShortcutBinding,
   SHORTCUT_COMMANDS,
 } from "@liveagent/ui/lib/shortcuts/shortcutCommands";
+import { formatShortcutLabel } from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 import {
   type ExternalShortcutBinding,
   ShortcutCommandsSection,
@@ -29,8 +30,6 @@ import {
   type GlobalShortcutAction,
   type GlobalShortcutBindings,
   type GlobalShortcutFailure,
-  globalShortcutDisplayToken,
-  globalShortcutKeyDisplayLabel,
   modifierFromEventCode,
   readGlobalShortcutBindings,
   type ShortcutModifier,
@@ -43,10 +42,6 @@ const IS_MAC = inferRuntimePlatform() === "macos";
 
 /** 应用内版本已由共享快捷键命令表提供，这两项在此只能注册为系统全局快捷键。 */
 const SYSTEM_WIDE_ONLY_ACTIONS = new Set<GlobalShortcutAction>(["newChat", "searchConversations"]);
-
-function displayToken(token: string): string {
-  return globalShortcutDisplayToken(token, IS_MAC);
-}
 
 interface ShortcutDraft {
   mods: ShortcutModifier[];
@@ -99,21 +94,10 @@ function ShortcutRow({
   );
 }
 
-function ShortcutKeys({ tokens }: { tokens: string[] }) {
-  return tokens.map((token, index) => (
-    <span key={token} className="flex items-center gap-1.5">
-      {index > 0 ? <span className="text-xs text-muted-foreground">+</span> : null}
-      <Kbd variant="tile" className="ghk-kbd rounded-md px-1.5">
-        {token}
-      </Kbd>
-    </span>
-  ));
-}
-
 function ShortcutRecordButton({
   id,
   label,
-  tokens,
+  chord,
   recording,
   dimmed = false,
   confirmationHint,
@@ -121,7 +105,8 @@ function ShortcutRecordButton({
 }: {
   id?: string;
   label: string;
-  tokens: string[];
+  /** Accelerator or recording draft; "" while nothing is set. */
+  chord: string;
   recording: boolean;
   dimmed?: boolean;
   confirmationHint: string;
@@ -138,14 +123,20 @@ function ShortcutRecordButton({
       title={t("settings.shortcutClickToRecord")}
       className={cn(SHORTCUT_KEY_BUTTON_CLASS, dimmed && "opacity-40")}
     >
-      {tokens.length > 0 ? (
-        <ShortcutKeys tokens={tokens} />
+      {chord ? (
+        <KbdShortcut
+          shortcut={chord}
+          isMac={IS_MAC}
+          variant="tile"
+          className="gap-1"
+          keyClassName="ghk-kbd rounded-md px-1.5"
+        />
       ) : (
         <span className={cn("text-xs", recording ? "text-primary" : "text-muted-foreground")}>
           {recording ? t("settings.shortcutRecordingHint") : t("settings.shortcutNotSet")}
         </span>
       )}
-      {recording && tokens.length > 0 ? (
+      {recording && chord ? (
         <span className="ml-1 text-xs font-medium text-primary">{confirmationHint}</span>
       ) : null}
     </button>
@@ -409,11 +400,10 @@ export function GlobalShortcutsSection() {
     [],
   );
 
-  const draftTokens = useMemo(() => {
-    const tokens = draft.mods.map((mod) => displayToken(mod));
-    if (draft.main) tokens.push(globalShortcutKeyDisplayLabel(draft.main));
-    return tokens;
-  }, [draft]);
+  const draftChord = useMemo(
+    () => [...draft.mods, ...(draft.main ? [draft.main] : [])].join("+"),
+    [draft],
+  );
 
   const externalBindings = useMemo<ExternalShortcutBinding[]>(
     () =>
@@ -465,9 +455,9 @@ export function GlobalShortcutsSection() {
             </span>
             <ShortcutChoiceSwitch
               checked={sendShortcut === "ctrlEnter"}
-              leftLabel="Enter"
-              rightLabel={`${IS_MAC ? "⌘" : "Ctrl"} + Enter`}
-              label={`${t("settings.shortcutSend")} · ${IS_MAC ? "⌘" : "Ctrl"} + Enter`}
+              leftLabel={formatShortcutLabel("Enter", IS_MAC)}
+              rightLabel={formatShortcutLabel("Mod+Enter", IS_MAC)}
+              label={`${t("settings.shortcutSend")} · ${formatShortcutLabel("Mod+Enter", IS_MAC)}`}
               title={t("settings.shortcutSendSwitchHint")}
               onChange={(checked) => {
                 const next: SendShortcut = checked ? "ctrlEnter" : "enter";
@@ -486,11 +476,7 @@ export function GlobalShortcutsSection() {
             const isRecording = recording === action.id;
             const binding = bindings[action.id];
             const bindingDisabled = Boolean(binding) && !binding?.enabled;
-            const tokens = isRecording
-              ? draftTokens
-              : binding
-                ? binding.accelerator.split("+").map((token) => displayToken(token))
-                : [];
+            const chord = isRecording ? draftChord : (binding?.accelerator ?? "");
             const systemWideOnly = SYSTEM_WIDE_ONLY_ACTIONS.has(action.id);
             const scope = systemWideOnly ? "global" : (binding?.scope ?? "global");
             const changeScope = (nextScope: ShortcutScope) => {
@@ -529,7 +515,7 @@ export function GlobalShortcutsSection() {
                 ) : null}
                 <ShortcutRecordButton
                   label={action.label}
-                  tokens={tokens}
+                  chord={chord}
                   recording={isRecording}
                   dimmed={bindingDisabled}
                   confirmationHint={t("settings.shortcutPressEnter")}

@@ -88,6 +88,7 @@ import {
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { formatShortcutLabel } from "@liveagent/ui/lib/shortcuts/shortcutKeys";
 import type { SttTransport } from "@liveagent/ui/lib/stt/types";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import {
@@ -1969,7 +1970,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     disabled={controlsDisabled || !isAgentMode}
                     onChange={onCommandSafetyModeChange}
                     onConfigureAutoReview={() => onOpenSettings("systemTools")}
-                    shortcutHint={canCycleMode ? t("chat.safety.cycleShortcut") : undefined}
+                    shortcutHint={
+                      canCycleMode
+                        ? t("chat.safety.cycleShortcut").replace(
+                            "{keys}",
+                            formatShortcutLabel("Shift+Tab"),
+                          )
+                        : undefined
+                    }
                   />
                 ) : null}
                 <span role="status" aria-live="polite">

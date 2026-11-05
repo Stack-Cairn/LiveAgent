@@ -85,7 +85,7 @@ test("send shortcut uses the shared segmented control and saves both directions"
   const items = [...group.querySelectorAll('[data-slot="toggle-group-item"]')];
   assert.equal(items.length, 2);
   assert.match(items[0].textContent, /Enter/);
-  assert.match(items[1].textContent, /Ctrl \+ Enter|⌘ \+ Enter/);
+  assert.match(items[1].textContent, /^(Ctrl\+Enter|⌘↩)$/);
   assert.equal(items[0].getAttribute("aria-pressed"), "true");
   assert.deepEqual(
     items.map((item) => item.className),

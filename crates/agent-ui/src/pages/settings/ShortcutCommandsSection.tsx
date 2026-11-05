@@ -1,5 +1,6 @@
 import { AlertTriangle, RotateCcw, X } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isMacLikePlatform } from "../../lib/shared/platform";
@@ -17,7 +18,6 @@ import {
 import {
   acceleratorFromEvent,
   formatShortcutLabel,
-  globalShortcutDisplayToken,
   modifierFromEventCode,
   resolveAccelerator,
   type ShortcutModifier,
@@ -44,18 +44,6 @@ function format(template: string, values: Record<string, string>) {
     (text, [key, value]) => text.replaceAll(`{${key}}`, value),
     template,
   );
-}
-
-function ShortcutKeyTokens({ tokens }: { tokens: readonly string[] }) {
-  return tokens.map((token, index) => (
-    // biome-ignore lint/suspicious/noArrayIndexKey: a chord can repeat a glyph only by position
-    <span key={`${token}-${index}`} className="flex items-center gap-1">
-      {index > 0 ? <span className="text-xs text-muted-foreground">+</span> : null}
-      <kbd className="rounded-md bg-settings-tile px-1.5 py-0.5 font-sans text-xs text-foreground">
-        {token}
-      </kbd>
-    </span>
-  ));
 }
 
 /**
@@ -263,9 +251,8 @@ export function ShortcutCommandsSection({
               const isRecording = recording === command.id;
               const overridden = overrides[command.id] !== undefined;
               const conflictNames = (conflicts.get(command.id) ?? []).map(labelFor);
-              const tokens = isRecording
-                ? draftModifiers.map((modifier) => globalShortcutDisplayToken(modifier, isMac))
-                : shortcutDisplayTokens(binding, isMac);
+              const chord = isRecording ? draftModifiers.join("+") : binding;
+              const hasKeys = shortcutDisplayTokens(chord, isMac).length > 0;
               const defaultLabel = command.defaultBinding
                 ? formatShortcutLabel(command.defaultBinding, isMac)
                 : t("shortcuts.notAssigned");
@@ -305,10 +292,18 @@ export function ShortcutCommandsSection({
                       "cursor-pointer shadow-sm hover:bg-background/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25",
                     )}
                   >
-                    {tokens.length > 0 ? <ShortcutKeyTokens tokens={tokens} /> : null}
+                    {hasKeys ? (
+                      <KbdShortcut
+                        shortcut={chord}
+                        isMac={isMac}
+                        variant="tile"
+                        className="gap-1"
+                        keyClassName="rounded-md px-1.5"
+                      />
+                    ) : null}
                     {isRecording ? (
                       <span className="text-xs text-primary">{t("shortcuts.recording")}</span>
-                    ) : tokens.length === 0 ? (
+                    ) : !hasKeys ? (
                       <span className="text-xs text-muted-foreground">
                         {t("shortcuts.notAssigned")}
                       </span>
