@@ -1069,7 +1069,9 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
     }
   } catch (error) {
     terminal = params.signal.aborted ? "aborted" : "error";
-    errorMessage = error instanceof Error ? error.message : String(error);
+    // Stop aborts the event stream fetch, so its AbortError text ("Fetch is aborted" in
+    // WKWebView) is not a run failure and must not reach the transcript.
+    if (terminal === "error") errorMessage = error instanceof Error ? error.message : String(error);
     streamAbortController.abort();
     cancelPendingPermissions();
     await client.cancelRun(kbrainSessionId, accepted.run_id).catch(() => undefined);
@@ -1094,14 +1096,9 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
     terminal = "error";
     errorMessage ??= "K-brain run completed without an assistant result";
   }
-  if (content.length === 0 && (terminal === "error" || terminal === "aborted")) {
-    content = [
-      {
-        type: "text",
-        text:
-          errorMessage ?? (terminal === "aborted" ? "K-brain turn aborted" : "K-brain run failed"),
-      },
-    ];
+  // A stopped turn keeps whatever it streamed; the transcript renders the stopped state.
+  if (content.length === 0 && terminal === "error") {
+    content = [{ type: "text", text: errorMessage ?? "K-brain run failed" }];
   }
 
   const message: AssistantMessage = {
