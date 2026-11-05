@@ -278,6 +278,9 @@ func TestVetAgentRequestAllowsCheckpointActions(t *testing.T) {
 	requests := []*gatewayv2.CheckpointRequest{
 		{Action: "list", ConversationId: "conversation-1"},
 		{Action: "diff", ConversationId: "conversation-1", TurnSeq: 2, AuthorizedRoots: []string{"/work"}},
+		// K-brain's first turn is turn_seq 0.
+		{Action: "diff", ConversationId: "conversation-1", AuthorizedRoots: []string{"/work"}},
+		{Action: "rewind", ConversationId: "conversation-1", AuthorizedRoots: []string{"/work"}},
 		{
 			Action:          "rewind",
 			ConversationId:  "conversation-1",
@@ -305,8 +308,8 @@ func TestVetAgentRequestRejectsMalformedCheckpoint(t *testing.T) {
 	requests := []*gatewayv2.CheckpointRequest{
 		nil,
 		{Action: "list", ConversationId: "conversation-1", TurnSeq: 1},
-		{Action: "diff", ConversationId: "conversation-1"},
-		{Action: "rewind", ConversationId: "conversation-1"},
+		{Action: "diff", ConversationId: "conversation-1", Expected: []*gatewayv2.CheckpointExpectedEntry{{Key: "/work\x01a.txt", CurrentHash: "abc"}}},
+		{Action: "rewind"},
 		{Action: "unknown", ConversationId: "conversation-1"},
 		{Action: "diff", ConversationId: "conversation-1", TurnSeq: 1, AuthorizedRoots: []string{" "}},
 		{Action: "diff", ConversationId: "conversation-1", TurnSeq: 1, AuthorizedRoots: tooManyRoots},

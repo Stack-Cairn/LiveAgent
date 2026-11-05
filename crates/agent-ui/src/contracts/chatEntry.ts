@@ -29,6 +29,8 @@ export type SharedChatEntry<
       toolCall: TToolCall;
       summary?: string;
       text: string;
+      /** Latest running-output snapshot (live only; never persisted, dropped once a result exists). */
+      liveOutput?: string;
     }
   | {
       id: string;

@@ -68,10 +68,15 @@ pub(crate) fn history_share_resolve_error_code(message: &str) -> i32 {
     if normalized.is_empty() {
         return 500;
     }
-    if normalized.contains("分享 token 不能为空") {
+    if normalized.contains("分享 token 不能为空") || normalized.contains("share token is required")
+    {
         return 400;
     }
-    if normalized.contains("分享链接不存在或已关闭") || normalized.contains("未找到对应的历史对话")
+    // K-brain's public share route answers every unknown or disabled token with
+    // "share not found".
+    if normalized.contains("分享链接不存在或已关闭")
+        || normalized.contains("未找到对应的历史对话")
+        || normalized.contains("share not found")
     {
         return 404;
     }

@@ -418,6 +418,11 @@ fn history_share_resolve_error_code_maps_public_share_failures() {
         history_share_resolve_error_code("读取历史对话分享链接失败：db"),
         500
     );
+    assert_eq!(history_share_resolve_error_code("share not found"), 404);
+    assert_eq!(
+        history_share_resolve_error_code("share token is required"),
+        400
+    );
 }
 
 #[test]

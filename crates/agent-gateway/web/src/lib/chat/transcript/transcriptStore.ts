@@ -209,6 +209,7 @@ function isContentDeltaEventType(type: string): boolean {
     case "tool_call":
     case "tool_call_delta":
     case "tool_result":
+    case "tool_output":
     case "hosted_search":
     case "error":
       return true;
