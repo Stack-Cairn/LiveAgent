@@ -341,6 +341,26 @@ export type KBrainRunOptions = {
   client_tools?: KBrainClientToolDefinition[];
 };
 
+/** `capabilities.run_sandbox` in /v1/health; every field may be absent on older backends. */
+export type KBrainRunSandboxCapability = {
+  supported?: boolean;
+  version?: string;
+  mechanism?: string;
+  platform?: string;
+  network_control?: boolean;
+  read_masking?: boolean;
+  path_protection?: boolean;
+  modes?: string[];
+  reason?: string;
+  /**
+   * Windows (capability `sandbox_setup` 1): `POST /v1/sandbox/setup` can install the
+   * sandbox accounts that let the offline sandbox cut the network.
+   */
+  setup_available?: boolean;
+  /** Short English text for the user about setup; empty once `sandbox-user` works. */
+  setup_hint?: string;
+};
+
 export type KBrainClientToolDefinition = {
   name: string;
   description: string;

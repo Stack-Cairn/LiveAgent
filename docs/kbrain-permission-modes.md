@@ -25,6 +25,18 @@ The sandbox modes approve file edits automatically and run shell commands withou
 
 Commands run in K-brain, so the desktop selector reads `capabilities.run_sandbox` from K-brain's `/v1/health`, not a desktop probe; the WebUI leaves it unknown and relies on the Gateway's check at submission. On the desktop the entries are disabled, with K-brain's reason, when the capability is absent or unsupported; the offline entry also needs `network_control`, and the description drops the read-masking promise when `read_masking` is false. Both entries are also disabled when `path_protection` is false (K-brain's Linux Landlock fallback): the protected workspace paths (`.liveagent/`, `.k-brain/`, `.git/hooks`, `.git/config`) would stay writable inside the sandbox and are later used outside it. Older K-brain builds omit the field and count as protected, unless they report the `landlock` mechanism. The desktop client and the Gateway both refuse to submit a sandboxed run the backend cannot enforce, including one without path protection, and K-brain itself rejects one with `400 options.sandbox`, so a sandbox mode never runs commands unconfined. A remote/queued request cannot loosen a stricter local selection.
 
+### Windows: setting up the offline sandbox
+
+On native Windows K-brain starts with the `low-integrity` sandbox, which cannot cut the network (`network_control: false`), so the offline entry is disabled. When K-brain reports `capabilities.sandbox_setup: 1` and `run_sandbox.setup_available: true` (Stack-Cairn/K-brain#165), the desktop shows **Set up offline sandbox…** under the disabled entry, with K-brain's `setup_hint` as its tooltip. Choosing it opens a confirmation that lists what setup changes on the machine:
+
+- two hidden local Windows accounts that sandboxed commands run as (one with network access, one without);
+- Windows Filtering Platform (firewall) rules that block all network access, loopback included, for the offline account;
+- a Windows administrator (UAC) prompt.
+
+After the user confirms, LiveAgent calls `POST /v1/sandbox/setup` with the backend token; the request waits until the UAC prompt is answered, and the dialog shows that it is waiting and cannot be dismissed meanwhile. The outcome is reported per status: `200` ready (or "finished but the self-test still fails" with K-brain's hint, when health still lacks network control), `403` approval declined (nothing changed), `409` another setup is running, `500` setup failed with K-brain's message, `501` unsupported, anything else as an error. Every attempt except `501` bumps `capabilityRevision`, so LiveAgent reads `/v1/health` again and every open selector updates; once the mechanism is `sandbox-user` with `network_control: true`, Offline sandbox becomes selectable and the dialog offers to switch to it. A sandbox without path protection stays unavailable and is never offered setup.
+
+The action is desktop-only and only for a K-brain on this machine (the managed backend or a loopback URL): the UAC prompt appears on the desktop of the machine that runs K-brain, so the WebUI/Gateway never shows it. Setup is undone only from a terminal with `kn sandbox uninstall`; LiveAgent has no uninstall action.
+
 Transport ownership:
 
 ```text
