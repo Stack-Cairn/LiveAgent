@@ -124,6 +124,8 @@ function toHostedSearch(value: KBrainMessage["hosted_search"]): HostedSearchBloc
   });
 }
 
+export const KBRAIN_ORIGIN_BACKGROUND = "background";
+
 function toMessage(
   message: KBrainMessage,
   index: number,
@@ -134,6 +136,17 @@ function toMessage(
   const timestamp = epoch(message.created_at, 0);
   if (message.role === "user") {
     const content = userContent(message);
+    // 后端自己送来的通知（wait 结果、进程退出、后台任务报告）不是用户写的，
+    // 标出来让对话按系统通知显示，而不是用户气泡。
+    if (message.origin === KBRAIN_ORIGIN_BACKGROUND) {
+      return {
+        role: "user",
+        content,
+        timestamp,
+        ...(message.id ? { id: message.id } : {}),
+        liveAgentBackgroundNotice: true,
+      } as Message;
+    }
     // K-brain 只存文本。带附件的消息落库时正文与附件指令拼在一起，历史回读
     // 要把它拆回去，否则界面会把整段指令当正文显示，附件卡片和粘贴 chip 都丢。
     const rawText =

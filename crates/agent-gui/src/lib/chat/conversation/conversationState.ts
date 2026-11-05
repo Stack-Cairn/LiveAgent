@@ -124,6 +124,8 @@ export type RenderUserMessage = {
   referencedConversations: ConversationMentionReference[];
   timestamp: number;
   isFromCompactedSegment: boolean;
+  /** A notice the backend delivered on its own; shown as a system line, not a user bubble. */
+  backgroundNotice?: boolean;
 };
 
 export type RenderAssistantGroup = {
@@ -634,6 +636,13 @@ function buildTimelineItemsForSegment(
   );
 }
 
+export function isBackgroundNoticeMessage(message: Message | undefined): boolean {
+  return (
+    (message as (Message & { liveAgentBackgroundNotice?: unknown }) | undefined)
+      ?.liveAgentBackgroundNotice === true
+  );
+}
+
 function readInjectedHistoryMessageRef(message: Message | undefined) {
   if (!message) return undefined;
   const candidate = (message as Message & { liveAgentHistoryRef?: unknown }).liveAgentHistoryRef;
@@ -716,6 +725,7 @@ function buildTimelineItemsForSlice(
           : [],
         timestamp: getMessageTimestamp(source),
         isFromCompactedSegment: isCompacted,
+        ...(isBackgroundNoticeMessage(source) ? { backgroundNotice: true } : {}),
       });
       continue;
     }

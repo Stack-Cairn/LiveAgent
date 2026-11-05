@@ -2,6 +2,7 @@ import {
   AssistantBubble,
   LiveAssistantStatus,
 } from "@liveagent/ui/components/chat/AssistantBubble";
+import { BackgroundNoticeMessage } from "@liveagent/ui/components/chat/BackgroundNoticeMessage";
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatFileLinkContextMenu";
 import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
@@ -268,6 +269,10 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
   const missingStableRef = !effectiveMessageRef;
   const editDisabled = readOnly || isStreaming || !onResendFromEdit || missingStableRef;
   const editTitle = missingStableRef ? t("chat.gatewayHistory.editUnavailable") : t("chat.edit");
+
+  if (row.backgroundNotice) {
+    return <BackgroundNoticeMessage text={row.text} />;
+  }
 
   if (isEditing && effectiveMessageRef) {
     return (

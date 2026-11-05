@@ -330,6 +330,9 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 		if !message.CreatedAt.IsZero() {
 			entry["timestamp"] = message.CreatedAt.UnixMilli()
 		}
+		if message.Role == "user" && message.Origin == OriginBackground {
+			entry["liveAgentBackgroundNotice"] = true
+		}
 		if message.Role == "tool" {
 			entry["role"], entry["toolCallId"], entry["toolName"] = "toolResult", message.ToolCallID, message.Name
 			entry["isError"] = message.StopReason == "error" || message.StopReason == "cancelled"

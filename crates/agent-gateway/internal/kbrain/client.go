@@ -125,7 +125,13 @@ type Message struct {
 	HostedSearch []json.RawMessage `json:"hosted_search,omitempty"`
 	StopReason   string            `json:"stop_reason,omitempty"`
 	CreatedAt    time.Time         `json:"created_at,omitempty"`
+	// Origin is "background" on a user-role notice K-brain delivered on its own
+	// (a wait result, a process exit, a background task report).
+	Origin string `json:"origin,omitempty"`
 }
+
+// OriginBackground marks a user-role message the user did not write.
+const OriginBackground = "background"
 
 type ContentBlock struct {
 	Type     string `json:"type"`

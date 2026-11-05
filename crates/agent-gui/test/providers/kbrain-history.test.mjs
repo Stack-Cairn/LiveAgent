@@ -6,6 +6,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const mapping = loader.loadModule("src/lib/kbrain/mapping.ts");
 const history = loader.loadModule("src/lib/kbrain/history.ts");
+const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
 const DEFAULT_KBRAIN_URL = "http://127.0.0.1:47321";
 const runtimeConnection = loader.loadModule("src/lib/kbrain/runtimeConnection.ts");
 
@@ -210,6 +211,39 @@ test("HTTP history restoration preserves cancelled, truncated and tool-use assis
     assert.deepEqual(restored.activeSegment.messages.map((message) => message.stopReason), expected);
     assert.deepEqual(restored.segments.flatMap((segment) => segment.messages.map((message) => message.stopReason)), expected);
     assert.deepEqual(restored.activeSegment.messages.map((message) => message.responseId), reasons.map((_, index) => `a-${index}`));
+  });
+});
+
+test("background notices from K-brain render as notices, not as user messages", async () => {
+  installStorage();
+  const notice = "[wait w1 done] condition met (ran every 2s):\n$ cat build.log\n\nBUILD-READY";
+  const session = makeSession({
+    tasks: [],
+    messages: [
+      { id: "u-1", role: "user", content: [{ type: "text", text: "build it, then continue" }] },
+      { id: "a-1", role: "assistant", content: [{ type: "text", text: "started" }], provider: "fixture", model: "fixture-model" },
+      { id: "u-2", role: "user", origin: "background", content: [{ type: "text", text: notice }] },
+      { id: "a-2", role: "assistant", content: [{ type: "text", text: "continuing" }], provider: "fixture", model: "fixture-model" },
+    ],
+    message_count: 4,
+  });
+  await withHttpFixture(async (_request, response) => {
+    sendJson(response, {
+      session, revision: session.revision, oldest_offset: 0, has_more_before: false,
+      total_message_count: session.messages.length, active_messages: session.messages,
+    });
+  }, async () => {
+    mapping.setKBrainSessionId("background-notice", session.id);
+    const restored = await history.getKBrainHistoryWindow("background-notice");
+    const users = restored.segments.flatMap((segment) => segment.messages).filter((message) => message.role === "user");
+    assert.deepEqual(users.map((message) => message.liveAgentBackgroundNotice === true), [false, true]);
+    const state = conversationState.createConversationStateFromContext({ messages: [] });
+    const withHistory = conversationState.appendMessagesToConversation(state, restored.segments.flatMap((segment) => segment.messages));
+    const items = withHistory.transcript.items.filter((item) => item.kind === "user");
+    assert.deepEqual(items.map((item) => [item.text, item.backgroundNotice === true]), [
+      ["build it, then continue", false],
+      [notice, true],
+    ]);
   });
 });
 

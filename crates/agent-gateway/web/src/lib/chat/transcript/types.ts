@@ -78,6 +78,7 @@ export type TranscriptRow =
       referencedConversations: ConversationMentionReference[];
       messageRef?: HistoryMessageRef;
       timestamp?: number;
+      backgroundNotice?: boolean;
     }
   | {
       key: string;

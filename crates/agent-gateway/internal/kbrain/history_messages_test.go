@@ -28,3 +28,24 @@ func TestHistoryMessagesJSONCarriesCanonicalOffsets(t *testing.T) {
 		}
 	}
 }
+
+func TestHistoryMessagesJSONMarksBackgroundNotices(t *testing.T) {
+	messages := []Message{
+		{ID: "u1", Role: "user", Content: []ContentBlock{{Type: "text", Text: "run the build"}}},
+		{ID: "u2", Role: "user", Origin: OriginBackground, Content: []ContentBlock{{Type: "text", Text: "[wait w1 done] condition met"}}},
+		{ID: "a1", Role: "assistant", Origin: OriginBackground, Content: []ContentBlock{{Type: "text", Text: "ok"}}},
+	}
+	raw, err := historyMessagesJSON(messages, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{false, true, false} {
+		if got := out[i]["liveAgentBackgroundNotice"] == true; got != want {
+			t.Fatalf("entry %d background notice = %v, want %v (%v)", i, got, want, out[i])
+		}
+	}
+}
