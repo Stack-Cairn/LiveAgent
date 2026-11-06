@@ -400,11 +400,116 @@ export function resolveAskUserQuestionAnswers(
 }
 
 /**
- * K-brain /v1 的应答一题只有一条 selected_label，且不是列出选项时必须标 custom，
+ * 旧版 K-brain /v1 的应答一题只有一条 selected_label，且不是列出选项时必须标 custom，
  * 否则后端拒收。多选题选了不止一项时拼接后的文本不是列出选项，因此也标 custom。
  */
 export function askUserQuestionAnswerIsCustomForBackend(answer: AskUserQuestionAnswer): boolean {
   return answer.custom === true || (answer.selectedLabels?.length ?? 0) > 1;
+}
+
+/**
+ * K-brain /v1 的一条提问应答（POST /v1/sessions/{id}/questions/{question_id} 的
+ * answers[]），也是 question.resolved.answers 与工具调用 question_answers 的写法。
+ * `selected_labels` 来自 Stack-Cairn/K-brain#168（能力 question_selected_labels）：
+ * 有它时 selected_label 只在 custom 时出现，是用户另外输入的文字。
+ */
+export type KBrainQuestionAnswerPayload = {
+  question_id: string;
+  prompt?: string;
+  selected_label?: string;
+  selected_labels?: string[];
+  custom?: boolean;
+};
+
+/** /v1/health 中表示后端接受 selected_labels 的能力（值为 1）。 */
+export const KBRAIN_QUESTION_SELECTED_LABELS_CAPABILITY = "question_selected_labels";
+
+/**
+ * 卡片应答转成 K-brain 的结构化写法：多选题选中的选项放进 selected_labels，另外输入的
+ * 文字放进 selected_label 并标 custom。单选题与只输入了文字的多选题仍是原写法。
+ * 只能发给声明了 question_selected_labels 的后端；旧后端用
+ * {@link legacyKBrainQuestionAnswer} 降级。
+ */
+export function kbrainQuestionAnswerPayload(
+  answer: AskUserQuestionAnswer,
+): KBrainQuestionAnswerPayload {
+  const labels = answer.selectedLabels ?? [];
+  const text = (answer.customText ?? "").trim().slice(0, ASK_USER_QUESTION_CUSTOM_MAX_LENGTH);
+  // 标了 custom 却没有单独的输入文字（旧格式），拆不开，只能按拼接文本发。
+  if (labels.length === 0 || (answer.custom === true && !text)) {
+    return {
+      question_id: answer.questionId,
+      selected_label: answer.selectedLabel,
+      ...(askUserQuestionAnswerIsCustomForBackend(answer) ? { custom: true } : {}),
+    };
+  }
+  return {
+    question_id: answer.questionId,
+    selected_labels: [...labels],
+    ...(answer.custom === true ? { selected_label: text, custom: true } : {}),
+  };
+}
+
+/**
+ * 结构化应答降级成旧后端认得的写法：选项与输入文字按 ASK_USER_QUESTION_MULTI_SEPARATOR
+ * 拼进 selected_label，多于一项或带输入文字时标 custom（#1241 的写法）。
+ */
+export function legacyKBrainQuestionAnswer(
+  answer: KBrainQuestionAnswerPayload,
+): KBrainQuestionAnswerPayload {
+  const { selected_labels: labels, ...rest } = answer;
+  if (!labels || labels.length === 0) return rest;
+  const text = answer.custom === true ? (answer.selected_label ?? "").trim() : "";
+  return {
+    ...rest,
+    selected_label: [...labels, ...(text ? [text] : [])]
+      .join(ASK_USER_QUESTION_MULTI_SEPARATOR)
+      .slice(0, ASK_USER_QUESTION_CUSTOM_MAX_LENGTH),
+    ...(text || labels.length > 1 ? { custom: true } : {}),
+  };
+}
+
+/**
+ * K-brain 记录的一条应答（question.resolved.answers 或工具调用的 question_answers）
+ * 转成卡片应答。有 selected_labels 时以它为准，不再拆分文本，标签自身含分隔符也能
+ * 原样还原；没有时按旧规则：custom 为 true 时 selected_label 是输入文字，否则是选项，
+ * 多选题的拼接文本按 {@link interpretAskUserQuestionAnswer} 拆回。
+ */
+export function readKBrainQuestionAnswer(
+  value: unknown,
+  question?: AskUserQuestionItem,
+): AskUserQuestionAnswer | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const questionId = normalizeText(record.question_id) || question?.id || "";
+  if (!questionId) return null;
+  const prompt = normalizeText(record.prompt) || question?.prompt || "";
+  const custom = record.custom === true;
+  const selectedLabel = normalizeText(record.selected_label);
+  const labels = Array.isArray(record.selected_labels)
+    ? record.selected_labels.filter(
+        (label): label is string => typeof label === "string" && label.trim() !== "",
+      )
+    : [];
+  if (labels.length > 0) {
+    const text = custom ? selectedLabel : "";
+    if (question && !question.multiple) {
+      return { questionId, prompt, selectedLabel: labels[0] };
+    }
+    return {
+      questionId,
+      prompt,
+      selectedLabel: [...labels, ...(text ? [text] : [])].join(ASK_USER_QUESTION_MULTI_SEPARATOR),
+      selectedLabels: labels,
+      ...(text ? { custom: true, customText: text } : {}),
+    };
+  }
+  if (!selectedLabel) return null;
+  if (question) {
+    const answer = interpretAskUserQuestionAnswer(question, selectedLabel, custom);
+    return answer ? { ...answer, questionId, prompt } : null;
+  }
+  return { questionId, prompt, selectedLabel, ...(custom ? { custom: true } : {}) };
 }
 
 function readAnswerRecord(
@@ -494,6 +599,26 @@ export function normalizeKBrainQuestionToolArguments(args: unknown): Record<stri
   return out;
 }
 
+/** 按问题顺序读 K-brain 记录的应答；不是数组或没有可用的应答时返回空数组。 */
+export function readKBrainQuestionAnswers(
+  questions: AskUserQuestionItem[],
+  raw: unknown,
+): AskUserQuestionAnswer[] {
+  if (!Array.isArray(raw)) return [];
+  const byId = new Map<string, unknown>();
+  for (const value of raw) {
+    if (!value || typeof value !== "object") continue;
+    const id = normalizeText((value as Record<string, unknown>).question_id);
+    if (id && !byId.has(id)) byId.set(id, value);
+  }
+  return questions.flatMap((question) => {
+    const answer = byId.has(question.id)
+      ? readKBrainQuestionAnswer(byId.get(question.id), question)
+      : null;
+    return answer ? [answer] : [];
+  });
+}
+
 const QUESTION_TOOL_NO_ANSWER = "(no answer)";
 
 /** 读 question 工具结果文本里每题的应答（K-brain tools.AskAnswerText 的两种写法）。 */
@@ -544,11 +669,16 @@ export function parseKBrainQuestionToolResult(
   args: unknown,
   output: string,
   isError: boolean,
+  questionAnswers?: unknown,
 ): AskUserQuestionResultDetails | null {
   const questions = sanitizeAskUserQuestionItems(
     normalizeKBrainQuestionToolArguments(args).questions,
   );
   if (questions.length === 0) return null;
+  // 新版 K-brain 在调用上记录 question_answers（Stack-Cairn/K-brain#168），以它为准；
+  // 旧会话与旧后端没有这个字段，才从给模型的结果文本里读。
+  const recorded = isError ? [] : readKBrainQuestionAnswers(questions, questionAnswers);
+  if (recorded.length > 0) return { kind: "ask_user_question", questions, answers: recorded };
   if (isError) {
     return /dismissed the question|stopped the turn|cancel/i.test(output)
       ? { kind: "ask_user_question", questions, answers: [], cancelled: true }

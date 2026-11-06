@@ -1,4 +1,8 @@
 import {
+  KBRAIN_QUESTION_SELECTED_LABELS_CAPABILITY,
+  legacyKBrainQuestionAnswer,
+} from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
   hasFrozenCapability,
   type KBrainHealth,
   readKBrainHealthResponse,
@@ -847,12 +851,30 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     });
   }
 
+  /**
+   * Capability question_selected_labels: multi-select answers go as `selected_labels`.
+   * Older backends reject the field as unknown (400), so without the capability, or when
+   * /v1/health cannot be read, the answers go as joined labels marked custom. Read fresh
+   * for each answer that needs it, so a backend updated mid-session is seen.
+   */
+  async function answersForBackend(
+    answers: KBrainQuestionAnswer[],
+  ): Promise<KBrainQuestionAnswer[]> {
+    if (!answers.some((answer) => (answer.selected_labels?.length ?? 0) > 0)) return answers;
+    const structured = await getHealth().then(
+      (health) => hasFrozenCapability(health, KBRAIN_QUESTION_SELECTED_LABELS_CAPABILITY),
+      () => false,
+    );
+    return structured ? answers : answers.map(legacyKBrainQuestionAnswer);
+  }
+
   async function resolveQuestion(
     conversationId: string,
     questionId: string,
     runId: string,
-    answers: KBrainQuestionAnswer[],
+    input: KBrainQuestionAnswer[],
   ): Promise<void> {
+    const answers = await answersForBackend(input);
     await request<unknown>(
       `/v1/sessions/${encodeURIComponent(conversationId)}/questions/${encodeURIComponent(questionId)}`,
       {

@@ -382,7 +382,7 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 			if known && len(call.Arguments) > 0 {
 				_ = json.Unmarshal(call.Arguments, &args)
 			}
-			details := resultDetails(message.Name, historyText(message), args, isError)
+			details := resultDetails(message.Name, historyText(message), args, isError, call.QuestionAnswers)
 			if known {
 				details = withRunInfo(message.Name, details, call.ExitCode, call.TimedOut, call.DurationMs)
 			}

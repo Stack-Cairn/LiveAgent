@@ -324,7 +324,13 @@ function toolResult(
     content: [{ type: "text", text: result.output }, ...images.content],
     details: withToolRunInfo(
       result.name,
-      questionResultDetails(result.name, result.output, call?.arguments, isError) ??
+      questionResultDetails(
+        result.name,
+        result.output,
+        call?.arguments,
+        isError,
+        result.question_answers,
+      ) ??
         taskResultDetails(result.name, call?.arguments, result, runId, revision) ??
         displayImageResultDetails(result.name, images.images, isError),
       result,

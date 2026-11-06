@@ -22,12 +22,24 @@ type interactiveFixture struct {
 	posts  map[string][]map[string]any
 	status map[string]int
 	events []*gatewayv2.ChatEvent
+	// health is the /v1/health body; empty answers 404 (no capability proven).
+	health string
 }
 
 func newInteractiveFixture(t *testing.T) *interactiveFixture {
 	t.Helper()
 	f := &interactiveFixture{t: t, posts: map[string][]map[string]any{}, status: map[string]int{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/health" {
+			f.mu.Lock()
+			health := f.health
+			f.mu.Unlock()
+			if health != "" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, health)
+				return
+			}
+		}
 		if r.Method != http.MethodPost {
 			http.NotFound(w, r)
 			return
@@ -548,7 +560,7 @@ func TestQuestionResultCarriesAnswerDetails(t *testing.T) {
 	if first["questionId"] != "color" || first["selectedLabel"] != "Light" || second["custom"] != true {
 		t.Fatalf("answers = %+v", answers)
 	}
-	if questionResultDetails("Bash", output) != nil || questionResultDetails(askUserQuestionTool, "no json") != nil {
+	if questionResultDetails("Bash", output, nil) != nil || questionResultDetails(askUserQuestionTool, "no json", nil) != nil {
 		t.Fatal("details must only come from AskUserQuestion results")
 	}
 	entries, err := historyMessagesJSON([]Message{{Role: "tool", ToolCallID: "call-q", Name: "AskUserQuestion", Content: []ContentBlock{{Type: "text", Text: output}}}}, 0)

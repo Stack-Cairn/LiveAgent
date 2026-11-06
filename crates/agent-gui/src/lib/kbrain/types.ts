@@ -1,3 +1,4 @@
+import type { KBrainQuestionAnswerPayload } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { CustomProvider, ProviderModelConfig } from "../settings";
 
 export const KBRAIN_PROTOCOL_VERSION = "kbrain.agent.v1" as const;
@@ -89,20 +90,32 @@ export type KBrainToolRunInfo = {
   duration_ms?: number;
 };
 
-export type KBrainToolCall = KBrainToolRunInfo & {
-  id: string;
-  name: string;
-  arguments: unknown;
+/**
+ * The answers recorded on a `question` / `AskUserQuestion` call (Stack-Cairn/K-brain#168),
+ * in history `tool_calls[]` and on `tool.result`; the same shape as
+ * `question.resolved.answers`. Display only; absent for timed-out or cancelled questions
+ * and on older backends.
+ */
+export type KBrainQuestionAnswers = {
+  question_answers?: KBrainQuestionAnswer[];
 };
 
-export type KBrainToolResult = KBrainToolRunInfo & {
-  content?: KBrainContentBlock[];
-  id: string;
-  name?: string;
-  output: string;
-  failed?: boolean;
-  cancelled?: boolean;
-};
+export type KBrainToolCall = KBrainToolRunInfo &
+  KBrainQuestionAnswers & {
+    id: string;
+    name: string;
+    arguments: unknown;
+  };
+
+export type KBrainToolResult = KBrainToolRunInfo &
+  KBrainQuestionAnswers & {
+    content?: KBrainContentBlock[];
+    id: string;
+    name?: string;
+    output: string;
+    failed?: boolean;
+    cancelled?: boolean;
+  };
 
 export type KBrainQuestionOption = {
   label: string;
@@ -126,11 +139,11 @@ export type KBrainQuestionRequest = {
   questions: KBrainQuestion[];
 };
 
-export type KBrainQuestionAnswer = {
-  question_id: string;
-  selected_label: string;
-  custom?: boolean;
-};
+/**
+ * One answer to `question.requested`. `selected_labels` needs capability
+ * `question_selected_labels`; the client downgrades it for older backends.
+ */
+export type KBrainQuestionAnswer = KBrainQuestionAnswerPayload;
 
 export type KBrainHostedSearch = {
   type: "hostedSearch";

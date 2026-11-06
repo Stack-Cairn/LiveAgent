@@ -151,6 +151,22 @@ type ToolCall struct {
 	ExitCode   *int  `json:"exit_code,omitempty"`
 	TimedOut   bool  `json:"timed_out,omitempty"`
 	DurationMs int64 `json:"duration_ms,omitempty"`
+	// QuestionAnswers are the answers recorded on a question or AskUserQuestion
+	// call (Stack-Cairn/K-brain#168), as in question.resolved. Display only.
+	QuestionAnswers []QuestionAnswer `json:"question_answers,omitempty"`
+}
+
+// QuestionAnswer is one answer to question.requested, as K-brain records it.
+// SelectedLabels (capability question_selected_labels) are the options picked;
+// with them, SelectedLabel is the user's own text and only set with Custom.
+// Old-style answers have no SelectedLabels: SelectedLabel is the typed text
+// when Custom, otherwise the option picked.
+type QuestionAnswer struct {
+	QuestionID     string   `json:"question_id"`
+	Prompt         string   `json:"prompt,omitempty"`
+	SelectedLabel  string   `json:"selected_label,omitempty"`
+	SelectedLabels []string `json:"selected_labels,omitempty"`
+	Custom         bool     `json:"custom,omitempty"`
 }
 
 type Usage struct {

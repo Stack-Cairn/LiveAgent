@@ -62,7 +62,7 @@ func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.Chat
 			if callArgs != nil && id != "" {
 				args = callArgs(id)
 			}
-			details := resultDetails(name, output, args, isError)
+			details := resultDetails(name, output, args, isError, decodeQuestionAnswers(result["question_answers"]))
 			var exitCode *int
 			if code, ok := result["exit_code"].(float64); ok {
 				value := int(code)
