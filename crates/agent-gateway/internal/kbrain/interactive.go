@@ -45,6 +45,12 @@ const (
 	approvalScopeMax = 300
 	// approvalPreviewMax bounds the synced diff, as K-brain bounds its own (32 KiB).
 	approvalPreviewMax = 32 * 1024
+
+	// questionCustomMax bounds the text typed next to listed options, as K-brain does.
+	questionCustomMax = 2000
+	// questionSelectedLabelsCapability (Stack-Cairn/K-brain#168) accepts
+	// selected_labels on question answers.
+	questionSelectedLabelsCapability = "question_selected_labels"
 )
 
 var syntheticArgPrefixes = []string{"__toolApproval", "__toolPermission", "__askUserQuestion", "__exitPlanMode"}
@@ -686,7 +692,7 @@ func (r *Relay) answerToolApproval(ctx context.Context, conversationID, toolCall
 }
 
 // answerQuestion forwards WebUI AskUserQuestion answers to K-brain. requestJSON
-// is the card's [{questionId, prompt, selectedLabel, custom?}].
+// is the card's [{questionId, prompt, selectedLabel, selectedLabels?, customText?, custom?}].
 func (r *Relay) answerQuestion(ctx context.Context, conversationID, toolCallID, requestJSON string) QueueResponse {
 	pending := r.interactive.lookup(conversationID, toolCallID, "question")
 	if pending == nil {
@@ -697,21 +703,46 @@ func (r *Relay) answerQuestion(ctx context.Context, conversationID, toolCallID, 
 		Prompt         string   `json:"prompt"`
 		SelectedLabel  string   `json:"selectedLabel"`
 		SelectedLabels []string `json:"selectedLabels"`
+		CustomText     string   `json:"customText"`
 		Custom         bool     `json:"custom"`
 	}
 	if err := json.Unmarshal([]byte(requestJSON), &answers); err != nil || len(answers) == 0 {
 		return queueError("invalid_request", "question answers are invalid")
 	}
+	// Capability question_selected_labels: multi-select picks go as
+	// selected_labels. Older backends reject the field (400), so without the
+	// capability, or without a readable handshake, they go as joined labels.
+	structured := false
+	for _, answer := range answers {
+		if len(answer.SelectedLabels) > 0 {
+			health, err := r.client.verifiedHealth(ctx, handshakeCapabilityMaxAge)
+			structured = err == nil && health.FrozenCapability(questionSelectedLabelsCapability)
+			break
+		}
+	}
 	out := make([]map[string]any, 0, len(answers))
 	for _, answer := range answers {
-		item := map[string]any{"question_id": answer.QuestionID, "selected_label": answer.SelectedLabel}
+		item := map[string]any{"question_id": answer.QuestionID}
 		if answer.Prompt != "" {
 			item["prompt"] = answer.Prompt
 		}
-		// K-brain takes one label per answer: several picks of a multi-select
-		// question arrive as their joined labels, which it only accepts as custom.
-		if answer.Custom || len(answer.SelectedLabels) > 1 {
-			item["custom"] = true
+		text := strings.TrimSpace(answer.CustomText)
+		if runes := []rune(text); len(runes) > questionCustomMax {
+			text = string(runes[:questionCustomMax])
+		}
+		switch {
+		case structured && len(answer.SelectedLabels) > 0 && (!answer.Custom || text != ""):
+			item["selected_labels"] = answer.SelectedLabels
+			if answer.Custom {
+				item["selected_label"], item["custom"] = text, true
+			}
+		default:
+			// The joined labels are not one listed option, so K-brain only
+			// accepts several of them as custom.
+			item["selected_label"] = answer.SelectedLabel
+			if answer.Custom || len(answer.SelectedLabels) > 1 {
+				item["custom"] = true
+			}
 		}
 		out = append(out, item)
 	}
@@ -913,18 +944,19 @@ func clampRules(rules []string, max int) []string {
 }
 
 // resultDetails is the question card's details for a question or
-// AskUserQuestion result; nil for other tools.
-func resultDetails(name, output string, args map[string]any, isError bool) map[string]any {
+// AskUserQuestion result; nil for other tools. recorded is the call's
+// question_answers, read instead of the result when present.
+func resultDetails(name, output string, args map[string]any, isError bool, recorded []QuestionAnswer) map[string]any {
 	if name == kbrainQuestionTool {
-		return questionToolResultDetails(args, output, isError)
+		return questionToolResultDetails(args, output, isError, recorded)
 	}
-	return questionResultDetails(name, output)
+	return questionResultDetails(name, output, recorded)
 }
 
 // questionResultDetails turns K-brain's AskUserQuestion result text into the
 // tool-result details the WebUI question card reads to show the chosen answers
 // (the desktop does the same in crates/agent-gui/src/lib/kbrain/questions.ts).
-func questionResultDetails(name, output string) map[string]any {
+func questionResultDetails(name, output string, recorded []QuestionAnswer) map[string]any {
 	if name != askUserQuestionTool {
 		return nil
 	}
@@ -933,27 +965,26 @@ func questionResultDetails(name, output string) map[string]any {
 		return nil
 	}
 	var result struct {
-		Kind      string `json:"kind"`
-		Questions []any  `json:"questions"`
-		Answers   []struct {
-			QuestionID    string `json:"question_id"`
-			Prompt        string `json:"prompt"`
-			SelectedLabel string `json:"selected_label"`
-			Custom        bool   `json:"custom"`
-		} `json:"answers"`
-		TimedOut  bool `json:"timed_out"`
-		Cancelled bool `json:"cancelled"`
+		Kind      string           `json:"kind"`
+		Questions []any            `json:"questions"`
+		Answers   []QuestionAnswer `json:"answers"`
+		TimedOut  bool             `json:"timed_out"`
+		Cancelled bool             `json:"cancelled"`
 	}
 	if json.Unmarshal([]byte(output[start:]), &result) != nil || result.Kind != "ask_user_question" || result.Questions == nil || result.Answers == nil {
 		return nil
 	}
+	if len(recorded) > 0 {
+		result.Answers = recorded
+	}
+	single := map[string]bool{}
+	for _, question := range questionItems(result.Questions) {
+		single[question.id] = !question.multiple
+	}
 	answers := make([]any, 0, len(result.Answers))
 	for _, answer := range result.Answers {
-		item := map[string]any{"questionId": answer.QuestionID, "prompt": answer.Prompt, "selectedLabel": answer.SelectedLabel}
-		if answer.Custom {
-			item["custom"] = true
-		}
-		answers = append(answers, item)
+		// Old-style answers keep their text; WebUI reads it against the questions.
+		answers = append(answers, cardAnswer(answer, answer.Prompt, single[answer.QuestionID]))
 	}
 	return map[string]any{"kind": "ask_user_question", "questions": result.Questions, "answers": answers, "timedOut": result.TimedOut, "cancelled": result.Cancelled}
 }

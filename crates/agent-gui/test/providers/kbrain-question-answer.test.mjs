@@ -30,7 +30,12 @@ test("production K-brain client posts an AskUserQuestion answer with run/session
   });
 });
 
-for (const mode of ["answered", "timeout", "cancelled"]) {
+// Multi-select modes answer with two options (one containing ", ") plus typed text:
+// selected_labels with capability question_selected_labels, #1241's joined custom
+// labels for an older backend.
+const multiModes = { "multi-select": { question_selected_labels: 1 }, "multi-select-older-backend": {} };
+
+for (const mode of ["answered", "timeout", "cancelled", ...Object.keys(multiModes)]) {
   test(`production conversation turn uses the question card answer path: ${mode}`, async () => {
     const store = new Map();
     globalThis.localStorage = {
@@ -66,7 +71,9 @@ for (const mode of ["answered", "timeout", "cancelled"]) {
     const request = {
       question_id: "question-1", tool_call_id: "call-1", run_id: "run-1",
       deadline_at: Date.now() + 180_000,
-      questions: [{ id: "q1", prompt: "Which?", options: [{ label: "Fast", recommended: true }, { label: "Slow" }] }],
+      questions: [mode in multiModes
+        ? { id: "q1", prompt: "Which?", multiple: true, options: [{ label: "Fast" }, { label: "Search, filter" }, { label: "Slow" }] }
+        : { id: "q1", prompt: "Which?", options: [{ label: "Fast", recommended: true }, { label: "Slow" }] }],
     };
     let controller;
     let seq = 1;
@@ -84,7 +91,9 @@ for (const mode of ["answered", "timeout", "cancelled"]) {
     const unsubscribe = questions.subscribeAskUserQuestionsForConversation("ui-conversation", () => {
       if (!questions.hasPendingAskUserQuestion("call-1")) return;
       assert.equal(questions.getAskUserQuestionDeadlineAt("call-1"), request.deadline_at);
-      if (mode === "answered") {
+      if (mode in multiModes) {
+        assert.equal(questions.answerAskUserQuestion("call-1", [{ questionId: "q1", selectedLabels: ["Slow", "Search, filter"], customText: "a badge", custom: true }], { conversationId: "ui-conversation" }).ok, true);
+      } else if (mode === "answered") {
         assert.equal(questions.answerAskUserQuestion("call-1", [{ questionId: "q1", selectedLabel: "wrong session" , custom: true }], { conversationId: "other" }).ok, false);
         assert.equal(questions.answerAskUserQuestion("call-1", [{ questionId: "q1", selectedLabel: "my custom choice", custom: true }], { conversationId: "ui-conversation" }).ok, true);
       } else {
@@ -94,6 +103,7 @@ for (const mode of ["answered", "timeout", "cancelled"]) {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url, init = {}) => {
       const path = new URL(url).pathname;
+      if (path === "/v1/health") return response({ status: "ok", version: "kbrain.agent.v1", capabilities: multiModes[mode] ?? {} });
       if (path === "/v1/sessions") return response({ id: "session-1" });
       if (path.endsWith("/runs")) return response({ version: "kbrain.agent.v1", conversation_id: "session-1", run_id: "run-1", accepted_seq: 1 }, 202);
       if (path.endsWith("/events")) return new Response(new ReadableStream({ start(value) {
@@ -132,7 +142,7 @@ for (const mode of ["answered", "timeout", "cancelled"]) {
       assert.equal(askEvents[0].arguments.__askUserQuestionPending, false);
       // The "answered" fixture answers inside the registration notification, before
       // the re-push; the other modes leave the question open long enough to see it.
-      if (mode !== "answered") {
+      if (mode !== "answered" && !(mode in multiModes)) {
         assert.equal(askEvents.some((event) => event.arguments.__askUserQuestionPending === true), true);
       }
       assert.equal(askEvents.at(-1).arguments.__askUserQuestionPending, false);
@@ -143,7 +153,18 @@ for (const mode of ["answered", "timeout", "cancelled"]) {
       assert.equal(details.timedOut, mode === "timeout");
       assert.equal(details.cancelled, mode === "cancelled");
       assert.equal(details.answers.length, mode === "cancelled" ? 0 : 1);
-      assert.equal(posted.length, mode === "answered" ? 1 : 0);
+      assert.equal(posted.length, mode === "timeout" || mode === "cancelled" ? 0 : 1);
+      if (mode in multiModes) {
+        const structured = mode === "multi-select";
+        assert.deepEqual(posted[0].body.answers, [structured
+          ? { question_id: "q1", selected_labels: ["Search, filter", "Slow"], selected_label: "a badge", custom: true }
+          : { question_id: "q1", selected_label: "Search, filter, Slow, a badge", custom: true }]);
+        const card = production.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
+        const settled = card.parseAskUserQuestionResultDetails(details).answers[0];
+        // With selected_labels the card gets the labels back exactly; the joined text is split.
+        assert.deepEqual(settled.selectedLabels, ["Search, filter", "Slow"]);
+        assert.equal(settled.customText, "a badge");
+      }
       if (mode === "answered") assert.deepEqual(posted[0], {
         path: "/v1/sessions/session-1/questions/question-1",
         body: { conversation_id: "session-1", question_id: "question-1", run_id: "run-1", answers: [{ question_id: "q1", selected_label: "my custom choice", custom: true }] },

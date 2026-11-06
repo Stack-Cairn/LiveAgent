@@ -257,3 +257,252 @@ test("a live question tool asks on the card, settles from question.resolved and 
   assert.equal(settled.answers[1].customText, undefined);
   assert.deepEqual(runInfo.readToolRunInfo(shell.details), { exitCode: 2, durationMs: 1500 });
 });
+
+// Stack-Cairn/K-brain#168: multi-select answers as selected_labels (capability
+// question_selected_labels) and the question_answers K-brain records on the call.
+const { createKBrainClient } = loader.loadModule("src/lib/kbrain/client.ts");
+
+// "Search" + "filter" joined reads the same as the option "Search, filter".
+const commaQuestionArgs = {
+  questions: [
+    { header: "Stack", question: "Which stack?", options: [{ label: "Go" }, { label: "Rust" }] },
+    {
+      header: "Extras",
+      question: "Add what?",
+      multiple: true,
+      options: [{ label: "Search" }, { label: "filter" }, { label: "Search, filter" }, { label: "CI" }],
+    },
+  ],
+};
+const commaQuestions = shared.parseAskUserQuestionItems(
+  shared.normalizeKBrainQuestionToolArguments(commaQuestionArgs).questions,
+);
+
+function health(capabilities) {
+  return new Response(JSON.stringify({ status: "ok", version: "kbrain.agent.v1", capabilities }), {
+    headers: { "content-type": "application/json" },
+  });
+}
+
+test("card answers become K-brain answers: selected_labels for multi-select picks, single-select unchanged", () => {
+  const [single, multi] = commaQuestions;
+  const payload = shared.kbrainQuestionAnswerPayload;
+  assert.deepEqual(payload({ questionId: "q1", prompt: single.prompt, selectedLabel: "Go" }), {
+    question_id: "q1",
+    selected_label: "Go",
+  });
+  assert.deepEqual(
+    payload({ questionId: "q1", prompt: single.prompt, selectedLabel: "Deno", custom: true }),
+    { question_id: "q1", selected_label: "Deno", custom: true },
+  );
+  assert.deepEqual(payload(shared.buildMultiSelectAnswer(multi, ["CI", "Search, filter"])), {
+    question_id: "q2",
+    selected_labels: ["Search, filter", "CI"],
+  });
+  assert.deepEqual(payload(shared.buildMultiSelectAnswer(multi, ["filter"], "  a badge  ")), {
+    question_id: "q2",
+    selected_labels: ["filter"],
+    selected_label: "a badge",
+    custom: true,
+  });
+  // Only typed text on a multi-select question is an ordinary custom answer.
+  assert.deepEqual(payload(shared.buildMultiSelectAnswer(multi, [], "just this")), {
+    question_id: "q2",
+    selected_label: "just this",
+    custom: true,
+  });
+
+  // Older backends get #1241's joined labels, custom when not one listed option.
+  const legacy = shared.legacyKBrainQuestionAnswer;
+  assert.deepEqual(legacy({ question_id: "q2", selected_labels: ["Search, filter", "CI"] }), {
+    question_id: "q2",
+    selected_label: "Search, filter, CI",
+    custom: true,
+  });
+  assert.deepEqual(legacy({ question_id: "q2", selected_labels: ["CI"] }), {
+    question_id: "q2",
+    selected_label: "CI",
+  });
+  assert.deepEqual(
+    legacy({ question_id: "q2", selected_labels: ["CI"], selected_label: "a badge", custom: true }),
+    { question_id: "q2", selected_label: "CI, a badge", custom: true },
+  );
+  assert.deepEqual(legacy({ question_id: "q1", selected_label: "Go" }), {
+    question_id: "q1",
+    selected_label: "Go",
+  });
+});
+
+for (const [name, capabilities, readable, structured] of [
+  ["a backend with question_selected_labels", { question_selected_labels: 1 }, true, true],
+  ["an older backend", { session_queue: 1 }, true, false],
+  ["an unreadable health", {}, false, false],
+]) {
+  test(`resolveQuestion sends selected_labels only to a backend that supports them: ${name}`, async () => {
+    const requests = [];
+    const client = createKBrainClient({
+      baseUrl: "http://kbrain.test",
+      fetch: async (url, init = {}) => {
+        const path = new URL(String(url)).pathname;
+        requests.push({ path, body: init.body ? JSON.parse(init.body) : undefined });
+        if (path === "/v1/health") {
+          return readable ? health(capabilities) : new Response("unavailable", { status: 503 });
+        }
+        return new Response(JSON.stringify({ ok: true }));
+      },
+    });
+    const answers = [
+      { question_id: "q1", selected_label: "Go" },
+      { question_id: "q2", selected_labels: ["Search, filter", "CI"], selected_label: "a badge", custom: true },
+    ];
+    await client.resolveQuestion("session-1", "question-1", "run-1", answers);
+    const posted = requests.find((request) => request.path.endsWith("/questions/question-1"));
+    assert.deepEqual(
+      posted.body.answers,
+      structured
+        ? answers
+        : [
+            { question_id: "q1", selected_label: "Go" },
+            { question_id: "q2", selected_label: "Search, filter, CI, a badge", custom: true },
+          ],
+    );
+    assert.equal(requests.filter((request) => request.path === "/v1/health").length, 1);
+
+    // Answers without selected_labels never wait for the handshake.
+    requests.length = 0;
+    await client.resolveQuestion("session-1", "question-2", "run-1", [answers[0]]);
+    assert.deepEqual(requests.map((request) => request.path), ["/v1/sessions/session-1/questions/question-2"]);
+  });
+}
+
+test("history reads question_answers, so labels containing ', ' come back exactly", () => {
+  // K-brain's text for the model; splitting it cannot tell "Search, filter" from two picks.
+  const text =
+    "The user answered:\n1. Which stack?\n   → Go\n2. Add what?\n   → Search, filter; plus a badge (user-typed answer via Other, not a listed option)";
+  const recorded = [
+    { question_id: "q1", prompt: "Which stack?", selected_label: "Go" },
+    { question_id: "q2", prompt: "Add what?", selected_labels: ["Search", "filter"], selected_label: "a badge", custom: true },
+  ];
+  const [, result] = history.convertMessages([
+    { role: "assistant", tool_calls: [{ id: "ask-1", name: "question", arguments: commaQuestionArgs, question_answers: recorded }] },
+    { role: "tool", tool_call_id: "ask-1", name: "question", content: [{ type: "text", text }] },
+  ]);
+  const settled = shared.parseAskUserQuestionResultDetails(result.details);
+  assert.deepEqual(settled.answers[0], { questionId: "q1", prompt: "Which stack?", selectedLabel: "Go" });
+  assert.deepEqual(settled.answers[1].selectedLabels, ["Search", "filter"]);
+  assert.equal(settled.answers[1].customText, "a badge");
+  assert.equal(settled.answers[1].custom, true);
+
+  // The option that itself contains ", " stays one option.
+  const [, single] = history.convertMessages([
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "ask-2", name: "question", arguments: commaQuestionArgs,
+        question_answers: [recorded[0], { question_id: "q2", prompt: "Add what?", selected_label: "Search, filter", selected_labels: ["Search, filter"] }],
+      }],
+    },
+    { role: "tool", tool_call_id: "ask-2", name: "question", content: [{ type: "text", text: "The user answered:\n1. Which stack?\n   → Go\n2. Add what?\n   → Search, filter" }] },
+  ]);
+  const one = shared.parseAskUserQuestionResultDetails(single.details).answers[1];
+  assert.deepEqual(one.selectedLabels, ["Search, filter"]);
+  assert.equal(one.custom, undefined);
+
+  // AskUserQuestion's result is the resolution JSON; its selected_labels are read too.
+  const resolution = {
+    kind: "ask_user_question",
+    questions: shared.normalizeKBrainQuestionToolArguments(commaQuestionArgs).questions,
+    answers: recorded,
+  };
+  const [, ask] = history.convertMessages([
+    { role: "assistant", tool_calls: [{ id: "ask-3", name: "AskUserQuestion", arguments: { questions: resolution.questions }, question_answers: recorded }] },
+    { role: "tool", tool_call_id: "ask-3", name: "AskUserQuestion", content: [{ type: "text", text: JSON.stringify(resolution) }] },
+  ]);
+  assert.deepEqual(shared.parseAskUserQuestionResultDetails(ask.details).answers[1].selectedLabels, ["Search", "filter"]);
+});
+
+test("old sessions without question_answers still split the joined text", () => {
+  const [, result] = history.convertMessages([
+    { role: "assistant", tool_calls: [{ id: "ask-1", name: "question", arguments: commaQuestionArgs }] },
+    { role: "tool", tool_call_id: "ask-1", name: "question", content: [{ type: "text", text: "The user answered:\n1. Which stack?\n   → Rust\n2. Add what?\n   → CI, filter" }] },
+  ]);
+  const settled = shared.parseAskUserQuestionResultDetails(result.details);
+  assert.equal(settled.answers[0].selectedLabel, "Rust");
+  assert.deepEqual(settled.answers[1].selectedLabels, ["filter", "CI"]);
+  // A timed-out question records no answers.
+  assert.equal(
+    shared.parseKBrainQuestionToolResult(commaQuestionArgs, "The user answered:\n1. Which stack?\n   → (no answer)\n2. Add what?\n   → (no answer)", false, []).timedOut,
+    true,
+  );
+});
+
+for (const withResolved of [true, false]) test(`a live question sends selected_labels and settles from the recorded answers${withResolved ? "" : " on tool.result alone"}`, async () => {
+  const storage = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, String(value)),
+    removeItem: (key) => storage.delete(key),
+  };
+  const request = {
+    question_id: "question-1", tool_call_id: "ask-1", run_id: "run-q", deadline_at: Date.now() + 60_000,
+    questions: shared.normalizeKBrainQuestionToolArguments(commaQuestionArgs).questions,
+  };
+  let controller;
+  const posted = [];
+  const fetch = async (url, init = {}) => {
+    const path = new URL(String(url)).pathname;
+    if (path === "/v1/health") return health({ question_selected_labels: 1 });
+    if (path === "/v1/sessions") return new Response(JSON.stringify({ id: "backend-q", messages: [], last_seq: 0 }));
+    if (path.endsWith("/runs")) {
+      return new Response(JSON.stringify({ version: "kbrain.agent.v1", conversation_id: "backend-q", run_id: "run-q", accepted_seq: 1 }), { status: 202 });
+    }
+    if (path.endsWith("/events")) {
+      return new Response(new ReadableStream({ start(value) {
+        controller = value;
+        controller.enqueue(new TextEncoder().encode(
+          sse(2, "tool.call", { tool_call: { id: "ask-1", name: "question", arguments: commaQuestionArgs } }) +
+          sse(3, "question.requested", request),
+        ));
+      } }), { headers: { "content-type": "text/event-stream" } });
+    }
+    if (path.endsWith("/questions/question-1")) {
+      const body = JSON.parse(init.body);
+      posted.push(body);
+      // K-brain records the validated answers with their prompts.
+      const answers = body.answers.map((answer, index) => ({ ...answer, prompt: request.questions[index].prompt }));
+      controller.enqueue(new TextEncoder().encode(
+        (withResolved ? sse(4, "question.resolved", { ...request, kind: "ask_user_question", answers }) : "") +
+        sse(withResolved ? 5 : 4, "tool.result", { tool_result: { id: "ask-1", name: "question", output: "The user answered:\n1. Which stack?\n   → Go\n2. Add what?\n   → Search, filter", question_answers: answers } }) +
+        sse(withResolved ? 6 : 5, "run.completed", {}),
+      ));
+      controller.close();
+      return new Response(JSON.stringify({ ok: true }));
+    }
+    throw new Error(`unexpected ${path}`);
+  };
+  const results = [];
+  const [single, multi] = commaQuestions;
+  const result = await turn.runKBrainTurn({
+    conversationId: `conversation-labels-${withResolved}`, sessionId: "host-q", cwd: "/tmp/w", model: { provider: "fixture", model: "m" },
+    prompt: "ask", context: { messages: [{ role: "user", content: "ask", timestamp: 1 }] },
+    signal: new AbortController().signal, fetch,
+    onTextDelta() {}, onThinkingDelta() {}, onToolCall() {},
+    onToolResult: (_call, value) => results.push(value),
+    onQuestionRequest: async () => [
+      shared.kbrainQuestionAnswerPayload({ questionId: "q1", prompt: single.prompt, selectedLabel: "Go" }),
+      shared.kbrainQuestionAnswerPayload(shared.buildMultiSelectAnswer(multi, ["Search", "filter"])),
+    ],
+  });
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+  assert.deepEqual(posted[0].answers, [
+    { question_id: "q1", selected_label: "Go" },
+    { question_id: "q2", selected_labels: ["Search", "filter"] },
+  ]);
+  const asked = results.filter((value) => value.toolCallId === "ask-1");
+  assert.equal(asked.length, withResolved ? 2 : 1);
+  for (const value of asked) {
+    const settled = shared.parseAskUserQuestionResultDetails(value.details);
+    assert.deepEqual(settled.answers[1].selectedLabels, ["Search", "filter"]);
+    assert.equal(settled.answers[1].custom, undefined);
+  }
+});

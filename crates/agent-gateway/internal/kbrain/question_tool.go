@@ -1,6 +1,7 @@
 package kbrain
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -181,12 +182,35 @@ func questionAnswerTexts(questions []questionItem, output string) []string {
 // result. A dismissed question fails the tool and shows as cancelled; no answer
 // to any question (the deadline passed) shows as timed out. WebUI splits a
 // multi-select answer's joined labels back into options.
-func questionToolResultDetails(args map[string]any, output string, isError bool) map[string]any {
+func questionToolResultDetails(args map[string]any, output string, isError bool, recorded []QuestionAnswer) map[string]any {
 	// The recorded call is already normalized; history holds the model's own form.
 	rawQuestions := normalizeQuestionToolArgs(args)["questions"]
 	questions := questionItems(rawQuestions)
 	if len(questions) == 0 {
 		return nil
+	}
+	// K-brain's question_answers (Stack-Cairn/K-brain#168) are exact, so they
+	// win over the text written for the model; old sessions only have the text.
+	if !isError && len(recorded) > 0 {
+		byID := map[string]QuestionAnswer{}
+		for _, answer := range recorded {
+			if _, seen := byID[answer.QuestionID]; !seen {
+				byID[answer.QuestionID] = answer
+			}
+		}
+		answers := []any{}
+		for _, question := range questions {
+			if answer, ok := byID[question.id]; ok && (len(answer.SelectedLabels) > 0 || strings.TrimSpace(answer.SelectedLabel) != "") {
+				prompt := answer.Prompt
+				if prompt == "" {
+					prompt = question.prompt
+				}
+				answers = append(answers, cardAnswer(answer, prompt, !question.multiple))
+			}
+		}
+		if len(answers) > 0 {
+			return map[string]any{"kind": "ask_user_question", "questions": rawQuestions, "answers": answers}
+		}
 	}
 	if isError {
 		if !questionCancelPattern.MatchString(output) {
@@ -214,6 +238,53 @@ func questionToolResultDetails(args map[string]any, output string, isError bool)
 		details["timedOut"] = true
 	}
 	return details
+}
+
+// cardAnswer is a recorded answer as the question card reads it. Structured
+// answers carry their labels (selectedLabels) and typed text (customText), and
+// selectedLabel is all of them joined; a single-select question shows its one
+// label. Old-style answers keep their text and custom flag.
+func cardAnswer(answer QuestionAnswer, prompt string, single bool) map[string]any {
+	item := map[string]any{"questionId": answer.QuestionID, "prompt": prompt}
+	if len(answer.SelectedLabels) == 0 {
+		item["selectedLabel"] = answer.SelectedLabel
+		if answer.Custom {
+			item["custom"] = true
+		}
+		return item
+	}
+	if single {
+		item["selectedLabel"] = answer.SelectedLabels[0]
+		return item
+	}
+	text := ""
+	if answer.Custom {
+		text = strings.TrimSpace(answer.SelectedLabel)
+	}
+	parts := append([]string{}, answer.SelectedLabels...)
+	if text != "" {
+		parts = append(parts, text)
+		item["custom"], item["customText"] = true, text
+	}
+	item["selectedLabel"] = strings.Join(parts, ", ")
+	item["selectedLabels"] = append([]string{}, answer.SelectedLabels...)
+	return item
+}
+
+// decodeQuestionAnswers reads question_answers from a decoded event payload.
+func decodeQuestionAnswers(raw any) []QuestionAnswer {
+	if raw == nil {
+		return nil
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var answers []QuestionAnswer
+	if json.Unmarshal(data, &answers) != nil {
+		return nil
+	}
+	return answers
 }
 
 // shellRunTools report an exit status; only their results carry run info.

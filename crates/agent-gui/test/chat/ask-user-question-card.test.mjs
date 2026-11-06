@@ -603,3 +603,36 @@ test("a settled multiple answer shows every chosen option checked", () => {
   const boxes = findAll(tree, (node) => node.type === "button" && node.props?.role === "checkbox" && !node.props["aria-label"]);
   assert.deepEqual(boxes.map((box) => box.props["aria-checked"]), [true, false, true]);
 });
+
+test("a settled answer with structured labels checks exactly those options, even with ', ' in a label", () => {
+  // "Search" + "filter" joined reads the same as the option "Search, filter";
+  // K-brain's selected_labels (Stack-Cairn/K-brain#168) say which was picked.
+  const question = {
+    id: "q1",
+    header: "Extras",
+    prompt: "Add what?",
+    multiple: true,
+    options: [{ label: "Search" }, { label: "filter" }, { label: "Search, filter" }, { label: "CI" }],
+  };
+  const boxes = (tree) =>
+    findAll(tree, (node) => node.type === "button" && node.props?.role === "checkbox" && !node.props["aria-label"]);
+  const render = (answer) =>
+    createCardHarness().render({ questions: [question], interactive: false, answers: [answer] });
+  const picked = render({
+    questionId: "q1",
+    prompt: "Add what?",
+    selectedLabel: "Search, filter",
+    selectedLabels: ["Search", "filter"],
+  });
+  assert.deepEqual(boxes(picked).map((box) => box.props["aria-checked"]), [true, true, false, false]);
+  const one = render({
+    questionId: "q1",
+    prompt: "Add what?",
+    selectedLabel: "Search, filter, a badge",
+    selectedLabels: ["Search, filter"],
+    custom: true,
+    customText: "a badge",
+  });
+  assert.deepEqual(boxes(one).map((box) => box.props["aria-checked"]), [false, false, true, false]);
+  assert.match(treeText(one), /a badge/);
+});

@@ -66,21 +66,21 @@ func TestQuestionToolCallShowsAsMultiQuestionCard(t *testing.T) {
 
 func TestQuestionToolResultText(t *testing.T) {
 	args := normalizeQuestionToolArgs(map[string]any{"question": "Proceed?", "options": []any{map[string]any{"label": "Yes"}, map[string]any{"label": "No"}}})
-	details := questionToolResultDetails(args, `User answered "Proceed?": Maybe later`, false)
+	details := questionToolResultDetails(args, `User answered "Proceed?": Maybe later`, false, nil)
 	answers, _ := details["answers"].([]any)
 	if len(answers) != 1 || answers[0].(map[string]any)["selectedLabel"] != "Maybe later" || answers[0].(map[string]any)["custom"] != true {
 		t.Fatalf("single form = %+v", details)
 	}
 	var multi map[string]any
 	_ = json.Unmarshal([]byte(multiQuestionArgs), &multi)
-	timedOut := questionToolResultDetails(multi, "The user answered:\n1. Which stack?\n   → (no answer)\n2. Add what?\n   → (no answer)", false)
+	timedOut := questionToolResultDetails(multi, "The user answered:\n1. Which stack?\n   → (no answer)\n2. Add what?\n   → (no answer)", false, nil)
 	if timedOut["timedOut"] != true {
 		t.Fatalf("no answers = %+v", timedOut)
 	}
-	if cancelled := questionToolResultDetails(multi, "the user dismissed the question", true); cancelled["cancelled"] != true {
+	if cancelled := questionToolResultDetails(multi, "the user dismissed the question", true, nil); cancelled["cancelled"] != true {
 		t.Fatalf("dismissed = %+v", cancelled)
 	}
-	if questionToolResultDetails(multi, "boom", true) != nil || questionToolResultDetails(multi, "unrelated", false) != nil {
+	if questionToolResultDetails(multi, "boom", true, nil) != nil || questionToolResultDetails(multi, "unrelated", false, nil) != nil {
 		t.Fatal("other results carry no question details")
 	}
 }
@@ -157,4 +157,150 @@ func TestPermissionPreviewReachesApprovalCard(t *testing.T) {
 	if !cut || len(diff) > approvalPreviewMax || strings.HasSuffix(diff, "\n") {
 		t.Fatalf("diff clamp = %d cut=%v", len(diff), cut)
 	}
+}
+
+// Stack-Cairn/K-brain#168: structured multi-select answers (selected_labels) and the
+// question_answers K-brain records on the call.
+const (
+	selectedLabelsHealth = `{"status":"ok","version":"kbrain.agent.v1","capabilities":{"question_selected_labels":1}}`
+	olderHealth          = `{"status":"ok","version":"kbrain.agent.v1","capabilities":{}}`
+	commaQuestionArgs    = `{"questions":[{"header":"Stack","question":"Which stack?","options":[{"label":"Go"},{"label":"Rust"}]},{"header":"Extras","question":"Add what?","multiple":true,"options":[{"label":"Docs"},{"label":"Search, filter"},{"label":"CI"}]}]}`
+	commaQuestionRequest = `{"question_id":"question-1","tool_call_id":"ask-1","run_id":"kb-run","questions":[{"id":"q1","header":"Stack","prompt":"Which stack?","options":[{"label":"Go"},{"label":"Rust"}]},{"id":"q2","header":"Extras","prompt":"Add what?","multiple":true,"options":[{"label":"Docs"},{"label":"Search, filter"},{"label":"CI"}]}]}`
+)
+
+func TestQuestionAnswersSendSelectedLabelsOnlyWithCapability(t *testing.T) {
+	for name, tc := range map[string]struct {
+		health string
+		labels string
+		custom string
+	}{
+		"capability":     {selectedLabelsHealth, `[{"question_id":"q1","selected_label":"Go"},{"question_id":"q2","selected_labels":["Search, filter","CI"]}]`, `[{"question_id":"q1","selected_label":"Go"},{"question_id":"q2","selected_labels":["Docs"],"selected_label":"a badge","custom":true}]`},
+		"older backend":  {olderHealth, `[{"question_id":"q1","selected_label":"Go"},{"question_id":"q2","selected_label":"Search, filter, CI","custom":true}]`, `[{"question_id":"q1","selected_label":"Go"},{"question_id":"q2","selected_label":"Docs, a badge","custom":true}]`},
+		"health missing": {"", `[{"question_id":"q1","selected_label":"Go"},{"question_id":"q2","selected_label":"Search, filter, CI","custom":true}]`, `[{"question_id":"q1","selected_label":"Go"},{"question_id":"q2","selected_label":"Docs, a badge","custom":true}]`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for i, answer := range []struct{ card, want string }{
+				{`[{"questionId":"q1","selectedLabel":"Go"},{"questionId":"q2","selectedLabel":"Search, filter, CI","selectedLabels":["Search, filter","CI"]}]`, tc.labels},
+				{`[{"questionId":"q1","selectedLabel":"Go"},{"questionId":"q2","selectedLabel":"Docs, a badge","selectedLabels":["Docs"],"customText":"a badge","custom":true}]`, tc.custom},
+			} {
+				f := newInteractiveFixture(t)
+				f.health = tc.health
+				f.send("tool.call", `{"tool_call":{"id":"ask-1","name":"question","arguments":`+commaQuestionArgs+`}}`)
+				f.send("question.requested", commaQuestionRequest)
+				f.take()
+				if response := f.queue("tool_answer", "ask-1", answer.card); !response.Accepted {
+					t.Fatalf("answer %d = %+v", i, response)
+				}
+				got, _ := json.Marshal(f.postsTo("/v1/sessions/kb-session/questions/question-1")[0]["answers"])
+				var want, sent any
+				_ = json.Unmarshal([]byte(answer.want), &want)
+				_ = json.Unmarshal(got, &sent)
+				if !jsonEqual(want, sent) {
+					t.Fatalf("answer %d sent %s, want %s", i, got, answer.want)
+				}
+			}
+		})
+	}
+}
+
+func jsonEqual(a, b any) bool {
+	left, _ := json.Marshal(a)
+	right, _ := json.Marshal(b)
+	return string(left) == string(right)
+}
+
+func TestQuestionAnswersReplayLabelsWithSeparator(t *testing.T) {
+	recorded := []QuestionAnswer{
+		{QuestionID: "q1", Prompt: "Which stack?", SelectedLabel: "Go"},
+		{QuestionID: "q2", Prompt: "Add what?", SelectedLabel: "a badge", SelectedLabels: []string{"Search, filter", "CI"}, Custom: true},
+	}
+	// The text for the model cannot tell "Search, filter" from two options.
+	text := "The user answered:\n1. Which stack?\n   → Go\n2. Add what?\n   → Search, filter, CI; plus a badge (user-typed answer via Other, not a listed option)"
+	check := func(t *testing.T, details map[string]any) {
+		t.Helper()
+		answers, _ := details["answers"].([]any)
+		if len(answers) != 2 {
+			t.Fatalf("details = %+v", details)
+		}
+		if first := answers[0].(map[string]any); first["selectedLabel"] != "Go" || first["selectedLabels"] != nil || first["custom"] != nil {
+			t.Fatalf("single answer = %+v", first)
+		}
+		second := answers[1].(map[string]any)
+		labels, _ := second["selectedLabels"].([]any)
+		if len(labels) != 2 || labels[0] != "Search, filter" || labels[1] != "CI" || second["customText"] != "a badge" || second["custom"] != true || second["selectedLabel"] != "Search, filter, CI, a badge" {
+			t.Fatalf("multi answer = %+v", second)
+		}
+	}
+
+	t.Run("history", func(t *testing.T) {
+		raw, err := historyMessagesJSON([]Message{
+			{Role: "assistant", ToolCalls: []ToolCall{{ID: "ask-1", Name: "question", Arguments: json.RawMessage(commaQuestionArgs), QuestionAnswers: recorded}}},
+			{Role: "tool", ToolCallID: "ask-1", Name: "question", Content: []ContentBlock{{Type: "text", Text: text}}},
+		}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var entries []map[string]any
+		if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+			t.Fatal(err)
+		}
+		details, _ := entries[1]["details"].(map[string]any)
+		check(t, roundTrip(t, details))
+	})
+
+	t.Run("tool.result", func(t *testing.T) {
+		f := newInteractiveFixture(t)
+		f.send("tool.call", `{"tool_call":{"id":"ask-1","name":"question","arguments":`+commaQuestionArgs+`}}`)
+		f.take()
+		raw, _ := json.Marshal(map[string]any{"tool_result": map[string]any{"id": "ask-1", "name": "question", "output": text, "question_answers": recorded}})
+		f.send("tool.result", string(raw))
+		events := f.take()
+		if len(events) != 1 {
+			t.Fatalf("events = %+v", events)
+		}
+		details, _ := events[0].data["details"].(map[string]any)
+		check(t, details)
+	})
+
+	t.Run("AskUserQuestion", func(t *testing.T) {
+		resolution, _ := json.Marshal(map[string]any{
+			"kind": "ask_user_question",
+			"questions": []any{
+				map[string]any{"id": "q1", "prompt": "Which stack?", "options": []any{map[string]any{"label": "Go"}, map[string]any{"label": "Rust"}}},
+				map[string]any{"id": "q2", "prompt": "Add what?", "multiple": true, "options": []any{map[string]any{"label": "Docs"}, map[string]any{"label": "Search, filter"}, map[string]any{"label": "CI"}}},
+			},
+			"answers": recorded,
+		})
+		check(t, roundTrip(t, questionResultDetails(askUserQuestionTool, string(resolution), nil)))
+		// question_answers on the call wins over the result's own answers.
+		check(t, roundTrip(t, questionResultDetails(askUserQuestionTool, strings.Replace(string(resolution), `"Search, filter","CI"`, `"Docs"`, 1), recorded)))
+	})
+
+	t.Run("old sessions read the text", func(t *testing.T) {
+		var args map[string]any
+		_ = json.Unmarshal([]byte(commaQuestionArgs), &args)
+		details := questionToolResultDetails(args, "The user answered:\n1. Which stack?\n   → Go\n2. Add what?\n   → Search, filter, CI", false, nil)
+		answers, _ := details["answers"].([]any)
+		if len(answers) != 2 || answers[1].(map[string]any)["selectedLabel"] != "Search, filter, CI" || answers[1].(map[string]any)["selectedLabels"] != nil {
+			t.Fatalf("old-style details = %+v", details)
+		}
+		// A timed-out question records no answers and still shows as timed out.
+		timedOut := questionToolResultDetails(args, "The user answered:\n1. Which stack?\n   → (no answer)\n2. Add what?\n   → (no answer)", false, []QuestionAnswer{})
+		if timedOut["timedOut"] != true {
+			t.Fatalf("timed out = %+v", timedOut)
+		}
+	})
+}
+
+func roundTrip(t *testing.T, value map[string]any) map[string]any {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }

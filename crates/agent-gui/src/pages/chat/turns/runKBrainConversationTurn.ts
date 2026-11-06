@@ -6,7 +6,7 @@ import type {
 } from "@liveagent/app/lib/agentTypes";
 import {
   ASK_USER_QUESTION_TOOL_NAME,
-  askUserQuestionAnswerIsCustomForBackend,
+  kbrainQuestionAnswerPayload,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import {
@@ -376,13 +376,9 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           } finally {
             if (call) pushGatewayToolCall(call);
           }
-          // K-brain takes one label per answer: several picks of a multi-select
-          // question go as their joined labels, marked custom so it accepts them.
-          return answers.map((answer) => ({
-            question_id: answer.questionId,
-            selected_label: answer.selectedLabel,
-            ...(askUserQuestionAnswerIsCustomForBackend(answer) ? { custom: true } : {}),
-          }));
+          // Multi-select picks go as selected_labels; the client sends them as joined
+          // custom labels to backends without capability question_selected_labels.
+          return answers.map(kbrainQuestionAnswerPayload);
         },
         onPermissionRequest: async (request, signal, refusal) => {
           // Key the approval by its tool call so the Gateway preview overlays the

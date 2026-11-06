@@ -232,7 +232,13 @@ function toMessage(
       // 运行信息（退出码/超时/耗时）在历史里挂在 assistant 的 tool_calls[] 上。
       details: withToolRunInfo(
         message.name,
-        questionResultDetails(message.name, text, toolCall?.arguments, isError) ??
+        questionResultDetails(
+          message.name,
+          text,
+          toolCall?.arguments,
+          isError,
+          toolCall?.question_answers,
+        ) ??
           taskResultDetails(
             message.name,
             toolCall?.arguments,
