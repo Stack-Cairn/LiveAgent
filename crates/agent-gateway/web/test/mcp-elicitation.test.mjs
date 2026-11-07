@@ -106,7 +106,7 @@ test("the synthetic arguments stay out of the displayed tool arguments", () => {
 });
 
 test("a pending form stands alone and is pinned; once answered the call rejoins the activity group", () => {
-  const { groupRoundBlocks, isPendingUserInteractionBlock } = loader.loadModule("@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts");
+  const { groupRoundBlocks, hasActiveUserInteraction, isPendingUserInteractionBlock } = loader.loadModule("@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts");
   const call = (id, args) => ({ kind: "tool", item: { toolCall: { type: "toolCall", id, name: "mcp__deploy__ship", arguments: args } } });
   const read = (id) => ({ kind: "tool", item: { toolCall: { type: "toolCall", id, name: "Read", arguments: {} } } });
 
@@ -114,11 +114,15 @@ test("a pending form stands alone and is pinned; once answered the call rejoins 
   assert.deepEqual(pending.map((block) => block.kind), ["toolGroup", "tool", "toolGroup"]);
   assert.equal(pending[1].item.toolCall.id, "call-1");
   assert.deepEqual(pending.map(isPendingUserInteractionBlock), [false, true, false]);
+  // It also counts as an interaction that needs the user, so a batch holding it stays open
+  // (even when the call is not listed as running) and does not fold itself on settle.
+  assert.equal(hasActiveUserInteraction([read("read-1").item, call("call-1", pendingArgs).item], []), true);
 
   const record = { elicitation_id: "el-1", server: "deploy", message: "m", action: "accept", reason: "user" };
   const answered = groupRoundBlocks([read("read-1"), call("call-1", { env: "prod", [shared.MCP_ELICITATION_RECORDS_ARG]: [record] }), read("read-2")]);
   assert.deepEqual(answered.map((block) => block.kind), ["toolGroup"]);
   assert.equal(answered.some(isPendingUserInteractionBlock), false);
+  assert.equal(hasActiveUserInteraction(answered[0].items, ["call-1"]), false);
 
   // A result ends the wait even if a stale pending copy is still in the arguments.
   const settled = { ...call("call-1", pendingArgs) };
