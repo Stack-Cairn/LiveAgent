@@ -25,7 +25,6 @@ import {
   deriveFileChangeStats,
   FILE_TOOL_TEXT_FIELDS,
   previewText,
-  summarizeToolCall,
   type ToolResultMessage,
   type ToolTraceItem,
   toolResultMessageToText,
@@ -59,6 +58,7 @@ import {
   isSubagentCardToolCall,
   KBRAIN_SUBAGENT_TOOL_NAME,
 } from "./assistantBubbleUtils";
+import { getConciseToolTarget } from "./conciseToolTarget";
 import { SubagentToolCall } from "./SubagentToolCard";
 import { ToolPermissionMarker } from "./ToolPermissionMarker";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
@@ -216,23 +216,24 @@ function ToolCallItem({
     typeof item.toolCall.arguments?.command === "string"
       ? item.toolCall.arguments.command.trim()
       : "";
-  const firstLine = inlineCommand ? inlineCommand.split("\n")[0] : "";
-  // 折叠行的行内命令:视觉截断交给 CSS(truncate 按实际可用宽度出省略号),
-  // 不再按固定字符数硬切(#444)。DOM 文本与原生 title 各留一个远超可视宽度
-  // 的上限,防止超长单行命令把常驻摘要行与悬浮提示撑到不可用。
-  const firstLinePreview = capInlineCommandPreview(firstLine);
-  const inlineCommandTitle = inlineCommand ? capInlineCommandPreview(inlineCommand) : "";
-  const toolArgsSummary =
-    isRedactedToolContent || isBash || isShellSessionControl || inlineCommand || isPlanCard
-      ? ""
-      : isAskUser
-        ? (askQuestions[0]?.prompt ?? "")
-        : isSubagentCard
-          ? getSubagentInlineSummary(item)
-          : summarizeToolCall(item.toolCall, {
-              includeName: false,
-              includeManagerAction: false,
-            });
+  // 行内目标取简短形式（命令首行去掉前导 cd、文件名、搜索模式、URL 主机+路径，
+  // 约 48 列），窄窗口里 CSS truncate 仍按实际宽度出省略号（#444）。完整请求放进
+  // 原生 title（留一个远超可视宽度的上限），简短形式丢了信息时展开区再展示参数。
+  const conciseTarget =
+    isRedactedToolContent ||
+    isShellSessionControl ||
+    isPlanCard ||
+    isAskUser ||
+    isSubagentCard ||
+    (isBash && !inlineCommand)
+      ? null
+      : getConciseToolTarget(item);
+  const inlineTarget = isAskUser
+    ? (askQuestions[0]?.prompt ?? "")
+    : isSubagentCard
+      ? getSubagentInlineSummary(item)
+      : (conciseTarget?.text ?? "");
+  const inlineTargetTitle = capInlineCommandPreview(conciseTarget?.full ?? inlineTarget);
   // 流式 Edit 参数每个 delta 都会换新 arguments 引用并重派生统计；exact 行级
   // diff（Myers，上限 200K 字符）只在参数定稿后才算，流式期走行数估算，避免
   // 每帧全量 diff 卡主线程。isRunning 不能作定稿信号：两端都在 toolcall_start
@@ -348,13 +349,13 @@ function ToolCallItem({
     !isPlanCard &&
     (shouldShowArgs || Boolean(result) || (isAskUser && askQuestions.length > 0));
   const effectiveOpen = canExpand && open;
-  const summaryTitleName =
-    isBash && effectiveOpen ? t(`chat.tool.shell.${activityPhase}Title`) : title.name;
-  const compactChipText = simpleFileOperation
-    ? ""
-    : firstLinePreview
-      ? firstLinePreview
-      : toolArgsSummary || title.action;
+  const summaryTitleName = title.name;
+  const compactChipText = simpleFileOperation ? "" : inlineTarget || title.action;
+  // Inside a batch the row body skips the request arguments; when the concise
+  // target dropped part of the request (a long command, a search path), show
+  // them so nothing is left only in a tooltip.
+  const showArgsInBody =
+    !isShellSessionTool && shouldShowArgs && (!compactChip || Boolean(conciseTarget?.lossy));
   const summaryClassName = cn(
     "flex select-none items-center gap-1.5 text-left",
     compactChip
@@ -421,10 +422,7 @@ function ToolCallItem({
           )}
         >
           {compactChipText ? (
-            <span
-              className="min-w-0 flex-1 truncate"
-              title={inlineCommandTitle || toolArgsSummary || undefined}
-            >
+            <span className="min-w-0 flex-1 truncate" title={inlineTargetTitle || undefined}>
               {compactChipText}
             </span>
           ) : null}
@@ -457,7 +455,7 @@ function ToolCallItem({
             (styled per the block container) matches the summary text */}
         <div
           className="min-w-0 truncate font-mono text-xs leading-5 text-foreground/48"
-          title={inlineCommandTitle || toolArgsSummary || undefined}
+          title={inlineTargetTitle || undefined}
         >
           <span className="font-sans text-sm font-[450] text-foreground/62 group-hover/tool:text-foreground/75">
             {summaryTitleName}
@@ -469,11 +467,7 @@ function ToolCallItem({
             ) : null}
           </span>
 
-          {firstLinePreview ? (
-            <span className="ml-1.5">{firstLinePreview}</span>
-          ) : toolArgsSummary ? (
-            <span className="ml-1.5">{toolArgsSummary}</span>
-          ) : null}
+          {inlineTarget ? <span className="ml-1.5">{inlineTarget}</span> : null}
         </div>
 
         {fileChangeStats ? (
@@ -570,7 +564,7 @@ function ToolCallItem({
         >
           {isShellSessionTool ? <ShellToolDisplay item={item} result={result} /> : null}
 
-          {!isShellSessionTool && shouldShowArgs && !compactChip ? (
+          {showArgsInBody ? (
             <ToolSection
               label={isBash || inlineCommand ? t("chat.tool.command") : t("chat.tool.args")}
             >

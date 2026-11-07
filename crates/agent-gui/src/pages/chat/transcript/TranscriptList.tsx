@@ -1,4 +1,5 @@
 import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
+import { ProcessViewportFollowingProvider } from "@liveagent/ui/components/chat/processDisclosure";
 import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -17,6 +18,7 @@ import {
 } from "@liveagent/ui/lib/transcript-virtual/useTranscriptNavigation";
 import { type Range, useVirtualizer } from "@tanstack/react-virtual";
 import {
+  type ComponentProps,
   type MutableRefObject,
   memo,
   type ReactNode,
@@ -639,7 +641,10 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   useLayoutEffect(() => () => saveMeasurementsRef.current(), []);
 
   return (
-    <ReplyHoverProvider value={replyHoverStore}>
+    <TranscriptRowProviders
+      replyHoverStore={replyHoverStore}
+      isViewportFollowing={isViewportFollowing}
+    >
       <div
         ref={virtualizer.containerRef}
         className="relative"
@@ -725,6 +730,20 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
           );
         })}
       </div>
-    </ReplyHoverProvider>
+    </TranscriptRowProviders>
   );
 });
+
+// A process block (tool batch, reasoning) that settles while the reader is
+// scrolled up keeps its disclosure state instead of folding under them.
+function TranscriptRowProviders(props: {
+  replyHoverStore: ComponentProps<typeof ReplyHoverProvider>["value"];
+  isViewportFollowing?: () => boolean;
+  children: ReactNode;
+}) {
+  return (
+    <ProcessViewportFollowingProvider isFollowing={props.isViewportFollowing}>
+      <ReplyHoverProvider value={props.replyHoverStore}>{props.children}</ReplyHoverProvider>
+    </ProcessViewportFollowingProvider>
+  );
+}

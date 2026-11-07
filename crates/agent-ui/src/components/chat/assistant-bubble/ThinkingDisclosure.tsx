@@ -1,9 +1,6 @@
 import { formatElapsedTime } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
-import {
-  useExpandProcessByDefault,
-  useProcessDefaultChange,
-} from "@liveagent/ui/components/chat/processDisclosure";
+import { useLiveProcessDisclosure } from "@liveagent/ui/components/chat/processDisclosure";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
@@ -12,7 +9,7 @@ import { useStreamingReveal } from "@liveagent/ui/lib/chat/streamingReveal";
 import { resolveThinkingDurationMs } from "@liveagent/ui/lib/chat/thinkingDurations";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Brain, ChevronRight, Loader2 } from "../../IconSet";
 
 /**
@@ -46,18 +43,7 @@ export function ThinkingDisclosure(props: {
   // it settles it folds back down — unless the user toggled it, after which
   // disclosure ownership stays with them. With "expand process by default" on,
   // every segment starts open and stays open after it settles.
-  const expandByDefault = useExpandProcessByDefault();
-  const [open, setOpen] = useState(active || expandByDefault);
-  const userOwnsDisclosureRef = useRef(false);
-
-  useEffect(() => {
-    if (!active && !expandByDefault && !userOwnsDisclosureRef.current) setOpen(false);
-  }, [active, expandByDefault]);
-  // Flipping the preference is an explicit request, so it wins over a manual toggle.
-  useProcessDefaultChange(expandByDefault, (expand) => {
-    userOwnsDisclosureRef.current = false;
-    setOpen(expand || active);
-  });
+  const [open, toggleOpen] = useLiveProcessDisclosure({ live: active });
 
   // Callback ref → state so the follow engine re-binds whenever LazyCollapse
   // mounts a fresh body (the element identity changes on every reopen).
@@ -108,10 +94,7 @@ export function ThinkingDisclosure(props: {
           "rounded-lg px-1.5 py-1",
           "text-left text-sm font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75",
         )}
-        onClick={() => {
-          userOwnsDisclosureRef.current = true;
-          setOpen((prev) => !prev);
-        }}
+        onClick={toggleOpen}
       >
         {active ? (
           <Loader2

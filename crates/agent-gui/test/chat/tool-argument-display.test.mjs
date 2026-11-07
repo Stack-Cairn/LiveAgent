@@ -773,7 +773,7 @@ test("shell session snapshots show status without a permanent spinner", () => {
   assert.doesNotMatch(pending, /session-1|cursor=|session=/);
 });
 
-test("Bash collapsed summary keeps the full first line in DOM and title instead of a 48-char cut", () => {
+test("Bash collapsed summary shows a concise first line and keeps the full command in the title", () => {
   const renderToolCallItem = createToolCallItemRenderer();
   const command = `echo ${"a".repeat(140)}-command-tail`;
   const html = renderToolCallItem({
@@ -783,10 +783,11 @@ test("Bash collapsed summary keeps the full first line in DOM and title instead 
     arguments: { command },
   });
 
-  // Once in the hover title, once in the visible summary text.
-  assert.equal(html.split(command).length - 1, 2);
+  // The visible target is cut to 48 columns; the hover title keeps every character.
+  assert.ok(html.includes(`>echo ${"a".repeat(42)}…<`));
+  assert.equal(html.split(command).length - 1, 1);
+  assert.match(html, new RegExp(`title="[^"]*${command}`));
   assert.ok(!html.includes(`$ ${command}`));
-  assert.ok(!html.includes("…"));
 });
 
 test("Bash collapsed summary bounds pathological single-line commands in DOM and title", () => {

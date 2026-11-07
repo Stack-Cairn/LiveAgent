@@ -1,15 +1,10 @@
 import { retainRunningToolContent } from "@liveagent/adapters/assistantBubble";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
-import {
-  useExpandProcessByDefault,
-  useProcessDefaultChange,
-} from "@liveagent/ui/components/chat/processDisclosure";
-import { useAttentionDisclosure } from "@liveagent/ui/components/chat/useAttentionDisclosure";
+import { useLiveProcessDisclosure } from "@liveagent/ui/components/chat/processDisclosure";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ToolTraceItem } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
-import { summarizeKBrainToolLine } from "@liveagent/ui/lib/chat/kbrainToolSummaries";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo } from "react";
 import {
@@ -33,16 +28,14 @@ import {
   Wrench,
 } from "../../IconSet";
 import {
-  compactInlineText,
   getFileOperationDisplay,
+  getShellSessionDisplayDetails,
   getToolActivityCategory,
-  getToolDisplayName,
   getToolTraceKey,
   hasActiveUserInteraction,
-  isWebFetchToolName,
-  LSP_TOOL_NAME,
   type ToolActivityCategory,
 } from "./assistantBubbleUtils";
+import { getConciseToolTarget } from "./conciseToolTarget";
 import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
 
 function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]) {
@@ -61,7 +54,10 @@ function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]
       waiting += 1;
       continue;
     }
-    if (item.toolResult.isError) {
+    // A shell command that exited non-zero or timed out failed even when the
+    // tool call itself returned normally.
+    const shellStatus = getShellSessionDisplayDetails(item.toolResult)?.status;
+    if (item.toolResult.isError || shellStatus === "failed" || shellStatus === "timed_out") {
       failed += 1;
       continue;
     }
@@ -100,44 +96,6 @@ const TOOL_BATCH_ICONS: Record<ToolActivityCategory, IconComponent> = {
   other: Wrench,
 };
 
-function stringArgument(item: ToolTraceItem, ...keys: string[]): string {
-  const args = item.toolCall.arguments || {};
-  for (const key of keys) {
-    const value = args[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-function getRunningToolTarget(item: ToolTraceItem) {
-  const fileOperation = getFileOperationDisplay(item);
-  if (fileOperation) return fileOperation.fileName;
-
-  const name = getToolDisplayName(item.toolCall.name);
-  const kbrainTarget = summarizeKBrainToolLine(item.toolCall.name, item.toolCall.arguments);
-  if (kbrainTarget !== null) return compactInlineText(kbrainTarget, 112);
-  const target =
-    name === "Bash"
-      ? stringArgument(item, "command").split("\n")[0]
-      : name === "Glob" || name === "Grep"
-        ? stringArgument(item, "pattern", "query", "path")
-        : name === "ToolSearch"
-          ? stringArgument(item, "query", "pattern", "name")
-          : name === "List"
-            ? stringArgument(item, "path") || "."
-            : name === "Agent"
-              ? stringArgument(item, "name", "id", "prompt")
-              : name === "SendMessage"
-                ? stringArgument(item, "to", "channel", "subject")
-                : name === LSP_TOOL_NAME
-                  ? stringArgument(item, "path", "query")
-                  : isWebFetchToolName(name)
-                    ? stringArgument(item, "url", "uri")
-                    : stringArgument(item, "path", "label", "name", "query", "action", "command");
-
-  return compactInlineText(target, 112);
-}
-
 function getRunningToolActivity(item: ToolTraceItem, t: (key: string) => string) {
   const fileOperation = getFileOperationDisplay(item);
   const category = getToolActivityCategory(item.toolCall.name);
@@ -146,11 +104,12 @@ function getRunningToolActivity(item: ToolTraceItem, t: (key: string) => string)
     : category === "other"
       ? t("chat.tool.activity.other.running")
       : t(`chat.tool.activity.${category}.running`);
-  const target = getRunningToolTarget(item);
+  const target = getConciseToolTarget(item);
 
   return {
     category,
-    label: target ? `${action} ${target}` : action,
+    label: target.text ? `${action} ${target.text}` : action,
+    title: target.full ? `${action} ${target.full}` : action,
   };
 }
 
@@ -179,6 +138,13 @@ function findLatestRunningTool(items: ToolTraceItem[], runningToolCallIds: strin
 function ToolTraceGroupInner(props: {
   items: ToolTraceItem[];
   runningToolCallIds?: string[];
+  /**
+   * The batch is the trailing activity of a running turn, so the next call may
+   * still join it. Together with a running call this keeps the batch live (open
+   * by default); it settles once the turn moves on to reasoning or prose, or ends.
+   * Gaps between consecutive calls therefore never fold and reopen the batch.
+   */
+  live?: boolean;
   readOnly?: boolean;
   redactToolContent?: boolean;
   onOpenFileLink?: (link: ChatFileLink) => void;
@@ -187,6 +153,7 @@ function ToolTraceGroupInner(props: {
   const {
     items,
     runningToolCallIds = [],
+    live: trailingLive = false,
     readOnly = false,
     redactToolContent = false,
     onOpenFileLink,
@@ -206,9 +173,14 @@ function ToolTraceGroupInner(props: {
     () => hasActiveUserInteraction(items, runningToolCallIds),
     [items, runningToolCallIds],
   );
-  const expandByDefault = useExpandProcessByDefault();
-  const [open, setOpen] = useAttentionDisclosure(attentionRequired, expandByDefault);
-  useProcessDefaultChange(expandByDefault, (expand) => setOpen(expand || attentionRequired));
+  // Open while the batch is live so its output shows as it happens; folded once
+  // done. A batch with a failed call stays open when it settles so the error
+  // stays in view; on history reload it mounts folded with its failed count.
+  const [open, toggleOpen] = useLiveProcessDisclosure({
+    live: trailingLive || counts.running > 0,
+    keepOpenWhenSettled: counts.failed > 0,
+    attentionRequired,
+  });
 
   // The latest live batch drops the count prefix ("运行中" instead of
   // "1 运行中"), nothing more. Idle phases render no filler status here:
@@ -265,10 +237,12 @@ function ToolTraceGroupInner(props: {
           "rounded-lg px-1.5 py-1",
           "text-left text-sm font-[450] text-foreground/60 transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground/75",
         )}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={toggleOpen}
       >
         <BatchIcon className="size-3 shrink-0 text-foreground/45" />
-        <span className="min-w-0 truncate">{headerLabel}</span>
+        <span className="min-w-0 truncate" title={runningActivity?.title}>
+          {headerLabel}
+        </span>
         <ChevronRight
           className={cn(
             "size-3 shrink-0 text-foreground/40 opacity-0",
@@ -341,6 +315,7 @@ export const ToolTraceGroup = memo(
     previous.readOnly === next.readOnly &&
     previous.redactToolContent === next.redactToolContent &&
     previous.showTurnStatus === next.showTurnStatus &&
+    previous.live === next.live &&
     previous.onOpenFileLink === next.onOpenFileLink &&
     previous.items.length === next.items.length &&
     previous.items.every(

@@ -85,6 +85,7 @@ const env = await createDomTestEnv({
               : item.toolCall.name.toLowerCase();
         return { kind, path, fileName: path.split("/").at(-1), link: null };
       },
+      getShellSessionDisplayDetails: () => null,
       getToolActivityCategory: (name) => (name === "Bash" ? "command" : "read"),
       getToolDisplayName: (name) => name,
       getToolTraceKey: (item, index) => item.toolCall.id ?? String(index),
@@ -228,6 +229,53 @@ test("a manual collapse still belongs to the user while the preference is on", (
 
   renderTurn(root, { expandByDefault: true, running: false, active: false });
   assert.deepEqual(disclosureStates(container), ["true", "false", "true"]);
+
+  act(() => root.unmount());
+});
+
+// A live turn with the preference off: the running batch and the streaming
+// thinking segment are open, and fold when they settle — unless the reader has
+// scrolled away from the bottom, where a fold would shift what they are reading.
+function renderLiveRows(root, { live, following }) {
+  act(() => {
+    root.render(
+      React.createElement(
+        ProcessDisclosureProvider,
+        { expandByDefault: false, isViewportFollowing: () => following },
+        React.createElement(ThinkingDisclosure, {
+          text: "先读取文件，再检查测试。",
+          trackKey: "turn-2:r1:thinking-1",
+          active: live,
+        }),
+        React.createElement(ToolTraceGroup, {
+          items: [live ? { toolCall: toolItem.toolCall } : toolItem],
+          runningToolCallIds: live ? ["tool-1"] : [],
+        }),
+      ),
+    );
+  });
+}
+
+test("live rows open while running and fold once settled when the reader follows", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  renderLiveRows(root, { live: true, following: true });
+  assert.deepEqual(disclosureStates(container), ["true", "true"]);
+
+  renderLiveRows(root, { live: false, following: true });
+  assert.deepEqual(disclosureStates(container), ["false", "false"]);
+
+  act(() => root.unmount());
+});
+
+test("live rows stay open on settle while the reader is scrolled away", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  renderLiveRows(root, { live: true, following: false });
+  renderLiveRows(root, { live: false, following: false });
+  assert.deepEqual(disclosureStates(container), ["true", "true"]);
 
   act(() => root.unmount());
 });

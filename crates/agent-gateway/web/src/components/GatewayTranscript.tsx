@@ -1127,7 +1127,10 @@ export function GatewayTranscript({
         {/* Keyed remount per conversation: per-conversation state (measured
             heights, scroll-to-end latch) initializes fresh, and row keys can
             never collide across conversations in the itemSizeCache. */}
-        <ProcessDisclosureProvider expandByDefault={expandProcessByDefault}>
+        <ProcessDisclosureProvider
+          expandByDefault={expandProcessByDefault}
+          isViewportFollowing={isViewportFollowing}
+        >
           <GatewayTranscriptListRegion
             key={conversationId ?? "shared"}
             conversationId={conversationId}
