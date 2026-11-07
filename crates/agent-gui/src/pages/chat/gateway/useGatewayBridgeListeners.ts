@@ -592,11 +592,14 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           afterInitialHistoryPersist: markRuntimeStarted,
         });
         if (!accepted) {
+          // Report the send path's own reason (model/provider config and the
+          // like); the generic text is only for refusals that gave none.
+          const rejection = gatewayBridgeRequest.rejection;
           failClaimedRequest(
             requestId,
             resolvedConversationId,
-            "desktop_runtime_rejected",
-            "Desktop app rejected the remote gateway chat request.",
+            rejection?.errorCode || "desktop_runtime_rejected",
+            rejection?.message || "Desktop app rejected the remote gateway chat request.",
           );
           return;
         }

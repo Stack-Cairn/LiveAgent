@@ -104,6 +104,15 @@ export type ActiveGatewayBridgeRequest = {
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
   commandSafetyModeOverride?: CommandSafetyMode;
+  // Why the desktop refused this turn before its run started. Set by the send
+  // path and reported back to the Gateway with the failed request, so the
+  // remote client sees the real reason instead of a generic rejection.
+  rejection?: GatewayBridgeRejection;
+};
+
+export type GatewayBridgeRejection = {
+  errorCode: string;
+  message: string;
 };
 
 export type SendChatAction = (overrides?: {

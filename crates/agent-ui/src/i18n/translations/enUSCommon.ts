@@ -733,6 +733,16 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.commands.goalPaused": "Goal paused.",
   "chat.commands.goalPauseUnsupported": "Pausing a goal from the composer is not available here",
   "chat.commands.busy": "A task is running. Send it after it finishes or stop it first",
+  "chat.modelConfigRejected.missing":
+    "The desktop app has no model selected for this request. Choose a model and try again.",
+  "chat.modelConfigRejected.invalid":
+    "The model settings sent with this request are invalid. Choose the model again, then retry.",
+  "chat.modelConfigRejected.providerMissing":
+    "The desktop app cannot find the provider of the selected model. Sync the desktop settings, then choose the model again.",
+  "chat.modelConfigRejected.providerTypeMismatch":
+    "The selected model's provider type does not match the desktop configuration. Sync the desktop settings, then choose the model again.",
+  "chat.modelConfigRejected.modelDisabled":
+    "The selected model is not enabled in the desktop app. Sync the desktop settings, then choose the model again.",
   "chat.commands.contextUnsupported":
     "This command cannot carry referenced conversations, large pastes or attachments here; remove them and try again.",
   "chat.commands.loopUsage":

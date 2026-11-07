@@ -23,6 +23,7 @@ function createController(options = {}) {
     },
     flushEvents: options.flushEvents,
     resolveErrorConversationId: options.resolveErrorConversationId,
+    onError: options.onError,
   });
   return { controller, sent };
 }
@@ -466,4 +467,19 @@ test("gateway bridge error can resolve the latest conversation id", () => {
       },
     ],
   );
+});
+
+test("gateway bridge event controller reports every error to onError, even when it forwards nothing", async () => {
+  const errors = [];
+  const { controller, sent } = createController({
+    enabled: false,
+    onError: (message) => errors.push(message),
+  });
+
+  controller.emitError("provider type differs");
+  await controller.close();
+  controller.emitError("after close");
+
+  assert.deepEqual(sent, []);
+  assert.deepEqual(errors, ["provider type differs", "after close"]);
 });
