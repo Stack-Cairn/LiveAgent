@@ -1984,3 +1984,23 @@ test("webui model failover round-trips through gateway settings sync", () => {
   );
   assert.deepEqual(received.modelFailover, edited.modelFailover);
 });
+
+test("WebUI resolves a hand-written K-brain provider type the way the desktop does", () => {
+  const raw = {
+    id: "handwritten",
+    name: "Hand-written",
+    api: "openai-completions",
+    baseUrl: "http://127.0.0.1:47561/v1",
+    models: [{ id: "local-model", name: "local-model" }],
+  };
+  // The desktop snapshot carries K-brain's raw provider entries; a fresh page
+  // load normalizes them without any desktop-side conversion.
+  const web = settings.normalizeSettings({ customProviders: [raw] });
+  assert.equal(web.customProviders[0].type, "codex");
+  assert.equal(web.customProviders[0].requestFormat, "openai-completions");
+
+  const anthropic = settings.normalizeSettings({
+    customProviders: [{ ...raw, api: "anthropic-messages" }],
+  });
+  assert.equal(anthropic.customProviders[0].type, "claude_code");
+});

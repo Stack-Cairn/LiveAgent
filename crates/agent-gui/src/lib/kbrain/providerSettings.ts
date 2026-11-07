@@ -1,30 +1,15 @@
 import { findCatalogModelAcrossProviders } from "@liveagent/ui/lib/models/modelCatalog";
-import { resolveProviderApi } from "@liveagent/ui/lib/providers/providerCapabilities";
 import {
-  type AppSettings,
-  type CustomProvider,
-  normalizeCustomProvider,
-  type ProviderId,
-} from "../settings";
+  resolveKBrainProviderType,
+  resolveKBrainRequestFormat,
+  resolveProviderApi,
+} from "@liveagent/ui/lib/providers/providerCapabilities";
+import { type AppSettings, type CustomProvider, normalizeCustomProvider } from "../settings";
 import { createKBrainClient } from "./client";
 import { getKBrainRuntimeConnection } from "./runtimeConnection";
 import type { KBrainSettingsDocument, KBrainSettingsProvider, KBrainSettingsUpdate } from "./types";
 
 export const KBRAIN_SETTINGS_CHANGED_EVENT = "kbrain:settings-changed";
-
-function providerType(provider: KBrainSettingsProvider): ProviderId {
-  if (["codex", "claude_code", "gemini", "xai", "deepseek"].includes(String(provider.type))) {
-    return provider.type as ProviderId;
-  }
-  switch (provider.api) {
-    case "anthropic-messages":
-      return "claude_code";
-    case "google-generative-ai":
-      return "gemini";
-    default:
-      return "codex";
-  }
-}
 
 export function customProviderFromKBrain(provider: KBrainSettingsProvider): CustomProvider {
   // K-brain 回传同一输出上限的 maxOutputTokens 与 maxOutputToken 两个字段。只保留单数：
@@ -41,11 +26,9 @@ export function customProviderFromKBrain(provider: KBrainSettingsProvider): Cust
   }));
   return normalizeCustomProvider({
     ...provider,
-    type: providerType(provider),
+    type: resolveKBrainProviderType(provider),
     name: provider.name || provider.id,
-    requestFormat:
-      provider.requestFormat ??
-      (provider.api === "openai-completions" ? "openai-completions" : undefined),
+    requestFormat: resolveKBrainRequestFormat(provider),
     apiKey: "",
     apiKeyConfigured: provider.apiKeyConfigured === true,
     models,

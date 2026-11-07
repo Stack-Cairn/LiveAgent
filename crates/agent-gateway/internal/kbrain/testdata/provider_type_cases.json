@@ -1,0 +1,13 @@
+[
+  { "type": "", "api": "anthropic-messages", "want": "claude_code" },
+  { "type": "", "api": "google-generative-ai", "want": "gemini" },
+  { "type": "", "api": "openai-completions", "want": "codex" },
+  { "type": "", "api": "openai-responses", "want": "codex" },
+  { "type": "", "api": "", "want": "codex" },
+  { "type": "unknown", "api": "anthropic-messages", "want": "claude_code" },
+  { "type": "codex", "api": "openai-completions", "want": "codex" },
+  { "type": "claude_code", "api": "anthropic-messages", "want": "claude_code" },
+  { "type": "gemini", "api": "google-generative-ai", "want": "gemini" },
+  { "type": "xai", "api": "openai-responses", "want": "xai" },
+  { "type": "deepseek", "api": "openai-completions", "want": "deepseek" }
+]
