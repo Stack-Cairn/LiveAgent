@@ -154,6 +154,18 @@ function getRunningToolActivity(item: ToolTraceItem, t: (key: string) => string)
   };
 }
 
+function getActiveToolCategories(items: ToolTraceItem[], runningToolCallIds: string[]) {
+  const categories = new Set<ToolActivityCategory>();
+  if (runningToolCallIds.length === 0) return categories;
+  const runningIds = new Set(runningToolCallIds);
+  for (const item of items) {
+    if (item.toolCall.id && runningIds.has(item.toolCall.id)) {
+      categories.add(getToolActivityCategory(item.toolCall.name));
+    }
+  }
+  return categories;
+}
+
 function findLatestRunningTool(items: ToolTraceItem[], runningToolCallIds: string[]) {
   if (runningToolCallIds.length === 0) return null;
   const runningIds = new Set(runningToolCallIds);
@@ -186,6 +198,10 @@ function ToolTraceGroupInner(props: {
     [items, runningToolCallIds],
   );
   const batchCounts = useMemo(() => getToolBatchCounts(items), [items]);
+  const activeCategories = useMemo(
+    () => getActiveToolCategories(items, runningToolCallIds),
+    [items, runningToolCallIds],
+  );
   const attentionRequired = useMemo(
     () => hasActiveUserInteraction(items, runningToolCallIds),
     [items, runningToolCallIds],
@@ -209,17 +225,32 @@ function ToolTraceGroupInner(props: {
           ? `${counts.waiting} ${t("chat.tool.waiting")}`
           : t("chat.tool.success");
 
+  // A category with a call still running reads in the present tense ("正在运行命令"),
+  // and switches to the past tense once its calls are done. Calls without a result
+  // that are not running belong to a settled or interrupted turn, so they read as past.
   // 中文标签之间没有天然的词边界（"读取了文件运行了命令"会黏成一句），
   // 用全角竖线分隔；全角字符自带留白，两侧不再加空格。
   const countLabel = batchCounts
-    .map(({ category }) => t(`chat.tool.batch.${category}`))
+    .map(({ category }) =>
+      activeCategories.has(category)
+        ? t(`chat.tool.batch.${category}.running`)
+        : t(`chat.tool.batch.${category}`),
+    )
     .join(locale === "zh-CN" ? "｜" : " | ");
+  // Collapsed, the header stands in for the batch: it names the call that is running
+  // and carries the batch status. Expanded, every call shows its own row with its
+  // running or failed status, so the header only labels the batch; repeating the
+  // running call there would show one command as two running rows. Rows carry no
+  // waiting status, so the header keeps that one.
   const runningActivity = useMemo(() => {
+    if (open) return null;
     const item = findLatestRunningTool(items, runningToolCallIds);
     return item ? getRunningToolActivity(item, t) : null;
-  }, [items, runningToolCallIds, t]);
+  }, [items, open, runningToolCallIds, t]);
   const headerLabel = runningActivity?.label ?? countLabel;
-  const showStatus = counts.failed > 0 || counts.running > 0 || counts.waiting > 0;
+  const showStatus = open
+    ? counts.failed === 0 && counts.running === 0 && counts.waiting > 0
+    : counts.failed > 0 || counts.running > 0 || counts.waiting > 0;
   const BatchIcon =
     TOOL_BATCH_ICONS[runningActivity?.category ?? batchCounts[0]?.category ?? "other"];
 
