@@ -346,6 +346,70 @@ test("failed update surfaces the gateway error", async () => {
   assert.equal(texts.some((text) => /did not start/.test(text)), true);
 });
 
+test("failed update shows the localized reason for a desktop model config refusal", async () => {
+  const i18n = loader.loadModule("src/i18n/config.ts");
+  const { describeChatRunFailure } = loader.loadModule(
+    "../../agent-ui/src/lib/chat/modelConfigRejection.ts",
+  );
+  for (const [locale, expected] of [
+    ["zh-CN", /所选模型的供应商类型与桌面端配置不一致/],
+    ["en-US", /provider type does not match the desktop configuration/],
+  ]) {
+    const stores = new Map();
+    const failed = [];
+    const pipeline = new ChatCommandPipeline({
+      getTranscriptStore(conversationId) {
+        let store = stores.get(conversationId);
+        if (!store) {
+          store = createTranscriptStore();
+          stores.set(conversationId, store);
+        }
+        return store;
+      },
+      onFailed(_pending, errorCode, message) {
+        failed.push({ errorCode, message });
+      },
+      describeFailure: (errorCode, message) =>
+        describeChatRunFailure(errorCode, message, (key) => i18n.t(key, locale)),
+    });
+    await pipeline.submit({
+      conversationId: "conv-1",
+      clientRequestId: "client-1",
+      message: "hello",
+      submit: async () => ({ runId: "run-1", conversationId: "conv-1", acceptedSeq: 1 }),
+    });
+
+    pipeline.handleCommandUpdate({
+      runId: "run-1",
+      clientRequestId: "client-1",
+      conversationId: "conv-1",
+      phase: "failed",
+      errorCode: "model_config_provider_type_mismatch",
+      message: "远程请求所选模型的供应商类型与桌面端配置不一致",
+    });
+
+    assert.equal(failed.length, 1);
+    assert.equal(failed[0].errorCode, "model_config_provider_type_mismatch");
+    assert.match(failed[0].message, expected);
+    const texts = tailTexts(stores.get("conv-1"));
+    assert.equal(
+      texts.some((text) => expected.test(text)),
+      true,
+    );
+  }
+});
+
+test("failed update keeps the message of codes without a localized reason", async () => {
+  const { describeChatRunFailure } = loader.loadModule(
+    "../../agent-ui/src/lib/chat/modelConfigRejection.ts",
+  );
+  assert.equal(
+    describeChatRunFailure("desktop_runtime_rejected", "Desktop text", () => "unused"),
+    "Desktop text",
+  );
+  assert.equal(describeChatRunFailure(null, "Desktop text", () => "unused"), "Desktop text");
+});
+
 test("run signals settle only on strict identity (runId or own clientRequestId)", async () => {
   const { pipeline } = createHarness();
   let releaseAccept;

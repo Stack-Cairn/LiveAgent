@@ -249,6 +249,53 @@ test("history persistence prefers the latest runtime selection over the turn-sta
   );
 });
 
+test("model selection errors carry a code the remote client can localize", () => {
+  const app = appSettings(
+    [
+      provider({
+        id: "openai-main",
+        models: ["gpt-5", "gpt-5-mini"],
+        activeModels: ["gpt-5"],
+      }),
+    ],
+    { customProviderId: "openai-main", model: "gpt-5" },
+  );
+  const cases = [
+    [{ customProviderId: "", model: "gpt-5", providerType: "codex" }, "model_config_invalid"],
+    [
+      { customProviderId: "missing", model: "gpt-5", providerType: "codex" },
+      "model_config_provider_missing",
+    ],
+    [
+      { customProviderId: "openai-main", model: "gpt-5", providerType: "claude_code" },
+      "model_config_provider_type_mismatch",
+    ],
+    [
+      { customProviderId: "openai-main", model: "gpt-5-mini", providerType: "codex" },
+      "model_config_model_disabled",
+    ],
+  ];
+  for (const [gatewaySelectedModel, code] of cases) {
+    assert.throws(
+      () =>
+        modelSelection.resolveEffectiveChatModelSelection({ settings: app, gatewaySelectedModel }),
+      (error) => {
+        assert.ok(error instanceof modelSelection.ChatModelSelectionError);
+        assert.equal(error.code, code);
+        assert.ok(error.message.length > 0);
+        return true;
+      },
+    );
+  }
+  assert.throws(
+    () =>
+      modelSelection.resolveEffectiveChatModelSelection({
+        settings: appSettings([provider({ id: "openai-main" })]),
+      }),
+    (error) => error.code === "model_config_missing",
+  );
+});
+
 test("selected model json round-trips and rejects malformed payloads", () => {
   assert.equal(
     settings.serializeSelectedModelJson({ customProviderId: "p1", model: "m1" }),

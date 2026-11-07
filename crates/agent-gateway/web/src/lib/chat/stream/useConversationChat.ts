@@ -21,6 +21,7 @@ export function createTranscriptStoreRegistry(hooks?: {
   // onDivergence); reported with the conversation id the store is currently
   // registered under so the app can resubscribe that conversation's stream.
   onDivergence?: (conversationId: string) => void;
+  describeRunFailure?: (errorCode: string | undefined, message: string) => string;
 }): TranscriptStoreRegistry {
   const stores = new Map<string, TranscriptStore>();
   // Mutable identity per store: `move` re-keys a draft store to its real
@@ -33,6 +34,7 @@ export function createTranscriptStoreRegistry(hooks?: {
         const identity = { conversationId };
         store = createTranscriptStore({
           onDivergence: () => hooks?.onDivergence?.(identity.conversationId),
+          describeRunFailure: hooks?.describeRunFailure,
         });
         storeIds.set(store, identity);
         stores.set(conversationId, store);

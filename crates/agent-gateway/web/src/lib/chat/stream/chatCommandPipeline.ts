@@ -55,6 +55,8 @@ export type ChatCommandPipelineHooks = {
   onQueuedInGui?(update: ChatCommandUpdate, pending: PendingChatCommand): void;
   onFailed?(pending: PendingChatCommand, errorCode: string | null, message: string): void;
   onPendingChanged?(): void;
+  // Text shown for a failed command: lets the app localize known error codes.
+  describeFailure?(errorCode: string | null, message: string): string;
 };
 
 const PENDING_COMMAND_TIMEOUT_MS = 60_000;
@@ -316,6 +318,7 @@ export class ChatCommandPipeline {
     errorCode: string | null,
     message: string,
   ): Extract<ChatCommandOutcome, { kind: "failed" }> {
+    message = this.hooks.describeFailure?.(errorCode, message) ?? message;
     const outcome = { kind: "failed" as const, errorCode, message };
     this.settledOutcomes.set(pending, outcome);
     this.startWaiters.get(pending)?.(outcome);

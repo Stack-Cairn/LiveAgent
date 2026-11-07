@@ -449,7 +449,7 @@ test("gateway bridge forwards sandboxOffline on a directly claimed agent turn", 
   }
 });
 
-async function runGatewayListenerScenario({ claims, onListen, kbrainMocks = {} }) {
+async function runGatewayListenerScenario({ claims, onListen, kbrainMocks = {}, sendAction }) {
   const hookHarness = createHookHarness();
   const invokeCalls = [];
   const sendCalls = [];
@@ -509,7 +509,7 @@ async function runGatewayListenerScenario({ claims, onListen, kbrainMocks = {} }
         sendActionRef: {
           current: async (overrides) => {
             sendCalls.push(overrides);
-            return true;
+            return sendAction ? sendAction(overrides) : true;
           },
         },
         queueGatewayBridgeEventForRequest() {},
@@ -582,6 +582,35 @@ test("gateway bridge rejects contradictory composer commands instead of sending 
   assert.equal(sendCalls.length, 0);
   const failed = invokeCalls.find((call) => call.command === "gateway_chat_fail");
   assert.equal(failed?.payload.error_code, "invalid_chat_command");
+});
+
+test("gateway bridge reports the send path's own reason when the desktop refuses a turn", async () => {
+  const { invokeCalls } = await runGatewayListenerScenario({
+    claims: [claimedChat("model-drift", { message: "hello" })],
+    sendAction(overrides) {
+      overrides.gatewayBridgeRequestOverride.rejection = {
+        errorCode: "model_config_provider_type_mismatch",
+        message: "provider type differs",
+      };
+      return false;
+    },
+  });
+  const failed = invokeCalls.filter((call) => call.command === "gateway_chat_fail");
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].payload.error_code, "model_config_provider_type_mismatch");
+  assert.equal(failed[0].payload.message, "provider type differs");
+  assert.equal(failed[0].payload.terminal, true);
+  assert.equal(
+    invokeCalls.some((call) => call.command === "gateway_chat_complete"),
+    false,
+  );
+
+  const generic = await runGatewayListenerScenario({
+    claims: [claimedChat("no-reason", { message: "hello" })],
+    sendAction: () => false,
+  });
+  const genericFail = generic.invokeCalls.find((call) => call.command === "gateway_chat_fail");
+  assert.equal(genericFail?.payload.error_code, "desktop_runtime_rejected");
 });
 
 test("gateway composer action listener runs /loop create and responds once", async () => {

@@ -679,6 +679,32 @@ test("failed run appends an error entry and clears busy", () => {
   assert.match(text, /model exploded/);
 });
 
+test("failed run error text goes through the app's failure description", () => {
+  const described = [];
+  const store = createTranscriptStore({
+    describeRunFailure(errorCode, message) {
+      described.push({ errorCode, message });
+      return errorCode === "model_config_model_disabled" ? "localized: model disabled" : message;
+    },
+  });
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent(
+    runFinished("run-1", 2, "failed", {
+      error_code: "model_config_model_disabled",
+      message: "desktop text",
+    }),
+  );
+  store.flush();
+  const text = allRows(store.getSnapshot())
+    .map((row) => rowText(row))
+    .join("\n");
+  assert.deepEqual(described, [
+    { errorCode: "model_config_model_disabled", message: "desktop text" },
+  ]);
+  assert.match(text, /localized: model disabled/);
+  assert.doesNotMatch(text, /desktop text/);
+});
+
 test("inferred desktop_run_lost marks the streamed copy stale so enrich adopts the persisted reply", () => {
   const store = createTranscriptStore();
   store.applyEvent(userMessage("run-1", 1, "hello"));

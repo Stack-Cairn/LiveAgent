@@ -104,6 +104,15 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 			controlType = strings.TrimSpace(chatControl.GetState())
 		}
 		if reliableChatIngress && (controlType == "completed" || controlType == "failed" || controlType == "cancelled") {
+			// Terminals of mirrored runs travel on the reliable ingress. A
+			// refusal before start has no ingress run, so it settles here.
+			if controlType == "failed" {
+				runID := strings.TrimSpace(env.GetRequestId())
+				if runID == "" {
+					runID = strings.TrimSpace(chatControl.GetRequestId())
+				}
+				m.failUnstartedChatCommand(agentID, runID, chatControl.GetErrorCode(), chatControl.GetMessage())
+			}
 			return
 		}
 		m.ingestChatControl(agentID, env.GetRequestId(), chatControl)

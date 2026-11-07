@@ -12,6 +12,7 @@ import {
   moveCommandRecovery,
 } from "@liveagent/ui/lib/chat/composerCommandRecovery";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
+import { describeChatRunFailure } from "@liveagent/ui/lib/chat/modelConfigRejection";
 import {
   clearSearchJumpTarget,
   getSearchJumpTargetSnapshot,
@@ -388,13 +389,22 @@ function useGatewayAppController() {
   // the api client is not, and divergence resyncs must reach the live client.
   const apiRef = useRef(api);
   apiRef.current = api;
+  // Failure text is resolved when the failure arrives, in the current locale.
+  const localeRef = useRef(settings.locale);
+  localeRef.current = settings.locale;
+  const describeFailure = useCallback(
+    (errorCode: string | null | undefined, message: string) =>
+      describeChatRunFailure(errorCode, message, (key) => translate(key, localeRef.current)),
+    [],
+  );
   const transcriptStoreRegistry = useMemo(
     () =>
       createTranscriptStoreRegistry({
         onDivergence: (divergedConversationId) =>
           apiRef.current?.resyncConversation(divergedConversationId),
+        describeRunFailure: describeFailure,
       }),
-    [],
+    [describeFailure],
   );
   const activityStore = useMemo(() => createActivityStore(), []);
   const pipelineOnBoundRef = useRef<
@@ -416,8 +426,9 @@ function useGatewayAppController() {
         onFailed: (pending, errorCode, message) =>
           pipelineOnFailedRef.current(pending, errorCode, message),
         onPendingChanged: () => setPendingCommandRevision((current) => current + 1),
+        describeFailure,
       }),
-    [transcriptStoreRegistry],
+    [describeFailure, transcriptStoreRegistry],
   );
 
   // --- Sidebar state layer --------------------------------------------------

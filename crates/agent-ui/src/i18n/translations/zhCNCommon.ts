@@ -682,6 +682,14 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.commands.goalPaused": "目标已暂停。",
   "chat.commands.goalPauseUnsupported": "此处暂不支持在输入框暂停目标",
   "chat.commands.busy": "任务进行中，结束或停止后再发送",
+  "chat.modelConfigRejected.missing": "桌面端没有为这次请求选择模型，请选择模型后重试。",
+  "chat.modelConfigRejected.invalid": "这次请求携带的模型配置无效，请重新选择模型后重试。",
+  "chat.modelConfigRejected.providerMissing":
+    "桌面端找不到所选模型的供应商，请同步桌面端设置后重新选择模型。",
+  "chat.modelConfigRejected.providerTypeMismatch":
+    "所选模型的供应商类型与桌面端配置不一致，请同步桌面端设置后重新选择模型。",
+  "chat.modelConfigRejected.modelDisabled":
+    "所选模型未在桌面端启用，请同步桌面端设置后重新选择模型。",
   "chat.commands.contextUnsupported":
     "此指令在这里无法附带会话引用、大段粘贴或附件；请移除后重试。",
   "chat.commands.loopUsage":

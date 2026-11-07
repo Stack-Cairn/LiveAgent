@@ -1162,12 +1162,40 @@ func (m *Manager) FailChatCommand(agentID string, runID string, errorCode string
 	if agentID == "" || runID == "" {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failChatCommandLocked(agentID, runID, errorCode, message, time.Now())
+}
+
+// failUnstartedChatCommand settles a command the desktop app refused before
+// its run started (model or provider config, busy conversation, invalid
+// command). An agent on the reliable chat ingress never mirrors such a run, so
+// the desktop's failed control is the only terminal signal it will ever get;
+// without it the startup watchdog would replace the real reason with a
+// timeout. Runs that started or that the reliable ingress owns are left to
+// the ingress.
+func (m *Manager) failUnstartedChatCommand(agentID string, runID string, errorCode string, message string) {
+	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
+	runID = strings.TrimSpace(runID)
+	if agentID == "" || runID == "" {
+		return
+	}
 	key := agentScopedKey(agentID, runID)
-	now := time.Now()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.reliableIngressOwnsRunLocked(agentID, runID) {
+		return
+	}
+	if record := s.runs[key]; record != nil && record.started {
+		return
+	}
+	s.failChatCommandLocked(agentID, runID, strings.TrimSpace(errorCode), strings.TrimSpace(message), time.Now())
+}
 
+func (s *conversationStreamStore) failChatCommandLocked(agentID string, runID string, errorCode string, message string, now time.Time) {
+	key := agentScopedKey(agentID, runID)
 	if pending := s.pendingRuns[key]; pending != nil {
 		delete(s.pendingRuns, key)
 		s.fireCommandUpdateLocked(ChatCommandUpdate{

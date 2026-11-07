@@ -45,6 +45,9 @@ type GatewayBridgeEventControllerParams = {
   ) => GatewayBridgeSendResult;
   flushEvents?: (requestId: string) => Promise<void>;
   resolveErrorConversationId?: () => string;
+  // Sees every error the turn reports, including ones the event stream does
+  // not forward (reliable ingress drops error events).
+  onError?: (message: string) => void;
 };
 
 export type GatewayBridgeEventController = {
@@ -241,6 +244,7 @@ export function createGatewayBridgeEventController(
       }
     },
     emitError(message: string, conversationIdOverride?: string) {
+      params.onError?.(message);
       queueEvent({
         type: "error",
         message,
