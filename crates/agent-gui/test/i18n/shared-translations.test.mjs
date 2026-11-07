@@ -172,6 +172,7 @@ const dynamicTranslationKeys = [
   "imageStudio.error.generic",
   ...TOOL_ACTIVITY_CATEGORIES.flatMap((category) => [
     `chat.tool.batch.${category}`,
+    `chat.tool.batch.${category}.running`,
     ...(category === "other" ? ["running"] : ["running", "completed", "failed"]).map(
       (phase) => `chat.tool.activity.${category}.${phase}`,
     ),

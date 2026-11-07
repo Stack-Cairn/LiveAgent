@@ -98,6 +98,7 @@ test("every activity category has localized titles in en-US and zh-CN", () => {
     const phases = category === "other" ? ["running"] : ["running", "completed", "failed"];
     const keys = [
       `chat.tool.batch.${category}`,
+      `chat.tool.batch.${category}.running`,
       ...phases.map((phase) => `chat.tool.activity.${category}.${phase}`),
     ];
     for (const key of keys) {

@@ -28,6 +28,8 @@ const env = await createDomTestEnv({
           ({
             "chat.tool.batch.read": "读取了文件",
             "chat.tool.batch.command": "运行了命令",
+            "chat.tool.batch.read.running": "正在读取文件",
+            "chat.tool.batch.command.running": "正在运行命令",
             "chat.tool.running": "运行中",
             "chat.tool.waiting": "等待中",
             "chat.tool.failed": "失败",
@@ -493,11 +495,44 @@ test("an expanded tool batch leaves the running call and its status to the call'
   assert.equal(button.textContent, "正在运行 make test运行中");
 
   click(button);
-  // The row inside names the command and says 运行中; the header only labels the batch.
-  assert.equal(container.querySelector("button").textContent, "运行了命令");
+  // The row inside names the command and says 运行中; the header only labels the batch,
+  // in the present tense while the command runs.
+  assert.equal(container.querySelector("button").textContent, "正在运行命令");
 
   click(container.querySelector("button"));
   assert.equal(container.querySelector("button").textContent, "正在运行 make test运行中");
+
+  act(() => root.unmount());
+});
+
+test("an expanded batch label stays in the present tense until its calls are done", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const readItem = {
+    toolCall: { id: "read-1", name: "read_file", arguments: {} },
+    toolResult: { isError: false },
+  };
+  const commandItem = {
+    toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make test" } },
+  };
+  const render = (items, runningToolCallIds) =>
+    act(() => {
+      root.render(
+        React.createElement(ToolTraceGroup, { items, runningToolCallIds, showTurnStatus: true }),
+      );
+    });
+
+  render([readItem, commandItem], ["bash-1"]);
+  click(container.querySelector("button"));
+  // Only the category with a running call reads as ongoing.
+  assert.equal(container.querySelector("button").textContent, "读取了文件｜正在运行命令");
+
+  render([readItem, { ...commandItem, toolResult: { isError: false } }], []);
+  assert.equal(container.querySelector("button").textContent, "读取了文件｜运行了命令");
+
+  // A call left without a result in a settled turn is not running any more.
+  render([readItem, commandItem], []);
+  assert.match(container.querySelector("button").textContent, /^读取了文件｜运行了命令/);
 
   act(() => root.unmount());
 });

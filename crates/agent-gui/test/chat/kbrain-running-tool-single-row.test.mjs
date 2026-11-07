@@ -203,6 +203,7 @@ function renderRound(round, { approvalPending = false } = {}) {
     const expanded = {
       ...read(),
       rows: host.querySelectorAll("[data-tool-trace-scroll] > *").length,
+      header: host.querySelector("button[aria-expanded]").textContent,
     };
     act(() => root.unmount());
     host.remove();
@@ -231,6 +232,7 @@ test("a running K-brain command shows one running row, collapsed or expanded", a
     if (stage === "result") {
       assert.deepEqual(view.collapsed, { running: 0, waitingApproval: 0, headerNamesCommand: 0 });
       assert.equal(view.expanded.running, 0);
+      assert.equal(view.expanded.header, "chat.tool.batch.command", "result: past tense");
       continue;
     }
     // Collapsed, the batch header stands in for the call.
@@ -239,6 +241,7 @@ test("a running K-brain command shows one running row, collapsed or expanded", a
     // Expanded, the call's own row carries its status and the header no longer
     // repeats the running command.
     assert.equal(view.expanded.headerNamesCommand, 0, `${stage}: expanded header`);
+    assert.equal(view.expanded.header, "chat.tool.batch.command.running", `${stage}: present tense`);
     if (stage === "approval") {
       assert.equal(view.expanded.waitingApproval, 1, "approval: the row waits");
       assert.equal(view.expanded.running, 0, "approval: nothing else says running");
