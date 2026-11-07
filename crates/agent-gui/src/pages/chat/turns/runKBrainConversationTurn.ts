@@ -10,6 +10,10 @@ import {
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
 import {
+  MCP_ELICITATION_DETAILS_KEY,
+  MCP_ELICITATION_SYNTHETIC_ARG_KEYS,
+} from "@liveagent/ui/lib/chat/mcpElicitation";
+import {
   resolveKBrainPermissionMode,
   resolveKBrainRunSandbox,
 } from "@liveagent/ui/lib/chat/permissionModes";
@@ -57,6 +61,12 @@ import {
   noteKBrainSubagentTurnStarted,
 } from "../../../lib/subagents/kbrainSubagentStore";
 import { requestBackendQuestion } from "../../../lib/tools/askUserQuestionTools";
+import {
+  clearMcpElicitationsForConversation,
+  mcpElicitationArgsOverlay,
+  recordMcpElicitationResolution,
+  registerMcpElicitation,
+} from "../../../lib/tools/mcpElicitations";
 import { recordPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { projectBackendPlan } from "../../../lib/tools/planModeTools";
 import { hasPendingToolApproval, requestToolApproval } from "../../../lib/tools/toolApproval";
@@ -186,11 +196,41 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       round: callRounds.get(call.id) ?? round,
     });
   };
+  // The call as the live transcript shows it: the model's arguments without any
+  // elicitation keys of its own, plus the forms the desktop store holds for it.
+  const withElicitationArgs = (call: ToolCall): ToolCall => {
+    const overlay = mcpElicitationArgsOverlay(call.id);
+    const args = call.arguments ?? {};
+    const hasModelKeys = MCP_ELICITATION_SYNTHETIC_ARG_KEYS.some((key) => key in args);
+    if (!hasModelKeys && Object.keys(overlay).length === 0) return call;
+    const stripped = Object.fromEntries(
+      Object.entries(args).filter(
+        ([key]) => !(MCP_ELICITATION_SYNTHETIC_ARG_KEYS as readonly string[]).includes(key),
+      ),
+    );
+    return { ...call, arguments: { ...stripped, ...overlay } };
+  };
+  // Re-renders a call after its elicitation forms changed, locally and on the WebUI.
+  const syncElicitationCall = (toolCallId: string) => {
+    const call = calls.get(toolCallId);
+    const callRound = callRounds.get(toolCallId);
+    if (!call || callRound === undefined) return;
+    if (!results.has(toolCallId)) {
+      params.batchLiveRoundsUpdate(
+        (previous) =>
+          updateLiveRound(previous, callRound, (target) =>
+            upsertToolCallToRound(target, withElicitationArgs(call)),
+          ),
+        transcriptStore,
+      );
+    }
+    pushGatewayToolCall(call);
+  };
   const onToolCall = (call: ToolCall) => {
     calls.set(call.id, call);
     callRounds.set(call.id, round);
     update((target) => ({
-      ...upsertToolCallToRound(collapseThinking(target), call),
+      ...upsertToolCallToRound(collapseThinking(target), withElicitationArgs(call)),
       runningToolCallIds: [...new Set([...target.runningToolCallIds, call.id])],
     }));
     gatewayBridgeEvents.queueEvent({
@@ -220,15 +260,22 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
       prior?.details && !result.details ? { ...result, details: prior.details } : result;
     results.set(call.id, enriched);
     update((target) => ({
-      ...attachToolResultToRound(target, call, enriched),
+      ...attachToolResultToRound(target, withElicitationArgs(call), enriched),
       runningToolCallIds: target.runningToolCallIds.filter((id) => id !== call.id),
     }));
     // WebUI reads `content`/`isError` and attaches the result in the call's round;
     // an Image call also needs its display_image details to render at all.
+    // MCP elicitation records (sensitive values already removed by K-brain) go along so
+    // the WebUI shows the same summaries.
+    const elicitationRecords = (enriched.details as Record<string, unknown> | undefined)?.[
+      MCP_ELICITATION_DETAILS_KEY
+    ];
     const displayImage =
       (enriched.details as { kind?: unknown } | undefined)?.kind === "display_image"
         ? { details: enriched.details }
-        : {};
+        : Array.isArray(elicitationRecords)
+          ? { details: { [MCP_ELICITATION_DETAILS_KEY]: elicitationRecords } }
+          : {};
     gatewayBridgeEvents.queueEvent({
       type: "tool_result",
       id: call.id,
@@ -444,6 +491,23 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           return scope ? { decision: "allow_always", scope } : "allow_always";
         },
         onPermissionAutoResolved,
+        onElicitationRequest: (request, answer, signal) => {
+          registerMcpElicitation({
+            conversationId: params.conversationId,
+            request,
+            answer,
+            signal: AbortSignal.any([approvalController.signal, signal]),
+          });
+          syncElicitationCall(request.toolCallId);
+          // A form closed without a resolution (run ended, stopped) must disappear too.
+          signal.addEventListener("abort", () => syncElicitationCall(request.toolCallId), {
+            once: true,
+          });
+        },
+        onElicitationResolved: (toolCallId, record) => {
+          recordMcpElicitationResolution(params.conversationId, toolCallId, record);
+          syncElicitationCall(toolCallId);
+        },
         onSubagentEvent: (event) =>
           ingestKBrainSubagentEvent(params.conversationId, event.conversation_id, event),
         onSubagent: (subagent) => {
@@ -580,6 +644,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
     }
     noteKBrainSubagentTurnEnded(params.conversationId);
     approvalController.abort();
+    clearMcpElicitationsForConversation(params.conversationId);
     cancellation.userStop.signal.removeEventListener("abort", cancelApprovals);
     status(null);
     hookLifecycle.ensureMessageEnded();

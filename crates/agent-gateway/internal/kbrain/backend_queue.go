@@ -85,6 +85,7 @@ func (r *Relay) startBackendQueuedRun(ctx context.Context, gatewayRunID, convers
 		return false, err
 	}
 	prompt = r.client.withReviewScope(ctx, prompt)
+	prompt = r.client.withMCPElicitation(ctx, prompt)
 	// Serialize session mapping before the backend acceptance; no local FIFO is created.
 	r.backendSubmitMu.Lock()
 	defer r.backendSubmitMu.Unlock()

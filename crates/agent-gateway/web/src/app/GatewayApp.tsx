@@ -61,6 +61,11 @@ import { createGatewayWorkspaceProjectRootClient } from "@/agent-ui-adapters/wor
 import type { GatewayTranscriptNavHandle } from "@/components/GatewayTranscript";
 import { registerAskUserQuestionAnswerHandler } from "@/lib/chat/askUserQuestionBridge";
 import type { HistoryWindowState } from "@/lib/chat/historyWindow";
+import {
+  buildMcpElicitationRequestJson,
+  readMcpElicitationFieldErrors,
+  registerMcpElicitationAnswerHandler,
+} from "@/lib/chat/mcpElicitationBridge";
 import { registerPlanDecisionHandler } from "@/lib/chat/planModeBridge";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
 import {
@@ -813,6 +818,42 @@ function useGatewayAppController() {
       }
     });
     return () => registerAskUserQuestionAnswerHandler(null);
+  }, [api]);
+
+  // MCP elicitation forms: answers go through gateway chat_queue.mcp_elicitation. A refused
+  // answer (400) comes back with per-field messages and the form stays open; the resolution
+  // itself streams back as a tool_call update like every other card.
+  useEffect(() => {
+    if (!api) {
+      registerMcpElicitationAnswerHandler(null);
+      return;
+    }
+    registerMcpElicitationAnswerHandler(async (toolCallId, elicitationId, action, content) => {
+      const conversationIdValue = resolveVisibleConversationId(
+        selectedHistoryIdRef.current,
+        conversationIdRef.current,
+      ).trim();
+      if (!conversationIdValue) {
+        return { ok: false, message: "No active conversation." };
+      }
+      try {
+        const response = await api.chatQueueMcpElicitation(
+          conversationIdValue,
+          toolCallId,
+          buildMcpElicitationRequestJson(elicitationId, action, content),
+        );
+        if (response.accepted) return { ok: true };
+        const fieldErrors = readMcpElicitationFieldErrors(response.itemJson);
+        return {
+          ok: false,
+          message: response.message || undefined,
+          ...(fieldErrors ? { fieldErrors } : {}),
+        };
+      } catch (error) {
+        return { ok: false, message: asErrorMessage(error, "Failed to submit the answer.") };
+      }
+    });
+    return () => registerMcpElicitationAnswerHandler(null);
   }, [api]);
 
   // 工具审批卡片的决定出口：经网关 chat_queue.tool_approval 送达桌面端审批挂起表;

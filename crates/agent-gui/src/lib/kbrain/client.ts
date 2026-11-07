@@ -3,6 +3,12 @@ import {
   legacyKBrainQuestionAnswer,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
+  MCP_ELICITATION_CAPABILITY,
+  type McpElicitationAction,
+  type McpElicitationContent,
+  type McpElicitationSubmitOutcome,
+} from "@liveagent/ui/lib/chat/mcpElicitation";
+import {
   hasFrozenCapability,
   type KBrainHealth,
   readKBrainHealthResponse,
@@ -630,23 +636,24 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     return result;
   }
 
-  // Capability ai_review_per_run: runs send review_scope "per_run" so the permission mode alone
-  // decides AI review (the global setting is hidden). Older backends reject unknown run options,
-  // so the answer comes from /v1/health; a failed read resolves false and is not cached. The
-  // shared read takes no caller's signal; each caller still stops waiting as soon as it aborts.
-  let perRunReview: Promise<boolean> | null = null;
-  function supportsPerRunReview(signal?: AbortSignal): Promise<boolean> {
-    if (!perRunReview) {
-      const read: Promise<boolean> = getHealth().then(
-        (health) => hasFrozenCapability(health, "ai_review_per_run"),
+  // Run capabilities come from one shared /v1/health read: older backends reject unknown run
+  // options, so ai_review_per_run (review_scope "per_run": the permission mode alone decides
+  // AI review) and mcp_elicitation (relay MCP form elicitations) are only sent when advertised.
+  // A failed read resolves null and is not cached. The shared read takes no caller's signal;
+  // each caller still stops waiting as soon as it aborts.
+  let capabilityHealth: Promise<KBrainHealth | null> | null = null;
+  function readRunCapabilities(signal?: AbortSignal): Promise<KBrainHealth | null> {
+    if (!capabilityHealth) {
+      const read: Promise<KBrainHealth | null> = getHealth().then(
+        (health) => health,
         () => {
-          if (perRunReview === read) perRunReview = null;
-          return false;
+          if (capabilityHealth === read) capabilityHealth = null;
+          return null;
         },
       );
-      perRunReview = read;
+      capabilityHealth = read;
     }
-    const pending = perRunReview;
+    const pending = capabilityHealth;
     if (!signal) return pending;
     signal.throwIfAborted();
     return new Promise((resolve, reject) => {
@@ -659,13 +666,33 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     });
   }
 
-  /** Run options with review_scope "per_run" when the backend reviews per permission mode. */
+  async function supportsMcpElicitation(signal?: AbortSignal): Promise<boolean> {
+    const health = await readRunCapabilities(signal);
+    return health ? hasFrozenCapability(health, MCP_ELICITATION_CAPABILITY) : false;
+  }
+
+  /**
+   * Run options with review_scope "per_run" when the backend reviews per permission mode, and
+   * without mcp_elicitation when the backend cannot relay form elicitations.
+   */
   async function scopedRunOptions<T extends KBrainRunOptions | undefined>(
     options: T,
     signal?: AbortSignal,
   ): Promise<T> {
-    if (!options || !(await supportsPerRunReview(signal))) return options;
-    return { ...options, review_scope: "per_run" as const };
+    if (!options) return options;
+    const health = await readRunCapabilities(signal);
+    let scoped: KBrainRunOptions = options;
+    if (health && hasFrozenCapability(health, "ai_review_per_run")) {
+      scoped = { ...scoped, review_scope: "per_run" as const };
+    }
+    if (
+      scoped.mcp_elicitation &&
+      !(health && hasFrozenCapability(health, MCP_ELICITATION_CAPABILITY))
+    ) {
+      const { mcp_elicitation: _unsupported, ...rest } = scoped;
+      scoped = rest;
+    }
+    return scoped as T;
   }
 
   async function startRun(
@@ -676,7 +703,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     const mode = input.options?.permission_mode;
     if (mode === "always" || mode === "auto_edit" || mode === "auto_review") {
       const health = await getHealth(signal);
-      perRunReview ??= Promise.resolve(hasFrozenCapability(health, "ai_review_per_run"));
+      capabilityHealth ??= Promise.resolve(health);
       if (!supportsPermissionMode(health, mode)) {
         throw new Error(
           `K-brain does not support permission mode ${mode}; update the backend before using this mode.`,
@@ -887,6 +914,61 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
         }),
       },
     );
+  }
+
+  /**
+   * Answers an MCP form elicitation. `content` goes only with accept. A 400 leaves the form
+   * pending and carries K-brain's per-field messages; 404 and 409 mean the request is gone
+   * (unknown, already answered or no longer pending). Only the MCP server keeps the content:
+   * nothing here logs or stores it.
+   */
+  async function answerElicitation(
+    conversationId: string,
+    elicitationId: string,
+    runId: string,
+    action: McpElicitationAction,
+    content?: McpElicitationContent,
+  ): Promise<McpElicitationSubmitOutcome> {
+    let response: Response;
+    try {
+      response = await fetchKBrain(
+        `/v1/sessions/${encodeURIComponent(conversationId)}/elicitations/${encodeURIComponent(elicitationId)}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            run_id: runId,
+            elicitation_id: elicitationId,
+            action,
+            ...(action === "accept" ? { content: content ?? {} } : {}),
+          }),
+        },
+        inputOptions,
+      );
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+    if (response.ok) return { ok: true };
+    const body = await response.text().catch(() => "");
+    let message = body.trim();
+    let fieldErrors: Record<string, string> | undefined;
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown; field_errors?: unknown };
+      if (typeof parsed.error === "string" && parsed.error) message = parsed.error;
+      if (isRecord(parsed.field_errors)) {
+        fieldErrors = {};
+        for (const [name, text] of Object.entries(parsed.field_errors)) {
+          if (name && typeof text === "string") fieldErrors[name] = text;
+        }
+      }
+    } catch {
+      // Keep the raw body for non-JSON errors.
+    }
+    return {
+      ok: false,
+      message: message || `K-brain request failed (${response.status})`,
+      ...(fieldErrors && Object.keys(fieldErrors).length > 0 ? { fieldErrors } : {}),
+    };
   }
 
   async function resolveClientTool(
@@ -1106,6 +1188,8 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     resolvePermission,
     resolveQuestion,
     resolveClientTool,
+    answerElicitation,
+    supportsMcpElicitation,
     getHistory,
     listCheckpoints,
     checkpointPreview,

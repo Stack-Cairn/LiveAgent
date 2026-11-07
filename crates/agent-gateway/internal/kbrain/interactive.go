@@ -53,16 +53,17 @@ const (
 	questionSelectedLabelsCapability = "question_selected_labels"
 )
 
-var syntheticArgPrefixes = []string{"__toolApproval", "__toolPermission", "__askUserQuestion", "__exitPlanMode"}
+var syntheticArgPrefixes = []string{"__toolApproval", "__toolPermission", "__askUserQuestion", "__exitPlanMode", "__mcpElicitation"}
 
 // interactiveState holds what WebUI needs to answer a direct K-brain run: the
 // model tool calls seen so far (to redraw a card with or without its pending
-// marker) and the permissions and questions still waiting for an answer.
+// marker) and the permissions, questions and MCP forms still waiting for an answer.
 type interactiveState struct {
 	mu           sync.Mutex
 	calls        map[string]*recordedCall
 	pending      map[string]*pendingInteraction
 	autoResolved map[string]map[string]any
+	elicitations map[string]*callElicitations
 }
 
 type recordedCall struct {
@@ -73,7 +74,7 @@ type recordedCall struct {
 }
 
 type pendingInteraction struct {
-	kind           string // "permission" or "question"
+	kind           string // "permission", "question" or "elicitation"
 	conversationID string
 	sessionID      string
 	runID          string
@@ -90,6 +91,7 @@ func newInteractiveState() *interactiveState {
 		calls:        map[string]*recordedCall{},
 		pending:      map[string]*pendingInteraction{},
 		autoResolved: map[string]map[string]any{},
+		elicitations: map[string]*callElicitations{},
 	}
 }
 
@@ -266,6 +268,16 @@ func (r *Relay) relayRunEvent(ctx context.Context, event Event, conversationID s
 			emit(chat)
 		}
 		return nil, nil
+	case "elicitation.requested":
+		for _, chat := range s.requestElicitation(conversationID, sessionID, event.RunID, payload, emit) {
+			emit(chat)
+		}
+		return nil, nil
+	case "elicitation.resolved":
+		for _, chat := range s.resolveElicitation(conversationID, payload) {
+			emit(chat)
+		}
+		return nil, nil
 	case "client_tool.requested":
 		// Direct runs offer no client tools; answer like the desktop does so a
 		// stray request fails fast instead of waiting for its deadline.
@@ -415,6 +427,7 @@ func (s *interactiveState) callEventLocked(conversationID, toolCallID string) *v
 			args[k] = v
 		}
 	}
+	s.elicitationArgsLocked(key, args)
 	return chatEvent(conversationID, v2.ChatEvent_TOOL_CALL, map[string]any{"id": toolCallID, "name": call.name, "arguments": args})
 }
 
@@ -571,6 +584,17 @@ func (s *interactiveState) finishRun(conversationID, runID string) []*v2.ChatEve
 				call.arguments[argQuestionPending] = false
 			}
 		}
+		if pending.kind == "elicitation" {
+			if state := s.elicitations[interactionKey(conversationID, pending.toolCallID)]; state != nil {
+				kept := state.pending[:0]
+				for _, request := range state.pending {
+					if elicitationID(request) != pending.requestID {
+						kept = append(kept, request)
+					}
+				}
+				state.pending = kept
+			}
+		}
 		if chat := s.callEventLocked(conversationID, pending.toolCallID); chat != nil {
 			out = append(out, chat)
 		}
@@ -589,6 +613,7 @@ func (s *interactiveState) finishRun(conversationID, runID string) []*v2.ChatEve
 			delete(s.autoResolved, key)
 		}
 	}
+	s.dropElicitationsLocked(conversationID, runID)
 	return out
 }
 
@@ -613,8 +638,11 @@ func (s *interactiveState) drop(p *pendingInteraction) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := interactionKey(p.conversationID, p.toolCallID)
-	if p.kind == "question" {
+	switch p.kind {
+	case "question":
 		key = interactionKey(p.conversationID, "question:"+p.toolCallID)
+	case "elicitation":
+		key = elicitationPendingKey(p.conversationID, p.requestID)
 	}
 	if current := s.pending[key]; current != nil && current.requestID == p.requestID {
 		delete(s.pending, key)

@@ -9,6 +9,7 @@ import {
   type HostedSearchBlock,
   normalizeHostedSearchBlock,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import { withMcpElicitationDetails } from "@liveagent/ui/lib/chat/mcpElicitation";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
 import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
 import { parseUserMessageContentWithUploads } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -230,24 +231,28 @@ function toMessage(
       toolName: kbrainToolResultName(message.name),
       content,
       // 运行信息（退出码/超时/耗时）在历史里挂在 assistant 的 tool_calls[] 上。
-      details: withToolRunInfo(
-        message.name,
-        questionResultDetails(
+      // MCP form elicitations of the call ride on the same tool_calls[] entry.
+      details: withMcpElicitationDetails(
+        withToolRunInfo(
           message.name,
-          text,
-          toolCall?.arguments,
-          isError,
-          toolCall?.question_answers,
-        ) ??
-          taskResultDetails(
+          questionResultDetails(
             message.name,
+            text,
             toolCall?.arguments,
-            { output: text, isError },
-            taskRunId ?? "history",
-            index,
+            isError,
+            toolCall?.question_answers,
           ) ??
-          displayImageResultDetails(message.name, images.images, isError),
-        toolCall,
+            taskResultDetails(
+              message.name,
+              toolCall?.arguments,
+              { output: text, isError },
+              taskRunId ?? "history",
+              index,
+            ) ??
+            displayImageResultDetails(message.name, images.images, isError),
+          toolCall,
+        ),
+        toolCall?.elicitations,
       ),
       isError,
       timestamp,

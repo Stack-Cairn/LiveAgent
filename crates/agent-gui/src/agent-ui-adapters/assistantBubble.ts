@@ -1,5 +1,10 @@
 import type { SubagentCardBinding } from "@liveagent/ui/contracts/subagentPane";
 import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuestion";
+import type {
+  McpElicitationAction,
+  McpElicitationContent,
+  McpElicitationSubmitOutcome,
+} from "@liveagent/ui/lib/chat/mcpElicitation";
 import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
 import { useMemo, useSyncExternalStore } from "react";
 import {
@@ -15,6 +20,12 @@ import {
   hasPendingAskUserQuestion,
   subscribeAskUserQuestions,
 } from "../lib/tools/askUserQuestionTools";
+import {
+  answerMcpElicitation,
+  getMcpElicitationVersion,
+  hasPendingMcpElicitationRequest,
+  subscribeMcpElicitations,
+} from "../lib/tools/mcpElicitations";
 import {
   getPermissionAutoResolved,
   getPermissionAutoResolvedVersion,
@@ -79,6 +90,29 @@ export function readAskUserQuestionDeadline(
 
 export function submitAskUserQuestionAnswers(toolCallId: string, answers: AskUserQuestionAnswer[]) {
   return Promise.resolve(answerAskUserQuestion(toolCallId, answers));
+}
+
+// An MCP elicitation form is answerable while the turn runner holds it in the pending store.
+export function useMcpElicitationAnswerable(
+  toolCallId: string,
+  elicitationId: string,
+  _toolArguments: Record<string, unknown> | undefined,
+) {
+  useSyncExternalStore(
+    subscribeMcpElicitations,
+    getMcpElicitationVersion,
+    getMcpElicitationVersion,
+  );
+  return hasPendingMcpElicitationRequest(toolCallId, elicitationId);
+}
+
+export function submitMcpElicitation(
+  toolCallId: string,
+  elicitationId: string,
+  action: McpElicitationAction,
+  content?: McpElicitationContent,
+): Promise<McpElicitationSubmitOutcome> {
+  return answerMcpElicitation(toolCallId, elicitationId, action, content);
 }
 
 export function usePlanDecisionState(toolCallId: string, _toolArguments: Record<string, unknown>) {

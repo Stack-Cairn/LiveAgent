@@ -21,14 +21,16 @@ type interactiveFixture struct {
 	mu     sync.Mutex
 	posts  map[string][]map[string]any
 	status map[string]int
-	events []*gatewayv2.ChatEvent
+	// replies overrides the error body of a path answered with status.
+	replies map[string]string
+	events  []*gatewayv2.ChatEvent
 	// health is the /v1/health body; empty answers 404 (no capability proven).
 	health string
 }
 
 func newInteractiveFixture(t *testing.T) *interactiveFixture {
 	t.Helper()
-	f := &interactiveFixture{t: t, posts: map[string][]map[string]any{}, status: map[string]int{}}
+	f := &interactiveFixture{t: t, posts: map[string][]map[string]any{}, status: map[string]int{}, replies: map[string]string{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/v1/health" {
 			f.mu.Lock()
@@ -52,11 +54,15 @@ func newInteractiveFixture(t *testing.T) *interactiveFixture {
 		f.mu.Lock()
 		f.posts[r.URL.Path] = append(f.posts[r.URL.Path], body)
 		status := f.status[r.URL.Path]
+		reply := f.replies[r.URL.Path]
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		if status != 0 {
 			w.WriteHeader(status)
-			_, _ = w.Write([]byte(`{"error":"cannot store rules: project has no workspace"}`))
+			if reply == "" {
+				reply = `{"error":"cannot store rules: project has no workspace"}`
+			}
+			_, _ = w.Write([]byte(reply))
 			return
 		}
 		_, _ = w.Write([]byte(`{"accepted":true}`))
