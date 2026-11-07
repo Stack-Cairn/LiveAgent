@@ -480,3 +480,36 @@ test("a settled turn without an answer mounts with its trace open, an answered o
     act(() => root.unmount());
   }
 });
+
+test("an expanded tool batch leaves the running call and its status to the call's own row", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const commandItem = {
+    toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make test" } },
+  };
+
+  renderToolTrace(root, true, [commandItem], true);
+  const button = container.querySelector("button");
+  assert.equal(button.textContent, "正在运行 make test运行中");
+
+  click(button);
+  // The row inside names the command and says 运行中; the header only labels the batch.
+  assert.equal(container.querySelector("button").textContent, "运行了命令");
+
+  click(container.querySelector("button"));
+  assert.equal(container.querySelector("button").textContent, "正在运行 make test运行中");
+
+  act(() => root.unmount());
+});
+
+test("an expanded tool batch keeps the waiting status its rows do not show", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const waitingItem = { toolCall: { id: "read-1", name: "read_file", arguments: {} } };
+
+  renderToolTrace(root, false, [waitingItem]);
+  click(container.querySelector("button"));
+  assert.equal(container.querySelector("button").textContent, "读取了文件1 等待中");
+
+  act(() => root.unmount());
+});

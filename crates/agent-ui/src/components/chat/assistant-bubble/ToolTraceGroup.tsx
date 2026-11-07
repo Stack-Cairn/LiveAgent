@@ -214,12 +214,20 @@ function ToolTraceGroupInner(props: {
   const countLabel = batchCounts
     .map(({ category }) => t(`chat.tool.batch.${category}`))
     .join(locale === "zh-CN" ? "｜" : " | ");
+  // Collapsed, the header stands in for the batch: it names the call that is running
+  // and carries the batch status. Expanded, every call shows its own row with its
+  // running or failed status, so the header only labels the batch; repeating the
+  // running call there would show one command as two running rows. Rows carry no
+  // waiting status, so the header keeps that one.
   const runningActivity = useMemo(() => {
+    if (open) return null;
     const item = findLatestRunningTool(items, runningToolCallIds);
     return item ? getRunningToolActivity(item, t) : null;
-  }, [items, runningToolCallIds, t]);
+  }, [items, open, runningToolCallIds, t]);
   const headerLabel = runningActivity?.label ?? countLabel;
-  const showStatus = counts.failed > 0 || counts.running > 0 || counts.waiting > 0;
+  const showStatus = open
+    ? counts.failed === 0 && counts.running === 0 && counts.waiting > 0
+    : counts.failed > 0 || counts.running > 0 || counts.waiting > 0;
   const BatchIcon =
     TOOL_BATCH_ICONS[runningActivity?.category ?? batchCounts[0]?.category ?? "other"];
 

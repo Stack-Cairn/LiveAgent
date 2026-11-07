@@ -53,3 +53,53 @@ test("tool_output is ignored for unknown calls and once the call has a result", 
   assert.equal(Boolean(item.toolResult), true);
   assert.equal(item.liveOutput, undefined, "the result supersedes the live snapshot");
 });
+
+test("a replayed K-brain run keeps one tool row through approval, live output and result", () => {
+  // The relayed wire events of one approved Bash run (K-brain v0.107.24, "Always ask"):
+  // the call, the approval marker and its resolution as call updates, the running
+  // snapshots, then the result. A direct-link reconnect replays them from the start.
+  const id = "bash-approved";
+  const args = { command: "for i in 1 2 3 4 5; do echo $i; sleep 1; done" };
+  const wire = [
+    { type: "tool_call", id, name: "Bash", arguments: args, round: 1 },
+    {
+      type: "tool_call",
+      id,
+      name: "Bash",
+      arguments: { ...args, __toolApprovalPending: true, __toolApprovalSummary: args.command },
+      round: 1,
+    },
+    { type: "tool_status", status: "Waiting for permission…" },
+    { type: "tool_call", id, name: "Bash", arguments: args, round: 1 },
+    { type: "tool_status", status: null },
+    output("1\n", id),
+    output("1\n2\n", id),
+  ];
+  const finished = {
+    ...result,
+    id,
+    content: [{ type: "text", text: "1\n2\n3\n4\n5\n" }],
+    details: { kbrainRun: { durationMs: 5046, exitCode: 0 } },
+  };
+  const toolRows = (turn) => {
+    const assistant = buildTurnRows(turn).find((row) => row.kind === "assistant");
+    const rounds = assistant?.rounds ?? [];
+    return {
+      blocks: rounds.flatMap((round) => round.blocks).filter((block) => block.kind === "tool"),
+      running: rounds.flatMap((round) => round.runningToolCallIds ?? []),
+    };
+  };
+
+  const live = reduce([...wire, ...wire, output("1\n2\n3\n", id)]);
+  const liveRows = toolRows(live);
+  assert.deepEqual(liveRows.blocks.map((block) => block.item.toolCall.id), [id]);
+  assert.deepEqual(liveRows.running, [id]);
+  assert.equal(liveRows.blocks[0].item.liveOutput, "1\n2\n3\n");
+
+  const settled = reduce([...wire, finished, ...wire, finished]);
+  const settledRows = toolRows(settled);
+  assert.deepEqual(settledRows.blocks.map((block) => block.item.toolCall.id), [id]);
+  assert.deepEqual(settledRows.running, []);
+  assert.equal(Boolean(settledRows.blocks[0].item.toolResult), true);
+  assert.equal(settled.entries.filter((entry) => entry.kind === "tool_call").length, 1);
+});
