@@ -12,6 +12,7 @@ import {
   shouldDisplayToolTraceItem,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { type ChatFileLink, parseChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import { hasPendingMcpElicitation } from "@liveagent/ui/lib/chat/mcpElicitation";
 import { type CompactionSeam, getCompactionSeam } from "@liveagent/ui/lib/chat/replyContinuity";
 import { isTaskToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
 import { readToolApprovalPending } from "@liveagent/ui/lib/chat/toolApprovalArgs";
@@ -157,6 +158,8 @@ export function isUserInteractionToolName(name: string) {
  * question / plan card, or an ordinary tool held at the approval gate. The
  * gate fires *before* the call executes, so approval-pending items are not in
  * `runningToolCallIds` and are recognised by the synced argument marker.
+ * MCP elicitation forms count too: the tool is running, but its server is
+ * waiting for the user.
  */
 export function hasActiveUserInteraction(items: ToolTraceItem[], runningToolCallIds: string[]) {
   if (items.length === 0) return false;
@@ -164,6 +167,8 @@ export function hasActiveUserInteraction(items: ToolTraceItem[], runningToolCall
   return items.some((item) => {
     if (item.toolResult) return false;
     if (readToolApprovalPending(item.toolCall.arguments)) return true;
+    // An MCP server is waiting on a form the user has to fill in.
+    if (hasPendingMcpElicitation(item.toolCall.arguments)) return true;
     return (
       isUserInteractionToolName(item.toolCall.name) &&
       Boolean(item.toolCall.id && runningIds.has(item.toolCall.id))
@@ -556,15 +561,21 @@ export function resolveActiveWorkEntry(
  * answered card trailing the whole turn.
  */
 export function isPendingUserInteractionBlock(block: GroupedRoundBlock) {
-  if (block.kind === "tool") {
-    return isUserInteractionToolName(block.item.toolCall.name) && !block.item.toolResult;
-  }
-  if (block.kind === "toolGroup") {
-    return block.items.some(
-      (item) => isUserInteractionToolName(item.toolCall.name) && !item.toolResult,
-    );
-  }
+  if (block.kind === "tool") return isPendingUserInteractionItem(block.item);
+  if (block.kind === "toolGroup") return block.items.some(isPendingUserInteractionItem);
   return false;
+}
+
+/**
+ * An unanswered question / plan card, or a tool whose MCP server is waiting on a form
+ * (elicitation): both block the run until the user answers.
+ */
+function isPendingUserInteractionItem(item: ToolTraceItem) {
+  if (item.toolResult) return false;
+  return (
+    isUserInteractionToolName(item.toolCall.name) ||
+    hasPendingMcpElicitation(item.toolCall.arguments)
+  );
 }
 
 function splitInteractionEntries(entries: readonly AssistantTurnLayoutEntry[]) {
@@ -959,6 +970,9 @@ export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[]
         block.item.toolCall.name === "Image" ||
         isTaskToolName(block.item.toolCall.name) ||
         isUserInteractionToolName(block.item.toolCall.name) ||
+        // A pending MCP form stands alone so it can be pinned outside the trace; once
+        // answered the call flows back into the activity group.
+        isPendingUserInteractionItem(block.item) ||
         block.item.toolCall.name === "ProcessWait" ||
         block.item.toolCall.name === "ProcessStop" ||
         isAgentToolName(block.item.toolCall.name)

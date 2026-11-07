@@ -27,6 +27,7 @@ import {
   normalizeChatRuntimeControls,
 } from "../../../lib/settings";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
+import { answerMcpElicitation } from "../../../lib/tools/mcpElicitations";
 import { answerPlanDecision } from "../../../lib/tools/planModeTools";
 import { answerToolApproval } from "../../../lib/tools/toolApproval";
 import { createTextComposerDraft } from "../composer/composerDraftText";
@@ -1025,6 +1026,48 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           return;
         }
         respond(requestId, { accepted: true });
+        return;
+      }
+
+      // WebUI answer to an MCP elicitation form: itemId is the toolCallId, request_json
+      // carries {elicitationId, action, content?}. The answer goes to K-brain through the
+      // desktop pending store; a 400 comes back with the server's per-field messages in
+      // item_json and the form stays open. The content is never logged or kept.
+      if (action === "mcp_elicitation") {
+        if (!itemId) {
+          fail("mcp_elicitation requires item_id", "invalid_request");
+          return;
+        }
+        let payload: { elicitationId?: unknown; action?: unknown; content?: unknown };
+        try {
+          payload = JSON.parse(request.requestJson || "{}");
+        } catch {
+          fail("invalid elicitation answer payload", "invalid_payload");
+          return;
+        }
+        if (typeof payload?.elicitationId !== "string" || !payload.elicitationId.trim()) {
+          fail("mcp_elicitation requires elicitationId", "invalid_payload");
+          return;
+        }
+        void answerMcpElicitation(itemId, payload.elicitationId, payload.action, payload.content, {
+          conversationId,
+        }).then(
+          (outcome) => {
+            if (outcome.ok) {
+              respond(requestId, { accepted: true });
+              return;
+            }
+            respond(requestId, {
+              accepted: false,
+              message: outcome.message || "elicitation not pending",
+              errorCode: outcome.fieldErrors ? "invalid_content" : "not_found",
+              ...(outcome.fieldErrors
+                ? { itemJson: JSON.stringify({ field_errors: outcome.fieldErrors }) }
+                : {}),
+            });
+          },
+          (error) => fail(error instanceof Error ? error.message : String(error), "internal"),
+        );
         return;
       }
 

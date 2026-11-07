@@ -40,6 +40,8 @@ func (r *Relay) Queue(ctx context.Context, req *gatewayv2.ChatQueueRequest, call
 		return r.answerToolApproval(ctx, strings.TrimSpace(req.GetConversationId()), strings.TrimSpace(req.GetItemId()), req.GetRequestJson())
 	case "tool_answer":
 		return r.answerQuestion(ctx, strings.TrimSpace(req.GetConversationId()), strings.TrimSpace(req.GetItemId()), req.GetRequestJson())
+	case "mcp_elicitation":
+		return r.answerElicitation(ctx, strings.TrimSpace(req.GetConversationId()), strings.TrimSpace(req.GetItemId()), req.GetRequestJson())
 	case "plan_decision":
 		return queueError("unsupported", "Plan approval is not available for K-brain runs in the Gateway yet.")
 	}

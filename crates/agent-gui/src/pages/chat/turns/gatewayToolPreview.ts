@@ -39,6 +39,7 @@ import {
   ensureAskUserQuestionDeadlineAt,
   hasPendingAskUserQuestion,
 } from "../../../lib/tools/askUserQuestionTools";
+import { mcpElicitationArgsOverlay } from "../../../lib/tools/mcpElicitations";
 import { getPermissionAutoResolved } from "../../../lib/tools/permissionAutoResolved";
 import { isPlanApprovalToolCall, isPlanDecisionPending } from "../../../lib/tools/planModeTools";
 import { getPendingToolApproval } from "../../../lib/tools/toolApproval";
@@ -163,7 +164,12 @@ export function withoutApprovalSyntheticArgs(
 export function buildGatewayToolCallPreviewArguments(
   toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
 ) {
-  const sourceArgs = withoutApprovalSyntheticArgs(toolCall.arguments);
+  // MCP elicitation forms of the call, from the desktop's pending store only (the same
+  // keys in the model's arguments were just dropped).
+  const sourceArgs = {
+    ...withoutApprovalSyntheticArgs(toolCall.arguments),
+    ...(toolCall.id ? mcpElicitationArgsOverlay(toolCall.id) : {}),
+  };
   // 待审批标记:任意工具在 beforeToolCall 处挂起等待批准时,盖到同步给 WebUI 的
   // 参数上,让远端渲染审批卡片并显示与桌面同源的倒计时。审批消解后重发的快照
   // 不再带此标记,卡片随之隐藏。__ 前缀合成参数不入展示、不影响本地执行。

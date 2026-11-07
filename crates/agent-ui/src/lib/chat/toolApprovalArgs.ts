@@ -1,3 +1,4 @@
+import { MCP_ELICITATION_SYNTHETIC_ARG_KEYS } from "./mcpElicitation";
 import { deriveFileToolPreview, readStreamPreviewMeta } from "./toolPreview";
 
 // 工具审批的网关同步契约:桌面端在同步给 WebUI 的工具参数上盖“待审批 + 截止
@@ -99,6 +100,9 @@ export const TOOL_APPROVAL_SYNTHETIC_ARG_KEYS: readonly string[] = [
   TOOL_PERMISSION_AUTO_RESOLVED_ARG,
   TOOL_APPROVAL_NOTICE_ARG,
   TOOL_APPROVAL_PREVIEW_ARG,
+  // MCP elicitation forms are stamped only from the desktop's pending store too: a model
+  // must not be able to fake a form on the WebUI.
+  ...MCP_ELICITATION_SYNTHETIC_ARG_KEYS,
 ];
 
 const PREVIEW_CONTEXT_LINES = 3;

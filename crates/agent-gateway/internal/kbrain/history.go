@@ -385,6 +385,7 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 			details := resultDetails(message.Name, historyText(message), args, isError, call.QuestionAnswers)
 			if known {
 				details = withRunInfo(message.Name, details, call.ExitCode, call.TimedOut, call.DurationMs)
+				details = withElicitationDetails(details, decodeElicitations(call.Elicitations))
 			}
 			if details != nil {
 				entry["details"] = details

@@ -21,6 +21,7 @@ import {
   splitTextAroundHostedSearch,
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import { summarizeKBrainToolArgs } from "@liveagent/ui/lib/chat/kbrainToolSummaries";
+import { MCP_ELICITATION_SYNTHETIC_ARG_KEYS } from "@liveagent/ui/lib/chat/mcpElicitation";
 import {
   EXIT_PLAN_MODE_APPROVED_ARG,
   EXIT_PLAN_MODE_PENDING_ARG,
@@ -620,6 +621,7 @@ const DISPLAY_SYNTHETIC_ARG_KEYS = new Set([
   KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG,
   EXIT_PLAN_MODE_PENDING_ARG,
   EXIT_PLAN_MODE_APPROVED_ARG,
+  ...MCP_ELICITATION_SYNTHETIC_ARG_KEYS,
 ]);
 
 // 深度截断超大字符串:MCP 参数可能把超长内容嵌在数组/对象里(如批量写文件),

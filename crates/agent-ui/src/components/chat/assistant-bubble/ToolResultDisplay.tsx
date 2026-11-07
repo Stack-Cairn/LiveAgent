@@ -36,6 +36,7 @@ import {
   type WriteResultDetails,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { formatLiveShellOutput } from "@liveagent/ui/lib/chat/liveShellOutput";
+import { withoutMcpElicitationDetails } from "@liveagent/ui/lib/chat/mcpElicitation";
 import {
   formatToolRunInfo,
   readToolRunInfo,
@@ -1259,7 +1260,8 @@ export function ToolResultDisplay({
   // Error results (and blocked calls) carry an empty details object — showing
   // a literal "{}" would bury the actual error text, which renders below.
   // Run info (exit code, duration) shows as one line, never as raw JSON.
-  const otherDetails = withoutToolRunInfo(result.details);
+  // Elicitation records render as their own cards below the tool row.
+  const otherDetails = withoutMcpElicitationDetails(withoutToolRunInfo(result.details));
   const hasOtherDetails =
     otherDetails !== null &&
     typeof otherDetails === "object" &&

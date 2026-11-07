@@ -100,15 +100,23 @@ export type KBrainQuestionAnswers = {
   question_answers?: KBrainQuestionAnswer[];
 };
 
+/**
+ * MCP form elicitations of a tool call (Stack-Cairn/K-brain#174): K-brain's records with
+ * sensitive values already removed. Parsed by the shared mcpElicitation module.
+ */
+export type KBrainToolElicitations = { elicitations?: unknown[] };
+
 export type KBrainToolCall = KBrainToolRunInfo &
-  KBrainQuestionAnswers & {
+  KBrainQuestionAnswers &
+  KBrainToolElicitations & {
     id: string;
     name: string;
     arguments: unknown;
   };
 
 export type KBrainToolResult = KBrainToolRunInfo &
-  KBrainQuestionAnswers & {
+  KBrainQuestionAnswers &
+  KBrainToolElicitations & {
     content?: KBrainContentBlock[];
     id: string;
     name?: string;
@@ -359,6 +367,11 @@ export type KBrainRunOptions = {
   sandbox?: import("@liveagent/ui/lib/chat/permissionModes").KBrainRunSandbox;
   /** Desktop-executed tools offered to the model for this run (e.g. Browser). */
   client_tools?: KBrainClientToolDefinition[];
+  /**
+   * Relay MCP form elicitations to this client (`elicitation.*` events). Sent only when
+   * K-brain advertises capability mcp_elicitation: older backends reject unknown options.
+   */
+  mcp_elicitation?: boolean;
 };
 
 /** `capabilities.run_sandbox` in /v1/health; every field may be absent on older backends. */

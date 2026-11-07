@@ -60,6 +60,7 @@ import {
 } from "./assistantBubbleUtils";
 import { getConciseToolTarget } from "./conciseToolTarget";
 import { SubagentToolCall } from "./SubagentToolCard";
+import { ToolElicitations } from "./ToolElicitations";
 import { ToolPermissionMarker } from "./ToolPermissionMarker";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
 
@@ -608,6 +609,16 @@ function ToolCallItem({
     </LazyCollapse>
   );
   const containerClassName = "group/tool min-w-0 max-w-full";
+  // MCP elicitation forms sit below the row, outside the collapse: a waiting form must stay
+  // visible whether or not the call is expanded.
+  const elicitations = isRedactedToolContent ? null : (
+    <ToolElicitations
+      toolCallId={item.toolCall.id}
+      args={item.toolCall.arguments}
+      details={result?.details}
+      canAnswer={!readOnly && !result}
+    />
+  );
 
   // 计划卡直出(任务卡风格):不进折叠壳、无摘要行,整卡直接展示——
   // 卡片自带「实施计划」头部与状态,正文不限高(与消息正文同滚动上下文)。
@@ -631,6 +642,7 @@ function ToolCallItem({
     return (
       <div className={containerClassName}>
         <div className={summaryClassName}>{summaryContent}</div>
+        {elicitations}
       </div>
     );
   }
@@ -648,6 +660,7 @@ function ToolCallItem({
       >
         {summaryContent}
       </button>
+      {elicitations}
       {body}
     </div>
   );

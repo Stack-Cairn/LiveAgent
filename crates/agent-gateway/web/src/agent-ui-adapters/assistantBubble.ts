@@ -4,6 +4,13 @@ import {
   readAskUserQuestionDeadlineAt,
   readAskUserQuestionPendingMarker,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
+  hasPendingMcpElicitation,
+  type McpElicitationAction,
+  type McpElicitationContent,
+  type McpElicitationSubmitOutcome,
+  readMcpElicitationPending,
+} from "@liveagent/ui/lib/chat/mcpElicitation";
 import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
 import { readPlanApprovedMarker, readPlanPendingMarker } from "@liveagent/ui/lib/chat/planMode";
 import {
@@ -12,6 +19,10 @@ import {
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { useSyncExternalStore } from "react";
 import { submitAskUserQuestionAnswer } from "../lib/chat/askUserQuestionBridge";
+import {
+  hasMcpElicitationAnswerHandler,
+  submitMcpElicitationAnswer,
+} from "../lib/chat/mcpElicitationBridge";
 import {
   getPlanDecisionOverlayVersion,
   readPlanDecisionOverlay,
@@ -54,6 +65,28 @@ export function readAskUserQuestionDeadline(
 
 export function submitAskUserQuestionAnswers(toolCallId: string, answers: AskUserQuestionAnswer[]) {
   return submitAskUserQuestionAnswer(toolCallId, answers);
+}
+
+// A form is answerable while the synced arguments still list it as pending (the desktop or
+// the gateway relay stamps them) and the gateway answer path is registered.
+export function useMcpElicitationAnswerable(
+  _toolCallId: string,
+  elicitationId: string,
+  toolArguments: Record<string, unknown> | undefined,
+) {
+  if (!hasMcpElicitationAnswerHandler() || !hasPendingMcpElicitation(toolArguments)) return false;
+  return readMcpElicitationPending(toolArguments).some(
+    (request) => request.elicitationId === elicitationId,
+  );
+}
+
+export function submitMcpElicitation(
+  toolCallId: string,
+  elicitationId: string,
+  action: McpElicitationAction,
+  content?: McpElicitationContent,
+): Promise<McpElicitationSubmitOutcome> {
+  return submitMcpElicitationAnswer(toolCallId, elicitationId, action, content);
 }
 
 export function usePlanDecisionState(toolCallId: string, toolArguments: Record<string, unknown>) {

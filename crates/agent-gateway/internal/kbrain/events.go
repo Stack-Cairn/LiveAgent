@@ -70,7 +70,13 @@ func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.Chat
 			}
 			timedOut := result["timed_out"] == true
 			duration, _ := result["duration_ms"].(float64)
-			if details = withRunInfo(name, details, exitCode, timedOut, int64(duration)); details != nil {
+			details = withRunInfo(name, details, exitCode, timedOut, int64(duration))
+			// The raw tool_result is forwarded too, so its copy loses sensitive values as well.
+			elicitations := sanitizeElicitationRecords(result["elicitations"])
+			if elicitations != nil {
+				result["elicitations"] = elicitations
+			}
+			if details = withElicitationDetails(details, elicitations); details != nil {
 				payload["details"] = details
 			}
 			content := []any{map[string]any{"type": "text", "text": result["output"]}}

@@ -154,6 +154,9 @@ type ToolCall struct {
 	// QuestionAnswers are the answers recorded on a question or AskUserQuestion
 	// call (Stack-Cairn/K-brain#168), as in question.resolved. Display only.
 	QuestionAnswers []QuestionAnswer `json:"question_answers,omitempty"`
+	// Elicitations are the MCP forms the call asked the user to fill in
+	// (Stack-Cairn/K-brain#174), sensitive values removed. Display only.
+	Elicitations []json.RawMessage `json:"elicitations,omitempty"`
 }
 
 // QuestionAnswer is one answer to question.requested, as K-brain records it.
@@ -187,7 +190,10 @@ type RunOptions struct {
 	WorkspaceRoots  []WorkspaceRoot `json:"workspace_roots,omitempty"`
 	Tools           *ToolSelection  `json:"tools,omitempty"`
 	PlanModeEnabled bool            `json:"plan_mode_enabled,omitempty"`
-	MCPServerIDs    []string        `json:"mcp_server_ids,omitempty"`
+	// MCPElicitation is set by withMCPElicitation from capability mcp_elicitation;
+	// callers leave it false.
+	MCPElicitation bool     `json:"mcp_elicitation,omitempty"`
+	MCPServerIDs   []string `json:"mcp_server_ids,omitempty"`
 	// Sandbox confines the run's commands with the backend's OS sandbox
 	// (capability run_sandbox). Runs asking for it are refused, never started
 	// unconfined, when the backend cannot enforce it.
@@ -442,6 +448,7 @@ func (c *Client) StartRun(ctx context.Context, sessionID string, in PromptReques
 		return out, 0, err
 	}
 	in = c.withReviewScope(ctx, in)
+	in = c.withMCPElicitation(ctx, in)
 	resp, err := c.request(ctx, http.MethodPost, "/v1/sessions/"+sessionID+"/runs", in, &out)
 	if err != nil {
 		return out, 0, err
