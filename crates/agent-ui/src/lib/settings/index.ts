@@ -23,6 +23,8 @@ import {
 } from "@liveagent/ui/lib/models/modelThinking";
 import {
   providerSupportsNativeWebSearch,
+  resolveKBrainProviderType,
+  resolveKBrainRequestFormat,
   resolveProviderApi,
 } from "@liveagent/ui/lib/providers/providerCapabilities";
 import {
@@ -1269,14 +1271,20 @@ export function normalizeProviderRetryPolicy(input: unknown): ProviderRetryPolic
 
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const type = normalizeProviderId(obj.type);
+  // A K-brain provider entry (it names its wire protocol in `api`) resolves its
+  // type and request format the way K-brain does — the same rule the desktop
+  // app applies — so a hand-written provider without `type` gets the same
+  // type on every client. Plain LiveAgent entries keep the legacy default.
+  const kBrainEntry = typeof obj.api === "string" && obj.api.trim() !== "";
+  const type = kBrainEntry ? resolveKBrainProviderType(obj) : normalizeProviderId(obj.type);
+  const requestFormat = kBrainEntry ? resolveKBrainRequestFormat(obj) : obj.requestFormat;
   const isFullUrl = obj.isFullUrl === true;
   const codexRouting =
     type === "codex" || type === "xai"
       ? normalizeCodexRouting(
           obj.baseUrl,
           // xAI / Grok 固定走 Responses；忽略历史配置中的 completions。
-          type === "xai" ? "openai-responses" : obj.requestFormat,
+          type === "xai" ? "openai-responses" : requestFormat,
           isFullUrl,
         )
       : undefined;

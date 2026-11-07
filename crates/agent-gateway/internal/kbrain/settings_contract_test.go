@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -256,6 +257,24 @@ func TestSettingsRejectsUnpersistedOrMalformedUpdates(t *testing.T) {
 				t.Fatalf("silently accepted %s", input)
 			}
 		})
+	}
+}
+
+// The desktop app and the WebUI resolve provider types with
+// resolveKBrainProviderType in agent-ui, tested against the same cases.
+func TestProviderTypeMatchesSharedCases(t *testing.T) {
+	raw, err := os.ReadFile("testdata/provider_type_cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct{ Type, API, Want string }
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases {
+		if got := providerType(kbrainProvider{Type: tc.Type, API: tc.API}); got != tc.Want {
+			t.Errorf("providerType(type=%q, api=%q) = %q, want %q", tc.Type, tc.API, got, tc.Want)
+		}
 	}
 }
 
