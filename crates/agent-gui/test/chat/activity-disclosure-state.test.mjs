@@ -77,6 +77,7 @@ const env = await createDomTestEnv({
               : item.toolCall.name.toLowerCase();
         return { kind, path, fileName: path.split("/").at(-1), link: null };
       },
+      getShellSessionDisplayDetails: () => null,
       getToolActivityCategory: (name) => (name === "Bash" ? "command" : "read"),
       getToolDisplayName: (name) => name,
       getToolTraceKey: (item, index) => item.toolCall.id ?? String(index),
@@ -327,25 +328,103 @@ test("a new blocking interaction opens the work trace once without stealing late
   act(() => root.unmount());
 });
 
+test("a running tool batch opens, then folds once its calls finish", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  renderToolTrace(root, true);
+  const button = container.querySelector("button");
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  renderToolTrace(root, false);
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+
+  // A later call in the same batch opens it again.
+  renderToolTrace(root, true);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  act(() => root.unmount());
+});
+
+test("a finished tool batch loaded from history mounts collapsed", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  renderToolTrace(root, false);
+  assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "false");
+
+  act(() => root.unmount());
+});
+
 test("manual tool-batch disclosure survives tool completion and restart", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
   renderToolTrace(root, true);
   const button = container.querySelector("button");
-  assert.equal(button.getAttribute("aria-expanded"), "false");
+  assert.equal(button.getAttribute("aria-expanded"), "true");
 
+  // Collapsed by hand while running: finishing and restarting leave it shut.
   click(button);
-  assert.equal(button.getAttribute("aria-expanded"), "true");
-
+  assert.equal(button.getAttribute("aria-expanded"), "false");
   renderToolTrace(root, false);
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.equal(button.getAttribute("aria-expanded"), "false");
   renderToolTrace(root, true);
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+
+  // Reopened by hand: finishing no longer folds it.
+  click(button);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  renderToolTrace(root, false);
   assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  click(button);
-  assert.equal(button.getAttribute("aria-expanded"), "false");
-  renderToolTrace(root, false);
+  act(() => root.unmount());
+});
+
+test("a tool batch that settles with a failed call stays open", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const pending = { toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make" } } };
+  const failed = { ...pending, toolResult: { isError: true } };
+
+  renderToolTrace(root, true, [pending]);
+  const button = container.querySelector("button");
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  renderToolTrace(root, false, [failed]);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  // Reloaded from history the failure shows in the folded header instead.
+  act(() => root.unmount());
+  const reloaded = document.createElement("div");
+  const reloadedRoot = createRoot(reloaded);
+  renderToolTrace(reloadedRoot, false, [failed]);
+  const header = reloaded.querySelector("button");
+  assert.equal(header.getAttribute("aria-expanded"), "false");
+  assert.match(header.textContent, /失败/);
+  act(() => reloadedRoot.unmount());
+});
+
+test("the trailing batch of a running turn stays open between calls", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const render = (live, runningToolCallIds) =>
+    act(() => {
+      root.render(
+        React.createElement(ToolTraceGroup, { items: [toolItem], runningToolCallIds, live }),
+      );
+    });
+
+  render(true, ["tool-1"]);
+  const button = container.querySelector("button");
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  // The call finished but the model is still deciding on the next one.
+  render(true, []);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  // An answer started after it (or the turn ended): now it folds.
+  render(false, []);
   assert.equal(button.getAttribute("aria-expanded"), "false");
 
   act(() => root.unmount());
@@ -427,7 +506,10 @@ test("latest tool batch shows 运行中 while running and no filler status when 
   assert.doesNotMatch(container.querySelector("button").textContent, /思考中/);
   assert.doesNotMatch(container.querySelector("button").textContent, /运行中/);
 
+  // Running, it opens and leaves the status to its rows; folded, the header says 运行中.
   renderToolTrace(root, true, [toolItem], true);
+  assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
+  click(container.querySelector("button"));
   assert.match(container.querySelector("button").textContent, /运行中/);
   assert.doesNotMatch(container.querySelector("button").textContent, /思考中/);
 
@@ -443,6 +525,9 @@ test("a running tool batch names the current operation and caps its expanded hei
 
   renderToolTrace(root, true, [readItem], true);
   const button = container.querySelector("button");
+  // Open while running; folded by hand, the header names the running call.
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  click(button);
   assert.match(button.textContent, /正在读取 App\.tsx/);
   assert.match(button.textContent, /运行中/);
 
@@ -492,15 +577,16 @@ test("an expanded tool batch leaves the running call and its status to the call'
 
   renderToolTrace(root, true, [commandItem], true);
   const button = container.querySelector("button");
-  assert.equal(button.textContent, "正在运行 make test运行中");
+  // Open while running: the row inside names the command and says 运行中; the
+  // header only labels the batch, in the present tense while the command runs.
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.equal(button.textContent, "正在运行命令");
 
   click(button);
-  // The row inside names the command and says 运行中; the header only labels the batch,
-  // in the present tense while the command runs.
-  assert.equal(container.querySelector("button").textContent, "正在运行命令");
+  assert.equal(container.querySelector("button").textContent, "正在运行 make test运行中");
 
   click(container.querySelector("button"));
-  assert.equal(container.querySelector("button").textContent, "正在运行 make test运行中");
+  assert.equal(container.querySelector("button").textContent, "正在运行命令");
 
   act(() => root.unmount());
 });
@@ -523,7 +609,10 @@ test("an expanded batch label stays in the present tense until its calls are don
     });
 
   render([readItem, commandItem], ["bash-1"]);
+  // Open while running. Fold and reopen it by hand so it stays open once done.
   click(container.querySelector("button"));
+  click(container.querySelector("button"));
+  assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
   // Only the category with a running call reads as ongoing.
   assert.equal(container.querySelector("button").textContent, "读取了文件｜正在运行命令");
 

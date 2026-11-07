@@ -358,6 +358,7 @@ for (const [mode, runTurn, decision, expectedDecision] of [
     const context = { systemPrompt: "system", messages: [{ role: "user", content: [{ type: "text", text: "inspect" }], timestamp: 1 }] };
     let state = createConversationStateFromContext(context);
     let rounds = [];
+    const thinkingOpenStates = [];
     let persisted;
     const hooks = [];
     const errors = [];
@@ -374,7 +375,7 @@ for (const [mode, runTurn, decision, expectedDecision] of [
       hookLifecycle: Object.fromEntries(["startAgent", "startTurn", "ensureMessageEnded", "endTurn", "endAgent"].map((key) => [key, () => hooks.push(key)])),
       buildPreparedContext: () => context, getNextConversationState: () => state,
       applyConversationState: (value) => { state = value; },
-      batchLiveRoundsUpdate: (update) => { rounds = update(rounds); },
+      batchLiveRoundsUpdate: (update) => { rounds = update(rounds); thinkingOpenStates.push(rounds[0]?.thinkingOpen); },
       updateToolStatus() {}, updateGatewayBridgeToolStatus() {}, freezeGatewayFinalProjection() {}, settleLiveTranscript() {},
       persistConversationWithHistorySync: async (value) => { persisted = value; return true; },
     });
@@ -399,6 +400,10 @@ for (const [mode, runTurn, decision, expectedDecision] of [
     assert.equal(JSON.stringify(runBody).includes("system message"), false);
     assert.equal(rounds[0].blocks.find((block) => block.kind === "text").text, "Hello");
     assert.equal(rounds[0].blocks.find((block) => block.kind === "thinking").text, "Checking");
+    // The thinking segment streams open ("Thinking"), and the text after it folds it.
+    const thinkingStreamed = thinkingOpenStates.indexOf(true);
+    assert.ok(thinkingStreamed >= 0, `thinking never streamed open: ${thinkingOpenStates}`);
+    assert.equal(thinkingOpenStates[thinkingStreamed + 1], false);
     const expectedOutput = expectedDecision === "reject" ? "permission rejected" : "file contents";
     const toolResult = rounds[0].blocks.find((block) => block.kind === "tool" && block.item.toolCall.id === "call").item.toolResult;
     assert.equal(toolResult.content[0].text, expectedOutput);

@@ -177,6 +177,10 @@ const dynamicTranslationKeys = [
       (phase) => `chat.tool.activity.${category}.${phase}`,
     ),
   ]),
+  // FileOperationKind in assistantBubbleUtils: tool rows read `chat.tool.file.${kind}.${phase}`.
+  ...["read", "create", "edit", "delete"].flatMap((kind) =>
+    ["running", "completed", "failed"].map((phase) => `chat.tool.file.${kind}.${phase}`),
+  ),
   ...builtinToolCatalog.BUILTIN_TOOL_CATEGORIES.map((category) => category.labelKey),
   ...builtinToolCatalog.BUILTIN_TOOL_CATALOG.flatMap((entry) => [
     `settings.builtinTool.${entry.id}.name`,
@@ -254,6 +258,46 @@ test("both hosts keep locale keys and placeholders aligned", () => {
         placeholders(translations["zh-CN"][key]),
         `${host} locale placeholders differ for ${key}`,
       );
+    }
+  }
+});
+
+// Tool batch headers and tool rows put a verb before a target ("Ran pnpm test",
+// "读取 App.tsx"); a label that wraps or crowds the target out defeats the point.
+const TOOL_LABEL_MAX_COLUMNS = 20;
+const toolLabelKey = /^chat\.tool\.(batch|activity|file)\./;
+
+function labelColumns(value) {
+  let columns = 0;
+  for (const character of value) columns += /[\u3000-\u9fff\uff00-\uffef]/.test(character) ? 2 : 1;
+  return columns;
+}
+
+test("tool activity labels stay short in every locale", () => {
+  for (const [host, translations] of hostTranslations) {
+    for (const locale of locales) {
+      const keys = Object.keys(translations[locale]).filter((key) => toolLabelKey.test(key));
+      assert.ok(keys.length > 50, `${host} ${locale} tool labels were not found`);
+      for (const key of keys) {
+        const value = translations[locale][key];
+        assert.ok(
+          labelColumns(value) <= TOOL_LABEL_MAX_COLUMNS,
+          `${host} ${locale} ${key} is too long for a tool header: ${value}`,
+        );
+      }
+    }
+  }
+});
+
+test("shell rows name the command instead of a separate title string", () => {
+  for (const [host, translations] of hostTranslations) {
+    for (const locale of locales) {
+      for (const phase of ["running", "completed", "failed"]) {
+        assert.ok(
+          !Object.hasOwn(translations[locale], `chat.tool.shell.${phase}Title`),
+          `${host} ${locale} still ships chat.tool.shell.${phase}Title`,
+        );
+      }
     }
   }
 });

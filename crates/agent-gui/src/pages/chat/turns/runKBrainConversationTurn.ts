@@ -329,7 +329,12 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           gatewayBridgeEvents.queueToken(delta, { round });
         },
         onThinkingDelta: (delta) => {
-          update((target) => appendThinkingDeltaToRound(target, delta));
+          // thinkingOpen marks the segment as streaming (open, "Thinking"); the next
+          // text delta or tool call folds it through collapseThinking.
+          update((target) => ({
+            ...appendThinkingDeltaToRound(target, delta),
+            thinkingOpen: true,
+          }));
           gatewayBridgeEvents.queueEvent({
             type: "thinking",
             text: delta,

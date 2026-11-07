@@ -162,8 +162,8 @@ function countMatches(text, pattern) {
   return text.split(pattern).length - 1;
 }
 
-// Renders the round as the transcript does and reads what the reader sees, with the
-// tool batch collapsed and then expanded.
+// Renders the round as the transcript does and reads what the reader sees in the
+// state the batch mounts in, then after one click: collapsed and expanded.
 function renderRound(round, { approvalPending = false } = {}) {
   if (approvalPending) pendingApprovals.add("bash-1");
   try {
@@ -197,17 +197,27 @@ function renderRound(round, { approvalPending = false } = {}) {
         ),
       };
     };
-    const collapsed = read();
-    const header = host.querySelector("button[aria-expanded]");
-    act(() => header.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    const expanded = {
+    const readState = () => ({
       ...read(),
       rows: host.querySelectorAll("[data-tool-trace-scroll] > *").length,
       header: host.querySelector("button[aria-expanded]").textContent,
-    };
+    });
+    const header = host.querySelector("button[aria-expanded]");
+    const initiallyOpen = header.getAttribute("aria-expanded") === "true";
+    const initial = readState();
+    act(() => header.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const toggled = readState();
+    const [collapsed, expanded] = initiallyOpen ? [toggled, initial] : [initial, toggled];
+    delete collapsed.rows;
+    delete collapsed.header;
     act(() => root.unmount());
     host.remove();
-    return { groups: groups.map((group) => [group.kind, group.items.map((item) => item.toolCall.id)]), collapsed, expanded };
+    return {
+      groups: groups.map((group) => [group.kind, group.items.map((item) => item.toolCall.id)]),
+      initiallyOpen,
+      collapsed,
+      expanded,
+    };
   } finally {
     pendingApprovals.delete("bash-1");
   }
@@ -228,6 +238,8 @@ test("a running K-brain command shows one running row, collapsed or expanded", a
     const view = renderRound(round, { approvalPending: stage === "approval" });
     assert.deepEqual(view.groups, [["toolGroup", ["bash-1"]]], stage);
     assert.equal(view.expanded.rows, 1, `${stage}: one row inside the batch`);
+    // Open while the command runs; a finished batch mounts folded.
+    assert.equal(view.initiallyOpen, stage !== "result", `${stage}: default disclosure`);
 
     if (stage === "result") {
       assert.deepEqual(view.collapsed, { running: 0, waitingApproval: 0, headerNamesCommand: 0 });
