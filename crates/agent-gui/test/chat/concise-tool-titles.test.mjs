@@ -105,3 +105,20 @@ test("searches name the pattern, not key=value pairs", () => {
   assert.match(target.full, /path=\./);
   assert.equal(target.lossy, true);
 });
+
+test("host bridge tools name the terminal or the tunnel target, not key=value pairs", () => {
+  assert.deepEqual(getConciseToolTarget(tool("ReadTerminal", { terminal_id: "term-2", max_bytes: 4096 })), {
+    text: "term-2",
+    full: "term-2",
+    lossy: false,
+  });
+  // No terminal picked: the verb ("Read terminal") is the whole title.
+  assert.equal(getConciseToolTarget(tool("ReadTerminal", { max_bytes: 4096 })).text, "");
+  const created = getConciseToolTarget(
+    tool("TunnelManager", { action: "create", targetUrl: "https://localhost:5173/app?x=1", ttlSeconds: 900 }),
+  );
+  assert.equal(created.text, "localhost:5173/app?x=1");
+  assert.doesNotMatch(created.text, /action=|ttlSeconds/);
+  assert.equal(getConciseToolTarget(tool("TunnelManager", { action: "close", id: "tun-1" })).text, "tun-1");
+  assert.equal(getConciseToolTarget(tool("TunnelManager", { action: "list" })).text, "");
+});

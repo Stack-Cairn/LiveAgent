@@ -448,6 +448,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.systemToolsEmpty": "没有匹配的工具",
   "settings.systemToolsClear": "清除筛选",
   "settings.systemToolsAlwaysAllowed": "只读 · 始终允许",
+  "settings.hostBridge.available": "桌面端可用",
+  "settings.hostBridge.tunnelsOff": "需开启远程隧道",
+  "settings.hostBridge.unsupported": "需更新 K-brain",
+  "settings.hostBridge.unavailable": "桌面桥接未连接",
+  "settings.hostBridge.hint":
+    "K-brain 通过 LiveAgent 桌面端执行此工具，桌面端会向它启动的每个 K-brain 注册。",
   "settings.systemToolsDesc":
     "查看 LiveAgent 在 Agent 模式下自动注册的内置工具，并为每个工具设置审批策略（放行 / 执行前询问 / 拒绝）。",
   "settings.builtinToolCategory.fs": "文件系统",

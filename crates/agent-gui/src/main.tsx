@@ -4,6 +4,8 @@ import "./index.css";
 import "katex/dist/katex.min.css";
 import "streamdown/styles.css";
 import { installReactDevTimelineLimit } from "@liveagent/ui/lib/system/reactDevTimeline";
+import { watchHostBridgeStatus } from "@liveagent/ui/lib/tools/hostBridgeStatus";
+import { isTauriHost } from "./lib/host";
 import {
   connectKBrainBackendWithRetry,
   createKBrainBootstrapRunner,
@@ -13,11 +15,16 @@ import { migrateAllHistoryOnce } from "./lib/kbrain/historyMigration";
 import { inferRuntimePlatform } from "./lib/runtimePlatform";
 import { createStartupRenderer } from "./lib/startup/render";
 import { installWebviewNavigationGuard } from "./lib/system/webviewNavigationGuard";
+import { listen } from "./shims/tauriEvent";
 
 if (import.meta.env.DEV) {
   const stopReactTimelineLimit = installReactDevTimelineLimit();
   import.meta.hot?.dispose(stopReactTimelineLimit);
 }
+
+// The desktop re-registers its host bridge on every K-brain restart; follow its status so
+// run options and Settings see which bridge tools K-brain has.
+if (isTauriHost()) void watchHostBridgeStatus(listen);
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 

@@ -90,6 +90,18 @@ export function getConciseToolTarget(item: ToolTraceItem): ConciseToolTarget {
     const ssh = summarizeSshManagerCall(args);
     if (ssh) return { text: ssh.text, full: ssh.full, lossy: ssh.full !== ssh.text };
   }
+  if (name === "ReadTerminal") {
+    // The verb already says "terminal"; name the tab only when one was picked.
+    const terminal = stringArgument(args, "terminal_id", "session_id");
+    return target(truncateColumns(terminal), terminal);
+  }
+  if (name === "TunnelManager") {
+    // The verb carries the action (Created tunnel, Closed tunnel, ...).
+    const targetUrl = stringArgument(args, "targetUrl");
+    if (targetUrl) return target(conciseUrl(targetUrl), summary() || targetUrl);
+    const id = stringArgument(args, "id", "tunnel_id");
+    return target(truncateColumns(id), summary() || id);
+  }
   if (name === LSP_TOOL_NAME) {
     const lsp = summary();
     return target(truncateColumns(collapseWhitespace(lsp)), lsp);

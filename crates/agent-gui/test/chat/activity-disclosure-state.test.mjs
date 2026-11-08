@@ -18,6 +18,7 @@ const env = await createDomTestEnv({
     },
     "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils": {
       getToolActivityCategory: () => "read",
+      getToolActivityTitleKey: (_toolCall, phase) => `chat.tool.activity.read.${phase}`,
       getToolTraceKey: (item, index) => item.toolCall.id ?? String(index),
     },
     "@liveagent/ui/components/IconSet": { Brain: EmptyIcon, ChevronDown: EmptyIcon },
@@ -79,6 +80,8 @@ const env = await createDomTestEnv({
       },
       getShellSessionDisplayDetails: () => null,
       getToolActivityCategory: (name) => (name === "Bash" ? "command" : "read"),
+      getToolActivityTitleKey: (toolCall, phase) =>
+        `chat.tool.activity.${toolCall.name === "Bash" ? "command" : "read"}.${phase}`,
       getToolDisplayName: (name) => name,
       getToolTraceKey: (item, index) => item.toolCall.id ?? String(index),
       isWebFetchToolName: (name) => name === "web_fetch" || name === "WebFetch",

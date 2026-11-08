@@ -131,7 +131,7 @@ const builtinToolCatalog = guiLoader.loadModule(
   "@liveagent/ui/lib/tools/builtinToolCatalog.ts",
 );
 const imagingErrors = guiLoader.loadModule("@liveagent/ui/lib/imaging/errors.ts");
-const { TOOL_ACTIVITY_CATEGORIES } = guiLoader.loadModule(
+const { TOOL_ACTIVITY_CATEGORIES, TUNNEL_TOOL_ACTIONS } = guiLoader.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts",
 );
 const dynamicTranslationKeys = [
@@ -177,6 +177,10 @@ const dynamicTranslationKeys = [
       (phase) => `chat.tool.activity.${category}.${phase}`,
     ),
   ]),
+  // getToolActivityTitleKey: TunnelManager rows read `chat.tool.tunnel.${action}.${phase}`.
+  ...TUNNEL_TOOL_ACTIONS.flatMap((action) =>
+    ["running", "completed", "failed"].map((phase) => `chat.tool.tunnel.${action}.${phase}`),
+  ),
   // FileOperationKind in assistantBubbleUtils: tool rows read `chat.tool.file.${kind}.${phase}`.
   ...["read", "create", "edit", "delete"].flatMap((kind) =>
     ["running", "completed", "failed"].map((phase) => `chat.tool.file.${kind}.${phase}`),

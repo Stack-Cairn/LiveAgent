@@ -1,4 +1,5 @@
 import { readKBrainHealthResponse } from "@liveagent/ui/lib/kbrain/health";
+import { loadHostBridgeStatus } from "@liveagent/ui/lib/tools/hostBridgeStatus";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriHost } from "../host";
 import {
@@ -24,6 +25,8 @@ type BootstrapInvoke = typeof invoke;
 
 const DEFAULT_BROWSER_BOOTSTRAP_TIMEOUT_MS = 5_000;
 const DEFAULT_DESKTOP_BOOTSTRAP_TIMEOUT_MS = 20_000;
+// Re-registering the host bridge is a loopback health check plus one PUT.
+const HOST_BRIDGE_REFRESH_TIMEOUT_MS = 3_000;
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
@@ -162,6 +165,13 @@ export async function connectKBrainBackend(
     options.signal,
   );
   setKBrainRuntimeConnection({ ...connection, managedLocal: true });
+  // The desktop registers its host bridge (ReadTerminal, TunnelManager) with every K-brain it
+  // starts; refreshing here makes sure the backend just (re)connected has it before the first
+  // run, and tells the run options which bridge tools K-brain knows. Never fails the connect.
+  await loadHostBridgeStatus(invokeFn, {
+    refresh: true,
+    timeoutMs: HOST_BRIDGE_REFRESH_TIMEOUT_MS,
+  });
   return getConfiguredKBrainConnection() as KBrainRuntimeConnection;
 }
 

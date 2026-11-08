@@ -1,3 +1,4 @@
+import { getHostBridgeTools } from "@liveagent/ui/lib/tools/hostBridgeStatus";
 import type { KBrainRunOptions } from "./types";
 
 type KBrainToolPolicy = "ask" | "allow" | "deny";
@@ -25,7 +26,8 @@ type KBrainToolPolicies = NonNullable<NonNullable<KBrainRunOptions["tools"]>["po
  *
  * Deliberately absent: tools K-brain registers only conditionally (lsp, browser_exec,
  * computer_exec, workflow, ToolSearch, dynamic MCP tools) — a policy for one that is missing
- * in this session would reject the run — and the subagent tools.
+ * in this session would reject the run — and the subagent tools. Tools the desktop host bridge
+ * provides are added per run from its live registration (see `hostTools`).
  */
 export const KBRAIN_POLICY_TOOL_NAMES: ReadonlySet<string> = new Set([
   "Read",
@@ -56,6 +58,13 @@ export const KBRAIN_POLICY_TOOL_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Host-bridge tools that are only registered while the desktop provides them. K-brain adds
+ * them to a session when a run starts, so a policy for one is valid exactly while the bridge
+ * registration lists it (TunnelManager follows the Remote tunnels switch).
+ */
+const KBRAIN_HOST_BRIDGE_POLICY_TOOL_NAMES: ReadonlySet<string> = new Set(["TunnelManager"]);
+
+/**
  * LiveAgent settings keys whose K-brain tool has another name. The settings catalog's Memory
  * Manager entry predates K-brain; K-brain's LiveAgent-compatible store tool is `memory_manager`.
  * An explicit policy under the K-brain name wins over the alias.
@@ -74,15 +83,18 @@ function isKBrainToolPolicy(value: unknown): value is KBrainToolPolicy {
  */
 export function canonicalKBrainToolPolicies(
   configured: Record<string, unknown> | undefined | null,
+  hostTools: ReadonlySet<string> = getHostBridgeTools(),
 ): KBrainToolPolicies {
+  const accepts = (name: string) =>
+    KBRAIN_POLICY_TOOL_NAMES.has(name) ||
+    (KBRAIN_HOST_BRIDGE_POLICY_TOOL_NAMES.has(name) && hostTools.has(name));
   const policies = new Map<string, KBrainToolPolicy>();
   for (const [alias, target] of Object.entries(KBRAIN_POLICY_ALIASES)) {
     const policy = configured?.[alias];
     if (isKBrainToolPolicy(policy)) policies.set(target, policy);
   }
   for (const [name, policy] of Object.entries(configured ?? {})) {
-    if (KBRAIN_POLICY_TOOL_NAMES.has(name) && isKBrainToolPolicy(policy))
-      policies.set(name, policy);
+    if (accepts(name) && isKBrainToolPolicy(policy)) policies.set(name, policy);
   }
   return Object.fromEntries(
     [...policies].sort(([left], [right]) => left.localeCompare(right)),

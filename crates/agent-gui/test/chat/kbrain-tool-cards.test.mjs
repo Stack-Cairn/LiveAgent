@@ -65,7 +65,8 @@ test("K-brain MCP names get readable titles and cua-driver detection", () => {
 
 const KBRAIN_TOOLS = {
   TerminalSession: { category: "command", Icon: "Terminal" },
-  ReadTerminal: { category: "read", Icon: "ScrollText" },
+  ReadTerminal: { category: "terminal", Icon: "ScrollText" },
+  TunnelManager: { category: "tunnel", Icon: "Link2" },
   PlanningQuery: { category: "planning", Icon: "CalendarDays" },
   PlanningMutate: { category: "planning", Icon: "CalendarDays" },
   wait: { category: "wait", Icon: "Timer" },
@@ -110,11 +111,35 @@ test("every activity category has localized titles in en-US and zh-CN", () => {
   assert.equal(zhCN.ZH_CN_COMMON_TRANSLATIONS["chat.tool.activity.memory.completed"], "已使用记忆");
 });
 
+test("tunnel rows are titled by their action; other tools fall back to the category", () => {
+  const key = (name, args, phase) =>
+    utils.getToolActivityTitleKey({ id: "t", name, arguments: args }, phase);
+  for (const action of utils.TUNNEL_TOOL_ACTIONS) {
+    for (const phase of ["running", "completed", "failed"]) {
+      const titleKey = key("TunnelManager", { action }, phase);
+      assert.equal(titleKey, `chat.tool.tunnel.${action}.${phase}`);
+      assert.ok(enUS.EN_US_COMMON_TRANSLATIONS[titleKey], `en-US ${titleKey}`);
+      assert.ok(zhCN.ZH_CN_COMMON_TRANSLATIONS[titleKey], `zh-CN ${titleKey}`);
+    }
+  }
+  assert.equal(key("TunnelManager", { action: "rotate" }, "running"), "chat.tool.activity.tunnel.running");
+  assert.equal(key("TunnelManager", {}, "completed"), "chat.tool.activity.tunnel.completed");
+  assert.equal(key("ReadTerminal", { terminal_id: "t" }, "failed"), "chat.tool.activity.terminal.failed");
+  assert.equal(key("SomeMcpTool", {}, "running"), null);
+  assert.equal(enUS.EN_US_COMMON_TRANSLATIONS["chat.tool.tunnel.create.completed"], "Created tunnel");
+  assert.equal(enUS.EN_US_COMMON_TRANSLATIONS["chat.tool.activity.terminal.completed"], "Read terminal");
+});
+
 test("K-brain tool summaries show the argument that matters", () => {
   assert.equal(summarize("TerminalSession", { command: "npm run dev" }), "npm run dev");
   assert.equal(
     summarize("ReadTerminal", { session_id: "term-3", max_bytes: 4096 }),
     "session=term-3 maxBytes=4096",
+  );
+  // The host bridge's ReadTerminal names a LiveAgent terminal.
+  assert.equal(
+    summarize("ReadTerminal", { terminal_id: "term-2", max_bytes: 4096 }),
+    "terminal=term-2 maxBytes=4096",
   );
   assert.equal(
     summarize("wait", {

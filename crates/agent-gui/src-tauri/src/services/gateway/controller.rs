@@ -374,6 +374,16 @@ impl GatewayController {
         self.apply_config(config)
     }
 
+    /// Current (normalized) Remote settings.
+    pub fn remote_settings(&self) -> RemoteSettingsPayload {
+        self.config_tx.borrow().clone()
+    }
+
+    /// Follows Remote settings changes (`apply_config`).
+    pub fn subscribe_remote_settings(&self) -> watch::Receiver<RemoteSettingsPayload> {
+        self.config_tx.subscribe()
+    }
+
     pub fn status(&self) -> GatewayStatusSnapshot {
         self.status
             .lock()

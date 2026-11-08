@@ -7,9 +7,16 @@ const fresh = { ...old, baseUrl: "http://new.test", token: "new" };
 
 function setup(t, fetch, desktop = true) {
   let connections = 0;
+  let bridgeRefreshes = 0;
   const loader = createTsModuleLoader({ mocks: {
     "@liveagent/app/shims/tauriCore": { invoke: async (command) => { assert.equal(command, "planning_migrate_legacy"); } },
-    "@tauri-apps/api/core": { invoke: async () => { connections++; return fresh; } },
+    "@tauri-apps/api/core": { invoke: async (command, args) => {
+      // Every (re)connect re-registers the desktop host bridge with the new K-brain.
+      if (command === "host_bridge_status") { assert.deepEqual(args, { refresh: true }); bridgeRefreshes++; return { state: "registered", tools: ["ReadTerminal"] }; }
+      assert.equal(command, "kbrain_backend_connection");
+      connections++;
+      return fresh;
+    } },
     [new URL("../../src/lib/host.ts", import.meta.url).pathname]: { isTauriHost: () => desktop },
   } });
   t.mock.method(globalThis, "fetch", fetch);
@@ -18,6 +25,7 @@ function setup(t, fetch, desktop = true) {
   return {
     runtime,
     connections: () => connections,
+    bridgeRefreshes: () => bridgeRefreshes,
     transport: loader.loadModule("src/lib/kbrain/transport.ts"),
     client: loader.loadModule("src/lib/kbrain/client.ts").createKBrainClient(),
     planning: loader.loadModule("src/lib/planning/kbrain.ts"),
@@ -39,6 +47,7 @@ test("concurrent stale desktop reads reconnect once and existing clients use new
   });
   await Promise.all([app.client.listModels(), app.planning.requestPlanning("query"), app.cron.fetchKBrainCron(), app.prompts.get(), app.trajectory.loadStats("1234abcd"), app.hooks.fetchKBrainHooks()]);
   assert.equal(app.connections(), 1);
+  assert.equal(app.bridgeRefreshes(), 1);
   assert.equal(calls.filter(c => c.url.startsWith(fresh.baseUrl)).length, 6);
   assert.ok(calls.filter(c => c.url.startsWith(fresh.baseUrl)).every(c => c.token === "Bearer new"));
   await app.client.listModels();

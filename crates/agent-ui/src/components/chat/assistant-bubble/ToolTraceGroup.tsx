@@ -20,7 +20,9 @@ import {
   Globe,
   Hand,
   type IconComponent,
+  Link2,
   RotateCcw,
+  ScrollText,
   Search,
   Server,
   Terminal,
@@ -32,6 +34,7 @@ import {
   getFileOperationDisplay,
   getShellSessionDisplayDetails,
   getToolActivityCategory,
+  getToolActivityTitleKey,
   getToolTraceKey,
   hasActiveUserInteraction,
   type ToolActivityCategory,
@@ -95,17 +98,19 @@ const TOOL_BATCH_ICONS: Record<ToolActivityCategory, IconComponent> = {
   browser: AppWindow,
   computer: Hand,
   ssh: Server,
+  terminal: ScrollText,
+  tunnel: Link2,
   other: Wrench,
 };
 
 function getRunningToolActivity(item: ToolTraceItem, t: (key: string) => string) {
   const fileOperation = getFileOperationDisplay(item);
   const category = getToolActivityCategory(item.toolCall.name);
-  const action = fileOperation
-    ? t(`chat.tool.file.${fileOperation.kind}.running`)
-    : category === "other"
-      ? t("chat.tool.activity.other.running")
-      : t(`chat.tool.activity.${category}.running`);
+  const action = t(
+    fileOperation
+      ? `chat.tool.file.${fileOperation.kind}.running`
+      : (getToolActivityTitleKey(item.toolCall, "running") ?? "chat.tool.activity.other.running"),
+  );
   const target = getConciseToolTarget(item);
 
   return {
