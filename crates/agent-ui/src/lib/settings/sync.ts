@@ -545,6 +545,7 @@ function syncableCustomSettings(
     codeFontFamily: "",
     chatTranscript: { width: DEFAULT_CHAT_TRANSCRIPT_WIDTH, expandProcessByDefault: false },
     runNotifications: true,
+    notifications: { enabled: true, calendar: true, cron: true },
     fontScale: { sidebar: 1, chat: 1, rightDock: 1, settings: 1 },
   };
 }
@@ -1401,6 +1402,7 @@ export function applyGatewaySettingsSyncPayload(
       codeFontFamily: current.customSettings.codeFontFamily,
       chatTranscript: current.customSettings.chatTranscript,
       runNotifications: current.customSettings.runNotifications,
+      notifications: current.customSettings.notifications,
       fontScale: current.customSettings.fontScale,
     },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,

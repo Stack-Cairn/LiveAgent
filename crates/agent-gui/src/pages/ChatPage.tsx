@@ -4369,7 +4369,10 @@ function ChatPageContent(props: ChatPageProps) {
           questionStore={conversationRuntimeRegistry.questions}
           unreadStore={unreadConversationStore}
           visibleConversationId={activeView === "chat" ? currentConversationId : ""}
-          enabled={settings.customSettings.runNotifications}
+          enabled={
+            settings.customSettings.notifications.enabled &&
+            settings.customSettings.runNotifications
+          }
         />
         {/* ---- Left column: navigation/sidebar ---- */}
         <ChatSidebarContainer

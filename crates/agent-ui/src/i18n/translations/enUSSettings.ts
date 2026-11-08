@@ -422,9 +422,17 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.languageDesc":
     "Choose the display language for the interface. Changes take effect immediately.",
   "settings.defaultTimeZone": "Default time zone",
-  "settings.calendarNotifications": "Calendar notifications",
   "settings.notificationsGroup": "Notifications",
-  "settings.runNotifications": "Background conversation notifications",
+  "settings.notificationsEnabled": "System notifications",
+  "settings.notificationsEnabledDesc":
+    "Master switch. When off, LiveAgent sends no system notifications and shows no Dock badge. All switches below are saved on this device only.",
+  "settings.calendarReminderNotifications": "Calendar reminders",
+  "settings.calendarReminderNotificationsDesc":
+    "Send a system notification when an event or task reminder is due. Reminders that come due while this is off are not sent later.",
+  "settings.cronNotifications": "Scheduled tasks",
+  "settings.cronNotificationsDesc":
+    'Send a system notification when a scheduled run finishes, whether it succeeds, fails or times out. Manual "Run now" and cancelled runs are not notified. Each task notifies the same result at most once every 5 minutes.',
+  "settings.runNotifications": "Background conversations",
   "settings.runNotificationsDesc":
     "When LiveAgent is in the background, send a system notification (click to open the conversation) and show a Dock badge when a conversation finishes or needs your approval or answer. Replies that finish in other conversations get an unread dot in the sidebar. Saved on this device only.",
   "settings.notificationTest": "Test system notification",

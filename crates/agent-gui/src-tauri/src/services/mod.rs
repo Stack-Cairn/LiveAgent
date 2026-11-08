@@ -11,6 +11,7 @@ pub mod kbrain_ssh_sync;
 pub mod local_gateway;
 pub mod mcp_oauth;
 pub mod memory;
+pub mod notification_prefs;
 pub mod planning;
 pub mod power_activity;
 pub mod provider_usage;

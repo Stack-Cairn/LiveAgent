@@ -218,6 +218,7 @@ macro_rules! app_invoke_handler {
             commands::planning::planning_notification_test,
             commands::notifications::chat_notification_deliver,
             commands::notifications::app_set_badge_count,
+            commands::notifications::notifications_set_preferences,
             commands::planning::planning_subscription,
             commands::planning::planning_import,
             commands::cron::cron_validate_expression,
@@ -1068,7 +1069,9 @@ pub fn run() {
                     scheduler: Arc::downgrade(&automation_scheduler),
                 });
                 Arc::clone(&automation_scheduler).start();
+                services::notification_prefs::init();
                 services::planning::start(app.handle().clone());
+                services::automation::run_notifications::start(app.handle().clone());
                 app.manage(Arc::clone(&gateway_controller));
                 start_host_bridge(app, &terminal_registry, &gateway_controller);
                 if let Err(error) = gateway_controller.start() {

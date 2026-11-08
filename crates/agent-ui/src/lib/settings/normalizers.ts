@@ -3,7 +3,7 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
-import type { ChatTranscriptSettings, FontScaleSettings } from "./types";
+import type { ChatTranscriptSettings, FontScaleSettings, NotificationSettings } from "./types";
 
 export function normalizeStringArray(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -52,5 +52,15 @@ export function normalizeChatTranscriptSettings(input: unknown): ChatTranscriptS
       DEFAULT_CHAT_TRANSCRIPT_WIDTH,
     ),
     expandProcessByDefault: obj.expandProcessByDefault === true,
+  };
+}
+
+/** Every switch defaults to on; only an explicit `false` turns one off. */
+export function normalizeNotificationSettings(input: unknown): NotificationSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return {
+    enabled: obj.enabled !== false,
+    calendar: obj.calendar !== false,
+    cron: obj.cron !== false,
   };
 }

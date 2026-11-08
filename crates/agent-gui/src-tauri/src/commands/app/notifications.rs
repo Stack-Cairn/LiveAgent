@@ -1,4 +1,15 @@
+use crate::services::notification_prefs::{self, NotificationLabels, NotificationPreferences};
 use crate::services::planning::notification;
+
+/// Receives the device-local notification switches and the labels in the UI
+/// language; background notifiers stay silent until the first call.
+#[tauri::command]
+pub fn notifications_set_preferences(
+    preferences: NotificationPreferences,
+    labels: NotificationLabels,
+) {
+    notification_prefs::set(preferences, labels);
+}
 
 /// Shows a system notification for a chat run; clicking it opens the conversation.
 #[tauri::command]

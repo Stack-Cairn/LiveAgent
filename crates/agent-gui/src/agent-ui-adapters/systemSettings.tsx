@@ -6,7 +6,10 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Select, SelectItem, SelectValue } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { updateRunNotifications } from "@liveagent/ui/lib/settings/index";
+import {
+  updateNotificationSettings,
+  updateRunNotifications,
+} from "@liveagent/ui/lib/settings/index";
 import {
   AgentActivationSwitch,
   SettingsGroup,
@@ -45,6 +48,7 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
   const isMacPlatform = useMemo(() => inferRuntimePlatform() === "macos", []);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [testingNotification, setTestingNotification] = useState(false);
+  const notifications = settings.customSettings.notifications;
 
   return (
     <>
@@ -52,11 +56,29 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
       {isTauriHost() && (
         <SettingsGroup title={t("settings.notificationsGroup")}>
           <SettingsRow
+            title={t("settings.notificationsEnabled")}
+            description={t("settings.notificationsEnabledDesc")}
+            control={
+              <AgentActivationSwitch
+                checked={notifications.enabled}
+                title={t("settings.notificationsEnabled")}
+                onToggle={() =>
+                  setSettings((prev) =>
+                    updateNotificationSettings(prev, {
+                      enabled: !prev.customSettings.notifications.enabled,
+                    }),
+                  )
+                }
+              />
+            }
+          />
+          <SettingsRow
             title={t("settings.runNotifications")}
             description={t("settings.runNotificationsDesc")}
             control={
               <AgentActivationSwitch
                 checked={settings.customSettings.runNotifications}
+                disabled={!notifications.enabled}
                 title={t("settings.runNotifications")}
                 onToggle={() =>
                   setSettings((prev) =>
@@ -66,10 +88,42 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
               />
             }
           />
-        </SettingsGroup>
-      )}
-      {isTauriHost() && (
-        <SettingsGroup title={t("settings.calendarNotifications")}>
+          <SettingsRow
+            title={t("settings.calendarReminderNotifications")}
+            description={t("settings.calendarReminderNotificationsDesc")}
+            control={
+              <AgentActivationSwitch
+                checked={notifications.calendar}
+                disabled={!notifications.enabled}
+                title={t("settings.calendarReminderNotifications")}
+                onToggle={() =>
+                  setSettings((prev) =>
+                    updateNotificationSettings(prev, {
+                      calendar: !prev.customSettings.notifications.calendar,
+                    }),
+                  )
+                }
+              />
+            }
+          />
+          <SettingsRow
+            title={t("settings.cronNotifications")}
+            description={t("settings.cronNotificationsDesc")}
+            control={
+              <AgentActivationSwitch
+                checked={notifications.cron}
+                disabled={!notifications.enabled}
+                title={t("settings.cronNotifications")}
+                onToggle={() =>
+                  setSettings((prev) =>
+                    updateNotificationSettings(prev, {
+                      cron: !prev.customSettings.notifications.cron,
+                    }),
+                  )
+                }
+              />
+            }
+          />
           <SettingsRow
             title={t("settings.notificationTest")}
             description={t("settings.notificationTestHint")}

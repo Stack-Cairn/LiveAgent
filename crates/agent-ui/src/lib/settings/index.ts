@@ -45,6 +45,7 @@ import {
   normalizeChatTranscriptSettings,
   normalizeFontScaleSettings,
   normalizeIntegerInRange,
+  normalizeNotificationSettings,
   normalizePositiveInteger,
   normalizeStringArray,
 } from "./normalizers";
@@ -82,6 +83,7 @@ import type {
   ModelInputModalitiesOverride,
   ModelInputModality,
   ModelLimitsSource,
+  NotificationSettings,
   ProjectPromptStrategy,
   PromptCacheHintMode,
   ProviderFailoverSettings,
@@ -155,6 +157,7 @@ export {
   normalizeChatTranscriptSettings,
   normalizeFontScale,
   normalizeFontScaleSettings,
+  normalizeNotificationSettings,
 } from "./normalizers";
 export { normalizeRetryErrorSettings } from "./retryError";
 export {
@@ -1881,6 +1884,7 @@ export function normalizeCustomSettings(
     chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
     // 缺省开启：老配置无此字段时启用后台对话通知。
     runNotifications: obj.runNotifications !== false,
+    notifications: normalizeNotificationSettings(obj.notifications),
     rightDock: normalizeRightDockSettings(obj.rightDock),
     // 三档枚举：历史配置无此字段或值不合法（含曾设想过的 "auto"）一律落回默认的统计状态栏。
     composerContextDisplay:
@@ -2470,6 +2474,22 @@ export function updateExpandProcessByDefault(prev: AppSettings, enabled: boolean
 export function updateRunNotifications(prev: AppSettings, enabled: boolean): AppSettings {
   if (prev.customSettings.runNotifications === enabled) return prev;
   return updateCustomSettings(prev, { runNotifications: enabled });
+}
+
+export function updateNotificationSettings(
+  prev: AppSettings,
+  patch: Partial<NotificationSettings>,
+): AppSettings {
+  const current = prev.customSettings.notifications;
+  const next = { ...current, ...patch };
+  if (
+    next.enabled === current.enabled &&
+    next.calendar === current.calendar &&
+    next.cron === current.cron
+  ) {
+    return prev;
+  }
+  return updateCustomSettings(prev, { notifications: next });
 }
 
 export function updateRightDockWidth(prev: AppSettings, width: number): AppSettings {

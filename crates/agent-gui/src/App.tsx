@@ -274,6 +274,10 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
+  // Notification switches are pushed to Rust only once real settings loaded:
+  // boot defaults (all on) or a failed-load fallback must not override a user
+  // who turned notifications off, so Rust stays silent until then.
+  const [notificationPreferencesLoaded, setNotificationPreferencesLoaded] = useState(false);
   const [backgroundHostsReady, setBackgroundHostsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getBootAlignedDefaultSettings());
   const [imageStudioWorkspace, setImageStudioWorkspace] = useState(settings.system.workdir);
@@ -453,6 +457,7 @@ export default function App() {
           const loadedWithDefaults = applyRuntimeSystemDefaults(loaded, defaultWorkdir);
           settingsRef.current = loadedWithDefaults;
           setSettingsState(loadedWithDefaults);
+          setNotificationPreferencesLoaded(true);
           setSettingsSaveState({ status: "saved" });
           void publishGatewaySettingsSync(loadedWithDefaults).catch((error) => {
             console.error("publish gateway settings sync failed", error);
@@ -815,6 +820,21 @@ export default function App() {
   const handleTransitionEnd = handleSettingsOverlayTransitionEnd;
 
   const localeContextValue = useLocaleContextValue(settings.locale);
+
+  const notificationPreferences = settings.customSettings.notifications;
+  useEffect(() => {
+    // Calendar reminders and cron results are notified by the Rust backend, which
+    // has no UI locale and stays silent until these device-local switches arrive.
+    if (!notificationPreferencesLoaded) return;
+    void invoke("notifications_set_preferences", {
+      preferences: notificationPreferences,
+      labels: {
+        cronSucceeded: translate("cron.runNotification.succeededTitle", settings.locale),
+        cronFailed: translate("cron.runNotification.failedTitle", settings.locale),
+        cronTimedOut: translate("cron.runNotification.timedOutTitle", settings.locale),
+      },
+    }).catch(() => {});
+  }, [notificationPreferencesLoaded, notificationPreferences, settings.locale]);
 
   useEffect(() => {
     // Calendar reminder notifications are shown by the backend, which has no UI locale.

@@ -387,9 +387,17 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.language": "语言",
   "settings.languageDesc": "选择界面显示语言，切换后立即生效。",
   "settings.defaultTimeZone": "默认时区",
-  "settings.calendarNotifications": "日程通知",
   "settings.notificationsGroup": "通知",
-  "settings.runNotifications": "后台对话通知",
+  "settings.notificationsEnabled": "系统通知",
+  "settings.notificationsEnabledDesc":
+    "总开关。关闭后不再发送任何系统通知，也不显示 Dock 角标。以下开关均仅保存在本机。",
+  "settings.calendarReminderNotifications": "日程提醒",
+  "settings.calendarReminderNotificationsDesc":
+    "日程或任务到达提醒时间时发送系统通知。关闭期间到期的提醒不会在重新开启后补发。",
+  "settings.cronNotifications": "定时任务",
+  "settings.cronNotificationsDesc":
+    "定时任务按计划运行结束时发送系统通知，包括成功、失败和超时；手动「立即运行」与已取消的运行不通知。同一任务相同结果 5 分钟内只通知一次。",
+  "settings.runNotifications": "后台对话",
   "settings.runNotificationsDesc":
     "窗口不在前台时，对话完成或需要你批准、回答，会发送系统通知（点击直接打开该对话），并在 Dock 图标显示角标；在其他对话中完成的回复会在侧栏显示未读圆点。仅保存在本机。",
   "settings.notificationTest": "测试系统通知",

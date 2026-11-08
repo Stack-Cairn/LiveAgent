@@ -1,6 +1,7 @@
 pub mod db;
 pub mod kbrain_occurrences;
 pub mod occurrences;
+pub mod run_notifications;
 pub mod scheduler;
 pub mod store;
 pub mod types;

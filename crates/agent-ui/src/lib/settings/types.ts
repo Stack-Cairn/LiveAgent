@@ -156,6 +156,19 @@ export type FontScaleSettings = {
   settings: number;
 };
 
+/**
+ * Desktop system notification switches. Device-local, never synced. `enabled`
+ * is the master switch; when off no system notification or Dock badge is shown.
+ * Background conversations keep their own `runNotifications` field.
+ */
+export type NotificationSettings = {
+  enabled: boolean;
+  /** Calendar reminders. */
+  calendar: boolean;
+  /** Scheduled cron task results (success, failure and timeout). */
+  cron: boolean;
+};
+
 export type ChatTranscriptSettings = {
   width: number;
   /** Start thinking segments and tool-trace groups expanded (#1154). */
@@ -189,6 +202,7 @@ export type CustomSettings = {
   // Desktop system notifications (and Dock badge) when a background run
   // finishes or blocks on approval / a question. Device-local, never synced.
   runNotifications: boolean;
+  notifications: NotificationSettings;
   rightDock: RightDockSettings;
   composerContextDisplay: ComposerContextDisplayMode;
   // Empty strings select the built-in stacks for each typography role.

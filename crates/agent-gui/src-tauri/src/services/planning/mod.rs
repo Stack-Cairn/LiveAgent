@@ -18,6 +18,7 @@ pub mod time;
 #[cfg(test)]
 mod trash;
 pub mod types;
+use crate::services::notification_prefs::{self, Category};
 use std::sync::{Arc, RwLock};
 #[cfg(test)]
 pub use store::PlanningStore;
@@ -71,6 +72,15 @@ pub fn changed(app: &tauri::AppHandle, seq: u64) {
     }
 }
 
+/// When a claimed reminder came due: its trigger time, or a later snooze.
+fn reminder_due_at(reminder: &serde_json::Value) -> i64 {
+    let at = |key: &str| reminder[key].as_f64().map(|value| value as i64);
+    match (at("triggerAt"), at("snoozedUntil")) {
+        (Some(trigger), Some(snoozed)) => trigger.max(snoozed),
+        (trigger, snoozed) => trigger.or(snoozed).unwrap_or(0),
+    }
+}
+
 pub fn start(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -80,25 +90,58 @@ pub fn start(app: tauri::AppHandle) {
             if notification::disabled() {
                 continue;
             }
+            // Until the frontend pushes its switches, leave reminders pending.
+            if notification_prefs::allows(Category::Calendar).is_none() {
+                continue;
+            }
             let claimed = backend::request(&app, "reminders.claim", serde_json::json!({})).await;
             if let Ok(serde_json::Value::Array(reminders)) = claimed {
                 for mut reminder in reminders {
-                    let delivery = notification::deliver(
-                        &app,
-                        reminder["id"].as_str().unwrap_or("").to_string(),
-                        notification_title(),
-                        reminder["title"].as_str().unwrap_or("").to_string(),
-                        false,
-                    )
-                    .await;
-                    let success = delivery.is_ok();
-                    if let Err(error) = delivery {
-                        eprintln!("[planning] notification delivery failed: {error}");
-                    }
+                    // Off now, or off when it came due: settle the reminder as
+                    // handled so turning the switch back on does not replay it.
+                    let due = reminder_due_at(&reminder);
+                    let allowed = notification_prefs::allows(Category::Calendar) == Some(true)
+                        && !notification_prefs::suppressed(Category::Calendar, due);
+                    let success = if allowed {
+                        let delivery = notification::deliver(
+                            &app,
+                            reminder["id"].as_str().unwrap_or("").to_string(),
+                            notification_title(),
+                            reminder["title"].as_str().unwrap_or("").to_string(),
+                            false,
+                        )
+                        .await;
+                        if let Err(error) = &delivery {
+                            eprintln!("[planning] notification delivery failed: {error}");
+                        }
+                        delivery.is_ok()
+                    } else {
+                        true
+                    };
                     reminder["success"] = serde_json::json!(success);
                     let _ = backend::request(&app, "reminders.finish", reminder).await;
                 }
             }
         }
     });
+}
+
+#[cfg(test)]
+mod reminder_due_tests {
+    use super::reminder_due_at;
+
+    #[test]
+    fn due_time_is_the_later_of_trigger_and_snooze() {
+        let due = |value| reminder_due_at(&value);
+        assert_eq!(
+            due(serde_json::json!({"triggerAt": 100, "snoozedUntil": 0})),
+            100
+        );
+        assert_eq!(
+            due(serde_json::json!({"triggerAt": 100, "snoozedUntil": 500})),
+            500
+        );
+        assert_eq!(due(serde_json::json!({"snoozedUntil": 500})), 500);
+        assert_eq!(due(serde_json::json!({})), 0);
+    }
 }
