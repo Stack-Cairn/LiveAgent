@@ -52,7 +52,7 @@ import {
   getFileOperationDisplay,
   getShellSessionDisplayDetails,
   getSubagentInlineSummary,
-  getToolActivityCategory,
+  getToolActivityTitleKey,
   getToolDisplayName,
   getToolDisplayTitle,
   getToolMeta,
@@ -262,17 +262,14 @@ function ToolCallItem({
   const fileOperation = useMemo(() => getFileOperationDisplay(item), [item]);
   const meta = getToolMeta(item.toolCall.name);
   const ToolIcon = meta.Icon;
-  const activityCategory = getToolActivityCategory(item.toolCall.name);
   const activityPhase =
     result?.isError || shellSessionFailed
       ? "failed"
       : isRunning || !result
         ? "running"
         : "completed";
-  const localizedActivityTitle =
-    activityCategory === "other"
-      ? null
-      : t(`chat.tool.activity.${activityCategory}.${activityPhase}`);
+  const activityTitleKey = getToolActivityTitleKey(item.toolCall, activityPhase);
+  const localizedActivityTitle = activityTitleKey ? t(activityTitleKey) : null;
   const localizedFileOperationTitle = fileOperation
     ? t(`chat.tool.file.${fileOperation.kind}.${activityPhase}`)
     : null;

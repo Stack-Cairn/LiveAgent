@@ -160,6 +160,7 @@ function summarizeToolSearch(args: Args): Part[] {
 const KBRAIN_TOOL_SUMMARIZERS: Readonly<Record<string, (args: Args) => Part[]>> = {
   TerminalSession: (args) => [clip(args.command, 120)],
   ReadTerminal: (args) => [
+    typeof args.terminal_id === "string" ? `terminal=${clip(args.terminal_id, 40)}` : null,
     typeof args.session_id === "string" ? `session=${clip(args.session_id, 40)}` : null,
     finiteNumber(args.max_bytes) !== undefined ? `maxBytes=${args.max_bytes}` : null,
   ],

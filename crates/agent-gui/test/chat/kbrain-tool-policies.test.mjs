@@ -92,6 +92,36 @@ test("conditionally registered K-brain tools and subagent tools are never forwar
   }
 });
 
+test("TunnelManager policies reach K-brain only while the host bridge provides it", () => {
+  const configured = { TunnelManager: "ask", ReadTerminal: "deny" };
+  // Not registered (or K-brain predates the bridge): a policy for it would reject the run.
+  assert.deepEqual(canonicalKBrainToolPolicies(configured, new Set()), { ReadTerminal: "deny" });
+  // Registered without TunnelManager (Remote tunnels off).
+  assert.deepEqual(canonicalKBrainToolPolicies(configured, new Set(["ReadTerminal"])), {
+    ReadTerminal: "deny",
+  });
+  assert.deepEqual(
+    canonicalKBrainToolPolicies(configured, new Set(["ReadTerminal", "TunnelManager"])),
+    { ReadTerminal: "deny", TunnelManager: "ask" },
+  );
+  // Only bridge tools are unlocked by the registration.
+  assert.deepEqual(canonicalKBrainToolPolicies({ Browser: "allow" }, new Set(["Browser"])), {});
+});
+
+test("the default host tools follow the live bridge status", () => {
+  const status = loader.loadModule("@liveagent/ui/lib/tools/hostBridgeStatus.ts");
+  status.resetHostBridgeStatusForTests();
+  assert.deepEqual(canonicalKBrainToolPolicies({ TunnelManager: "deny" }), {});
+  return status
+    .loadHostBridgeStatus(async () => ({ state: "registered", tools: ["ReadTerminal", "TunnelManager"] }))
+    .then(() => {
+      assert.deepEqual(canonicalKBrainToolPolicies({ TunnelManager: "deny" }), {
+        TunnelManager: "deny",
+      });
+      status.resetHostBridgeStatusForTests();
+    });
+});
+
 test("the Memory Manager setting governs K-brain's memory_manager tool", () => {
   assert.deepEqual(canonicalKBrainToolPolicies({ MemoryManager: "deny" }), {
     memory_manager: "deny",

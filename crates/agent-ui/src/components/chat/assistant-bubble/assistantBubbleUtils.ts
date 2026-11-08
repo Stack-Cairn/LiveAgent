@@ -73,6 +73,8 @@ export const TOOL_ACTIVITY_CATEGORIES = [
   "browser",
   "computer",
   "ssh",
+  "terminal",
+  "tunnel",
   "other",
 ] as const;
 
@@ -97,8 +99,13 @@ export function getToolActivityCategory(name: string): ToolActivityCategory {
     case "Read":
     case "Image":
     case "SkillsManager":
-    case "ReadTerminal":
       return "read";
+    // Desktop terminal reads and Remote tunnels, run by K-brain through the
+    // desktop host bridge (or by the legacy frontend runtime).
+    case "ReadTerminal":
+      return "terminal";
+    case "TunnelManager":
+      return "tunnel";
     case "Glob":
     case "Grep":
     case "ToolSearch":
@@ -919,6 +926,31 @@ export function getManagerToolActionName(toolCall: {
     return displayString(args.path) ? "read" : "list";
   }
   return "";
+}
+
+/** TunnelManager actions with their own row titles (`chat.tool.tunnel.<action>.<phase>`). */
+export const TUNNEL_TOOL_ACTIONS = ["list", "create", "close", "check"] as const;
+export type TunnelToolAction = (typeof TUNNEL_TOOL_ACTIONS)[number];
+
+export type ToolActivityPhase = "running" | "completed" | "failed";
+
+/**
+ * Translation key for a tool row's verb: the TunnelManager action when known,
+ * otherwise the activity category; `null` for the generic `other` category,
+ * whose rows keep the tool's own name.
+ */
+export function getToolActivityTitleKey(
+  toolCall: { name: string; arguments?: Record<string, unknown> },
+  phase: ToolActivityPhase,
+): string | null {
+  const category = getToolActivityCategory(toolCall.name);
+  if (category === "tunnel") {
+    const action = displayString(toolCall.arguments?.action);
+    if ((TUNNEL_TOOL_ACTIONS as readonly string[]).includes(action)) {
+      return `chat.tool.tunnel.${action}.${phase}`;
+    }
+  }
+  return category === "other" ? null : `chat.tool.activity.${category}.${phase}`;
 }
 
 export function getToolDisplayTitle(toolCall: {

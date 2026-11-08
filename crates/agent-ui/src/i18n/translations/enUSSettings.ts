@@ -483,6 +483,12 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.systemToolsEmpty": "No matching tools",
   "settings.systemToolsClear": "Clear filters",
   "settings.systemToolsAlwaysAllowed": "Read-only · Always allowed",
+  "settings.hostBridge.available": "Available via desktop",
+  "settings.hostBridge.tunnelsOff": "Turn on Remote tunnels",
+  "settings.hostBridge.unsupported": "Needs a newer K-brain",
+  "settings.hostBridge.unavailable": "Desktop bridge offline",
+  "settings.hostBridge.hint":
+    "K-brain runs this tool through the LiveAgent desktop app, which registers it with every K-brain it starts.",
   "settings.systemToolsDesc":
     "View the built-in tools that LiveAgent registers automatically in Agent mode, and set an approval policy per tool (allow / ask before running / deny).",
   "settings.builtinToolCategory.fs": "File System",

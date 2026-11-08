@@ -14,6 +14,7 @@ import {
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import { Search } from "@liveagent/ui/components/IconSet";
 import { SettingsSection } from "@liveagent/ui/components/settings/SettingsLayout";
 import {
@@ -25,6 +26,12 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import {
+  type HostBridgeStatus,
+  type HostBridgeToolAvailability,
+  hostBridgeToolAvailability,
+  useHostBridgeStatus,
+} from "@liveagent/ui/lib/tools/hostBridgeStatus";
 import { useEffect, useMemo, useState } from "react";
 import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";
 import {
@@ -155,11 +162,51 @@ function BrowserModeRow(props: {
   );
 }
 
+const HOST_BRIDGE_BADGE: Record<HostBridgeToolAvailability, { key: string; className: string }> = {
+  available: {
+    key: "settings.hostBridge.available",
+    className: "bg-emerald-500/10 text-emerald-500",
+  },
+  tunnels_off: {
+    key: "settings.hostBridge.tunnelsOff",
+    className: "bg-amber-500/10 text-amber-500",
+  },
+  unsupported: {
+    key: "settings.hostBridge.unsupported",
+    className: "bg-muted/60 text-muted-foreground",
+  },
+  unavailable: {
+    key: "settings.hostBridge.unavailable",
+    className: "bg-muted/60 text-muted-foreground",
+  },
+};
+
+/**
+ * ReadTerminal / TunnelManager run in K-brain through the desktop host bridge; show whether
+ * the bridge currently provides them. Hosts without the bridge (WebUI) show nothing.
+ */
+function HostBridgeBadge(props: { status: HostBridgeStatus | null; toolName: string }) {
+  const { t } = useLocale();
+  const availability = hostBridgeToolAvailability(props.status, props.toolName);
+  if (!availability) return null;
+  const badge = HOST_BRIDGE_BADGE[availability];
+  return (
+    <span
+      title={t("settings.hostBridge.hint")}
+      data-host-bridge={availability}
+      className={cn("rounded-full px-2 py-0.5 text-tiny leading-none", badge.className)}
+    >
+      {t(badge.key)}
+    </span>
+  );
+}
+
 export function SystemToolsSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
 
   const policies = settings.system.toolPolicies ?? {};
+  const hostBridge = useHostBridgeStatus(invoke, listen);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const query = search.trim().toLocaleLowerCase();
@@ -293,6 +340,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                         <code className="font-mono text-tiny text-muted-foreground">
                           {entry.toolName}
                         </code>
+                        <HostBridgeBadge status={hostBridge} toolName={entry.toolName} />
                       </div>
                       <div className="mt-1 text-xs leading-5 text-muted-foreground">
                         {t(`settings.builtinTool.${entry.id}.desc`)}

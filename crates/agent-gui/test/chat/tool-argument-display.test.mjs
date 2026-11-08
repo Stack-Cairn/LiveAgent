@@ -250,6 +250,11 @@ function createToolCallItemRenderer() {
           }
           return "other";
         },
+        getToolActivityTitleKey(toolCall, phase) {
+          return ["Bash", "ManagedProcess", "ProcessWait", "ProcessStop"].includes(toolCall.name)
+            ? `chat.tool.activity.command.${phase}`
+            : null;
+        },
         getBuiltinResultKind() {
           return null;
         },
