@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
@@ -185,6 +186,14 @@ test("composer offers pack skills that are on and never shadowed copies", () => 
       settings: { selected: ["radare2", "local-notes"], packs: { "reverse-skill": false } },
     }).map((item) => item.name),
     ["local-notes"],
+  );
+});
+
+test("the composer re-reads K-brain skills once a skills switch is saved", () => {
+  const appSource = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  assert.match(
+    appSource,
+    /await kbrainSkillsAdapter\.settings\(next\.skills\);[\s\S]{0,200}?notifySkillsDiscoveryUpdated\(\);/,
   );
 });
 
