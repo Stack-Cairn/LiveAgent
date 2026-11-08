@@ -31,6 +31,7 @@ import {
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { notifySkillsDiscoveryUpdated } from "@liveagent/ui/lib/skills/index";
 import {
   lazy,
   type ReactNode,
@@ -535,6 +536,8 @@ export default function App() {
         .then(async () => {
           if (JSON.stringify(prev.skills) !== JSON.stringify(next.skills)) {
             await kbrainSkillsAdapter.settings(next.skills);
+            // The composer reads enabled skills from K-brain; re-read once the switch is saved.
+            notifySkillsDiscoveryUpdated();
           }
           return persistSettings(prev, next);
         })

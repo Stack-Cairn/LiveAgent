@@ -95,11 +95,18 @@ pub(crate) fn parse_yaml_top_level_scalar(yaml: &str, key: &str) -> Option<Strin
         };
 
         let rest = rest.trim();
-        if rest == "|" || rest == ">" {
+        if let Some(folded) = block_scalar_style(rest) {
             i += 1;
             let mut block = Vec::new();
             while i < lines.len() {
                 let block_line = lines[i];
+                if block_line.trim().is_empty() {
+                    // Blank lines belong to the block only when more indented
+                    // content follows; trailing ones are dropped below.
+                    block.push(String::new());
+                    i += 1;
+                    continue;
+                }
                 let is_indented = block_line
                     .chars()
                     .next()
@@ -108,16 +115,42 @@ pub(crate) fn parse_yaml_top_level_scalar(yaml: &str, key: &str) -> Option<Strin
                 if !is_indented {
                     break;
                 }
-                block.push(block_line.trim_start().to_string());
+                block.push(block_line.trim().to_string());
                 i += 1;
             }
-            return Some(block.join("\n"));
+            while block.last().is_some_and(String::is_empty) {
+                block.pop();
+            }
+            let separator = if folded { " " } else { "\n" };
+            return Some(block.join(separator));
         }
 
         return Some(unquote_yaml_scalar(rest));
     }
 
     None
+}
+
+/// Recognizes a YAML block scalar header (`|`, `>`, with optional chomping
+/// `-`/`+` and indentation digit, e.g. `|-` or `>2`). Returns `Some(true)` for
+/// folded (`>`) and `Some(false)` for literal (`|`) blocks.
+fn block_scalar_style(header: &str) -> Option<bool> {
+    let header = header.split(" #").next().unwrap_or(header).trim();
+    let mut chars = header.chars();
+    let folded = match chars.next()? {
+        '|' => false,
+        '>' => true,
+        _ => return None,
+    };
+    let indicators = chars.as_str();
+    if indicators.len() > 2
+        || !indicators
+            .chars()
+            .all(|ch| ch == '-' || ch == '+' || ch.is_ascii_digit())
+    {
+        return None;
+    }
+    Some(folded)
 }
 
 pub(crate) fn inline_yaml_key_start(yaml: &str, key: &str) -> Option<usize> {

@@ -32,6 +32,8 @@ export type MentionComposerSkill = {
   description: string;
   skillFile: string;
   baseDir: string;
+  /** Skill pack holding the skill; absent for a top-level skill. */
+  pack?: string;
 };
 
 export type MentionComposerSkillMention = MentionComposerSkill;

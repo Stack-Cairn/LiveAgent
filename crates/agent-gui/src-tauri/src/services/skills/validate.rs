@@ -241,13 +241,69 @@ pub(crate) fn validate_installed_skill(
     root: &Path,
     name: &str,
 ) -> Result<SystemSkillValidationResponse, String> {
+    // A pack skill named by its baseDir gets the lenient pack check.
+    if name.contains('/') || name.contains('\\') {
+        if let Some(found) = find_pack_skill(root, name) {
+            return Ok(pack_skill_validation(found));
+        }
+    }
     let name = sanitize_skill_name(name)?;
     let target = root.join(&name);
+    if target.is_dir()
+        && standard_metadata_file_for(&target).is_none()
+        && may_be_pack_dir_name(&name)
+    {
+        let scan = scan_pack(root, &target);
+        if scan.is_pack {
+            // The whole pack: it needs at least one usable skill.
+            let ok = !scan.skills.is_empty();
+            return Ok(SystemSkillValidationResponse {
+                target: display_path(&target),
+                ok,
+                errors: if ok {
+                    Vec::new()
+                } else {
+                    vec![format!("Skill pack '{name}' has no valid SKILL.md")]
+                },
+                pack: Some(name.clone()),
+                warnings: scan
+                    .invalid
+                    .into_iter()
+                    .map(|entry| format!("{}: {}", entry.path, entry.error))
+                    .collect(),
+                name,
+            });
+        }
+    }
+    if !target.exists() {
+        if let Some(found) = find_pack_skill(root, &name) {
+            return Ok(pack_skill_validation(found));
+        }
+    }
     let validation = validate_skill_dir(&target);
     Ok(SystemSkillValidationResponse {
         name,
         target: display_path(&target),
         ok: validation.ok,
         errors: validation.errors,
+        pack: None,
+        warnings: Vec::new(),
     })
+}
+
+/// Lenient check of one pack skill: discovery already required `name` and
+/// `description` and a lenient name, so a found pack skill is valid.
+fn pack_skill_validation(found: PackSkillRef) -> SystemSkillValidationResponse {
+    let errors = sanitize_pack_skill_name(&found.skill.metadata.name)
+        .err()
+        .into_iter()
+        .collect::<Vec<_>>();
+    SystemSkillValidationResponse {
+        name: found.skill.metadata.name.clone(),
+        target: display_path(&found.skill.dir),
+        ok: errors.is_empty(),
+        errors,
+        pack: Some(found.pack),
+        warnings: Vec::new(),
+    }
 }

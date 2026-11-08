@@ -66,6 +66,15 @@ import {
   readInstalledSortPreference,
   sortInstalledSkillItems,
 } from "@liveagent/ui/lib/skills/installedSort";
+import {
+  applySkillSelectionChanges,
+  effectiveSelectedSkillNames,
+  groupSkillsByPack,
+  removeSkillPackFromSelection,
+  setSkillPackEnabled,
+  skillPackName,
+  skillPackToggleState,
+} from "@liveagent/ui/lib/skills/packs";
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentModeRequired } from "../../components/settings/AgentModeRequired";
 import { isUnsupportedResourceError, type ResourceHostCapabilities } from "../../lib/resourceHost";
@@ -76,7 +85,7 @@ import {
   InstalledSkillPreviewDrawer,
   type InstalledSkillPreviewState,
 } from "./InstalledSkillPreviewDrawer";
-import { InstalledSkillsView } from "./InstalledSkillsView";
+import { type InstalledSkillPackInfo, InstalledSkillsView } from "./InstalledSkillsView";
 import { classifyInstalledSkill, type StoreCategoryValue } from "./SkillCategoryControls";
 import { SkillsImportView } from "./SkillsImportView";
 import { SkillsStoreView, STORE_SORT_OPTIONS, TERMINAL_INSTALL_PHASES } from "./SkillsStoreView";
@@ -145,6 +154,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     initialSkills ?? initialDiscovery?.skills ?? [],
   );
   const [rootDir, setRootDir] = useState(initialRootDir ?? initialDiscovery?.rootDir ?? "");
+  // Pack skills whose name another skill kept; listed in their pack, never active.
+  const [shadowedSkills, setShadowedSkills] = useState<SkillSummary[]>(
+    initialDiscovery?.shadowed ?? [],
+  );
   const [hasPresentedInstalledSkills, setHasPresentedInstalledSkills] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [discoveryBackendManaged, setDiscoveryBackendManaged] = useState(false);
@@ -190,6 +203,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   );
   const pendingInstallTokensRef = useRef(new Map<string, symbol>());
   const [deletingSkillName, setDeletingSkillName] = useState<string | null>(null);
+  const [deletingPack, setDeletingPack] = useState<string | null>(null);
   const [externalScans, setExternalScans] = useState<ExternalToolScan[] | null>(null);
   const [externalLoading, setExternalLoading] = useState(false);
   const [externalError, setExternalError] = useState<string | null>(null);
@@ -241,17 +255,21 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   // 唯一写入点：setState 与 discoverySignatureRef 必须同步更新，防止签名与状态漂移。
   // 签名未变时跳过 setState，保持 skills 数组引用稳定（下游 memo 链与 store 轮询零重渲）。
-  const applyDiscovery = useCallback((nextRootDir: string, nextSkills: SkillSummary[]) => {
-    const signature = buildSkillDiscoverySignature(nextRootDir, nextSkills);
-    const changed = discoverySignatureRef.current !== signature;
-    discoverySignatureRef.current = signature;
-    if (changed) {
-      skillsSnapshotRef.current = nextSkills;
-      setSkills(nextSkills);
-      setRootDir(nextRootDir);
-    }
-    return changed;
-  }, []);
+  const applyDiscovery = useCallback(
+    (nextRootDir: string, nextSkills: SkillSummary[], nextShadowed: SkillSummary[] = []) => {
+      const signature = buildSkillDiscoverySignature(nextRootDir, [...nextSkills, ...nextShadowed]);
+      const changed = discoverySignatureRef.current !== signature;
+      discoverySignatureRef.current = signature;
+      if (changed) {
+        skillsSnapshotRef.current = nextSkills;
+        setSkills(nextSkills);
+        setShadowedSkills(nextShadowed);
+        setRootDir(nextRootDir);
+      }
+      return changed;
+    },
+    [],
+  );
 
   const refresh = useCallback(
     async (options?: { silent?: boolean; announce?: boolean; force?: boolean }) => {
@@ -270,7 +288,11 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       try {
         const discovery = await discoverSkills({ force: options?.force ?? true });
         const summary = summarizeSkillScan(skillsSnapshotRef.current, discovery.skills);
-        const changed = applyDiscovery(discovery.rootDir, discovery.skills);
+        const changed = applyDiscovery(
+          discovery.rootDir,
+          discovery.skills,
+          discovery.shadowed ?? [],
+        );
         if (changed) {
           notifySkillsDiscoveryUpdated();
         }
@@ -324,10 +346,39 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     }
   }, [initialSkills?.length, initialDiscovery, refresh]);
 
+  // Skills that are on: named in `selected`, or in a pack switched on as a whole.
   const selected = useMemo(
-    () => new Set(mergeAlwaysEnabledSkillNames(settings.skills.selected)),
-    [settings.skills.selected],
+    () =>
+      effectiveSelectedSkillNames(skills, {
+        selected: mergeAlwaysEnabledSkillNames(settings.skills.selected),
+        packs: settings.skills.packs,
+      }),
+    [settings.skills.packs, settings.skills.selected, skills],
   );
+  const packInfos = useMemo(() => {
+    const infos = new Map<string, InstalledSkillPackInfo>();
+    const selection = { selected: settings.skills.selected, packs: settings.skills.packs };
+    for (const [pack, members] of groupSkillsByPack(skills)) {
+      infos.set(pack, {
+        skillCount: members.length,
+        enabledCount: members.filter((member) => selected.has(member.name)).length,
+        toggleState: skillPackToggleState(pack, members, selection),
+        shadowed: [],
+      });
+    }
+    for (const skill of shadowedSkills) {
+      const pack = skillPackName(skill);
+      if (!pack) continue;
+      const info = infos.get(pack) ?? {
+        skillCount: 0,
+        enabledCount: 0,
+        toggleState: "off" as const,
+        shadowed: [],
+      };
+      infos.set(pack, { ...info, shadowed: [...info.shadowed, skill] });
+    }
+    return new Map([...infos.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  }, [selected, settings.skills.packs, settings.skills.selected, shadowedSkills, skills]);
   // 首次渲染保留缓存列表；后续数据更新仍可延迟渲染，避免阻塞输入。
   const deferredSkills = useDeferredValue(skills);
   const installedContentPending = deferredSkills !== skills;
@@ -779,10 +830,17 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   const enableInstalledSkillsFromJob = useCallback(
     (job: SkillInstallJobSnapshot) => {
-      const installedNames = (job.installed ?? [])
+      const installed = job.installed ?? [];
+      // A pack install turns its pack on as a whole; packs only come from
+      // backends that support them.
+      const installedPacks = Array.from(
+        new Set(installed.map((item) => item.pack?.trim() ?? "").filter(Boolean)),
+      );
+      const installedNames = installed
+        .filter((item) => !item.pack?.trim())
         .map((item) => item.name?.trim())
         .filter((name): name is string => Boolean(name) && !isAlwaysEnabledSkillName(name));
-      if (installedNames.length === 0) return;
+      if (installedNames.length === 0 && installedPacks.length === 0) return;
 
       setSettings((prev) => {
         const next = new Set(prev.skills.selected);
@@ -793,10 +851,18 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
             changed = true;
           }
         }
+        const packs = { ...prev.skills.packs };
+        for (const pack of installedPacks) {
+          if (packs[pack] !== true) {
+            packs[pack] = true;
+            changed = true;
+          }
+        }
         if (!changed) return prev;
         return updateSkills(prev, {
           enabled: true,
           selected: Array.from(next),
+          ...(installedPacks.length > 0 ? { packs } : {}),
         });
       });
     },
@@ -943,9 +1009,15 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       lockedByChatMode ||
       backendManaged ||
       isAlwaysEnabledSkillName(skill.name) ||
-      deletingSkillName
+      deletingSkillName ||
+      deletingPack
     )
       return;
+    const pack = skillPackName(skill);
+    if (pack) {
+      explainPackSkillDelete(skill.name, pack);
+      return;
+    }
     const skillName = skill.name;
     const sourceSlug = skill.source?.registry === "clawhub" ? skill.source.slug?.trim() || "" : "";
     const sourceOwnerHandle =
@@ -1000,12 +1072,59 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     }
   }
 
+  function explainPackSkillDelete(name: string, pack: string) {
+    toast.warning(
+      t("settings.skillPackChildDeleteTitle").replace("{name}", name).replace("{pack}", pack),
+      {
+        id: `${toastScope}-pack-delete`,
+        appearance: "notice",
+        duration: 6_000,
+        description: t("settings.skillPackChildDeleteHint"),
+      },
+    );
+  }
+
+  async function deletePack(pack: string) {
+    if (lockedByChatMode || backendManaged || deletingSkillName || deletingPack) return;
+    const members = skills.filter((skill) => skillPackName(skill) === pack);
+    const memberNames = members.map((skill) => skill.name);
+    setLoadError(null);
+    setDeletingPack(pack);
+    try {
+      // The pack directory goes as a whole: K-brain deletes a pack by its name.
+      await manageSkill({ action: "delete", name: pack });
+      setSettings((prev) =>
+        removeWorkspaceResourceReferences(
+          updateSkills(prev, removeSkillPackFromSelection(prev.skills, pack, members)),
+          { skillNames: memberNames },
+        ),
+      );
+      setSkills((prev) => prev.filter((item) => skillPackName(item) !== pack));
+      setShadowedSkills((prev) => prev.filter((item) => skillPackName(item) !== pack));
+      setPreviewInstalledSkill((current) =>
+        current && skillPackName(current) === pack ? null : current,
+      );
+      notifySkillsDiscoveryUpdated();
+      await refresh({ silent: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setLoadError(msg || t("settings.skillsHubDeleteFailed"));
+    } finally {
+      setDeletingPack(null);
+    }
+  }
+
   function toggleSkill(name: string, on: boolean) {
     if (backendManaged || isAlwaysEnabledSkillName(name)) return;
-    const next = new Set(settings.skills.selected);
-    if (on) next.add(name);
-    else next.delete(name);
-    setSettings((prev) => updateSkills(prev, { selected: Array.from(next) }));
+    setSettings((prev) =>
+      updateSkills(prev, applySkillSelectionChanges(prev.skills, skills, new Map([[name, on]]))),
+    );
+  }
+
+  function togglePack(pack: string, on: boolean) {
+    if (backendManaged) return;
+    const members = skills.filter((skill) => skillPackName(skill) === pack);
+    setSettings((prev) => updateSkills(prev, setSkillPackEnabled(prev.skills, pack, members, on)));
   }
 
   const dismissBulkUndo = useCallback(() => toast.dismiss(`${toastScope}-undo`), [toastScope]);
@@ -1099,10 +1218,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       const names = [...bulkSelection].filter((name) => !isAlwaysEnabledSkillName(name));
       if (names.length === 0) return;
 
-      const before = settings.skills.selected;
-      const current = new Set(before);
+      const before = { selected: settings.skills.selected, packs: settings.skills.packs };
       const changedNames = names.filter((name) =>
-        target ? !current.has(name) : current.has(name),
+        target ? !selected.has(name) : selected.has(name),
       );
       const changed = changedNames.length;
       if (changed === 0) return;
@@ -1116,40 +1234,52 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         action: {
           label: t("settings.skillsBulkUndo"),
           onClick: () => {
-            setSettings((prev) => updateSkills(prev, { selected: before }));
+            setSettings((prev) => updateSkills(prev, before));
           },
         },
       });
       exitBulkMode();
-      setSettings((prev) => {
-        const next = new Set(prev.skills.selected);
-        for (const name of names) {
-          if (target) next.add(name);
-          else next.delete(name);
-        }
-        return updateSkills(prev, {
+      setSettings((prev) =>
+        updateSkills(prev, {
           enabled: target ? true : prev.skills.enabled,
-          selected: Array.from(next),
-        });
-      });
+          ...applySkillSelectionChanges(
+            prev.skills,
+            skills,
+            new Map(names.map((name) => [name, target])),
+          ),
+        }),
+      );
     },
     [
       backendManaged,
       bulkSelection,
       dismissBulkUndo,
       exitBulkMode,
+      selected,
       setSettings,
+      settings.skills.packs,
       settings.skills.selected,
+      skills,
       t,
       toastScope,
     ],
   );
 
   async function deleteBulkSelectedInstalledSkills() {
-    if (lockedByChatMode || backendManaged || deletingSkillName || !bulkMode) return;
-    const targets = skills.filter(
+    if (lockedByChatMode || backendManaged || deletingSkillName || deletingPack || !bulkMode)
+      return;
+    const chosen = skills.filter(
       (skill) => bulkSelection.has(skill.name) && !isAlwaysEnabledSkillName(skill.name),
     );
+    // Pack skills cannot be deleted one by one; they stay and are reported.
+    const packSkills = chosen.filter((skill) => skillPackName(skill));
+    const targets = chosen.filter((skill) => !skillPackName(skill));
+    if (packSkills.length > 0) {
+      explainPackSkillDelete(
+        packSkills.map((skill) => skill.name).join(", "),
+        Array.from(new Set(packSkills.map(skillPackName))).join(", "),
+      );
+    }
     if (targets.length === 0) return;
 
     setLoadError(null);
@@ -1317,6 +1447,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const cardHandlersRef = useRef({
     toggleSkill,
     deleteSkill,
+    togglePack,
+    deletePack,
     openInstalledSkillPreview,
     handleBulkInstalledCardClick,
     sortedNames: [] as string[],
@@ -1325,6 +1457,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     cardHandlersRef.current = {
       toggleSkill,
       deleteSkill,
+      togglePack,
+      deletePack,
       openInstalledSkillPreview,
       handleBulkInstalledCardClick,
       sortedNames: sortedInstalledNames,
@@ -1336,6 +1470,14 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   );
   const handleCardDelete = useCallback(
     (skill: SkillSummary) => void cardHandlersRef.current.deleteSkill(skill),
+    [],
+  );
+  const handlePackToggle = useCallback(
+    (pack: string, on: boolean) => cardHandlersRef.current.togglePack(pack, on),
+    [],
+  );
+  const handlePackDelete = useCallback(
+    (pack: string) => void cardHandlersRef.current.deletePack(pack),
     [],
   );
   const handleCardOpenPreview = useCallback(
@@ -1629,6 +1771,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         onBulkCardClick={handleCardBulkClick}
                         onOpenPreview={handleCardOpenPreview}
                         onDelete={handleCardDelete}
+                        packs={packInfos}
+                        deletingPack={deletingPack}
+                        onTogglePack={handlePackToggle}
+                        onDeletePack={handlePackDelete}
                       />
                     </TabsContent>
                     <TabsContent value="store" className="h-full min-h-0">

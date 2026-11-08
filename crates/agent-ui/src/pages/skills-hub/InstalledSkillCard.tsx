@@ -50,6 +50,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ClawHubCategorySlug } from "@liveagent/ui/lib/skills/clawHubCategories";
 import type { SkillSummary } from "@liveagent/ui/lib/skills/index";
+import { skillPackName } from "@liveagent/ui/lib/skills/packs";
 import {
   getInstalledSkillCardIdentity,
   type InstalledSkillCardIconName,
@@ -186,6 +187,7 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
   } = props;
   const { t } = useLocale();
   const effectivelyEnabled = skillsEnabled && checked;
+  const packName = skillPackName(skill);
   const cardIdentity = useMemo(
     () => (alwaysEnabled ? null : getInstalledSkillCardIdentity(skill.name, primaryCategory)),
     [alwaysEnabled, primaryCategory, skill.name],
@@ -288,30 +290,52 @@ export const InstalledSkillCard = memo(function InstalledSkillCard(props: Instal
               </Button>
             ) : null}
             {!alwaysEnabled ? (
-              <ConfirmDeletePopover name={skill.name} onConfirm={() => onDelete(skill)}>
-                {(open) => (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className={cn(
-                      "text-muted-foreground opacity-0 transition-opacity",
-                      "group-hover:opacity-100 focus-visible:opacity-100",
-                      "hover:bg-destructive/10 hover:text-destructive",
-                      "[@media(hover:none)]:opacity-100",
-                    )}
-                    disabled={deleteDisabled}
-                    aria-label={`${t("settings.skillsHubDeleteSkill")}: ${skill.name}`}
-                    onClick={open}
-                    title={t("settings.skillsHubDeleteSkill")}
-                  >
-                    {deleting ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="size-3.5" />
-                    )}
-                  </Button>
-                )}
-              </ConfirmDeletePopover>
+              packName ? (
+                // A pack skill cannot be deleted alone; the handler explains why.
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className={cn(
+                    "text-muted-foreground opacity-0 transition-opacity",
+                    "group-hover:opacity-100 focus-visible:opacity-100",
+                    "hover:bg-destructive/10 hover:text-destructive",
+                    "[@media(hover:none)]:opacity-100",
+                  )}
+                  disabled={deleteDisabled}
+                  aria-label={`${t("settings.skillsHubDeleteSkill")}: ${skill.name}`}
+                  onClick={() => onDelete(skill)}
+                  title={t("settings.skillPackChildDeleteTitle")
+                    .replace("{name}", skill.name)
+                    .replace("{pack}", packName)}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              ) : (
+                <ConfirmDeletePopover name={skill.name} onConfirm={() => onDelete(skill)}>
+                  {(open) => (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className={cn(
+                        "text-muted-foreground opacity-0 transition-opacity",
+                        "group-hover:opacity-100 focus-visible:opacity-100",
+                        "hover:bg-destructive/10 hover:text-destructive",
+                        "[@media(hover:none)]:opacity-100",
+                      )}
+                      disabled={deleteDisabled}
+                      aria-label={`${t("settings.skillsHubDeleteSkill")}: ${skill.name}`}
+                      onClick={open}
+                      title={t("settings.skillsHubDeleteSkill")}
+                    >
+                      {deleting ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
+                    </Button>
+                  )}
+                </ConfirmDeletePopover>
+              )
             ) : null}
             {!alwaysEnabled ? (
               <ResourceActivationSwitch

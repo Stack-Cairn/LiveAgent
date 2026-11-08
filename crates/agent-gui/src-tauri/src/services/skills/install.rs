@@ -91,8 +91,19 @@ pub(crate) fn backup_existing_path(
     Ok(backup)
 }
 
+/// Whether an install copy leaves this entry out: dot-prefixed files and
+/// directories (`.git`, `.DS_Store`, ...), as K-brain does.
+fn is_skipped_install_entry(entry: &walkdir::DirEntry) -> bool {
+    entry.depth() > 0 && entry.file_name().to_string_lossy().starts_with('.')
+}
+
 pub(crate) fn copy_dir_safely(source_dir: &Path, target: &Path) -> Result<(), String> {
-    for entry in WalkDir::new(source_dir).follow_links(false).min_depth(1) {
+    for entry in WalkDir::new(source_dir)
+        .follow_links(false)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|entry| !is_skipped_install_entry(entry))
+    {
         let entry = entry.map_err(|e| format!("Failed to inspect source Skill: {e}"))?;
         let source_path = entry.path();
         let rel = source_path
@@ -241,6 +252,7 @@ pub(crate) fn install_skill_dir(
             target: display_path(&target),
             backup: None,
             skill_file: rel_to_root_str(dest_root, &metadata.metadata_file),
+            pack: None,
         });
     }
 
@@ -268,7 +280,294 @@ pub(crate) fn install_skill_dir(
         target: display_path(&target),
         backup: backup.map(|path| display_path(&path)),
         skill_file: rel_to_root_str(dest_root, &target.join(rel_metadata_file)),
+        pack: None,
     })
+}
+
+const MAX_PACK_INSTALL_FILES: usize = 5000;
+const MAX_PACK_INSTALL_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Copies a skill pack tree. Like [`copy_dir_safely`] it leaves out
+/// dot-prefixed entries (`.git`, ...); unlike it, it skips symlinks instead of
+/// failing: packs are often whole repos, and a copied link could point outside
+/// the Skills root.
+fn copy_pack_dir(source_dir: &Path, target: &Path) -> Result<(), String> {
+    let mut files = 0usize;
+    let mut bytes = 0u64;
+    let walker = WalkDir::new(source_dir)
+        .follow_links(false)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|entry| !is_skipped_install_entry(entry));
+    for entry in walker {
+        let entry = entry.map_err(|e| format!("Failed to inspect skill pack source: {e}"))?;
+        let source_path = entry.path();
+        let rel = source_path
+            .strip_prefix(source_dir)
+            .map_err(|e| format!("Failed to compute relative skill pack path: {e}"))?;
+        let target_path = target.join(rel);
+        let file_type = entry.file_type();
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            fs::create_dir_all(&target_path)
+                .map_err(|e| format!("Failed to create skill pack directory: {e}"))?;
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        let size = entry
+            .metadata()
+            .map_err(|e| format!("Failed to read skill pack file metadata: {e}"))?
+            .len();
+        if size > MAX_SKILL_FILE_BYTES {
+            return Err(format!(
+                "Skill pack file is too large: {} ({} bytes)",
+                source_path.display(),
+                size
+            ));
+        }
+        files += 1;
+        bytes = bytes.saturating_add(size);
+        if files > MAX_PACK_INSTALL_FILES {
+            return Err(format!(
+                "Skill pack has too many files, over {MAX_PACK_INSTALL_FILES}"
+            ));
+        }
+        if bytes > MAX_PACK_INSTALL_BYTES {
+            return Err(format!(
+                "Skill pack is too large, over {MAX_PACK_INSTALL_BYTES} bytes"
+            ));
+        }
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create skill pack parent directory: {e}"))?;
+        }
+        fs::copy(source_path, &target_path).map_err(|e| {
+            format!(
+                "Failed to copy skill pack file {} to {}: {e}",
+                source_path.display(),
+                target_path.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+/// Steps into an archive wrapper (a directory whose only visible entry is one
+/// directory), so `pack.zip -> pack/` is treated as `pack/`. One level only,
+/// like K-brain: a repo holding just `skills/` stays the pack root.
+fn unwrap_single_dir(dir: &Path) -> PathBuf {
+    if standard_metadata_file_for(dir).is_some() {
+        return dir.to_path_buf();
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return dir.to_path_buf();
+    };
+    let visible = entries
+        .flatten()
+        .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    match visible.as_slice() {
+        [only] if only.is_dir() => only.clone(),
+        _ => dir.to_path_buf(),
+    }
+}
+
+/// Returns the directory to install as a skill pack, or `None` when the source
+/// installs as one or more plain skills. A source is a pack when it has no
+/// SKILL.md of its own, holds nested SKILL.md files (same walk as discovery),
+/// and the plain installer would either find no skills or leave some of those
+/// nested skills behind (a router, deeper modules, client adapter dirs).
+pub(crate) fn detect_pack_source(
+    stage_root: &Path,
+    flat_candidates: &[PathBuf],
+) -> Option<PathBuf> {
+    let candidate = unwrap_single_dir(stage_root);
+    if standard_metadata_file_for(&candidate).is_some() {
+        return None;
+    }
+    let walk = walk_pack(&candidate, &candidate);
+    if walk.skill_dirs.is_empty() {
+        return None;
+    }
+    let flat = flat_candidates
+        .iter()
+        .filter(|dir| standard_metadata_file_for(dir).is_some())
+        .filter_map(|dir| fs::canonicalize(dir).ok())
+        .collect::<std::collections::HashSet<_>>();
+    if flat.is_empty() {
+        return Some(candidate);
+    }
+    walk.skill_dirs
+        .iter()
+        .any(|skill| {
+            fs::canonicalize(&skill.dir)
+                .map(|dir| !flat.contains(&dir))
+                .unwrap_or(true)
+        })
+        .then_some(candidate)
+}
+
+fn strip_archive_extension(name: &str) -> &str {
+    let lower = name.to_ascii_lowercase();
+    for ext in [".zip", ".skill", ".git"] {
+        if lower.ends_with(ext) {
+            return &name[..name.len() - ext.len()];
+        }
+    }
+    name
+}
+
+/// Derives the pack directory name from the install source, like K-brain:
+/// the GitHub repository (or the last directory of a tree URL); for an archive,
+/// its single wrapper directory, else the file name; for a local directory,
+/// its name. Falls back to the staged directory name.
+pub(crate) fn pack_name_for_source(
+    source: &str,
+    git_ref: &str,
+    stage_root: &Path,
+    pack_dir: &Path,
+) -> Option<String> {
+    let mut raw_names = Vec::new();
+    let dir_name = |dir: &Path| {
+        dir.file_name()
+            .map(|name| name.to_string_lossy().to_string())
+    };
+    if is_github_source(source) {
+        if let Ok(github) = parse_github_url(source, git_ref) {
+            if let Some(last) = github
+                .subpath
+                .as_deref()
+                .and_then(|subpath| subpath.rsplit('/').find(|part| !part.is_empty()))
+            {
+                raw_names.push(last.to_string());
+            }
+            raw_names.push(github.repo);
+        }
+    } else {
+        let local = crate::runtime::platform::expand_tilde_path(source);
+        let local_dir = !is_http_source(source) && local.is_dir();
+        if !local_dir && pack_dir != stage_root {
+            raw_names.extend(dir_name(pack_dir));
+        }
+        if is_http_source(source) {
+            if let Some(last) = reqwest::Url::parse(source).ok().and_then(|url| {
+                url.path_segments()
+                    .and_then(|mut segments| segments.rfind(|part| !part.is_empty()))
+                    .map(str::to_string)
+            }) {
+                raw_names.push(strip_archive_extension(&last).to_string());
+            }
+        } else if let Some(name) = local.file_name() {
+            raw_names.push(strip_archive_extension(&name.to_string_lossy()).to_string());
+        }
+    }
+    raw_names.extend(dir_name(pack_dir));
+    raw_names
+        .into_iter()
+        .map(|raw| normalize_skill_name(&raw))
+        .find(|name| sanitize_skill_name(name).is_ok())
+}
+
+fn pack_install_results(
+    dest_root: &Path,
+    target: &Path,
+    pack_name: &str,
+    skills: &[PackSkill],
+    backup: Option<&Path>,
+) -> Vec<SystemSkillInstallResult> {
+    let mut ordered = skills.iter().collect::<Vec<_>>();
+    ordered.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.rel.cmp(&b.rel)));
+    let mut seen = std::collections::HashSet::new();
+    ordered
+        .into_iter()
+        .filter(|skill| seen.insert(skill.metadata.name.clone()))
+        .map(|skill| SystemSkillInstallResult {
+            name: skill.metadata.name.clone(),
+            target: display_path(target),
+            backup: backup.map(display_path),
+            skill_file: rel_to_root_str(dest_root, &target.join(&skill.rel).join("SKILL.md")),
+            pack: Some(pack_name.to_string()),
+        })
+        .collect()
+}
+
+/// Installs `source_dir` as `<dest_root>/<pack_name>` with the same
+/// stage-then-swap discipline as single skills. Returns one result per
+/// distinct skill name in the pack.
+pub(crate) fn install_pack_dir(
+    dest_root: &Path,
+    source_dir: &Path,
+    pack_name: &str,
+    conflict: &str,
+) -> Result<Vec<SystemSkillInstallResult>, String> {
+    let pack_name = sanitize_skill_name(pack_name)?;
+    fs::create_dir_all(dest_root)
+        .map_err(|e| format!("Failed to create Skills root directory: {e}"))?;
+    let target = dest_root.join(&pack_name);
+
+    if target.exists() && source_dir.canonicalize().ok() == target.canonicalize().ok() {
+        let scan = scan_pack(dest_root, &target);
+        return Ok(pack_install_results(
+            dest_root,
+            &target,
+            &pack_name,
+            &scan.skills,
+            None,
+        ));
+    }
+
+    let staging = staging_root(dest_root);
+    fs::create_dir_all(&staging)
+        .map_err(|e| format!("Failed to create Skills staging directory: {e}"))?;
+    cleanup_stale_staging(&staging);
+    let staged = staging.join(format!("{pack_name}-{}", unique_suffix()));
+    fs::create_dir_all(&staged)
+        .map_err(|e| format!("Failed to create staged skill pack directory: {e}"))?;
+    let scan = match copy_pack_dir(source_dir, &staged) {
+        Ok(()) => scan_pack(&staged, &staged),
+        Err(error) => {
+            remove_path_best_effort(&staged);
+            return Err(error);
+        }
+    };
+    if scan.skills.is_empty() {
+        remove_path_best_effort(&staged);
+        let details = scan
+            .invalid
+            .iter()
+            .map(|entry| entry.error.clone())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(if details.is_empty() {
+            format!("Skill pack '{pack_name}' contains no valid SKILL.md")
+        } else {
+            format!("Skill pack '{pack_name}' contains no valid SKILL.md: {details}")
+        });
+    }
+
+    let swap = {
+        let _guard = skills_write_guard();
+        swap_skill_into_place(dest_root, &staged, &pack_name, conflict)
+    };
+    let backup = match swap {
+        Ok(backup) => backup,
+        Err(error) => {
+            remove_path_best_effort(&staged);
+            return Err(error);
+        }
+    };
+    Ok(pack_install_results(
+        dest_root,
+        &target,
+        &pack_name,
+        &scan.skills,
+        backup.as_deref(),
+    ))
 }
 
 pub(crate) fn normalize_conflict(
@@ -517,6 +816,26 @@ where
         message: Some("Validating Skill metadata".to_string()),
     });
     let candidates = discover_skill_dirs(&stage_root);
+    if let Some(pack_dir) = detect_pack_source(&stage_root, &candidates) {
+        let pack_name =
+            match name_override.clone() {
+                Some(name) => name,
+                None => pack_name_for_source(source, git_ref, &stage_root, &pack_dir).ok_or_else(
+                    || "Could not derive a skill pack name from the source; pass name".to_string(),
+                )?,
+            };
+        ensure_not_builtin_skill_management_target(root, &pack_name, "install")?;
+        if should_cancel() {
+            return Err(INSTALL_CANCELLED_ERROR.to_string());
+        }
+        on_progress(SkillInstallProgressUpdate {
+            phase: "installing",
+            downloaded_bytes: None,
+            total_bytes: None,
+            message: Some(format!("Installing skill pack {pack_name}")),
+        });
+        return install_pack_dir(root, &pack_dir, &pack_name, &conflict);
+    }
     if candidates.is_empty() {
         return Err(
             "No skill directories found. Expected SKILL.md, skill.md, skill.json, or README.md."

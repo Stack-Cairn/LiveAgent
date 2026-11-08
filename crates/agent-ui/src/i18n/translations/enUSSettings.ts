@@ -1365,6 +1365,21 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.skillsHubPreparingDesc":
     "Preparing a large set of Skills in the background; it will appear when ready",
   "settings.skillsHubDeleteSkill": "Delete Skill",
+  "settings.skillPackLabel": "Skill pack",
+  "settings.skillPackCount": "{count} skills",
+  "settings.skillPackEnabledCount": "{enabled}/{count} on",
+  "settings.skillPackExpand": "Show skills in {pack}",
+  "settings.skillPackCollapse": "Hide skills in {pack}",
+  "settings.skillPackToggle": "Turn skill pack on or off",
+  "settings.skillPackMixed": "Some skills on",
+  "settings.skillPackDelete": "Delete skill pack",
+  "settings.skillPackDeleteConfirm":
+    "Delete skill pack {pack} and all {count} of its skills? This cannot be undone.",
+  "settings.skillPackChildDeleteTitle": "{name} is part of skill pack {pack}",
+  "settings.skillPackChildDeleteHint":
+    "A pack is installed as one directory, so its skills cannot be deleted one by one. Turn this skill off, or delete the whole pack from its header.",
+  "settings.skillPackShadowed": "Shadowed",
+  "settings.skillPackShadowedBy": "Not used: {by} has the same name",
   "settings.skillsHubBulkSelect": "Bulk Select",
   "settings.skillsHubBulkDelete": "Delete Selected",
   "settings.skillsHubBulkDeleteConfirm": "Delete {count} skills? This cannot be undone.",

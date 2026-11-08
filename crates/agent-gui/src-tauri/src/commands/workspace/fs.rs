@@ -5454,6 +5454,39 @@ mod tests {
     }
 
     #[test]
+    fn skill_scoped_paths_resolve_skills_inside_a_skill_pack() {
+        let workdir = unique_test_workdir("skill-pack-workspace");
+        let skills_root = unique_test_workdir("skill-pack-root");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let skill_dir = skills_root.join("demo-pack/skills/radare2");
+        fs::create_dir_all(&skill_dir).expect("create pack skill directory");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: radare2\ndescription: Pack skill\n---\n",
+        )
+        .expect("write pack skill");
+
+        let uri = "skill://demo-pack/skills/radare2/SKILL.md";
+        let skill_text = resolve_test_scoped_path(&workdir, &skills_root, uri);
+        let read = fs_read_editable_text_impl(&skill_text).expect("pack skill should read");
+        assert_eq!(read.path, uri);
+        assert!(read.content.contains("name: radare2"));
+
+        let escape = resolve_scoped_fs_path_with(
+            &workdir.display().to_string(),
+            "skill://demo-pack/skills/../../../outside.md",
+            || Ok(skills_root.clone()),
+        );
+        assert!(
+            escape.is_err(),
+            "pack paths must stay inside the Skills root"
+        );
+
+        let _ = fs::remove_dir_all(workdir);
+        let _ = fs::remove_dir_all(skills_root);
+    }
+
+    #[test]
     fn skill_scoped_paths_reject_invalid_segments() {
         let workdir = unique_test_workdir("skill-invalid-workspace");
         let skills_root = unique_test_workdir("skill-invalid-root");

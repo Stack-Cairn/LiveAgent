@@ -732,6 +732,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.composer.noMatchingApps": "No matching apps",
   "chat.composer.noMatchingEnabledSkills": "No matching enabled Skills",
   "chat.composer.skillsTitle": "Skills",
+  "chat.composer.skillPackTitle": "From skill pack {pack}",
   "chat.commands.title": "Commands",
   "chat.commands.groupCommands": "Commands",
   "chat.commands.groupPrompts": "Prompts",

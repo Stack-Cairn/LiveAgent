@@ -61,3 +61,42 @@ func TestRelaySkillSettingsSaveAndValidation(t *testing.T) {
 		t.Fatal("failed save acknowledged")
 	}
 }
+
+func TestRelaySkillSettingsCarrySkillPackSwitches(t *testing.T) {
+	var bodies []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/settings":
+			_, _ = io.WriteString(w, `{"providers":[],"models":[]}`)
+		case "/v1/skills/settings":
+			body, _ := io.ReadAll(r.Body)
+			bodies = append(bodies, string(body))
+			_, _ = io.WriteString(w, `{"settings":{"enabled":true,"selected":[]}}`)
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+		}
+	}))
+	defer server.Close()
+	client, _ := New(server.URL, "", server.Client())
+	relay, _ := NewRelay(client, "kb", ModelRef{}, "")
+	for _, raw := range []string{
+		`{"skills":{"enabled":true,"selected":["a"],"packs":{"reverse-skill":false}}}`,
+		`{"skills":{"enabled":true,"selected":["a"]}}`,
+	} {
+		if _, err := relay.SettingsUpdate(context.Background(), &gatewayv2.SettingsUpdateRequest{SettingsJson: raw}); err != nil {
+			t.Fatalf("save %s: %v", raw, err)
+		}
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("saves=%d", len(bodies))
+	}
+	if !strings.Contains(bodies[0], `"packs":{"reverse-skill":false}`) {
+		t.Errorf("pack switches dropped: %s", bodies[0])
+	}
+	// Without packs the field stays out, so an older K-brain accepts the body
+	// and a newer one keeps its stored switches.
+	if strings.Contains(bodies[1], "packs") {
+		t.Errorf("packs sent although absent: %s", bodies[1])
+	}
+}

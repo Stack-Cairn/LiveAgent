@@ -64,6 +64,14 @@ pub struct SystemSkillSummary {
     pub built_in: bool,
     pub installed_at: Option<u64>,
     pub source: Option<SystemSkillSourceMetadata>,
+    /// Top-level directory of the skill pack this skill belongs to; empty for
+    /// a top-level skill (`<root>/<name>/SKILL.md`).
+    pub pack: String,
+    /// True when another skill with the same name wins (see `packs`).
+    pub shadowed: bool,
+    /// `baseDir` of the skill that kept the name when `shadowed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadowed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -80,6 +88,9 @@ pub struct SystemSkillInstallResult {
     pub target: String,
     pub backup: Option<String>,
     pub skill_file: String,
+    /// Set when the source was installed as a skill pack.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pack: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -89,6 +100,12 @@ pub struct SystemSkillValidationResponse {
     pub target: String,
     pub ok: bool,
     pub errors: Vec<String>,
+    /// Skill pack of the validated pack or pack skill.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pack: Option<String>,
+    /// Pack walk problems (malformed SKILL.md files, caps reached).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -194,6 +211,9 @@ pub struct SystemManageSkillResponse {
     pub start_line: Option<usize>,
     pub num_lines: Option<usize>,
     pub skills: Option<Vec<SystemSkillSummary>>,
+    /// Pack skills that lost their name to another skill (list only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadowed: Option<Vec<SystemSkillSummary>>,
     pub invalid: Option<Vec<SystemSkillInvalidEntry>>,
     pub installed: Option<Vec<SystemSkillInstallResult>>,
     pub created: Option<SystemSkillInstallResult>,

@@ -58,8 +58,13 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
         }
         "list" => {
             let (skills, invalid) = list_installed_skills(&root)?;
+            // Same shape as K-brain: one entry per name in `skills`, shadowed
+            // pack copies apart so name-keyed clients never see duplicates.
+            let (shadowed, skills): (Vec<_>, Vec<_>) =
+                skills.into_iter().partition(|skill| skill.shadowed);
             Ok(SystemManageSkillResponse {
                 skills: Some(skills),
+                shadowed: Some(shadowed),
                 invalid: Some(invalid),
                 ..base
             })

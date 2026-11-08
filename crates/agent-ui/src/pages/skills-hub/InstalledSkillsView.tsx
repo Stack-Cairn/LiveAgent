@@ -5,14 +5,24 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ClawHubCategorySlug } from "@liveagent/ui/lib/skills/clawHubCategories";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
+import { type SkillPackToggleState, skillPackName } from "@liveagent/ui/lib/skills/packs";
 import { InstalledSkillCard } from "./InstalledSkillCard";
 import { StoreCategoryChips, type StoreCategoryValue } from "./SkillCategoryControls";
+import { SkillPackGroup } from "./SkillPackGroup";
 import { SkillsContentLoadingState } from "./SkillsLoading";
 import { SKILL_LIST_GRID_CLASS } from "./skillCardLayout";
 
 export type InstalledSkillListItem = {
   skill: SkillSummary;
   categories: ClawHubCategorySlug[];
+};
+
+/** Header data of one skill pack, over all of its skills (not only filtered ones). */
+export type InstalledSkillPackInfo = {
+  skillCount: number;
+  enabledCount: number;
+  toggleState: SkillPackToggleState;
+  shadowed: readonly SkillSummary[];
 };
 
 type InstalledSkillsViewProps = {
@@ -40,7 +50,14 @@ type InstalledSkillsViewProps = {
   onBulkCardClick: (name: string, shiftKey: boolean) => void;
   onOpenPreview: (skill: SkillSummary) => void;
   onDelete: (skill: SkillSummary) => void;
+  /** Skill packs by name; empty when the backend has no skill packs. */
+  packs?: ReadonlyMap<string, InstalledSkillPackInfo>;
+  deletingPack?: string | null;
+  onTogglePack?: (pack: string, on: boolean) => void;
+  onDeletePack?: (pack: string) => void;
 };
+
+const NO_PACKS: ReadonlyMap<string, InstalledSkillPackInfo> = new Map();
 
 export function InstalledSkillsView({
   items,
@@ -67,8 +84,78 @@ export function InstalledSkillsView({
   onBulkCardClick,
   onOpenPreview,
   onDelete,
+  packs = NO_PACKS,
+  deletingPack = null,
+  onTogglePack = () => {},
+  onDeletePack = () => {},
 }: InstalledSkillsViewProps) {
   const { t } = useLocale();
+  // Pack skills render inside their pack group; the rest stay in the flat list.
+  const topLevelItems: InstalledSkillListItem[] = [];
+  const packItems = new Map<string, InstalledSkillListItem[]>();
+  for (const item of items) {
+    const pack = skillPackName(item.skill);
+    if (!pack || !packs.has(pack)) {
+      topLevelItems.push(item);
+      continue;
+    }
+    const members = packItems.get(pack);
+    if (members) members.push(item);
+    else packItems.set(pack, [item]);
+  }
+  const filtering = filter.trim() !== "" || category !== "all";
+  const renderCard = ({ skill, categories }: InstalledSkillListItem) => {
+    const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);
+    return (
+      <div key={`${skill.name}-${rootDir}`} className="min-w-0">
+        <InstalledSkillCard
+          skill={skill}
+          primaryCategory={categories[0] ?? "other"}
+          alwaysEnabled={alwaysEnabled}
+          checked={alwaysEnabled || selected.has(skill.name)}
+          skillsEnabled={skillsEnabled && !backendManaged}
+          bulkMode={bulkMode}
+          bulkSelected={bulkSelection.has(skill.name)}
+          deleting={deletingSkillName === skill.name}
+          deleteDisabled={backendManaged || deletingSkillName !== null}
+          previewDisabled={backendManaged}
+          searchQuery={searchQuery}
+          onToggle={backendManaged ? () => {} : onToggle}
+          onEnterBulkMode={onEnterBulkMode}
+          onToggleBulkSelection={onToggleBulkSelection}
+          onBulkCardClick={onBulkCardClick}
+          onOpenPreview={onOpenPreview}
+          onDelete={backendManaged ? () => {} : onDelete}
+          onSelectCategory={onSelectCategory}
+        />
+      </div>
+    );
+  };
+  const packGroups = [...packs.entries()].flatMap(([pack, info]) => {
+    const members = packItems.get(pack) ?? [];
+    // While filtering, a pack shows only when some of its skills match.
+    if (filtering ? members.length === 0 : info.skillCount + info.shadowed.length === 0) {
+      return [];
+    }
+    return [
+      <SkillPackGroup
+        key={`pack:${pack}-${rootDir}`}
+        pack={pack}
+        skillCount={info.skillCount}
+        enabledCount={info.enabledCount}
+        toggleState={info.toggleState}
+        skillsEnabled={skillsEnabled && !backendManaged}
+        deleting={deletingPack === pack}
+        deleteDisabled={backendManaged || deletingPack !== null || deletingSkillName !== null}
+        forceExpanded={filtering}
+        shadowed={filtering ? [] : info.shadowed}
+        onToggle={backendManaged ? () => {} : onTogglePack}
+        onDelete={backendManaged ? () => {} : onDeletePack}
+      >
+        {members.map(renderCard)}
+      </SkillPackGroup>,
+    ];
+  });
 
   return (
     <div
@@ -155,37 +242,11 @@ export function InstalledSkillsView({
           />
         ) : null}
 
-        {items.length > 0 ? (
-          <div className={SKILL_LIST_GRID_CLASS}>
-            {items.map(({ skill, categories }) => {
-              const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);
-              return (
-                <div key={`${skill.name}-${rootDir}`} className="min-w-0">
-                  <InstalledSkillCard
-                    skill={skill}
-                    primaryCategory={categories[0] ?? "other"}
-                    alwaysEnabled={alwaysEnabled}
-                    checked={alwaysEnabled || selected.has(skill.name)}
-                    skillsEnabled={skillsEnabled && !backendManaged}
-                    bulkMode={bulkMode}
-                    bulkSelected={bulkSelection.has(skill.name)}
-                    deleting={deletingSkillName === skill.name}
-                    deleteDisabled={backendManaged || deletingSkillName !== null}
-                    previewDisabled={backendManaged}
-                    searchQuery={searchQuery}
-                    onToggle={backendManaged ? () => {} : onToggle}
-                    onEnterBulkMode={onEnterBulkMode}
-                    onToggleBulkSelection={onToggleBulkSelection}
-                    onBulkCardClick={onBulkCardClick}
-                    onOpenPreview={onOpenPreview}
-                    onDelete={backendManaged ? () => {} : onDelete}
-                    onSelectCategory={onSelectCategory}
-                  />
-                </div>
-              );
-            })}
-          </div>
+        {topLevelItems.length > 0 ? (
+          <div className={SKILL_LIST_GRID_CLASS}>{topLevelItems.map(renderCard)}</div>
         ) : null}
+
+        {packGroups.length > 0 ? <div className={SKILL_LIST_GRID_CLASS}>{packGroups}</div> : null}
 
         {(filter.trim() || category !== "all") && items.length === 0 && hasSkills ? (
           <GlassPanel tone="muted">

@@ -1735,10 +1735,22 @@ export function normalizeAgentPromptTemplates(input: unknown): AgentPromptTempla
 
 export function normalizeSkillsSettings(input: unknown): SkillsSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const packs = normalizeSkillPackSwitches(obj.packs);
   return {
     enabled: obj.enabled !== false,
     selected: mergeAlwaysEnabledSkillNames(normalizeStringArray(obj.selected)),
+    ...(packs ? { packs } : {}),
   };
+}
+
+/** Keeps `packs` only as an object of booleans; anything else drops it. */
+function normalizeSkillPackSwitches(input: unknown): Record<string, boolean> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const packs: Record<string, boolean> = {};
+  for (const [name, value] of Object.entries(input as Record<string, unknown>)) {
+    if (name.trim() && typeof value === "boolean") packs[name] = value;
+  }
+  return packs;
 }
 
 export function normalizeSelectedModel(input: unknown): SelectedModel | undefined {
