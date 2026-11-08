@@ -1,7 +1,11 @@
+import { hasFrozenCapability, readKBrainHealthResponse } from "@liveagent/ui/lib/kbrain/health";
 import type { SkillsResourceAdapter } from "@liveagent/ui/lib/resourceHost";
 import { normalizeClawHubSkillCard } from "@liveagent/ui/lib/skills/clawHub";
 import type { SystemManageSkillResponse } from "@liveagent/ui/lib/skills/index";
 import { fetchKBrain } from "../lib/kbrain/transport";
+
+/** K-brain capability: skills nested in skill packs, `packs` in skills settings. */
+export const KBRAIN_SKILL_PACKS_CAPABILITY = "skill_packs";
 
 /** Resource-page seam for K-brain-managed Skills. */
 export function createKbrainSkillsAdapter(fetchImpl?: typeof fetch): SkillsResourceAdapter {
@@ -54,11 +58,30 @@ export function createKbrainSkillsAdapter(fetchImpl?: typeof fetch): SkillsResou
       }
       return result;
     },
-    settings: (body) =>
-      request("/v1/skills/settings", {
+    settings: async (body) => {
+      // Older backends reject the unknown `packs` field with 400, so it only
+      // goes to one that advertises skill_packs (read fresh: the backend may
+      // have been swapped since the list was read).
+      let payload = body;
+      if (body.packs !== undefined) {
+        const supported = await fetchKBrain(
+          "/v1/health",
+          undefined,
+          fetchImpl ? { fetch: fetchImpl } : {},
+        )
+          .then(readKBrainHealthResponse)
+          .then((health) => hasFrozenCapability(health, KBRAIN_SKILL_PACKS_CAPABILITY))
+          .catch(() => false);
+        if (!supported) {
+          const { packs: _unsupported, ...rest } = body;
+          payload = rest;
+        }
+      }
+      return request("/v1/skills/settings", {
         method: "PUT",
-        body: JSON.stringify(body),
-      }),
+        body: JSON.stringify(payload),
+      });
+    },
     read: (path, offset = 0, length = 200) =>
       request(`/v1/skills/file?path=${encodeURIComponent(path)}&offset=${offset}&length=${length}`),
     storeSearch: async (params) => {

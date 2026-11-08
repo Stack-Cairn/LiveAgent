@@ -1,7 +1,35 @@
 import type { MentionComposerSkill } from "@liveagent/ui/components/chat/MentionComposerModel";
 import { subscribeSkillsDiscoveryUpdated } from "@liveagent/ui/lib/skills/index";
+import { isSkillEffectivelySelected } from "@liveagent/ui/lib/skills/packs";
 import { useEffect, useState } from "react";
 import { kbrainSkillsAdapter } from "../../../agent-ui-adapters/kbrainSkills";
+
+/**
+ * Enabled skills of a K-brain list, as K-brain resolves them: by name, or by
+ * the whole-pack switch of a skill pack. Shadowed pack copies are never offered.
+ */
+export function kbrainComposerSkillsFromList(result: {
+  skills?: ReadonlyArray<{
+    name: string;
+    description: string;
+    skillFile: string;
+    baseDir: string;
+    pack?: string;
+    shadowed?: boolean;
+  }> | null;
+  settings: { selected: readonly string[]; packs?: Readonly<Record<string, boolean>> };
+}): MentionComposerSkill[] {
+  const selected = new Set(result.settings.selected);
+  return (result.skills ?? [])
+    .filter((skill) => isSkillEffectivelySelected(skill, selected, result.settings.packs))
+    .map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      skillFile: skill.skillFile,
+      baseDir: skill.baseDir,
+      ...(skill.pack ? { pack: skill.pack } : {}),
+    }));
+}
 
 /**
  * K-brain 后端模式下输入框可选的技能。技能的安装与启用由 K-brain 管理，前端的
@@ -33,17 +61,7 @@ export function useKBrainComposerSkills(
           setSkills([]);
           return;
         }
-        const selected = new Set(result.settings.selected);
-        setSkills(
-          (result.skills ?? [])
-            .filter((skill) => selected.has(skill.name))
-            .map((skill) => ({
-              name: skill.name,
-              description: skill.description,
-              skillFile: skill.skillFile,
-              baseDir: skill.baseDir,
-            })),
-        );
+        setSkills(kbrainComposerSkillsFromList(result));
       })
       .catch(() => {
         if (!cancelled) setSkills([]);

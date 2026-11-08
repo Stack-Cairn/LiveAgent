@@ -682,6 +682,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.composer.noMatchingApps": "未找到匹配的应用",
   "chat.composer.noMatchingEnabledSkills": "未找到匹配的已启用 Skills",
   "chat.composer.skillsTitle": "Skills",
+  "chat.composer.skillPackTitle": "来自技能包 {pack}",
   "chat.commands.title": "指令",
   "chat.commands.groupCommands": "指令",
   "chat.commands.groupPrompts": "提示词",

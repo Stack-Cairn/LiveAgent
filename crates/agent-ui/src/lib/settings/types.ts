@@ -54,6 +54,12 @@ export type McpSettings = {
 export type SkillsSettings = {
   enabled: boolean;
   selected: string[];
+  /**
+   * Whole-pack switches keyed by skill pack name (K-brain capability
+   * `skill_packs`): true turns every skill of the pack on, false turns all of
+   * them off. A pack not listed follows `selected`. Absent on older backends.
+   */
+  packs?: Record<string, boolean>;
 };
 
 export type MemoryOrganizerScope = "all" | "global" | "projects" | "current-project";

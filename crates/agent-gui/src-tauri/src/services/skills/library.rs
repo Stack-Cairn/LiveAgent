@@ -1,6 +1,7 @@
 //! 已安装 Skill 库：目录发现、列表、文本读取、删除、打包与 `_meta.json` 源信息。
 
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Component, Path, PathBuf};
@@ -298,6 +299,9 @@ pub(crate) fn skill_summary_from_dir(
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .and_then(|duration| u64::try_from(duration.as_millis()).ok()),
         source: read_skill_source_metadata(skill_dir),
+        pack: String::new(),
+        shadowed: false,
+        shadowed_by: None,
     })
 }
 
@@ -306,7 +310,10 @@ pub(crate) fn list_installed_skills(
 ) -> Result<(Vec<SystemSkillSummary>, Vec<SystemSkillInvalidEntry>), String> {
     let mut skills = Vec::new();
     let mut invalid = Vec::new();
+    let mut packs: Vec<(String, Vec<PackSkill>)> = Vec::new();
+    let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let entries = fs::read_dir(root).map_err(|e| format!("Failed to list Skills root: {e}"))?;
+    let mut dirs = Vec::new();
     for entry in entries {
         let entry = match entry {
             Ok(entry) => entry,
@@ -323,6 +330,26 @@ pub(crate) fn list_installed_skills(
         if name.starts_with('.') || name.contains(".backup-") || !path.is_dir() {
             continue;
         }
+        dirs.push((name, path));
+    }
+    dirs.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (name, path) in dirs {
+        // A directory with its own SKILL.md (or skill.json) is one skill; the
+        // pack walk only applies when it has none.
+        if standard_metadata_file_for(&path).is_none()
+            && may_be_pack_dir_name(&name)
+            && fs::canonicalize(&path)
+                .map(|target| target.starts_with(&canonical_root))
+                .unwrap_or(false)
+        {
+            let scan = scan_pack(root, &path);
+            if scan.is_pack {
+                invalid.extend(scan.invalid);
+                packs.push((name, scan.skills));
+                continue;
+            }
+        }
         match skill_summary_from_dir(root, &path) {
             Ok(summary) => skills.push(summary),
             Err(error) => invalid.push(SystemSkillInvalidEntry {
@@ -331,24 +358,58 @@ pub(crate) fn list_installed_skills(
             }),
         }
     }
-    skills.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let top_level = skills
+        .iter()
+        .map(|skill| (skill.name.clone(), skill.base_dir.clone()))
+        .collect::<HashMap<_, _>>();
+    let shadowing = resolve_pack_shadowing(&top_level, &packs);
+    for ((pack, pack_skills), shadowed_by) in packs.iter().zip(shadowing) {
+        for (skill, shadowed_by) in pack_skills.iter().zip(shadowed_by) {
+            skills.push(pack_skill_summary(root, pack, skill, shadowed_by));
+        }
+    }
+    skills.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.shadowed.cmp(&b.shadowed))
+            .then_with(|| a.base_dir.cmp(&b.base_dir))
+    });
     Ok((skills, invalid))
+}
+
+fn pack_child_delete_error(name: &str, pack: &str) -> String {
+    format!(
+        "Skill '{name}' belongs to skill pack '{pack}' and cannot be deleted on its own. Disable it instead, or delete the whole pack '{pack}'."
+    )
 }
 
 pub(crate) fn delete_installed_skill(
     root: &Path,
     name: &str,
 ) -> Result<SystemSkillDeleteResponse, String> {
+    // A pack skill may be named by its baseDir (`<pack>/skills/<module>`).
+    if name.contains('/') || name.contains('\\') {
+        if let Some(pack) = find_pack_for_skill_name(root, name) {
+            return Err(pack_child_delete_error(name, &pack));
+        }
+    }
     let name = sanitize_skill_name(name)?;
     ensure_not_builtin_skill_management_target(root, &name, "delete")?;
     let _guard = skills_write_guard();
     let target = root.join(&name);
-    let metadata = fs::symlink_metadata(&target).map_err(|e| {
-        format!(
-            "Skill does not exist or cannot be inspected: {}: {e}",
-            target.display()
-        )
-    })?;
+    let metadata = match fs::symlink_metadata(&target) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            if let Some(pack) = find_pack_for_skill_name(root, &name) {
+                return Err(pack_child_delete_error(&name, &pack));
+            }
+            return Err(format!(
+                "Skill does not exist or cannot be inspected: {}: {error}",
+                target.display()
+            ));
+        }
+    };
     if metadata.file_type().is_symlink() {
         return Err(format!(
             "SkillsManager action=delete refuses to delete symlink target: {}",

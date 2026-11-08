@@ -19,6 +19,8 @@ export function buildSkillEntrySignature(skill: SkillSummary) {
     skill.source?.slug ?? "",
     skill.installedAt ?? "",
     skill.source?.version ?? "",
+    skill.pack ?? "",
+    skill.shadowedBy ?? "",
   ].join("\0");
 }
 

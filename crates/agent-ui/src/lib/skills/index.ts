@@ -31,6 +31,15 @@ export type SkillSummary = {
   inlineContent?: string;
   inlineContentTruncated?: boolean;
   source?: SkillSourceMetadata | null;
+  /**
+   * Skill pack holding the skill ("" for a top-level skill). Absent when the
+   * backend does not know skill packs.
+   */
+  pack?: string;
+  /** True when another skill kept this name; never active. */
+  shadowed?: boolean;
+  /** baseDir of the skill that kept the name. */
+  shadowedBy?: string;
 };
 
 export type SkillSourceMetadata = {
@@ -46,7 +55,10 @@ export type SkillSourceMetadata = {
 
 export type SkillDiscovery = {
   rootDir: string;
+  /** One active skill per name. */
   skills: SkillSummary[];
+  /** Pack skills that lost their name to another skill (skill packs only). */
+  shadowed?: SkillSummary[];
 };
 
 export type ExplicitSkillMentionReference = {
@@ -93,6 +105,10 @@ export type SkillInstallResult = {
   target: string;
   backup?: string | null;
   skillFile: string;
+  /** Set when the source was installed as a skill pack. */
+  pack?: string | null;
+  /** Number of skills in an installed pack (K-brain). */
+  skills?: number | null;
 };
 export type SkillInstallJobSnapshot = {
   jobId: string;
@@ -119,16 +135,9 @@ export type SystemManageSkillResponse = {
   truncated?: boolean | null;
   startLine?: number | null;
   numLines?: number | null;
-  skills?: Array<{
-    name: string;
-    description: string;
-    target: string;
-    skillFile: string;
-    baseDir: string;
-    builtIn?: boolean;
-    installedAt?: number | null;
-    source?: SkillSourceMetadata | null;
-  }> | null;
+  skills?: ManagedSkillListItem[] | null;
+  /** Pack skills that lost their name to another skill (skill packs only). */
+  shadowed?: ManagedSkillListItem[] | null;
   invalid?: Array<{ path: string; error: string }> | null;
   installed?: SkillInstallResult[] | null;
   created?: SkillInstallResult | null;
@@ -137,6 +146,9 @@ export type SystemManageSkillResponse = {
     target: string;
     ok: boolean;
     errors: string[];
+    /** Skill pack of the validated pack or pack skill. */
+    pack?: string;
+    warnings?: string[];
   } | null;
   package?: {
     name: string;
@@ -154,6 +166,20 @@ export type SystemManageSkillResponse = {
   clawhubDownloadUrl?: string | null;
   external?: ExternalToolScan[] | null;
   externalMcp?: ExternalMcpToolScan[] | null;
+};
+
+export type ManagedSkillListItem = {
+  name: string;
+  description: string;
+  target: string;
+  skillFile: string;
+  baseDir: string;
+  builtIn?: boolean;
+  installedAt?: number | null;
+  source?: SkillSourceMetadata | null;
+  pack?: string;
+  shadowed?: boolean;
+  shadowedBy?: string;
 };
 
 export type ExternalSkillEntry = {
@@ -483,29 +509,46 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function normalizeManagedSkillListItem(raw: ManagedSkillListItem): SkillSummary | null {
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  const description = typeof raw.description === "string" ? raw.description.trim() : "";
+  const skillFile = typeof raw.skillFile === "string" ? normalizeRelPath(raw.skillFile) : "";
+  const baseDir = typeof raw.baseDir === "string" ? normalizeRelPath(raw.baseDir) : "";
+  if (!name || !description || !skillFile || !baseDir) return null;
+  return {
+    name,
+    description,
+    skillFile,
+    baseDir,
+    builtIn: raw.builtIn === true,
+    installedAt:
+      typeof raw.installedAt === "number" && Number.isFinite(raw.installedAt)
+        ? raw.installedAt
+        : null,
+    source: normalizeSkillSourceMetadata(raw.source),
+    // `pack` is absent on backends without skill packs; keep it absent then.
+    ...(typeof raw.pack === "string" ? { pack: raw.pack.trim() } : {}),
+    ...(raw.shadowed === true ? { shadowed: true } : {}),
+    ...(typeof raw.shadowedBy === "string" && raw.shadowedBy
+      ? { shadowedBy: normalizeRelPath(raw.shadowedBy) }
+      : {}),
+  };
+}
+
 async function managedSkillListToDiscovery(
   managed: SystemManageSkillResponse,
 ): Promise<SkillDiscovery> {
   const rootDir = normalizeDisplayPath(managed.rootDir ?? "");
   const rawSkills: SkillSummary[] = [];
   for (const raw of managed.skills ?? []) {
-    const name = typeof raw.name === "string" ? raw.name.trim() : "";
-    const description = typeof raw.description === "string" ? raw.description.trim() : "";
-    const skillFile = typeof raw.skillFile === "string" ? normalizeRelPath(raw.skillFile) : "";
-    const baseDir = typeof raw.baseDir === "string" ? normalizeRelPath(raw.baseDir) : "";
-    if (!name || !description || !skillFile || !baseDir) continue;
-    rawSkills.push({
-      name,
-      description,
-      skillFile,
-      baseDir,
-      builtIn: raw.builtIn === true,
-      installedAt:
-        typeof raw.installedAt === "number" && Number.isFinite(raw.installedAt)
-          ? raw.installedAt
-          : null,
-      source: normalizeSkillSourceMetadata(raw.source),
-    });
+    const skill = normalizeManagedSkillListItem(raw);
+    // Older lists mixed shadowed pack copies into `skills`; keep them apart.
+    if (skill && !skill.shadowed) rawSkills.push(skill);
+  }
+  const shadowed: SkillSummary[] = [];
+  for (const raw of [...(managed.shadowed ?? []), ...(managed.skills ?? [])]) {
+    const skill = normalizeManagedSkillListItem(raw);
+    if (skill?.shadowed) shadowed.push(skill);
   }
   // README 回退型 skill 的富化各需两次串行往返；数量多时串行等待主导加载耗时，
   // 这里做有界并发（保序），失败兜底在 maybeAttachReadmeFallbackInline 内部。
@@ -518,6 +561,7 @@ async function managedSkillListToDiscovery(
   const discovery: SkillDiscovery = {
     rootDir,
     skills: sortAndDedupeSkills(skills),
+    ...(shadowed.length > 0 ? { shadowed } : {}),
   };
 
   if (discovery.skills.length === 0 && (managed.invalid?.length ?? 0) > 0) {

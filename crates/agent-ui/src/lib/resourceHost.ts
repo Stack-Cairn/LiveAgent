@@ -1,7 +1,12 @@
 import type { ClawHubListResponse } from "./skills/clawHub";
 import type { SystemManageSkillResponse } from "./skills/index";
 
-export type SkillsResourceSettings = { enabled: boolean; selected: string[] };
+export type SkillsResourceSettings = {
+  enabled: boolean;
+  selected: string[];
+  /** Whole-pack switches; only sent to backends with capability `skill_packs`. */
+  packs?: Record<string, boolean>;
+};
 
 export type SkillsResourceAdapter = {
   list: (

@@ -15,6 +15,10 @@ func gatewaySkillSettings(raw json.RawMessage) (json.RawMessage, error) {
 	var settings struct {
 		Enabled  *bool    `json:"enabled"`
 		Selected []string `json:"selected"`
+		// Packs switches whole skill packs (K-brain capability skill_packs).
+		// Omitted when absent: K-brain then keeps the stored value, and an
+		// older K-brain never sees the field it would reject.
+		Packs map[string]bool `json:"packs,omitempty"`
 	}
 	if err := json.Unmarshal(raw, &settings); err != nil || settings.Enabled == nil || settings.Selected == nil {
 		return nil, errors.New("skills settings require enabled and selected")

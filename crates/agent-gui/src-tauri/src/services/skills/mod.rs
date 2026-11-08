@@ -4,6 +4,7 @@
 //! - [`util`]：临时目录、时间戳与 payload 字段工具
 //! - [`paths`]：skills 根目录解析、路径回显与路径 / 名称清洗
 //! - [`metadata`]：frontmatter / skill.json 元数据解析与元数据文件定位
+//! - [`packs`]：Skill pack 发现（嵌套 SKILL.md）、宽松元数据与同名遮蔽
 //! - [`library`]：已安装 Skill 库（发现 / 列表 / 读取 / 删除 / 打包 / `_meta.json`）
 //! - [`sources`]：安装源准备（GitHub / HTTP / 本地 / 压缩包）、下载与安全解压
 //! - [`install`]：备份、带冲突策略的复制与 install payload 编排
@@ -24,6 +25,9 @@ mod jobs;
 mod library;
 mod manager;
 mod metadata;
+#[cfg(test)]
+mod pack_tests;
+mod packs;
 mod paths;
 mod sources;
 #[cfg(test)]
@@ -46,6 +50,7 @@ pub use library::{
 };
 pub use manager::system_manage_skill_sync;
 pub(crate) use metadata::*;
+pub(crate) use packs::*;
 pub use paths::skills_root_dir;
 pub(crate) use paths::*;
 pub(crate) use sources::*;
