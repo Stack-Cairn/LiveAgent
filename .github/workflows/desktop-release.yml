@@ -249,7 +249,7 @@ jobs:
         run: |
           $archive = Join-Path $env:RUNNER_TEMP "protoc.zip"
           $destination = Join-Path $env:RUNNER_TEMP "protoc-$env:PROTOC_VERSION"
-          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v$env:PROTOC_VERSION/protoc-$env:PROTOC_VERSION-win64.zip" -OutFile $archive
+          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v$env:PROTOC_VERSION/protoc-$env:PROTOC_VERSION-win64.zip" -OutFile $archive -MaximumRetryCount 8 -RetryIntervalSec 20
           Expand-Archive -Path $archive -DestinationPath $destination -Force
           $protoc = Join-Path $destination "bin\protoc.exe"
           & $protoc --version
@@ -385,7 +385,7 @@ jobs:
           PROTOC_VERSION: "34.0"
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/protoc.zip \
+          curl -fsSL --retry 8 --retry-all-errors --retry-delay 20 -o /tmp/protoc.zip \
             "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
           sudo unzip -oq /tmp/protoc.zip -d /usr/local 'bin/protoc' 'include/*'
           sudo chmod +x /usr/local/bin/protoc
