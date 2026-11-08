@@ -63,7 +63,32 @@ async function optionalJson(path) {
   catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
 
+class RetryableDownloadError extends Error {}
+
+const downloadAttempts = 4;
+
+function retryDelayMs(attempt) {
+  const base = Number(process.env.LIVEAGENT_KBRAIN_DOWNLOAD_RETRY_DELAY_MS ?? 2_000);
+  return (Number.isFinite(base) && base >= 0 ? base : 2_000) * 2 ** (attempt - 1);
+}
+
+// GitHub release downloads occasionally answer 5xx or drop the connection on CI runners.
+// Retry those a few times; 4xx answers and redirect or protocol errors fail at once.
 async function download(url) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await downloadOnce(url);
+    } catch (error) {
+      const retryable = error instanceof RetryableDownloadError || (error instanceof TypeError && error.message === "fetch failed") || error?.name === "TimeoutError";
+      if (!retryable || attempt >= downloadAttempts) throw error;
+      const delay = retryDelayMs(attempt);
+      console.warn(`K-brain download attempt ${attempt}/${downloadAttempts} failed (${error.message}); retrying in ${delay} ms`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+async function downloadOnce(url) {
   let current = new URL(url);
   const signal = AbortSignal.timeout(120_000);
   for (let redirects = 0; redirects <= 5; redirects++) {
@@ -78,7 +103,12 @@ async function download(url) {
       current = new URL(location, current);
       continue;
     }
-    if (!response.ok) throw new Error(`K-brain download failed: HTTP ${response.status}`);
+    if (!response.ok) {
+      await response.body?.cancel();
+      const message = `K-brain download failed: HTTP ${response.status}`;
+      if (response.status >= 500 || response.status === 408 || response.status === 429) throw new RetryableDownloadError(message);
+      throw new Error(message);
+    }
     return Buffer.from(await response.arrayBuffer());
   }
   throw new Error("K-brain download exceeded redirect limit");

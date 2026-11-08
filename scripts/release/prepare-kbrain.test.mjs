@@ -7,6 +7,8 @@ import { after, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { defaultArtifact, defaultOutput, platformFor, prepare, readLock, resolveTarget, root } from "./prepare-kbrain.mjs";
 
+process.env.LIVEAGENT_KBRAIN_DOWNLOAD_RETRY_DELAY_MS = "0";
+
 const revision = "e6743be5600046f5c0fb3db256dbf2c49abf66af";
 const baseLock = {
   schemaVersion: 1,
@@ -38,12 +40,12 @@ function sha256(data) {
 
 let server;
 let requests = 0;
-function startServer(body, status = 200) {
+function startServer(body, status = 200, failFirst = 0, failStatus = 504) {
   return new Promise((resolve) => {
     server = createServer((_request, response) => {
       requests += 1;
-      response.writeHead(status);
-      response.end(body);
+      response.writeHead(requests <= failFirst ? failStatus : status);
+      response.end(requests <= failFirst ? "gateway timeout" : body);
     }).listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}/k-brain`));
   });
 }
@@ -134,6 +136,37 @@ test("blocks checksum mismatches and failed downloads without leaving a runtime 
   await assert.rejects(() => prepare({ lock: failed.path, target: "x86_64-unknown-linux-gnu", artifactDir: false, output: join(failed.directory, "output") }), /download failed|fetch failed|ENOTFOUND|network/i);
   const noDownloads = await fixtureLock();
   await assert.rejects(() => prepare({ lock: noDownloads.path, target: "x86_64-unknown-linux-gnu", artifactDir: false, output: join(noDownloads.directory, "output") }), /No pinned K-brain backend and computer artifacts/);
+});
+
+test("retries transient 5xx download failures but not 4xx answers", async () => {
+  const body = Buffer.from("fixture k-brain after a gateway timeout\n");
+  const hash = sha256(body);
+  const url = await startServer(body, 200, 2);
+  const flaky = await fixtureLock({ downloads: {
+    "x86_64-pc-windows-msvc": { sourceRevision: revision, assets: { backend: "k-brain-windows-x64.exe", computer: "k-brain-computer-windows-x64.exe" }, urls: { backend: url, computer: url }, sha256: { backend: hash, computer: hash } },
+  } });
+  cacheFiles.push(join(root, ".liveagent", "kbrain-cache", hash, "k-brain-windows-x64.exe"), join(root, ".liveagent", "kbrain-cache", hash, "k-brain-computer-windows-x64.exe"));
+  const prepared = await prepare({ lock: flaky.path, target: "x86_64-pc-windows-msvc", artifactDir: false, output: join(flaky.directory, "output"), release: true });
+  assert.equal(prepared.sha256.backend, hash);
+  assert.equal(requests, 4); // two 504s, then the backend and the computer binary
+  await new Promise((resolve) => server.close(resolve));
+  requests = 0;
+
+  const missingUrl = await startServer(body, 404);
+  const missing = await fixtureLock({ downloads: {
+    "x86_64-unknown-linux-gnu": { sourceRevision: revision, assets: { backend: "k-brain-linux-x64", computer: "k-brain-computer-linux-x64" }, urls: { backend: missingUrl, computer: missingUrl }, sha256: { backend: "1".repeat(64), computer: "1".repeat(64) } },
+  } });
+  await assert.rejects(() => prepare({ lock: missing.path, target: "x86_64-unknown-linux-gnu", artifactDir: false, output: join(missing.directory, "output") }), /HTTP 404/);
+  assert.equal(requests, 1);
+  await new Promise((resolve) => server.close(resolve));
+  requests = 0;
+
+  const downUrl = await startServer(body, 200, 99, 503);
+  const down = await fixtureLock({ downloads: {
+    "x86_64-unknown-linux-gnu": { sourceRevision: revision, assets: { backend: "k-brain-linux-x64", computer: "k-brain-computer-linux-x64" }, urls: { backend: downUrl, computer: downUrl }, sha256: { backend: "2".repeat(64), computer: "2".repeat(64) } },
+  } });
+  await assert.rejects(() => prepare({ lock: down.path, target: "x86_64-unknown-linux-gnu", artifactDir: false, output: join(down.directory, "output") }), /HTTP 503/);
+  assert.equal(requests, 4);
 });
 
 test("rejects an invalid lock before downloading", async () => {
