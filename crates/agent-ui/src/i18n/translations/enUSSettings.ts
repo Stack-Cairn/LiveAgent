@@ -1122,6 +1122,15 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "Trust record cleared. The next connection will confirm the host key again.",
   "settings.sshKnownHostResetEmpty": "No trust record was found for this host.",
   "settings.sshKnownHostResetFailed": "Failed to reset trust record: {error}",
+  "settings.sshAgentLabel": "SSHManager",
+  "settings.sshAgentCredentialSaved": "Credential saved",
+  "settings.sshAgentCredentialMissing": "No saved credential",
+  "settings.sshAgentCredentialInteractive": "Prompts at login",
+  "settings.sshAgentHostKeys": "Trusted host keys",
+  "settings.sshAgentNoHostKeys": "No trusted host key yet",
+  "settings.sshAgentSkipped":
+    "Not available to SSHManager: K-brain does not accept this host's settings.",
+  "settings.sshAgentSyncFailed": "Could not sync SSH hosts to K-brain: {error}",
   "settings.sshReconnectPromptTitle": "Apply the updated SSH settings?",
   "settings.sshReconnectPromptDesc":
     "{count} active connection(s) to this host still use the previous settings. Reconnecting now interrupts running remote programs.",

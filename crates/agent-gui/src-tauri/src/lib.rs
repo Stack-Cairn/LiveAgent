@@ -168,6 +168,7 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_save_ssh,
             commands::settings::settings_apply_ssh_patch,
             commands::settings::settings_reset_ssh_known_host,
+            commands::settings::settings_kbrain_ssh_state,
             commands::settings::settings_save_remote,
             commands::settings::settings_save_memory,
             commands::settings::settings_save_model_failover,
@@ -994,6 +995,12 @@ pub fn run() {
                 }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
+                // Push Settings > SSH to K-brain's SSHManager on every (re)connect.
+                if let Some(kbrain) =
+                    app.try_state::<Arc<services::kbrain_backend::KBrainBackendState>>()
+                {
+                    services::kbrain_ssh_sync::install(Arc::clone(kbrain.inner()));
+                }
                 // 配置自动同步的后台任务：只消费脏信号并做防抖上传，
                 // 未开启自动同步时它会在每次唤醒后静默跳过。
                 services::webdav_auto_sync::start(app.handle().clone());

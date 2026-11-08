@@ -19,6 +19,7 @@ import {
   ASK_USER_QUESTION_TOOL_NAME,
   type AskUserQuestionAnswer,
   parseAskUserQuestionResultDetails,
+  readToolQuestionItems,
   sanitizeAskUserQuestionItems,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
@@ -40,6 +41,7 @@ import {
   parseExitPlanModeResultDetails,
   sanitizePlanMarkdown,
 } from "@liveagent/ui/lib/chat/planMode";
+import { hasSshManagerResultView } from "@liveagent/ui/lib/chat/sshManagerDisplay";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "../../IconSet";
@@ -511,6 +513,8 @@ function ToolCallItem({
           const resultText = toolResultMessageToText(result);
           if (!/\S/.test(resultText)) return null;
           if (builtinResultKind && builtinResultKind !== "read_image") return null;
+          // Exec output and SFTP transfers already render in full above.
+          if (hasSshManagerResultView(item.toolCall.name, resultText, result.isError)) return null;
 
           if (readOnly) {
             return (
@@ -611,13 +615,36 @@ function ToolCallItem({
   const containerClassName = "group/tool min-w-0 max-w-full";
   // MCP elicitation forms sit below the row, outside the collapse: a waiting form must stay
   // visible whether or not the call is expanded.
+  // A question the running tool asks itself (SSHManager confirming a host key) sits there
+  // too, while it is pending.
+  const toolQuestions =
+    !isAskUser && !isRedactedToolContent && !result && askPending
+      ? readToolQuestionItems(item.toolCall.arguments)
+      : [];
   const elicitations = isRedactedToolContent ? null : (
-    <ToolElicitations
-      toolCallId={item.toolCall.id}
-      args={item.toolCall.arguments}
-      details={result?.details}
-      canAnswer={!readOnly && !result}
-    />
+    <>
+      {toolQuestions.length > 0 ? (
+        <div className="py-1.5">
+          <AskUserQuestionCard
+            questions={toolQuestions}
+            allowCustom={false}
+            interactive={!readOnly}
+            deadlineAt={
+              readOnly
+                ? undefined
+                : readAskUserQuestionDeadline(item.toolCall.id, item.toolCall.arguments)
+            }
+            onSubmit={submitAskAnswers}
+          />
+        </div>
+      ) : null}
+      <ToolElicitations
+        toolCallId={item.toolCall.id}
+        args={item.toolCall.arguments}
+        details={result?.details}
+        canAnswer={!readOnly && !result}
+      />
+    </>
   );
 
   // 计划卡直出(任务卡风格):不进折叠壳、无摘要行,整卡直接展示——

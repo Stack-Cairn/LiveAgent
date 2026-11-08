@@ -1,3 +1,4 @@
+import { TOOL_QUESTION_ARG } from "./askUserQuestion";
 import { MCP_ELICITATION_SYNTHETIC_ARG_KEYS } from "./mcpElicitation";
 import { deriveFileToolPreview, readStreamPreviewMeta } from "./toolPreview";
 
@@ -103,6 +104,8 @@ export const TOOL_APPROVAL_SYNTHETIC_ARG_KEYS: readonly string[] = [
   // MCP elicitation forms are stamped only from the desktop's pending store too: a model
   // must not be able to fake a form on the WebUI.
   ...MCP_ELICITATION_SYNTHETIC_ARG_KEYS,
+  // A tool's own question (SSHManager host keys) comes from the desktop's pending store.
+  TOOL_QUESTION_ARG,
 ];
 
 const PREVIEW_CONTEXT_LINES = 3;

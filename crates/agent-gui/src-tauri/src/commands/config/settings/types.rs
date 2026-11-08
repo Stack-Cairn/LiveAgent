@@ -113,4 +113,6 @@ pub(crate) struct RuntimeSshKnownHostKey {
 #[serde(rename_all = "camelCase")]
 pub struct SshKnownHostResetResponse {
     pub deleted: usize,
+    /// Of `deleted`, the keys removed from K-brain's known_hosts (SSHManager).
+    pub kbrain_removed: usize,
 }

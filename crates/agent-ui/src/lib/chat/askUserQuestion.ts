@@ -36,6 +36,14 @@ export const ASK_USER_QUESTION_PENDING_ARG = "__askUserQuestionPending";
  */
 export const KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG = "__kbrainQuestionArguments";
 
+/**
+ * A question a running tool asks (K-brain's SSHManager host-key confirmation): the call
+ * keeps its own name and arguments, and the question rides along under this key while it
+ * is pending. Holds `{ questions }`; the desktop strips it when the question resolves and
+ * stamps it only from its own pending store when syncing to the WebUI.
+ */
+export const TOOL_QUESTION_ARG = "__toolQuestion";
+
 export type AskUserQuestionOption = {
   label: string;
   description?: string;
@@ -94,6 +102,14 @@ export function readAskUserQuestionPendingMarker(args: unknown): boolean | null 
   if (!args || typeof args !== "object") return null;
   const value = (args as Record<string, unknown>)[ASK_USER_QUESTION_PENDING_ARG];
   return typeof value === "boolean" ? value : null;
+}
+
+/** The questions a running tool asks, from {@link TOOL_QUESTION_ARG}; empty when none. */
+export function readToolQuestionItems(args: unknown): AskUserQuestionItem[] {
+  if (!args || typeof args !== "object") return [];
+  const value = (args as Record<string, unknown>)[TOOL_QUESTION_ARG];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return sanitizeAskUserQuestionItems((value as Record<string, unknown>).questions);
 }
 
 /** 推荐项固定排在第一位展示；其余选项保持模型给出的顺序。 */

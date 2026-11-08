@@ -113,6 +113,7 @@ fn save_ssh(conn: &mut Connection, payload: Value) -> Result<(), String> {
 
     tx.commit()
         .map_err(|e| format!("提交 {SSH_SETTINGS_TABLE} 事务失败：{e}"))?;
+    crate::services::kbrain_ssh_sync::request_sync();
     Ok(())
 }
 
@@ -125,4 +126,9 @@ fn empty_ssh_settings_value() -> Value {
 
 fn load_ssh_or_empty(conn: &Connection) -> Result<Value, String> {
     Ok(load_ssh(conn)?.unwrap_or_else(empty_ssh_settings_value))
+}
+
+/// The SSH settings with their secrets, for the push to K-brain's SSHManager.
+pub(crate) fn load_ssh_settings_for_kbrain(conn: &Connection) -> Result<Value, String> {
+    load_ssh_or_empty(conn)
 }

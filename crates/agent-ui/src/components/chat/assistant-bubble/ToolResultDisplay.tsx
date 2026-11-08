@@ -60,6 +60,7 @@ import {
   shouldShowSubagentCleanupStatus,
   shouldShowSubagentWorktreeLocation,
 } from "./assistantBubbleUtils";
+import { getSshManagerResultView } from "./SshManagerResult";
 import { getToolResultImages, ToolResultImagePreview } from "./ToolImages";
 
 // 距底部不超过这么多像素视为“跟随最新输出”；用户上翻查看时不抢滚动位置。
@@ -590,6 +591,9 @@ export function ToolResultDisplay({
     item.toolCall.name === "ProcessStop";
 
   if (isShellSessionTool) return null;
+
+  const sshView = getSshManagerResultView(item.toolCall.name, text, result.isError);
+  if (sshView) return sshView;
 
   if (kind === "read_text") {
     const details = result.details as ReadTextResultDetails;

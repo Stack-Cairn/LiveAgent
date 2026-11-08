@@ -6,7 +6,12 @@ import type {
   ToolResultMessage,
 } from "@liveagent/app/lib/agentTypes";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
-import { KBRAIN_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
+  ASK_USER_QUESTION_DEADLINE_ARG,
+  ASK_USER_QUESTION_TOOL_NAME,
+  KBRAIN_QUESTION_TOOL_NAME,
+  TOOL_QUESTION_ARG,
+} from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   type HostedSearchBlock,
   normalizeHostedSearchBlock,
@@ -341,6 +346,26 @@ function usage(message?: KBrainMessage): AssistantMessage["usage"] {
     totalTokens: input + output,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   };
+}
+
+/** The call without the question a running tool asked (see {@link TOOL_QUESTION_ARG}). */
+export function withoutToolQuestion(call: ToolCall): ToolCall {
+  if (!(TOOL_QUESTION_ARG in (call.arguments ?? {}))) return call;
+  const {
+    [TOOL_QUESTION_ARG]: _question,
+    [ASK_USER_QUESTION_DEADLINE_ARG]: _deadline,
+    ...rest
+  } = call.arguments;
+  return { ...call, arguments: rest };
+}
+
+/** A question asked by a running tool other than AskUserQuestion / K-brain's question. */
+export function isToolOwnedQuestion(call: ToolCall | undefined): call is ToolCall {
+  return (
+    call !== undefined &&
+    call.name !== ASK_USER_QUESTION_TOOL_NAME &&
+    call.name !== KBRAIN_QUESTION_TOOL_NAME
+  );
 }
 
 function toolCall(call: KBrainToolCall): ToolCall {
@@ -840,12 +865,14 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           resolvedQuestion?.details && !computed.isError
             ? { ...computed, details: resolvedQuestion.details }
             : computed;
-        const call = calls.get(result.toolCallId) ?? {
-          type: "toolCall",
-          id: result.toolCallId,
-          name: result.toolName,
-          arguments: {},
-        };
+        const call = withoutToolQuestion(
+          calls.get(result.toolCallId) ?? {
+            type: "toolCall",
+            id: result.toolCallId,
+            name: result.toolName,
+            arguments: {},
+          },
+        );
         settledCalls.add(result.toolCallId);
         params.onToolResult(call, result);
         break;
@@ -947,22 +974,35 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         if (request.run_id !== accepted.run_id || !request.question_id || !request.tool_call_id)
           throw new Error("Question identity mismatch");
         if (pendingQuestions.has(request.question_id)) break;
-        const previous = calls.get(request.tool_call_id)?.arguments ?? {};
-        const call: ToolCall = {
-          type: "toolCall",
-          id: request.tool_call_id,
-          name: "AskUserQuestion",
-          arguments: {
-            questions: request.questions,
-            __askUserQuestionDeadlineAt: request.deadline_at,
-            ...(previous[KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG] !== undefined
-              ? {
-                  [KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG]:
-                    previous[KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG],
-                }
-              : {}),
-          },
-        };
+        const previousCall = calls.get(request.tool_call_id);
+        const previous = previousCall?.arguments ?? {};
+        // A running tool asking its own question (SSHManager confirming a host key) keeps
+        // its name and arguments: the question rides along until it resolves, and the
+        // tool's real result follows.
+        const call: ToolCall = isToolOwnedQuestion(previousCall)
+          ? {
+              ...previousCall,
+              arguments: {
+                ...previous,
+                [TOOL_QUESTION_ARG]: { questions: request.questions },
+                [ASK_USER_QUESTION_DEADLINE_ARG]: request.deadline_at,
+              },
+            }
+          : {
+              type: "toolCall",
+              id: request.tool_call_id,
+              name: "AskUserQuestion",
+              arguments: {
+                questions: request.questions,
+                __askUserQuestionDeadlineAt: request.deadline_at,
+                ...(previous[KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG] !== undefined
+                  ? {
+                      [KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG]:
+                        previous[KBRAIN_QUESTION_ORIGINAL_ARGUMENTS_ARG],
+                    }
+                  : {}),
+              },
+            };
         calls.set(call.id, call);
         params.onToolCall(call);
         pendingQuestions.set(request.question_id, questionController);
@@ -998,7 +1038,12 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           pendingQuestions.get(resolution.question_id)?.abort();
           pendingQuestions.delete(resolution.question_id);
           const call = calls.get(resolution.tool_call_id);
-          if (call) {
+          if (call && TOOL_QUESTION_ARG in call.arguments) {
+            // The tool goes on running; only the question card goes away.
+            const settled = withoutToolQuestion(call);
+            calls.set(settled.id, settled);
+            if (!settledCalls.has(settled.id)) params.onToolCall(settled);
+          } else if (call) {
             const resolved = toolResult(
               {
                 id: call.id,

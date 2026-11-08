@@ -72,6 +72,7 @@ export const TOOL_ACTIVITY_CATEGORIES = [
   "context",
   "browser",
   "computer",
+  "ssh",
   "other",
 ] as const;
 
@@ -110,10 +111,11 @@ export function getToolActivityCategory(name: string): ToolActivityCategory {
     case "ManagedProcess":
     case "ProcessWait":
     case "ProcessStop":
-    case "SSHManager":
-    case "SshManager":
     case "TerminalSession":
       return "command";
+    case "SSHManager":
+    case "SshManager":
+      return "ssh";
     case "List":
       return "list";
     case LSP_TOOL_NAME:

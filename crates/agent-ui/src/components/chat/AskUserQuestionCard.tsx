@@ -124,6 +124,57 @@ function RecommendedTag({ label }: { label: string }) {
   );
 }
 
+// 「Key: value」形式的指纹行（如 SSH 主机密钥确认里的 Algorithm/Fingerprint）
+// 单独成行、等宽可选中，长指纹整段换行而不是被截断。
+const QUESTION_PROMPT_FIELD = /^(Algorithm|Fingerprint):\s*(\S.*)$/;
+
+// A plain render helper (not a component) so the prompt text stays in the card's own tree.
+function renderQuestionPrompt(prompt: string) {
+  const lines = prompt.split("\n");
+  if (!lines.some((line) => QUESTION_PROMPT_FIELD.test(line.trim()))) {
+    return (
+      <div className="whitespace-pre-wrap text-sm font-medium leading-1p5 text-foreground">
+        {prompt}
+      </div>
+    );
+  }
+  const blocks: Array<{ key: string; text?: string; field?: [string, string] }> = [];
+  let paragraph: string[] = [];
+  const flush = (index: number) => {
+    const text = paragraph.join("\n").trim();
+    if (text) blocks.push({ key: `p${index}`, text });
+    paragraph = [];
+  };
+  lines.forEach((line, index) => {
+    const match = QUESTION_PROMPT_FIELD.exec(line.trim());
+    if (match) {
+      flush(index);
+      blocks.push({ key: `f${index}`, field: [match[1], match[2]] });
+    } else {
+      paragraph.push(line);
+    }
+  });
+  flush(lines.length);
+  return (
+    <div className="flex flex-col gap-1.5 text-sm leading-1p5 text-foreground">
+      {blocks.map((block) =>
+        block.field ? (
+          <div key={block.key} data-question-field={block.field[0]} className="flex flex-col">
+            <span className="text-xs text-muted-foreground">{block.field[0]}</span>
+            <code className="select-text break-all font-mono text-xs text-foreground">
+              {block.field[1]}
+            </code>
+          </div>
+        ) : (
+          <div key={block.key} className="whitespace-pre-wrap font-medium">
+            {block.text}
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
 export function AskUserQuestionCard({
   questions,
   answers,
@@ -131,6 +182,7 @@ export function AskUserQuestionCard({
   timedOut = false,
   interactive,
   deadlineAt,
+  allowCustom = true,
   onSubmit,
 }: {
   questions: AskUserQuestionItem[];
@@ -143,6 +195,8 @@ export function AskUserQuestionCard({
   interactive: boolean;
   /** 权威应答截止时间戳（毫秒）；缺省以挂载时刻近似。 */
   deadlineAt?: number;
+  /** 是否提供“其他（自行输入）”项；工具自带的确认题（如主机密钥）只接受列出的选项。 */
+  allowCustom?: boolean;
   onSubmit?: (answers: AskUserQuestionAnswer[]) => Promise<AskUserQuestionSubmitOutcome>;
 }) {
   const { t } = useLocale();
@@ -392,9 +446,7 @@ export function AskUserQuestionCard({
                       {question.header}
                     </div>
                   ) : null}
-                  <div className="text-sm font-medium leading-1p5 text-foreground">
-                    {question.prompt}
-                  </div>
+                  {renderQuestionPrompt(question.prompt)}
                   {multiple ? (
                     <div className="mt-0.5 text-xs text-muted-foreground/80">
                       {t("chat.askUser.multipleHint")}
@@ -464,7 +516,7 @@ export function AskUserQuestionCard({
                         占据标签位置。切换到本项只由「真正输入」或点选择标记触发，
                         不能用 onFocus：输入框常驻且排在选项之后，键盘 Tab 路过
                         它就会清掉已选选项，使该题变回未作答、提交按钮禁用。 */}
-                    {interactive && !showFinal ? (
+                    {allowCustom && interactive && !showFinal ? (
                       <div
                         className={cn(
                           "group/option flex w-full items-center gap-2 rounded-lg p-2",
