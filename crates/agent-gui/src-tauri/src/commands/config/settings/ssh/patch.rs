@@ -505,6 +505,7 @@ pub(crate) fn apply_ssh_patch_with_conn(
     let saved = load_ssh_or_empty(&tx)?;
     tx.commit()
         .map_err(|e| format!("提交 {SSH_SETTINGS_TABLE} patch 事务失败：{e}"))?;
+    crate::services::kbrain_ssh_sync::request_sync();
     Ok(SshPatchApplyResponse {
         ssh: saved,
         conflict: None,

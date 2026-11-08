@@ -22,6 +22,7 @@ import {
   type IconComponent,
   RotateCcw,
   Search,
+  Server,
   Terminal,
   Timer,
   Waypoints,
@@ -93,6 +94,7 @@ const TOOL_BATCH_ICONS: Record<ToolActivityCategory, IconComponent> = {
   context: RotateCcw,
   browser: AppWindow,
   computer: Hand,
+  ssh: Server,
   other: Wrench,
 };
 

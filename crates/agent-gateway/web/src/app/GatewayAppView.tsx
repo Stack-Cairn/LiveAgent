@@ -52,6 +52,7 @@ import {
   SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS,
 } from "@liveagent/ui/lib/chat/commandPaletteActions";
 import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
+import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
@@ -453,6 +454,8 @@ export function GatewayAppView({
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  // SSHManager rows name hosts by their configured name rather than the opaque id.
+  rememberSshHostNames(settings.ssh.hosts);
   const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
   useEffect(() => {

@@ -217,6 +217,11 @@ export function requestBackendQuestion(params: {
   });
 }
 
+/** The questions pending on a call, for a tool that asks its own (SSHManager host keys). */
+export function getPendingAskUserQuestionItems(toolCallId: string): AskUserQuestionItem[] | null {
+  return pendingByToolCallId.get(toolCallId.trim())?.questions ?? null;
+}
+
 export function hasPendingAskUserQuestion(toolCallId: string) {
   return pendingByToolCallId.has(toolCallId.trim());
 }

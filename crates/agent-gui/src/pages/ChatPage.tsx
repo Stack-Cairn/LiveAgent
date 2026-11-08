@@ -52,6 +52,7 @@ import type {
   ComposerTurnCommand,
 } from "@liveagent/ui/lib/chat/composerCommands";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
+import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -336,6 +337,8 @@ function ChatPageContent(props: ChatPageProps) {
   const { settings, error: modelCatalogError } = useKBrainCatalogSettings(directSettings);
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
+  // SSHManager rows name hosts by their configured name rather than the opaque id.
+  rememberSshHostNames(settings.ssh.hosts);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const { t, locale } = useLocale();
   // 运行期思考档位补充（models.dev/thinkingLive）异步到达时借本订阅触发重绘：

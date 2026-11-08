@@ -61,8 +61,13 @@ export type McpElicitationField = {
   sensitive?: boolean;
 };
 
+/** Who asks: an MCP server (no source) or an SSH server's login prompt ("ssh"). */
+export const MCP_ELICITATION_SOURCE_SSH = "ssh";
+
 export type McpElicitationRequest = {
   elicitationId: string;
+  /** "ssh" for an SSH login (password, passphrase or keyboard-interactive prompts). */
+  source?: string;
   toolCallId: string;
   runId?: string;
   /** Answer deadline, epoch milliseconds (backend clock). */
@@ -77,6 +82,7 @@ export type McpElicitationRequest = {
 export type McpElicitationRecord = {
   /** Empty when the request never reached a /v1 client (automatic declines). */
   elicitationId?: string;
+  source?: string;
   server: string;
   tool?: string;
   message: string;
@@ -186,7 +192,10 @@ export function parseMcpElicitationField(raw: unknown): McpElicitationField | nu
   if (minItems !== undefined) field.minItems = minItems;
   const maxItems = readCount(raw.max_items ?? raw.maxItems);
   if (maxItems !== undefined) field.maxItems = maxItems;
-  if (raw.sensitive === true) field.sensitive = true;
+  // `format: "password"` is how JSON-schema producers mark a secret; it masks like `sensitive`.
+  if (raw.sensitive === true || (type === "string" && format === "password")) {
+    field.sensitive = true;
+  }
   return field;
 }
 
@@ -221,6 +230,8 @@ export function parseMcpElicitationRequest(raw: unknown): McpElicitationRequest 
   if (deadlineAt !== undefined && deadlineAt > 0) request.deadlineAt = deadlineAt;
   const tool = readString(raw.tool);
   if (tool) request.tool = tool;
+  const source = readString(raw.source);
+  if (source) request.source = source;
   return request;
 }
 
@@ -245,6 +256,8 @@ export function parseMcpElicitationRecord(raw: unknown): McpElicitationRecord | 
   if (elicitationId) record.elicitationId = elicitationId;
   const tool = readString(raw.tool);
   if (tool) record.tool = tool;
+  const source = readString(raw.source);
+  if (source) record.source = source;
   if (action === "accept" && isRecord(raw.content)) record.content = { ...raw.content };
   if (Array.isArray(raw.redacted)) {
     const redacted = raw.redacted.filter((name): name is string => typeof name === "string");
@@ -627,4 +640,14 @@ export function mcpElicitationOutcome(
   if (record.action === "accept") return "accepted";
   if (record.action === "decline") return "declined";
   return "cancelled";
+}
+
+/** An SSH login form rather than an MCP server's question. */
+export function isSshElicitation(entry: { source?: string; server: string }): boolean {
+  return entry.source === MCP_ELICITATION_SOURCE_SSH;
+}
+
+/** The host an SSH login form is for: K-brain names the server `ssh:<host name>`. */
+export function sshElicitationHost(entry: { server: string }): string {
+  return entry.server.startsWith("ssh:") ? entry.server.slice(4) : entry.server;
 }

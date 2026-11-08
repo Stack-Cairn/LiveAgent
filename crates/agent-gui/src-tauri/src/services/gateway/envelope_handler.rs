@@ -6,7 +6,7 @@ use tauri::Emitter;
 use crate::commands::chat_history::{self};
 use crate::commands::settings::{
     apply_ssh_patch_with_conn, open_db, redact_gateway_settings_sync_payload,
-    reset_runtime_ssh_known_host, SSH_PATCH_FIELD,
+    reset_ssh_known_host_everywhere, SSH_PATCH_FIELD,
 };
 use crate::services::gateway_bridge;
 use crate::services::workspace_watch::WatchSource;
@@ -1001,9 +1001,14 @@ impl GatewayController {
                             .await;
                     }
                 };
-                match reset_runtime_ssh_known_host(&host, port) {
-                    Ok(deleted) => {
-                        let deleted = u32::try_from(deleted).unwrap_or(u32::MAX);
+                let reset = tauri::async_runtime::spawn_blocking(move || {
+                    reset_ssh_known_host_everywhere(&host, port)
+                })
+                .await
+                .unwrap_or_else(|e| Err(format!("reset SSH known host join failed: {e}")));
+                match reset {
+                    Ok(response) => {
+                        let deleted = u32::try_from(response.deleted).unwrap_or(u32::MAX);
                         self.send_agent_envelope(proto::AgentEnvelope {
                             request_id,
                             timestamp: now_unix_seconds(),

@@ -59,6 +59,13 @@ import {
   scanSshImportCandidates,
 } from "../../lib/ssh/scan";
 import type { TerminalSession } from "../../lib/terminal/types";
+import {
+  hasSshAgentHostStatus,
+  type KBrainSshState,
+  SshAgentHostStatus,
+  SshAgentSyncError,
+  useKBrainSshState,
+} from "./SshAgentState";
 import { ConfirmActionPopover, PromptTag } from "./shared";
 
 type SshViewMode = "list" | "grid";
@@ -829,12 +836,21 @@ function SshHostCard(props: {
   viewMode: SshViewMode;
   resetStatus?: SshKnownHostResetStatus;
   resettingKnownHost: boolean;
+  agentState: KBrainSshState | null;
   onEdit: () => void;
   onDelete: () => void;
   onResetKnownHost: () => void;
 }) {
-  const { host, viewMode, resetStatus, resettingKnownHost, onEdit, onDelete, onResetKnownHost } =
-    props;
+  const {
+    host,
+    viewMode,
+    resetStatus,
+    resettingKnownHost,
+    agentState,
+    onEdit,
+    onDelete,
+    onResetKnownHost,
+  } = props;
   const { t } = useLocale();
   const showKeyPath = host.authType === "privateKey" && host.privateKeyPath.trim().length > 0;
   const showKeyConfigured = host.authType === "privateKey" && host.privateKeyConfigured;
@@ -847,7 +863,8 @@ function SshHostCard(props: {
     ? t("settings.sshProxyUseSystemTag")
     : t("settings.sshAdvancedProxy");
   const hasMeta = showKeyPath || showKeyConfigured;
-  const hasFooter = hasMeta || resetStatus;
+  const hasAgent = hasSshAgentHostStatus(host.id, agentState);
+  const hasFooter = hasMeta || resetStatus || hasAgent;
 
   const actions = (
     <div className="settings-hover-actions flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
@@ -943,6 +960,7 @@ function SshHostCard(props: {
         {hasFooter ? (
           <div className="mt-auto space-y-2 pt-3">
             {hasMeta ? metaTags : null}
+            {hasAgent ? <SshAgentHostStatus hostId={host.id} state={agentState} /> : null}
             {resetStatusNode}
           </div>
         ) : null}
@@ -982,6 +1000,7 @@ function SshHostCard(props: {
       {hasFooter ? (
         <div className="space-y-2 border-t border-border/40 px-4 py-2.5">
           {hasMeta ? metaTags : null}
+          {hasAgent ? <SshAgentHostStatus hostId={host.id} state={agentState} /> : null}
           {resetStatusNode}
         </div>
       ) : null}
@@ -1045,6 +1064,9 @@ export function SshSection(props: SettingsSectionProps) {
   const saveStatusRef = useRef(saveState?.status ?? "idle");
   saveStatusRef.current = saveState?.status ?? "idle";
   const hosts = settings.ssh.hosts;
+  const { state: agentState, refresh: refreshAgentState } = useKBrainSshState(
+    saveState?.status ?? "idle",
+  );
 
   useEffect(() => {
     return () => {
@@ -1338,6 +1360,7 @@ export function SshSection(props: SettingsSectionProps) {
         host: targetHost,
         port: host.port,
       });
+      void refreshAgentState();
       showKnownHostResetStatus({
         hostId: host.id,
         kind: response.deleted > 0 ? "success" : "info",
@@ -1411,6 +1434,8 @@ export function SshSection(props: SettingsSectionProps) {
           }
         />
 
+        <SshAgentSyncError state={agentState} />
+
         {hosts.length === 0 ? (
           <EmptyState variant="settings">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-settings-active">
@@ -1451,6 +1476,7 @@ export function SshSection(props: SettingsSectionProps) {
                   knownHostResetStatus?.hostId === host.id ? knownHostResetStatus : undefined
                 }
                 resettingKnownHost={knownHostResettingId === host.id}
+                agentState={agentState}
                 onEdit={() => openEdit(host)}
                 onDelete={() => void handleDeleteRequest(host)}
                 onResetKnownHost={() => void handleResetKnownHost(host)}

@@ -11,6 +11,10 @@ import {
 } from "@liveagent/ui/lib/chat/conciseText";
 import { summarizeKBrainToolLine } from "@liveagent/ui/lib/chat/kbrainToolSummaries";
 import {
+  isSshManagerToolName,
+  summarizeSshManagerCall,
+} from "@liveagent/ui/lib/chat/sshManagerDisplay";
+import {
   getFileOperationDisplay,
   getToolDisplayName,
   isWebFetchToolName,
@@ -81,6 +85,10 @@ export function getConciseToolTarget(item: ToolTraceItem): ConciseToolTarget {
   if (isWebFetchToolName(rawName)) {
     const url = stringArgument(args, "url", "uri");
     if (url) return target(conciseUrl(url), summary() || url);
+  }
+  if (isSshManagerToolName(rawName)) {
+    const ssh = summarizeSshManagerCall(args);
+    if (ssh) return { text: ssh.text, full: ssh.full, lossy: ssh.full !== ssh.text };
   }
   if (name === LSP_TOOL_NAME) {
     const lsp = summary();

@@ -169,10 +169,44 @@ pub async fn settings_reset_ssh_known_host(
     host: String,
     port: u16,
 ) -> Result<SshKnownHostResetResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let deleted = reset_runtime_ssh_known_host(&host, port)?;
-        Ok(SshKnownHostResetResponse { deleted })
+    tauri::async_runtime::spawn_blocking(move || reset_ssh_known_host_everywhere(&host, port))
+        .await
+        .map_err(|e| format!("settings_reset_ssh_known_host join 失败：{e}"))?
+}
+
+/// Forgets a host key in the desktop terminal's known hosts and in K-brain's known_hosts
+/// (SSHManager), so the next connection from either asks again.
+pub(crate) fn reset_ssh_known_host_everywhere(
+    host: &str,
+    port: u16,
+) -> Result<SshKnownHostResetResponse, String> {
+    let deleted = reset_runtime_ssh_known_host(host, port)?;
+    let kbrain_removed = match crate::services::kbrain_ssh_sync::forget_host_keys(host, port) {
+        Ok(removed) => removed,
+        Err(error) => {
+            eprintln!("forget K-brain SSH host keys failed: {error}");
+            0
+        }
+    };
+    Ok(SshKnownHostResetResponse {
+        deleted: deleted + kbrain_removed,
+        kbrain_removed,
+    })
+}
+
+/// K-brain's view of Settings > SSH after pushing the desktop's hosts: each host's
+/// credential state and the host keys SSHManager saved. Never starts K-brain.
+#[tauri::command]
+pub async fn settings_kbrain_ssh_state() -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let Some(connection) = crate::services::kbrain_ssh_sync::running_connection() else {
+            return crate::services::kbrain_ssh_sync::public_state(Ok(Default::default()), false);
+        };
+        crate::services::kbrain_ssh_sync::public_state(
+            crate::services::kbrain_ssh_sync::sync_running(&connection),
+            true,
+        )
     })
     .await
-    .map_err(|e| format!("settings_reset_ssh_known_host join 失败：{e}"))?
+    .map_err(|e| format!("settings_kbrain_ssh_state join failed: {e}"))
 }

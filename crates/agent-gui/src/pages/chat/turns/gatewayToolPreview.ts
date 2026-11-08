@@ -5,6 +5,7 @@ import {
   ASK_USER_QUESTION_PENDING_ARG,
   ASK_USER_QUESTION_TOOL_NAME,
   readAskUserQuestionDeadlineAt,
+  TOOL_QUESTION_ARG,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import {
   EXIT_PLAN_MODE_APPROVED_ARG,
@@ -37,6 +38,8 @@ import {
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
 import {
   ensureAskUserQuestionDeadlineAt,
+  getAskUserQuestionDeadlineAt,
+  getPendingAskUserQuestionItems,
   hasPendingAskUserQuestion,
 } from "../../../lib/tools/askUserQuestionTools";
 import { mcpElicitationArgsOverlay } from "../../../lib/tools/mcpElicitations";
@@ -247,12 +250,24 @@ export function buildGatewayToolCallPreviewArguments(
       [EXIT_PLAN_MODE_APPROVED_ARG]: isPlanApprovalToolCall(toolCall.id),
     };
   }
+  // A question the running tool asks itself (SSHManager confirming a host key): the
+  // questions, deadline and pending marker come from the desktop's store only.
+  const toolQuestions = toolCall.id ? getPendingAskUserQuestionItems(toolCall.id) : null;
+  const questionOverlay: Record<string, unknown> | null = toolQuestions
+    ? {
+        [TOOL_QUESTION_ARG]: { questions: toolQuestions },
+        [ASK_USER_QUESTION_DEADLINE_ARG]: getAskUserQuestionDeadlineAt(toolCall.id),
+        [ASK_USER_QUESTION_PENDING_ARG]: true,
+      }
+    : null;
+  const overlay =
+    approvalOverlay || questionOverlay ? { ...approvalOverlay, ...questionOverlay } : null;
   const fieldsToPreview = FILE_TOOL_TEXT_FIELDS[toolCall.name];
   if (!fieldsToPreview) {
-    return approvalOverlay ? { ...sourceArgs, ...approvalOverlay } : sourceArgs;
+    return overlay ? { ...sourceArgs, ...overlay } : sourceArgs;
   }
 
-  const args: Record<string, unknown> = { ...sourceArgs, ...(approvalOverlay ?? {}) };
+  const args: Record<string, unknown> = { ...sourceArgs, ...(overlay ?? {}) };
   const fields: Record<string, PreviewFieldMetrics> = {};
   let progress = 0;
 

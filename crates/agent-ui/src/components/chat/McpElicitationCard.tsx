@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   McpLogo,
+  Server,
   ShieldAlert,
 } from "@liveagent/ui/components/IconSet";
 import { Badge } from "@liveagent/ui/components/ui/badge";
@@ -23,6 +24,7 @@ import {
   formatMcpElicitationValue,
   initialMcpElicitationDraft,
   isMcpElicitationChoice,
+  isSshElicitation,
   type McpElicitationAction,
   type McpElicitationContent,
   type McpElicitationDraft,
@@ -34,6 +36,7 @@ import {
   type McpElicitationSubmitOutcome,
   mcpElicitationFieldLabel,
   mcpElicitationOutcome,
+  sshElicitationHost,
 } from "../../lib/chat/mcpElicitation";
 import { cn } from "../../lib/shared/utils";
 
@@ -339,19 +342,37 @@ function FieldInput({
   );
 }
 
-function ServerHeading({ server, tool }: { server: string; tool?: string }) {
+function ServerHeading({
+  server,
+  tool,
+  source,
+}: {
+  server: string;
+  tool?: string;
+  source?: string;
+}) {
   const { t } = useLocale();
+  // An SSH server's login prompt (K-brain names it `ssh:<host>`): label it as an SSH
+  // login for that host rather than as an MCP server.
+  const ssh = isSshElicitation({ source, server });
+  const Icon = ssh ? Server : McpLogo;
+  const name = ssh ? sshElicitationHost({ server }) : server;
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-      <McpLogo className="size-3.5 shrink-0" />
-      <span>{t("chat.mcpElicitation.serverLabel")}</span>
+    <div
+      className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground"
+      data-mcp-elicitation-source={ssh ? "ssh" : undefined}
+    >
+      <Icon className="size-3.5 shrink-0" />
+      <span>{ssh ? t("chat.mcpElicitation.sshLabel") : t("chat.mcpElicitation.serverLabel")}</span>
       <span
         data-mcp-elicitation-server
         className="max-w-full truncate rounded-md bg-foreground/[0.06] px-1.5 py-0.5 font-mono text-xs font-semibold text-foreground"
       >
-        {server || t("chat.mcpElicitation.unknownServer")}
+        {name || t("chat.mcpElicitation.unknownServer")}
       </span>
-      {tool ? <span className="truncate font-mono text-muted-foreground/70">· {tool}</span> : null}
+      {tool && !ssh ? (
+        <span className="truncate font-mono text-muted-foreground/70">· {tool}</span>
+      ) : null}
     </div>
   );
 }
@@ -452,7 +473,7 @@ export function McpElicitationForm({
         className="overflow-hidden rounded-xl border border-border/60 bg-muted/20"
       >
         <div className="flex flex-col gap-3 px-4 pb-3 pt-3.5">
-          <ServerHeading server={request.server} tool={request.tool} />
+          <ServerHeading server={request.server} tool={request.tool} source={request.source} />
           {request.message ? (
             <div className="whitespace-pre-wrap break-words text-sm font-medium leading-1p5 text-foreground">
               {request.message}
@@ -465,9 +486,13 @@ export function McpElicitationForm({
             >
               <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
               <span>
-                {fill(t("chat.mcpElicitation.sensitiveWarning"), {
-                  server: request.server || t("chat.mcpElicitation.unknownServer"),
-                })}
+                {isSshElicitation(request)
+                  ? fill(t("chat.mcpElicitation.sshSensitiveWarning"), {
+                      server: sshElicitationHost(request) || t("chat.mcpElicitation.unknownServer"),
+                    })
+                  : fill(t("chat.mcpElicitation.sensitiveWarning"), {
+                      server: request.server || t("chat.mcpElicitation.unknownServer"),
+                    })}
               </span>
             </div>
           ) : null}
@@ -631,7 +656,9 @@ const OUTCOME_KEYS: Record<ReturnType<typeof mcpElicitationOutcome>, string> = {
 export function McpElicitationSummary({ record }: { record: McpElicitationRecord }) {
   const { t } = useLocale();
   const outcome = mcpElicitationOutcome(record);
-  const server = record.server || t("chat.mcpElicitation.unknownServer");
+  const server =
+    (isSshElicitation(record) ? sshElicitationHost(record) : record.server) ||
+    t("chat.mcpElicitation.unknownServer");
 
   if (outcome === "no_client" || outcome === "unattended" || outcome === "limit") {
     // Nobody was asked: a small note, not a card.
@@ -640,7 +667,11 @@ export function McpElicitationSummary({ record }: { record: McpElicitationRecord
         data-mcp-elicitation-note={outcome}
         className="flex min-w-0 items-start gap-1.5 text-xs leading-1p5 text-muted-foreground"
       >
-        <McpLogo className="mt-0.5 size-3.5 shrink-0" />
+        {isSshElicitation(record) ? (
+          <Server className="mt-0.5 size-3.5 shrink-0" />
+        ) : (
+          <McpLogo className="mt-0.5 size-3.5 shrink-0" />
+        )}
         <span className="min-w-0 break-words">{fill(t(OUTCOME_KEYS[outcome]), { server })}</span>
       </div>
     );
@@ -693,7 +724,7 @@ export function McpElicitationSummary({ record }: { record: McpElicitationRecord
       data-mcp-elicitation-summary={outcome}
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <ServerHeading server={record.server} tool={record.tool} />
+        <ServerHeading server={record.server} tool={record.tool} source={record.source} />
         {tone === "success" ? (
           <Badge variant="success" className="text-xs">
             <Check className="size-3" />
