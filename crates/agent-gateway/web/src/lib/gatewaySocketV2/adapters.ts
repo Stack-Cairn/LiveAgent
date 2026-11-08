@@ -607,6 +607,35 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           argsJson: JSON.stringify({ page: n32(body.page), page_size: n32(body.page_size) }),
         }),
       };
+    // Archive commands share the memory_manage passthrough; the desktop answers them
+    // through its K-brain history bridge and a direct K-brain relay answers them itself.
+    case "history.archive_supported":
+      return {
+        case: "memoryManage",
+        value: create(MemoryManageRequestSchema, {
+          command: "history_archive_supported",
+          argsJson: "{}",
+        }),
+      };
+    case "history.archived_list":
+      return {
+        case: "memoryManage",
+        value: create(MemoryManageRequestSchema, {
+          command: "history_archived_list",
+          argsJson: JSON.stringify({ page: n32(body.page), page_size: n32(body.page_size) }),
+        }),
+      };
+    case "history.archive_set":
+      return {
+        case: "memoryManage",
+        value: create(MemoryManageRequestSchema, {
+          command: "history_archive_set",
+          argsJson: JSON.stringify({
+            conversation_id: trimStr(body.conversation_id),
+            archived: bool(body.archived),
+          }),
+        }),
+      };
     case "history.get":
       return {
         case: "historyGet",

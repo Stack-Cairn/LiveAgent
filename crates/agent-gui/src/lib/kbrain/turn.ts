@@ -65,7 +65,9 @@ import type {
   KBrainSubagent,
   KBrainToolCall,
   KBrainToolResult,
+  KBrainUsage,
 } from "./types";
+import { hasKBrainUsage, kbrainUsage } from "./usage";
 
 type CanonicalInputPart = {
   type: string;
@@ -255,6 +257,11 @@ export type KBrainTurnParams = {
   /** 命令运行中的输出尾部快照（整体替换，非增量）；结果到达后不再回调。 */
   onToolOutput?: (toolCallId: string, output: string) => void;
   onSubagent?: (subagent: KBrainSubagent) => void;
+  /**
+   * `usage.updated`: the token usage of the model call that just finished. Fires once
+   * per model call during the run, before that call's tools run.
+   */
+  onUsage?: (usage: AssistantMessage["usage"]) => void;
   /** Every `subagent.*` and `trajectory.child.*` event, from any run of the session. */
   onSubagentEvent?: (event: KBrainEvent) => void;
   onStatus?: (status: string | null) => void;
@@ -333,19 +340,7 @@ function waitMs(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 function usage(message?: KBrainMessage): AssistantMessage["usage"] {
-  const value = message?.usage;
-  const input = value?.input_tokens ?? 0;
-  const output = value?.output_tokens ?? 0;
-  const cacheRead = value?.cached_tokens ?? 0;
-  const cacheWrite = value?.cache_write_tokens ?? 0;
-  return {
-    input,
-    output,
-    cacheRead,
-    cacheWrite,
-    totalTokens: input + output,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  };
+  return kbrainUsage(message?.usage);
 }
 
 /** The call without the question a running tool asked (see {@link TOOL_QUESTION_ARG}). */
@@ -880,6 +875,14 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
       case "assistant.message.created":
         finalMessage = eventPayload<KBrainMessage>(event);
         break;
+      case "usage.updated": {
+        // One report per model call, after its stream and before its tool calls run.
+        // Replayed events after a reconnect arrive here again in order, so the latest
+        // report always wins.
+        const reported = eventPayload<KBrainUsage>(event);
+        if (hasKBrainUsage(reported)) params.onUsage?.(kbrainUsage(reported));
+        break;
+      }
       case "goal.updated": {
         const state = eventPayload<KBrainGoalState>(event);
         if (state?.conversation_id === kbrainSessionId) params.onGoalUpdate?.(state);

@@ -336,9 +336,11 @@ function buildRawRowsFromEntries(
             entry.text,
           ) as GatewayTranscriptRound;
         }
+        const meta = mergeAssistantMeta(nextRound.meta, entry.meta);
         return {
           ...nextRound,
-          meta: mergeAssistantMeta(nextRound.meta, entry.meta),
+          meta:
+            entry.usageMark && meta ? { ...meta, usageBlockCount: nextRound.blocks.length } : meta,
         };
       });
       continue;

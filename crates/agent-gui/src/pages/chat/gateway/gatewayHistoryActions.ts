@@ -5,12 +5,15 @@ import {
   deleteChatHistory,
   getChatHistoryShare,
   getChatHistoryWindow,
+  listArchivedChatHistory,
   listChatHistory,
   listChatHistoryWorkdirs,
   renameChatHistory,
+  setChatHistoryArchived,
   setChatHistoryCwd,
   setChatHistoryPinned,
   setChatHistoryShare,
+  supportsChatHistoryArchive,
 } from "../../../lib/chat/history/chatHistory";
 import { kBrainCheckpointClient } from "../../../lib/kbrain/checkpoints";
 import { resolveKBrainHistoryShare } from "../../../lib/kbrain/history";
@@ -84,6 +87,15 @@ export async function runGatewayHistoryAction(event: GatewayComposerActionEvent)
       return { conversation: await setChatHistoryCwd(id, String(data.cwd ?? "")) };
     case "delete":
       await deleteChatHistory(id);
+      return {};
+    // Archive actions answer the WebUI's history_archive_* commands; the sidebar
+    // change feed carries the row removal or return to every client.
+    case "archive_supported":
+      return { supported: await supportsChatHistoryArchive() };
+    case "archived_list":
+      return listArchivedChatHistory(Number(data.page) || 1, Number(data.pageSize) || 30);
+    case "archive":
+      await setChatHistoryArchived(id, data.archived === true);
       return {};
     case "branch":
       return { conversation: await branchChatHistory(id, messageRef(data.baseMessageRef)) };

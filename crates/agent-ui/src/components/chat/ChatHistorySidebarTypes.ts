@@ -8,13 +8,13 @@ import type { ReactNode } from "react";
 import type { CommandPaletteActionsProvider } from "../../lib/chat/commandPalette";
 import type { SidebarShortcutId, SidebarShortcuts } from "../../lib/settings/sidebarShortcuts";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
-import type { WorkspaceHistoryState } from "../../lib/sidebar/store";
+import type { SidebarStoreArchive, WorkspaceHistoryState } from "../../lib/sidebar/store";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
 
 export type ChatHistorySidebarListStatus = "initial" | "loading" | "syncing" | "ready";
 
-export type ChatHistorySidebarMutationKind = "rename" | "pin" | "move" | "delete";
+export type ChatHistorySidebarMutationKind = "rename" | "pin" | "move" | "delete" | "archive";
 
 export type WorkspaceProjectRemoveOptions = {
   deleteWorktree?: boolean;
@@ -141,6 +141,10 @@ export type ChatHistorySidebarProps = {
   onCommitRename: () => void;
   onCancelRename: () => void;
   onSetPinned: (id: string, isPinned: boolean) => void;
+  /** Archives or unarchives one conversation; omitted when the backend cannot archive. */
+  onSetArchived?: (id: string, archived: boolean) => void;
+  /** The archived conversations list; omitted when the backend cannot archive. */
+  archivedConversations?: SidebarStoreArchive;
   onMoveToWorkspace: (id: string, cwd: string) => void;
   onMoveConversationsToWorkspace: (
     ids: readonly string[],
@@ -262,6 +266,8 @@ type ChatHistorySidebarConversationHandlers = Pick<
   | "onCommitRename"
   | "onCancelRename"
   | "onSetPinned"
+  | "onSetArchived"
+  | "archivedConversations"
   | "onMoveToWorkspace"
   | "onMoveConversationsToWorkspace"
   | "onDeleteConversation"

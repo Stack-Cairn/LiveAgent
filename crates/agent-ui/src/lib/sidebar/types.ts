@@ -14,6 +14,8 @@ export type SidebarConversation = {
   isPinned?: boolean;
   pinnedAt?: number | null;
   isShared?: boolean;
+  /** Archived conversations are only listed in the archived view. */
+  isArchived?: boolean;
   selectedModelJson?: string;
   /** Backend session ID of the conversation this one was branched from. */
   forkedFromSessionId?: string;
@@ -47,9 +49,10 @@ export type SidebarErrorCode =
   | "moveFailed"
   | "moveBlockedRunning"
   | "deleteFailed"
+  | "archiveFailed"
   | "deleteBlockedRunning";
 
-export type SidebarMutationKind = "rename" | "pin" | "move" | "delete";
+export type SidebarMutationKind = "rename" | "pin" | "move" | "delete" | "archive";
 
 export type SidebarRunningItem = {
   conversationId: string;

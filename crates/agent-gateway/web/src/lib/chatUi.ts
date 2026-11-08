@@ -52,7 +52,14 @@ type SharedGatewayChatEntry = SharedChatEntry<
     /** A notice the backend delivered on its own; shown as a system line, not a user bubble. */
     backgroundNotice?: boolean;
   },
-  { timestamp?: number }
+  {
+    timestamp?: number;
+    /**
+     * This entry carries a mid-run usage report (`usageLive` token): the round's blocks
+     * built so far are the ones that report covers.
+     */
+    usageMark?: boolean;
+  }
 >;
 
 export type ChatEntry =

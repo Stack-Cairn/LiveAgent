@@ -10,11 +10,14 @@ import type { SidebarBackendEvent } from "@liveagent/ui/lib/sidebar/types";
 import type { ChatHistorySummary } from "../chat/history/chatHistory";
 import {
   deleteChatHistory,
+  listArchivedChatHistory,
   listChatHistory,
   listChatHistoryWorkdirs,
   renameChatHistory,
+  setChatHistoryArchived,
   setChatHistoryCwd,
   setChatHistoryPinned,
+  supportsChatHistoryArchive,
 } from "../chat/history/chatHistory";
 import { getKBrainSidebarSyncError, kBrainSidebarSync } from "../kbrain/sidebarSync";
 import { getProviderRuntimeBackend } from "../providers/runtime/providerRuntimeConfig";
@@ -118,6 +121,11 @@ export function createGuiSidebarBackend(): SidebarBackend {
           getReconcileIntervalMs: () => (kBrainSidebarSync.isHealthy() ? null : 60_000),
           subscribeSyncState: kBrainSidebarSync.subscribeHealth,
           getSyncError: getKBrainSidebarSyncError,
+          archive: {
+            isSupported: supportsChatHistoryArchive,
+            setArchived: setChatHistoryArchived,
+            listArchived: listArchivedChatHistory,
+          },
         }
       : {}),
   };

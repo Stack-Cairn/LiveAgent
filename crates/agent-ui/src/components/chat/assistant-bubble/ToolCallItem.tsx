@@ -42,6 +42,12 @@ import {
   sanitizePlanMarkdown,
 } from "@liveagent/ui/lib/chat/planMode";
 import { hasSshManagerResultView } from "@liveagent/ui/lib/chat/sshManagerDisplay";
+import {
+  describeSubagentControlCall,
+  isSubagentControlRowToolName,
+  KBRAIN_SUBAGENT_FOLLOWUP_TOOL_NAME,
+  subagentControlAction,
+} from "@liveagent/ui/lib/chat/subagentControlTools";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "../../IconSet";
@@ -61,7 +67,7 @@ import {
   KBRAIN_SUBAGENT_TOOL_NAME,
 } from "./assistantBubbleUtils";
 import { getConciseToolTarget } from "./conciseToolTarget";
-import { SubagentToolCall } from "./SubagentToolCard";
+import { SubagentControlToolCall, SubagentToolCall } from "./SubagentToolCard";
 import { ToolElicitations } from "./ToolElicitations";
 import { ToolPermissionMarker } from "./ToolPermissionMarker";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
@@ -123,6 +129,7 @@ function ToolCallItem({
   redactToolContent = false,
   compactChip = false,
   onOpenFileLink,
+  subagentLabel,
 }: {
   item: ToolTraceItem;
   isRunning?: boolean;
@@ -130,6 +137,8 @@ function ToolCallItem({
   redactToolContent?: boolean;
   compactChip?: boolean;
   onOpenFileLink?: (link: ChatFileLink) => void;
+  /** The subagent a status / steer / cancel / follow-up call is about, when known. */
+  subagentLabel?: string;
 }) {
   const { t } = useLocale();
   const result = item.toolResult;
@@ -231,11 +240,21 @@ function ToolCallItem({
     (isBash && !inlineCommand)
       ? null
       : getConciseToolTarget(item);
+  // status / steer / cancel / follow-up: "<verb> subagent <name>", then what came back.
+  const subagentControl =
+    isRedactedToolContent || !subagentControlAction(item.toolCall.name)
+      ? null
+      : describeSubagentControlCall(
+          item.toolCall,
+          result && { text: toolResultMessageToText(result), isError: Boolean(result.isError) },
+          { running: displayIsRunning, label: subagentLabel },
+          t,
+        );
   const inlineTarget = isAskUser
     ? (askQuestions[0]?.prompt ?? "")
     : isSubagentCard
       ? getSubagentInlineSummary(item)
-      : (conciseTarget?.text ?? "");
+      : (subagentControl?.target ?? conciseTarget?.text ?? "");
   const inlineTargetTitle = capInlineCommandPreview(conciseTarget?.full ?? inlineTarget);
   // 流式 Edit 参数每个 delta 都会换新 arguments 引用并重派生统计；exact 行级
   // diff（Myers，上限 200K 字符）只在参数定稿后才算，流式期走行数估算，避免
@@ -269,7 +288,11 @@ function ToolCallItem({
         ? "running"
         : "completed";
   const activityTitleKey = getToolActivityTitleKey(item.toolCall, activityPhase);
-  const localizedActivityTitle = activityTitleKey ? t(activityTitleKey) : null;
+  const localizedActivityTitle = subagentControl
+    ? subagentControl.title
+    : activityTitleKey
+      ? t(activityTitleKey)
+      : null;
   const localizedFileOperationTitle = fileOperation
     ? t(`chat.tool.file.${fileOperation.kind}.${activityPhase}`)
     : null;
@@ -291,7 +314,7 @@ function ToolCallItem({
   const simpleFileOperation =
     !isRedactedToolContent && fileOperation && !result?.isError ? fileOperation : null;
 
-  const statusLabel = isApprovalPending
+  const genericStatusLabel = isApprovalPending
     ? t("chat.toolApproval.waitingStatus")
     : isRunning
       ? isAskUser
@@ -315,8 +338,12 @@ function ToolCallItem({
                   : t("chat.tool.success")
                 : t("chat.tool.waiting");
 
+  const statusLabel = subagentControl?.outcome?.text ?? genericStatusLabel;
+
   const statusTextClass =
-    result?.isError || shellSessionFailed ? "text-[hsl(var(--chat-error))]" : "text-foreground/45";
+    result?.isError || shellSessionFailed || subagentControl?.outcome?.failed
+      ? "text-[hsl(var(--chat-error))]"
+      : "text-foreground/45";
 
   const liveOutputSettledOk = Boolean(result) && !result?.isError && !shellSessionFailed;
   useEffect(() => {
@@ -439,7 +466,7 @@ function ToolCallItem({
       )}
 
       <ToolPermissionMarker marker={permissionAutoResolved} />
-      {displayIsRunning || result?.isError || shellSessionFailed ? (
+      {displayIsRunning || result?.isError || shellSessionFailed || subagentControl?.outcome ? (
         <span className={cn("shrink-0 text-tiny", statusTextClass)}>{statusLabel}</span>
       ) : null}
     </>
@@ -725,14 +752,31 @@ export function areToolTraceItemsEqual(previous: ToolTraceItem, next: ToolTraceI
 
 type ToolCallItemProps = Parameters<typeof ToolCallItem>[0];
 
-// A K-brain `subagent` call is a subagent card when the host can link it; shared
-// (redacted) transcripts keep the plain row.
+// A K-brain `subagent` call (and a follow-up of one) is a subagent card when the host
+// can link it; status / steer / cancel calls are rows named after their subagent.
+// Shared (redacted) transcripts keep the plain row.
 function ToolCallItemSwitch(props: ToolCallItemProps) {
-  if (props.item.toolCall.name === KBRAIN_SUBAGENT_TOOL_NAME && !props.redactToolContent) {
+  const { name, id } = props.item.toolCall;
+  if (props.redactToolContent) return <ToolCallItem {...props} />;
+  if (name === KBRAIN_SUBAGENT_TOOL_NAME || name === KBRAIN_SUBAGENT_FOLLOWUP_TOOL_NAME) {
+    const result = props.item.toolResult;
+    const followup =
+      name === KBRAIN_SUBAGENT_FOLLOWUP_TOOL_NAME
+        ? { running: Boolean(props.isRunning) && !result, failed: Boolean(result?.isError) }
+        : undefined;
     return (
       <SubagentToolCall
-        toolCallId={props.item.toolCall.id}
+        toolCallId={id}
         fallback={<ToolCallItem {...props} />}
+        {...(followup ? { followup } : {})}
+      />
+    );
+  }
+  if (isSubagentControlRowToolName(name)) {
+    return (
+      <SubagentControlToolCall
+        toolCallId={id}
+        render={(label) => <ToolCallItem {...props} subagentLabel={label} />}
       />
     );
   }

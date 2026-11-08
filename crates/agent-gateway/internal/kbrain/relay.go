@@ -412,9 +412,16 @@ func (r *Relay) MemoryManage(ctx context.Context, request *gatewayv2.MemoryManag
 		raw json.RawMessage
 		err error
 	)
-	if command == "chat_history_search" {
+	switch command {
+	case "chat_history_search":
 		raw, err = r.client.HistorySearch(ctx, args)
-	} else {
+	case historyArchiveSupportedCommand:
+		raw, err = r.historyArchiveSupported(ctx)
+	case historyArchivedListCommand:
+		raw, err = r.historyArchivedList(ctx, args)
+	case historyArchiveSetCommand:
+		raw, err = r.historyArchiveSet(ctx, args)
+	default:
 		raw, err = r.client.MemoryManage(ctx, command, args)
 	}
 	if err != nil {

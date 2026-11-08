@@ -71,6 +71,8 @@ export type UiRound = {
     stopReason?: string;
     usage?: Usage;
     contextRelevant?: boolean;
+    /** Leading blocks a mid-run usage report already covers (see contextUsage). */
+    usageBlockCount?: number;
   };
 };
 

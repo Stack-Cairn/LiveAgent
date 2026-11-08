@@ -127,8 +127,9 @@ export function submitPlanDecision(toolCallId: string, answer: PlanDecisionAnswe
   return Promise.resolve(answerPlanDecision(toolCallId, answer));
 }
 
-// The K-brain subagent the parent's `subagent` call started. Null until the backend
-// links the two (older K-brain never does), and the plain tool row renders instead.
+// The K-brain subagent the parent's `subagent` call started, or the one a follow-up /
+// status / steer / cancel call names. Null until the store knows it (older K-brain
+// never does), and the plain tool row renders instead.
 export function useSubagentCard(toolCallId: string): SubagentCardBinding | null {
   // Each snapshot must be stable between store changes, so read the entry and its
   // conversation separately rather than as a fresh pair.

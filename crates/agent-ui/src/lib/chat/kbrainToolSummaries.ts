@@ -11,6 +11,7 @@
  * - memory_manager: internal/agent/memory_store_tool.go, internal/memoryruntime/tool.go
  * - browser_exec / computer_exec: internal/tools/browser.go, internal/tools/computer.go
  * - ToolSearch: internal/mcp/search.go
+ * - subagent_status / steer / cancel / followup: internal/agent/subagent_control.go
  *
  * Each summarizer returns the parts to join with spaces; empty parts are dropped by the caller.
  */
@@ -157,6 +158,12 @@ function summarizeToolSearch(args: Args): Part[] {
   return [clip(args.query, 80), max === undefined ? null : `max=${max}`];
 }
 
+// The subagent id comes first: K-brain derives it from the task description, so it
+// already reads as a name ("fix-login-tests-1").
+function summarizeSubagentControl(args: Args): Part[] {
+  return [clip(args.id, 60)];
+}
+
 const KBRAIN_TOOL_SUMMARIZERS: Readonly<Record<string, (args: Args) => Part[]>> = {
   TerminalSession: (args) => [clip(args.command, 120)],
   ReadTerminal: (args) => [
@@ -176,6 +183,10 @@ const KBRAIN_TOOL_SUMMARIZERS: Readonly<Record<string, (args: Args) => Part[]>> 
   browser_exec: summarizeBrowserExec,
   computer_exec: summarizeComputerExec,
   ToolSearch: summarizeToolSearch,
+  subagent_status: summarizeSubagentControl,
+  subagent_steer: summarizeSubagentControl,
+  subagent_cancel: summarizeSubagentControl,
+  subagent_followup: summarizeSubagentControl,
 };
 
 /** Summary parts for a K-brain-only tool, or `null` when the name is not one of them. */

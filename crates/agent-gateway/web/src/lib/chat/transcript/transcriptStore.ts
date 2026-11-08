@@ -14,6 +14,7 @@ import { type ChatEntry, normalizeLiveUploadedFiles, readHistoryMessageRef } fro
 import type { ChatEvent } from "@/lib/gatewayTypes";
 import {
   absorbTrajectoryChatEvent,
+  noteLiveUsageReport,
   resetLiveTrajectoryForRebase,
 } from "@/lib/trajectory/liveTrajectory";
 
@@ -1022,6 +1023,9 @@ export function createTranscriptStore(options?: {
         return;
       }
       lastSeq = seq;
+    }
+    if (event.type === "token" && event.usageLive === true) {
+      noteLiveUsageReport(event.conversation_id);
     }
     const runId = readEventRunId(event);
     switch (event.type) {

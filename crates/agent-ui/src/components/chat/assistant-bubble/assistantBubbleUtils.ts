@@ -14,6 +14,10 @@ import {
 import { type ChatFileLink, parseChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { hasPendingMcpElicitation } from "@liveagent/ui/lib/chat/mcpElicitation";
 import { type CompactionSeam, getCompactionSeam } from "@liveagent/ui/lib/chat/replyContinuity";
+import {
+  KBRAIN_SUBAGENT_FOLLOWUP_TOOL_NAME,
+  subagentControlAction,
+} from "@liveagent/ui/lib/chat/subagentControlTools";
 import { isTaskToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
 import { readToolApprovalPending } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import type {
@@ -94,6 +98,7 @@ export function isWebFetchToolName(name: string) {
 
 export function getToolActivityCategory(name: string): ToolActivityCategory {
   if (isTaskToolName(name)) return "other";
+  if (subagentControlAction(name)) return "agent";
   if (isWebFetchToolName(name)) return "fetch";
   switch (name) {
     case "Read":
@@ -256,6 +261,10 @@ export function getToolMeta(name: string): {
     case "SendMessage":
       return { Icon: Bot, accent: "var(--tool-list-accent)", category: "system" };
     case KBRAIN_SUBAGENT_TOOL_NAME:
+    case KBRAIN_SUBAGENT_FOLLOWUP_TOOL_NAME:
+    case "subagent_status":
+    case "subagent_steer":
+    case "subagent_cancel":
       return { Icon: Bot, accent: "var(--tool-list-accent)", category: "agent" };
     case "Write":
       return { Icon: FileText, accent: "var(--tool-file-accent)", category: "file" };
@@ -752,7 +761,12 @@ export function getToolTraceKey(item: ToolTraceItem, index: number) {
 export const KBRAIN_SUBAGENT_TOOL_NAME = "subagent";
 
 export function isAgentToolName(name: string) {
-  return name === "Agent" || name === KBRAIN_SUBAGENT_TOOL_NAME;
+  return (
+    name === "Agent" ||
+    name === KBRAIN_SUBAGENT_TOOL_NAME ||
+    // A follow-up renders as its subagent's card, so it stands alone like the call that started it.
+    name === KBRAIN_SUBAGENT_FOLLOWUP_TOOL_NAME
+  );
 }
 
 /**

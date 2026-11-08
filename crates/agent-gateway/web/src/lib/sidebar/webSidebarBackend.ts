@@ -15,7 +15,11 @@ import { listPinnedSidebarConversations } from "@liveagent/ui/lib/sidebar/pinned
 // seconds ceiling are multiplied to ms, everything else passes through.
 // `chat.activity` / `running_conversations` use `UnixMilli()` explicitly.
 
-import type { SidebarBackend, SidebarListPage } from "@liveagent/ui/lib/sidebar/backend";
+import type {
+  SidebarArchiveBackend,
+  SidebarBackend,
+  SidebarListPage,
+} from "@liveagent/ui/lib/sidebar/backend";
 import type {
   SidebarBackendEvent,
   SidebarConversation,
@@ -68,6 +72,7 @@ export function normalizeGatewayConversationSummary(
     isPinned: summary.is_pinned === true,
     pinnedAt: summary.is_pinned === true && pinnedAt > 0 ? pinnedAt : null,
     isShared: summary.is_shared === true,
+    ...(summary.is_archived === true ? { isArchived: true } : {}),
   };
 }
 
@@ -144,6 +149,9 @@ type WebSidebarApi = {
   pinHistory(conversationId: string, isPinned: boolean): Promise<ConversationSummary>;
   setHistoryCwd(conversationId: string, cwd: string): Promise<ConversationSummary>;
   deleteHistory(conversationId: string): Promise<void>;
+  historyArchiveSupported?(): Promise<boolean>;
+  listArchivedHistory?(page: number, pageSize: number): Promise<HistoryList>;
+  setHistoryArchived?(conversationId: string, archived: boolean): Promise<void>;
   subscribeHistory(listener: (event: GatewayHistoryEvent) => void): () => void;
   subscribeHistorySync?(
     listener: (
@@ -372,6 +380,25 @@ export function createWebSidebarBackend(deps: WebSidebarBackendDeps): SidebarBac
         },
       );
     },
+
+    ...(api.historyArchiveSupported && api.listArchivedHistory && api.setHistoryArchived
+      ? {
+          archive: createWebArchiveBackend({
+            isSupported: api.historyArchiveSupported.bind(api),
+            list: api.listArchivedHistory.bind(api),
+            set: api.setHistoryArchived.bind(api),
+            confirmRemoved: (id, mutate) =>
+              runConfirmedMutation(
+                id,
+                (item) => item === undefined,
+                async () => {
+                  await mutate();
+                  return undefined;
+                },
+              ),
+          }),
+        }
+      : {}),
 
     // The single event subscription: gateway history.event upserts/deletes
     // plus a diff bridge over the activity store (running/idle transitions).
@@ -684,6 +711,36 @@ export function createWebSidebarBackend(deps: WebSidebarBackendDeps): SidebarBac
     },
 
     getProtectedConversationIds: () => deps.getProtectedConversationIds(),
+  };
+}
+
+/**
+ * Archive for the web end. Archiving waits until the history feed drops the row, like
+ * delete; unarchiving returns at once and the feed brings the row back.
+ */
+function createWebArchiveBackend(deps: {
+  isSupported: () => Promise<boolean>;
+  list: (page: number, pageSize: number) => Promise<HistoryList>;
+  set: (id: string, archived: boolean) => Promise<void>;
+  confirmRemoved: (id: string, mutate: () => Promise<void>) => Promise<unknown>;
+}): SidebarArchiveBackend {
+  return {
+    // Older desktops reject the command; that only means no archive.
+    isSupported: () => deps.isSupported().catch(() => false),
+    async setArchived(id, archived) {
+      if (archived) await deps.confirmRemoved(id, () => deps.set(id, true));
+      else await deps.set(id, false);
+    },
+    async listArchived(page, pageSize) {
+      const response = await deps.list(page, pageSize);
+      return {
+        items: response.conversations.map((summary) => ({
+          ...normalizeGatewayConversationSummary(summary),
+          isArchived: true,
+        })),
+        totalCount: Math.max(0, response.total_count),
+      };
+    },
   };
 }
 
