@@ -23,7 +23,9 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useMemo, useState } from "react";
 import { type MemoryQuotaSummaryResponse, memoryQuotaSummary } from "../../../lib/memory/api";
 import { deriveQuotaLadder } from "../../../lib/memory/organizer/quota";
+import type { KBrainSettingsAdapter } from "../kbrainSettingsAdapter";
 import { BackendMemoryOrganizer } from "./BackendMemoryOrganizer";
+import { MemoryOrganizerSchedule } from "./MemoryOrganizerSchedule";
 import { memoryScopeLabel } from "./panelModel";
 
 export function MemorySettingsDrawer(props: {
@@ -35,6 +37,8 @@ export function MemorySettingsDrawer(props: {
   onRequestWipe: () => void | Promise<void>;
   backendManaged?: boolean;
   kbrain?: boolean;
+  /** K-brain settings, for the organizer schedule; omitted hosts show no schedule. */
+  kbrainSettings?: KBrainSettingsAdapter;
 }) {
   const { workdir, saving, t, onClose, onRequestWipe, backendManaged = false } = props;
   const [drawerWipeConfirmOpen, setDrawerWipeConfirmOpen] = useState(false);
@@ -93,7 +97,12 @@ export function MemorySettingsDrawer(props: {
             ) : null}
 
             {props.kbrain && !backendManaged ? (
-              <BackendMemoryOrganizer workdir={workdir} t={t} />
+              <>
+                {props.kbrainSettings ? (
+                  <MemoryOrganizerSchedule kbrain={props.kbrainSettings} />
+                ) : null}
+                <BackendMemoryOrganizer workdir={workdir} t={t} />
+              </>
             ) : (
               <section className="py-5">
                 <p className="text-sm text-muted-foreground" role="status">

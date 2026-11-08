@@ -14,15 +14,19 @@ type gatewaySettingsProjection struct {
 	Computer   json.RawMessage `json:"computer,omitempty"`
 	// KBrainMemory is K-brain's memory master switch; WebUI's `memory` key is
 	// LiveAgent's organizer settings, so the switch travels under its own name.
-	KBrainMemory    json.RawMessage `json:"kbrainMemory,omitempty"`
-	CustomProviders []any           `json:"customProviders"`
-	SelectedModel   map[string]any  `json:"selectedModel"`
+	KBrainMemory json.RawMessage `json:"kbrainMemory,omitempty"`
+	// KBrainMemoryOrganizer is K-brain's organizer schedule {enabled,intervalHours};
+	// absent on backends without capabilities.memory_organizer_settings.
+	KBrainMemoryOrganizer json.RawMessage `json:"kbrainMemoryOrganizer,omitempty"`
+	CustomProviders       []any           `json:"customProviders"`
+	SelectedModel         map[string]any  `json:"selectedModel"`
 }
 
 type kbrainSettingsDocument struct {
 	AIApproval      json.RawMessage  `json:"aiApproval,omitempty"`
 	Computer        json.RawMessage  `json:"computer,omitempty"`
 	Memory          json.RawMessage  `json:"memory,omitempty"`
+	MemoryOrganizer json.RawMessage  `json:"memoryOrganizer,omitempty"`
 	DefaultModel    string           `json:"defaultModel"`
 	DefaultProvider string           `json:"defaultProvider"`
 	Providers       []kbrainProvider `json:"providers"`
@@ -206,7 +210,7 @@ func settingsProjectionForGateway(raw json.RawMessage) (json.RawMessage, error) 
 			"providerType":     providerTypeByID[document.DefaultProvider],
 		}
 	}
-	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval, KBrainMemory: document.Memory})
+	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval, KBrainMemory: document.Memory, KBrainMemoryOrganizer: document.MemoryOrganizer})
 }
 
 func decodeSettingsDocument(raw json.RawMessage) (kbrainSettingsDocument, error) {
@@ -232,7 +236,7 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 	}
 	for key := range input {
 		switch key {
-		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents", "projectPrompts", "kbrainMemory":
+		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents", "projectPrompts", "kbrainMemory", "kbrainMemoryOrganizer":
 		default:
 			return nil, fmt.Errorf("unsupported Gateway settings field %q: non-provider settings persistence is unavailable", key)
 		}
@@ -273,6 +277,13 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 			return nil, errors.New("kbrainMemory must be an object with boolean enabled")
 		}
 		update["memory"] = map[string]bool{"enabled": *object.Enabled}
+	}
+	if organizer, ok := input["kbrainMemoryOrganizer"]; ok {
+		value, err := memoryOrganizerUpdate(organizer)
+		if err != nil {
+			return nil, err
+		}
+		update["memoryOrganizer"] = value
 	}
 	if selectedRaw, ok := input["selectedModel"]; ok {
 		var selected map[string]json.RawMessage
@@ -453,6 +464,68 @@ func gatewayMCPSettings(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(settings)
 }
 
+// mcpLiveAgentOnlyServerFields are LiveAgent-side MCP server fields K-brain does not
+// accept (it rejects unknown fields): messageUrl belongs to the legacy SSE transport and
+// backendFields is LiveAgent's copy of K-brain fields it does not edit.
+var mcpLiveAgentOnlyServerFields = []string{"messageUrl", "backendFields"}
+
+// mergeMCPSettingsWithCurrent fills the WebUI's MCP settings with what K-brain has.
+// PUT /v1/mcp replaces the whole document, and the WebUI does not edit every field
+// (per-server workspaceRoots, fields of newer K-brain releases, top-level fields), so a
+// field a server or the document leaves out keeps K-brain's current value. Servers are
+// matched by id; a server the update leaves out is removed as before.
+func mergeMCPSettingsWithCurrent(update, currentResource json.RawMessage) (json.RawMessage, error) {
+	var settings map[string]json.RawMessage
+	if err := json.Unmarshal(update, &settings); err != nil || settings == nil {
+		return nil, errors.New("MCP settings must be an object")
+	}
+	var servers []map[string]json.RawMessage
+	if err := json.Unmarshal(settings["servers"], &servers); err != nil || servers == nil {
+		return nil, errors.New("MCP settings must contain a servers array")
+	}
+	var resource struct {
+		Settings map[string]json.RawMessage `json:"settings"`
+	}
+	if err := json.Unmarshal(currentResource, &resource); err != nil {
+		return nil, fmt.Errorf("decode current MCP settings: %w", err)
+	}
+	current := resource.Settings
+	var currentServers []map[string]json.RawMessage
+	if raw, ok := current["servers"]; ok {
+		_ = json.Unmarshal(raw, &currentServers)
+	}
+	byID := map[string]map[string]json.RawMessage{}
+	for _, server := range currentServers {
+		var id string
+		if server != nil && json.Unmarshal(server["id"], &id) == nil && id != "" {
+			byID[id] = server
+		}
+	}
+	for _, server := range servers {
+		if server == nil {
+			return nil, errors.New("MCP server must be an object")
+		}
+		for _, field := range mcpLiveAgentOnlyServerFields {
+			delete(server, field)
+		}
+		var id string
+		_ = json.Unmarshal(server["id"], &id)
+		live := byID[strings.TrimSpace(id)]
+		for key, value := range live {
+			if _, present := server[key]; !present {
+				server[key] = value
+			}
+		}
+	}
+	for key, value := range current {
+		if _, present := settings[key]; !present && key != "servers" {
+			settings[key] = value
+		}
+	}
+	settings["servers"], _ = json.Marshal(servers)
+	return json.Marshal(settings)
+}
+
 func providerModelPresent(provider map[string]any, modelID string) bool {
 	if strings.TrimSpace(modelID) == "" {
 		return false
@@ -627,4 +700,26 @@ func apiForProviderType(providerType, requestFormat string) string {
 		}
 		return "openai-responses"
 	}
+}
+
+// memoryOrganizerUpdate validates the WebUI's kbrainMemoryOrganizer and returns the
+// K-brain memoryOrganizer update: enabled and/or intervalHours, whose range (1 to 168
+// hours) K-brain checks.
+func memoryOrganizerUpdate(raw json.RawMessage) (map[string]any, error) {
+	invalid := errors.New("kbrainMemoryOrganizer must be an object with boolean enabled and/or numeric intervalHours")
+	var object struct {
+		Enabled       *bool    `json:"enabled"`
+		IntervalHours *float64 `json:"intervalHours"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil || (object.Enabled == nil && object.IntervalHours == nil) {
+		return nil, invalid
+	}
+	out := map[string]any{}
+	if object.Enabled != nil {
+		out["enabled"] = *object.Enabled
+	}
+	if object.IntervalHours != nil {
+		out["intervalHours"] = *object.IntervalHours
+	}
+	return out, nil
 }

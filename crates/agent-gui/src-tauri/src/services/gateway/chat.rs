@@ -178,6 +178,9 @@ impl GatewayController {
             goal_text,
             prompt_command,
             plan_command,
+            // 桌面端按自己的项目设置（workdir 对应的资源设置）决定 MCP 服务器，
+            // 不采用 WebUI 随请求带来的选择。
+            mcp_servers: _,
         } = request;
         let selected_model = selected_model.map(|selected_model| GatewaySelectedModelEvent {
             custom_provider_id: selected_model.custom_provider_id,

@@ -863,6 +863,7 @@ export function MemoryPanel(props: {
           onRequestWipe={wipeAll}
           backendManaged={backendManaged}
           kbrain={resourceHost.isKbrain}
+          kbrainSettings={props.kbrain}
         />
       ) : null}
     </>

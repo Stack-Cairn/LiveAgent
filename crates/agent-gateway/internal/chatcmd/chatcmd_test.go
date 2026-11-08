@@ -220,3 +220,23 @@ func TestChatStartupWatchdogUsesShortCombinedWindow(t *testing.T) {
 		t.Fatalf("startup watchdog terminal = %s %#v", last.Type, last.Payload)
 	}
 }
+
+func TestProjectMCPServerSelectionSurvivesGatewayCommandRoundTrip(t *testing.T) {
+	for name, selection := range map[string]*gatewayv2.ChatMcpServerSelection{
+		"inherit": nil,
+		"none":    {},
+		"custom":  {ServerIds: []string{"docs"}},
+	} {
+		body := RequestBodyFromProto(&gatewayv2.ChatRequest{Message: "hi", ClientRequestId: "client-mcp", McpServers: selection})
+		if err := NormalizeRequestBody(&body); err != nil {
+			t.Fatalf("%s: NormalizeRequestBody() error = %v", name, err)
+		}
+		forwarded := buildCommandEnvelope("run-mcp", "chat.submit", body, nil).GetChatCommand().GetRequest().GetMcpServers()
+		if (forwarded == nil) != (selection == nil) {
+			t.Fatalf("%s: presence lost: %#v", name, forwarded)
+		}
+		if selection != nil && strings.Join(forwarded.GetServerIds(), ",") != strings.Join(selection.GetServerIds(), ",") {
+			t.Fatalf("%s: server ids = %#v", name, forwarded.GetServerIds())
+		}
+	}
+}

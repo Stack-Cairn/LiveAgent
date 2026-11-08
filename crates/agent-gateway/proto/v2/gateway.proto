@@ -751,6 +751,14 @@ message ChatRequest {
   bool prompt_command = 15;
   // A single /plan task, distinct from ordinary chat with plan mode enabled.
   bool plan_command = 16;
+  // The project's MCP server choice (Project settings, custom or off). Absent
+  // means the project inherits the global MCP settings; present with no ids
+  // means the run offers no MCP server.
+  ChatMcpServerSelection mcp_servers = 17;
+}
+
+message ChatMcpServerSelection {
+  repeated string server_ids = 1;
 }
 
 message ChatMessageRef {

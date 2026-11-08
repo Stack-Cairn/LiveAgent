@@ -23,6 +23,7 @@ import {
   mcpOauthStatus,
 } from "@liveagent/ui/lib/mcp/oauthApi";
 import { resolveMcpDocsHref } from "@liveagent/ui/lib/mcpServerMetadata";
+import type { McpServerRuntimeStatus } from "@liveagent/ui/lib/resourceHost";
 import { isGatewayWebuiRuntime } from "@liveagent/ui/lib/runtimeEnv";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useEffect, useState } from "react";
@@ -165,6 +166,42 @@ function OauthControls(props: { server: McpServerConfig }) {
   );
 }
 
+/**
+ * Connection state K-brain reports for an enabled server. Disabled servers show
+ * nothing beyond their switch; servers K-brain runs itself are not MCP clients.
+ */
+function RuntimeStatusBadge(props: { status: McpServerRuntimeStatus }) {
+  const { status } = props;
+  const { t } = useLocale();
+  if (status.status === "ready") {
+    const label = t("mcpHub.serverReady").replace("{count}", String(status.tools));
+    return (
+      <Badge variant="success" className="h-5 px-1.5 text-tiny" title={label}>
+        {label}
+      </Badge>
+    );
+  }
+  if (status.status === "connecting") {
+    return (
+      <Badge variant="muted" className="h-5 px-1.5 text-tiny">
+        {t("mcpHub.serverConnecting")}
+      </Badge>
+    );
+  }
+  if (status.status === "failed") {
+    return (
+      <Badge
+        variant="destructive"
+        className="h-5 px-1.5 text-tiny"
+        title={status.error || t("mcpHub.serverFailed")}
+      >
+        {t("mcpHub.serverFailed")}
+      </Badge>
+    );
+  }
+  return null;
+}
+
 export const McpServerCard = memo(function McpServerCard(props: {
   server: McpServerConfig;
   idx: number;
@@ -173,8 +210,10 @@ export const McpServerCard = memo(function McpServerCard(props: {
   onEdit: () => void;
   policy: ToolPolicy;
   onPolicyChange: (next: ToolPolicy) => void;
+  runtimeStatus?: McpServerRuntimeStatus;
 }) {
-  const { server, idx, searchQuery, setSettings, onEdit, policy, onPolicyChange } = props;
+  const { server, idx, searchQuery, setSettings, onEdit, policy, onPolicyChange, runtimeStatus } =
+    props;
   const { t } = useLocale();
   const transport = server.transport || "stdio";
   const isStdio = transport === "stdio";
@@ -260,6 +299,7 @@ export const McpServerCard = memo(function McpServerCard(props: {
             <SearchHighlight text={transportLabel} query={searchQuery} />
           </Badge>
           {isOauthServer(server) ? <OauthControls server={server} /> : null}
+          {enabled && runtimeStatus ? <RuntimeStatusBadge status={runtimeStatus} /> : null}
         </div>
         {detailLine ? (
           <button
@@ -273,6 +313,11 @@ export const McpServerCard = memo(function McpServerCard(props: {
           >
             <SearchHighlight text={detailLine} query={searchQuery} />
           </button>
+        ) : null}
+        {enabled && runtimeStatus?.status === "failed" && runtimeStatus.error ? (
+          <p className="mt-1 min-w-0 truncate text-xs text-destructive" title={runtimeStatus.error}>
+            {runtimeStatus.error}
+          </p>
         ) : null}
       </div>
 

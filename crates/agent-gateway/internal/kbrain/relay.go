@@ -295,6 +295,13 @@ func (r *Relay) SettingsUpdate(ctx context.Context, request *gatewayv2.SettingsU
 		}
 	}
 	if mcp != nil {
+		current, err := r.client.settingsRequest(ctx, "GET", "/v1/mcp", nil)
+		if err != nil {
+			return nil, err
+		}
+		if mcp, err = mergeMCPSettingsWithCurrent(mcp, current); err != nil {
+			return nil, err
+		}
 		if _, err := r.client.settingsRequest(ctx, "PUT", "/v1/mcp", mcp); err != nil {
 			return nil, err
 		}

@@ -33,10 +33,17 @@ export type AIApprovalConfig = {
 /** K-brain memory master switch; absent on backends without `capabilities.memory_switch`. */
 export type KBrainMemoryConfig = { enabled: boolean };
 
+/**
+ * K-brain's memory organizer schedule (whole hours, 1–168); absent on backends without
+ * `capabilities.memory_organizer_settings`. K-brain applies a change at once.
+ */
+export type KBrainMemoryOrganizerConfig = { enabled: boolean; intervalHours: number };
+
 export type KBrainSettingsDocument = {
   aiApproval?: AIApprovalConfig;
   computer?: KBrainComputerConfig;
   memory?: KBrainMemoryConfig;
+  memoryOrganizer?: KBrainMemoryOrganizerConfig;
   mode: "kbrain";
   defaultModel: string;
   defaultProvider: string;

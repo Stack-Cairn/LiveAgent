@@ -43,6 +43,7 @@ import {
   useState,
 } from "react";
 import { useDesktopImageStudioHost } from "./agent-ui-adapters/imageStudio";
+import { kbrainMcpStatusAdapter } from "./agent-ui-adapters/kbrainMcpStatus";
 import { settingsHostAdapter } from "./agent-ui-adapters/kbrainSettings";
 import { kbrainSkillsAdapter } from "./agent-ui-adapters/kbrainSkills";
 import { AppBootShell } from "./components/app/AppBootShell";
@@ -54,6 +55,7 @@ import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
 import { isKBrainBrowserHost } from "./lib/host";
 import { HistoryMigrationNoticeBanner } from "./lib/kbrain/HistoryMigrationNoticeBanner";
+import { syncWorkspaceSkillsOverridesOnce } from "./lib/kbrain/workspaceSkills";
 import { requestPlanning } from "./lib/planning/kbrain";
 import { TimeZoneNoticeBanner } from "./lib/planning/TimeZoneNoticeBanner";
 import { setRetryErrorExtension } from "./lib/providers/runtime/streamRetry";
@@ -92,6 +94,7 @@ import type { SectionId } from "./pages/settings/types";
 const guiResourceHostCapabilities: ResourceHostCapabilities = {
   ...kbrainResourceHostCapabilities,
   skillsAdapter: kbrainSkillsAdapter,
+  mcpStatusAdapter: kbrainMcpStatusAdapter,
 };
 configureResourceHostCapabilities(guiResourceHostCapabilities);
 
@@ -442,6 +445,9 @@ export default function App() {
         void loadChatPage();
         const { settings: loaded, defaultWorkdir } = await persistedSettingsPromise;
         loaded.skills = (await kbrainSkillsAdapter.list()).settings;
+        void syncWorkspaceSkillsOverridesOnce(loaded).catch((error) => {
+          console.warn("sync project skills to K-brain failed", error);
+        });
         if (!cancelled) {
           defaultWorkdirRef.current = defaultWorkdir;
           const loadedWithDefaults = applyRuntimeSystemDefaults(loaded, defaultWorkdir);

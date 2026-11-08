@@ -1104,80 +1104,37 @@ test("memory model settings only keep enabled provider models", () => {
   });
 });
 
-test("memory organizer settings normalize schedule and disable stale enabled state", () => {
+test("memory settings drop the local organizer schedule K-brain now owns", () => {
   const defaults = settings.getDefaultSettings();
-  assert.equal(defaults.memory.organizerSchedule.frequency, "none");
-  assert.equal(defaults.memory.organizerEnabled, false);
-  assert.equal(
-    settings.computeNextMemoryOrganizerRunAt(defaults.memory.organizerSchedule),
-    undefined,
-  );
-
-  const customProviders = [
-    {
-      id: "provider-1",
-      name: "Provider",
-      type: "codex",
-      baseUrl: "https://api.openai.com/v1",
-      apiKey: "key",
-      models: ["gpt-5"],
-      activeModels: ["gpt-5"],
-    },
-  ];
+  assert.deepEqual(defaults.memory, { organizerModel: undefined, summaryModel: undefined });
 
   const normalized = settings.normalizeSettings({
-    customProviders,
+    customProviders: [
+      {
+        id: "provider-1",
+        name: "Provider",
+        type: "codex",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "key",
+        models: ["gpt-5"],
+        activeModels: ["gpt-5"],
+      },
+    ],
     memory: {
       organizerModel: { customProviderId: "provider-1", model: "gpt-5" },
       organizerEnabled: true,
-      organizerSchedule: {
-        frequency: "weekly",
-        timeLocal: "25:99",
-        weekday: 9,
-        timezone: "",
-      },
+      organizerSchedule: { frequency: "weekly", timeLocal: "03:00", weekday: 1, timezone: "UTC" },
       organizerScope: "projects",
       organizerMode: "aggressive",
+      organizerLastRunAt: 1,
+      organizerNextRunAt: 2,
     },
   });
 
-  assert.equal(normalized.memory.organizerEnabled, true);
-  assert.equal(normalized.memory.organizerSchedule.frequency, "weekly");
-  assert.equal(normalized.memory.organizerSchedule.timeLocal, "03:00");
-  assert.equal(normalized.memory.organizerSchedule.weekday, 1);
-  assert.equal(typeof normalized.memory.organizerSchedule.timezone, "string");
-  assert.equal(normalized.memory.organizerScope, "projects");
-  assert.equal(normalized.memory.organizerMode, "aggressive");
-  assert.equal(typeof normalized.memory.organizerNextRunAt, "number");
-
-  const stale = settings.normalizeSettings({
-    customProviders,
-    memory: {
-      organizerModel: { customProviderId: "provider-1", model: "missing" },
-      organizerEnabled: true,
-      organizerNextRunAt: 123,
-    },
+  assert.deepEqual(normalized.memory, {
+    organizerModel: { customProviderId: "provider-1", model: "gpt-5" },
+    summaryModel: undefined,
   });
-
-  assert.equal(stale.memory.organizerModel, undefined);
-  assert.equal(stale.memory.organizerEnabled, false);
-  assert.equal(stale.memory.organizerNextRunAt, undefined);
-
-  const disabledSchedule = settings.normalizeSettings({
-    customProviders,
-    memory: {
-      organizerModel: { customProviderId: "provider-1", model: "gpt-5" },
-      organizerEnabled: true,
-      organizerSchedule: {
-        frequency: "none",
-      },
-      organizerNextRunAt: 123,
-    },
-  });
-
-  assert.equal(disabledSchedule.memory.organizerSchedule.frequency, "none");
-  assert.equal(disabledSchedule.memory.organizerEnabled, false);
-  assert.equal(disabledSchedule.memory.organizerNextRunAt, undefined);
 });
 
 test("gateway settings sync payload redacts provider api keys", () => {

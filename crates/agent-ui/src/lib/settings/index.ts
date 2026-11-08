@@ -59,14 +59,7 @@ import {
   RIGHT_DOCK_SINGLETON_TAB_IDS,
 } from "./rightDockNormalization";
 import { normalizeSidebarShortcuts } from "./sidebarShortcuts";
-import {
-  computeNextMemoryOrganizerRunAt,
-  normalizeMemoryOrganizerMode,
-  normalizeMemoryOrganizerSchedule,
-  normalizeMemoryOrganizerScope,
-  normalizeOptionalTimestamp,
-  normalizeTheme,
-} from "./themeAndMemory";
+import { normalizeTheme } from "./themeAndMemory";
 import type {
   AgentPromptTemplate,
   AppSettings,
@@ -175,11 +168,8 @@ export {
   rightDockToolKindForTabId,
 } from "./rightDockNormalization";
 export {
-  computeNextMemoryOrganizerRunAt,
-  getDefaultMemoryOrganizerSchedule,
   getNextTheme,
   normalizeTheme,
-  rescheduleOrganizerForTimeZone,
   resolveEffectiveTheme,
   subscribeToSystemThemePreference,
 } from "./themeAndMemory";
@@ -1690,6 +1680,9 @@ export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
   const cwd = typeof obj.cwd === "string" ? obj.cwd.trim() : "";
   const messageUrl = typeof obj.messageUrl === "string" ? obj.messageUrl.trim() : "";
   const auth = normalizeMcpAuthConfig(obj.auth);
+  const policy = normalizeToolPolicies(obj.policy);
+  const workspaceRoots = normalizeStringArray(obj.workspaceRoots);
+  const backendFields = normalizeMcpBackendFields(obj.backendFields);
 
   return {
     id,
@@ -1706,7 +1699,41 @@ export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
     timeoutMs: normalizeTimeoutMs(obj.timeoutMs),
     messageUrl: messageUrl || undefined,
     ...(auth ? { auth } : {}),
+    ...(policy ? { policy } : {}),
+    ...(workspaceRoots.length > 0 ? { workspaceRoots } : {}),
+    ...(backendFields ? { backendFields } : {}),
   };
+}
+
+/** Server fields LiveAgent edits or derives itself; anything else K-brain returns is kept as is. */
+export const MCP_SERVER_CONFIG_FIELDS: readonly string[] = [
+  "id",
+  "description",
+  "docsUrl",
+  "enabled",
+  "transport",
+  "command",
+  "args",
+  "url",
+  "env",
+  "cwd",
+  "headers",
+  "timeoutMs",
+  "messageUrl",
+  "auth",
+  "policy",
+  "workspaceRoots",
+  "backendFields",
+];
+
+function normalizeMcpBackendFields(input: unknown): Record<string, unknown> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!key || MCP_SERVER_CONFIG_FIELDS.includes(key) || value === undefined) continue;
+    out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export function normalizeMcpSettings(input: unknown): McpSettings {
@@ -1811,32 +1838,15 @@ export function normalizeMemorySettings(
   customProviders: CustomProvider[],
 ): MemorySettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const organizerModel = normalizeSelectedModelForProviders(
-    normalizeSelectedModel(obj.organizerModel),
-    customProviders,
-  );
-  const organizerSchedule = normalizeMemoryOrganizerSchedule(obj.organizerSchedule);
-  const organizerEnabled =
-    obj.organizerEnabled === true &&
-    Boolean(organizerModel) &&
-    organizerSchedule.frequency !== "none";
-  const organizerNextRunAt = organizerEnabled
-    ? (normalizeOptionalTimestamp(obj.organizerNextRunAt) ??
-      computeNextMemoryOrganizerRunAt(organizerSchedule) ??
-      undefined)
-    : undefined;
   return {
-    organizerModel,
+    organizerModel: normalizeSelectedModelForProviders(
+      normalizeSelectedModel(obj.organizerModel),
+      customProviders,
+    ),
     summaryModel: normalizeSelectedModelForProviders(
       normalizeSelectedModel(obj.summaryModel),
       customProviders,
     ),
-    organizerEnabled,
-    organizerSchedule,
-    organizerScope: normalizeMemoryOrganizerScope(obj.organizerScope),
-    organizerMode: normalizeMemoryOrganizerMode(obj.organizerMode),
-    organizerLastRunAt: normalizeOptionalTimestamp(obj.organizerLastRunAt),
-    organizerNextRunAt,
   };
 }
 
@@ -2181,6 +2191,21 @@ export function resolveEffectivePromptSettings(
     projectPromptStrategy,
     prompt,
   };
+}
+
+/**
+ * The MCP servers a run may use under the workspace's resource mode: undefined
+ * for inherit (the backend's own selection), otherwise the enabled servers the
+ * workspace picked, where an empty pick or mode off means none.
+ */
+export function workspaceMcpServerIds(
+  resources: Pick<EffectiveWorkspaceResources, "mode"> & {
+    mcpServers: readonly Pick<McpServerConfig, "id">[];
+  },
+): string[] | undefined {
+  if (resources.mode === "inherit") return undefined;
+  if (resources.mode === "off") return [];
+  return resources.mcpServers.map((server) => server.id).filter(Boolean);
 }
 
 export function filterMcpSettingsForWorkspace(

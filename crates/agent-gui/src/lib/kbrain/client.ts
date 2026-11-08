@@ -396,6 +396,11 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     });
   }
 
+  /** Re-reads K-brain's saved MCP settings and restarts every server (POST /v1/mcp/reload). */
+  async function reloadMcp(): Promise<unknown> {
+    return request<unknown>("/v1/mcp/reload", { method: "POST" });
+  }
+
   async function discoverMcpTools(
     input: { cwd?: string; server_ids?: string[] } = {},
   ): Promise<unknown> {
@@ -1164,6 +1169,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     updateSettings,
     getMcpSettings,
     updateMcpSettings,
+    reloadMcp,
     discoverMcpTools,
     searchMcpTools,
     callMcpTool,

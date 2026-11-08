@@ -727,11 +727,17 @@ impl GatewayController {
                                 return self.send_error_response(request_id, 400, error).await;
                             }
                         };
-                        // The memory switch and the AI approval reviewer go to K-brain and
-                        // never into LiveAgent's own settings; an update carrying only
-                        // them ends here.
+                        // The memory switch, the memory organizer schedule and the AI
+                        // approval reviewer go to K-brain and never into LiveAgent's own
+                        // settings; an update carrying only them ends here.
                         let memory_switch = match kbrain_memory::take_switch_update(&mut snapshot) {
                             Ok(switch) => switch,
+                            Err(error) => {
+                                return self.send_error_response(request_id, 400, error).await;
+                            }
+                        };
+                        let organizer = match kbrain_memory::take_organizer_update(&mut snapshot) {
+                            Ok(organizer) => organizer,
                             Err(error) => {
                                 return self.send_error_response(request_id, 400, error).await;
                             }
@@ -743,7 +749,7 @@ impl GatewayController {
                                     return self.send_error_response(request_id, 400, error).await;
                                 }
                             };
-                        if memory_switch.is_some() || ai_approval.is_some() {
+                        if memory_switch.is_some() || organizer.is_some() || ai_approval.is_some() {
                             let Some(connection) = kbrain_memory::running_kbrain(&self.app_handle)
                             else {
                                 return self
@@ -757,6 +763,9 @@ impl GatewayController {
                             let written = tauri::async_runtime::spawn_blocking(move || {
                                 if let Some(enabled) = memory_switch {
                                     kbrain_memory::write_switch(&connection, enabled)?;
+                                }
+                                if let Some(organizer) = &organizer {
+                                    kbrain_memory::write_organizer(&connection, organizer)?;
                                 }
                                 if let Some(approval) = &ai_approval {
                                     kbrain_ai_approval::write_approval(&connection, approval)?;

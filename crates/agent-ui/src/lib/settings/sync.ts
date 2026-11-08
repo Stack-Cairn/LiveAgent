@@ -54,6 +54,11 @@ export type GatewaySettingsSyncPayload = {
   computer?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainComputerConfig;
   /** K-brain memory master switch, distinct from LiveAgent's `memory` organizer settings. */
   kbrainMemory?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainMemoryConfig;
+  /**
+   * K-brain memory organizer schedule; absent on backends without the setting. An update
+   * may leave a field out, which K-brain keeps.
+   */
+  kbrainMemoryOrganizer?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainMemoryOrganizerConfig;
   system: AppSettings["system"];
   customProviders: GatewaySettingsSyncProvider[];
   mcp: AppSettings["mcp"];
