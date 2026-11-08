@@ -65,11 +65,11 @@ async function optionalJson(path) {
 
 class RetryableDownloadError extends Error {}
 
-const downloadAttempts = 4;
+const downloadAttempts = 6;
 
 function retryDelayMs(attempt) {
-  const base = Number(process.env.LIVEAGENT_KBRAIN_DOWNLOAD_RETRY_DELAY_MS ?? 2_000);
-  return (Number.isFinite(base) && base >= 0 ? base : 2_000) * 2 ** (attempt - 1);
+  const base = Number(process.env.LIVEAGENT_KBRAIN_DOWNLOAD_RETRY_DELAY_MS ?? 5_000);
+  return (Number.isFinite(base) && base >= 0 ? base : 5_000) * 2 ** (attempt - 1);
 }
 
 // GitHub release downloads occasionally answer 5xx or drop the connection on CI runners.

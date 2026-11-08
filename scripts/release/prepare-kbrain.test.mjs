@@ -166,7 +166,7 @@ test("retries transient 5xx download failures but not 4xx answers", async () => 
     "x86_64-unknown-linux-gnu": { sourceRevision: revision, assets: { backend: "k-brain-linux-x64", computer: "k-brain-computer-linux-x64" }, urls: { backend: downUrl, computer: downUrl }, sha256: { backend: "2".repeat(64), computer: "2".repeat(64) } },
   } });
   await assert.rejects(() => prepare({ lock: down.path, target: "x86_64-unknown-linux-gnu", artifactDir: false, output: join(down.directory, "output") }), /HTTP 503/);
-  assert.equal(requests, 4);
+  assert.equal(requests, 6);
 });
 
 test("rejects an invalid lock before downloading", async () => {
