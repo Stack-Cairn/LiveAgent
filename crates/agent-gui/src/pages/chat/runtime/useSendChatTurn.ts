@@ -60,6 +60,7 @@ import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection
 import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { isTauriHost, liveAgentRuntimeCapabilities } from "../../../lib/host";
 import { showGoalProgress } from "../../../lib/kbrain/goalNotice";
+import { workspaceMcpServerIds } from "../../../lib/kbrain/mcp";
 import { kBrainSidebarSync } from "../../../lib/kbrain/sidebarSync";
 import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import {
@@ -1517,6 +1518,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             },
             agentTemplates: settings.agents,
             getMcpSettings: getEffectiveMcpSettings,
+            mcpServerIds: workspaceMcpServerIds(workspaceResources),
             getToolPolicies,
             getCuaAllowSelfTargeting: () => settings.system.cuaAllowSelfTargeting === true,
             commandSafetyMode: effectiveCommandSafetyMode,

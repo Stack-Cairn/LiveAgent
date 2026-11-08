@@ -154,6 +154,39 @@ mod tests {
     }
 
     #[test]
+    fn schema_init_drops_the_dead_local_memory_organizer_schedule() {
+        let conn = open_memory_db();
+        let stored = json!({
+            "organizerModel": { "customProviderId": "provider-a", "model": "gpt-5" },
+            "summaryModel": { "customProviderId": "provider-a", "model": "gpt-5.4" },
+            "organizerEnabled": true,
+            "organizerSchedule": { "frequency": "daily", "timeLocal": "03:00", "timezone": "UTC" },
+            "organizerScope": "all",
+            "organizerMode": "standard",
+            "organizerLastRunAt": 1,
+            "organizerNextRunAt": 2
+        });
+        conn.execute(
+            &format!(
+                "INSERT INTO {MEMORY_SETTINGS_TABLE} (config_id, payload_json, updated_at) VALUES ('default', ?1, 0)"
+            ),
+            params![stored.to_string()],
+        )
+        .expect("insert legacy memory settings");
+
+        initialize_schema(&conn).expect("re-run schema init");
+        initialize_schema(&conn).expect("schema init is idempotent");
+
+        assert_eq!(
+            load_memory(&conn).expect("load memory settings"),
+            Some(json!({
+                "organizerModel": { "customProviderId": "provider-a", "model": "gpt-5" },
+                "summaryModel": { "customProviderId": "provider-a", "model": "gpt-5.4" }
+            }))
+        );
+    }
+
+    #[test]
     fn normalize_remote_settings_repairs_single_slash_gateway_url() {
         let normalized = normalize_remote_settings_payload(RemoteSettingsPayload {
             enabled: true,

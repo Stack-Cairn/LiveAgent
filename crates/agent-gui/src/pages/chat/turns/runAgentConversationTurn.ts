@@ -64,6 +64,11 @@ export type RunAgentConversationTurnParams = {
   }) => void | Promise<void>;
   agentTemplates: AppSettings["agents"];
   getMcpSettings: () => AppSettings["mcp"];
+  /**
+   * MCP servers the workspace allows for this turn: undefined follows K-brain's
+   * selection, an empty list allows none.
+   */
+  mcpServerIds?: readonly string[];
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
   getCuaAllowSelfTargeting?: () => boolean;
   commandSafetyMode?: AppSettings["system"]["commandSafetyMode"];

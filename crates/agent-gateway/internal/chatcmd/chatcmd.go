@@ -379,7 +379,15 @@ func buildProtoRequest(body handler.ChatRequestBody) *gatewayv2.ChatRequest {
 		GoalText:                body.GoalText,
 		PromptCommand:           body.PromptCommand,
 		PlanCommand:             body.PlanCommand,
+		McpServers:              protoMCPServerSelection(body.MCPServers),
 	}
+}
+
+func protoMCPServerSelection(selection *handler.ChatMCPServerSelectionBody) *gatewayv2.ChatMcpServerSelection {
+	if selection == nil {
+		return nil
+	}
+	return &gatewayv2.ChatMcpServerSelection{ServerIds: append([]string{}, selection.ServerIDs...)}
 }
 
 // BuildProtoMessageRef 把 MessageRef 转为 proto 表示（nil 安全）。
@@ -415,6 +423,9 @@ func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 		GoalText:          req.GetGoalText(),
 		PromptCommand:     req.GetPromptCommand(),
 		PlanCommand:       req.GetPlanCommand(),
+	}
+	if selection := req.GetMcpServers(); selection != nil {
+		body.MCPServers = &handler.ChatMCPServerSelectionBody{ServerIDs: append([]string{}, selection.GetServerIds()...)}
 	}
 	for _, reference := range req.GetReferencedConversations() {
 		body.ReferencedConversations = append(

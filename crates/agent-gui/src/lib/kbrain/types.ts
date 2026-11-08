@@ -372,6 +372,12 @@ export type KBrainRunOptions = {
    * K-brain advertises capability mcp_elicitation: older backends reject unknown options.
    */
   mcp_elicitation?: boolean;
+  /**
+   * MCP servers K-brain may offer in this run. Omitted means K-brain's saved
+   * selection (or every enabled server); an empty list means the same, so "no
+   * server" is sent as an id that matches none (KBRAIN_NO_MCP_SERVERS).
+   */
+  mcp_server_ids?: string[];
 };
 
 /** `capabilities.run_sandbox` in /v1/health; every field may be absent on older backends. */

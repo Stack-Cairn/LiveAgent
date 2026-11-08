@@ -5,12 +5,7 @@
 // Shared implementation owned by @liveagent/ui. Platform-specific capabilities
 // remain in their host adapter modules.
 
-import type {
-  MemoryOrganizerFrequency,
-  MemoryOrganizerMode,
-  MemoryOrganizerScope,
-  ProviderId,
-} from "@liveagent/app/lib/settings";
+import type { ProviderId } from "@liveagent/app/lib/settings";
 import type {
   MemoryListResponse,
   MemoryMeta,
@@ -35,35 +30,6 @@ export type MemoryModelOption = {
   providerId?: string;
   providerType?: ProviderId;
 };
-
-export const MEMORY_ORGANIZER_FREQUENCIES: Array<{
-  value: MemoryOrganizerFrequency;
-  labelKey: string;
-}> = [
-  { value: "none", labelKey: "settings.memoryOrganizerNoSchedule" },
-  { value: "daily", labelKey: "settings.memoryOrganizerEveryDay" },
-  { value: "weekly", labelKey: "settings.memoryOrganizerEveryWeek" },
-];
-export const MEMORY_ORGANIZER_SCOPES: Array<{ value: MemoryOrganizerScope; labelKey: string }> = [
-  { value: "all", labelKey: "settings.memoryOrganizerScopeAll" },
-  { value: "global", labelKey: "settings.memoryOrganizerScopeGlobal" },
-  { value: "projects", labelKey: "settings.memoryOrganizerScopeAllProjects" },
-  { value: "current-project", labelKey: "settings.memoryOrganizerScopeCurrentProject" },
-];
-export const MEMORY_ORGANIZER_MODES: Array<{ value: MemoryOrganizerMode; labelKey: string }> = [
-  { value: "conservative", labelKey: "settings.memoryOrganizerModeConservative" },
-  { value: "standard", labelKey: "settings.memoryOrganizerModeStandard" },
-  { value: "aggressive", labelKey: "settings.memoryOrganizerModeAggressive" },
-];
-export const MEMORY_ORGANIZER_WEEKDAYS = [
-  "settings.memoryOrganizerWeekdaySunday",
-  "settings.memoryOrganizerWeekdayMonday",
-  "settings.memoryOrganizerWeekdayTuesday",
-  "settings.memoryOrganizerWeekdayWednesday",
-  "settings.memoryOrganizerWeekdayThursday",
-  "settings.memoryOrganizerWeekdayFriday",
-  "settings.memoryOrganizerWeekdaySaturday",
-];
 
 export function formatTime(value: number) {
   if (!value) return "";

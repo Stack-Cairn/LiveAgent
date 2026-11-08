@@ -43,6 +43,7 @@ import {
 } from "../../../lib/kbrain/goalStore";
 import { getKBrainHistoryWindow } from "../../../lib/kbrain/history";
 import { getKBrainSessionId } from "../../../lib/kbrain/mapping";
+import { kbrainRunMcpServerIds } from "../../../lib/kbrain/mcp";
 import { canonicalKBrainToolPolicies } from "../../../lib/kbrain/toolPolicies";
 import { type KBrainPermissionAutoResolved, runKBrainTurn } from "../../../lib/kbrain/turn";
 import type {
@@ -102,6 +103,7 @@ export function canonicalRunOptions(params: Params, uploadsRoot?: string): KBrai
   const safety = agentMode && "commandSafetyMode" in params ? params.commandSafetyMode : undefined;
   const reasoning = params.runtime.reasoning;
   const sandbox = agentMode ? resolveKBrainRunSandbox(safety) : undefined;
+  const mcpServerIds = agentMode ? kbrainRunMcpServerIds(params.mcpServerIds) : undefined;
   return {
     mode: agentMode ? "agent" : "chat",
     ...(reasoning ? { reasoning } : {}),
@@ -114,6 +116,7 @@ export function canonicalRunOptions(params: Params, uploadsRoot?: string): KBrai
     ...(roots.length ? { workspace_roots: roots } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(Object.keys(policies).length ? { tools: { policies } } : {}),
+    ...(mcpServerIds ? { mcp_server_ids: mcpServerIds } : {}),
     ...(agentMode && params.planModeEnabled !== undefined
       ? { plan_mode_enabled: params.planModeEnabled }
       : {}),

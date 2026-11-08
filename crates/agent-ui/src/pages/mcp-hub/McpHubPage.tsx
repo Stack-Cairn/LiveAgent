@@ -1,5 +1,5 @@
 import { type AppSettings, type McpServerConfig, updateMcp } from "@liveagent/app/lib/settings";
-import { Cloud, Download, Plus, Search, Server } from "@liveagent/ui/components/IconSet";
+import { Cloud, Download, Plus, RefreshCw, Search, Server } from "@liveagent/ui/components/IconSet";
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -13,6 +13,7 @@ import { Input } from "../../components/ui/input";
 import { Tabs, TabsContent } from "../../components/ui/tabs";
 import { isHubHiddenServerId } from "../../contracts/mcpServerDefaults";
 import { McpImportView } from "./McpImportView";
+import { useMcpRuntimeStatus } from "./useMcpRuntimeStatus";
 
 type McpHubPageProps = {
   settings: AppSettings;
@@ -32,6 +33,7 @@ function isMcpHubView(value: unknown): value is McpHubView {
 export function McpHubPage(props: McpHubPageProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
+  const runtime = useMcpRuntimeStatus();
   const [view, setView] = useState<McpHubView>("installed");
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [searchQueries, setSearchQueries] = useState<Record<McpHubView, string>>({
@@ -102,6 +104,22 @@ export function McpHubPage(props: McpHubPageProps) {
                   ? `${enabledCount}/${serverCount} ${t("mcpHub.enabled")}`
                   : t("mcpHub.statusEmpty")}
               </Badge>
+              {runtime.available && serverCount > 0 ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 px-3"
+                  disabled={runtime.reconnecting}
+                  onClick={() => void runtime.reconnect()}
+                  title={runtime.error ?? t("mcpHub.reconnectHint")}
+                  aria-label={t("mcpHub.reconnect")}
+                >
+                  <RefreshCw className={cn("size-3.5", runtime.reconnecting && "animate-spin")} />
+                  <span className="hidden whitespace-nowrap sm:inline">
+                    {runtime.reconnecting ? t("mcpHub.reconnecting") : t("mcpHub.reconnect")}
+                  </span>
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
@@ -178,9 +196,20 @@ export function McpHubPage(props: McpHubPageProps) {
                 />
               </div>
 
+              {runtime.error ? (
+                <p
+                  role="alert"
+                  className="mt-2 truncate text-xs text-destructive"
+                  title={runtime.error}
+                >
+                  {t("mcpHub.reconnectFailed").replace("{error}", runtime.error)}
+                </p>
+              ) : null}
+
               <div className="min-h-0 flex-1 overflow-hidden pt-4">
                 <TabsContent value="installed" className="h-full min-h-0">
                   <McpServersForm
+                    statuses={runtime.statuses}
                     settings={settings}
                     setSettings={setSettings}
                     query={searchQueries.installed}

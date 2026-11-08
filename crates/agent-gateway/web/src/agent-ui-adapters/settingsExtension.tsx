@@ -8,6 +8,7 @@ import type { GatewaySettingsSyncUpdatePayload } from "@liveagent/ui/lib/setting
 import type { ShortcutCommandId } from "@liveagent/ui/lib/shortcuts/shortcutCommands";
 import type {
   KBrainMemoryConfig,
+  KBrainMemoryOrganizerConfig,
   KBrainSettingsAdapter,
   PermissionRule,
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
@@ -82,17 +83,27 @@ const computerSettingsAdapter: KBrainSettingsAdapter = {
       aiApproval: document.aiApproval,
       computer: document.computer,
       memory: document.kbrainMemory,
+      memoryOrganizer: document.kbrainMemoryOrganizer,
     };
   },
   async updateSettings(update) {
-    // Gateway carries the K-brain memory switch as `kbrainMemory`: its `memory` key is
-    // LiveAgent's own organizer settings.
-    const { memory, ...rest } = update as GatewaySettingsSyncUpdatePayload & {
+    // Gateway carries the K-brain memory switch as `kbrainMemory` and the organizer
+    // schedule as `kbrainMemoryOrganizer`: its `memory` key is LiveAgent's own settings.
+    const { memory, memoryOrganizer, ...rest } = update as Omit<
+      GatewaySettingsSyncUpdatePayload,
+      "kbrainMemoryOrganizer"
+    > & {
       memory?: KBrainMemoryConfig;
+      memoryOrganizer?: Partial<KBrainMemoryOrganizerConfig>;
     };
-    await getGatewayWebSocketClient(loadToken().trim()).updateSettings(
-      memory ? { ...rest, kbrainMemory: memory } : rest,
-    );
+    await getGatewayWebSocketClient(loadToken().trim()).updateSettings({
+      ...rest,
+      ...(memory ? { kbrainMemory: memory } : {}),
+      // A partial schedule is forwarded as is; K-brain keeps the field left out.
+      ...(memoryOrganizer
+        ? { kbrainMemoryOrganizer: memoryOrganizer as KBrainMemoryOrganizerConfig }
+        : {}),
+    });
     return this.getSettings();
   },
 };

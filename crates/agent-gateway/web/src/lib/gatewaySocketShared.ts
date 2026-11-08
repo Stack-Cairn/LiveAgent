@@ -81,6 +81,8 @@ export type GatewayChatSystemSettings = {
   executionMode?: string;
   workdir?: string;
   commandSafetyMode?: string;
+  /** MCP servers the project allows; undefined inherits, [] offers none. */
+  mcpServerIds?: string[];
 };
 
 export type GatewayChatCommandInput = {
@@ -560,6 +562,9 @@ export function buildChatCommandPayload(input: GatewayChatCommandInput) {
       goal_text: input.goalText ?? "",
       prompt_command: input.promptCommand === true,
       plan_command: input.planCommand === true,
+      mcp_servers: systemSettings?.mcpServerIds
+        ? { server_ids: [...systemSettings.mcpServerIds] }
+        : undefined,
       runtime_controls: input.runtimeControls
         ? {
             thinking_enabled: input.runtimeControls.thinkingEnabled,

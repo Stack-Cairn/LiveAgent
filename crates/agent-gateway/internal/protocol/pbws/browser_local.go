@@ -354,7 +354,27 @@ func kbrainOptions(body handler.ChatRequestBody) *kbrain.RunOptions {
 	if strings.TrimSpace(body.Workdir) != "" {
 		options.WorkspaceRoots = []kbrain.WorkspaceRoot{{Path: body.Workdir, Access: "write"}}
 	}
+	if options.Mode == "agent" && body.MCPServers != nil {
+		options.MCPServerIDs = kbrainMCPServerIDs(body.MCPServers.ServerIDs)
+	}
 	return options
+}
+
+// kbrainNoMCPServers offers a run no MCP server: K-brain reads an empty
+// mcp_server_ids as "use the saved selection", and ignores ids it does not know.
+const kbrainNoMCPServers = "liveagent:no-mcp-servers"
+
+func kbrainMCPServerIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 {
+		return []string{kbrainNoMCPServers}
+	}
+	return out
 }
 
 func (s *Server) kbrainCallbacks(agentID string) kbrain.Callbacks {

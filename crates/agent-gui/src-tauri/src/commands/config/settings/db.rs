@@ -141,6 +141,24 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
             ON workspace_root_grants (project_id);
         -- 'agent' 登录方式已移除，遗留配置回退为密码登录（与前端 normalize 的未知值兜底一致）
         UPDATE ssh_settings SET auth_type = 'password' WHERE auth_type = 'agent';
+        -- 记忆整理计划改由 K-brain 保存（/v1/settings 的 memoryOrganizer）。旧版本地的
+        -- organizer* 计划字段从未驱动任何整理，加载时清除；organizerModel/summaryModel 保留。
+        UPDATE memory_settings
+        SET payload_json = json_remove(
+            payload_json,
+            '$.organizerEnabled', '$.organizerSchedule', '$.organizerScope',
+            '$.organizerMode', '$.organizerLastRunAt', '$.organizerNextRunAt'
+        )
+        WHERE json_valid(payload_json)
+          AND json_type(payload_json) = 'object'
+          AND (
+            json_type(payload_json, '$.organizerEnabled') IS NOT NULL
+            OR json_type(payload_json, '$.organizerSchedule') IS NOT NULL
+            OR json_type(payload_json, '$.organizerScope') IS NOT NULL
+            OR json_type(payload_json, '$.organizerMode') IS NOT NULL
+            OR json_type(payload_json, '$.organizerLastRunAt') IS NOT NULL
+            OR json_type(payload_json, '$.organizerNextRunAt') IS NOT NULL
+          );
         ",
     )
     .map_err(|e| format!("初始化设置表失败：{e}"))?;

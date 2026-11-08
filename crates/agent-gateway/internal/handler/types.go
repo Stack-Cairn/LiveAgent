@@ -56,6 +56,13 @@ type ChatRequestBody struct {
 	GoalText      string `json:"goal_text,omitempty"`
 	PromptCommand bool   `json:"prompt_command,omitempty"`
 	PlanCommand   bool   `json:"plan_command,omitempty"`
+	// MCPServers is the project's MCP server choice; nil inherits the global
+	// MCP settings, an empty ServerIDs offers no MCP server.
+	MCPServers *ChatMCPServerSelectionBody `json:"mcp_servers,omitempty"`
+}
+
+type ChatMCPServerSelectionBody struct {
+	ServerIDs []string `json:"server_ids"`
 }
 
 type CancelChatRequestBody struct {

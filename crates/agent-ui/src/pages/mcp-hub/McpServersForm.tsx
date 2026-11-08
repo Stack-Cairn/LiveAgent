@@ -1,11 +1,12 @@
 import {
   type AppSettings,
   type McpServerConfig,
-  updateSystem,
+  updateMcp,
 } from "@liveagent/app/lib/settings/index";
 import { Plug, Plus, Server } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { McpServerRuntimeStatus } from "@liveagent/ui/lib/resourceHost";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo } from "react";
@@ -17,12 +18,6 @@ import { McpServerCard } from "./McpServerCard";
 
 export { McpServerEditModal } from "./McpServerEditModal";
 
-const SERVER_POLICY_PREFIX = "server:";
-
-function serverPolicyKey(serverId: string): string {
-  return `${SERVER_POLICY_PREFIX}${serverId}`;
-}
-
 type SetMcpSettingsFn = (updater: (prev: AppSettings) => AppSettings) => void;
 
 type McpServersFormProps = {
@@ -31,10 +26,12 @@ type McpServersFormProps = {
   query: string;
   onAddServer?: () => void;
   onEditServer?: (server: McpServerConfig, idx: number) => void;
+  /** Connection status by server id; absent where the host cannot read it. */
+  statuses?: Map<string, McpServerRuntimeStatus> | null;
 };
 
 export function McpServersForm(props: McpServersFormProps) {
-  const { settings, setSettings, query, onAddServer, onEditServer } = props;
+  const { settings, setSettings, query, onAddServer, onEditServer, statuses } = props;
   const { t } = useLocale();
   // 由专属设置页托管的 server 不在 Hub 里露面（当前是 cua-driver，归
   // 「设置 → CUA」管）。过滤后仍需拿到原始下标：McpServerCard 的编辑 /
@@ -103,24 +100,19 @@ export function McpServersForm(props: McpServersFormProps) {
                 searchQuery={query}
                 setSettings={setSettings}
                 onEdit={() => onEditServer?.(server, idx)}
-                policy={
-                  settings.system.toolPolicies?.[serverPolicyKey(server.id)] ??
-                  effectiveServerPolicyDefault(server)
-                }
+                // K-brain enforces the server's policy["*"]; a tool-specific entry set
+                // elsewhere still takes precedence for that tool.
+                policy={server.policy?.["*"] ?? effectiveServerPolicyDefault(server)}
                 onPolicyChange={(next) =>
-                  setSettings((prev) => {
-                    const current = { ...(prev.system.toolPolicies ?? {}) };
-                    const key = serverPolicyKey(server.id);
-                    // 只有回到该 server 的缺省值才删 key——对普通 server 缺省是
-                    // allow，对硬编码为 ask 的 server（cua-driver）则相反：显式
-                    // 存下 "allow" 才能盖过缺省，删掉反而会退回 ask。
-                    if (next === effectiveServerPolicyDefault(server)) delete current[key];
-                    else current[key] = next;
-                    return updateSystem(prev, {
-                      toolPolicies: Object.keys(current).length > 0 ? current : undefined,
-                    });
-                  })
+                  setSettings((prev) =>
+                    updateMcp(prev, {
+                      servers: prev.mcp.servers.map((item, index) =>
+                        index === idx ? { ...item, policy: { ...item.policy, "*": next } } : item,
+                      ),
+                    }),
+                  )
                 }
+                runtimeStatus={statuses?.get(server.id)}
               />
             ))}
           </div>

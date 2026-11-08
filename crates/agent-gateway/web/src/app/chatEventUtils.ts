@@ -4,7 +4,9 @@ import {
   type AppSettings,
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
+  resolveWorkspaceResources,
   type SelectedModel,
+  workspaceMcpServerIds,
 } from "@/lib/settings";
 import type { ModelProviderSource, TunnelManagerToolChange } from "./types";
 
@@ -100,9 +102,12 @@ export function buildGatewaySelectedModel(
 }
 
 export function buildGatewaySystemSettings(settings: AppSettings, workdirOverride?: string) {
+  const workdir = workdirOverride ?? settings.system.workdir.trim();
   return {
     executionMode: settings.system.executionMode,
-    workdir: workdirOverride ?? settings.system.workdir.trim(),
+    workdir,
     commandSafetyMode: settings.system.commandSafetyMode,
+    // The project's MCP choice (Project settings); undefined when it inherits.
+    mcpServerIds: workspaceMcpServerIds(resolveWorkspaceResources(settings, workdir)),
   };
 }

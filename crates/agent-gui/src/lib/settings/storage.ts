@@ -8,7 +8,11 @@ import {
 import { type Locale, normalizeLocale } from "../../i18n/config";
 import { isKBrainBackendEnabled, isKBrainBrowserHost } from "../host";
 import { createKBrainClient } from "../kbrain/client";
-import { fromKBrainMcpSettings, toKBrainMcpSettings } from "../kbrain/mcp";
+import {
+  fromKBrainMcpSettings,
+  mergeKBrainMcpSettings,
+  notifyKBrainMcpSettingsSaved,
+} from "../kbrain/mcp";
 import { createKBrainPromptClient, type KBrainPromptSnapshot } from "../kbrain/prompts";
 import {
   appProvidersFromKBrain,
@@ -20,6 +24,10 @@ import {
 } from "../kbrain/providerSettings";
 import { getConfiguredKBrainConnection } from "../kbrain/runtimeConnection";
 import type { KBrainSettingsDocument } from "../kbrain/types";
+import {
+  changedWorkspaceSkillsOverrides,
+  saveWorkspaceSkillsOverrides,
+} from "../kbrain/workspaceSkills";
 import { SettingsStorageError, type SettingsStorageErrorCode } from "./errors";
 import {
   type AppSettings,
@@ -27,6 +35,7 @@ import {
   type CloseWindowBehavior,
   type CustomProvider,
   getDefaultSettings,
+  type McpSettings,
   normalizeChatRuntimeControls,
   normalizeChatTranscriptSettings,
   normalizeCloseWindowBehavior,
@@ -58,6 +67,7 @@ import {
   writeImportedLegacyProviderIds,
   writeRejectedLegacyProviders,
 } from "./legacyProviderImport";
+import { migrateLegacyMcpServerPolicies } from "./mcpPolicyMigration";
 
 const LOCAL_UI_SETTINGS_STORAGE_KEY = "liveagent.ui-settings.v1";
 const BROWSER_SETTINGS_STORAGE_KEY = "liveagent.kbrain-browser-settings.v1";
@@ -791,13 +801,28 @@ async function loadKBrainMcpSettings(settings: AppSettings): Promise<AppSettings
     if (!isKBrainBrowserHost()) {
       document = await importLegacyMcpSettings(settings.mcp, document, client.updateMcpSettings);
     }
+    const migration = await migrateLegacyMcpServerPolicies(
+      settings.system.toolPolicies,
+      document,
+      client.updateMcpSettings,
+    );
     return normalizeSettings({
       ...settings,
-      mcp: fromKBrainMcpSettings(document, settings.mcp),
+      system: { ...settings.system, toolPolicies: migration.toolPolicies },
+      mcp: fromKBrainMcpSettings(migration.document, settings.mcp),
     });
   } catch (error) {
     throw new SettingsStorageError("load_failed", error);
   }
+}
+
+// PUT /v1/mcp replaces the whole document; merging onto K-brain's current copy keeps the
+// per-server policy, workspaceRoots and any field this build does not know about.
+async function saveKBrainMcpSettings(previous: McpSettings, next: McpSettings): Promise<void> {
+  const client = createKBrainClient();
+  const current = await client.getMcpSettings();
+  await client.updateMcpSettings(mergeKBrainMcpSettings(current, next, previous));
+  notifyKBrainMcpSettingsSaved();
 }
 
 async function persistKBrainPrompts(prev: AppSettings, next: AppSettings): Promise<void> {
@@ -928,13 +953,22 @@ export async function persistSettings(
     );
   }
 
+  const workspaceSkills = isKBrainBackendEnabled()
+    ? changedWorkspaceSkillsOverrides(prev, next)
+    : [];
+  if (workspaceSkills.length > 0) {
+    tasks.push(
+      saveWorkspaceSkillsOverrides(workspaceSkills, next.skills).catch((error) => {
+        throw new SettingsStorageError("save_failed", error);
+      }),
+    );
+  }
+
   if (isKBrainBackendEnabled() && hasChanged(prev.mcp, next.mcp)) {
     tasks.push(
-      createKBrainClient()
-        .updateMcpSettings(toKBrainMcpSettings(next.mcp))
-        .catch((error) => {
-          throw new SettingsStorageError("save_failed", error);
-        }),
+      saveKBrainMcpSettings(prev.mcp, next.mcp).catch((error) => {
+        throw new SettingsStorageError("save_failed", error);
+      }),
     );
   }
 
