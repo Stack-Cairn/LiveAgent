@@ -51,6 +51,7 @@ type Session struct {
 	MessageCount      int32     `json:"message_count"`
 	Pinned            bool      `json:"pinned"`
 	Shared            bool      `json:"shared"`
+	Archived          bool      `json:"archived,omitempty"`
 	Messages          []Message `json:"messages,omitempty"`
 	TotalMessageCount int32     `json:"total_message_count,omitempty"`
 }
@@ -321,6 +322,29 @@ func (c *Client) ListSessions(ctx context.Context, page, pageSize int, cwd strin
 	}
 	if resp.StatusCode != http.StatusOK {
 		return out, fmt.Errorf("kbrain list sessions: %s", resp.Status)
+	}
+	if out.TotalCount == 0 {
+		out.TotalCount = int32(len(out.Sessions))
+	}
+	return out, nil
+}
+
+// ListArchivedSessions lists only archived sessions (capability session_archive).
+func (c *Client) ListArchivedSessions(ctx context.Context, page, pageSize int) (SessionPage, error) {
+	query := url.Values{}
+	query.Set("page", strconv.Itoa(max(page, 1)))
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	query.Set("page_size", strconv.Itoa(pageSize))
+	query.Set("archived", "only")
+	var out SessionPage
+	resp, err := c.request(ctx, http.MethodGet, "/v1/sessions?"+query.Encode(), nil, &out)
+	if err != nil {
+		return out, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return out, fmt.Errorf("kbrain list archived sessions: %s", resp.Status)
 	}
 	if out.TotalCount == 0 {
 		out.TotalCount = int32(len(out.Sessions))

@@ -5,6 +5,7 @@ type CacheRetention = "none" | "short" | "long";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
 import { createKBrainClient } from "../../kbrain/client";
 import type { KBrainMessage, KBrainModelRef } from "../../kbrain/types";
+import { kbrainUsage as mapKBrainUsage } from "../../kbrain/usage";
 import type { ProviderId } from "../../settings";
 import { appendSystemPrompt } from "./common";
 import { getProviderRuntimeBackend } from "./providerRuntimeConfig";
@@ -63,18 +64,7 @@ async function generateKBrainText(params: {
 }
 
 function kbrainUsage(response: Awaited<ReturnType<typeof generateKBrainText>>) {
-  const input = response.usage?.input_tokens ?? 0;
-  const output = response.usage?.output_tokens ?? 0;
-  const cacheRead = response.usage?.cached_tokens ?? 0;
-  const cacheWrite = response.usage?.cache_write_tokens ?? 0;
-  return {
-    input,
-    output,
-    cacheRead,
-    cacheWrite,
-    totalTokens: input + output,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  };
+  return mapKBrainUsage(response.usage);
 }
 
 export function buildTextOnlySystemSuffix(allowJsonOutput = false) {

@@ -97,6 +97,56 @@ fn summary_cwd(value: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+/// WebUI archive commands (memory_manage passthrough) and the desktop frontend's
+/// history action that answers each one.
+pub(crate) fn history_archive_action(command: &str) -> Option<&'static str> {
+    match command.trim() {
+        "history_archive_supported" => Some("archive_supported"),
+        "history_archived_list" => Some("archived_list"),
+        "history_archive_set" => Some("archive"),
+        _ => None,
+    }
+}
+
+fn history_archive_data(action: &str, args: &Value) -> Value {
+    match action {
+        "archived_list" => json!({"page": args["page"], "pageSize": args["page_size"]}),
+        "archive" => json!({"archived": args["archived"].as_bool() == Some(true)}),
+        _ => json!({}),
+    }
+}
+
+/// The frontend's `{items, totalCount}` page in the WebUI's history list shape.
+fn archived_list_json(value: &Value) -> Value {
+    let conversations = value["items"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    let s = summary(item);
+                    json!({
+                        "id": s.id,
+                        "title": s.title,
+                        "created_at": s.created_at,
+                        "updated_at": s.updated_at,
+                        "message_count": s.message_count,
+                        "provider_id": s.provider_id,
+                        "model": s.model,
+                        "session_id": s.session_id,
+                        "cwd": s.cwd,
+                        "selected_model_json": s.selected_model_json,
+                        "is_pinned": s.is_pinned,
+                        "is_shared": s.is_shared,
+                        "is_archived": true,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    json!({"conversations": conversations, "total_count": count(&value["totalCount"])})
+}
+
 impl GatewayController {
     /// Working directory of a conversation as the desktop frontend's history
     /// (K-brain sessions or the local database) records it; `None` when the
@@ -122,6 +172,53 @@ impl GatewayController {
             .await
             .ok()?;
         summary_cwd(&value)
+    }
+
+    /// Archive commands from the WebUI. Only the frontend holds the local-to-backend id
+    /// mapping, so they run as history actions there, like the other history requests.
+    pub(crate) async fn handle_history_archive_command(
+        self: &std::sync::Arc<Self>,
+        request_id: String,
+        action: &'static str,
+        request: &proto::MemoryManageRequest,
+    ) -> Result<proto::MemoryManageResponse, String> {
+        let raw = request.args_json.trim();
+        let args: Value = if raw.is_empty() {
+            json!({})
+        } else {
+            serde_json::from_str(raw)
+                .map_err(|e| format!("invalid {} args: {e}", request.command))?
+        };
+        let conversation_id = args["conversation_id"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if action == "archive" && conversation_id.is_empty() {
+            return Err("conversation_id is required".into());
+        }
+        let value = self
+            .run_composer_action(GatewayComposerActionEvent {
+                request_id,
+                kind: "history".into(),
+                conversation_id,
+                action: action.into(),
+                cron: String::new(),
+                interval: String::new(),
+                prompt: String::new(),
+                reasoning: String::new(),
+                loop_id: String::new(),
+                data: Some(history_archive_data(action, &args)),
+            })
+            .await?;
+        let result = match action {
+            "archived_list" => archived_list_json(&value),
+            "archive_supported" => json!({"supported": value["supported"].as_bool() == Some(true)}),
+            _ => json!({}),
+        };
+        let result_json = serde_json::to_string(&result)
+            .map_err(|e| format!("serialize {} result failed: {e}", request.command))?;
+        Ok(proto::MemoryManageResponse { result_json })
     }
 
     pub(crate) async fn handle_kbrain_history_request(
@@ -361,6 +458,58 @@ impl GatewayController {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_commands_map_to_frontend_history_actions() {
+        assert_eq!(
+            history_archive_action(" history_archive_supported "),
+            Some("archive_supported")
+        );
+        assert_eq!(
+            history_archive_action("history_archived_list"),
+            Some("archived_list")
+        );
+        assert_eq!(
+            history_archive_action("history_archive_set"),
+            Some("archive")
+        );
+        assert_eq!(history_archive_action("history_shared_list"), None);
+        assert_eq!(history_archive_action("memory_list"), None);
+
+        let args = json!({"page": 2, "page_size": 30, "archived": true, "conversation_id": "c"});
+        assert_eq!(
+            history_archive_data("archived_list", &args),
+            json!({"page": 2, "pageSize": 30})
+        );
+        assert_eq!(
+            history_archive_data("archive", &args),
+            json!({"archived": true})
+        );
+        assert_eq!(
+            history_archive_data("archive", &json!({})),
+            json!({"archived": false})
+        );
+    }
+
+    #[test]
+    fn archived_list_uses_the_webui_history_list_shape() {
+        let value = archived_list_json(&json!({
+            "items": [{
+                "id": "desktop-conversation", "sessionId": "backend-session", "title": "Old",
+                "cwd": "/w", "messageCount": 3, "updatedAt": 20, "createdAt": 10,
+                "providerId": "p", "model": "m", "isArchived": true
+            }],
+            "totalCount": 7
+        }));
+        assert_eq!(value["total_count"], 7);
+        let first = &value["conversations"][0];
+        assert_eq!(first["id"], "desktop-conversation");
+        assert_eq!(first["session_id"], "desktop-conversation");
+        assert_eq!(first["updated_at"], 20);
+        assert_eq!(first["message_count"], 3);
+        assert_eq!(first["is_archived"], true);
+        assert_eq!(archived_list_json(&json!({}))["conversations"], json!([]));
+    }
 
     #[test]
     fn webui_restore_keeps_desktop_identity_and_windows_workdir() {

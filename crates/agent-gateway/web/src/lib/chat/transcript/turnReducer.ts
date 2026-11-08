@@ -359,12 +359,16 @@ function applyTokenEvent(turn: Turn, event: Extract<ChatEvent, { type: "token" }
 
   const entries = turn.entries;
   const tail = entries.at(-1);
-  const assistantIndex =
-    tail?.kind === "assistant" && (round === undefined || tail.round === round)
-      ? entries.length - 1
-      : text === ""
-        ? findLastSegmentAssistantIndex(entries, round)
-        : -1;
+  // A mid-run usage report marks its position: it covers what the round holds so far,
+  // so it lands on the tail and never on an earlier assistant entry.
+  const usageMark = event.usageLive === true && meta?.usage !== undefined;
+  const tailIsRoundAssistant =
+    tail?.kind === "assistant" && (round === undefined || tail.round === round);
+  const assistantIndex = tailIsRoundAssistant
+    ? entries.length - 1
+    : text === "" && !usageMark
+      ? findLastSegmentAssistantIndex(entries, round)
+      : -1;
   if (assistantIndex >= 0) {
     const target = entries[assistantIndex];
     if (target?.kind !== "assistant") return turn;
@@ -374,6 +378,7 @@ function applyTokenEvent(turn: Turn, event: Extract<ChatEvent, { type: "token" }
       text: target.text + text,
       round: round ?? target.round,
       meta: meta ? mergeAssistantMeta(target.meta, meta) : target.meta,
+      ...(usageMark ? { usageMark: true } : {}),
     };
     return withEntries(turn, enrichSegmentHostedSearches(next));
   }
@@ -390,6 +395,7 @@ function applyTokenEvent(turn: Turn, event: Extract<ChatEvent, { type: "token" }
       text,
       round,
       meta,
+      ...(usageMark ? { usageMark: true } : {}),
     },
   ];
   return withEntries(turn, enrichSegmentHostedSearches(next));

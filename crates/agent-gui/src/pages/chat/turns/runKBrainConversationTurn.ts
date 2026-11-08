@@ -58,6 +58,7 @@ import {
 } from "../../../lib/kbrain/uploadStagingRoot";
 import {
   ingestKBrainSubagentEvent,
+  linkKBrainSubagentToolCalls,
   noteKBrainSubagentTurnEnded,
   noteKBrainSubagentTurnStarted,
 } from "../../../lib/subagents/kbrainSubagentStore";
@@ -232,6 +233,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   const onToolCall = (call: ToolCall) => {
     calls.set(call.id, call);
     callRounds.set(call.id, round);
+    linkKBrainSubagentToolCalls(params.conversationId, [call]);
     update((target) => ({
       ...upsertToolCallToRound(collapseThinking(target), withElicitationArgs(call)),
       runningToolCallIds: [...new Set([...target.runningToolCallIds, call.id])],
@@ -325,6 +327,8 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   // 直到目标达成、暂停或用户停止。
   // 回调里写入、轮次结束后读取；经函数读取，避免控制流把它收窄成初始值。
   let latestGoalState: KBrainGoalState | undefined;
+  // The latest usage.updated report of this goal round's run.
+  let liveUsage: AssistantMessage["usage"] | undefined;
   // 目标在等用户回答时，这条普通消息就是回复，后端会把它作为目标的一轮接收。
   // 目标栏先按进行中显示；本轮的去向（达成、再次等待或续跑）以后端事件为准，
   // 结束时再读一次目标对齐。
@@ -337,6 +341,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   // 本次发送是否牵涉目标（/goal 指令、续跑轮次或收到进行中的目标状态）；结束时据此对齐。
   let goalInvolved = command?.kind === "goal" || answersGoal;
   const readGoalState = () => latestGoalState;
+  const readLiveUsage = () => liveUsage;
   let attachClientRequestId: string | undefined;
   noteKBrainSubagentTurnStarted(params.conversationId);
   try {
@@ -344,6 +349,7 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
     for (;;) {
       hookLifecycle.startTurn(round);
       latestGoalState = undefined;
+      liveUsage = undefined;
       const assistant = await runKBrainTurn({
         locale: params.locale,
         conversationId: params.conversationId,
@@ -409,6 +415,16 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         onToolCall,
         onToolResult,
         onToolOutput,
+        onUsage: (reported) => {
+          // The live round spans every model call of the run; the report covers the
+          // blocks it already holds, so the context ring adds only what follows.
+          liveUsage = reported;
+          update((target) => ({
+            ...target,
+            meta: { ...target.meta, usage: reported, usageBlockCount: target.blocks.length },
+          }));
+          gatewayBridgeEvents.queueToken("", { round, usage: reported, usageLive: true });
+        },
         onStatus: status,
         onQuestionRequest: async (
           request: KBrainQuestionRequest,
@@ -556,24 +572,33 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           ...Array.from(calls.values()).filter((call) => !assistantCallIds.has(call.id)),
         ],
       };
-      update((target) => ({
-        ...collapseThinking(target),
-        runningToolCallIds: [],
-        meta: {
-          provider: projected.provider,
-          model: projected.model,
-          api: projected.api,
-          stopReason: projected.stopReason,
-          usage: projected.usage,
-        },
-      }));
+      // A run that ends without a final message (stopped, failed) keeps the last live
+      // report instead of an empty usage.
+      const lastReport = readLiveUsage();
+      const finalUsage =
+        projected.usage.totalTokens > 0 || !lastReport ? projected.usage : lastReport;
+      update((target) => {
+        const usageBlockCount = target.meta?.usageBlockCount;
+        return {
+          ...collapseThinking(target),
+          runningToolCallIds: [],
+          meta: {
+            provider: projected.provider,
+            model: projected.model,
+            api: projected.api,
+            stopReason: projected.stopReason,
+            usage: finalUsage,
+            ...(usageBlockCount === undefined ? {} : { usageBlockCount }),
+          },
+        };
+      });
       gatewayBridgeEvents.queueToken("", {
         round,
         provider: projected.provider,
         model: projected.model,
         api: projected.api,
         stopReason: projected.stopReason,
-        usage: projected.usage,
+        usage: finalUsage,
       });
       if (projected.errorMessage) gatewayBridgeEvents.emitError(projected.errorMessage);
       let state = appendMessagesToConversation(params.getNextConversationState(), [

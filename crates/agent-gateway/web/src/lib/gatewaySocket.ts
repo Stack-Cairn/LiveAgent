@@ -343,6 +343,10 @@ export type GatewayWebSocketClientLike = {
   listHistory(page: number, pageSize: number, filter?: HistoryListFilter): Promise<HistoryList>;
   listHistoryWorkdirs(): Promise<HistoryWorkdirsResponse>;
   listSharedHistory(page: number, pageSize: number): Promise<HistoryList>;
+  /** Whether the agent can archive conversations (K-brain `session_archive`). */
+  historyArchiveSupported(): Promise<boolean>;
+  listArchivedHistory(page: number, pageSize: number): Promise<HistoryList>;
+  setHistoryArchived(conversationId: string, archived: boolean): Promise<void>;
   getHistory(conversationId: string, options?: HistoryGetOptions): Promise<HistoryDetail>;
   getHistoryPrefix(
     conversationId: string,

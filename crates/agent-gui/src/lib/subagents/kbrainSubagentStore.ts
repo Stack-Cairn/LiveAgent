@@ -1,3 +1,8 @@
+import {
+  subagentControlAction,
+  subagentControlTargetId,
+} from "@liveagent/ui/lib/chat/subagentControlTools";
+import { capabilityAtLeast } from "@liveagent/ui/lib/kbrain/health";
 import { createKBrainClient } from "../kbrain/client";
 import { getKBrainSessionId } from "../kbrain/mapping";
 import { getConfiguredKBrainConnection } from "../kbrain/runtimeConnection";
@@ -64,7 +69,8 @@ export type ConversationSubagents = {
 type SubagentClient = Pick<
   ReturnType<typeof createKBrainClient>,
   "listSubagents" | "getSubagentTranscript" | "cancelSubagent" | "subscribeSubagent"
->;
+> &
+  Partial<Pick<ReturnType<typeof createKBrainClient>, "getCapabilities">>;
 
 type Resources = {
   follows: Map<string, AbortController>;
@@ -81,8 +87,13 @@ let sessionResolver: (conversationId: string) => string | undefined = (conversat
 const conversations = new Map<string, ConversationSubagents>();
 const resources = new Map<string, Resources>();
 const toolCallIndex = new Map<string, { conversationId: string; id: string }>();
+/** status / steer / cancel / follow-up calls, by tool call id, to the subagent they name. */
+const controlCallIndex = new Map<string, { conversationId: string; id: string }>();
 const listeners = new Set<() => void>();
 let version = 0;
+/** One health read serves every conversation for a minute (the backend can be swapped). */
+const CAPABILITY_TTL_MS = 60_000;
+let transcriptsCapability: { at: number; value: Promise<boolean> } | null = null;
 
 const EMPTY: Readonly<Record<string, SubagentEntry>> = Object.freeze({});
 
@@ -102,6 +113,8 @@ export function resetKBrainSubagentStore() {
   conversations.clear();
   resources.clear();
   toolCallIndex.clear();
+  controlCallIndex.clear();
+  transcriptsCapability = null;
   emit();
 }
 
@@ -307,9 +320,15 @@ export function loadKBrainSubagents(conversationId: string): Promise<void> {
   const state = conversationFor(conversationId);
   if (!state.sessionId || state.unsupported) return Promise.resolve();
   const sessionId = state.sessionId;
-  const load = clientFactory()
-    .listSubagents(sessionId)
-    .then((list: KBrainSubagentList) => {
+  const client = clientFactory();
+  const load = hasSubagentTranscripts(client)
+    .then((supported) => {
+      if (supported) return client.listSubagents(sessionId);
+      update(conversationId, (current) => ({ ...current, unsupported: true }));
+      return null;
+    })
+    .then((list: KBrainSubagentList | null) => {
+      if (!list) return;
       const listSeq = list.last_seq ?? 0;
       update(conversationId, (current) => {
         let next = current;
@@ -331,6 +350,25 @@ export function loadKBrainSubagents(conversationId: string): Promise<void> {
     });
   resource.listLoad = load;
   return load;
+}
+
+/**
+ * Backends without `subagent_transcripts` have no /subagents routes and never link a
+ * subagent to its tool calls; their calls keep the plain tool rows. A failed health
+ * read is not taken as a "no": the list request itself still reports a missing route.
+ */
+function hasSubagentTranscripts(client: SubagentClient): Promise<boolean> {
+  if (!client.getCapabilities) return Promise.resolve(true);
+  const now = Date.now();
+  if (transcriptsCapability && now - transcriptsCapability.at < CAPABILITY_TTL_MS) {
+    return transcriptsCapability.value;
+  }
+  const value = client
+    .getCapabilities()
+    .then((capabilities) => capabilityAtLeast({ capabilities }, "subagent_transcripts", 1))
+    .catch(() => true);
+  transcriptsCapability = { at: now, value };
+  return value;
 }
 
 function isMissingRoute(error: unknown) {
@@ -427,11 +465,36 @@ export function getKBrainConversationSubagents(
   return conversations.get(conversationId);
 }
 
-/** The subagent the parent's `subagent` tool call started, when the backend linked them. */
+/**
+ * Records which subagent the conversation's status / steer / cancel / follow-up calls
+ * name (`arguments.id`), from the live turn and from loaded history. Other calls and
+ * calls without an id (a status listing) are ignored.
+ */
+export function linkKBrainSubagentToolCalls(
+  conversationId: string,
+  calls: Iterable<{ id: string; name: string; arguments: unknown }>,
+) {
+  let changed = false;
+  for (const call of calls) {
+    if (!call.id || !subagentControlAction(call.name)) continue;
+    const id = subagentControlTargetId(call.arguments);
+    if (!id) continue;
+    const previous = controlCallIndex.get(call.id);
+    if (previous?.conversationId === conversationId && previous.id === id) continue;
+    controlCallIndex.set(call.id, { conversationId, id });
+    changed = true;
+  }
+  if (changed) emit();
+}
+
+/**
+ * The subagent a tool call is about: the one the parent's `subagent` call started (when
+ * the backend linked them), or the one a status / steer / cancel / follow-up call names.
+ */
 export function getKBrainSubagentForToolCall(
   toolCallId: string,
 ): { conversationId: string; entry: SubagentEntry } | undefined {
-  const link = toolCallIndex.get(toolCallId);
+  const link = toolCallIndex.get(toolCallId) ?? controlCallIndex.get(toolCallId);
   if (!link) return undefined;
   const entry = conversations.get(link.conversationId)?.entries[link.id];
   return entry ? { conversationId: link.conversationId, entry } : undefined;
@@ -452,8 +515,10 @@ export function forgetKBrainSubagents(conversationId: string) {
   const resource = resources.get(conversationId);
   for (const controller of resource?.follows.values() ?? []) controller.abort();
   resources.delete(conversationId);
-  for (const [toolCallId, link] of toolCallIndex) {
-    if (link.conversationId === conversationId) toolCallIndex.delete(toolCallId);
+  for (const index of [toolCallIndex, controlCallIndex]) {
+    for (const [toolCallId, link] of index) {
+      if (link.conversationId === conversationId) index.delete(toolCallId);
+    }
   }
   if (conversations.delete(conversationId)) emit();
 }

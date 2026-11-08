@@ -14,7 +14,7 @@
 //   remove conversations deleted elsewhere instead of resurrecting them.
 
 import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
-import type { SidebarBackend } from "./backend";
+import type { SidebarBackend, SidebarListPage } from "./backend";
 import {
   applySidebarBackendEvent,
   mergeSidebarConversation,
@@ -95,6 +95,8 @@ export type SidebarStore = {
   setPinned(id: string, isPinned: boolean): Promise<boolean>;
   setCwd(id: string, cwd: string): Promise<boolean>;
   remove(id: string): Promise<boolean>;
+  /** Present when the backend can archive conversations (see SidebarArchiveBackend). */
+  archive?: SidebarStoreArchive;
   clearMutationError(id: string): void;
   upsertLocal(conversation: SidebarConversation, options?: { reveal?: boolean }): void;
   removeLocal(conversationId: string): void;
@@ -107,6 +109,16 @@ export type SidebarStore = {
   hydrateRunning(items: readonly SidebarRunningItem[]): void;
   peek(conversationId: string): SidebarConversation | undefined;
   peekConversations(): readonly SidebarConversation[];
+};
+
+export type SidebarStoreArchive = {
+  isSupported(): Promise<boolean>;
+  /**
+   * Archiving removes the row at once (restored if the backend refuses). Unarchiving
+   * targets a row the list does not hold; it reappears through the backend's sync.
+   */
+  setArchived(id: string, archived: boolean): Promise<boolean>;
+  listArchived(page: number, pageSize: number): Promise<SidebarListPage>;
 };
 
 export type SidebarStoreOptions = {
@@ -1112,6 +1124,36 @@ export function createSidebarStore(
     }, delay);
   };
 
+  const createArchive = (archive: NonNullable<SidebarBackend["archive"]>): SidebarStoreArchive => ({
+    isSupported: () => archive.isSupported(),
+    listArchived: (page, pageSize) => archive.listArchived(page, pageSize),
+    setArchived: async (id, archived) => {
+      if (archived) {
+        const done = await runMutation({
+          id,
+          kind: "archive",
+          failureCode: "archiveFailed",
+          optimistic: () => null,
+          execute: async () => {
+            await archive.setArchived(id, true);
+            return null;
+          },
+        });
+        if (done) void refreshWorkdirs("delete");
+        return done;
+      }
+      try {
+        await archive.setArchived(id, false);
+      } catch {
+        return false;
+      }
+      // Event-sourced backends deliver the row themselves; a polled one needs a reload.
+      if (backend.getReconcileIntervalMs?.() !== null) void fetchFirstPage(false);
+      void refreshWorkdirs("move");
+      return true;
+    },
+  });
+
   return {
     getSnapshot: () => snapshot,
     subscribe: (listener) => {
@@ -1283,6 +1325,8 @@ export function createSidebarStore(
       }
       return removed;
     },
+
+    ...(backend.archive ? { archive: createArchive(backend.archive) } : {}),
 
     clearMutationError: (id) => {
       if (!snapshot.mutationErrors.has(id)) {

@@ -1374,12 +1374,26 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::MemoryManage(request)) => {
                 let controller = Arc::clone(self);
                 tauri::async_runtime::spawn(async move {
-                    let result = match gateway_bridge::handle_memory_manage(
-                        controller.app_handle.clone(),
-                        request,
-                    )
-                    .await
-                    {
+                    let outcome =
+                        match super::kbrain_history::history_archive_action(&request.command) {
+                            Some(action) => {
+                                controller
+                                    .handle_history_archive_command(
+                                        request_id.clone(),
+                                        action,
+                                        &request,
+                                    )
+                                    .await
+                            }
+                            None => {
+                                gateway_bridge::handle_memory_manage(
+                                    controller.app_handle.clone(),
+                                    request,
+                                )
+                                .await
+                            }
+                        };
+                    let result = match outcome {
                         Ok(response) => {
                             controller
                                 .send_agent_envelope(proto::AgentEnvelope {

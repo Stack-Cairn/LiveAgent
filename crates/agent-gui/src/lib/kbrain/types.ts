@@ -350,6 +350,8 @@ export type KBrainUpdateSessionRequest = {
   model?: KBrainModelRef;
   /** Moves the session to another workspace (absolute path to an existing directory). */
   cwd?: string;
+  /** Hides the session from the default list (capability `session_archive`). */
+  archived?: boolean;
 };
 
 export type KBrainRunOptions = {

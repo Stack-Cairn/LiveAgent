@@ -13,6 +13,7 @@ import { withMcpElicitationDetails } from "@liveagent/ui/lib/chat/mcpElicitation
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
 import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
 import { parseUserMessageContentWithUploads } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { capabilityAtLeast } from "@liveagent/ui/lib/kbrain/health";
 import {
   type ConversationViewState,
   getHistoryMessageContentHash,
@@ -28,6 +29,7 @@ import type {
   ChatHistoryWindowRecord,
   ConversationPersistenceCursor,
 } from "../chat/history/chatHistory";
+import { linkKBrainSubagentToolCalls } from "../subagents/kbrainSubagentStore";
 import { createKBrainClient } from "./client";
 import { historyErrorStatus, recoverLegacyHistory } from "./historyMigration";
 import {
@@ -54,6 +56,7 @@ import type {
   KBrainSession,
   KBrainToolCall,
 } from "./types";
+import { kbrainUsage } from "./usage";
 
 const KBRAIN_API = "kbrain.agent.v1" as AssistantMessage["api"];
 
@@ -284,14 +287,7 @@ function toMessage(
     model: message.model || "unknown",
     responseId: message.id,
     ...(message.id ? { id: message.id } : {}),
-    usage: {
-      input: message.usage?.input_tokens ?? 0,
-      output: message.usage?.output_tokens ?? 0,
-      cacheRead: message.usage?.cached_tokens ?? 0,
-      cacheWrite: message.usage?.cache_write_tokens ?? 0,
-      totalTokens: (message.usage?.input_tokens ?? 0) + (message.usage?.output_tokens ?? 0),
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
+    usage: kbrainUsage(message.usage),
     stopReason: historyStopReason(message.stop_reason),
     timestamp,
   };
@@ -391,6 +387,7 @@ export function summaryForSession(
     updatedAt: epoch(session.updated_at, createdAt),
     isPinned: session.pinned === true,
     isShared: session.shared === true,
+    ...(session.archived === true ? { isArchived: true } : {}),
     ...(session.forked_from?.trim() ? { forkedFromSessionId: session.forked_from.trim() } : {}),
   };
 }
@@ -466,6 +463,8 @@ function historyWindow(
   for (const message of source) {
     for (const call of message.tool_calls ?? []) toolCalls.set(call.id, call);
   }
+  // Follow-up / status / steer / cancel calls find their subagent's card and name.
+  linkKBrainSubagentToolCalls(localId, toolCalls.values());
   const indexedMessages = source.flatMap((message, index) => {
     const offset = offsets[index];
     const converted = toMessage(
@@ -562,6 +561,60 @@ function historyWindow(
     revision: result.revision,
     updatedAt,
   };
+}
+
+const ARCHIVE_CAPABILITY_TTL_MS = 60_000;
+let archiveCapability: { baseUrl: string; at: number; value: Promise<boolean> } | undefined;
+
+/** True when the connected K-brain can archive sessions (capability `session_archive`). */
+export function supportsKBrainSessionArchive(): Promise<boolean> {
+  const url = baseUrl() ?? "";
+  const now = Date.now();
+  if (
+    archiveCapability &&
+    archiveCapability.baseUrl === url &&
+    now - archiveCapability.at < ARCHIVE_CAPABILITY_TTL_MS
+  ) {
+    return archiveCapability.value;
+  }
+  const value = client()
+    .getCapabilities()
+    .then((capabilities) => capabilityAtLeast({ capabilities }, "session_archive", 1));
+  const entry = { baseUrl: url, at: now, value };
+  archiveCapability = entry;
+  // An unreachable backend is asked again next time instead of hiding archive for a minute.
+  return value.catch(() => {
+    if (archiveCapability === entry) archiveCapability = undefined;
+    return false;
+  });
+}
+
+export async function listKBrainArchivedHistory(
+  page: number,
+  pageSize: number,
+): Promise<ChatHistoryListPage> {
+  const result = await client().listSessions({ page, pageSize, archived: "only" });
+  const items = result.sessions.map((session) => {
+    const localId = ensureKBrainConversationId(session.id, baseUrl());
+    setKBrainSessionId(localId, session.id, baseUrl());
+    return summaryForSession(session, localId);
+  });
+  return { items, totalCount: result.total_count };
+}
+
+/**
+ * Archives or unarchives a session. Archiving drops it from the synced list and
+ * unarchiving brings it back, both through the normal change feed.
+ */
+export async function setKBrainHistoryArchived(id: string, archived: boolean): Promise<void> {
+  const localId = id.trim();
+  const backendId = getKBrainSessionId(localId, baseUrl());
+  if (!backendId) throw new Error(`K-brain session mapping not found for conversation ${localId}`);
+  const session = await client().updateSession(backendId, { archived });
+  if ((session.archived === true) !== archived) {
+    throw new Error("K-brain did not apply the archive change; it may not support archiving");
+  }
+  await confirmKBrainMutation(backendId, session);
 }
 
 export async function listKBrainHistory(

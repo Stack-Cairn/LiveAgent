@@ -103,6 +103,8 @@ export type ChatEvent = (
       api?: string;
       stopReason?: string;
       usage?: unknown;
+      /** `usage` is a mid-run report of the model call that just finished. */
+      usageLive?: boolean;
       contextRelevant?: boolean;
       checkpoint?: ChatCheckpointPayload;
       conversation_id?: string;
@@ -227,6 +229,8 @@ export type ConversationSummary = {
   is_pinned?: boolean;
   pinned_at?: number;
   is_shared?: boolean;
+  /** Set on rows of the archived list (K-brain `session_archive`). */
+  is_archived?: boolean;
 };
 
 export type HistoryList = {

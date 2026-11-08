@@ -23,6 +23,7 @@ type GatewayAssistantMeta = {
   stopReason?: string;
   usage?: Usage;
   contextRelevant?: boolean;
+  usageBlockCount?: number;
 };
 
 export type GatewayRuntimeSnapshotEntry = SharedChatEntry<

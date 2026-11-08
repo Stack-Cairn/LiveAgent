@@ -147,6 +147,8 @@ type HistoryRowProps = {
   onCommitRename: () => void;
   onCancelRename: () => void;
   onSetPinned: (id: string, isPinned: boolean) => void;
+  /** Present when the backend can archive conversations. */
+  onSetArchived?: (id: string, archived: boolean) => void;
   onMoveToWorkspace: (id: string, cwd: string) => void;
   moveWorkspaces: readonly WorkspaceProject[];
   onShareConversation: (item: SidebarConversation) => void;
@@ -222,6 +224,7 @@ function areHistoryRowPropsEqual(previous: HistoryRowProps, next: HistoryRowProp
     previous.onCommitRename === next.onCommitRename &&
     previous.onCancelRename === next.onCancelRename &&
     previous.onSetPinned === next.onSetPinned &&
+    previous.onSetArchived === next.onSetArchived &&
     previous.onMoveToWorkspace === next.onMoveToWorkspace &&
     previous.moveWorkspaces === next.moveWorkspaces &&
     previous.onShareConversation === next.onShareConversation &&
@@ -261,6 +264,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     onCommitRename,
     onCancelRename,
     onSetPinned,
+    onSetArchived,
     onMoveToWorkspace,
     moveWorkspaces,
     onShareConversation,
@@ -368,6 +372,10 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     }
     onSetPinned(item.id, item.isPinned !== true);
   }, [isInteractionDisabled, item.id, item.isPinned, onSetPinned]);
+
+  const handleArchive = useCallback(() => {
+    if (!isInteractionDisabled) onSetArchived?.(item.id, true);
+  }, [isInteractionDisabled, item.id, onSetArchived]);
 
   const handleMoveToWorkspace = useCallback(
     (cwd: string) => {
@@ -716,6 +724,16 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
             <Pin className={CONVERSATION_MENU_ICON_CLASS} />
           )}
           {item.isPinned ? t("chat.conversationUnpin") : t("chat.conversationPin")}
+        </DropdownMenuItem>
+      ) : null}
+      {onSetArchived && !item.isPending ? (
+        <DropdownMenuItem
+          disabled={isInteractionDisabled || isRunning || isBusy}
+          onSelect={handleArchive}
+          className={CONVERSATION_MENU_ITEM_CLASS}
+        >
+          <Archive className={CONVERSATION_MENU_ICON_CLASS} />
+          {t("chat.conversationArchive")}
         </DropdownMenuItem>
       ) : null}
       <DropdownMenuItem

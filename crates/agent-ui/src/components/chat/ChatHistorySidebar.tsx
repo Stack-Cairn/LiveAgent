@@ -1,6 +1,7 @@
 import { type WorkspaceProject, workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import {
   AlertCircle,
+  Archive,
   Blend,
   Brain,
   Cable,
@@ -102,6 +103,7 @@ import {
   SidebarTrigger,
   useSidebarToggleShortcut,
 } from "../ui/sidebar";
+import { ArchivedConversationsModal } from "./ArchivedConversationsModal";
 import { HistoryRow, ProjectGroupHeader, ProjectRow } from "./ChatHistorySidebarRows";
 import {
   HISTORY_RENAME_INPUT_CLASS,
@@ -283,6 +285,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onCommitRename,
     onCancelRename,
     onSetPinned,
+    onSetArchived,
+    archivedConversations,
     onMoveToWorkspace,
     onMoveConversationsToWorkspace,
     canShareConversations,
@@ -747,6 +751,15 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       onOpenSharedConversations();
     }
   });
+  const handleSetArchivedEvent = useStableEvent((id: string, archived: boolean) => {
+    if (!sectionsDisabled) onSetArchived?.(id, archived);
+  });
+  const handleSetArchived = onSetArchived ? handleSetArchivedEvent : undefined;
+  const [archivedListOpen, setArchivedListOpen] = useState(false);
+  const handleOpenArchivedConversations = useStableEvent(() => {
+    if (!sectionsDisabled) setArchivedListOpen(true);
+  });
+  const handleCloseArchivedConversations = useStableEvent(() => setArchivedListOpen(false));
   const handleDeleteConversation = useStableEvent((id: string) => {
     if (!sectionsDisabled) {
       onDeleteConversation(id);
@@ -1325,6 +1338,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         onCommitRename={handleCommitRename}
         onCancelRename={handleCancelRename}
         onSetPinned={handleSetPinned}
+        onSetArchived={handleSetArchived}
         onMoveToWorkspace={handleMoveToWorkspace}
         moveWorkspaces={activeProjects}
         onShareConversation={handleShareConversation}
@@ -1358,6 +1372,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       onConversationOpenInWorkbenchSplit,
       handleMoveToWorkspace,
       handleSetPinned,
+      handleSetArchived,
       handleSetPendingDelete,
       handleShareConversation,
       handleStartRenaming,
@@ -1754,6 +1769,21 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       >
                         <ListChecks className="size-3.5" />
                       </Button>
+                      {archivedConversations ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleOpenArchivedConversations}
+                          disabled={sectionsDisabled}
+                          className={PROJECT_ICON_BUTTON_CLASS}
+                          title={t("chat.archivedConversations.open")}
+                          aria-label={t("chat.archivedConversations.open")}
+                          data-archived-conversations-button=""
+                        >
+                          <Archive className="size-3.5" />
+                        </Button>
+                      ) : null}
                       {canShareConversations && (
                         <Button
                           type="button"
@@ -2215,6 +2245,21 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           <ListChecks className="size-3.5" />
                         </Button>
                       ) : null}
+                      {archivedConversations ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleOpenArchivedConversations}
+                          disabled={sectionsDisabled}
+                          className={PROJECT_ICON_BUTTON_CLASS}
+                          title={t("chat.archivedConversations.open")}
+                          aria-label={t("chat.archivedConversations.open")}
+                          data-archived-conversations-button=""
+                        >
+                          <Archive className="size-3.5" />
+                        </Button>
+                      ) : null}
                       {canShareConversations ? (
                         <Button
                           type="button"
@@ -2378,6 +2423,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         mode={conversationSearchMode}
         getActions={getCommandPaletteActions ? getPaletteActions : undefined}
       />
+      {archivedConversations && archivedListOpen ? (
+        <ArchivedConversationsModal
+          archive={archivedConversations}
+          onClose={handleCloseArchivedConversations}
+        />
+      ) : null}
     </>
   );
 });

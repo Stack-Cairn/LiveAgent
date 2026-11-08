@@ -274,6 +274,8 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
       cwdEmpty?: boolean;
       shared?: boolean;
       pinned?: boolean;
+      /** Archive filter (capability `session_archive`); omitted means exclude. */
+      archived?: "exclude" | "include" | "only";
     } = {},
   ): Promise<KBrainSessionPage> {
     const query = new URLSearchParams();
@@ -283,6 +285,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     if (params.cwdEmpty !== undefined) query.set("cwd_empty", String(params.cwdEmpty));
     if (params.shared !== undefined) query.set("shared", String(params.shared));
     if (params.pinned !== undefined) query.set("pinned", String(params.pinned));
+    if (params.archived !== undefined) query.set("archived", params.archived);
     const result = await request<KBrainSessionPage | KBrainSession[]>(`/v1/sessions?${query}`);
     return Array.isArray(result)
       ? { sessions: result, total_count: result.length }

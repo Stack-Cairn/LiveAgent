@@ -13,6 +13,7 @@ import { useSyncExternalStore } from "react";
 import {
   liveTrajectoryAuthoritativeRevision,
   liveTrajectoryEvents,
+  liveUsageRefreshRevision,
   subscribeLiveTrajectory,
 } from "@/lib/trajectory/liveTrajectory";
 
@@ -42,9 +43,15 @@ export function ConversationStatsBarHost(props: {
   const liveEvents = useSyncExternalStore(subscribeLiveTrajectory, () =>
     liveTrajectoryEvents(conversationId),
   );
-  const authoritativeRevision = useSyncExternalStore(subscribeLiveTrajectory, () =>
+  const trajectoryRevision = useSyncExternalStore(subscribeLiveTrajectory, () =>
     liveTrajectoryAuthoritativeRevision(conversationId),
   );
+  // Live usage reports reload the persisted tail so token totals move during a run. Both
+  // counters only grow, so their sum changes whenever either one does.
+  const usageRevision = useSyncExternalStore(subscribeLiveTrajectory, () =>
+    liveUsageRefreshRevision(conversationId),
+  );
+  const authoritativeRevision = trajectoryRevision + usageRevision;
   const { stats } = useConversationStats({
     conversationId,
     host,

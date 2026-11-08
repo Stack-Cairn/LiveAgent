@@ -125,7 +125,16 @@ export function SubagentStatusText({
  * One subagent in the parent transcript: what it was asked, how it is doing, and
  * what it is doing now. Clicking it opens its own transcript in the side pane.
  */
-export function SubagentCard({ view, onOpen }: { view: SubagentView; onOpen: () => void }) {
+export function SubagentCard({
+  view,
+  onOpen,
+  label,
+}: {
+  view: SubagentView;
+  onOpen: () => void;
+  /** Replaces the "Subagent" prefix, e.g. "Follow-up" on a follow-up's card. */
+  label?: string;
+}) {
   const { t } = useLocale();
   const running = view.status === "running";
   const now = useTickingNow(running && view.startedAtMs !== undefined);
@@ -150,7 +159,9 @@ export function SubagentCard({ view, onOpen }: { view: SubagentView; onOpen: () 
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-baseline gap-1.5">
-          <span className="shrink-0 text-xs text-foreground/45">{t("chat.subagent.label")}</span>
+          <span className="shrink-0 text-xs text-foreground/45">
+            {label ?? t("chat.subagent.label")}
+          </span>
           <span className="min-w-0 truncate text-sm font-[450] text-foreground/80">
             {view.description}
           </span>
@@ -180,15 +191,51 @@ export function SubagentCard({ view, onOpen }: { view: SubagentView; onOpen: () 
 /**
  * A `subagent` tool call: the subagent card once the host links the call to its
  * subagent, the plain tool row otherwise (older backends, hosts without subagents).
+ *
+ * A `subagent_followup` call shows the same subagent's card (its transcript carries
+ * on in the same conversation). K-brain keeps the subagent's own status while the
+ * follow-up runs, so the card takes its status from the follow-up call instead.
  */
 export function SubagentToolCall({
   toolCallId,
   fallback,
+  followup,
 }: {
   toolCallId: string;
   fallback: ReactNode;
+  followup?: { running: boolean; failed: boolean };
 }) {
+  const { t } = useLocale();
   const binding = useSubagentCard(toolCallId);
   if (!binding) return <>{fallback}</>;
-  return <SubagentCard view={binding.view} onOpen={binding.open} />;
+  if (!followup) return <SubagentCard view={binding.view} onOpen={binding.open} />;
+  const status: SubagentView["status"] = followup.running
+    ? "running"
+    : followup.failed
+      ? "error"
+      : binding.view.status === "running"
+        ? "done"
+        : binding.view.status;
+  return (
+    <SubagentCard
+      view={status === binding.view.status ? binding.view : { ...binding.view, status }}
+      onOpen={binding.open}
+      label={t("chat.subagent.followupLabel")}
+    />
+  );
+}
+
+/**
+ * `subagent_status` / `subagent_steer` / `subagent_cancel`: a concise tool row named
+ * after the subagent's description when the host knows the subagent.
+ */
+export function SubagentControlToolCall({
+  toolCallId,
+  render,
+}: {
+  toolCallId: string;
+  render: (subagentLabel: string | undefined) => ReactNode;
+}) {
+  const binding = useSubagentCard(toolCallId);
+  return <>{render(binding?.view.description)}</>;
 }

@@ -38,6 +38,13 @@ func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.Chat
 		base.Type = v2.ChatEvent_TOKEN
 	case "assistant.message.created":
 		base.Type = v2.ChatEvent_TOKEN
+		if usage, ok := payload["usage"].(map[string]any); ok {
+			payload["usage"] = liveAgentUsage(usage)
+		}
+	case "usage.updated":
+		// One report per model call; the WebUI anchors its live context ring on it.
+		base.Type = v2.ChatEvent_TOKEN
+		payload = map[string]any{"text": "", "usage": liveAgentUsage(payload), "usageLive": true}
 	case "assistant.thinking.delta":
 		base.Type = v2.ChatEvent_THINKING
 	case "assistant.sources":
@@ -131,3 +138,24 @@ func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.Chat
 }
 
 func payloadAsMap(payload map[string]any) (map[string]any, bool) { return payload, payload != nil }
+
+// liveAgentUsage maps a K-brain usage report to LiveAgent's usage fields. K-brain's
+// input_tokens include cache reads and writes; LiveAgent's input excludes them.
+func liveAgentUsage(usage map[string]any) map[string]any {
+	count := func(key string) int64 {
+		value, _ := usage[key].(float64)
+		if value < 0 {
+			return 0
+		}
+		return int64(value)
+	}
+	input, output := count("input_tokens"), count("output_tokens")
+	cacheRead, cacheWrite := count("cached_tokens"), count("cache_write_tokens")
+	return map[string]any{
+		"input":       max(0, input-cacheRead-cacheWrite),
+		"output":      output,
+		"cacheRead":   cacheRead,
+		"cacheWrite":  cacheWrite,
+		"totalTokens": input + output,
+	}
+}

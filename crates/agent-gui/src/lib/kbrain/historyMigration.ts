@@ -319,7 +319,11 @@ function canonicalMessage(value: unknown): KBrainMessage {
     ...(message.usage
       ? {
           usage: {
-            input_tokens: message.usage.input,
+            // K-brain's prompt count includes cache reads and writes.
+            input_tokens:
+              (message.usage.input ?? 0) +
+              (message.usage.cacheRead ?? 0) +
+              (message.usage.cacheWrite ?? 0),
             output_tokens: message.usage.output,
             cached_tokens: message.usage.cacheRead,
             cache_write_tokens: message.usage.cacheWrite,

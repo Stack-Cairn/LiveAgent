@@ -1079,6 +1079,26 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     });
   }
 
+  async historyArchiveSupported(): Promise<boolean> {
+    const response = await this.request<{ supported?: boolean }>("history.archive_supported", {});
+    return response?.supported === true;
+  }
+
+  async listArchivedHistory(page: number, pageSize: number): Promise<HistoryList> {
+    const response = await this.request<Partial<HistoryList>>("history.archived_list", {
+      page: normalizeHistoryListPage(page),
+      page_size: normalizeHistoryListPageSize(pageSize),
+    });
+    return {
+      conversations: Array.isArray(response?.conversations) ? response.conversations : [],
+      total_count: typeof response?.total_count === "number" ? response.total_count : 0,
+    };
+  }
+
+  async setHistoryArchived(conversationId: string, archived: boolean): Promise<void> {
+    await this.request("history.archive_set", { conversation_id: conversationId, archived });
+  }
+
   async getHistory(conversationId: string, options?: HistoryGetOptions): Promise<HistoryDetail> {
     return this.requestWithRecovery<HistoryDetail>("history.get", {
       conversation_id: conversationId,

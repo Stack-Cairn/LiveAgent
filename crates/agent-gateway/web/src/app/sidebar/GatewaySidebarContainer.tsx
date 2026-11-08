@@ -17,6 +17,7 @@ import type { SidebarSnapshot, SidebarStore } from "@liveagent/ui/lib/sidebar/st
 import type { TransientSidebarRunningConversation } from "@liveagent/ui/lib/sidebar/transientActivity";
 import { mergeTransientSidebarRunningActivity } from "@liveagent/ui/lib/sidebar/transientActivity";
 import type { SidebarConversation, SidebarErrorCode } from "@liveagent/ui/lib/sidebar/types";
+import { useSidebarArchive } from "@liveagent/ui/lib/sidebar/useSidebarArchive";
 import { useSidebarContainerState } from "@liveagent/ui/lib/sidebar/useSidebarContainerState";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { sortWorkspaceProjectsByActivity } from "@liveagent/ui/lib/workspaceProjects";
@@ -127,6 +128,8 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
     workspaceHistory,
   } = useSidebarContainerState(store, props.showProjects);
   const conversationIndex = useSidebarSelector(store, selectConversationIndex);
+  // Re-probe after a reconnect: the desktop or K-brain behind the gateway may have changed.
+  const archive = useSidebarArchive(store, connectionLost ? "offline" : listState.status);
   const effectiveRunningActivity = useMemo(
     () =>
       mergeTransientSidebarRunningActivity(
@@ -363,6 +366,8 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
         onCommitRename: handleCommitRename,
         onCancelRename: handleCancelRename,
         onSetPinned: handleSetPinned,
+        onSetArchived: archive.archive ? archive.setArchived : undefined,
+        archivedConversations: archive.archive,
         onMoveToWorkspace: handleMoveToWorkspace,
         onMoveConversationsToWorkspace: handleMoveConversationsToWorkspace,
         onDeleteConversation: handleDeleteConversation,

@@ -118,6 +118,13 @@ export type ContextUsageScanItem = {
       stopReason?: string;
       api?: string;
       contextRelevant?: boolean;
+      /**
+       * How many of the round's leading blocks `usage` already covers. A K-brain run is
+       * one live round spanning several model calls and reports usage after each call:
+       * blocks before this index (earlier calls' output and tool results) are inside
+       * that report's prompt, so only later blocks are added to it.
+       */
+      usageBlockCount?: number;
     };
     blocks?: readonly {
       kind?: string;
@@ -354,9 +361,21 @@ function roundThinkingTokenUnits(
   return units;
 }
 
+function roundUsageBlockCount(
+  round: NonNullable<ContextUsageScanItem["rounds"]>[number],
+): number | undefined {
+  const count = round.meta?.usageBlockCount;
+  return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ? count : undefined;
+}
+
 function roundReplaysReasoning(
   round: NonNullable<ContextUsageScanItem["rounds"]>[number],
 ): boolean {
+  // A mid-run report (no stop reason yet) is followed by another call of the same run,
+  // which replays this call's reasoning.
+  if (roundUsageBlockCount(round) !== undefined && round.meta?.stopReason === undefined) {
+    return true;
+  }
   return contentReplaysReasoning(round.blocks, {
     api: round.meta?.api,
     stopReason: round.meta?.stopReason,
@@ -407,6 +426,32 @@ function estimateRoundTokens(
     (assistantUnits > 0 ? messageTokensFromUnits(assistantUnits) : 0) + toolResultTokens;
   roundTokenCache.set(round, totalTokens);
   return totalTokens;
+}
+
+// Blocks after a mid-run usage report: the tool calls of the reported model call (their
+// arguments are in its output, their results are not) and whatever the next call has
+// streamed so far.
+function estimateUncoveredRoundTokens(
+  round: NonNullable<ContextUsageScanItem["rounds"]>[number],
+  coveredBlocks: number,
+): number {
+  const blocks = round.blocks ?? [];
+  let assistantUnits = 0;
+  let toolResultTokens = 0;
+  for (let index = coveredBlocks; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    if (!block || block.kind === HOSTED_SEARCH_BLOCK_KIND) continue;
+    if (block.kind === "tool") {
+      const toolResult =
+        block.item && typeof block.item === "object"
+          ? (block.item as { toolResult?: { content?: unknown } }).toolResult
+          : undefined;
+      if (toolResult) toolResultTokens += estimateToolResultTokens(toolResult);
+      continue;
+    }
+    assistantUnits += estimateContentBlockTokenUnits(block);
+  }
+  return (assistantUnits > 0 ? messageTokensFromUnits(assistantUnits) : 0) + toolResultTokens;
 }
 
 // "有效 token 计数"的两端单一校验口径（floor 且必须是有限正数）。
@@ -599,7 +644,14 @@ export function deriveContextUsageTokens(
           replayReasoning: roundReplaysReasoning(round),
         });
         if (anchorTokens !== undefined) {
-          return anchorTokens + trailingTokens + estimateRoundTokens(round, true);
+          const coveredBlocks = roundUsageBlockCount(round);
+          return (
+            anchorTokens +
+            trailingTokens +
+            (coveredBlocks === undefined
+              ? estimateRoundTokens(round, true)
+              : estimateUncoveredRoundTokens(round, coveredBlocks))
+          );
         }
       }
       trailingTokens += estimateRoundTokens(round, false);

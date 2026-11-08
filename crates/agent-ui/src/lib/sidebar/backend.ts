@@ -15,6 +15,18 @@ export type SidebarListPage = {
   totalCount: number;
 };
 
+/**
+ * Archived conversations (K-brain `session_archive`). Archived conversations leave the
+ * normal list; the backend's own sync reports both directions as list changes.
+ */
+export type SidebarArchiveBackend = {
+  /** False hides every archive action (older backends, other runtimes). */
+  isSupported(): Promise<boolean>;
+  setArchived(id: string, archived: boolean): Promise<void>;
+  /** `page` is 1-based, like listConversations. */
+  listArchived(page: number, pageSize: number): Promise<SidebarListPage>;
+};
+
 export type SidebarBackend = {
   listPinnedConversations?(): Promise<SidebarConversation[]>;
   listConversations(page: number, pageSize: number, scope: SidebarScope): Promise<SidebarListPage>;
@@ -23,6 +35,7 @@ export type SidebarBackend = {
   setConversationPinned(id: string, isPinned: boolean): Promise<SidebarConversation>;
   setConversationCwd(id: string, cwd: string): Promise<SidebarConversation>;
   deleteConversation(id: string): Promise<void>;
+  archive?: SidebarArchiveBackend;
   // The single event subscription for this end. The store subscribes exactly
   // once per start() and applies every event through the reconcile reducers.
   subscribeEvents(listener: (event: SidebarBackendEvent) => void): () => void;
