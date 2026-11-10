@@ -329,6 +329,11 @@ export type KBrainSubagent = {
   usage?: KBrainUsage;
   tool_count?: number;
   duration_ms?: number;
+  /**
+   * Runs in another process sharing the session store (a kn terminal). Its events
+   * are not streamed; the list and transcript are polled while it runs.
+   */
+  external?: boolean;
 };
 
 export type KBrainSubagentEvent = {

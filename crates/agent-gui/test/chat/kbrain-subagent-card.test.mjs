@@ -175,6 +175,34 @@ test("the pane lists running subagents first and stops the one in front", async 
   }
 });
 
+test("a subagent running in kn offers no stop button; the pane says to stop it there", async () => {
+  const external = { ...runningView, external: true };
+  const pane = (env) => {
+    const { SubagentPane } = env.loadModule("@liveagent/ui/components/subagents/SubagentPane.tsx");
+    return env.React.createElement(SubagentPane, {
+      tabs: [external],
+      activeId: "task-1",
+      directory: { running: [external], ended: [], endedTotal: 0, hasMoreEnded: false },
+      transcript: { status: "ready", items: [] },
+      onShowDirectory() {},
+      onSelectTab() {},
+      onCloseTab() {},
+      onClose() {},
+      onShowMore() {},
+      onStop: async () => assert.fail("an external subagent cannot be stopped here"),
+      onRetryTranscript() {},
+    });
+  };
+  const { host, cleanup } = await render(pane, null);
+  try {
+    assert.equal(host.querySelector('[data-subagent-stop="task-1"]'), null);
+    const note = host.querySelector('[data-subagent-external="task-1"]');
+    assert.ok(note?.textContent.includes("chat.subagent.pane.external"));
+  } finally {
+    await cleanup();
+  }
+});
+
 test("the running chip counts subagents and hides at zero", async () => {
   let opened = 0;
   const chip = (count) => (env) => {

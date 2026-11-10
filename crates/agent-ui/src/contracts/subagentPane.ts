@@ -15,6 +15,8 @@ export type SubagentView = {
   tokens?: number;
   toolCount?: number;
   background?: boolean;
+  /** Running in another process (kn), so it can only be stopped there. */
+  external?: boolean;
   /** The child tool it started last, while it runs. */
   latestTool?: { name: string; arguments: Record<string, unknown> };
   error?: string;

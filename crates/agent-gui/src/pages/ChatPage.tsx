@@ -193,6 +193,7 @@ import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
+import { loadKBrainSubagents } from "../lib/subagents/kbrainSubagentStore";
 import { toggleDesktopWindowPin } from "../lib/system/windowPin";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
@@ -1582,6 +1583,9 @@ function ChatPageContent(props: ChatPageProps) {
       externalRunConversationIdsRef.current.has(currentConversationId)
     ) {
       conversationPersistenceCursorRef.current.delete(currentConversationId);
+      // Subagents that turn starts are saved as it goes; re-list them so their
+      // cards fill in (those still running are then polled until they end).
+      void loadKBrainSubagents(currentConversationId);
     }
     if (currentItem.externalRun) {
       externalRunConversationIdsRef.current.add(currentConversationId);
