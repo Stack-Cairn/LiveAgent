@@ -8,6 +8,7 @@ import type {
   SidebarScope,
   SidebarWorkdirSummary,
 } from "@liveagent/ui/lib/sidebar/types";
+import { sameExternalRun } from "@liveagent/ui/lib/sidebar/types";
 import { createKBrainClient } from "./client";
 import { summaryForSession } from "./history";
 import {
@@ -132,7 +133,8 @@ function sameConversation(a: SidebarConversation | undefined, b: SidebarConversa
     a.sessionId === b.sessionId &&
     a.selectedModelJson === b.selectedModelJson &&
     a.createdAt === b.createdAt &&
-    a.forkedFromSessionId === b.forkedFromSessionId
+    a.forkedFromSessionId === b.forkedFromSessionId &&
+    sameExternalRun(a.externalRun, b.externalRun)
   );
 }
 

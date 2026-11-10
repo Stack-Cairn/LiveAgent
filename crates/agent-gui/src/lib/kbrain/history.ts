@@ -14,6 +14,7 @@ import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
 import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
 import { parseUserMessageContentWithUploads } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { capabilityAtLeast } from "@liveagent/ui/lib/kbrain/health";
+import type { SidebarExternalRun } from "@liveagent/ui/lib/sidebar/types";
 import {
   type ConversationViewState,
   getHistoryMessageContentHash,
@@ -389,7 +390,20 @@ export function summaryForSession(
     isShared: session.shared === true,
     ...(session.archived === true ? { isArchived: true } : {}),
     ...(session.forked_from?.trim() ? { forkedFromSessionId: session.forked_from.trim() } : {}),
+    // Always present so a cleared run replaces the previous summary's value.
+    externalRun: externalRunOf(session),
   };
+}
+
+/** Another process's running turn; only K-brain with `session_external_runs` reports one. */
+export function externalRunOf(
+  session: Pick<KBrainSession, "external_run">,
+): SidebarExternalRun | undefined {
+  const run = session.external_run;
+  const client = run?.client?.trim();
+  if (!run || !client) return undefined;
+  const startedAt = Date.parse(run.started_at);
+  return { client, startedAt: Number.isFinite(startedAt) ? startedAt : 0 };
 }
 
 type ProjectionSnapshot = {

@@ -1543,6 +1543,8 @@ function ChatPageContent(props: ChatPageProps) {
     previousHistoryIdsRef.current = nextIds;
   }, [currentConversationId, historyItems, historyScopeKey, isSending]);
 
+  const externalRunConversationIdsRef = useRef(new Set<string>());
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: Composer content is sampled through its ref; the effect is driven by persisted snapshot changes and run state.
   useEffect(() => {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
@@ -1571,6 +1573,21 @@ function ChatPageContent(props: ChatPageProps) {
     }
 
     currentConversationHistoryUpdatedAtRef.current = currentItem.updatedAt;
+    // A turn running in another process (kn) moved the snapshot. The warm
+    // persistence cursor would make the open a cache hit on the stale
+    // transcript, so drop it and re-read; keep refreshing through the final
+    // snapshot that clears the run.
+    if (
+      currentItem.externalRun ||
+      externalRunConversationIdsRef.current.has(currentConversationId)
+    ) {
+      conversationPersistenceCursorRef.current.delete(currentConversationId);
+    }
+    if (currentItem.externalRun) {
+      externalRunConversationIdsRef.current.add(currentConversationId);
+    } else {
+      externalRunConversationIdsRef.current.delete(currentConversationId);
+    }
     openController.open(currentConversationId);
   }, [
     currentConversationId,
@@ -2157,6 +2174,10 @@ function ChatPageContent(props: ChatPageProps) {
   const handleSend = useCallback(() => {
     const conversationId = currentConversationIdRef.current.trim();
     const runtimeEntry = conversationRuntimeCacheRef.current.get(conversationId);
+    // kn holds this session's run lease; K-brain would refuse the run with 409.
+    if (conversationId && sidebarStore.peek(conversationId)?.externalRun) {
+      return;
+    }
     if (queuedChatTurnEditSlotRef.current?.conversationId === conversationId) {
       if (enqueueCurrentComposerTurn("edit")) {
         requestQueuedChatTurnProcessing(conversationId);
@@ -2196,6 +2217,7 @@ function ChatPageContent(props: ChatPageProps) {
     enqueueCurrentComposerTurn,
     isConversationRunning,
     requestQueuedChatTurnProcessing,
+    sidebarStore,
   ]);
 
   const handleComposerBusyChange = useCallback((isBusy: boolean) => {
@@ -2211,16 +2233,22 @@ function ChatPageContent(props: ChatPageProps) {
   const isCompactionRunning = compactionStatus.phase === "running";
   const isConversationHydrating = currentConversationHydrationPhase === "hydrating";
   const isConversationHydrationFailed = currentConversationHydrationPhase === "failed";
-  const composerPlaceholder = isCompactionRunning
-    ? t("chat.compactingContextWait")
-    : isConversationHydrating
-      ? "正在加载会话，请稍候..."
-      : isConversationHydrationFailed
-        ? "当前会话加载失败，请重新打开会话..."
-        : enabledComposerSkills.length > 0
-          ? t("chat.inputHintWithSkills")
-          : t("chat.inputHint");
+  const currentExternalRun = historyItems.find(
+    (item) => item.id === currentConversationId,
+  )?.externalRun;
+  const composerPlaceholder = currentExternalRun
+    ? t("chat.externalRunPlaceholder").replace("{client}", currentExternalRun.client)
+    : isCompactionRunning
+      ? t("chat.compactingContextWait")
+      : isConversationHydrating
+        ? "正在加载会话，请稍候..."
+        : isConversationHydrationFailed
+          ? "当前会话加载失败，请重新打开会话..."
+          : enabledComposerSkills.length > 0
+            ? t("chat.inputHintWithSkills")
+            : t("chat.inputHint");
   const isComposerInputDisabled =
+    Boolean(currentExternalRun) ||
     isCompactionRunning ||
     isConversationHydrating ||
     isConversationHydrationFailed ||

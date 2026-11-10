@@ -384,6 +384,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.statusPinned": "Pinned",
   "chat.statusShared": "Shared",
   "chat.statusRunningReply": "Replying",
+  "chat.externalRunPlaceholder":
+    "Running in {client} — replies appear here as the turn progresses. Send again when it finishes.",
   "chat.delete": "Delete",
   "chat.remove": "Remove",
   "chat.manageSharedConversations": "Manage shared conversations ({count})",

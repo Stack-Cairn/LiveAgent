@@ -203,6 +203,12 @@ export type KBrainSession = {
   /** Source session ID of a branch; older K-brain builds omit it. */
   forked_from?: string;
   fork_seq?: number;
+  /**
+   * Set while another process sharing the data root (the kn terminal UI, kn run)
+   * runs a turn in this session (capability `session_external_runs`). The backend
+   * refuses runs and history edits for the session until it is cleared.
+   */
+  external_run?: KBrainExternalRun;
   messages?: KBrainMessage[];
   active_messages?: KBrainMessage[];
   tasks?: KBrainSubagent[];
@@ -213,6 +219,12 @@ export type KBrainSession = {
   total_message_count?: number;
   sync_epoch?: string;
   sync_revision?: string;
+};
+
+export type KBrainExternalRun = {
+  client: string;
+  pid?: number;
+  started_at: string;
 };
 
 export type KBrainSessionPage = {
