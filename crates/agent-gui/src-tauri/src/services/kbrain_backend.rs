@@ -1,8 +1,8 @@
+use sha2::{Digest, Sha256};
 #[cfg(test)]
 use std::fs;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use sha2::{Digest, Sha256};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -32,6 +32,7 @@ const PROTOCOL_VERSION: &str = "kbrain.agent.v1";
 const READY_PREFIX: &str = "k-brain backend listening on ";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 const STOP_GRACE: Duration = Duration::from_secs(2);
+const STARTS_SUSPENDED_ERROR: &str = "正在迁移数据目录，本地服务将在应用重启后恢复";
 const MAX_STDOUT_LINE: usize = 16 * 1024;
 const MAX_STDERR_BYTES: usize = 64 * 1024;
 
@@ -78,6 +79,9 @@ pub struct KBrainBackendState {
     start_lock: Mutex<()>,
     shutdown_epoch: AtomicU64,
     exiting: AtomicBool,
+    /// Set while the data root is being copied: a restart now would run K-brain on the
+    /// old root and lose whatever it writes before the app restarts on the new one.
+    starts_suspended: AtomicBool,
     /// Every listener/token change (start, restart on a new port, shutdown), so
     /// dependents such as the managed Gateway never keep a stale backend.
     connection_tx: tokio::sync::watch::Sender<Option<KBrainBackendConnection>>,
@@ -90,6 +94,7 @@ impl Default for KBrainBackendState {
             start_lock: Mutex::new(()),
             shutdown_epoch: AtomicU64::new(0),
             exiting: AtomicBool::new(false),
+            starts_suspended: AtomicBool::new(false),
             connection_tx: tokio::sync::watch::channel(None).0,
         }
     }
@@ -97,7 +102,9 @@ impl Default for KBrainBackendState {
 
 // Storage identity follows the canonical data root, never the ephemeral listener or token.
 fn backend_storage_id(root: &Path) -> Result<String, String> {
-    let canonical = root.canonicalize().map_err(|_| "Unable to identify K-brain data root".to_string())?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|_| "Unable to identify K-brain data root".to_string())?;
     let digest = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
     let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
     Ok(format!("local-{hex}"))
@@ -123,7 +130,8 @@ impl KBrainBackendManager {
         if cancelled() {
             return Err("K-brain backend startup cancelled".into());
         }
-        std::fs::create_dir_all(&backend_dir).map_err(|_| "Unable to create K-brain data root".to_string())?;
+        std::fs::create_dir_all(&backend_dir)
+            .map_err(|_| "Unable to create K-brain data root".to_string())?;
         let storage_id = backend_storage_id(&backend_dir)?;
         let token = uuid::Uuid::new_v4().to_string();
 
@@ -308,9 +316,7 @@ impl KBrainBackendState {
             .filter(|v| !v.is_empty())
             .map(PathBuf::from);
         let overridden = preferred.is_some() || legacy_override.is_some();
-        let root = preferred
-            .or(legacy_override)
-            .unwrap_or(data_root);
+        let root = preferred.or(legacy_override).unwrap_or(data_root);
         let legacy = (!overridden).then(|| data_dir.join(BACKEND_DIR));
         self.ensure_started_with_paths(binary, root, legacy)
     }
@@ -340,6 +346,9 @@ impl KBrainBackendState {
             .lock()
             .map_err(|_| "K-brain backend start lock is poisoned".to_string())?;
 
+        if self.starts_suspended.load(Ordering::SeqCst) {
+            return Err(STARTS_SUSPENDED_ERROR.into());
+        }
         if cancelled() {
             return Err("K-brain backend startup cancelled".into());
         }
@@ -416,6 +425,23 @@ impl KBrainBackendState {
         }
     }
 
+    /// Stops K-brain and refuses to start it again until [`Self::resume_starts`].
+    pub fn suspend_and_shutdown(&self) {
+        self.starts_suspended.store(true, Ordering::SeqCst);
+        self.shutdown();
+    }
+
+    pub fn resume_starts(&self) {
+        self.starts_suspended.store(false, Ordering::SeqCst);
+    }
+
+    /// Replaces a backend that stopped answering (startup or settings never finish) with a
+    /// fresh process; the next request reconnects to it.
+    pub fn restart(&self, app: &AppHandle) -> Result<KBrainBackendConnection, String> {
+        self.shutdown();
+        self.ensure_started(app)
+    }
+
     pub fn shutdown_for_exit(&self) {
         self.exiting.store(true, Ordering::SeqCst);
         self.shutdown();
@@ -469,6 +495,19 @@ impl Drop for KBrainBackendManager {
             }
         }
     }
+}
+
+/// Restarts the bundled K-brain: the escape from a startup screen waiting on a stuck backend.
+#[tauri::command]
+pub async fn kbrain_backend_restart(
+    app: AppHandle,
+    state: State<'_, Arc<KBrainBackendState>>,
+) -> Result<KBrainBackendConnection, String> {
+    let state = Arc::clone(state.inner());
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || state.restart(&handle))
+        .await
+        .map_err(|error| format!("K-brain backend restart task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -717,7 +756,8 @@ mod tests {
         assert_eq!(id, backend_storage_id(&root.path().join(".")).unwrap());
         assert_ne!(id, backend_storage_id(other.path()).unwrap());
         assert!(!id.contains(root.path().to_string_lossy().as_ref()));
-        #[cfg(unix)] {
+        #[cfg(unix)]
+        {
             let link_parent = tempfile::tempdir().unwrap();
             let link = link_parent.path().join("alias");
             std::os::unix::fs::symlink(root.path(), &link).unwrap();
@@ -996,7 +1036,10 @@ while True:
     fn running_connection_without_a_backend_is_none_and_never_starts_one() {
         let state = KBrainBackendState::default();
         assert!(state.running_connection().is_none());
-        assert!(state.manager.lock().unwrap().is_none(), "reading must not launch K-Brain");
+        assert!(
+            state.manager.lock().unwrap().is_none(),
+            "reading must not launch K-Brain"
+        );
         assert!(state.subscribe_connection().borrow().is_none());
     }
 
@@ -1016,7 +1059,10 @@ while True:
             .expect("backend");
         assert!(changes.has_changed().unwrap(), "start must notify");
         assert_eq!(
-            changes.borrow_and_update().as_ref().map(|c| c.base_url.clone()),
+            changes
+                .borrow_and_update()
+                .as_ref()
+                .map(|c| c.base_url.clone()),
             Some(started.base_url.clone())
         );
         assert_eq!(
@@ -1027,6 +1073,41 @@ while True:
         assert!(changes.has_changed().unwrap(), "shutdown must notify");
         assert!(changes.borrow_and_update().is_none());
         assert!(state.running_connection().is_none());
+        assert_fixture_reaped(&data);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn suspended_starts_keep_backend_stopped_until_resumed() {
+        let _serial = CHILD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let temp = test_dir();
+        let binary = fixture_binary(&temp, "parent-loss");
+        let data = temp.path().join("data");
+        let state = KBrainBackendState::default();
+        state
+            .ensure_started_with_binary(binary.clone(), data.clone())
+            .expect("backend");
+        // A data-root copy is running: reconnect attempts must not relaunch on the old root.
+        state.suspend_and_shutdown();
+        assert!(state.running_connection().is_none());
+        assert_fixture_reaped(&data);
+        let error = state
+            .ensure_started_with_binary(binary.clone(), data.clone())
+            .expect_err("suspended start");
+        assert_eq!(error, STARTS_SUSPENDED_ERROR);
+        assert!(state.running_connection().is_none());
+
+        state.resume_starts();
+        let restarted = state
+            .ensure_started_with_binary(binary, data.clone())
+            .expect("resumed backend");
+        assert_eq!(
+            state.running_connection().map(|c| c.base_url),
+            Some(restarted.base_url)
+        );
+        state.shutdown();
         assert_fixture_reaped(&data);
     }
 

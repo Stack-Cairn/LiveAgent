@@ -6,6 +6,20 @@ import {
   type StartupPhase,
 } from "./progress";
 
+/**
+ * No progress for this long offers the ways out (skip into the app, restart and retry). Shorter
+ * than the migration's per-request limit, so a backend that stops answering surfaces the escapes
+ * before a chain of timed-out steps can keep the screen up.
+ */
+export const STARTUP_STALL_MS = 15_000;
+
+export type StartupEscapes = {
+  /** Restart the local service and run startup again. */
+  retry: () => void;
+  /** Open the app now; unfinished migration keeps running in the background. */
+  skip: () => void;
+};
+
 export function startupLanguage(): "zh" | "en" {
   try {
     const locale = JSON.parse(localStorage.getItem("liveagent.ui-settings.v1") ?? "null")?.locale;
@@ -28,6 +42,29 @@ export function createStartupRenderer(doc: Document = document) {
   let pending: ReturnType<typeof setTimeout> | undefined;
   let lastPaint = 0;
   const retry = shell?.querySelector<HTMLButtonElement>("[data-boot-retry]");
+  const skip = shell?.querySelector<HTMLButtonElement>("[data-boot-skip]");
+  let escapes: StartupEscapes | undefined;
+  let escaped = false;
+  // One click ends this screen's attempt; later clicks (or a second button) do nothing.
+  const once = (action: () => void) => () => {
+    if (escaped || disposed) return;
+    escaped = true;
+    if (retry) retry.disabled = true;
+    if (skip) skip.disabled = true;
+    action();
+  };
+  const showEscapes = (retryLabel: string, onRetry?: () => void) => {
+    if (escaped) return;
+    if (retry && onRetry) {
+      text("retry", retryLabel);
+      retry.hidden = false;
+      retry.onclick = once(onRetry);
+    }
+    if (skip && escapes) {
+      skip.hidden = false;
+      skip.onclick = once(escapes.skip);
+    }
+  };
   const operations = {
     waiting: choose("等待检查", "Waiting"),
     reading: choose("正在读取旧数据", "Reading old data"),
@@ -90,15 +127,25 @@ export function createStartupRenderer(doc: Document = document) {
         `Elapsed ${Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000))}s`,
       ),
     );
+    const stalled =
+      state.phase !== "error" && Date.now() - state.lastProgressAt >= STARTUP_STALL_MS;
     text(
       "waiting",
-      state.phase !== "error" && Date.now() - state.lastProgressAt >= 30_000
-        ? choose(
-            "当前步骤耗时较长，仍在等待处理结果。",
-            "This step is taking a while. Still waiting for its result.",
-          )
+      stalled
+        ? escapes
+          ? choose(
+              "当前步骤耗时较长。可以跳过直接进入应用，未完成的迁移会在后台继续；也可以重启本地服务后重试。",
+              "This step is taking a while. Skip to open LiveAgent now while the migration continues in the background, or restart the local service and retry.",
+            )
+          : choose(
+              "当前步骤耗时较长，仍在等待处理结果。",
+              "This step is taking a while. Still waiting for its result.",
+            )
         : "",
     );
+    if (stalled && escapes) {
+      showEscapes(choose("重启本地服务并重试", "Restart local service and retry"), escapes.retry);
+    }
   };
   const schedule = () => {
     if (disposed || pending !== undefined) return;
@@ -116,14 +163,30 @@ export function createStartupRenderer(doc: Document = document) {
     clearInterval(timer);
     if (pending !== undefined) clearTimeout(pending);
     if (retry) retry.onclick = null;
+    if (skip) skip.onclick = null;
   };
   shell?.setAttribute("aria-label", choose("LiveAgent 启动进度", "LiveAgent startup progress"));
   text("retry", choose("重试", "Retry"));
+  text("skip", choose("跳过，进入应用", "Skip and open LiveAgent"));
+  if (retry) {
+    retry.hidden = true;
+    retry.disabled = false;
+  }
+  if (skip) {
+    skip.hidden = true;
+    skip.disabled = false;
+  }
   paint();
   return {
     phase(phase: StartupPhase) {
       if (disposed) return;
       state = { ...state, phase, lastProgressAt: Date.now() };
+      paint();
+    },
+    /** Enables the stalled-step actions; they appear once no progress arrived for a while. */
+    offerEscapes(next: StartupEscapes) {
+      if (disposed) return;
+      escapes = next;
       paint();
     },
     progress(event: HistoryMigrationProgress) {
@@ -144,16 +207,15 @@ export function createStartupRenderer(doc: Document = document) {
           "The local service or data preparation could not finish. Retry, or check diagnostic logs if it persists.",
         ),
       );
-      if (retry) {
-        retry.hidden = false;
-        retry.onclick = () => {
-          dispose();
-          shell?.removeAttribute("data-boot-failed");
-          shell?.setAttribute("aria-busy", "true");
-          retry.hidden = true;
-          onRetry();
-        };
-      }
+      text("waiting", "");
+      showEscapes(choose("重试", "Retry"), () => {
+        dispose();
+        shell?.removeAttribute("data-boot-failed");
+        shell?.setAttribute("aria-busy", "true");
+        if (retry) retry.hidden = true;
+        if (skip) skip.hidden = true;
+        onRetry();
+      });
       paint();
       clearInterval(timer);
       if (pending !== undefined) clearTimeout(pending);

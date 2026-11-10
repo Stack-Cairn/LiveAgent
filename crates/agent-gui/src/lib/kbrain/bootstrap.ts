@@ -184,6 +184,24 @@ export function resetKBrainBackendConnection(): void {
   clearKBrainRuntimeConnection();
 }
 
+// Stop (2 s grace, then kill) plus a fresh start that itself gives up after 15 s.
+const RESTART_TIMEOUT_MS = 30_000;
+
+/**
+ * Replaces the bundled K-brain with a fresh process. This is the way out when startup or the
+ * settings load waits on a backend that stopped answering: retrying against the same stuck
+ * process would only wait again. Browser hosts do not own their backend, so they only reconnect.
+ */
+export async function restartKBrainBackend(invokeFn: BootstrapInvoke = invoke): Promise<void> {
+  resetKBrainBackendConnection();
+  if (!isTauriHost()) return;
+  const connection = await withTimeout(
+    invokeFn<KBrainRuntimeConnection>("kbrain_backend_restart"),
+    RESTART_TIMEOUT_MS,
+  );
+  setKBrainRuntimeConnection({ ...connection, managedLocal: true });
+}
+
 export async function connectKBrainBackendWithRetry(
   invokeFn: BootstrapInvoke = invoke,
   options: KBrainBootstrapOptions = {},

@@ -181,7 +181,8 @@ test("only the import POST can produce a deterministic failure record", async ()
     new URL("../../src/lib/kbrain/historyMigration.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /importAttempted = true;\s+const result = await client\.importLegacyHistory/);
+  // The POST runs under a time limit (a stopped backend must not hold startup forever).
+  assert.match(source, /importAttempted = true;\s+const result = await withDeadline\(\s+\(bound\) => client\.importLegacyHistory\(payload, bound\)/);
   assert.match(source, /const kind = importAttempted\s+\? classifyHistoryMigrationFailure/);
 });
 

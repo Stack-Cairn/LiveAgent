@@ -390,6 +390,7 @@ macro_rules! app_invoke_handler {
             commands::gateway::provider_usage_test,
             services::proxy::proxy_get_server_info,
             services::kbrain_backend::kbrain_backend_connection,
+            services::kbrain_backend::kbrain_backend_restart,
             services::host_bridge::registration::host_bridge_status,
         ]
     };

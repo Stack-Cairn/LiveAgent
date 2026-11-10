@@ -13,6 +13,10 @@ export {
  */
 export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> = {
   "zh-CN": {
+    "app.loadingStalled": "本地服务长时间没有响应，设置还没有加载完成。",
+    "app.restartLocalService": "重启本地服务",
+    "app.restartingLocalService": "正在重启本地服务…",
+    "app.retryLoading": "重试",
     "historyImport.title": "旧版对话迁移",
     "historyImport.action": "导入旧版对话",
     "historyImport.description":
@@ -374,6 +378,11 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.remoteHeartbeatHint": "本地 Agent 向 Gateway 上报存活状态的间隔",
   },
   "en-US": {
+    "app.loadingStalled":
+      "The local service has not answered for a while, so settings are still loading.",
+    "app.restartLocalService": "Restart local service",
+    "app.restartingLocalService": "Restarting the local service…",
+    "app.retryLoading": "Retry",
     "historyImport.title": "Legacy conversation migration",
     "historyImport.action": "Import old conversations",
     "historyImport.description":

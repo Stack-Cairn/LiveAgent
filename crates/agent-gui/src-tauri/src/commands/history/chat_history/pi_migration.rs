@@ -565,9 +565,18 @@ fn read_pi_record(candidate: &PiCandidate) -> Option<PiMigrationRecord> {
     })
 }
 
+/// Scans and parses session files, so it runs off the main thread: a synchronous command
+/// would freeze the window (and the startup screen with it) while a large directory is read.
 #[tauri::command]
-pub fn pi_history_migration_page(cursor: Option<String>) -> Result<PiMigrationPage, String> {
-    let home = crate::runtime::data_home::home_dir().ok_or_else(|| "cannot locate user home".to_string())?;
+pub async fn pi_history_migration_page(cursor: Option<String>) -> Result<PiMigrationPage, String> {
+    tauri::async_runtime::spawn_blocking(move || pi_history_migration_page_sync(cursor))
+        .await
+        .map_err(|e| format!("pi history migration join failed: {e}"))?
+}
+
+fn pi_history_migration_page_sync(cursor: Option<String>) -> Result<PiMigrationPage, String> {
+    let home = crate::runtime::data_home::home_dir()
+        .ok_or_else(|| "cannot locate user home".to_string())?;
     let candidates = pi_candidates(&home);
     let after = cursor.unwrap_or_default();
     let start = if after.is_empty() {
